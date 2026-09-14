@@ -8,9 +8,30 @@ surfacing as a confusing runtime error later.
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: Where the container copies the fixtures to (see infra/docker/Dockerfile.ai).
+_CONTAINER_FIXTURES_DIR = "/app/data/fixtures"
+
+
+def _default_fixtures_dir() -> str:
+    """Locate `data/fixtures` in both places this service runs.
+
+    In a container the code lives at /app and the fixtures are copied to
+    /app/data/fixtures. Run natively from a checkout, this file is at
+    <repo>/services/ai/app/config.py and the fixtures are at <repo>/data/fixtures.
+    Guessing wrong is quiet and nasty: the provider loads nothing, every symbol
+    falls through to the live provider, and the "works offline" promise breaks.
+    """
+    try:
+        checkout = Path(__file__).resolve().parents[3] / "data" / "fixtures"
+    except IndexError:  # pragma: no cover - only when the path is unusually short
+        return _CONTAINER_FIXTURES_DIR
+    return str(checkout) if checkout.is_dir() else _CONTAINER_FIXTURES_DIR
 
 
 class Settings(BaseSettings):
@@ -53,8 +74,9 @@ class Settings(BaseSettings):
     # Per-provider outbound request budget (token bucket), requests per minute.
     provider_rate_limit_per_minute: int = 60
 
-    # Absolute path to the fixture data directory (mounted into the container).
-    fixtures_dir: str = "/app/data/fixtures"
+    # Absolute path to the fixture data directory. Resolved for the current
+    # runtime; FIXTURES_DIR in the environment always wins.
+    fixtures_dir: str = Field(default_factory=_default_fixtures_dir)
 
     # News and LLM settings arrive in later milestones; they follow the same
     # comma-separated convention as market_data_providers.

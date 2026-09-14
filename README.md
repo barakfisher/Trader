@@ -20,23 +20,41 @@ claim. It never places an order.
 ## Quick start
 
 ```bash
-cp .env.example .env
-# set APP_PASSPHRASE and SESSION_SECRET to your own values
-pnpm up
+bash scripts/dev-docker.sh
 ```
 
-Then open **http://localhost:5173**, sign in with `APP_PASSPHRASE`, and import
-`data/fixtures/demo-portfolio.csv`.
+That is the whole setup: it creates `.env` with generated secrets on first run, builds the
+images, starts everything, waits until the stack is genuinely ready, and prints the dashboard URL
+and your sign-in passphrase. Then import `data/fixtures/demo-portfolio.csv`.
+
+### Two ways to run it
+
+| | `scripts/dev-docker.sh` | `scripts/dev-local.sh` |
+|---|---|---|
+| **Use when** | demoing, infrastructure work, migrations, anything CI must match | writing application code, debugging, fastest iteration |
+| Runs in containers | everything | Postgres and Redis only |
+| Runs on your Mac | nothing | the three application processes |
+| Reload speed | seconds (rebuild) | instant (native watch) |
+| Needs installed | Docker | Docker, pnpm, uv |
+
+Both read the same `.env` and share one database, so you can switch between them freely.
+`--help` on either explains its options.
 
 No API keys are needed: the default provider chain starts with a fixture provider, so the whole
 system runs offline. Set `MARKET_DATA_PROVIDERS=yfinance,fixture` in `.env` to prefer live
 (delayed) Yahoo Finance prices.
 
-| Service | URL |
+| Service | Default URL |
 |---|---|
-| Web dashboard | http://localhost:5173 |
-| Orchestrator API | http://localhost:8080 (`/healthz`, `/readyz`) |
-| AI service | http://localhost:8000 (`/docs`) |
+| Web dashboard | http://127.0.0.1:5173 |
+| Orchestrator API | http://127.0.0.1:8080 (`/healthz`, `/readyz`) |
+| AI service | http://127.0.0.1:8000 (`/docs`) |
+
+Every published port is configurable in `.env` (`WEB_HOST_PORT`, `ORCHESTRATOR_HOST_PORT`,
+`AI_SERVICE_HOST_PORT`, `POSTGRES_HOST_PORT`, `REDIS_HOST_PORT`) for when another project on your
+machine already owns one. Only the host side moves; the ports inside Docker never change. Prefer
+`127.0.0.1` over `localhost`: on macOS `localhost` resolves to IPv6 first, which may be a
+different process entirely.
 
 ## Architecture at a glance
 
@@ -63,7 +81,7 @@ infra/docker        Dockerfiles
 infra/compose       local docker-compose environment
 infra/k8s           Kubernetes manifests (Milestone 7)
 data/fixtures       offline prices, instruments and a demo portfolio
-scripts             smoke-test.sh (end-to-end check against a running stack)
+scripts             dev-docker.sh, dev-local.sh, smoke-test.sh
 ```
 
 ## Development
