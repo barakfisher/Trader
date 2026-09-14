@@ -79,9 +79,24 @@ Full reasoning in [docs/DESIGN.md](../docs/DESIGN.md) section 2. The ones that c
 | No component/DOM tests on the web app | `apps/web/test` | store logic is covered; rendering is not. Add a DOM test runner in M6 |
 | `instruments` and `quotes` have no `user_id` | migration `0001` | intentional: shared reference and market data, not user-owned. Documented so the audit does not re-flag it |
 
+## Developer entry points
+
+- `bash scripts/dev-docker.sh` — everything in containers. The default. `--rebuild`, `--reset`
+  (destroys the database, asks first), `--logs`, `--stop`.
+- `bash scripts/dev-local.sh` — Postgres and Redis in containers, the three application processes
+  native with hot reload. `--setup` installs dependencies only. It stops the containerised app
+  services first so both cannot run at once, and refuses to start if a port it needs is taken.
+- Shared helpers in `scripts/lib/dev-common.sh`: `.env` bootstrap with generated secrets,
+  readiness polling, and a port check that probes the exact bind address (IPv4 loopback) rather
+  than the port number, because another process may hold only the IPv6 address.
+
 ## Local environment notes (this machine)
 
-- Ports 5432, `[::1]:5173` and `[::1]:5174` are held by other projects. Host ports are
-  parameterised: `.env` uses `POSTGRES_HOST_PORT=55432`, `WEB_HOST_PORT=5174`, and
-  `VITE_API_BASE_URL=http://127.0.0.1:8080` because `localhost` resolves to IPv6 first.
-- Reach the dashboard at **http://127.0.0.1:5174**, not `localhost`.
+- Other processes on this Mac hold 5432, `127.0.0.1:8000`, and `[::1]:5173` / `[::1]:5174`. All
+  published ports are therefore configurable; this machine's `.env` uses
+  `POSTGRES_HOST_PORT=55432`, `WEB_HOST_PORT=5174`, `AI_SERVICE_HOST_PORT=8001`, and
+  `VITE_API_BASE_URL=http://127.0.0.1:8080`.
+- Reach the dashboard at **http://127.0.0.1:5174**, not `localhost` (IPv6 resolves first).
+- A stale Vite dev server from the directory's previous project
+  (`/Users/a/projects/Traders/frontend/node_modules/.bin/vite`, pid 36957 as of 2026-09-14) still
+  holds `[::1]:5173`. Killing it would free the default port; left alone pending the user's call.
