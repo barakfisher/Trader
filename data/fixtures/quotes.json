@@ -1,0 +1,26 @@
+{
+  "_comment": "Deterministic offline prices. Used by CI, the test suite and the zero-API-key demo. Not real-time and not meant to be.",
+  "prices": {
+    "AAPL":    { "price": 232.14, "previous_close": 229.79, "currency": "USD" },
+    "MSFT":    { "price": 418.62, "previous_close": 421.05, "currency": "USD" },
+    "NVDA":    { "price": 118.45, "previous_close": 124.90, "currency": "USD" },
+    "GOOGL":   { "price": 163.20, "previous_close": 161.44, "currency": "USD" },
+    "SMR":     { "price": 9.87,   "previous_close": 8.92,   "currency": "USD" },
+    "CEG":     { "price": 251.33, "previous_close": 243.10, "currency": "USD" },
+    "VOO":     { "price": 512.08, "previous_close": 510.22, "currency": "USD" },
+    "QQQ":     { "price": 461.77, "previous_close": 464.30, "currency": "USD" },
+    "URA":     { "price": 27.64,  "previous_close": 26.15,  "currency": "USD" },
+    "TAN":     { "price": 38.91,  "previous_close": 39.55,  "currency": "USD" },
+    "BTC-USD": { "price": 58412.33, "previous_close": 57120.10, "currency": "USD" },
+    "ETH-USD": { "price": 2344.51,  "previous_close": 2401.88, "currency": "USD" },
+    "TEVA":    { "price": 17.42,  "previous_close": 17.28,  "currency": "USD" },
+    "SAP.DE":  { "price": 196.40, "previous_close": 194.05, "currency": "EUR" }
+  },
+  "fx": {
+    "EURUSD": 1.1043,
+    "USDEUR": 0.9056,
+    "ILSUSD": 0.2712,
+    "USDILS": 3.6878,
+    "GBPUSD": 1.3115
+  }
+}

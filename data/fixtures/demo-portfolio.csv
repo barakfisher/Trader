@@ -1,0 +1,11 @@
+symbol,quantity,cost_basis,currency,opened_at,notes
+AAPL,25,185.40,USD,2023-11-14,core holding
+MSFT,12,342.10,USD,2024-01-08,
+NVDA,40,98.75,USD,2024-03-21,post-split position
+VOO,18,455.20,USD,2023-06-02,index core
+QQQ,10,412.66,USD,2024-02-15,
+URA,150,24.10,USD,2024-05-30,nuclear theme
+SMR,200,7.15,USD,2024-07-11,nuclear theme - speculative
+BTC-USD,0.42,41250.00,USD,2024-01-30,
+ETH-USD,3.5,2180.00,USD,2024-04-18,
+SAP.DE,20,172.30,EUR,2024-02-27,non-USD position - exercises FX conversion

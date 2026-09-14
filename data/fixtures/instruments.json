@@ -1,0 +1,16 @@
+[
+  { "symbol": "AAPL",    "name": "Apple Inc.",                          "asset_class": "equity", "exchange": "NASDAQ", "currency": "USD" },
+  { "symbol": "MSFT",    "name": "Microsoft Corporation",               "asset_class": "equity", "exchange": "NASDAQ", "currency": "USD" },
+  { "symbol": "NVDA",    "name": "NVIDIA Corporation",                  "asset_class": "equity", "exchange": "NASDAQ", "currency": "USD" },
+  { "symbol": "GOOGL",   "name": "Alphabet Inc. Class A",               "asset_class": "equity", "exchange": "NASDAQ", "currency": "USD" },
+  { "symbol": "SMR",     "name": "NuScale Power Corporation",           "asset_class": "equity", "exchange": "NYSE",   "currency": "USD" },
+  { "symbol": "CEG",     "name": "Constellation Energy Corporation",    "asset_class": "equity", "exchange": "NASDAQ", "currency": "USD" },
+  { "symbol": "VOO",     "name": "Vanguard S&P 500 ETF",                "asset_class": "etf",    "exchange": "NYSEARCA", "currency": "USD" },
+  { "symbol": "QQQ",     "name": "Invesco QQQ Trust",                   "asset_class": "etf",    "exchange": "NASDAQ", "currency": "USD" },
+  { "symbol": "URA",     "name": "Global X Uranium ETF",                "asset_class": "etf",    "exchange": "NYSEARCA", "currency": "USD" },
+  { "symbol": "TAN",     "name": "Invesco Solar ETF",                   "asset_class": "etf",    "exchange": "NYSEARCA", "currency": "USD" },
+  { "symbol": "BTC-USD", "name": "Bitcoin USD",                         "asset_class": "crypto", "exchange": "CCC",    "currency": "USD" },
+  { "symbol": "ETH-USD", "name": "Ethereum USD",                        "asset_class": "crypto", "exchange": "CCC",    "currency": "USD" },
+  { "symbol": "TEVA",    "name": "Teva Pharmaceutical Industries Ltd",  "asset_class": "equity", "exchange": "NYSE",   "currency": "USD" },
+  { "symbol": "SAP.DE",  "name": "SAP SE",                              "asset_class": "equity", "exchange": "XETRA",  "currency": "EUR" }
+]

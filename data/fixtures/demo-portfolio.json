@@ -1,0 +1,10 @@
+{
+  "_comment": "Same demo portfolio as demo-portfolio.csv, in the JSON import shape.",
+  "holdings": [
+    { "symbol": "AAPL", "quantity": 25, "cost_basis": 185.40, "currency": "USD", "opened_at": "2023-11-14" },
+    { "symbol": "MSFT", "quantity": 12, "cost_basis": 342.10, "currency": "USD", "opened_at": "2024-01-08" },
+    { "symbol": "NVDA", "quantity": 40, "cost_basis": 98.75, "currency": "USD", "opened_at": "2024-03-21" },
+    { "symbol": "VOO", "quantity": 18, "cost_basis": 455.20, "currency": "USD", "opened_at": "2023-06-02" },
+    { "symbol": "BTC-USD", "quantity": 0.42, "cost_basis": 41250.00, "currency": "USD", "opened_at": "2024-01-30" }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@traders/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Types, money helpers and the generated AI-service client shared by orchestrator and web",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ai": "./src/ai/client.ts"
+  },
+  "scripts": {
+    "build": "echo \"@traders/shared is consumed as TypeScript source; nothing to build\"",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "echo \"no tests in @traders/shared\"",
+    "gen:api": "openapi-typescript ../../services/ai/openapi.json -o src/generated/ai-api.d.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.4.1",
+    "typescript": "^5.6.3"
+  }
+}
