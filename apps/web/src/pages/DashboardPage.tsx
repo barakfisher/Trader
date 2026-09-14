@@ -1,0 +1,85 @@
+import { observer } from 'mobx-react-lite';
+import { FileUp, LineChart, LogOut, RefreshCw } from 'lucide-react';
+
+import { AddHoldingForm } from '../components/AddHoldingForm.tsx';
+import { AllocationChart } from '../components/AllocationChart.tsx';
+import { Disclaimer } from '../components/Disclaimer.tsx';
+import { HoldingsTable } from '../components/HoldingsTable.tsx';
+import { ImportWizard } from '../components/ImportWizard.tsx';
+import { SummaryCards } from '../components/SummaryCards.tsx';
+import { Button, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
+import { useStore } from '../stores/context.tsx';
+
+export const DashboardPage = observer(function DashboardPage() {
+  const { auth, portfolio, import: importStore } = useStore();
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <LineChart className="size-5 text-accent" aria-hidden />
+          <h1 className="text-base font-semibold">Portfolio</h1>
+          {portfolio.lastLoadedAt && (
+            <span className="text-xs text-text-muted">
+              updated {portfolio.lastLoadedAt.toLocaleTimeString()}
+              {portfolio.refreshing && ' · refreshing…'}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => void portfolio.load({ silent: true })}>
+            <span className="flex items-center gap-1">
+              <RefreshCw className={`size-4 ${portfolio.refreshing ? 'animate-spin' : ''}`} aria-hidden />
+              Refresh
+            </span>
+          </Button>
+          <Button variant="secondary" onClick={importStore.openDialog}>
+            <span className="flex items-center gap-1">
+              <FileUp className="size-4" aria-hidden />
+              Import
+            </span>
+          </Button>
+          <Button variant="ghost" onClick={() => void auth.logout()}>
+            <span className="flex items-center gap-1">
+              <LogOut className="size-4" aria-hidden />
+              Sign out
+            </span>
+          </Button>
+        </div>
+      </header>
+
+      {portfolio.loading && !portfolio.data && <Spinner label="Loading your portfolio…" />}
+      {portfolio.error && (
+        <ErrorNote message={portfolio.error} onRetry={() => void portfolio.load()} />
+      )}
+
+      {portfolio.isEmpty ? (
+        <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+          <div className="rounded-xl border border-border-subtle bg-surface-raised">
+            <EmptyState
+              title="No holdings yet"
+              body="Import a CSV or JSON file from your broker, or add a position by hand. The demo portfolio in data/fixtures/demo-portfolio.csv works with no API keys."
+              action={<Button onClick={importStore.openDialog}>Import a file</Button>}
+            />
+          </div>
+          <AddHoldingForm />
+        </div>
+      ) : (
+        <>
+          <SummaryCards />
+          <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+            <HoldingsTable />
+            <div className="space-y-4">
+              <AllocationChart />
+              <AddHoldingForm />
+            </div>
+          </div>
+        </>
+      )}
+
+      <Disclaimer />
+      <ImportWizard />
+    </div>
+  );
+});

@@ -1,0 +1,15 @@
+**/node_modules
+**/.venv
+**/dist
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+.git
+.env
+.env.*
+!.env.example
+data/local
+docs
+*.md
+!data/fixtures/README.md

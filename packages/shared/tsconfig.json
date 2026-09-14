@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": [],
+    // The AI client uses fetch, AbortController and URLSearchParams. These are
+    // present in both runtimes that consume this package (Node 22 and the
+    // browser); DOM is the lib that declares them without pulling in @types/node.
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["src/**/*.ts"]
+}

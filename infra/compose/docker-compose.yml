@@ -1,0 +1,112 @@
+# Local development environment.
+#
+# `docker compose -f infra/compose/docker-compose.yml up --build` brings up the
+# whole system with the fixture market-data provider, so it works with no API
+# keys and no network access to any provider.
+#
+# Startup order is enforced with health checks rather than sleeps: postgres and
+# redis must be healthy, then migrations run to completion, then the services
+# start.
+
+name: traders
+
+x-env: &env
+  env_file:
+    - ../../.env
+
+services:
+  postgres:
+    # pgvector is part of the image so the RAG milestone needs no extra setup.
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-traders}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-traders}
+      POSTGRES_DB: ${POSTGRES_DB:-traders}
+    ports:
+      # Host ports are configurable: another project may already hold the default.
+      - '${POSTGRES_HOST_PORT:-5432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-traders} -d ${POSTGRES_DB:-traders}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    ports:
+      - '${REDIS_HOST_PORT:-6379}:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.ai
+    <<: *env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-traders}:${POSTGRES_PASSWORD:-traders}@postgres:5432/${POSTGRES_DB:-traders}
+    command: ['alembic', 'upgrade', 'head']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  ai-service:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.ai
+    <<: *env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-traders}:${POSTGRES_PASSWORD:-traders}@postgres:5432/${POSTGRES_DB:-traders}
+      REDIS_URL: redis://redis:6379/0
+      FIXTURES_DIR: /app/data/fixtures
+    ports:
+      - '${AI_SERVICE_PORT:-8000}:8000'
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  orchestrator:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.orchestrator
+    <<: *env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-traders}:${POSTGRES_PASSWORD:-traders}@postgres:5432/${POSTGRES_DB:-traders}
+      AI_SERVICE_URL: http://ai-service:8000
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+    ports:
+      - '${ORCHESTRATOR_PORT:-8080}:8080'
+    depends_on:
+      ai-service:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.web
+      target: dev
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+    ports:
+      - '${WEB_HOST_PORT:-5173}:5173'
+    depends_on:
+      - orchestrator
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

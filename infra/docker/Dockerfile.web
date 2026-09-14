@@ -1,0 +1,39 @@
+# Frontend. Two targets:
+#   dev  - Vite dev server with hot reload (used by docker-compose)
+#   prod - static bundle served by nginx
+FROM node:22-slim AS deps
+
+ENV PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH
+
+WORKDIR /repo
+
+RUN corepack enable
+
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
+COPY apps/web/package.json apps/web/
+COPY packages/shared/package.json packages/shared/
+RUN pnpm install --frozen-lockfile --filter @traders/web...
+
+COPY packages/shared packages/shared
+COPY apps/web apps/web
+
+# --- development -------------------------------------------------------------
+FROM deps AS dev
+WORKDIR /repo/apps/web
+EXPOSE 5173
+CMD ["pnpm", "dev", "--host", "0.0.0.0"]
+
+# --- production --------------------------------------------------------------
+FROM deps AS build
+WORKDIR /repo/apps/web
+ARG VITE_API_BASE_URL=http://localhost:8080
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+RUN pnpm build
+
+FROM nginx:1.27-alpine AS prod
+COPY infra/docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /repo/apps/web/dist /usr/share/nginx/html
+EXPOSE 80
+HEALTHCHECK --interval=15s --timeout=5s --retries=5 \
+    CMD wget -q --spider http://localhost/ || exit 1
