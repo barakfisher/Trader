@@ -42,6 +42,24 @@ def upgrade() -> None:
     )
 
 
+    # Rows written before these columns existed carry the defaults, which would
+    # read as "complete, fully priced, nothing missing" - a claim we cannot
+    # support. We do not know how many holdings those snapshots covered or
+    # whether every one of them was priced, so they are marked degraded: unknown
+    # provenance is closer to degraded than to trustworthy, and Milestone 2
+    # treating an unverifiable total as solid evidence is precisely the failure
+    # this migration exists to prevent. `holdings_count = 0` identifies them
+    # exactly, because every row written from now on records a real count and a
+    # snapshot of an empty portfolio is never stored.
+    op.execute(
+        """
+        UPDATE portfolio_snapshots
+           SET degraded = true
+         WHERE holdings_count = 0
+        """
+    )
+
+
 def downgrade() -> None:
     op.execute(
         """
