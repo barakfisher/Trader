@@ -74,6 +74,10 @@ class Settings(BaseSettings):
     coingecko_api_key: str | None = None
 
     # Cache TTLs (seconds).
+    # CACHE_TTL_QUOTE is the MINIMUM quote TTL, not the TTL. The effective value
+    # per quote comes from app/core/cache_policy.py, which stretches it to the
+    # serving provider's delay during market hours and to an hour when the market
+    # is closed. This floor only matters for providers that declare no delay.
     cache_ttl_quote: int = 60
     cache_ttl_history: int = 43_200
     cache_ttl_news: int = 900
