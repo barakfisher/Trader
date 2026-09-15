@@ -5,7 +5,9 @@ the first provider can answer and pass the remainder down the chain, so a
 partial answer from a cheap provider still saves quota on an expensive one.
 
 Two cache layers per symbol:
-  * `quote:{symbol}` - short TTL, the normal hot path.
+  * `quote:{symbol}` - the normal hot path. Its TTL is decided per quote by
+    core/cache_policy.py from the serving provider's delay and whether the
+    market is open, with CACHE_TTL_QUOTE as the floor.
   * `quote:last:{symbol}` - 7 days, the "last known good" value used only when
     every provider in the chain has failed. Served with stale=True so the UI can
     label it rather than silently showing an old price as current.
@@ -15,6 +17,7 @@ from __future__ import annotations
 
 from app.config import Settings
 from app.core.cache import Cache
+from app.core.cache_policy import quote_ttl
 from app.core.logging import get_logger
 from app.core.ratelimit import RateLimiter
 from app.models import FxRate, InstrumentResolution, Quote
@@ -95,9 +98,15 @@ class MarketDataService:
             for quote in quotes:
                 found[quote.symbol] = quote
                 payload = quote.model_dump(mode="json")
-                await self._cache.set(
-                    f"quote:{quote.symbol}", payload, self._settings.cache_ttl_quote
+                # The TTL is per quote, not per config: a 15-minute-delayed
+                # equity and a 24/7 crypto pair from the same provider have
+                # different notions of "fresh". See core/cache_policy.py.
+                ttl = quote_ttl(
+                    quote.symbol,
+                    provider.delay_seconds,
+                    minimum_ttl_seconds=self._settings.cache_ttl_quote,
                 )
+                await self._cache.set(f"quote:{quote.symbol}", payload, ttl)
                 await self._cache.set(
                     f"quote:last:{quote.symbol}", payload, _LAST_KNOWN_TTL_SECONDS
                 )
