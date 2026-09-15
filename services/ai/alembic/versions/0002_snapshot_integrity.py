@@ -41,7 +41,6 @@ def upgrade() -> None:
         """
     )
 
-
     # Rows written before these columns existed carry the defaults, which would
     # read as "complete, fully priced, nothing missing" - a claim we cannot
     # support. We do not know how many holdings those snapshots covered or
