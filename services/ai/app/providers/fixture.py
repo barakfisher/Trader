@@ -27,6 +27,11 @@ class FixtureProvider:
     # same observation. Five minutes keeps the demo's price history sparse and
     # honest instead of adding a row per page refresh.
     quote_granularity_seconds = 300
+    # A local JSON file: no upstream, no quota, nothing for the limiter to
+    # protect. Rate limiting the offline provider would only mean the demo could
+    # lock itself out of its own fixtures.
+    makes_external_requests = False
+    batches_requests = True
 
     def __init__(self, fixtures_dir: str) -> None:
         self._dir = Path(fixtures_dir)
