@@ -21,7 +21,14 @@ class Quote(BaseModel):
     symbol: str
     price_minor: int
     currency: str
-    as_of: datetime
+    as_of: datetime = Field(
+        description=(
+            "When this price was observed, not when it was fetched. Providers that "
+            "publish a trade timestamp supply it directly; for the rest it is the "
+            "fetch time floored to the provider's freshness window, so repeated "
+            "reads of one observation share an as_of and deduplicate on storage."
+        )
+    )
     source: str = Field(
         description="Provider that produced this quote, e.g. 'fixture', 'yfinance'."
     )

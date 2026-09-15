@@ -39,3 +39,31 @@ async def test_fx_rate_and_identity(fixture_provider: FixtureProvider):
     eur = await fixture_provider.fx_rate("EUR", "USD")
     assert eur is not None and eur.rate == "1.1043"
     assert await fixture_provider.fx_rate("USD", "XYZ") is None
+
+
+async def test_repeated_reads_share_one_observation_time(fixture_provider: FixtureProvider):
+    """The property `quotes (instrument_id, as_of)` relies on to deduplicate.
+
+    Two reads seconds apart describe the same underlying price, so they must
+    carry the same as_of - otherwise every dashboard refresh appends a duplicate
+    row to the price history.
+    """
+    first = await fixture_provider.quotes(["AAPL"])
+    second = await fixture_provider.quotes(["AAPL"])
+    assert first[0].as_of == second[0].as_of
+
+
+async def test_observation_time_is_floored_to_the_provider_window(
+    fixture_provider: FixtureProvider,
+):
+    quotes = await fixture_provider.quotes(["AAPL"])
+    as_of = quotes[0].as_of
+    assert int(as_of.timestamp()) % fixture_provider.quote_granularity_seconds == 0
+    assert as_of.microsecond == 0
+
+
+async def test_observation_time_is_never_in_the_future(fixture_provider: FixtureProvider):
+    from datetime import UTC, datetime
+
+    quotes = await fixture_provider.quotes(["AAPL"])
+    assert quotes[0].as_of <= datetime.now(UTC)

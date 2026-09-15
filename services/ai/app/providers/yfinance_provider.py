@@ -18,6 +18,7 @@ from decimal import Decimal, InvalidOperation
 
 from app.core.logging import get_logger
 from app.core.money import to_minor
+from app.core.observation_time import observed_at
 from app.models import AssetClass, FxRate, Instrument, InstrumentResolution, Quote
 from app.providers.base import ProviderError
 
@@ -47,6 +48,10 @@ def _as_decimal(value: object) -> Decimal | None:
 class YFinanceProvider:
     name = "yfinance"
     delay_seconds = 900  # Yahoo serves most exchanges on a 15-minute delay.
+    # `fast_info` publishes no timestamp at all (no regularMarketTime, no
+    # lastTradeTime), so an observation can only be dated to the delay window it
+    # came from. Claiming more precision than that would be a fabrication.
+    quote_granularity_seconds = 900
 
     def __init__(self, *, timeout_seconds: float = 12.0) -> None:
         self._timeout = timeout_seconds
@@ -104,7 +109,7 @@ class YFinanceProvider:
     # -- provider contract ----------------------------------------------------
 
     async def quotes(self, symbols: list[str]) -> list[Quote]:
-        now = datetime.now(UTC)
+        as_of = observed_at(datetime.now(UTC), self.quote_granularity_seconds)
 
         async def one(symbol: str) -> Quote | None:
             try:
@@ -134,7 +139,7 @@ class YFinanceProvider:
                 symbol=symbol.upper(),
                 price_minor=price_minor,
                 currency=currency,
-                as_of=now,
+                as_of=as_of,
                 source=self.name,
                 delay_seconds=self.delay_seconds,
                 previous_close_minor=previous_minor,
@@ -197,7 +202,11 @@ class YFinanceProvider:
         base, quote = base.upper(), quote.upper()
         if base == quote:
             return FxRate(
-                base=base, quote=quote, rate="1", as_of=datetime.now(UTC), source=self.name
+                base=base,
+                quote=quote,
+                rate="1",
+                as_of=observed_at(datetime.now(UTC), self.quote_granularity_seconds),
+                source=self.name,
             )
         # Yahoo expresses FX pairs as e.g. "ILSUSD=X".
         raw = await asyncio.to_thread(self._fetch_one_blocking, f"{base}{quote}=X")
@@ -207,6 +216,6 @@ class YFinanceProvider:
             base=base,
             quote=quote,
             rate=str(raw["price"]),
-            as_of=datetime.now(UTC),
+            as_of=observed_at(datetime.now(UTC), self.quote_granularity_seconds),
             source=self.name,
         )
