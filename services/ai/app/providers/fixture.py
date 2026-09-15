@@ -14,6 +14,7 @@ from pathlib import Path
 
 from app.core.logging import get_logger
 from app.core.money import to_minor
+from app.core.observation_time import observed_at
 from app.models import FxRate, Instrument, InstrumentResolution, Quote
 
 log = get_logger("provider.fixture")
@@ -22,6 +23,10 @@ log = get_logger("provider.fixture")
 class FixtureProvider:
     name = "fixture"
     delay_seconds = 0
+    # Fixture prices are constant, so every read within a window really is the
+    # same observation. Five minutes keeps the demo's price history sparse and
+    # honest instead of adding a row per page refresh.
+    quote_granularity_seconds = 300
 
     def __init__(self, fixtures_dir: str) -> None:
         self._dir = Path(fixtures_dir)
@@ -44,7 +49,7 @@ class FixtureProvider:
         log.info("fixture.loaded", instruments=len(self._instruments), prices=len(self._prices))
 
     async def quotes(self, symbols: list[str]) -> list[Quote]:
-        now = datetime.now(UTC)
+        as_of = observed_at(datetime.now(UTC), self.quote_granularity_seconds)
         results: list[Quote] = []
         for symbol in symbols:
             entry = self._prices.get(symbol.upper())
@@ -65,7 +70,7 @@ class FixtureProvider:
                     symbol=symbol.upper(),
                     price_minor=price_minor,
                     currency=currency,
-                    as_of=now,
+                    as_of=as_of,
                     source=self.name,
                     delay_seconds=self.delay_seconds,
                     previous_close_minor=previous_minor,
@@ -103,7 +108,7 @@ class FixtureProvider:
                 base=base.upper(),
                 quote=quote.upper(),
                 rate="1",
-                as_of=datetime.now(UTC),
+                as_of=observed_at(datetime.now(UTC), self.quote_granularity_seconds),
                 source=self.name,
             )
         rate = self._fx.get(f"{base.upper()}{quote.upper()}")
@@ -113,6 +118,6 @@ class FixtureProvider:
             base=base.upper(),
             quote=quote.upper(),
             rate=str(rate),
-            as_of=datetime.now(UTC),
+            as_of=observed_at(datetime.now(UTC), self.quote_granularity_seconds),
             source=self.name,
         )

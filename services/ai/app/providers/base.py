@@ -28,6 +28,12 @@ class MarketDataProvider(Protocol):
     #: Provider-declared quote delay in seconds (0 = real time).
     delay_seconds: int
 
+    #: How far apart two genuinely different observations can be. Used to floor
+    #: `Quote.as_of` when the provider publishes no timestamp of its own, so a
+    #: repeated read of the same underlying data yields the same `as_of`.
+    #: See app/core/observation_time.py.
+    quote_granularity_seconds: int
+
     async def quotes(self, symbols: list[str]) -> list[Quote]:
         """Price as many of `symbols` as possible. Unknown symbols are omitted,
         never faked. Raising ProviderError means "provider is unusable right now"."""

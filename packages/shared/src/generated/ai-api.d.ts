@@ -193,6 +193,7 @@ export interface components {
             /**
              * As Of
              * Format: date-time
+             * @description When this price was observed, not when it was fetched. Providers that publish a trade timestamp supply it directly; for the rest it is the fetch time floored to the provider's freshness window, so repeated reads of one observation share an as_of and deduplicate on storage.
              */
             as_of: string;
             /** Currency */
