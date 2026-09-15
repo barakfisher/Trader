@@ -11,7 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 #: Where the container copies the fixtures to (see infra/docker/Dockerfile.ai).
@@ -34,6 +34,11 @@ def _default_fixtures_dir() -> str:
     return str(checkout) if checkout.is_dir() else _CONTAINER_FIXTURES_DIR
 
 
+#: Placeholder shipped in .env.example. Usable in development because both
+#: services read the same file; rejected outright in production.
+DEFAULT_INTERNAL_API_KEY = "change-me-internal"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=(".env", "../../.env"),
@@ -53,8 +58,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://traders:traders@localhost:5432/traders"
     redis_url: str = "redis://localhost:6379/0"
 
-    # Service-to-service auth for /internal routes.
-    internal_api_key: str = "change-me-internal"
+    # Service-to-service auth for the market routes. There is no development
+    # bypass (see app/deps.py); the default value below only works because both
+    # services read it from the same .env and therefore agree on it.
+    internal_api_key: str = DEFAULT_INTERNAL_API_KEY
 
     # Market data: ordered fallback chain, first provider that answers wins.
     # Kept as a raw comma-separated string because pydantic-settings decodes
@@ -80,6 +87,20 @@ class Settings(BaseSettings):
 
     # News and LLM settings arrive in later milestones; they follow the same
     # comma-separated convention as market_data_providers.
+
+    @model_validator(mode="after")
+    def _reject_default_secrets_in_production(self) -> Settings:
+        """Refuse to start a production deployment with the shipped default key.
+
+        Failing at boot is loud and costs one restart. Failing at request time,
+        or not failing at all, means shipping an unprotected internal API.
+        """
+        if self.app_env == "production" and self.internal_api_key == DEFAULT_INTERNAL_API_KEY:
+            raise ValueError(
+                "INTERNAL_API_KEY is still the default value; set a real one before "
+                "running with APP_ENV=production"
+            )
+        return self
 
     @property
     def market_data_chain(self) -> list[str]:

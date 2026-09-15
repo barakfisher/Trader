@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import secrets
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Request, status
@@ -25,12 +26,19 @@ async def require_internal_key(
 ) -> None:
     """The AI service is never exposed publicly; the orchestrator is its only client.
 
-    In development the check is skipped when the key is left at its default so a
-    fresh clone works without ceremony; in production a mismatch is a hard 401.
+    This check has no development bypass. An earlier version skipped it when the
+    key was still at its default value, which meant the protection silently did
+    not run whenever APP_ENV was unset - a security control that is absent
+    exactly when someone has forgotten to configure it. A fresh clone still
+    works without ceremony, because both services read the same key from the
+    same .env: whatever the value is, they agree on it.
+
+    compare_digest keeps the comparison constant-time, so response timing cannot
+    be used to recover the key one character at a time.
     """
-    if not settings.is_production and settings.internal_api_key == "change-me-internal":
-        return
-    if x_internal_key != settings.internal_api_key:
+    if x_internal_key is None or not secrets.compare_digest(
+        x_internal_key, settings.internal_api_key
+    ):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid internal API key")
 
 

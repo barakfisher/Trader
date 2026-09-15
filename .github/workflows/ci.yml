@@ -41,9 +41,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # No `version:` here on purpose. The action reads `packageManager` from
+      # package.json, and declaring it in both places is a hard error:
+      # "Multiple versions of pnpm specified". package.json is the single source
+      # of truth, so local installs and CI cannot drift apart.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 22
