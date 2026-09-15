@@ -27,3 +27,6 @@ data/local/
 
 # Stray runtime databases from other tools
 *.db
+
+# Agent worktrees (temporary, created by parallel workers)
+.claude/worktrees/

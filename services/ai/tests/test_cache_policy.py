@@ -193,3 +193,36 @@ async def test_registry_passes_the_configured_floor_to_the_policy(settings, monk
 
     assert seen == [("AAPL", 900, settings.cache_ttl_quote)]
     assert recorded["quote:AAPL"] == 4242
+
+
+class TestDaylightSaving:
+    """The session is a New York local time, not a fixed UTC window.
+
+    A hardcoded summer window treats 20:00-21:00 UTC as closed all winter - the
+    final hour of an active trading day - and would serve hour-old prices
+    through it. These cases would fail against such a window.
+    """
+
+    def test_winter_afternoon_is_open(self):
+        # 20:30 UTC in January is 15:30 in New York: half an hour before the bell.
+        assert is_us_market_open(datetime(2026, 1, 15, 20, 30, tzinfo=UTC)) is True
+
+    def test_winter_early_morning_is_closed(self):
+        # 13:45 UTC in January is 08:45 in New York: before the open.
+        assert is_us_market_open(datetime(2026, 1, 15, 13, 45, tzinfo=UTC)) is False
+
+    def test_summer_afternoon_is_closed(self):
+        # The same 20:30 UTC in July is 16:30 in New York: after the close.
+        assert is_us_market_open(datetime(2026, 7, 15, 20, 30, tzinfo=UTC)) is False
+
+    def test_summer_morning_is_open(self):
+        assert is_us_market_open(datetime(2026, 7, 15, 14, 0, tzinfo=UTC)) is True
+
+    def test_weekends_are_judged_in_market_local_time(self):
+        # 01:00 UTC on Monday is still Sunday evening in New York.
+        assert is_us_market_open(datetime(2026, 7, 20, 1, 0, tzinfo=UTC)) is False
+
+    def test_ttl_follows_the_corrected_session(self):
+        winter_afternoon = datetime(2026, 1, 15, 20, 30, tzinfo=UTC)
+        assert quote_ttl("AAPL", 900, winter_afternoon) == 900
+        assert quote_ttl("BTC-USD", 900, winter_afternoon) == 60

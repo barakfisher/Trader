@@ -22,6 +22,9 @@ against a fake clock rather than against whatever time CI happens to run at.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from app.core.logging import get_logger
 
 #: Crypto never closes, so the only thing bounding its TTL is how often we are
 #: willing to ask.
@@ -36,17 +39,22 @@ DEFAULT_MINIMUM_TTL_SECONDS = 60
 #: that without turning the overnight window into a per-minute poll.
 CLOSED_TTL_SECONDS = 3600
 
-#: Regular US session expressed in UTC, which is what the fixed window below
-#: assumes: 09:30-16:00 in New York is 13:30-20:00 UTC while US daylight saving
-#: is in force (mid-March to early November) and 14:30-21:00 UTC outside it.
-#: We keep the summer window year-round rather than carrying a timezone lookup
-#: here. In the winter months that mistakes 13:30-14:30 UTC for open - harmless,
-#: a shorter TTL and a few extra fetches before the bell - and 20:00-21:00 UTC
-#: for closed, which is the one real cost: during the last hour of a winter
-#: session a quote can sit up to an hour stale. Fixing it properly means
-#: resolving America/New_York here; deferred until the UI cares.
-MARKET_OPEN_MINUTE_UTC = 13 * 60 + 30
-MARKET_CLOSE_MINUTE_UTC = 20 * 60
+#: The regular NYSE/Nasdaq session in New York local time. Resolving the zone
+#: rather than hardcoding a UTC window matters: the session is 13:30-20:00 UTC
+#: under US daylight saving and 14:30-21:00 UTC outside it. A fixed summer
+#: window would treat 20:00-21:00 UTC as closed every winter afternoon - the
+#: final hour of an active trading day - and serve hour-old prices through it.
+MARKET_TIMEZONE = "America/New_York"
+MARKET_OPEN_MINUTE_LOCAL = 9 * 60 + 30
+MARKET_CLOSE_MINUTE_LOCAL = 16 * 60
+
+#: Fallback window, in UTC, used only if the system has no timezone database.
+#: Correct for roughly eight months of the year; see the comment above for what
+#: it costs in the other four.
+FALLBACK_OPEN_MINUTE_UTC = 13 * 60 + 30
+FALLBACK_CLOSE_MINUTE_UTC = 20 * 60
+
+log = get_logger("cache_policy")
 
 #: Quote currencies that appear as a suffix on continuously traded pairs.
 _CRYPTO_QUOTE_SUFFIXES = ("-USD", "-USDT", "-USDC", "-EUR", "-GBP", "-BTC", "-ETH")
@@ -73,6 +81,10 @@ def is_crypto_symbol(symbol: str) -> bool:
 def is_us_market_open(now: datetime) -> bool:
     """Is the regular US session running at `now`?
 
+    The instant is converted to New York local time, so daylight saving is
+    handled by the timezone database rather than by us remembering to move a
+    constant twice a year.
+
     Public holidays are deliberately ignored. A holiday calendar is either a new
     dependency or a hand-maintained table that silently rots every January, and
     the entire consequence of being wrong on Thanksgiving is that we use the
@@ -80,11 +92,20 @@ def is_us_market_open(now: datetime) -> bool:
     close. Weekends are worth handling because they are a seventh of the year
     and need no data to compute.
     """
-    moment = now.astimezone(UTC)
-    if moment.weekday() >= 5:  # Saturday, Sunday
+    try:
+        local = now.astimezone(ZoneInfo(MARKET_TIMEZONE))
+        open_minute, close_minute = MARKET_OPEN_MINUTE_LOCAL, MARKET_CLOSE_MINUTE_LOCAL
+    except ZoneInfoNotFoundError:
+        # A container without tzdata should degrade to extra fetches, never to a
+        # crash on the path that prices every portfolio.
+        log.warning("cache_policy.timezone_unavailable", timezone=MARKET_TIMEZONE)
+        local = now.astimezone(UTC)
+        open_minute, close_minute = FALLBACK_OPEN_MINUTE_UTC, FALLBACK_CLOSE_MINUTE_UTC
+
+    if local.weekday() >= 5:  # Saturday, Sunday - in market-local terms
         return False
-    minute_of_day = moment.hour * 60 + moment.minute
-    return MARKET_OPEN_MINUTE_UTC <= minute_of_day < MARKET_CLOSE_MINUTE_UTC
+    minute_of_day = local.hour * 60 + local.minute
+    return open_minute <= minute_of_day < close_minute
 
 
 def quote_ttl(
