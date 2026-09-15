@@ -13,6 +13,11 @@ from tests.fakes import FakeRedis
 
 FIXTURES_DIR = Path(__file__).resolve().parents[3] / "data" / "fixtures"
 
+#: Tests must not depend on the developer's .env. Every test that exercises an
+#: authenticated route uses this key and overrides the settings dependency, so
+#: the suite behaves identically on a laptop with a .env and on a bare CI runner.
+TEST_INTERNAL_KEY = "test-internal-key"
+
 
 @pytest.fixture
 def settings() -> Settings:
@@ -21,6 +26,7 @@ def settings() -> Settings:
         market_data_providers="fixture",
         fixtures_dir=str(FIXTURES_DIR),
         cache_ttl_quote=60,
+        internal_api_key=TEST_INTERNAL_KEY,
     )
 
 

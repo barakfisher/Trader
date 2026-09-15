@@ -8,9 +8,35 @@ surfacing as a confusing runtime error later.
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: Where the container copies the fixtures to (see infra/docker/Dockerfile.ai).
+_CONTAINER_FIXTURES_DIR = "/app/data/fixtures"
+
+
+def _default_fixtures_dir() -> str:
+    """Locate `data/fixtures` in both places this service runs.
+
+    In a container the code lives at /app and the fixtures are copied to
+    /app/data/fixtures. Run natively from a checkout, this file is at
+    <repo>/services/ai/app/config.py and the fixtures are at <repo>/data/fixtures.
+    Guessing wrong is quiet and nasty: the provider loads nothing, every symbol
+    falls through to the live provider, and the "works offline" promise breaks.
+    """
+    try:
+        checkout = Path(__file__).resolve().parents[3] / "data" / "fixtures"
+    except IndexError:  # pragma: no cover - only when the path is unusually short
+        return _CONTAINER_FIXTURES_DIR
+    return str(checkout) if checkout.is_dir() else _CONTAINER_FIXTURES_DIR
+
+
+#: Placeholder shipped in .env.example. Usable in development because both
+#: services read the same file; rejected outright in production.
+DEFAULT_INTERNAL_API_KEY = "change-me-internal"
 
 
 class Settings(BaseSettings):
@@ -32,8 +58,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://traders:traders@localhost:5432/traders"
     redis_url: str = "redis://localhost:6379/0"
 
-    # Service-to-service auth for /internal routes.
-    internal_api_key: str = "change-me-internal"
+    # Service-to-service auth for the market routes. There is no development
+    # bypass (see app/deps.py); the default value below only works because both
+    # services read it from the same .env and therefore agree on it.
+    internal_api_key: str = DEFAULT_INTERNAL_API_KEY
 
     # Market data: ordered fallback chain, first provider that answers wins.
     # Kept as a raw comma-separated string because pydantic-settings decodes
@@ -53,11 +81,26 @@ class Settings(BaseSettings):
     # Per-provider outbound request budget (token bucket), requests per minute.
     provider_rate_limit_per_minute: int = 60
 
-    # Absolute path to the fixture data directory (mounted into the container).
-    fixtures_dir: str = "/app/data/fixtures"
+    # Absolute path to the fixture data directory. Resolved for the current
+    # runtime; FIXTURES_DIR in the environment always wins.
+    fixtures_dir: str = Field(default_factory=_default_fixtures_dir)
 
     # News and LLM settings arrive in later milestones; they follow the same
     # comma-separated convention as market_data_providers.
+
+    @model_validator(mode="after")
+    def _reject_default_secrets_in_production(self) -> Settings:
+        """Refuse to start a production deployment with the shipped default key.
+
+        Failing at boot is loud and costs one restart. Failing at request time,
+        or not failing at all, means shipping an unprotected internal API.
+        """
+        if self.app_env == "production" and self.internal_api_key == DEFAULT_INTERNAL_API_KEY:
+            raise ValueError(
+                "INTERNAL_API_KEY is still the default value; set a real one before "
+                "running with APP_ENV=production"
+            )
+        return self
 
     @property
     def market_data_chain(self) -> list[str]:

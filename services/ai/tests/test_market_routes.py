@@ -13,22 +13,30 @@ from app.core.cache import Cache
 from app.core.ratelimit import RateLimiter
 from app.main import app
 from app.providers.registry import MarketDataService
+from tests.conftest import TEST_INTERNAL_KEY
 from tests.fakes import FakeRedis
 
 
 @pytest.fixture
-def client(settings, fixture_provider) -> httpx.AsyncClient:
+def configured_app(settings, fixture_provider):
+    """The app wired to test settings, with no dependency on the ambient .env."""
     redis = FakeRedis()
     app.state.redis = redis
     app.state.market_data = MarketDataService(
         [fixture_provider], Cache(redis), RateLimiter(redis), settings
     )
-    transport = httpx.ASGITransport(app=app)
+    app.dependency_overrides[get_settings] = lambda: settings
+    yield app
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client(configured_app) -> httpx.AsyncClient:
     # The market router is internal-only; a client without the shared key gets 401.
     return httpx.AsyncClient(
-        transport=transport,
+        transport=httpx.ASGITransport(app=configured_app),
         base_url="http://test",
-        headers={"x-internal-key": get_settings().internal_api_key},
+        headers={"x-internal-key": TEST_INTERNAL_KEY},
     )
 
 
@@ -64,15 +72,21 @@ async def test_fx_endpoint_reports_a_missing_pair_as_404(client):
     assert missing.status_code == 404
 
 
-async def test_market_routes_require_the_internal_key(settings, fixture_provider):
-    redis = FakeRedis()
-    app.state.redis = redis
-    app.state.market_data = MarketDataService(
-        [fixture_provider], Cache(redis), RateLimiter(redis), settings
-    )
-    transport = httpx.ASGITransport(app=app)
+async def test_market_routes_require_the_internal_key(configured_app):
+    """No key, no data - and no development bypass, whatever APP_ENV says."""
+    transport = httpx.ASGITransport(app=configured_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as anonymous:
         response = await anonymous.post("/market/quotes", json={"symbols": ["AAPL"]})
+    assert response.status_code == 401
+
+
+async def test_market_routes_reject_a_wrong_internal_key(configured_app):
+    transport = httpx.ASGITransport(app=configured_app)
+    headers = {"x-internal-key": "not-the-key"}
+    async with httpx.AsyncClient(
+        transport=transport, base_url="http://test", headers=headers
+    ) as wrong:
+        response = await wrong.post("/market/quotes", json={"symbols": ["AAPL"]})
     assert response.status_code == 401
 
 
