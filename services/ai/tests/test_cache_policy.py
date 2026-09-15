@@ -226,9 +226,12 @@ class TestDaylightSaving:
         assert is_us_market_open(datetime(2026, 7, 20, 1, 0, tzinfo=UTC)) is False
 
     def test_ttl_follows_the_corrected_session(self):
+        # The constants, not their current values: this test is about the session
+        # boundary, and hardcoding a tuning number here made it fail the moment
+        # the crypto TTL was raised - for a reason unrelated to daylight saving.
         winter_afternoon = datetime(2026, 1, 15, 20, 30, tzinfo=UTC)
-        assert quote_ttl("AAPL", 900, winter_afternoon) == 900
-        assert quote_ttl("BTC-USD", 900, winter_afternoon) == 60
+        assert quote_ttl("AAPL", YFINANCE_DELAY, winter_afternoon) == YFINANCE_DELAY
+        assert quote_ttl("BTC-USD", YFINANCE_DELAY, winter_afternoon) == CRYPTO_TTL_SECONDS
 
 
 def test_crypto_ttl_stays_within_free_tier_reach():
