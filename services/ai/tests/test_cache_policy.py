@@ -95,7 +95,8 @@ def test_the_configured_minimum_is_a_floor():
     assert quote_ttl("AAPL", 0, weekday(15, 0), minimum_ttl_seconds=300) == 300
     # And a floor above the closed-market TTL still wins.
     assert quote_ttl("AAPL", 0, weekday(3, 0), minimum_ttl_seconds=7200) == 7200
-    assert quote_ttl("BTC-USD", 0, weekday(3, 0), minimum_ttl_seconds=120) == 120
+    # The floor has to exceed the crypto TTL to be the binding constraint.
+    assert quote_ttl("BTC-USD", 0, weekday(3, 0), minimum_ttl_seconds=600) == 600
 
 
 def test_the_floor_never_shortens_a_longer_provider_delay():
@@ -195,3 +196,23 @@ async def test_registry_passes_the_configured_floor_to_the_policy(settings, monk
 
     assert seen == [("AAPL", 900, settings.cache_ttl_quote)]
     assert recorded["quote:AAPL"] == 4242
+
+
+def test_crypto_ttl_stays_within_free_tier_reach():
+    """A floor, not an exact value, so tuning does not churn the suite.
+
+    Crypto is the most expensive symbol class we serve: it never closes, so its
+    TTL alone decides the request rate. Anything under five minutes puts a
+    single open dashboard past what free provider tiers tolerate, so that is the
+    line worth defending in a test rather than in a comment someone edits away.
+    """
+    assert CRYPTO_TTL_SECONDS >= 300
+    assert quote_ttl("ETH-USD", YFINANCE_DELAY, weekday(15, 0)) >= 300
+
+
+def test_crypto_still_refreshes_far_more_often_than_a_closed_market():
+    # The point of the crypto branch is that continuous markets must not inherit
+    # the closed-market TTL; raising the floor must not blur that distinction.
+    assert quote_ttl("BTC-USD", YFINANCE_DELAY, weekday(3, 0)) < quote_ttl(
+        "AAPL", YFINANCE_DELAY, weekday(3, 0)
+    )

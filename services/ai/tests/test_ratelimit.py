@@ -105,7 +105,9 @@ def test_daily_limits_are_parsed_from_the_flat_string():
 
 
 def test_an_empty_setting_means_no_caps():
-    assert Settings(app_env="test").provider_daily_limit_map == {}
+    # _env_file=None: without it this reads the developer's .env, so whether it
+    # passes depends on a file outside the repository.
+    assert Settings(_env_file=None, app_env="test").provider_daily_limit_map == {}
 
 
 @pytest.mark.parametrize("raw", ["alphavantage", "alphavantage=lots", "=25"])

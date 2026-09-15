@@ -23,9 +23,17 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-#: Crypto never closes, so the only thing bounding its TTL is how often we are
-#: willing to ask.
-CRYPTO_TTL_SECONDS = 60
+#: Crypto never closes, so nothing bounds its TTL except how often we are
+#: willing to ask - which makes it by far the most expensive symbol class we
+#: serve. At 60 seconds a single pair left open on the dashboard costs ~1,440
+#: requests a day, more than seventeen equities combined.
+#:
+#: Five minutes is the tracker's answer rather than the trading desk's. This
+#: product reports what a portfolio is worth and explains why it moved; a
+#: five-minute-old bitcoin price changes a displayed total by a fraction of a
+#: percent and changes no explanation at all. Revisit if a feature ever needs
+#: minute-level crypto, and pay for it deliberately.
+CRYPTO_TTL_SECONDS = 300
 
 #: Floor applied when the caller does not pass one. Mirrors the CACHE_TTL_QUOTE
 #: default so importing this module standalone behaves like the wired service.
