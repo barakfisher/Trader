@@ -2,39 +2,32 @@
  * Internal routes: the entrypoint scheduled work calls into.
  *
  * There is exactly one trigger path for scheduled work (DESIGN.md section 2):
- * locally a timer in this process calls it, in Kubernetes a CronJob does. Runs
- * carry a `runKey` so a double trigger is a no-op rather than duplicate work -
- * the property the whole M4 notification pipeline depends on.
+ * locally a timer in this process calls it, in Kubernetes a CronJob does. Both
+ * carry a run key, and the `runs` table decides who gets to do the work.
+ *
+ * The claim lives in Postgres rather than in this process because a restart
+ * used to wipe it: the timer fires ten seconds after boot, so three restarts
+ * meant three extra runs. That was survivable only because the snapshot table
+ * has a unique constraint. It stops being survivable in Milestone 4, where the
+ * same mechanism gates Telegram alerts - and a sent message cannot be
+ * deduplicated after the fact.
  */
 
 import type { Hono } from 'hono';
 import { z } from 'zod';
 
-import { getUser } from '../../db/queries.js';
+import { claimRun, finishRun, getUser, listRuns } from '../../db/queries.js';
 import { logger } from '../../logger.js';
 import { localDate, takeSnapshot } from '../../services/snapshot.js';
-import type { AppEnv } from '../app.js';
+import { currentUserId, type AppEnv } from '../app.js';
 import { ApiProblem, badRequest, notFound } from '../errors.js';
 
 const runSchema = z.object({
   kind: z.enum(['snapshot']),
   userId: z.string().uuid().optional(),
   runKey: z.string().max(200).optional(),
+  trigger: z.string().max(40).optional(),
 });
-
-/** Run keys seen in this process. Moves to the `runs` table in M2. */
-const seenRunKeys = new Map<string, number>();
-const RUN_KEY_TTL_MS = 6 * 60 * 60 * 1000;
-
-function alreadyRan(runKey: string): boolean {
-  const now = Date.now();
-  for (const [key, at] of seenRunKeys) {
-    if (now - at > RUN_KEY_TTL_MS) seenRunKeys.delete(key);
-  }
-  if (seenRunKeys.has(runKey)) return true;
-  seenRunKeys.set(runKey, now);
-  return false;
-}
 
 export function registerInternalRoutes(app: Hono<AppEnv>): void {
   app.post('/internal/runs', async (context) => {
@@ -45,7 +38,7 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
 
     const parsed = runSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
-      throw badRequest('invalid_body', 'expected { kind, userId?, runKey? }', parsed.error.issues);
+      throw badRequest('invalid_body', 'expected { kind, userId?, runKey?, trigger? }', parsed.error.issues);
     }
 
     const userId = parsed.data.userId ?? config.SINGLE_USER_ID;
@@ -53,16 +46,56 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
     if (!user) throw notFound('user not found');
 
     const runKey = parsed.data.runKey ?? `${parsed.data.kind}:${userId}:${localDate(user.timezone)}`;
-    if (alreadyRan(runKey)) {
-      logger().info({ runKey }, 'run skipped: already executed');
-      return context.json({ kind: parsed.data.kind, runKey, status: 'skipped', reason: 'duplicate run key' });
+    const claim = await claimRun({
+      userId,
+      kind: parsed.data.kind,
+      runKey,
+      trigger: parsed.data.trigger ?? 'unknown',
+    });
+
+    if (!claim.claimed) {
+      logger().info({ runKey, existingStatus: claim.existingStatus }, 'run skipped: already claimed');
+      return context.json({
+        kind: parsed.data.kind,
+        runKey,
+        status: 'skipped',
+        reason: `this run key was already claimed (${claim.existingStatus ?? 'unknown'})`,
+      });
     }
 
-    const result = await takeSnapshot(user, context.get('ai'), context.get('requestId'));
-    return context.json({ kind: parsed.data.kind, runKey, status: result.skipped ? 'skipped' : 'ok', result });
+    const runId = claim.runId as string;
+    try {
+      const result = await takeSnapshot(user, context.get('ai'), context.get('requestId'));
+      const status = result.skipped ? 'skipped' : result.degraded ? 'degraded' : 'ok';
+      await finishRun(runId, status, result);
+      return context.json({ kind: parsed.data.kind, runKey, runId, status, result });
+    } catch (error) {
+      // A failed run must be recorded as failed, not left claimed: otherwise the
+      // key blocks every later attempt until the stale-claim window elapses.
+      await finishRun(runId, 'failed', { error: (error as Error).message });
+      throw error;
+    }
   });
-}
 
-export function resetRunKeysForTests(): void {
-  seenRunKeys.clear();
+  /**
+   * Run history. The useful question it answers is not "is the process alive?"
+   * but "did the work actually happen?" - the failure a liveness probe cannot
+   * see, because a scheduler that is silently rejected looks exactly like a
+   * quiet market.
+   */
+  app.get('/runs', async (context) => {
+    const userId = currentUserId(context);
+    const kind = context.req.query('kind');
+    const rows = await listRuns(userId, kind, 50);
+    return context.json({
+      runs: rows.map((row) => ({
+        id: row.id,
+        kind: row.kind,
+        runKey: row.run_key,
+        status: row.status,
+        startedAt: new Date(row.started_at).toISOString(),
+        finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : null,
+      })),
+    });
+  });
 }
