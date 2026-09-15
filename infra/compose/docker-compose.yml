@@ -37,7 +37,15 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ['redis-server', '--save', '', '--appendonly', 'no']
+    # Persistence on a cache is unusual, and deliberate here. Every cached quote
+    # cost an external API call against a free tier, and development restarts
+    # containers constantly - without this, each restart throws the cache away
+    # and the next page load refetches every symbol. Redis stores expiry times
+    # as absolute instants, so entries that expired while the container was down
+    # stay expired: this recovers calls without ever serving a quote past its TTL.
+    command: ['redis-server', '--save', '300', '1', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
     ports:
       - '${REDIS_HOST_PORT:-6379}:6379'
     healthcheck:
@@ -112,3 +120,4 @@ services:
 
 volumes:
   postgres-data:
+  redis-data:
