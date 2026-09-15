@@ -45,9 +45,13 @@ class FakeRedis:
         return removed
 
     async def incr(self, key: str) -> int:
-        current = 0 if self._expired(key) else int(self._store[key][0])
-        expires_at = None if self._expired(key) else self._store.get(key, ("0", None))[1]
-        current += 1
+        return await self.incrby(key, 1)
+
+    async def incrby(self, key: str, amount: int) -> int:
+        expired = self._expired(key)
+        current = 0 if expired else int(self._store[key][0])
+        expires_at = None if expired else self._store[key][1]
+        current += amount
         self._store[key] = (str(current), expires_at)
         return current
 
