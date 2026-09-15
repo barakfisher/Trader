@@ -23,6 +23,29 @@ export class PortfolioStore {
     return this.data !== null && this.data.holdings.length === 0;
   }
 
+  /**
+   * The oldest observation time among priced holdings, as an ISO string.
+   *
+   * This is what the header should show, and it is not the same thing as
+   * `lastLoadedAt`. Quotes come from a delayed feed and are dated to the
+   * provider's observation window, so a portfolio "refreshed" seconds ago can be
+   * built entirely from prices that were true twenty minutes ago. Reporting the
+   * fetch time as though it were the price time is the same misrepresentation
+   * the backend used to make when it stamped every quote with `now()`.
+   */
+  get pricesAsOf(): string | null {
+    const times = (this.data?.holdings ?? [])
+      .map((holding) => holding.quote?.asOf)
+      .filter((asOf): asOf is string => Boolean(asOf));
+    if (times.length === 0) return null;
+    return times.reduce((oldest, current) => (current < oldest ? current : oldest));
+  }
+
+  /** True when any displayed price came from a cached last-known-good value. */
+  get hasStaleQuotes(): boolean {
+    return (this.data?.holdings ?? []).some((holding) => holding.quote?.stale === true);
+  }
+
   get baseCurrency(): string {
     return this.data?.summary.baseCurrency ?? this.root.auth.user?.baseCurrency ?? 'USD';
   }

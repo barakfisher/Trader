@@ -8,6 +8,7 @@ import { HoldingsTable } from '../components/HoldingsTable.tsx';
 import { ImportWizard } from '../components/ImportWizard.tsx';
 import { SummaryCards } from '../components/SummaryCards.tsx';
 import { Button, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
+import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { useStore } from '../stores/context.tsx';
 
 export const DashboardPage = observer(function DashboardPage() {
@@ -19,9 +20,15 @@ export const DashboardPage = observer(function DashboardPage() {
         <div className="flex items-center gap-2">
           <LineChart className="size-5 text-accent" aria-hidden />
           <h1 className="text-base font-semibold">Portfolio</h1>
-          {portfolio.lastLoadedAt && (
-            <span className="text-xs text-text-muted">
-              updated {portfolio.lastLoadedAt.toLocaleTimeString()}
+          {portfolio.pricesAsOf && (
+            <span
+              className="text-xs text-text-muted"
+              title={`Prices observed ${formatExactTime(portfolio.pricesAsOf)}. Fetched ${
+                portfolio.lastLoadedAt?.toLocaleTimeString() ?? 'unknown'
+              }.`}
+            >
+              prices from {formatAge(portfolio.pricesAsOf)}
+              {portfolio.hasStaleQuotes && ' · some cached'}
               {portfolio.refreshing && ' · refreshing…'}
             </span>
           )}

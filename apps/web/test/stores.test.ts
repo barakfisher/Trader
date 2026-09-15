@@ -166,6 +166,75 @@ describe('ImportStore', () => {
   });
 });
 
+function holdingWithQuote(symbol: string, asOf: string, stale = false) {
+  return {
+    id: symbol,
+    instrument: { id: symbol, symbol, name: symbol, assetClass: 'equity' as const, exchange: null, currency: 'USD' },
+    quantity: '1',
+    costBasisMinor: 1000,
+    costCurrency: 'USD',
+    openedAt: null,
+    notes: null,
+    quote: {
+      priceMinor: 1100,
+      currency: 'USD',
+      asOf,
+      source: 'yfinance',
+      delaySeconds: 900,
+      dayChangePct: 1,
+      stale,
+    },
+    valueMinor: 1100,
+    costMinor: 1000,
+    pnlMinor: 100,
+    pnlPct: 10,
+    weightPct: 100,
+    fxRate: '1',
+  };
+}
+
+describe('PortfolioStore price freshness', () => {
+  let store: InstanceType<typeof RootStore>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    store = new RootStore();
+  });
+
+  it('reports the oldest observation time, not the fetch time', async () => {
+    // A portfolio fetched "just now" can be built entirely from prices that were
+    // true twenty minutes ago; the header must say the latter.
+    get.mockResolvedValue({
+      ...portfolio,
+      holdings: [
+        holdingWithQuote('AAPL', '2026-09-15T10:15:00Z'),
+        holdingWithQuote('VOO', '2026-09-15T10:00:00Z'),
+      ],
+    });
+    await store.portfolio.load();
+    expect(store.portfolio.pricesAsOf).toBe('2026-09-15T10:00:00Z');
+    expect(store.portfolio.lastLoadedAt).not.toBeNull();
+  });
+
+  it('has no observation time when nothing could be priced', async () => {
+    get.mockResolvedValue({ ...portfolio, holdings: [] });
+    await store.portfolio.load();
+    expect(store.portfolio.pricesAsOf).toBeNull();
+  });
+
+  it('flags when any displayed price came from the cache', async () => {
+    get.mockResolvedValue({
+      ...portfolio,
+      holdings: [
+        holdingWithQuote('AAPL', '2026-09-15T10:15:00Z'),
+        holdingWithQuote('VOO', '2026-09-15T10:00:00Z', true),
+      ],
+    });
+    await store.portfolio.load();
+    expect(store.portfolio.hasStaleQuotes).toBe(true);
+  });
+});
+
 describe('PortfolioStore', () => {
   let store: InstanceType<typeof RootStore>;
 
