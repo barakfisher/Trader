@@ -82,8 +82,16 @@ class Settings(BaseSettings):
     cache_ttl_history: int = 43_200
     cache_ttl_news: int = 900
 
-    # Per-provider outbound request budget (token bucket), requests per minute.
+    # Per-provider outbound request budget, requests per minute.
     provider_rate_limit_per_minute: int = 60
+
+    # Per-provider daily caps, "alphavantage=25,finnhub=60". Free tiers are
+    # capped per day as well as per minute, and a per-minute limiter cannot
+    # protect a daily cap. Raw string for the same reason as
+    # market_data_providers (pydantic-settings decodes dict-typed fields from a
+    # .env file as JSON); `provider_daily_limit_map` is the parsed accessor.
+    # Empty means no daily cap for any provider.
+    provider_daily_limits: str = ""
 
     # Absolute path to the fixture data directory. Resolved for the current
     # runtime; FIXTURES_DIR in the environment always wins.
@@ -106,11 +114,44 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def _validate_daily_limits(self) -> Settings:
+        """Surface a malformed PROVIDER_DAILY_LIMITS at boot, not mid-request."""
+        _ = self.provider_daily_limit_map
+        return self
+
     @property
     def market_data_chain(self) -> list[str]:
         return [
             item.strip().lower() for item in self.market_data_providers.split(",") if item.strip()
         ]
+
+    @property
+    def provider_daily_limit_map(self) -> dict[str, int]:
+        """Parse PROVIDER_DAILY_LIMITS into {provider: requests_per_day}.
+
+        A malformed entry raises, and `_validate_daily_limits` calls this at boot
+        so it raises there rather than on the first quote request. A typo in a
+        budget would otherwise read as "no cap on that provider", which is
+        exactly the failure this setting exists to prevent.
+        """
+        limits: dict[str, int] = {}
+        for item in self.provider_daily_limits.split(","):
+            entry = item.strip()
+            if not entry:
+                continue
+            name, separator, raw_limit = entry.partition("=")
+            if not separator or not name.strip():
+                raise ValueError(
+                    f"PROVIDER_DAILY_LIMITS entry {entry!r} is not in the form provider=limit"
+                )
+            try:
+                limits[name.strip().lower()] = int(raw_limit.strip())
+            except ValueError as exc:
+                raise ValueError(
+                    f"PROVIDER_DAILY_LIMITS entry {entry!r} has a non-integer limit"
+                ) from exc
+        return limits
 
     @property
     def is_production(self) -> bool:

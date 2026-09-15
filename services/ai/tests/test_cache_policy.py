@@ -117,6 +117,8 @@ class _DelayedProvider:
     name = "delayed"
     delay_seconds = 900
     quote_granularity_seconds = 900
+    makes_external_requests = True
+    batches_requests = False
 
     async def quotes(self, symbols):
         from app.models import Quote

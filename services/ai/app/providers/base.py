@@ -34,6 +34,20 @@ class MarketDataProvider(Protocol):
     #: See app/core/observation_time.py.
     quote_granularity_seconds: int
 
+    #: Does calling this provider consume an external quota? False for
+    #: FixtureProvider, which reads a local JSON file and has no upstream to
+    #: protect. The chain skips rate limiting entirely for such providers, so a
+    #: burst of offline requests cannot lock the demo out of its own fixtures.
+    makes_external_requests: bool
+
+    #: Does `quotes()` price the whole list in one upstream request? False for
+    #: yfinance, which issues one HTTP request per symbol; True for providers
+    #: with a genuine multi-symbol endpoint (Polygon's grouped snapshot). This is
+    #: what the limiter charges against: a 10-symbol call costs 10 requests from
+    #: a non-batching provider and 1 from a batching one, and charging 1 for both
+    #: made the limiter under-report usage by the batch size.
+    batches_requests: bool
+
     async def quotes(self, symbols: list[str]) -> list[Quote]:
         """Price as many of `symbols` as possible. Unknown symbols are omitted,
         never faked. Raising ProviderError means "provider is unusable right now"."""
