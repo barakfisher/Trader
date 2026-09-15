@@ -12,11 +12,16 @@
     "build": "echo \"@traders/shared is consumed as TypeScript source; nothing to build\"",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "test": "echo \"no tests in @traders/shared\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "gen:api": "openapi-typescript ../../services/ai/openapi.json -o src/generated/ai-api.d.ts"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "openapi-typescript": "^7.4.1",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.2"
   }
 }

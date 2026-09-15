@@ -8,5 +8,5 @@
     // browser); DOM is the lib that declares them without pulling in @types/node.
     "lib": ["ES2023", "DOM"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts"]
 }
