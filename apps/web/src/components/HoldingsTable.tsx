@@ -4,6 +4,7 @@ import { Check, Clock, Pencil, Trash2, X } from 'lucide-react';
 
 import { formatMoney, formatPercent, minorToNumber, type HoldingView } from '@traders/shared';
 
+import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { useStore } from '../stores/context.tsx';
 import { Card, Delta } from './ui.tsx';
 
@@ -69,7 +70,7 @@ const HoldingRow = observer(function HoldingRow({
           <span className="font-medium">{holding.instrument.symbol}</span>
           {holding.quote?.stale && (
             <span
-              title={`Last known price from ${new Date(holding.quote.asOf).toLocaleString()}`}
+              title={`Last known price, observed ${formatExactTime(holding.quote.asOf)}. No provider could refresh it.`}
               className="flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-[10px] text-warn"
             >
               <Clock className="size-3" aria-hidden /> stale
@@ -81,12 +82,6 @@ const HoldingRow = observer(function HoldingRow({
         </div>
         <p className="text-xs text-text-muted">
           {holding.instrument.name ?? holding.instrument.assetClass}
-          {holding.quote && holding.quote.delaySeconds > 0 && (
-            <span title={`${holding.quote.source} quote, delayed`}>
-              {' '}
-              · {Math.round(holding.quote.delaySeconds / 60)}m delayed
-            </span>
-          )}
         </p>
       </td>
 
@@ -121,7 +116,28 @@ const HoldingRow = observer(function HoldingRow({
       </td>
 
       <td className="py-2 pr-3 text-right">
-        {holding.quote ? formatMoney(holding.quote.priceMinor, holding.quote.currency) : '—'}
+        {holding.quote ? (
+          <>
+            <div>{formatMoney(holding.quote.priceMinor, holding.quote.currency)}</div>
+            {/* The price is only as fresh as its observation window, and the
+                provider's delay is on top of that. Showing both stops the table
+                implying every figure is live. */}
+            <div
+              className="text-[11px] text-text-muted"
+              title={`Observed ${formatExactTime(holding.quote.asOf)} via ${holding.quote.source}${
+                holding.quote.delaySeconds > 0
+                  ? `, on a ${Math.round(holding.quote.delaySeconds / 60)}-minute delayed feed`
+                  : ''
+              }`}
+            >
+              {formatAge(holding.quote.asOf)}
+              {holding.quote.delaySeconds > 0 &&
+                ` · ${Math.round(holding.quote.delaySeconds / 60)}m delay`}
+            </div>
+          </>
+        ) : (
+          '—'
+        )}
       </td>
       <td className="py-2 pr-3 text-right">
         <Delta value={holding.quote?.dayChangePct ?? null}>
