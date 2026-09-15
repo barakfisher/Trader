@@ -79,6 +79,33 @@ export interface PortfolioResponse {
   allocationByAssetClass: AllocationSlice[];
 }
 
+// --- Snapshots ---------------------------------------------------------------
+
+/**
+ * One stored day of the equity curve. Snapshots are historical facts: they are
+ * written once and never recomputed, so each row carries how complete the
+ * pricing was at the time. A consumer that charts or analyses the series must
+ * treat a `degraded` point as approximate rather than as a real move.
+ */
+export interface PortfolioSnapshot {
+  /** Calendar date in the user's timezone, ISO 8601 (YYYY-MM-DD). */
+  asOf: string;
+  totalMinor: number;
+  costMinor: number;
+  currency: string;
+  /** Holdings held on `asOf`, priced or not. */
+  holdingsCount: number;
+  /** Of those, how many contributed to `totalMinor`; a lower number understates it. */
+  pricedCount: number;
+  /** True when any holding was unpriced or any quote was stale. */
+  degraded: boolean;
+}
+
+export interface SnapshotsResponse {
+  /** Oldest first, so the series can be charted as returned. */
+  snapshots: PortfolioSnapshot[];
+}
+
 // --- Import (FLOWS.md F1) ----------------------------------------------------
 
 export type ImportRowStatus = 'ok' | 'ambiguous' | 'unresolved' | 'invalid' | 'duplicate';

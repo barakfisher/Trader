@@ -63,6 +63,11 @@ Full reasoning in [docs/DESIGN.md](../docs/DESIGN.md) section 2. The ones that c
 7. **Milestone order was changed from the original brief** to ship a vertical slice first.
 8. **Session auth is a signed self-describing cookie**, no session table; only `http/auth.ts` and
    the login route change when real multi-user auth arrives.
+9. **A partially priced snapshot is stored marked, not refused** (Alembic `0002_snapshot_integrity`:
+   `holdings_count`, `priced_count`, `degraded`). A hole in the series reads as "no change" and
+   misleads exactly as much as an understated total; snapshots are never recomputed, so the marker
+   is the only chance to say the total is incomplete. M2's volatility and drawdown rules must skip
+   `degraded` points rather than explain them.
 
 ## Known issues and technical debt
 
@@ -78,6 +83,7 @@ Full reasoning in [docs/DESIGN.md](../docs/DESIGN.md) section 2. The ones that c
 | No rate limiting on public API routes | `src/http/app.ts` | single-user deployment; revisit before multi-user |
 | No component/DOM tests on the web app | `apps/web/test` | store logic is covered; rendering is not. Add a DOM test runner in M6 |
 | `instruments` and `quotes` have no `user_id` | migration `0001` | intentional: shared reference and market data, not user-owned. Documented so the audit does not re-flag it |
+| Snapshots written before `0002` carry default counts | migration `0002` | `holdings_count = 0` on a non-zero total means "provenance unknown"; not backfilled, and `0002` has not yet run against a live database |
 
 ## Developer entry points
 
