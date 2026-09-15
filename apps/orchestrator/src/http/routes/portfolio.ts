@@ -5,6 +5,7 @@
  */
 
 import type { Hono } from 'hono';
+import type { SnapshotsResponse } from '@traders/shared';
 
 import { getUser, listHoldings, listSnapshots, recordQuotes } from '../../db/queries.js';
 import { logger } from '../../logger.js';
@@ -48,15 +49,21 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
     const userId = currentUserId(context);
     const limit = Number(context.req.query('limit') ?? 365);
     const rows = await listSnapshots(userId, Number.isFinite(limit) ? Math.min(limit, 3650) : 365);
-    return context.json({
+    const response: SnapshotsResponse = {
       snapshots: rows
         .map((row) => ({
           asOf: row.as_of instanceof Date ? row.as_of.toISOString().slice(0, 10) : String(row.as_of),
           totalMinor: Number(row.total_minor),
           costMinor: Number(row.cost_minor),
           currency: row.currency,
+          // Provenance travels with every point: a client charting the series
+          // has to be able to mark an approximate total as approximate.
+          holdingsCount: Number(row.holdings_count),
+          pricedCount: Number(row.priced_count),
+          degraded: row.degraded,
         }))
         .reverse(),
-    });
+    };
+    return context.json(response);
   });
 }

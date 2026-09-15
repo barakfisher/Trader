@@ -6,6 +6,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SnapshotsResponse } from '@traders/shared';
 
 const USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -136,6 +137,36 @@ describe('API', () => {
     const body = (await response.json()) as { summary: { totalValueMinor: number }; holdings: unknown[] };
     expect(body.summary.totalValueMinor).toBe(232140);
     expect(body.holdings).toHaveLength(1);
+  });
+
+  it('reports snapshot completeness on the equity curve', async () => {
+    const { listSnapshots } = await import('../src/db/queries.js');
+    vi.mocked(listSnapshots).mockResolvedValueOnce([
+      {
+        as_of: new Date('2026-09-14T00:00:00Z'),
+        total_minor: '6785800',
+        cost_minor: '5000000',
+        currency: 'USD',
+        holdings_count: 10,
+        priced_count: 9,
+        degraded: true,
+      },
+    ] as never);
+
+    const cookie = await loginCookie(app);
+    const response = await app.request('/portfolio/snapshots', { headers: { cookie } });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as SnapshotsResponse;
+    // A client charting this point has to be able to see that it is incomplete.
+    expect(body.snapshots[0]).toEqual({
+      asOf: '2026-09-14',
+      totalMinor: 6785800,
+      costMinor: 5000000,
+      currency: 'USD',
+      holdingsCount: 10,
+      pricedCount: 9,
+      degraded: true,
+    });
   });
 
   it('blocks a state-changing request from an unknown origin', async () => {

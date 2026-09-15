@@ -18,10 +18,13 @@ export interface FakeAiOptions {
   missingFx?: string[];
   /** Symbols to return as ambiguous, with candidates. */
   ambiguous?: Record<string, string[]>;
+  /** Symbols whose quote is served from a cache past its TTL. */
+  stale?: string[];
 }
 
 export function createFakeAi(options: FakeAiOptions = {}): AiClient {
   const unpriceable = new Set((options.unpriceable ?? []).map((s) => s.toUpperCase()));
+  const stale = new Set((options.stale ?? []).map((s) => s.toUpperCase()));
   const missingFx = new Set(options.missingFx ?? []);
 
   const client = {
@@ -44,7 +47,7 @@ export function createFakeAi(options: FakeAiOptions = {}): AiClient {
           delay_seconds: 0,
           previous_close_minor: entry.previous,
           day_change_pct: Number((((entry.price - entry.previous) / entry.previous) * 100).toFixed(4)),
-          stale: false,
+          stale: stale.has(symbol),
         });
       }
       return { quotes, missing };
