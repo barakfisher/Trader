@@ -51,6 +51,8 @@ async def test_chain_moves_on_when_first_provider_fails(settings, fixture_provid
     class BrokenProvider:
         name = "broken"
         delay_seconds = 0
+        makes_external_requests = True
+        batches_requests = False
 
         async def quotes(self, symbols):
             raise ProviderError(self.name, "down")

@@ -11,6 +11,12 @@ Two cache layers per symbol:
   * `quote:last:{symbol}` - 7 days, the "last known good" value used only when
     every provider in the chain has failed. Served with stale=True so the UI can
     label it rather than silently showing an old price as current.
+
+Rate limiting is charged in upstream requests, not in calls: a provider that
+fetches one symbol at a time (`batches_requests = False`) costs `len(symbols)`,
+and a provider that makes no external request at all costs nothing. Both a
+per-minute and a per-UTC-day budget are checked; either one being exhausted
+skips the provider and the chain continues.
 """
 
 from __future__ import annotations
@@ -85,10 +91,7 @@ class MarketDataService:
             missing = [s for s in wanted if s not in found]
             if not missing:
                 break
-            if not await self._limiter.allow(
-                provider.name, self._settings.provider_rate_limit_per_minute
-            ):
-                log.warning("providers.skipped_rate_limited", provider=provider.name)
+            if not await self._within_budget(provider, len(missing)):
                 continue
             try:
                 quotes = await provider.quotes(missing)
@@ -128,6 +131,39 @@ class MarketDataService:
         if still_missing:
             log.warning("providers.unpriced", symbols=still_missing)
         return [found[s] for s in wanted if s in found], still_missing
+
+    async def _within_budget(self, provider: MarketDataProvider, symbol_count: int) -> bool:
+        """Charge this call to the provider's budgets; False means skip it.
+
+        The cost is the number of upstream requests the call will actually make,
+        which is `symbol_count` for a provider that fetches one symbol at a time
+        and 1 for one with a real multi-symbol endpoint. Charging 1 either way
+        under-reported usage by the batch size, so the mechanism protecting our
+        API credits was blind to exactly the requests that consume them.
+        """
+        if not provider.makes_external_requests:
+            return True  # local provider: no quota to spend
+        cost = 1 if provider.batches_requests else max(symbol_count, 1)
+
+        daily_limit = self._settings.provider_daily_limit_map.get(provider.name, 0)
+        if not await self._limiter.allow_daily(provider.name, daily_limit, cost):
+            # Worth its own line: a per-minute denial recovers in under a minute,
+            # an exhausted daily budget means this provider is gone until UTC
+            # midnight and the chain is running on its fallbacks.
+            log.warning(
+                "providers.skipped_daily_budget",
+                provider=provider.name,
+                limit_per_day=daily_limit,
+                cost=cost,
+            )
+            return False
+
+        if not await self._limiter.allow(
+            provider.name, self._settings.provider_rate_limit_per_minute, cost
+        ):
+            log.warning("providers.skipped_rate_limited", provider=provider.name, cost=cost)
+            return False
+        return True
 
     async def resolve(self, query: str) -> InstrumentResolution:
         cache_key = f"resolve:{query.strip().lower()}"

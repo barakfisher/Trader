@@ -52,6 +52,10 @@ class YFinanceProvider:
     # lastTradeTime), so an observation can only be dated to the delay window it
     # came from. Claiming more precision than that would be a fabrication.
     quote_granularity_seconds = 900
+    makes_external_requests = True
+    # `quotes()` fans out one `Ticker` read per symbol (see the gather below), so
+    # a 10-symbol request costs 10 upstream requests, not 1.
+    batches_requests = False
 
     def __init__(self, *, timeout_seconds: float = 12.0) -> None:
         self._timeout = timeout_seconds
