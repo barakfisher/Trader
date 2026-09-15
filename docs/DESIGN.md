@@ -51,7 +51,8 @@ users(id, email, base_currency, quiet_hours, created_at)
 instruments(id, symbol, asset_class, exchange, currency, name, provider_ids jsonb)
 holdings(id, user_id, instrument_id, quantity numeric, cost_basis_minor, currency, opened_at)
 target_weights(user_id, instrument_id, weight)           -- optional, drives drift detection
-portfolio_snapshots(id, user_id, as_of, total_minor, currency, breakdown jsonb)
+portfolio_snapshots(id, user_id, as_of, total_minor, cost_minor, currency, breakdown jsonb,
+                    holdings_count, priced_count, degraded)   -- see note below
 quotes(instrument_id, as_of, price_minor, currency, source, delay_seconds)  -- time-series, retained N days
 
 topics(id, user_id, label, status[active|proposed|rejected], created_by[user|auto])
@@ -77,6 +78,22 @@ kb_chunks(id, document_id, ord, text, embedding vector, metadata jsonb)
 Indices that matter: `observations(dedupe_key)`, `notifications(dedupe_key)`, `runs(run_key)`,
 `articles(url_hash)`, `kb_chunks` HNSW on `embedding`, `quotes(instrument_id, as_of desc)`.
 
+Two columns carry more meaning than their names suggest:
+
+- **`quotes.as_of` is when the price was *observed*, not when it was fetched.** Providers that
+  publish a trade timestamp supply it; for the rest it is the fetch time floored to that provider's
+  freshness window (`quote_granularity_seconds`). This is what makes the `(instrument_id, as_of)`
+  primary key deduplicate repeated reads of one observation, and it keeps the stored time from
+  claiming precision the data does not have. Stamping `now()` here produced 70 rows holding 10
+  distinct prices, and would have misdated every move Milestone 2 derives from the series.
+- **`portfolio_snapshots.degraded`** records that the day's total was computed while something was
+  unpriced or served stale. A snapshot is a historical fact that is never recomputed, so an
+  understated total would leave a permanent phantom crash in the equity curve - and the analysis
+  engine would later detect that crash and explain it, citing our own data. Partial snapshots are
+  stored *marked* rather than refused, because a silent hole in the series is equally misleading.
+  Rows predating this column are backfilled `degraded = true`: unknown provenance is closer to
+  degraded than to trustworthy.
+
 ## 4. Provider layer (ai-service)
 
 ```python
@@ -84,6 +101,22 @@ class MarketDataProvider(Protocol):
     def quote(self, symbols: list[str]) -> list[Quote]: ...
     def history(self, symbol: str, period: str) -> Series: ...
 ```
+**Cache policy** (`app/core/cache_policy.py`): a quote's TTL follows the data rather than the
+clock. Crypto trades continuously, so it is capped by how often we are willing to ask (300s).
+Equities take the provider's own declared delay while the market is open - caching for less than
+that re-reads a value that cannot have changed - and one hour when it is closed. Market hours are
+resolved in `America/New_York`, not a fixed UTC window, because the session shifts by an hour twice
+a year and a stale window silently serves hour-old prices through the last hour of a winter trading
+day. Public holidays are deliberately ignored: the cost is a handful of extra requests roughly ten
+days a year, against a calendar that is either a dependency or a table that rots.
+
+**Quota accounting**: the rate limiter is charged what a call actually costs - `len(symbols)` for a
+provider that issues one request per symbol, 1 for one with a multi-symbol endpoint
+(`batches_requests` on the provider contract). Charging per call while making one request per
+symbol under-reported usage by the batch size, which is to say the mechanism protecting the budget
+was reporting a twentieth of the truth. Per-day ceilings (`PROVIDER_DAILY_LIMITS`) exist because
+free tiers cap by day and a per-minute limiter cannot see that.
+
 Implementations, tried in order per config: `FixtureProvider` (offline/CI/demo) →
 `YFinanceProvider` (dev default; unofficial, treat as best-effort) →
 `AlphaVantageProvider` / `FinnhubProvider` (keyed, hard daily caps) →

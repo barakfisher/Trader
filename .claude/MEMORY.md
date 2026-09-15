@@ -1,6 +1,6 @@
 # Project memory — Traders
 
-Updated: 2026-09-14. Maintained per [CLAUDE.md](../CLAUDE.md) "Session management & memory".
+Updated: 2026-09-15. Maintained per [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
 ---
 
@@ -9,7 +9,8 @@ Updated: 2026-09-14. Maintained per [CLAUDE.md](../CLAUDE.md) "Session managemen
 | Milestone | Status | Notes |
 |---|---|---|
 | **M0 — Repo skeleton & contracts** | ✅ **Complete** | monorepo, compose stack, CI, OpenAPI contract + generated client |
-| **M1 — Vertical slice: portfolio in, valued portfolio out** | ✅ **Complete** (pending milestone quiz) | built and verified end to end against the running stack |
+| **M1 — Vertical slice: portfolio in, valued portfolio out** | ✅ **Complete** | built and verified end to end against the running stack |
+| **M1.5 — Trustworthy quote path** (unplanned, inserted) | ✅ **Complete** | correctness work M2 depends on; see below |
 | M2 — Analysis engine & observations | ⏭️ Next | rule layer, news ingestion, correlation, narration behind the evidence validator |
 | M3 — RAG & educational engine | Not started | |
 | M4 — Scheduling, HITL & Telegram | Not started | Mastra lands here |
@@ -47,6 +48,27 @@ Updated: 2026-09-14. Maintained per [CLAUDE.md](../CLAUDE.md) "Session managemen
   `scripts/smoke-test.sh` passing against the live containers (login, import, valuation with FX,
   snapshot, idempotency, auth rejections).
 
+**M1.5 — trustworthy quote path** (PRs #3-#10, 2026-09-15)
+
+Inserted between M1 and M2 after an audit of the quote path found data problems M2 would have
+built on. Every item was measured before and after, not assumed.
+
+- **Observation time** (`core/observation_time.py`): `quotes.as_of` is when a price was observed,
+  not when it was fetched, floored to each provider's freshness window. Eight dashboard refreshes
+  went from 70 stored rows holding 10 distinct prices, to 10.
+- **Cache policy** (`core/cache_policy.py`): TTL derived from provider delay, asset class and
+  market hours, the latter resolved in `America/New_York` rather than a fixed UTC window.
+- **Quota accounting**: the rate limiter charges `len(symbols)` for non-batching providers and
+  supports per-day ceilings. It previously charged 1 per call while making 20 requests.
+- **Free-tier tuning**: crypto TTL 60s → 300s, Redis persists across restarts, a self-imposed
+  `PROVIDER_DAILY_LIMITS` ceiling. Heavy use of a 20-symbol portfolio: ~14,400 → ~600 requests/day.
+- **Response validation** (`packages/shared/src/ai/schemas.ts`): every AI-service response is zod
+  parsed, with each schema pinned to its generated type so Python drift is a compile error. The
+  `as T` cast it replaced was the largest act of faith in the codebase.
+- **Snapshot integrity** (migration `0002`): snapshots record `holdings_count`, `priced_count` and
+  `degraded`, so a partial day is stored marked rather than silently understated.
+- **UI honesty**: the dashboard reports when prices were *observed*, not when they were fetched.
+
 ## Architectural decisions
 
 Full reasoning in [docs/DESIGN.md](../docs/DESIGN.md) section 2. The ones that constrain future work:
@@ -63,6 +85,14 @@ Full reasoning in [docs/DESIGN.md](../docs/DESIGN.md) section 2. The ones that c
 7. **Milestone order was changed from the original brief** to ship a vertical slice first.
 8. **Session auth is a signed self-describing cookie**, no session table; only `http/auth.ts` and
    the login route change when real multi-user auth arrives.
+9. **No market-status API call, ever, on the pricing path.** Evaluated and rejected: the quota
+   saving is near zero because fetching is demand-driven, an external check cannot replace the
+   offline calendar it would need as an outage fallback, and a wrongly cached "closed" would halt
+   pricing for a day - failing in the expensive direction, where the current design fails in the
+   cheap one. If scheduled scans ever make holidays material, the answer is a static calendar
+   applied at the scheduler, not a network call per quote.
+10. **Partial snapshots are stored and marked, not refused.** A silent hole in the equity curve is
+    as misleading as an understated total; `degraded` lets every consumer tell the difference.
 9. **A partially priced snapshot is stored marked, not refused** (Alembic `0002_snapshot_integrity`:
    `holdings_count`, `priced_count`, `degraded`). A hole in the series reads as "no change" and
    misleads exactly as much as an understated total; snapshots are never recomputed, so the marker
@@ -82,6 +112,9 @@ Full reasoning in [docs/DESIGN.md](../docs/DESIGN.md) section 2. The ones that c
 | Quote history written best-effort | `routes/portfolio.ts` | failures are logged, not retried; fine until M2 needs dense history |
 | No rate limiting on public API routes | `src/http/app.ts` | single-user deployment; revisit before multi-user |
 | No component/DOM tests on the web app | `apps/web/test` | store logic is covered; rendering is not. Add a DOM test runner in M6 |
+| Crypto detection is a symbol-shape heuristic | `core/cache_policy.py` | `-USD` suffix, because the AI service receives bare symbols. Fix by passing `asset_class` and `exchange` on the quote request |
+| Market hours assume US sessions for every symbol | `core/cache_policy.py` | SAP.DE trades on XETRA (08:00-16:30 UTC) but is judged against NYSE hours: ~5 hours a day of needlessly stale prices. Same wire change fixes it |
+| Redis cold start refetches everything | `core/cache.py` | the `quotes` table holds usable recent prices; warming from it was deferred to pair with M2 |
 | `instruments` and `quotes` have no `user_id` | migration `0001` | intentional: shared reference and market data, not user-owned. Documented so the audit does not re-flag it |
 | Snapshots written before `0002` carry default counts | migration `0002` | `holdings_count = 0` on a non-zero total means "provenance unknown"; not backfilled, and `0002` has not yet run against a live database |
 

@@ -29,6 +29,25 @@ and [docs/MILESTONES.md](docs/MILESTONES.md) before changing architecture.
 10. **Timestamps are ISO 8601 UTC**; "today" resolves in the user's timezone (`APP_TIMEZONE`,
     default `Asia/Jerusalem`). Base currency USD.
 
+## Conventions learned the hard way
+
+Each of these cost real time. They are listed so the cost is paid once.
+
+1. **Tests assert constants, never tuning values.** `assert ttl == CRYPTO_TTL_SECONDS`, not
+   `== 60`. Three separate spurious failures came from a test about session boundaries breaking
+   because an unrelated TTL was retuned. A test should fail when the behaviour it describes
+   changes, and at no other time.
+2. **No stacked pull requests.** One branch off `main`, merged, then the next. Two PRs merged into
+   their base branches instead of `main` and their content silently never arrived - while GitHub
+   displayed them as MERGED. Parallel authoring in separate worktrees is fine; parallel merging is
+   not. After merging, verify by content (`grep` for a marker), not by the merge badge.
+3. **Tests must not read `.env`.** Build settings with `_env_file=None` and override injected
+   config. A test whose result depends on a file outside the repository passes on one machine and
+   fails on another, and the green one is the misleading result.
+4. **Name modules after the concept they own.** `money.ts`, `valuation.ts`, `cache_policy.py` - no
+   `utils`, `helpers`, `common` or `misc` filenames. A file whose only honest name is "utils" has
+   contents that do not belong together.
+
 ## Repository conventions
 
 - Monorepo: `apps/web`, `apps/orchestrator`, `packages/shared`, `services/ai`, `infra/*`.
@@ -59,11 +78,13 @@ verification covering:
 2. **Automated testing**: run the full test suite (FastAPI pytest / frontend tests) to ensure zero
    regressions.
 3. **Security check**: verify that no secrets, credentials, or `.env` files are tracked in git.
-4. **Interactive milestone learning quiz**:
-   - Generate a 3 to 5 question quiz directly in the CLI/terminal covering the new code changes,
-     architectural choices, and potential edge cases introduced in this milestone.
-   - Present the quiz to the user and **wait for their responses** before wrapping up the
-     milestone, creating a git commit, or opening a PR.
+4. **Learning quiz - on request only**:
+   - When the user asks for a quiz, generate 3 to 5 questions on the new code, the architectural
+     choices and the edge cases, ask them one at a time, and wait for each answer.
+   - Do not gate commits, PRs or milestones on it. It was blocking delivery and being skipped, and
+     a rule that is routinely skipped teaches nothing except that rules are optional.
+   - Instead, every PR body explains what changed and why it matters. That is the durable version
+     of the same idea, and it survives in the repository rather than in a terminal.
 
 ### Commands the audit uses
 
