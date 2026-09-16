@@ -7,7 +7,13 @@
 import type { Hono } from 'hono';
 import type { SnapshotsResponse } from '@traders/shared';
 
-import { getUser, listHoldings, listSnapshots, recordQuotes } from '../../db/queries.js';
+import {
+  getUser,
+  listHoldings,
+  listObservations,
+  listSnapshots,
+  recordQuotes,
+} from '../../db/queries.js';
 import { logger } from '../../logger.js';
 import { valuePortfolio } from '../../services/valuation.js';
 import { currentUserId, type AppEnv } from '../app.js';
@@ -43,6 +49,33 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
     );
 
     return context.json(portfolio);
+  });
+
+  /**
+   * The observations feed: what the analysis engine has found, newest first.
+   *
+   * `evidence` is returned in full rather than summarised. It is what makes a
+   * claim checkable, and a claim the reader cannot check is the thing this
+   * product exists not to make.
+   */
+  app.get('/observations', async (context) => {
+    const userId = currentUserId(context);
+    const limit = Number(context.req.query('limit') ?? 50);
+    const rows = await listObservations(userId, Number.isFinite(limit) ? Math.min(limit, 200) : 50);
+    return context.json({
+      observations: rows.map((row) => ({
+        id: row.id,
+        kind: row.kind,
+        severity: row.severity,
+        subjectKind: row.subject_kind,
+        subjectRef: row.subject_ref,
+        headline: row.headline,
+        explanation: row.explanation,
+        evidence: row.evidence,
+        conceptRefs: row.concept_refs,
+        createdAt: new Date(row.created_at).toISOString(),
+      })),
+    });
   });
 
   app.get('/portfolio/snapshots', async (context) => {

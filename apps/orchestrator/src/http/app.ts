@@ -36,7 +36,7 @@ export interface AppEnv {
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 /** Route prefixes that require a signed-in session. */
-const PROTECTED_PREFIXES = ['/portfolio', '/holdings', '/imports', '/runs'];
+const PROTECTED_PREFIXES = ['/portfolio', '/holdings', '/imports', '/runs', '/observations'];
 
 export function createApp(config: Config, ai: AiClient): Hono<AppEnv> {
   const app = new Hono<AppEnv>();

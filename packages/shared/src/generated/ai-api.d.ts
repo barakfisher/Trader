@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/analysis/portfolio-scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Portfolio Scan */
+        post: operations["portfolio_scan_analysis_portfolio_scan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -186,6 +203,76 @@ export interface components {
             resolved?: components["schemas"]["Instrument"] | null;
         };
         /**
+         * ObservationOut
+         * @description A finding, its words, and its identity.
+         *
+         *     `evidence` carries every figure the headline and explanation rest on; the
+         *     narration validator rejects any that is not here. `narration_source` says who
+         *     wrote the words, and `fallback_reason` why the model did not, so the
+         *     rejection rate is measurable.
+         */
+        ObservationOut: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Concept Refs */
+            concept_refs?: string[];
+            /** Dedupe Key */
+            dedupe_key: string;
+            /** Evidence */
+            evidence?: {
+                [key: string]: unknown;
+            };
+            /** Explanation */
+            explanation: string;
+            /**
+             * Fallback Reason
+             * @default none
+             */
+            fallback_reason: string;
+            /** Headline */
+            headline: string;
+            /** Kind */
+            kind: string;
+            /**
+             * Narration Source
+             * @enum {string}
+             */
+            narration_source: "llm" | "template";
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "info" | "notable" | "high";
+            /** Subject Ref */
+            subject_ref: string;
+        };
+        /** PortfolioScanRequest */
+        PortfolioScanRequest: {
+            /**
+             * Base Currency
+             * @default USD
+             */
+            base_currency: string;
+            /** Holdings */
+            holdings: components["schemas"]["ScanHolding"][];
+            /**
+             * Target Weights
+             * @description symbol -> target weight as a decimal string, e.g. {'VOO': '0.25'}.
+             */
+            target_weights?: {
+                [key: string]: string;
+            };
+        };
+        /** PortfolioScanResponse */
+        PortfolioScanResponse: {
+            /** Observations */
+            observations: components["schemas"]["ObservationOut"][];
+            stats: components["schemas"]["ScanStatsOut"];
+        };
+        /**
          * Quote
          * @description A single price observation. `price_minor` is integer minor units.
          */
@@ -239,6 +326,64 @@ export interface components {
             /** Quotes */
             quotes: components["schemas"]["Quote"][];
         };
+        /**
+         * ScanHolding
+         * @description One holding as the scan needs it.
+         *
+         *     `value_minor` is the holding's market value in the portfolio's base currency,
+         *     computed by the orchestrator, which owns valuation and the FX rates. It is
+         *     null when the holding could not be priced - carried rather than omitted so
+         *     the scan can report that allocation drift was skipped, and why.
+         */
+        ScanHolding: {
+            /**
+             * As Of
+             * @description When the price behind value_minor was observed. Allocation drift dates a weight by the stalest price contributing to it, so a position without this cannot take part.
+             */
+            as_of?: string | null;
+            /**
+             * Currency
+             * @default USD
+             */
+            currency: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Symbol */
+            symbol: string;
+            /** Value Minor */
+            value_minor?: number | null;
+        };
+        /** ScanStatsOut */
+        ScanStatsOut: {
+            /** Drift Skipped Reason */
+            drift_skipped_reason?: string | null;
+            /**
+             * Findings
+             * @default 0
+             */
+            findings: number;
+            /** Insufficient History */
+            insufficient_history?: string[];
+            /**
+             * Narrated By Llm
+             * @default 0
+             */
+            narrated_by_llm: number;
+            /** Narration Fallbacks */
+            narration_fallbacks?: {
+                [key: string]: number;
+            };
+            /**
+             * Subjects
+             * @default 0
+             */
+            subjects: number;
+            /**
+             * Subjects With History
+             * @default 0
+             */
+            subjects_with_history: number;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -261,6 +406,41 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    portfolio_scan_analysis_portfolio_scan_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortfolioScanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioScanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     healthz_healthz_get: {
         parameters: {
             query?: never;

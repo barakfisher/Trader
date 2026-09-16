@@ -12,6 +12,10 @@ const PRICES: Record<string, { price: number; previous: number; currency: string
 const FX: Record<string, string> = { EURUSD: '1.1043', USDUSD: '1' };
 
 export interface FakeAiOptions {
+  /** Observations the scan should return. */
+  observations?: unknown[];
+  /** Stats overrides, for exercising the skipped-rule paths. */
+  scanStats?: Record<string, unknown>;
   /** Symbols to pretend no provider can price. */
   unpriceable?: string[];
   /** Currency pairs to pretend are unavailable, e.g. ['EURUSD']. */
@@ -98,6 +102,36 @@ export function createFakeAi(options: FakeAiOptions = {}): AiClient {
       const rate = base.toUpperCase() === quote.toUpperCase() ? '1' : FX[key];
       if (!rate) throw new Error(`no FX rate for ${key}`);
       return { base, quote, rate, as_of: '2026-09-14T12:00:00Z', source: 'fake' };
+    },
+
+    async portfolioScan() {
+      return {
+        observations: options.observations ?? [
+          {
+            kind: 'price_move',
+            severity: 'high',
+            subject_ref: 'instrument:AAPL',
+            as_of: '2026-09-16T14:00:00Z',
+            headline: 'AAPL moved -8.5%',
+            explanation: 'From $129.45 to $118.45.',
+            evidence: { change_pct: -0.085 },
+            concept_refs: ['daily-return'],
+            dedupe_key: 'price_move:test',
+            narration_source: 'template',
+            fallback_reason: 'no_provider',
+          },
+        ],
+        stats: {
+          subjects: 1,
+          subjects_with_history: 1,
+          findings: 1,
+          narrated_by_llm: 0,
+          narration_fallbacks: { no_provider: 1 },
+          drift_skipped_reason: null,
+          insufficient_history: [],
+          ...(options.scanStats ?? {}),
+        },
+      };
     },
 
     async health() {

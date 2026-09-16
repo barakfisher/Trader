@@ -97,6 +97,45 @@ export const healthResponseSchema = z.object({
   version: z.string(),
 });
 
+export const observationSchema = z.object({
+  kind: z.string(),
+  severity: z.enum(['info', 'notable', 'high']),
+  subject_ref: z.string(),
+  as_of: z.string(),
+  headline: z.string(),
+  explanation: z.string(),
+  // Evidence is deliberately unconstrained: it is the rule's own record of what
+  // it measured, and every rule carries different figures. Narrowing it here
+  // would mean editing this file whenever a rule learns to record one more
+  // number, which is exactly the coupling the validator does not need.
+  evidence: z.record(z.string(), z.unknown()).optional(),
+  concept_refs: z.array(z.string()).optional(),
+  dedupe_key: z.string(),
+  narration_source: z.enum(['llm', 'template']),
+  // Required, not optional: it carries a plain default of "none", which pydantic
+  // publishes as a default and the generator therefore treats as always present.
+  fallback_reason: z.string(),
+});
+
+// Counters carry plain defaults, which pydantic publishes as a `default` and the
+// generator therefore treats as always present. The two collections use
+// default_factory, which publishes no default and so arrives optional. Matching
+// that split exactly is the whole point of the assertions below.
+export const scanStatsSchema = z.object({
+  subjects: z.number().int(),
+  subjects_with_history: z.number().int(),
+  findings: z.number().int(),
+  narrated_by_llm: z.number().int(),
+  narration_fallbacks: z.record(z.string(), z.number().int()).optional(),
+  drift_skipped_reason: z.string().nullish(),
+  insufficient_history: z.array(z.string()).optional(),
+});
+
+export const portfolioScanResponseSchema = z.object({
+  observations: z.array(observationSchema),
+  stats: scanStatsSchema,
+});
+
 // --- Compile-time drift detection -------------------------------------------
 //
 // `Equal` is the standard function-identity trick: two types are identical only
@@ -124,6 +163,13 @@ export type _AssertInstrumentResolution = Expect<
   Equal<z.infer<typeof instrumentResolutionSchema>, Schemas['InstrumentResolution']>
 >;
 export type _AssertFxRate = Expect<Equal<z.infer<typeof fxRateSchema>, Schemas['FxRate']>>;
+export type _AssertObservation = Expect<
+  Equal<z.infer<typeof observationSchema>, Schemas['ObservationOut']>
+>;
+export type _AssertScanStats = Expect<Equal<z.infer<typeof scanStatsSchema>, Schemas['ScanStatsOut']>>;
+export type _AssertPortfolioScan = Expect<
+  Equal<z.infer<typeof portfolioScanResponseSchema>, Schemas['PortfolioScanResponse']>
+>;
 export type _AssertHealthResponse = Expect<
   Equal<z.infer<typeof healthResponseSchema>, Schemas['HealthResponse']>
 >;

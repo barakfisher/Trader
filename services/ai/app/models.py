@@ -8,7 +8,7 @@ stable: renaming one is a breaking API change.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -85,6 +85,81 @@ class FxRate(BaseModel):
     rate: str = Field(description="Decimal as string to avoid float drift in transport.")
     as_of: datetime
     source: str
+
+
+# --- Analysis (Milestone 2) ---------------------------------------------------
+
+Severity = Literal["info", "notable", "high"]
+NarrationSource = Literal["llm", "template"]
+
+
+class ScanHolding(BaseModel):
+    """One holding as the scan needs it.
+
+    `value_minor` is the holding's market value in the portfolio's base currency,
+    computed by the orchestrator, which owns valuation and the FX rates. It is
+    null when the holding could not be priced - carried rather than omitted so
+    the scan can report that allocation drift was skipped, and why.
+    """
+
+    instrument_id: str
+    symbol: str
+    value_minor: int | None = None
+    currency: str = "USD"
+    as_of: datetime | None = Field(
+        default=None,
+        description=(
+            "When the price behind value_minor was observed. Allocation drift dates a "
+            "weight by the stalest price contributing to it, so a position without this "
+            "cannot take part."
+        ),
+    )
+
+
+class PortfolioScanRequest(BaseModel):
+    base_currency: str = "USD"
+    holdings: list[ScanHolding] = Field(min_length=1, max_length=500)
+    target_weights: dict[str, str] = Field(
+        default_factory=dict,
+        description="symbol -> target weight as a decimal string, e.g. {'VOO': '0.25'}.",
+    )
+
+
+class ObservationOut(BaseModel):
+    """A finding, its words, and its identity.
+
+    `evidence` carries every figure the headline and explanation rest on; the
+    narration validator rejects any that is not here. `narration_source` says who
+    wrote the words, and `fallback_reason` why the model did not, so the
+    rejection rate is measurable.
+    """
+
+    kind: str
+    severity: Severity
+    subject_ref: str
+    as_of: datetime
+    headline: str
+    explanation: str
+    evidence: dict[str, Any] = Field(default_factory=dict)
+    concept_refs: list[str] = Field(default_factory=list)
+    dedupe_key: str
+    narration_source: NarrationSource
+    fallback_reason: str = "none"
+
+
+class ScanStatsOut(BaseModel):
+    subjects: int = 0
+    subjects_with_history: int = 0
+    findings: int = 0
+    narrated_by_llm: int = 0
+    narration_fallbacks: dict[str, int] = Field(default_factory=dict)
+    drift_skipped_reason: str | None = None
+    insufficient_history: list[str] = Field(default_factory=list)
+
+
+class PortfolioScanResponse(BaseModel):
+    observations: list[ObservationOut]
+    stats: ScanStatsOut
 
 
 class HealthResponse(BaseModel):

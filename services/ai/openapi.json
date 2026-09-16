@@ -189,6 +189,133 @@
         "title": "InstrumentResolution",
         "type": "object"
       },
+      "ObservationOut": {
+        "description": "A finding, its words, and its identity.\n\n`evidence` carries every figure the headline and explanation rest on; the\nnarration validator rejects any that is not here. `narration_source` says who\nwrote the words, and `fallback_reason` why the model did not, so the\nrejection rate is measurable.",
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "concept_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Concept Refs",
+            "type": "array"
+          },
+          "dedupe_key": {
+            "title": "Dedupe Key",
+            "type": "string"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "title": "Evidence",
+            "type": "object"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "fallback_reason": {
+            "default": "none",
+            "title": "Fallback Reason",
+            "type": "string"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "narration_source": {
+            "enum": [
+              "llm",
+              "template"
+            ],
+            "title": "Narration Source",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "notable",
+              "high"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "subject_ref": {
+            "title": "Subject Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "severity",
+          "subject_ref",
+          "as_of",
+          "headline",
+          "explanation",
+          "dedupe_key",
+          "narration_source"
+        ],
+        "title": "ObservationOut",
+        "type": "object"
+      },
+      "PortfolioScanRequest": {
+        "properties": {
+          "base_currency": {
+            "default": "USD",
+            "title": "Base Currency",
+            "type": "string"
+          },
+          "holdings": {
+            "items": {
+              "$ref": "#/components/schemas/ScanHolding"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Holdings",
+            "type": "array"
+          },
+          "target_weights": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "symbol -> target weight as a decimal string, e.g. {'VOO': '0.25'}.",
+            "title": "Target Weights",
+            "type": "object"
+          }
+        },
+        "required": [
+          "holdings"
+        ],
+        "title": "PortfolioScanRequest",
+        "type": "object"
+      },
+      "PortfolioScanResponse": {
+        "properties": {
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/ObservationOut"
+            },
+            "title": "Observations",
+            "type": "array"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/ScanStatsOut"
+          }
+        },
+        "required": [
+          "observations",
+          "stats"
+        ],
+        "title": "PortfolioScanResponse",
+        "type": "object"
+      },
       "Quote": {
         "description": "A single price observation. `price_minor` is integer minor units.",
         "properties": {
@@ -302,6 +429,105 @@
         "title": "QuoteResponse",
         "type": "object"
       },
+      "ScanHolding": {
+        "description": "One holding as the scan needs it.\n\n`value_minor` is the holding's market value in the portfolio's base currency,\ncomputed by the orchestrator, which owns valuation and the FX rates. It is\nnull when the holding could not be priced - carried rather than omitted so\nthe scan can report that allocation drift was skipped, and why.",
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the price behind value_minor was observed. Allocation drift dates a weight by the stalest price contributing to it, so a position without this cannot take part.",
+            "title": "As Of"
+          },
+          "currency": {
+            "default": "USD",
+            "title": "Currency",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "value_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Minor"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "symbol"
+        ],
+        "title": "ScanHolding",
+        "type": "object"
+      },
+      "ScanStatsOut": {
+        "properties": {
+          "drift_skipped_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drift Skipped Reason"
+          },
+          "findings": {
+            "default": 0,
+            "title": "Findings",
+            "type": "integer"
+          },
+          "insufficient_history": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Insufficient History",
+            "type": "array"
+          },
+          "narrated_by_llm": {
+            "default": 0,
+            "title": "Narrated By Llm",
+            "type": "integer"
+          },
+          "narration_fallbacks": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Narration Fallbacks",
+            "type": "object"
+          },
+          "subjects": {
+            "default": 0,
+            "title": "Subjects",
+            "type": "integer"
+          },
+          "subjects_with_history": {
+            "default": 0,
+            "title": "Subjects With History",
+            "type": "integer"
+          }
+        },
+        "title": "ScanStatsOut",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -351,6 +577,65 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/analysis/portfolio-scan": {
+      "post": {
+        "operationId": "portfolio_scan_analysis_portfolio_scan_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortfolioScanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioScanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Portfolio Scan",
+        "tags": [
+          "analysis"
+        ]
+      }
+    },
     "/healthz": {
       "get": {
         "operationId": "healthz_healthz_get",

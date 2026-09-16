@@ -17,13 +17,14 @@ import type { Hono } from 'hono';
 import { z } from 'zod';
 
 import { claimRun, finishRun, getUser, listRuns } from '../../db/queries.js';
+import { runPortfolioScan } from '../../services/portfolioScan.js';
 import { logger } from '../../logger.js';
 import { localDate, takeSnapshot } from '../../services/snapshot.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { ApiProblem, badRequest, notFound } from '../errors.js';
 
 const runSchema = z.object({
-  kind: z.enum(['snapshot']),
+  kind: z.enum(['snapshot', 'portfolio_scan']),
   userId: z.string().uuid().optional(),
   runKey: z.string().max(200).optional(),
   trigger: z.string().max(40).optional(),
@@ -65,6 +66,26 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
 
     const runId = claim.runId as string;
     try {
+      if (parsed.data.kind === 'portfolio_scan') {
+        const scan = await runPortfolioScan(
+          user,
+          context.get('ai'),
+          runId,
+          context.get('requestId'),
+        );
+        // A scan that found nothing is a legitimate outcome, but one that could
+        // not look properly is not the same thing - hence 'degraded' rather than
+        // 'ok' whenever a rule declined to run or a holding could not be priced.
+        await finishRun(runId, scan.degraded ? 'degraded' : 'ok', scan);
+        return context.json({
+          kind: parsed.data.kind,
+          runKey,
+          runId,
+          status: scan.degraded ? 'degraded' : 'ok',
+          result: scan,
+        });
+      }
+
       const result = await takeSnapshot(user, context.get('ai'), context.get('requestId'));
       const status = result.skipped ? 'skipped' : result.degraded ? 'degraded' : 'ok';
       await finishRun(runId, status, result);
