@@ -140,8 +140,14 @@ class Settings(BaseSettings):
     # runtime; FIXTURES_DIR in the environment always wins.
     fixtures_dir: str = Field(default_factory=_default_fixtures_dir)
 
-    # News settings arrive in a later milestone; they follow the same
-    # comma-separated convention as market_data_providers.
+    # News providers: ordered chain, same comma-separated convention as
+    # market_data_providers and for the same pydantic-settings reason. Unlike the
+    # quote chain this one is not a fallback - `app/news/ingestion.py` queries
+    # every provider in it, because two news sources carry different outlets
+    # while two quote sources carry the same price. `news_chain` is the parsed
+    # accessor every caller should use.
+    news_providers: str = "fixture"
+    newsapi_key: str | None = None
 
     # LLM access. One gateway module (app/llm) reads all of this; no call site
     # names a provider. An unusable value here degrades to no narration rather
@@ -222,6 +228,10 @@ class Settings(BaseSettings):
         return [
             item.strip().lower() for item in self.market_data_providers.split(",") if item.strip()
         ]
+
+    @property
+    def news_chain(self) -> list[str]:
+        return [item.strip().lower() for item in self.news_providers.split(",") if item.strip()]
 
     @property
     def provider_daily_limit_map(self) -> dict[str, int]:

@@ -1,0 +1,145 @@
+{
+  "_comment": "Deterministic offline news. Every article below is FICTIONAL: the outlets, URLs, bodies and events were written for this repository and describe nothing that happened. Real company names appear because the pipeline's entity matching is the thing under test; nothing here is a statement about a real person. Used by CI, the test suite and the zero-API-key demo. The dates are fixed on purpose - the provider filters by `since` rather than pretending every article is fresh - so a demo window has to include September 2026.",
+  "articles": [
+    {
+      "url": "https://newswire.example.com/2026/09/15/apple-services-record",
+      "source": "Example Newswire",
+      "published_at": "2026-09-15T12:40:00Z",
+      "title": "Apple posts record services revenue as device demand holds",
+      "body": "Apple Inc. ($AAPL) reported record services revenue for the quarter and beat its own guidance on gross margin. Management said installed-base growth remained strong across every region and raised the mid-point of its outlook for the current period. Analysts described the print as robust and pointed to momentum in subscriptions."
+    },
+    {
+      "url": "https://markets.example.net/story/apple-app-store-review",
+      "source": "Example Markets",
+      "published_at": "2026-09-15T08:05:00Z",
+      "title": "Apple faces a second review of App Store commissions",
+      "body": "Regulators opened an investigation into how Apple Inc. charges developers, and warned that a remedy could arrive before the end of the year. Apple said it disagrees with the premise of the probe. Two brokers flagged concerns that a forced change to commissions would cut services margin."
+    },
+    {
+      "url": "https://newswire.example.com/2026/09/14/microsoft-cloud-capacity",
+      "source": "Example Newswire",
+      "published_at": "2026-09-14T15:20:00Z",
+      "title": "Microsoft raises its cloud capacity plan for the next two quarters",
+      "body": "Microsoft Corporation (NASDAQ: MSFT) raised its planned data-centre capacity additions and said commercial bookings grew faster than it had guided. The company called demand for its AI tier strong enough to justify the expansion, and said the added capacity is already contracted."
+    },
+    {
+      "url": "https://markets.example.net/story/microsoft-gaming-finance-chief",
+      "source": "Example Markets",
+      "published_at": "2026-09-14T09:00:00Z",
+      "title": "Microsoft names a finance chief for its gaming division",
+      "body": "Microsoft Corporation (NASDAQ: MSFT) said the head of finance for its gaming division will change at the start of next month. The company described the appointment as internal and said reporting lines are unchanged. No change to segment disclosure was announced."
+    },
+    {
+      "url": "https://newswire.example.com/2026/09/15/nvidia-export-rules",
+      "source": "Example Newswire",
+      "published_at": "2026-09-15T17:55:00Z",
+      "title": "Nvidia slumps after wider export rules hit its data-centre outlook",
+      "body": "NVIDIA Corporation ($NVDA) fell sharply after the export rules covering accelerator sales were widened. The company warned that a portion of next year's data-centre revenue is now at risk, and one broker downgraded the shares, citing concerns that the shortfall cannot be filled elsewhere. The stock tumbled in late trading."
+    },
+    {
+      "url": "https://markets.example.net/story/ai-capex-race-widens",
+      "source": "Example Markets",
+      "published_at": "2026-09-15T11:30:00Z",
+      "title": "AI capex race widens as three hyperscalers lift spending plans",
+      "body": "Nvidia, Microsoft and Alphabet each pointed to higher AI-related spending this week, and the Nasdaq-100 tracker $QQQ closed near a record. Nvidia said order coverage extends further into next year, Microsoft raised its capacity plan, and Alphabet said its cloud unit is now profitable. Supplier gains were broad."
+    },
+    {
+      "url": "https://newswire.example.com/2026/09/15/constellation-data-centre-ppa",
+      "source": "Example Newswire",
+      "published_at": "2026-09-15T13:10:00Z",
+      "title": "Constellation Energy signs a 20-year data-centre power deal",
+      "body": "Constellation Energy Corporation ($CEG) has agreed a twenty-year power purchase agreement with an unnamed hyperscale operator, covering output from an existing nuclear site. The company said the contract is priced above its current fleet average and raised the lower end of its long-term earnings range. Management called the agreement a template for further deals."
+    },
+    {
+      "url": "https://markets.example.net/story/constellation-energy-ppa-datacentre?utm_source=newsletter&utm_medium=email",
+      "source": "Example Markets",
+      "published_at": "2026-09-15T14:02:00Z",
+      "title": "Constellation inks a two-decade deal to power data centres",
+      "body": "Constellation Energy Corporation ($CEG) has agreed a twenty-year power purchase agreement with an unnamed hyperscale operator, covering output from an existing nuclear site.   The company said the contract is priced above its current fleet average and raised the lower end of its long-term earnings range.\nManagement called the agreement a template for further deals."
+    },
+    {
+      "url": "https://regulator.example.org/notice/smr-design-review-window",
+      "source": "Example Regulatory Notices",
+      "published_at": "2026-09-14T07:45:00Z",
+      "title": "Regulator sets a 2027 review window for SMR designs",
+      "body": "The licensing body published the timetable for its next round of SMR reviews. Each SMR submission filed before the cut-off will be assigned a review slot in 2027, and the notice sets out how a design once reviewed may be reused at a second site. The notice names no applicant and takes no view on any SMR vendor's schedule."
+    },
+    {
+      "url": "https://newswire.example.com/2026/09/16/nuscale-first-commercial-order",
+      "source": "Example Newswire",
+      "published_at": "2026-09-16T06:30:00Z",
+      "title": "NuScale Power wins a first commercial order for its reactor module",
+      "body": "NuScale Power Corporation (NYSE: SMR) said it has won its first commercial order, an award covering six modules at a site in the western United States. The company called the approval of its uprated design the gate it had been waiting on, and said the order converts a long-standing letter of intent."
+    },
+    {
+      "url": "https://markets.example.net/story/uranium-fund-inflows",
+      "source": "Example Markets",
+      "published_at": "2026-09-15T10:15:00Z",
+      "title": "Uranium fund draws record inflows as utilities lock in supply",
+      "body": "The Global X Uranium ETF (NYSEARCA: URA) took in record weekly inflows as utilities extended supply contracts further out. Term prices rallied for a fourth week. Flow data showed gains concentrated in a handful of vehicles rather than spread across the sector."
+    },
+    {
+      "url": "https://markets.example.net/story/solar-fund-subsidy-phase-out",
+      "source": "Example Markets",
+      "published_at": "2026-09-15T16:20:00Z",
+      "title": "Solar fund slides as a subsidy phase-out weighs on installers",
+      "body": "The Invesco Solar ETF ($TAN) declined for a fifth session after the residential subsidy phase-out was confirmed. Two installers warned on orders and a third delayed its capital markets day. Analysts see weakness in residential demand persisting through next year, and one cut its sector view."
+    },
+    {
+      "url": "https://newswire.example.com/2026/09/16/bitcoin-fund-inflows-resume",
+      "source": "Example Newswire",
+      "published_at": "2026-09-16T05:10:00Z",
+      "title": "Bitcoin rallies as spot fund inflows resume",
+      "body": "Bitcoin ($BTC) rallied for a third day as spot fund inflows resumed after a quiet fortnight. Desks described demand as broad rather than concentrated, and derivatives funding turned positive. The move leaves the asset with strong gains for the month."
+    },
+    {
+      "url": "https://markets.example.net/story/ethereum-upgrade-delayed",
+      "source": "Example Markets",
+      "published_at": "2026-09-15T19:40:00Z",
+      "title": "Ethereum upgrade delayed again after a testnet fault",
+      "body": "Ethereum ($ETH) fell after core developers delayed the next network upgrade for a second time, citing a fault found on a testnet. Fees had spiked earlier in the week. Several validators warned that a further delay would push the change past the end of the year."
+    },
+    {
+      "url": "https://newswire.example.com/2026/09/14/vanguard-fund-expense-ratio",
+      "source": "Example Newswire",
+      "published_at": "2026-09-14T12:00:00Z",
+      "title": "Vanguard trims an index fund expense ratio by a basis point",
+      "body": "The Vanguard S&P 500 ETF (NYSEARCA: VOO) will charge one basis point less from the start of next month, according to a filing. The fund's index and replication method are unchanged. The filing lists the new fee schedule and the effective date."
+    },
+    {
+      "url": "https://newswire.example.com/2026/09/15/teva-generic-approval",
+      "source": "Example Newswire",
+      "published_at": "2026-09-15T09:25:00Z",
+      "title": "Teva wins approval for a generic respiratory inhaler",
+      "body": "Teva Pharmaceutical Industries Ltd ($TEVA) received approval for a generic inhaler and said it will launch in the first quarter. The company called the approval a milestone for its respiratory portfolio and raised its expectation for generic launches this year."
+    },
+    {
+      "url": "https://markets.example.net/story/teva-supply-delay-plant",
+      "source": "Example Markets",
+      "published_at": "2026-09-16T08:50:00Z",
+      "title": "Teva warns of a supply delay at one plant",
+      "body": "Teva Pharmaceutical Industries Ltd ($TEVA) warned that a delayed equipment qualification at one plant will hold back shipments of two products into next quarter. The company said the shortfall is contained to those lines. One broker cut its estimates and flagged concerns about the wider remediation schedule."
+    },
+    {
+      "url": "https://newswire.example.com/2026/09/15/sap-cloud-backlog-target",
+      "source": "Example Newswire",
+      "published_at": "2026-09-15T07:15:00Z",
+      "title": "SAP lifts its cloud backlog target for the year",
+      "body": "SAP SE (XETRA: SAP) raised its cloud backlog target after bookings grew ahead of plan in the first half. The company said migrations from its on-premise base accelerated, and called pipeline conversion strong. Guidance for the licence business is unchanged."
+    },
+    {
+      "url": "https://markets.example.net/story/tech-selloff-yields-climb",
+      "source": "Example Markets",
+      "published_at": "2026-09-16T09:05:00Z",
+      "title": "Tech selloff drags the Nasdaq-100 tracker lower as yields climb",
+      "body": "A broad selloff left $QQQ lower for a third session as long-dated yields climbed. Index heavyweights declined more than the average constituent, and one desk warned that positioning remains crowded. Volumes were heavy into the close."
+    },
+    {
+      "url": "https://newswire.example.com/2026/09/16/ten-year-yields-inflation-print",
+      "source": "Example Newswire",
+      "published_at": "2026-09-16T13:35:00Z",
+      "title": "Ten-year yields ease after an inflation print lands in line",
+      "body": "Ten-year yields eased two basis points after the monthly inflation print came in line with the consensus estimate. Shelter and services components were little changed from the prior month. Rate futures continued to imply one adjustment before year-end, and the curve was flat on the session."
+    }
+  ]
+}
