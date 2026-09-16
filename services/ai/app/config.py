@@ -7,12 +7,15 @@ surfacing as a confusing runtime error later.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.llm.pricing import ModelPrice, parse_model_prices
 
 #: Where the container copies the fixtures to (see infra/docker/Dockerfile.ai).
 _CONTAINER_FIXTURES_DIR = "/app/data/fixtures"
@@ -97,8 +100,51 @@ class Settings(BaseSettings):
     # runtime; FIXTURES_DIR in the environment always wins.
     fixtures_dir: str = Field(default_factory=_default_fixtures_dir)
 
-    # News and LLM settings arrive in later milestones; they follow the same
+    # News settings arrive in a later milestone; they follow the same
     # comma-separated convention as market_data_providers.
+
+    # LLM access. One gateway module (app/llm) reads all of this; no call site
+    # names a provider. An unusable value here degrades to no narration rather
+    # than failing at boot - see app/llm/factory.py for why this differs from
+    # the internal-key check below.
+    llm_provider: str = "openrouter"
+    llm_model: str = "anthropic/claude-sonnet-4.5"
+    llm_temperature: float = 0.1
+
+    # Hard ceiling on estimated LLM spend per UTC day, enforced in
+    # app/llm/budget.py. Decimal, never float, per guideline 3. Zero means no
+    # paid calls at all: unlike the per-provider request limits above, 0 does
+    # NOT mean unlimited here, because an unset spend ceiling reading as
+    # "unlimited" is the worst way for this setting to fail.
+    llm_daily_budget_usd: Decimal = Decimal("5")
+
+    # Per-call limits. A narration is a headline plus a short explanation, so the
+    # output cap is small on purpose: it bounds both the latency of a scheduled
+    # run and the cost of a model that decides to be expansive.
+    llm_max_output_tokens: int = 700
+    llm_timeout_seconds: float = 30.0
+
+    # Token prices, "model=input_per_mtok/output_per_mtok" in USD per million
+    # tokens, layered over the documented defaults in app/llm/pricing.py. Raw
+    # string for the same reason as provider_daily_limits (pydantic-settings
+    # decodes dict-typed fields from a .env file as JSON); the parsed accessor is
+    # `llm_model_price_map`. Prices drift, so this is configuration rather than a
+    # constant: repricing a model must not need a release.
+    llm_model_prices: str = ""
+
+    # Charged for a model with no configured price. Not zero: an unpriced model
+    # treated as free would run all day against a budget that never moves. See
+    # app/llm/pricing.py for the full reasoning.
+    llm_unknown_model_price_usd_per_mtok: Decimal = Decimal("20")
+
+    openrouter_api_key: str | None = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    anthropic_api_key: str | None = None
+    openai_api_key: str | None = None
+    openai_base_url: str = "https://api.openai.com/v1"
+    # Ollama's root URL; the adapter appends the /v1 compatibility prefix.
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3.2"
 
     @model_validator(mode="after")
     def _reject_default_secrets_in_production(self) -> Settings:
@@ -119,6 +165,17 @@ class Settings(BaseSettings):
         """Surface a malformed PROVIDER_DAILY_LIMITS at boot, not mid-request."""
         _ = self.provider_daily_limit_map
         return self
+
+    @model_validator(mode="after")
+    def _validate_llm_prices(self) -> Settings:
+        """Surface a malformed LLM_MODEL_PRICES at boot, not on the first call."""
+        _ = self.llm_model_price_map
+        return self
+
+    @property
+    def llm_model_price_map(self) -> dict[str, ModelPrice]:
+        """Parse LLM_MODEL_PRICES over app/llm/pricing.py's documented defaults."""
+        return parse_model_prices(self.llm_model_prices)
 
     @property
     def market_data_chain(self) -> list[str]:
