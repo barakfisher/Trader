@@ -1,0 +1,161 @@
+"""Refuse any figure the evidence does not support.
+
+This is where guideline 7 stops being a principle and becomes a mechanism. A
+language model asked to explain a price move will, given the chance, supply
+numbers that were never in its input: a plausible previous close, a market cap,
+a percentage that reads well. In a product whose entire output is claims about
+someone's money, a fabricated figure with a confident sentence around it is the
+worst thing we can ship - worse than saying nothing, because it is indetectable
+by the reader.
+
+So every number in generated text is checked against the finding's evidence, and
+a narration containing even one unsupported figure is discarded whole. The
+caller falls back to a deterministic template. The failure mode is deliberately
+blunt: partial trust in a sentence is not a thing we can offer.
+
+Matching has to tolerate how a number is *written* without tolerating a
+different number:
+
+  * minor units in evidence, major units in prose - `price_minor: 11845` is
+    written "$118.45";
+  * ratios in evidence, percentages in prose - `change_pct: -0.085` is written
+    "-8.5%" or "8.5%";
+  * rounding - a value is accepted if it rounds to the written figure at the
+    precision the writer chose, so "8.5%" matches -0.08502 but "8.6%" does not;
+  * an unsigned mention - "fell 8.5%" drops the minus that "-8.5%" carries;
+  * numbers quoted from evidence strings, such as a headline containing "20-year"
+    or a date containing 2026.
+
+Everything else is unsourced, including a figure that is merely plausible.
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Iterable, Mapping
+from decimal import Decimal, InvalidOperation
+
+from app.core.logging import get_logger
+
+log = get_logger("narration.validator")
+
+#: Numbers as they appear in prose: optional sign, thousands separators, decimals.
+#: A leading currency symbol or a trailing % is stripped by the caller, because
+#: the unit is irrelevant to whether the VALUE is supported.
+_NUMBER_PATTERN = re.compile(r"-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?")
+
+#: Keys whose values are integer minor units, so prose will divide them by 100.
+_MINOR_SUFFIX = "_minor"
+
+#: Keys whose values are ratios, so prose will multiply them by 100.
+_RATIO_SUFFIXES = ("_pct", "_ratio", "_weight")
+
+#: An ISO 8601 date, optionally followed by a time. Timestamps are mined for
+#: their DATE only: the clock components of "2026-09-16T11:30:00+00:00" are 11,
+#: 30 and 0, and admitting those would quietly whitelist most small integers -
+#: enough for "fallen 30% this year" to read as sourced. A narration may quote
+#: the day something happened; it has no business quoting the minute.
+_ISO_DATE_PREFIX = re.compile(r"^(\d{4})-(\d{2})-(\d{2})(?:[T ]|$)")
+
+
+def _to_decimal(value: object) -> Decimal | None:
+    if isinstance(value, bool):  # bool is an int; a flag is not a figure
+        return None
+    if isinstance(value, Decimal):
+        return value
+    if isinstance(value, int | float):
+        return Decimal(str(value))
+    return None
+
+
+def _forms_for(key: str, value: Decimal) -> set[Decimal]:
+    """Every value a writer could legitimately render this evidence entry as."""
+    forms = {value}
+    if key.endswith(_MINOR_SUFFIX):
+        forms.add(value / 100)
+    if key.endswith(_RATIO_SUFFIXES):
+        forms.add(value * 100)
+    # A writer may drop the sign: "fell 8.5%" rather than "changed by -8.5%".
+    return {form for base in list(forms) for form in (base, -base)}
+
+
+def sourced_values(evidence: Mapping[str, object], _key: str = "") -> set[Decimal]:
+    """Collect every figure the evidence supports, in each renderable form.
+
+    Walks nested structures, because evidence carries lists of contributing
+    positions and nested threshold blocks. Strings are mined for the numbers
+    inside them so that a quoted headline or an ISO date does not read as
+    invention.
+    """
+    found: set[Decimal] = set()
+
+    if isinstance(evidence, Mapping):
+        for key, value in evidence.items():
+            found |= sourced_values(value, str(key))  # type: ignore[arg-type]
+        return found
+
+    if isinstance(evidence, str):
+        iso = _ISO_DATE_PREFIX.match(evidence)
+        tokens = iso.groups() if iso else _NUMBER_PATTERN.findall(evidence)
+        for token in tokens:
+            number = _parse(token)
+            if number is not None:
+                found |= {number, -number}
+        return found
+
+    if isinstance(evidence, Iterable) and not isinstance(evidence, str | bytes):
+        for item in evidence:
+            found |= sourced_values(item, _key)  # type: ignore[arg-type]
+        return found
+
+    number = _to_decimal(evidence)
+    if number is not None:
+        found |= _forms_for(_key, number)
+    return found
+
+
+def _parse(token: str) -> Decimal | None:
+    try:
+        return Decimal(token.replace(",", ""))
+    except InvalidOperation:
+        return None
+
+
+def _supported(written: Decimal, places: int, sourced: set[Decimal]) -> bool:
+    """Does any sourced value round to `written` at the precision it was written?
+
+    Implemented as a half-unit tolerance at the written precision rather than by
+    quantizing, because quantize applies banker's rounding: "8%" would then be
+    accepted for 8.5 while "9%" was refused, which is an arbitrary distinction to
+    impose on a writer. A half unit accepts either, and still refuses $118.40 for
+    $118.45 - the tolerance there is half a cent.
+
+    Rounding to a coarser figure is a legitimate way to describe a number.
+    Changing it is not.
+    """
+    tolerance = Decimal(5).scaleb(-places - 1)  # half of the last written digit
+    return any(abs(candidate - written) <= tolerance for candidate in sourced)
+
+
+def unsourced_figures(text: str, evidence: Mapping[str, object]) -> list[str]:
+    """Figures in `text` that the evidence does not support, in order of appearance."""
+    sourced = sourced_values(evidence)
+    offenders: list[str] = []
+
+    for token in _NUMBER_PATTERN.findall(text):
+        written = _parse(token)
+        if written is None:
+            continue
+        places = -written.as_tuple().exponent if written.as_tuple().exponent < 0 else 0
+        if not _supported(written, places, sourced):
+            offenders.append(token)
+
+    return offenders
+
+
+def is_supported(text: str, evidence: Mapping[str, object]) -> bool:
+    """True when every figure in `text` traces back to the evidence."""
+    offenders = unsourced_figures(text, evidence)
+    if offenders:
+        log.warning("narration.unsourced_figures", figures=offenders, text=text[:200])
+    return not offenders
