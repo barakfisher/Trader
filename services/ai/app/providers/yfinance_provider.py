@@ -13,16 +13,20 @@ to a worker thread to keep the event loop responsive.
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time
 from decimal import Decimal, InvalidOperation
 
 from app.core.logging import get_logger
 from app.core.money import to_minor
 from app.core.observation_time import observed_at
-from app.models import AssetClass, FxRate, Instrument, InstrumentResolution, Quote
+from app.models import AssetClass, DailyClose, FxRate, Instrument, InstrumentResolution, Quote
 from app.providers.base import ProviderError
 
 log = get_logger("provider.yfinance")
+
+#: Daily closes are dated to 20:00 UTC, matching the fixture provider so the two
+#: interleave in one series without reordering.
+CLOSE_TIME = time(20, 0, tzinfo=UTC)
 
 # Yahoo's quoteType vocabulary mapped onto ours.
 _QUOTE_TYPE_MAP: dict[str, AssetClass] = {
@@ -168,6 +172,56 @@ class YFinanceProvider:
         if errors and not quotes:
             raise ProviderError(self.name, f"all {errors} symbol requests failed")
         return quotes
+
+    def _history_blocking(self, symbol: str, days: int) -> list[tuple[date, Decimal, str]]:
+        """Daily candles for one symbol. Runs in a worker thread."""
+        import yfinance as yf
+
+        ticker = yf.Ticker(symbol)
+        # auto_adjust=False keeps the close as it was printed. An adjusted series
+        # rewrites history after every dividend and split, so yesterday's
+        # "closing price" would change under us - and an observation citing a
+        # price the user can no longer find is worse than no observation.
+        frame = ticker.history(period=f"{max(days, 1)}d", interval="1d", auto_adjust=False)
+        if frame.empty:
+            return []
+
+        currency = "USD"
+        try:
+            currency = (ticker.fast_info.get("currency") or "USD").upper()
+        except Exception as exc:  # noqa: BLE001 - third-party surface
+            log.debug("yfinance.history_currency_failed", symbol=symbol, error=str(exc))
+
+        closes: list[tuple[date, Decimal, str]] = []
+        for timestamp, row in frame.iterrows():
+            price = _as_decimal(row.get("Close"))
+            if price is None:
+                continue
+            closes.append((timestamp.date(), price, currency))
+        return closes
+
+    async def history(self, symbol: str, days: int) -> list[DailyClose]:
+        try:
+            raw = await asyncio.wait_for(
+                asyncio.to_thread(self._history_blocking, symbol, days),
+                timeout=self._timeout * 3,  # a year of candles is a bigger read
+            )
+        except TimeoutError:
+            log.warning("yfinance.history_timeout", symbol=symbol)
+            return []
+        except Exception as exc:  # noqa: BLE001
+            raise ProviderError(self.name, str(exc)) from exc
+
+        return [
+            DailyClose(
+                symbol=symbol.upper(),
+                as_of=datetime.combine(day, CLOSE_TIME),
+                price_minor=to_minor(price, currency),
+                currency=currency,
+                source=self.name,
+            )
+            for day, price, currency in raw
+        ]
 
     async def resolve(self, query: str) -> InstrumentResolution:
         candidate = query.strip().upper()

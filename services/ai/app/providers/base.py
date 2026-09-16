@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from app.models import FxRate, InstrumentResolution, Quote
+from app.models import DailyClose, FxRate, InstrumentResolution, Quote
 
 
 class ProviderError(RuntimeError):
@@ -55,6 +55,21 @@ class MarketDataProvider(Protocol):
 
     async def resolve(self, query: str) -> InstrumentResolution:
         """Map a user-supplied string to an instrument, or return candidates."""
+        ...
+
+    async def history(self, symbol: str, days: int) -> list[DailyClose]:
+        """Daily closes for `symbol`, oldest first, covering at most `days` back.
+
+        Specified in DESIGN.md section 4 from the start and left unimplemented
+        through two milestones, which is why the analysis engine has only ever
+        run on a synthetic fixture: a rule needs ten observations before it will
+        say anything, and a spot quote accrues one per day at best.
+
+        Returning fewer days than asked for is normal - a recent listing, a
+        holiday week, a provider with a shorter window. Returning an empty list
+        is a refusal, not an error: the caller treats a symbol with no history as
+        one it cannot analyse yet, which is already a first-class state.
+        """
         ...
 
     async def fx_rate(self, base: str, quote: str) -> FxRate | None:

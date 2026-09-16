@@ -44,6 +44,47 @@ class Quote(BaseModel):
     )
 
 
+class DailyClose(BaseModel):
+    """One day's closing price.
+
+    `as_of` is dated to the session close rather than to midnight, so a daily
+    close and an intraday quote for the same instrument order sensibly in one
+    series. Money is integer minor units, as everywhere.
+    """
+
+    symbol: str
+    as_of: datetime
+    price_minor: int
+    currency: str
+    source: str
+
+
+class BackfillInstrument(BaseModel):
+    instrument_id: str
+    symbol: str
+
+
+class BackfillRequest(BaseModel):
+    """Which instruments to fetch daily closes for, and how far back."""
+
+    instruments: list[BackfillInstrument] = Field(min_length=1, max_length=500)
+    days: int = Field(default=180, ge=2, le=3650)
+
+
+class BackfillResponse(BaseModel):
+    written: int = 0
+    already_present: int = 0
+    per_symbol: dict[str, int] = Field(default_factory=dict)
+    without_history: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Symbols no provider could supply a series for. Reported rather than "
+            "omitted: a holding the engine cannot analyse is something the user "
+            "should be able to discover."
+        ),
+    )
+
+
 class QuoteRequest(BaseModel):
     symbols: list[str] = Field(min_length=1, max_length=200)
 

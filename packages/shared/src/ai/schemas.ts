@@ -137,6 +137,13 @@ export const portfolioScanResponseSchema = z.object({
   stats: scanStatsSchema,
 });
 
+export const backfillResponseSchema = z.object({
+  written: z.number().int(),
+  already_present: z.number().int(),
+  per_symbol: z.record(z.string(), z.number().int()).optional(),
+  without_history: z.array(z.string()).optional(),
+});
+
 // --- Compile-time drift detection -------------------------------------------
 //
 // `Equal` is the standard function-identity trick: two types are identical only
@@ -168,6 +175,9 @@ export type _AssertObservation = Expect<
   Equal<z.infer<typeof observationSchema>, Schemas['ObservationOut']>
 >;
 export type _AssertScanStats = Expect<Equal<z.infer<typeof scanStatsSchema>, Schemas['ScanStatsOut']>>;
+export type _AssertBackfill = Expect<
+  Equal<z.infer<typeof backfillResponseSchema>, Schemas['BackfillResponse']>
+>;
 export type _AssertPortfolioScan = Expect<
   Equal<z.infer<typeof portfolioScanResponseSchema>, Schemas['PortfolioScanResponse']>
 >;

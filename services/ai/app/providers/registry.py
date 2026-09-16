@@ -26,7 +26,7 @@ from app.core.cache import Cache
 from app.core.cache_policy import quote_ttl
 from app.core.logging import get_logger
 from app.core.ratelimit import RateLimiter
-from app.models import FxRate, InstrumentResolution, Quote
+from app.models import DailyClose, FxRate, InstrumentResolution, Quote
 from app.providers.base import MarketDataProvider, ProviderError
 from app.providers.fixture import FixtureProvider
 from app.providers.yfinance_provider import YFinanceProvider
@@ -164,6 +164,46 @@ class MarketDataService:
             log.warning("providers.skipped_rate_limited", provider=provider.name, cost=cost)
             return False
         return True
+
+    async def history(self, symbol: str, days: int) -> list[DailyClose]:
+        """Daily closes from the first provider that has any.
+
+        Unlike quotes, the chain does not merge partial answers: a series
+        stitched from two providers would mix their conventions for what a close
+        is, and a rule computing a daily return across the seam would be
+        measuring the difference between two definitions rather than a move.
+
+        Cached for the history TTL. A backfill re-run within that window is the
+        normal case - it happens whenever a holding is added - and it should cost
+        nothing.
+        """
+        symbol = symbol.strip().upper()
+        cache_key = f"history:{symbol}:{days}"
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            return [DailyClose.model_validate(item) for item in cached]
+
+        for provider in self._providers:
+            if not await self._limiter.allow(
+                provider.name, self._settings.provider_rate_limit_per_minute
+            ):
+                log.warning("providers.skipped_rate_limited", provider=provider.name)
+                continue
+            try:
+                closes = await provider.history(symbol, days)
+            except ProviderError as exc:
+                log.warning("providers.history_failed", provider=provider.name, error=str(exc))
+                continue
+            if closes:
+                await self._cache.set(
+                    cache_key,
+                    [close.model_dump(mode="json") for close in closes],
+                    self._settings.cache_ttl_history,
+                )
+                return closes
+
+        log.info("providers.no_history", symbol=symbol)
+        return []
 
     async def resolve(self, query: str) -> InstrumentResolution:
         cache_key = f"resolve:{query.strip().lower()}"

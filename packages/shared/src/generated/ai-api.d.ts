@@ -55,6 +55,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/market/history/backfill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Backfill
+         * @description Fill the price history the analysis rules read.
+         *
+         *     Idempotent, so a scheduled daily call and a manual one after an import do
+         *     the same safe thing: today's close is added once and everything already
+         *     stored is left alone.
+         */
+        post: operations["backfill_market_history_backfill_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/market/instruments/resolve": {
         parameters: {
             query?: never;
@@ -110,6 +134,48 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** BackfillInstrument */
+        BackfillInstrument: {
+            /** Instrument Id */
+            instrument_id: string;
+            /** Symbol */
+            symbol: string;
+        };
+        /**
+         * BackfillRequest
+         * @description Which instruments to fetch daily closes for, and how far back.
+         */
+        BackfillRequest: {
+            /**
+             * Days
+             * @default 180
+             */
+            days: number;
+            /** Instruments */
+            instruments: components["schemas"]["BackfillInstrument"][];
+        };
+        /** BackfillResponse */
+        BackfillResponse: {
+            /**
+             * Already Present
+             * @default 0
+             */
+            already_present: number;
+            /** Per Symbol */
+            per_symbol?: {
+                [key: string]: number;
+            };
+            /**
+             * Without History
+             * @description Symbols no provider could supply a series for. Reported rather than omitted: a holding the engine cannot analyse is something the user should be able to discover.
+             */
+            without_history?: string[];
+            /**
+             * Written
+             * @default 0
+             */
+            written: number;
+        };
         /** FxRate */
         FxRate: {
             /**
@@ -492,6 +558,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FxRate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    backfill_market_history_backfill_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BackfillRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackfillResponse"];
                 };
             };
             /** @description Validation Error */
