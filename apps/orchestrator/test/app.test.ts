@@ -55,6 +55,8 @@ vi.mock('../src/db/queries.js', () => ({
   claimRun: vi.fn(),
   finishRun: vi.fn(async () => undefined),
   listRuns: vi.fn(async () => []),
+  insertObservations: vi.fn(async () => ({ created: 0, suppressed: 0 })),
+  listObservations: vi.fn(async () => []),
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
 }));
 
@@ -90,9 +92,11 @@ const ENV = {
 
 const ORIGIN = { origin: 'http://localhost:5173', 'content-type': 'application/json' };
 
+let scanStats: Record<string, unknown> = {};
+
 function buildApp() {
   resetConfigForTests();
-  return createApp(loadConfig(ENV), createFakeAi());
+  return createApp(loadConfig(ENV), createFakeAi({ scanStats }));
 }
 
 async function loginCookie(app: ReturnType<typeof buildApp>): Promise<string> {
@@ -113,6 +117,7 @@ describe('API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     stubRunClaims();
+    scanStats = {};
     app = buildApp();
   });
 
@@ -306,6 +311,61 @@ describe('API', () => {
     const second = (await (await app.request('/internal/runs', init)).json()) as { status: string };
     expect(first.status).toBe('ok');
     expect(second.status).toBe('skipped');
+  });
+
+  it('runs a portfolio scan and stores what it finds', async () => {
+    vi.mocked(queries.insertObservations).mockResolvedValueOnce({ created: 2, suppressed: 1 });
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'portfolio_scan' }),
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { status: string; result: { created: number } };
+    expect(body.result.created).toBe(2);
+    expect(queries.insertObservations).toHaveBeenCalled();
+  });
+
+  it('marks a scan degraded when a rule declined to run', async () => {
+    // "Nothing was found" and "we could not look" must not report the same way.
+    vi.mocked(queries.insertObservations).mockResolvedValueOnce({ created: 0, suppressed: 0 });
+    scanStats = { drift_skipped_reason: '1 of 1 holdings could not be priced (AAPL)' };
+    app = buildApp();
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'portfolio_scan' }),
+    });
+    const body = (await response.json()) as { status: string; result: { skipped: string[] } };
+    expect(body.status).toBe('degraded');
+    expect(body.result.skipped[0]).toContain('allocation drift');
+  });
+
+  it('requires a session to read the observations feed', async () => {
+    expect((await app.request('/observations')).status).toBe(401);
+  });
+
+  it('serves the observations feed with its evidence intact', async () => {
+    vi.mocked(queries.listObservations).mockResolvedValueOnce([
+      {
+        id: 'obs-1',
+        kind: 'price_move',
+        severity: 'high',
+        subject_kind: 'instrument',
+        subject_ref: 'instrument:NVDA',
+        headline: 'NVDA moved -8.5%',
+        explanation: 'From $129.45 to $118.45.',
+        evidence: { change_pct: -0.085 },
+        concept_refs: ['daily-return'],
+        created_at: new Date('2026-09-16T14:00:00Z'),
+      },
+    ] as never);
+    const cookie = await loginCookie(app);
+    const response = await app.request('/observations', { headers: { cookie } });
+    const body = (await response.json()) as { observations: { evidence: unknown }[] };
+    // Evidence is returned whole: a claim the reader cannot check is the thing
+    // this product exists not to make.
+    expect(body.observations[0]!.evidence).toEqual({ change_pct: -0.085 });
   });
 
   it('returns the standard error shape for an unknown route', async () => {

@@ -408,4 +408,93 @@ export function listRuns(userId: string, kind?: string, limit = 50): Promise<Run
   );
 }
 
+// --- Observations -------------------------------------------------------------
+
+export interface ObservationToStore {
+  userId: string;
+  runId: string | null;
+  kind: string;
+  severity: string;
+  subjectKind: string;
+  subjectRef: string;
+  headline: string;
+  explanation: string;
+  evidence: unknown;
+  conceptRefs: string[];
+  dedupeKey: string;
+}
+
+/**
+ * Store observations, skipping any the feed has already reported.
+ *
+ * `dedupe_key` is unique, so a re-scan over unchanged data inserts nothing and
+ * the count of suppressed rows is the honest measure of how repetitive the scan
+ * is. Suppression is silent by design at this layer and loud in the run stats:
+ * nothing is lost, because an identical finding says nothing new.
+ */
+export async function insertObservations(
+  observations: ObservationToStore[],
+): Promise<{ created: number; suppressed: number }> {
+  if (observations.length === 0) return { created: 0, suppressed: 0 };
+
+  const values: string[] = [];
+  const params: unknown[] = [];
+  observations.forEach((observation) => {
+    const base = params.length;
+    params.push(
+      observation.userId,
+      observation.runId,
+      observation.kind,
+      observation.severity,
+      observation.subjectKind,
+      observation.subjectRef,
+      observation.headline,
+      observation.explanation,
+      JSON.stringify(observation.evidence ?? {}),
+      observation.conceptRefs,
+      observation.dedupeKey,
+    );
+    values.push(
+      `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, ` +
+        `$${base + 7}, $${base + 8}, $${base + 9}::jsonb, $${base + 10}::text[], $${base + 11})`,
+    );
+  });
+
+  const inserted = await query<{ id: string }>(
+    `INSERT INTO observations
+       (user_id, run_id, kind, severity, subject_kind, subject_ref, headline, explanation,
+        evidence, concept_refs, dedupe_key)
+     VALUES ${values.join(', ')}
+     ON CONFLICT (dedupe_key) DO NOTHING
+     RETURNING id`,
+    params,
+  );
+  return { created: inserted.length, suppressed: observations.length - inserted.length };
+}
+
+export interface ObservationRow {
+  id: string;
+  kind: string;
+  severity: string;
+  subject_kind: string;
+  subject_ref: string;
+  headline: string;
+  explanation: string | null;
+  evidence: unknown;
+  concept_refs: string[];
+  created_at: Date;
+}
+
+export function listObservations(userId: string, limit = 50): Promise<ObservationRow[]> {
+  return query<ObservationRow>(
+    `SELECT id, kind, severity, subject_kind, subject_ref, headline, explanation,
+            evidence, concept_refs, created_at
+       FROM observations
+      WHERE user_id = $1
+      ORDER BY created_at DESC, severity DESC
+      LIMIT $2`,
+    [userId, limit],
+  );
+}
+
 export { transaction };

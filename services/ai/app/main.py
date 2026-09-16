@@ -19,8 +19,9 @@ from app.config import get_settings
 from app.core.cache import Cache
 from app.core.logging import configure_logging, get_logger, request_id_var
 from app.core.ratelimit import RateLimiter
+from app.llm.factory import build_llm
 from app.providers.registry import MarketDataService, build_providers
-from app.routers import health, market
+from app.routers import analysis, health, market
 
 settings = get_settings()
 configure_logging(settings.log_level, json_output=settings.is_production)
@@ -35,6 +36,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     cache = Cache(redis)
     limiter = RateLimiter(redis)
     app.state.market_data = MarketDataService(build_providers(settings), cache, limiter, settings)
+    # Built once, with the spend guard wired to the same Redis. A misconfigured
+    # provider raises here in production and degrades to null elsewhere, so the
+    # quotes API is never taken down by a narration setting.
+    app.state.llm = build_llm(settings, redis)
     try:
         yield
     finally:
@@ -73,3 +78,4 @@ async def request_context(request: Request, call_next):
 
 app.include_router(health.router)
 app.include_router(market.router)
+app.include_router(analysis.router)

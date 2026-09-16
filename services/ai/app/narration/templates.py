@@ -115,10 +115,12 @@ def explanation_for(finding: Finding) -> str:
         return (
             f"{symbol} last traded at {_money(evidence['price_minor'], currency)}, "
             f"{_pct(evidence['drawdown_pct'])} below its recent high of "
-            f"{_money(evidence['peak_price_minor'], currency)}."
+            f"{_money(evidence['high_price_minor'], currency)}."
         )
 
     if finding.kind == "allocation_drift":
+        # Weights arrive as decimal strings, because a portfolio weight is money
+        # arithmetic and must not round through a float on its way here.
         return (
             f"{symbol} is {_pct(evidence['actual_weight'], 1).lstrip('+')} of the portfolio "
             f"against a target of {_pct(evidence['target_weight'], 1).lstrip('+')}."

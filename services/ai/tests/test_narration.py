@@ -187,3 +187,72 @@ class TestCorrelation:
         result = correlate(PRICE_MOVE, articles, limit=3)
         assert len(result) == 3
         assert [a.salience for a in result] == sorted((a.salience for a in result), reverse=True)
+
+
+class TestTemplatesAgainstRealRuleOutput:
+    """Templates built from evidence the rules actually emit, not invented dicts.
+
+    The first version of these templates read `peak_price_minor` while the
+    drawdown rule writes `high_price_minor`. Every unit test passed, because
+    every unit test supplied evidence I had written myself; the scan failed the
+    moment it ran against a real finding. A template is a contract with the rule
+    that produced the evidence, so the test has to hold both ends.
+    """
+
+    def series(self, closes: list[int]) -> list:
+        from datetime import timedelta
+
+        from app.analysis.price_series import PricePoint
+
+        start = NOW - timedelta(days=len(closes))
+        return [
+            PricePoint(as_of=start + timedelta(days=index), price_minor=close, currency="USD")
+            for index, close in enumerate(closes)
+        ]
+
+    async def narrate_all(self, findings):
+        results = []
+        for finding in findings:
+            result = await narrate(finding, [], None)
+            assert result.source == "template"
+            text = f"{result.headline} {result.explanation}"
+            assert is_supported(text, finding.evidence), text
+            results.append(text)
+        return results
+
+    async def test_price_and_sigma_templates_match_the_rules(self):
+        from app.analysis import AnalysisThresholds, price_move_findings, sigma_move_findings
+
+        thresholds = AnalysisThresholds()
+        closes = [10000 + (index % 3) * 20 for index in range(40)] + [9100]
+        points = self.series(closes)
+        findings = price_move_findings("TEST", points, thresholds) + sigma_move_findings(
+            "TEST", points, thresholds
+        )
+        assert findings, "the fixture series must actually trigger these rules"
+        await self.narrate_all(findings)
+
+    async def test_drawdown_template_matches_the_rule(self):
+        from app.analysis import AnalysisThresholds, drawdown_findings
+
+        closes = [15000] + [14000 - index * 100 for index in range(20)]
+        findings = drawdown_findings("TEST", self.series(closes), AnalysisThresholds())
+        assert findings, "the fixture series must actually trigger a drawdown"
+        await self.narrate_all(findings)
+
+    async def test_allocation_drift_template_matches_the_rule(self):
+        from decimal import Decimal
+
+        from app.analysis import AnalysisThresholds, PositionValue, allocation_drift_findings
+
+        findings = allocation_drift_findings(
+            [
+                PositionValue(symbol="AAA", value_minor=700_000, currency="USD", as_of=NOW),
+                PositionValue(symbol="BBB", value_minor=300_000, currency="USD", as_of=NOW),
+            ],
+            {"AAA": Decimal("0.4"), "BBB": Decimal("0.6")},
+            AnalysisThresholds(),
+            base_currency="USD",
+        )
+        assert findings, "the fixture weights must actually drift"
+        await self.narrate_all(findings)

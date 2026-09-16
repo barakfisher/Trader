@@ -20,6 +20,7 @@ import {
   fxRateSchema,
   healthResponseSchema,
   instrumentResolutionSchema,
+  portfolioScanResponseSchema,
   quoteResponseSchema,
 } from './schemas.js';
 
@@ -29,6 +30,17 @@ export type InstrumentResolution = components['schemas']['InstrumentResolution']
 export type AiInstrument = components['schemas']['Instrument'];
 export type FxRate = components['schemas']['FxRate'];
 export type HealthResponse = components['schemas']['HealthResponse'];
+export type PortfolioScanRequest = components['schemas']['PortfolioScanRequest'];
+export type PortfolioScanResponse = components['schemas']['PortfolioScanResponse'];
+export type ObservationOut = components['schemas']['ObservationOut'];
+
+/**
+ * A scan loads history for every holding and may call a model once per finding,
+ * so it needs far longer than a quote lookup. Five minutes is generous enough
+ * that a slow model does not lose the work, and short enough that a wedged
+ * request still ends.
+ */
+const SCAN_TIMEOUT_MS = 5 * 60_000;
 
 export class AiServiceError extends Error {
   constructor(
@@ -61,10 +73,11 @@ export class AiClient {
   private async request<T>(
     path: string,
     schema: z.ZodType<T>,
-    init: RequestInit & { requestId?: string } = {},
+    init: RequestInit & { requestId?: string; timeoutMs?: number } = {},
   ): Promise<T> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timeoutMs = init.timeoutMs ?? this.timeoutMs;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(`${this.baseUrl}${path}`, {
         ...init,
@@ -97,7 +110,7 @@ export class AiClient {
     } catch (error) {
       if (error instanceof AiServiceError) throw error;
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new AiServiceError(`AI service timed out after ${this.timeoutMs}ms on ${path}`, 504);
+        throw new AiServiceError(`AI service timed out after ${timeoutMs}ms on ${path}`, 504);
       }
       throw new AiServiceError(
         `AI service unreachable: ${error instanceof Error ? error.message : String(error)}`,
@@ -126,6 +139,21 @@ export class AiClient {
       method: 'GET',
       requestId,
     });
+  }
+
+  /**
+   * Run the analysis pipeline over a portfolio.
+   *
+   * Deliberately long-running compared with a quote: it loads history for every
+   * holding and may call a model once per finding. The default client timeout is
+   * too short for that, so this call is given its own.
+   */
+  portfolioScan(payload: PortfolioScanRequest, requestId?: string): Promise<PortfolioScanResponse> {
+    return this.request<PortfolioScanResponse>(
+      '/analysis/portfolio-scan',
+      portfolioScanResponseSchema,
+      { method: 'POST', body: JSON.stringify(payload), requestId, timeoutMs: SCAN_TIMEOUT_MS },
+    );
   }
 
   fxRate(base: string, quote: string, requestId?: string): Promise<FxRate> {

@@ -47,8 +47,11 @@ _NUMBER_PATTERN = re.compile(r"-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?")
 #: Keys whose values are integer minor units, so prose will divide them by 100.
 _MINOR_SUFFIX = "_minor"
 
-#: Keys whose values are ratios, so prose will multiply them by 100.
-_RATIO_SUFFIXES = ("_pct", "_ratio", "_weight")
+#: Markers identifying a key whose value is a ratio, so prose will multiply it by
+#: 100. Matched anywhere in the key rather than as a suffix: the drift rule names
+#: its central figure `drift`, not `drift_pct`, and a suffix rule left a correct
+#: template failing its own check.
+_RATIO_MARKERS = ("pct", "ratio", "weight", "drift")
 
 #: An ISO 8601 date, optionally followed by a time. Timestamps are mined for
 #: their DATE only: the clock components of "2026-09-16T11:30:00+00:00" are 11,
@@ -73,7 +76,7 @@ def _forms_for(key: str, value: Decimal) -> set[Decimal]:
     forms = {value}
     if key.endswith(_MINOR_SUFFIX):
         forms.add(value / 100)
-    if key.endswith(_RATIO_SUFFIXES):
+    if any(marker in key for marker in _RATIO_MARKERS):
         forms.add(value * 100)
     # A writer may drop the sign: "fell 8.5%" rather than "changed by -8.5%".
     return {form for base in list(forms) for form in (base, -base)}
@@ -95,6 +98,15 @@ def sourced_values(evidence: Mapping[str, object], _key: str = "") -> set[Decima
         return found
 
     if isinstance(evidence, str):
+        # A string that is entirely one number is a number: this project
+        # transports exact decimals as strings precisely so they do not round
+        # through a float, so a portfolio weight arrives as "0.7000" and prose
+        # will write it as 70%. Reading it as prose would strip the key's
+        # meaning and leave a correct template failing its own check.
+        whole = _parse(evidence.strip())
+        if whole is not None:
+            return _forms_for(_key, whole)
+
         iso = _ISO_DATE_PREFIX.match(evidence)
         tokens = iso.groups() if iso else _NUMBER_PATTERN.findall(evidence)
         for token in tokens:
