@@ -49,3 +49,53 @@ def test_key_is_readable_and_bounded():
     key = dedupe_key(finding())
     assert key.startswith("price_move:")
     assert len(key) <= 64
+
+
+class TestStatesDoNotRepeatDaily:
+    """A drawdown is not something that happened; it is something that is true.
+
+    With a day bucket, "SMR is -26.5% from its 30-day high" re-announced itself
+    every morning for as long as the decline lasted. In a feed that is clutter;
+    in Milestone 4, where the same key gates Telegram, it is a notification every
+    morning about something already known.
+    """
+
+    def state(self, day: int, **overrides) -> Finding:
+        return finding(
+            kind=overrides.pop("kind", "drawdown"),
+            as_of=datetime(2026, 9, day, 14, 0, tzinfo=UTC),
+            **overrides,
+        )
+
+    def test_a_continuing_drawdown_is_one_observation_all_week(self):
+        # 14th to 18th September 2026 is Monday to Friday of one ISO week.
+        keys = {dedupe_key(self.state(day)) for day in (14, 15, 16, 17, 18)}
+        assert len(keys) == 1
+
+    def test_it_does_surface_again_the_following_week(self):
+        # Short enough that a continuing condition is still surfaced.
+        assert dedupe_key(self.state(16)) != dedupe_key(self.state(23))
+
+    def test_a_deepening_drawdown_is_reported_at_once(self):
+        # Severity is in the key regardless of bucket, so notable -> high is a
+        # new thing to say and is said the day it happens.
+        assert dedupe_key(self.state(16, severity="notable")) != dedupe_key(
+            self.state(16, severity="high")
+        )
+
+    def test_allocation_drift_behaves_the_same_way(self):
+        drift = {"kind": "allocation_drift", "subject_ref": "portfolio:allocation:VOO"}
+        assert dedupe_key(self.state(14, **drift)) == dedupe_key(self.state(18, **drift))
+
+    def test_events_still_bucket_by_day(self):
+        # A price move on Tuesday and another on Wednesday are two events, and
+        # both deserve saying. Only states persist.
+        assert dedupe_key(self.state(15, kind="price_move")) != dedupe_key(
+            self.state(16, kind="price_move")
+        )
+
+    def test_an_unknown_kind_buckets_by_day(self):
+        # The cautious direction: repeat rather than go quiet.
+        assert dedupe_key(self.state(15, kind="future_rule")) != dedupe_key(
+            self.state(16, kind="future_rule")
+        )

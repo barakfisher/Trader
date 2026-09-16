@@ -123,35 +123,48 @@ failure they prevent.
    exactly once per period skips that period entirely if the process restarts at the wrong moment,
    and a silently skipped run looks exactly like a quiet market.
 
-7. **pgvector inside Postgres**, not a separate vector database, behind a `VectorStore` interface.
+7. **Events bucket by day; states bucket by week.** A `dedupe_key` includes a time bucket, and how
+   coarse it is depends on what the rule describes. A price move *happened* on a day. A drawdown or
+   an allocation drift is not something that happened - it is something that is **true**, and stays
+   true for weeks. With a day bucket those re-announced every morning: "SMR is -26.5% from its
+   30-day high", again, about a decline the reader was told about yesterday. A week of daily scans
+   produced 35 observations for 5 persistent conditions. Severity remains in the key, so a drawdown
+   deepening from notable to high is said immediately whatever week it falls in.
+
+   This was found by costing narration rather than by reading the feed, and it matters far more in
+   M4 than it does now: the same key gates Telegram, and a notification every morning about
+   something already known is how a person comes to mute a bot - after which it delivers nothing,
+   including the alert that mattered.
+
+8. **pgvector inside Postgres**, not a separate vector database, behind a `VectorStore` interface.
    One fewer container, transactional writes with the rest of the domain.
 
-8. **REST + OpenAPI, not gRPC**, with routes shaped so SSE can be added without changing payloads.
+9. **REST + OpenAPI, not gRPC**, with routes shaped so SSE can be added without changing payloads.
 
-9. **One trigger path for scheduled work.** Locally a timer calls `POST /internal/runs`; in
+10. **One trigger path for scheduled work.** Locally a timer calls `POST /internal/runs`; in
    Kubernetes a CronJob will, with `SCHEDULER_ENABLED=false` on the Deployment. Two schedulers would
    double-fire.
 
-10. **Cost basis is stored per unit, not as a position total.** Editing quantity would otherwise
+11. **Cost basis is stored per unit, not as a position total.** Editing quantity would otherwise
     leave a total nobody paid, and the system could not tell a correction from a purchase.
 
-11. **Mastra is deferred to M4** — see `apps/orchestrator/src/mastra/README.md` for the seams it
+12. **Mastra is deferred to M4** — see `apps/orchestrator/src/mastra/README.md` for the seams it
     will use. A workflow engine with no observations to act on could not have been tested.
 
-12. **Session auth is a signed self-describing cookie**, no session table. Only `http/auth.ts` and
+13. **Session auth is a signed self-describing cookie**, no session table. Only `http/auth.ts` and
     the login route change when real multi-user auth arrives.
 
-13. **Misconfiguration fails at boot in production, degrades in development.** An unknown LLM
+14. **Misconfiguration fails at boot in production, degrades in development.** An unknown LLM
     provider or a missing key raises in production and returns a null provider elsewhere.
     `LLM_PROVIDER=null` is always honoured: the distinction that matters is *deliberately off* versus
     *broken*.
 
-14. **Unpriced is `null`, never `0`.** A zero is indistinguishable from a real value, so an
+15. **Unpriced is `null`, never `0`.** A zero is indistinguishable from a real value, so an
     infrastructure failure would render as a financial fact. The same argument rejects a `1.0` FX
     fallback: it collides with the legitimate same-currency rate, destroying the evidence that
     anything went wrong.
 
-15. **The milestone order was changed from the original brief** to ship a vertical slice first.
+16. **The milestone order was changed from the original brief** to ship a vertical slice first.
 
 ---
 
