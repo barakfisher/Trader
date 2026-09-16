@@ -154,8 +154,20 @@ class Settings(BaseSettings):
     # than failing at boot - see app/llm/factory.py for why this differs from
     # the internal-key check below.
     llm_provider: str = "openrouter"
-    llm_model: str = "anthropic/claude-sonnet-4.5"
+    # A `:free` OpenRouter route by default, so a fresh clone with a key can
+    # narrate without a spending decision. Free routes are a shared pool and
+    # answer 429 under load; the adapter retries once and the pipeline falls
+    # back to a template, which is the same degradation as any other provider
+    # failure. Point this at a paid model when narration quality matters more
+    # than it costs.
+    llm_model: str = "nvidia/nemotron-3-super-120b-a12b:free"
     llm_temperature: float = 0.1
+
+    # How much thinking a reasoning model may do before it answers. Empty means
+    # "send nothing and let the model decide", which is right for a model that
+    # does not reason. It matters because reasoning is billed out of
+    # llm_max_output_tokens - see app/llm/openai_compatible.py.
+    llm_reasoning_effort: str = "low"
 
     # Hard ceiling on estimated LLM spend per UTC day, enforced in
     # app/llm/budget.py. Decimal, never float, per guideline 3. Zero means no

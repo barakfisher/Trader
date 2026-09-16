@@ -82,6 +82,7 @@ def test_the_configured_model_and_limits_reach_the_adapter():
                 llm_timeout_seconds=7.5,
                 llm_max_output_tokens=321,
                 llm_temperature=0.4,
+                llm_reasoning_effort="medium",
             ),
             FakeRedis(),
         )
@@ -90,6 +91,24 @@ def test_the_configured_model_and_limits_reach_the_adapter():
     assert adapter._timeout_seconds == 7.5
     assert adapter._max_output_tokens == 321
     assert adapter._temperature == 0.4
+    assert adapter._reasoning_effort == "medium"
+
+
+def test_an_unset_reasoning_effort_reaches_the_adapter_as_no_budget_at_all():
+    # Empty means "send nothing", not "send an empty string": the adapter omits
+    # the field entirely so a non-reasoning model is asked a question it
+    # understands.
+    adapter = _unwrap(
+        build_llm(
+            build(
+                llm_provider="openrouter",
+                openrouter_api_key="sk-test",
+                llm_reasoning_effort="   ",
+            ),
+            FakeRedis(),
+        )
+    )
+    assert adapter._reasoning_effort is None
 
 
 # -- everything that degrades to no narration ---------------------------------

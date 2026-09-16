@@ -209,7 +209,7 @@ the green test as coverage.
 | **Concept chips point nowhere** | `apps/web` | PRD FR-16 wants one click to an explanation; the corpus arrives in M3. They render as labels rather than dead links |
 | **Target weights have an API and no UI** | `apps/web` | `PUT /targets` is tested and works; setting them requires curl. Allocation drift is invisible to a user who does not know the endpoint exists |
 | **Import previews live in process memory** | `services/previewStore.ts` | Forces `replicas: 1` in Kubernetes. The only remaining in-memory state — run keys moved to the `runs` table in M2 |
-| **OpenRouter workspace budget is exhausted** | external | `$0.01` lifetime cap, spent. Every narration falls back to a template with `fallback_reason: provider_error`. The product works and says so; model-written explanations need the budget raised |
+| **Narration runs on a free, shared OpenRouter route** | `.env`, `app/llm` | The paid budget is spent, so `LLM_MODEL` is a `:free` route. Free routes are a shared pool: `429 overloaded` is normal under load and shows up as a template fallback, so narration coverage is now weather rather than a guarantee. Quality is a small open model's, not Sonnet's. Both are fixed by pointing `LLM_MODEL` at a paid model and funding the workspace |
 | Crypto detection is a symbol-shape heuristic | `core/cache_policy.py` | `-USD` suffix, because the AI service receives bare symbols |
 | Market hours assume US sessions for every symbol | `core/cache_policy.py` | SAP.DE trades on XETRA but is judged against NYSE hours. The same wire change (pass `asset_class` and `exchange` on the quote request) fixes both this and the heuristic above |
 | No component/DOM tests on the web app | `apps/web/test` | Store and formatting logic covered; rendering is not |
@@ -230,6 +230,12 @@ the green test as coverage.
   to IPv6 first, where a different project is listening.
 - The database currently holds ~1,800 real daily closes from Yahoo and a real portfolio scan's
   observations. Nothing synthetic remains in `quotes`.
+- **A git worktree has no Python venv and no `.env`** — both live in the main checkout only, and
+  `services/ai`'s editable install points at the main checkout's `app/`, so the obvious
+  `.venv/bin/pytest` silently tests the *other* tree. Run a worktree's Python suite as
+  `cd services/ai && PYTHONPATH=$PWD /Users/a/projects/Traders/services/ai/.venv/bin/python -m pytest -q`;
+  `PYTHONPATH` precedes site-packages, so it wins over the `.pth`. `pnpm install` in the worktree
+  does work and is needed once.
 
 ---
 

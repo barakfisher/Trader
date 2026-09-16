@@ -21,9 +21,17 @@ top of the frontier range - and each unpriced model is logged once. Refusing the
 call outright was the alternative; it was rejected because it turns "try a
 different model for an afternoon" into a required config edit, and because the
 consequence of the pessimistic rate is a budget that empties early and visibly
-rather than a bill that arrives quietly. The exception is a provider that does
-not charge per token at all (Ollama, running on hardware we already own):
-`charges_per_token=False` prices at zero by declaration, not by omission.
+rather than a bill that arrives quietly.
+
+There are two exceptions, and both are declarations of free rather than
+omissions of a price. A provider that does not charge per token at all (Ollama,
+running on hardware we already own) sets `charges_per_token=False`. And a model
+id carrying OpenRouter's `:free` suffix is routed to a zero-cost pool by the
+gateway itself - the suffix *is* the price, stated by the party that does the
+billing, and their usage payload reports `cost: 0` to match. Treating it as
+unpriced instead would charge a free model the pessimistic rate and empty the
+daily budget against spend that never happened, which is the same silent loss of
+narration the rate exists to prevent, arrived at from the opposite direction.
 """
 
 from __future__ import annotations
@@ -66,6 +74,22 @@ DEFAULT_MODEL_PRICES: dict[str, ModelPrice] = {
 #: model exhausts the daily budget sooner than the real bill would - see the
 #: module docstring for why that is the direction we choose.
 DEFAULT_UNKNOWN_MODEL_PRICE_USD_PER_MTOK = Decimal("20")
+
+#: OpenRouter's marker for a model served from its zero-cost pool, e.g.
+#: "nvidia/nemotron-3-super-120b-a12b:free". The suffix is part of the model id
+#: a caller sends, and a different route from the paid variant of the same
+#: weights - so it is matched exactly, never stripped to find a paid price.
+FREE_MODEL_SUFFIX = ":free"
+
+#: The price of a model the gateway has declared free. Named rather than written
+#: as a literal zero at the call site, so the declaration is greppable.
+FREE_MODEL_PRICE = ModelPrice(Decimal(0), Decimal(0))
+
+
+def is_declared_free(model: str) -> bool:
+    """True when the model id itself declares the model unbilled."""
+    return model.strip().lower().endswith(FREE_MODEL_SUFFIX)
+
 
 #: Models already reported as unpriced. One warning per model per process: this
 #: is a configuration gap, and repeating it on every call would bury the rest of
@@ -118,8 +142,16 @@ def price_for(model: str, prices: dict[str, ModelPrice]) -> ModelPrice | None:
     "anthropic/claude-sonnet-4.5" and "claude-sonnet-4.5" are the same model
     billed at the same rate, and requiring both spellings in the table would
     make a provider switch silently unprice the model it had just been using.
+
+    A `:free` model id is priced at zero without consulting the table at all;
+    see the module docstring for why that is a declaration and not an omission.
     """
     key = model.strip().lower()
+    if is_declared_free(key):
+        # Checked before the table so an operator cannot accidentally put a
+        # price on a free route, and before the prefix fallback below, which
+        # would otherwise price "nvidia/x:free" from an entry for "nvidia/x".
+        return FREE_MODEL_PRICE
     if key in prices:
         return prices[key]
     bare = key.rpartition("/")[2]
