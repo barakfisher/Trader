@@ -1,6 +1,15 @@
 # Project memory — Traders
 
-Updated: 2026-09-16. Maintained per [CLAUDE.md](../CLAUDE.md) "Session management & memory".
+Written for a session that has never seen the conversation that built this. The code is readable;
+the reasoning behind it is not, and that is what this file is for. Maintained per
+[CLAUDE.md](../CLAUDE.md) "Session management & memory".
+
+Updated: 2026-09-16, after 23 merged PRs, before Milestone 4.
+
+**One-line state:** the product imports a portfolio, fetches six months of real daily prices,
+scans it every 30 minutes for four kinds of finding, explains each one in sentences whose every
+figure is checked against the evidence, and shows them in a dashboard with the numbers underneath.
+It does not yet reach the user — nothing is pushed, nothing is approved.
 
 ---
 
@@ -8,178 +17,230 @@ Updated: 2026-09-16. Maintained per [CLAUDE.md](../CLAUDE.md) "Session managemen
 
 | Milestone | Status | Notes |
 |---|---|---|
-| **M0 — Repo skeleton & contracts** | ✅ **Complete** | monorepo, compose stack, CI, OpenAPI contract + generated client |
-| **M1 — Vertical slice: portfolio in, valued portfolio out** | ✅ **Complete** | built and verified end to end against the running stack |
-| **M1.5 — Trustworthy quote path** (unplanned, inserted) | ✅ **Complete** | correctness work M2 depends on; see below |
-| **M2 — Analysis engine & observations** | ✅ **Complete** | PRs #12-#22; the product now finds things, explains them and shows the figures |
-| M3 — RAG & educational engine | Not started | |
-| M4 — Scheduling, HITL & Telegram | Not started | Mastra lands here |
+| **M0 — Repo skeleton & contracts** | ✅ Complete | monorepo, compose stack, CI, OpenAPI contract + generated client |
+| **M1 — Vertical slice** | ✅ Complete | portfolio in, valued portfolio out |
+| **M1.5 — Trustworthy quote path** | ✅ Complete | **unplanned**; inserted after an audit found data problems M2 would have built on |
+| **M2 — Analysis engine & observations** | ✅ Complete | PRs #12–#22 |
+| **M2.5 — Real price history** | ✅ Complete | **unplanned**; PR #23. Finished M1's provider layer, 18 PRs late |
+| **M3 — RAG & educational engine** | Not started | gives the feed's concept chips somewhere to point |
+| **M4 — Scheduling, HITL & Telegram** | ⏭️ Next | Mastra lands here; the scheduling half is already done |
 | M5 — Market discovery & topics | Not started | |
 | M6 — Frontend completion & polish | Not started | |
 | M7 — Kubernetes & documentation | Not started | |
 
-## Completed features
+**Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
+not anticipate, found by running the thing rather than by reading it. M1.5 came from auditing the
+quote path and finding timestamps that made the price series unusable. M2.5 came from asking "can I
+get real data out of this?" and discovering the answer was no. Expect more of these: the milestone
+plan describes features, and the gaps have all been in the layers underneath them.
 
-**M0**
-- pnpm workspace: `apps/web`, `apps/orchestrator`, `packages/shared`, `services/ai`, `infra/*`.
-- `docker compose` stack: Postgres (pgvector image), Redis, one-shot Alembic `migrate` container,
-  `ai-service`, `orchestrator`, `web`. Ordering enforced by health checks, not sleeps.
-- Typed config validated at boot in both services (`pydantic-settings` / `zod`), structured JSON
-  logging with `request_id` propagated across the service boundary, `/healthz` + `/readyz`.
-- OpenAPI schema exported from FastAPI to a committed `services/ai/openapi.json`; the TypeScript
-  client is generated from it (`pnpm gen:api`). CI fails if either artefact is stale.
-- CI: Python lint/tests, TS typecheck/tests/build, and a compose smoke-test job.
+---
 
-**M1**
-- `MarketDataProvider` chain: `FixtureProvider` (offline, zero API keys) → `YFinanceProvider`,
-  with a Redis cache (single-flight), per-provider rate limiting, and a last-known-good fallback
-  served flagged `stale`.
-- Endpoints: `POST /market/quotes`, `GET /market/instruments/resolve`, `GET /market/fx`, all
-  behind the internal shared-key dependency.
-- Alembic `0001_initial_portfolio`: `users`, `instruments`, `holdings`, `target_weights`,
-  `quotes`, `portfolio_snapshots`, the pgvector extension, and the seeded single user.
-- Orchestrator: passphrase login with an HMAC session cookie, origin check on writes, holdings
-  CRUD, CSV/JSON import (preview → commit) with per-row validation and symbol resolution,
-  valuation with FX, `POST /internal/runs` with run-key deduplication, daily snapshot job.
-- Web: login, summary metrics, holdings table with inline quantity edit, allocation donut,
-  manual add form, import wizard with per-row status and candidate pickers, visible degraded
-  states (unpriced / stale), persistent disclaimer.
-- Verification: 79 tests (45 orchestrator vitest, 8 web store vitest, 26 pytest) plus
-  `scripts/smoke-test.sh` passing against the live containers (login, import, valuation with FX,
-  snapshot, idempotency, auth rejections).
+## Orientation: running and verifying
 
-**M1.5 — trustworthy quote path** (PRs #3-#10, 2026-09-15)
+```bash
+bash scripts/dev-docker.sh          # everything in containers; prints URLs and the passphrase
+bash scripts/dev-local.sh           # app processes native, Postgres+Redis in containers
+bash scripts/smoke-test.sh          # end-to-end against a running stack
+```
 
-Inserted between M1 and M2 after an audit of the quote path found data problems M2 would have
-built on. Every item was measured before and after, not assumed.
+Full gate, which every PR must pass:
 
-- **Observation time** (`core/observation_time.py`): `quotes.as_of` is when a price was observed,
-  not when it was fetched, floored to each provider's freshness window. Eight dashboard refreshes
-  went from 70 stored rows holding 10 distinct prices, to 10.
-- **Cache policy** (`core/cache_policy.py`): TTL derived from provider delay, asset class and
-  market hours, the latter resolved in `America/New_York` rather than a fixed UTC window.
-- **Quota accounting**: the rate limiter charges `len(symbols)` for non-batching providers and
-  supports per-day ceilings. It previously charged 1 per call while making 20 requests.
-- **Free-tier tuning**: crypto TTL 60s → 300s, Redis persists across restarts, a self-imposed
-  `PROVIDER_DAILY_LIMITS` ceiling. Heavy use of a 20-symbol portfolio: ~14,400 → ~600 requests/day.
-- **Response validation** (`packages/shared/src/ai/schemas.ts`): every AI-service response is zod
-  parsed, with each schema pinned to its generated type so Python drift is a compile error. The
-  `as T` cast it replaced was the largest act of faith in the codebase.
-- **Snapshot integrity** (migration `0002`): snapshots record `holdings_count`, `priced_count` and
-  `degraded`, so a partial day is stored marked rather than silently understated.
-- **UI honesty**: the dashboard reports when prices were *observed*, not when they were fetched.
-- **Target weights API** (`apps/orchestrator/src/http/routes/targets.ts`): `GET/PUT /targets` write
-  the whole set transactionally, and `portfolioScan.ts` now sends the user's real targets instead
-  of `{}`. Allocation drift had been implemented and unreachable: nothing could fill the table.
+```bash
+pnpm -r typecheck && pnpm -r test
+cd services/ai && .venv/bin/python -m pytest -q
+.venv/bin/ruff check . && .venv/bin/ruff format --check .
+```
 
-**M2 — analysis engine and observations** (PRs #12-#22, 2026-09-16)
+Test counts at handoff: **551** — 416 Python, 80 orchestrator, 39 web, 16 shared.
 
-- **`runs` and `observations`** (migration `0003`). Run claims moved from a process-local Map to a
-  unique `run_key` INSERT, so idempotency survives a restart and works across replicas. A run that
-  throws is recorded failed rather than leaving its key claimed; one abandoned by a killed process
-  is reclaimed after thirty minutes.
-- **LLM provider factory** with one adapter covering OpenRouter, OpenAI and Ollama, a null provider
-  so running without a model is a tested path, and a daily spend guard in micro-USD. Misconfiguration
-  raises at boot in production and degrades elsewhere.
-- **Rule layer**: price move, sigma move, drawdown, allocation drift. Pure functions; every finding
-  carries the figures it rests on.
-- **News ingestion** (migration `0004`): fixture provider, dedupe on URL and content hashes, entity
-  extraction that refuses a bare ticker without corroboration, deterministic lexicon sentiment.
-- **Narration behind the evidence validator**: every number in generated text is checked against the
-  finding's evidence, and one unsupported figure discards the whole narration. Five failure paths
-  land on deterministic templates, with `fallback_reason` recorded.
-- **Price-history fixture** (70 daily closes per symbol, committed, seeded by a script that shifts
-  the series to end yesterday) — without it every rule correctly found nothing.
-- **Scan workflow**: `POST /internal/runs {kind: portfolio_scan}`, observations stored with a
-  `dedupe_key`, skips recorded as loudly as findings.
-- **Scheduled scans**, with the run-key bucket deciding what counts as a repeat (snapshot daily,
-  scan half-hourly) and timers that fire more often than the work is allowed to happen.
-- **Target weights API**, without which allocation drift could never fire.
-- **Observations feed** with an evidence drawer that renders `price_minor: 11845` as `$118.45`.
+Useful endpoints (all need the session cookie except `/internal/*`, which needs `x-internal-key`):
 
-## Architectural decisions
+| | |
+|---|---|
+| `POST /internal/runs` | `{kind: snapshot \| portfolio_scan \| backfill}` — the single entrypoint for all scheduled work |
+| `GET /runs` | run history: *did the work actually happen?* |
+| `GET /observations` | the feed, with full evidence |
+| `PUT /targets` | set allocation targets (no UI yet) |
 
-Full reasoning in [docs/DESIGN.md](../docs/DESIGN.md) section 2. The ones that constrain future work:
+---
 
-1. **pgvector inside Postgres**, not a separate vector database, behind a `VectorStore` interface.
-2. **REST + OpenAPI**, not gRPC; routes shaped so SSE streaming can be added without changing
-   payloads.
-3. **One trigger path for scheduled work**: `POST /internal/runs`. Locally a timer calls it; in
-   Kubernetes a CronJob does, with `SCHEDULER_ENABLED=false` on the Deployment.
-4. **Mastra deferred to M4**, with the integration points already in place — see
-   `apps/orchestrator/src/mastra/README.md` for why and where.
-5. **Cost basis is per unit**, not a position total; totals computed at read time.
-6. **Vite SPA, not Next.js**; MobX + Recharts only.
-7. **Milestone order was changed from the original brief** to ship a vertical slice first.
-8. **Session auth is a signed self-describing cookie**, no session table; only `http/auth.ts` and
-   the login route change when real multi-user auth arrives.
-9. **No market-status API call, ever, on the pricing path.** Evaluated and rejected: the quota
-   saving is near zero because fetching is demand-driven, an external check cannot replace the
-   offline calendar it would need as an outage fallback, and a wrongly cached "closed" would halt
-   pricing for a day - failing in the expensive direction, where the current design fails in the
-   cheap one. If scheduled scans ever make holidays material, the answer is a static calendar
-   applied at the scheduler, not a network call per quote.
-10. **Identity is decided before narration, not after.** The rules are deterministic and the scan
-    runs half-hourly, so most of what a scan finds is what the last scan found. The caller sends the
-    dedupe keys it already holds and the pipeline skips those before calling a model: a repeat costs
-    a hash rather than a completion. Narrating and then discarding was roughly two hundred throwaway
-    model calls a day.
-11. **Partial snapshots are stored and marked, not refused.** A silent hole in the equity curve is
-    as misleading as an understated total; `degraded` lets every consumer tell the difference.
-11. **Target weights are replaced, never patched.** A set of weights is one statement about the
-    intended shape of the portfolio, and its only cross-row rule (they sum to at most 1) is a
-    property of the set. A partial update could leave a combination the user never chose, and the
-    drift rule would report against it as if they had. A target may name any resolved instrument,
-    held or not, because "I meant 10% of this and hold none" is a real drift; it may not name a
-    symbol we have never resolved, so `PUT /targets` makes no provider call and a market-data
-    outage can never block someone correcting their own targets.
+## What exists, by area
 
-9. **A partially priced snapshot is stored marked, not refused** (Alembic `0002_snapshot_integrity`:
-   `holdings_count`, `priced_count`, `degraded`). A hole in the series reads as "no change" and
-   misleads exactly as much as an understated total; snapshots are never recomputed, so the marker
-   is the only chance to say the total is incomplete. M2's volatility and drawdown rules must skip
-   `degraded` points rather than explain them.
+**`services/ai`** (Python, FastAPI) — market data providers behind a chain with caching, rate
+limiting and per-provider daily budgets; four deterministic analysis rules; news ingestion with
+entity extraction; an LLM provider factory with a daily spend guard; narration behind an evidence
+validator; the Alembic schema (5 migrations) that both services share.
 
-## Known issues and technical debt
+**`apps/orchestrator`** (Node, Hono) — sessions, holdings CRUD, CSV/JSON import with per-row
+validation, valuation with FX, target weights, the scan workflow, run claims, the observations feed,
+and the local scheduler.
+
+**`apps/web`** (React, MobX, Tailwind, Recharts) — login, portfolio dashboard, import wizard,
+observations feed with an evidence drawer.
+
+**`packages/shared`** — wire types, money helpers, and the AI-service client whose zod schemas are
+pinned to the generated OpenAPI types so Python drift becomes a compile error. That mechanism has
+caught four real mismatches; trust it.
+
+---
+
+## Decisions that were argued, not obvious
+
+The code shows *what*; these are the *why*. Several look like over-engineering until you know the
+failure they prevent.
+
+1. **No market-status API on the pricing path.** Evaluated and rejected. The quota saving is near
+   zero because fetching is demand-driven; an external check cannot replace the offline calendar it
+   would need as an outage fallback, so you maintain both and the fallback rots; and a wrongly
+   cached "market closed" halts pricing for a day — failing in the expensive direction where the
+   current design fails in the cheap one. If scheduled scans ever make holidays material, the answer
+   is a **static calendar applied at the scheduler**, not a network call per quote.
+
+2. **Partial snapshots are stored and marked, not refused.** A day where 9 of 10 holdings priced is
+   recorded with `degraded`, `priced_count` and `holdings_count`. Refusing would leave a silent hole
+   in the equity curve, which is just as misleading as an understated total. Rows predating the
+   columns are backfilled `degraded = true`: unknown provenance is closer to degraded than to
+   trustworthy.
+
+3. **Identity is decided before narration, not after.** The caller sends the dedupe keys it already
+   holds and the pipeline skips those before calling a model. Narrating and then discarding on
+   insert was ~370 throwaway completions a day at a 30-minute cadence. A repeat costs a hash.
+
+4. **A price series is never stitched across providers.** The chain takes the first provider with
+   *any* history rather than merging partial answers, because a daily return measured across the
+   seam compares two definitions of a close rather than a move. (Quotes *are* merged across
+   providers — different question, no continuity to break.)
+
+5. **`auto_adjust=False` on the Yahoo history read.** An adjusted series rewrites history after
+   every dividend and split, so yesterday's closing price would change under us — and an observation
+   citing a price the user can no longer find is worse than no observation.
+
+6. **The run-key bucket decides what counts as a repeat, and lives server-side.** `snapshot` and
+   `backfill` bucket by day, `portfolio_scan` by half hour. The policy is in `/internal/runs` rather
+   than in the caller so a Kubernetes CronJob inherits it unchanged. The timers deliberately fire
+   *more often* than the work is allowed to happen (15 min against a 30-min bucket): a timer firing
+   exactly once per period skips that period entirely if the process restarts at the wrong moment,
+   and a silently skipped run looks exactly like a quiet market.
+
+7. **pgvector inside Postgres**, not a separate vector database, behind a `VectorStore` interface.
+   One fewer container, transactional writes with the rest of the domain.
+
+8. **REST + OpenAPI, not gRPC**, with routes shaped so SSE can be added without changing payloads.
+
+9. **One trigger path for scheduled work.** Locally a timer calls `POST /internal/runs`; in
+   Kubernetes a CronJob will, with `SCHEDULER_ENABLED=false` on the Deployment. Two schedulers would
+   double-fire.
+
+10. **Cost basis is stored per unit, not as a position total.** Editing quantity would otherwise
+    leave a total nobody paid, and the system could not tell a correction from a purchase.
+
+11. **Mastra is deferred to M4** — see `apps/orchestrator/src/mastra/README.md` for the seams it
+    will use. A workflow engine with no observations to act on could not have been tested.
+
+12. **Session auth is a signed self-describing cookie**, no session table. Only `http/auth.ts` and
+    the login route change when real multi-user auth arrives.
+
+13. **Misconfiguration fails at boot in production, degrades in development.** An unknown LLM
+    provider or a missing key raises in production and returns a null provider elsewhere.
+    `LLM_PROVIDER=null` is always honoured: the distinction that matters is *deliberately off* versus
+    *broken*.
+
+14. **Unpriced is `null`, never `0`.** A zero is indistinguishable from a real value, so an
+    infrastructure failure would render as a financial fact. The same argument rejects a `1.0` FX
+    fallback: it collides with the legitimate same-currency rate, destroying the evidence that
+    anything went wrong.
+
+15. **The milestone order was changed from the original brief** to ship a vertical slice first.
+
+---
+
+## Bugs that cost real time, and the lesson from each
+
+These are listed because the lesson generalises, not because the bug was interesting.
+
+**Stacked PRs silently lost merged work.** #8 and #9 were merged into their *base branches*, which
+had already been merged into main — so GitHub showed them MERGED while their code was nowhere. Two
+PRs of work, including the rate-limiter fix, sat orphaned until a content check found them.
+→ **One branch off `main` at a time. After merging, verify by content (`grep` for a marker), never
+by the merge badge.** Parallel authoring in worktrees is fine; parallel *merging* is not.
+
+**Tests that read `.env` pass on the wrong machine.** A test asserting `/market/*` rejects
+unauthenticated requests passed locally (where a real key was set) and failed in CI (where the
+default key triggered a bypass) — and the *green* result was the misleading one, because it was
+green for a reason unrelated to the code. The same pattern recurred twice more.
+→ **Build settings with `_env_file=None`; override injected config.** A test whose result depends on
+a file outside the repository is testing the machine.
+
+**Tests pinning tuning values fail for unrelated reasons.** A daylight-saving test asserted the
+crypto TTL was 60; raising that TTL broke a test about session boundaries. Three separate spurious
+failures came from this.
+→ **Assert constants, never their current values.** A test should fail when the behaviour it
+describes changes, and at no other time.
+
+**Templates tested against invented evidence.** The drawdown template read `peak_price_minor` while
+the rule emits `high_price_minor`. Every unit test passed because every unit test supplied evidence
+written by hand; the first real scan raised `KeyError`. The same shape hid a worse one: allocation
+drift requires each position to carry the observation time behind its value, and neither the
+pipeline nor its test supplied one — **drift could never have fired in production, silently**.
+→ **Test the consumer against output the producer actually generates**, not against a fixture of
+what you believe it generates.
+
+**A wildcard auth guard shadowed the internal routes.** Mounting the session check as a sub-router
+at `/*` made `POST /internal/runs` return 401 to everyone, including the cron trigger. The symptom
+would have been *silence* — no alerts, no observations, a dashboard that looks perfectly healthy —
+and liveness probes cannot see it, because the process is fine and its dependencies are fine.
+→ **Scheduled work needs a freshness check** ("did anything run today?"), not a liveness probe.
+`GET /runs` exists for this.
+
+**A fixture that looked like a solved problem.** The synthetic price history made the analysis
+engine testable and also let the missing `history()` survive two milestones. A fixture hides an
+absence.
+→ When a fixture stands in for a real source, **record what is still missing** rather than treating
+the green test as coverage.
+
+---
+
+## Current technical debt
 
 | Item | Where | Impact |
 |---|---|---|
-| Import previews are in-process memory | `apps/orchestrator/src/services/previewStore.ts` | orchestrator must stay at `replicas: 1` until this moves to Redis |
-| Run keys are in-process memory | `src/http/routes/internal.ts` | must move to the `runs` table in M2, or a restart lets a duplicate run through |
-| No `runs` table yet | Alembic | M2 deliverable; the migration must also backfill idempotency |
-| Web bundle is ~600 kB (Recharts) | `apps/web` | acceptable now; code-split in M6 |
-| `yfinance` is unofficial and delayed | `services/ai/app/providers/yfinance_provider.py` | fine for development; add Polygon.io before relying on it |
-| LLM provider factory not built yet | — | M2; must be an interface from the first line (CLAUDE.md guideline 6) |
-| Quote history written best-effort | `routes/portfolio.ts` | failures are logged, not retried; fine until M2 needs dense history |
-| No rate limiting on public API routes | `src/http/app.ts` | single-user deployment; revisit before multi-user |
-| No component/DOM tests on the web app | `apps/web/test` | store logic is covered; rendering is not. Add a DOM test runner in M6 |
-| Crypto detection is a symbol-shape heuristic | `core/cache_policy.py` | `-USD` suffix, because the AI service receives bare symbols. Fix by passing `asset_class` and `exchange` on the quote request |
-| Market hours assume US sessions for every symbol | `core/cache_policy.py` | SAP.DE trades on XETRA (08:00-16:30 UTC) but is judged against NYSE hours: ~5 hours a day of needlessly stale prices. Same wire change fixes it |
-| Explanation provenance is invisible | `observations` | Nothing records whether a sentence was written by a model or a template, so the UI cannot show it and a reader cannot weigh it. Needs a column |
-| Concept chips point nowhere | `apps/web` | FR-16 wants one click to an explanation; the corpus arrives in M3 |
-| No UI for target weights | `apps/web` | The API exists and is tested; setting them still requires curl |
-| Redis cold start refetches everything | `core/cache.py` | the `quotes` table holds usable recent prices; warming from it was deferred to pair with M2 |
-| `instruments` and `quotes` have no `user_id` | migration `0001` | intentional: shared reference and market data, not user-owned. Documented so the audit does not re-flag it |
-| Snapshots written before `0002` carry default counts | migration `0002` | `holdings_count = 0` on a non-zero total means "provenance unknown"; not backfilled, and `0002` has not yet run against a live database |
+| **Explanation provenance is not stored** | `observations` | Nothing records whether a sentence came from the model or a template, so the UI cannot show it and a reader cannot weigh it. Needs a column; the pipeline already computes `narration_source` and `fallback_reason` and throws them away on insert |
+| **Concept chips point nowhere** | `apps/web` | PRD FR-16 wants one click to an explanation; the corpus arrives in M3. They render as labels rather than dead links |
+| **Target weights have an API and no UI** | `apps/web` | `PUT /targets` is tested and works; setting them requires curl. Allocation drift is invisible to a user who does not know the endpoint exists |
+| **Import previews live in process memory** | `services/previewStore.ts` | Forces `replicas: 1` in Kubernetes. The only remaining in-memory state — run keys moved to the `runs` table in M2 |
+| **OpenRouter workspace budget is exhausted** | external | `$0.01` lifetime cap, spent. Every narration falls back to a template with `fallback_reason: provider_error`. The product works and says so; model-written explanations need the budget raised |
+| Crypto detection is a symbol-shape heuristic | `core/cache_policy.py` | `-USD` suffix, because the AI service receives bare symbols |
+| Market hours assume US sessions for every symbol | `core/cache_policy.py` | SAP.DE trades on XETRA but is judged against NYSE hours. The same wire change (pass `asset_class` and `exchange` on the quote request) fixes both this and the heuristic above |
+| No component/DOM tests on the web app | `apps/web/test` | Store and formatting logic covered; rendering is not |
+| Redis cold start refetches everything | `core/cache.py` | The `quotes` table holds usable recent prices; warming from it was deferred |
+| `instruments`, `quotes` and the news tables have no `user_id` | migrations | **Intentional** — shared reference and market data, not user-owned. Documented so an audit does not re-flag it |
 
-## Developer entry points
+---
 
-- `bash scripts/dev-docker.sh` — everything in containers. The default. `--rebuild`, `--reset`
-  (destroys the database, asks first), `--logs`, `--stop`.
-- `bash scripts/dev-local.sh` — Postgres and Redis in containers, the three application processes
-  native with hot reload. `--setup` installs dependencies only. It stops the containerised app
-  services first so both cannot run at once, and refuses to start if a port it needs is taken.
-- Shared helpers in `scripts/lib/dev-common.sh`: `.env` bootstrap with generated secrets,
-  readiness polling, and a port check that probes the exact bind address (IPv4 loopback) rather
-  than the port number, because another process may hold only the IPv6 address.
+## Local environment (this machine)
 
-## Local environment notes (this machine)
+- **`.env` has `MARKET_DATA_PROVIDERS=yfinance,fixture`** — real, 15-minute-delayed prices.
+  **`.env.example` keeps `fixture,yfinance`** so a fresh clone and CI run entirely offline with no
+  API keys. Do not "fix" the difference: it is the point.
+- Other processes on this machine hold ports 5432, `127.0.0.1:8000` and `[::1]:5173`/`[::1]:5174`.
+  Every published port is configurable; this machine uses `POSTGRES_HOST_PORT=55432`,
+  `WEB_HOST_PORT=5174`, `AI_SERVICE_HOST_PORT=8001`.
+- **Reach the dashboard at `http://127.0.0.1:5174`, not `localhost`** — macOS resolves `localhost`
+  to IPv6 first, where a different project is listening.
+- The database currently holds ~1,800 real daily closes from Yahoo and a real portfolio scan's
+  observations. Nothing synthetic remains in `quotes`.
 
-- Other processes on this Mac hold 5432, `127.0.0.1:8000`, and `[::1]:5173` / `[::1]:5174`. All
-  published ports are therefore configurable; this machine's `.env` uses
-  `POSTGRES_HOST_PORT=55432`, `WEB_HOST_PORT=5174`, `AI_SERVICE_HOST_PORT=8001`, and
-  `VITE_API_BASE_URL=http://127.0.0.1:8080`.
-- Reach the dashboard at **http://127.0.0.1:5174**, not `localhost` (IPv6 resolves first).
-- A stale Vite dev server from the directory's previous project
-  (`/Users/a/projects/Traders/frontend/node_modules/.bin/vite`, pid 36957 as of 2026-09-14) still
-  holds `[::1]:5173`. Killing it would free the default port; left alone pending the user's call.
+---
+
+## Starting M4
+
+The scheduling half of M4 is already done (run kinds, buckets, idempotent claims). What remains is
+the human-in-the-loop state machine and Telegram. The seams are in place: `POST /internal/runs` is
+the trigger, `runs.run_key` is the idempotency guarantee, `observations.dedupe_key` stops a repeat
+notifying twice, `users.quiet_hours` exists, and severity is already on every observation.
+
+**Two things to settle before writing code.** Proposals need a durable state machine with a TTL —
+an approval acted on hours later is a decision made against prices that have moved. And a Telegram
+callback is replayable: the payload must be signed, single-use and TTL-checked, or a forwarded
+message becomes an approval. `docs/FLOWS.md` F3 and F4 have the intended shapes.
