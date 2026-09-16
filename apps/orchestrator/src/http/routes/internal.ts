@@ -18,6 +18,7 @@ import { z } from 'zod';
 
 import { claimRun, finishRun, getUser, listHeldInstruments, listRuns } from '../../db/queries.js';
 import { runPortfolioScan } from '../../services/portfolioScan.js';
+import { sweepExpiredProposals } from '../../services/proposals.js';
 import { logger } from '../../logger.js';
 import { localDate, takeSnapshot } from '../../services/snapshot.js';
 import { currentUserId, type AppEnv } from '../app.js';
@@ -41,6 +42,11 @@ const RUN_BUCKET_MINUTES: Record<string, number> = {
   // Daily closes appear once a day, so asking more often fetches the same
   // series and writes nothing. The provider quota is the reason to care.
   backfill: 24 * 60,
+  // The sweep only writes expiries the clock has already made true, so running
+  // it more often costs an indexed scan of a partial index and nothing else.
+  // Fifteen minutes bounds how long a dead proposal can sit in the inbox
+  // looking answerable - and `effectiveState` means it never actually is.
+  proposal_sweep: 15,
 };
 
 /** The bucket a moment falls into, as a readable suffix for the run key. */
@@ -54,7 +60,7 @@ export function runBucket(kind: string, localDate: string, now: Date = new Date(
 }
 
 const runSchema = z.object({
-  kind: z.enum(['snapshot', 'portfolio_scan', 'backfill']),
+  kind: z.enum(['snapshot', 'portfolio_scan', 'backfill', 'proposal_sweep']),
   userId: z.string().uuid().optional(),
   runKey: z.string().max(200).optional(),
   trigger: z.string().max(40).optional(),
@@ -122,6 +128,22 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
           runId,
           status: degraded ? 'degraded' : 'ok',
           result,
+        });
+      }
+
+      if (parsed.data.kind === 'proposal_sweep') {
+        // Deliberately not scoped to `userId`: a deadline is a deadline for
+        // everybody, and a sweep that only expired the triggering user's
+        // proposals would leave every other account's inbox stale for as long
+        // as that account stayed quiet.
+        const expired = await sweepExpiredProposals();
+        await finishRun(runId, 'ok', { expired });
+        return context.json({
+          kind: parsed.data.kind,
+          runKey,
+          runId,
+          status: 'ok',
+          result: { expired },
         });
       }
 

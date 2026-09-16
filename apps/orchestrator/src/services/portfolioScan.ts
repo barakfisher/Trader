@@ -11,6 +11,7 @@
 import type { AiClient } from '@traders/shared/ai';
 
 import {
+  getOrCreateUserSettings,
   insertObservations,
   listHoldings,
   listRecentDedupeKeys,
@@ -19,6 +20,7 @@ import {
   type UserRow,
 } from '../db/queries.js';
 import { logger } from '../logger.js';
+import { raiseProposals } from './proposals.js';
 import { valuePortfolio } from './valuation.js';
 
 export interface ScanResult {
@@ -35,6 +37,9 @@ export interface ScanResult {
   /** Present when a rule declined to run, and why. Never silently absent. */
   skipped: string[];
   degraded: boolean;
+  /** New findings that warranted a decision, and how many became one. */
+  proposalsSelected: number;
+  proposalsCreated: number;
 }
 
 export async function runPortfolioScan(
@@ -56,6 +61,8 @@ export async function runPortfolioScan(
       narrationFallbacks: {},
       skipped: ['no holdings to analyse'],
       degraded: false,
+      proposalsSelected: 0,
+      proposalsCreated: 0,
     };
   }
 
@@ -115,7 +122,35 @@ export async function runPortfolioScan(
     dedupeKey: observation.dedupe_key,
   }));
 
-  const { created, suppressed } = await insertObservations(toStore);
+  const { created, suppressed, inserted } = await insertObservations(toStore);
+
+  /**
+   * Proposals are raised only for observations this scan actually created. A
+   * suppressed finding is one the feed already reported, and it either raised a
+   * proposal at the time or was not the kind that does - either way, asking the
+   * user about it again because the market has not moved is how an approvals
+   * inbox becomes something people stop reading.
+   *
+   * The settings read is per scan rather than per finding: the thresholds are
+   * the user's, so they cannot come from `config`, but they also cannot change
+   * halfway through one scan's results without making that scan's output
+   * incoherent.
+   */
+  const settings = await getOrCreateUserSettings(user.id);
+  const proposals = await raiseProposals(
+    user.id,
+    inserted.map((observation) => ({
+      id: observation.id,
+      kind: observation.kind,
+      severity: observation.severity,
+      subjectRef: observation.subject_ref,
+      evidence: observation.evidence,
+    })),
+    {
+      proposalSeverity: settings.proposal_severity,
+      proposalTtlHours: settings.proposal_ttl_hours,
+    },
+  );
 
   const skipped: string[] = [];
   if (response.stats.drift_skipped_reason) {
@@ -141,6 +176,8 @@ export async function runPortfolioScan(
     // did less than it appears to have done. Recording that is the difference
     // between "nothing happened" and "we did not look".
     degraded: portfolio.summary.degraded || skipped.length > 0,
+    proposalsSelected: proposals.selected,
+    proposalsCreated: proposals.created,
   };
 
   logger().info({ userId: user.id, ...result }, 'portfolio scan complete');

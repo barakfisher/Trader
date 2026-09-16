@@ -27,6 +27,10 @@ const INTERVALS_MS: Record<string, number> = {
   // Hourly against a daily bucket: the extras cost one HTTP request each and
   // mean a restart cannot skip the day's history.
   backfill: 60 * 60 * 1000,
+  // Matches its run bucket rather than firing more often than it: unlike a scan,
+  // a repeated sweep has nothing to collapse - it is already idempotent, since a
+  // proposal already marked expired produces no transition.
+  proposal_sweep: 15 * 60 * 1000,
 };
 
 /** Stagger the first run of each kind so a restart does not fire both at once. */
@@ -36,6 +40,7 @@ const FIRST_RUN_DELAY_MS: Record<string, number> = {
   backfill: 8_000,
   snapshot: 20_000,
   portfolio_scan: 40_000,
+  proposal_sweep: 55_000,
 };
 
 const timers: NodeJS.Timeout[] = [];

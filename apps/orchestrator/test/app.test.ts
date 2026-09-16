@@ -55,7 +55,16 @@ vi.mock('../src/db/queries.js', () => ({
   claimRun: vi.fn(),
   finishRun: vi.fn(async () => undefined),
   listRuns: vi.fn(async () => []),
-  insertObservations: vi.fn(async () => ({ created: 0, suppressed: 0 })),
+  insertObservations: vi.fn(async () => ({ created: 0, suppressed: 0, inserted: [] })),
+  getOrCreateUserSettings: vi.fn(async () => ({
+    proposal_severity: 'high',
+    proposal_ttl_hours: 24,
+    notify_severity: 'high',
+    quiet_hours_start: '22:00',
+    quiet_hours_end: '07:00',
+    muted_until: null,
+  })),
+  createProposals: vi.fn(async () => 0),
   listObservations: vi.fn(async () => []),
   listRecentDedupeKeys: vi.fn(async () => []),
   listTargetWeights: vi.fn(async () => []),
@@ -318,7 +327,7 @@ describe('API', () => {
   });
 
   it('runs a portfolio scan and stores what it finds', async () => {
-    vi.mocked(queries.insertObservations).mockResolvedValueOnce({ created: 2, suppressed: 1 });
+    vi.mocked(queries.insertObservations).mockResolvedValueOnce({ created: 2, suppressed: 1, inserted: [] });
     const response = await app.request('/internal/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
@@ -332,7 +341,7 @@ describe('API', () => {
 
   it('marks a scan degraded when a rule declined to run', async () => {
     // "Nothing was found" and "we could not look" must not report the same way.
-    vi.mocked(queries.insertObservations).mockResolvedValueOnce({ created: 0, suppressed: 0 });
+    vi.mocked(queries.insertObservations).mockResolvedValueOnce({ created: 0, suppressed: 0, inserted: [] });
     scanStats = { drift_skipped_reason: '1 of 1 holdings could not be priced (AAPL)' };
     app = buildApp();
     const response = await app.request('/internal/runs', {

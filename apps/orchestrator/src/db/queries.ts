@@ -495,6 +495,15 @@ export interface ObservationToStore {
   dedupeKey: string;
 }
 
+/** An observation that was actually written, as opposed to one suppressed. */
+export interface InsertedObservation {
+  id: string;
+  kind: string;
+  severity: string;
+  subject_ref: string | null;
+  evidence: unknown;
+}
+
 /**
  * Store observations, skipping any the feed has already reported.
  *
@@ -502,11 +511,17 @@ export interface ObservationToStore {
  * the count of suppressed rows is the honest measure of how repetitive the scan
  * is. Suppression is silent by design at this layer and loud in the run stats:
  * nothing is lost, because an identical finding says nothing new.
+ *
+ * The inserted rows are returned, not just counted, because raising a proposal
+ * is something that should happen for a finding the user has not seen and not
+ * for one they have. Returning only a count would leave the caller to re-query
+ * for "what was new", and the only honest way to answer that after the fact is
+ * by timestamp - which is a race with the next scan.
  */
 export async function insertObservations(
   observations: ObservationToStore[],
-): Promise<{ created: number; suppressed: number }> {
-  if (observations.length === 0) return { created: 0, suppressed: 0 };
+): Promise<{ created: number; suppressed: number; inserted: InsertedObservation[] }> {
+  if (observations.length === 0) return { created: 0, suppressed: 0, inserted: [] };
 
   const values: string[] = [];
   const params: unknown[] = [];
@@ -531,16 +546,20 @@ export async function insertObservations(
     );
   });
 
-  const inserted = await query<{ id: string }>(
+  const inserted = await query<InsertedObservation>(
     `INSERT INTO observations
        (user_id, run_id, kind, severity, subject_kind, subject_ref, headline, explanation,
         evidence, concept_refs, dedupe_key)
      VALUES ${values.join(', ')}
      ON CONFLICT (dedupe_key) DO NOTHING
-     RETURNING id`,
+     RETURNING id, kind, severity, subject_ref, evidence`,
     params,
   );
-  return { created: inserted.length, suppressed: observations.length - inserted.length };
+  return {
+    created: inserted.length,
+    suppressed: observations.length - inserted.length,
+    inserted,
+  };
 }
 
 export interface ObservationRow {
@@ -597,6 +616,290 @@ export function listObservations(userId: string, limit = 50): Promise<Observatio
       LIMIT $2`,
     [userId, limit],
   );
+}
+
+// --- Proposals, their audit trail, and the paper ledger -------------------------
+
+export interface ProposalRow {
+  id: string;
+  user_id: string;
+  observation_id: string;
+  kind: string;
+  payload: unknown;
+  state: string;
+  expires_at: Date;
+  snoozed_until: Date | null;
+  decided_at: Date | null;
+  decided_via: string | null;
+  created_at: Date;
+  /** Joined from the observation, so the inbox renders without a second query. */
+  severity: string;
+  subject_ref: string | null;
+  headline: string;
+  explanation: string | null;
+  evidence: unknown;
+}
+
+export interface ProposalToCreate {
+  userId: string;
+  observationId: string;
+  kind: string;
+  payload: unknown;
+  expiresAt: Date;
+}
+
+/**
+ * Raise proposals for findings that do not already have one.
+ *
+ * `ON CONFLICT (observation_id) DO NOTHING` is what makes a re-scan cheap: the
+ * observation layer already suppresses a repeated finding by `dedupe_key`, and
+ * this is the same guarantee one level up, for the case where an observation
+ * survives but its proposal was created by an earlier run. Two suppression
+ * schemes would eventually disagree; this one defers to the first.
+ */
+export async function createProposals(proposals: ProposalToCreate[]): Promise<number> {
+  if (proposals.length === 0) return 0;
+
+  const values: string[] = [];
+  const params: unknown[] = [];
+  proposals.forEach((proposal) => {
+    const base = params.length;
+    params.push(
+      proposal.userId,
+      proposal.observationId,
+      proposal.kind,
+      JSON.stringify(proposal.payload ?? {}),
+      proposal.expiresAt,
+    );
+    values.push(
+      `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}::jsonb, $${base + 5})`,
+    );
+  });
+
+  const inserted = await query<{ id: string }>(
+    `INSERT INTO proposals (user_id, observation_id, kind, payload, expires_at)
+     VALUES ${values.join(', ')}
+     ON CONFLICT (observation_id) DO NOTHING
+     RETURNING id`,
+    params,
+  );
+  return inserted.length;
+}
+
+/** The columns every proposal read returns, joined to the finding behind it. */
+const PROPOSAL_COLUMNS = `p.id, p.user_id, p.observation_id, p.kind, p.payload, p.state,
+       p.expires_at, p.snoozed_until, p.decided_at, p.decided_via, p.created_at,
+       o.severity, o.subject_ref, o.headline, o.explanation, o.evidence`;
+
+export function findProposal(userId: string, proposalId: string): Promise<ProposalRow | null> {
+  return queryOne<ProposalRow>(
+    `SELECT ${PROPOSAL_COLUMNS}
+       FROM proposals p
+       JOIN observations o ON o.id = p.observation_id
+      WHERE p.user_id = $1 AND p.id = $2`,
+    [userId, proposalId],
+  );
+}
+
+/**
+ * The inbox. Ordered by deadline rather than by creation: what matters about an
+ * open question is how long is left to answer it, and a proposal raised an hour
+ * ago with a two-hour TTL is more urgent than one raised yesterday with a week.
+ *
+ * `open` selects on the *stored* state, and the caller re-reads each row through
+ * `effectiveState` - so a proposal whose deadline passed since the last sweep
+ * arrives here and is rendered as expired rather than being invisible until the
+ * sweep catches up. Filtering on the computed state in SQL would duplicate the
+ * state machine in a second language.
+ */
+export function listProposals(
+  userId: string,
+  options: { open?: boolean; limit?: number } = {},
+): Promise<ProposalRow[]> {
+  const { open = false, limit = 50 } = options;
+  return query<ProposalRow>(
+    `SELECT ${PROPOSAL_COLUMNS}
+       FROM proposals p
+       JOIN observations o ON o.id = p.observation_id
+      WHERE p.user_id = $1
+        ${open ? `AND p.state IN ('pending','snoozed')` : ''}
+      ORDER BY p.expires_at ASC, p.created_at DESC
+      LIMIT $2`,
+    [userId, limit],
+  );
+}
+
+/** Proposals whose deadline has passed but whose row has not caught up yet. */
+export function listProposalsToExpire(limit = 500): Promise<ProposalRow[]> {
+  return query<ProposalRow>(
+    `SELECT ${PROPOSAL_COLUMNS}
+       FROM proposals p
+       JOIN observations o ON o.id = p.observation_id
+      WHERE p.state IN ('pending','snoozed')
+        AND p.expires_at <= now()
+      ORDER BY p.expires_at ASC
+      LIMIT $1`,
+    [limit],
+  );
+}
+
+export interface TransitionToApply {
+  proposalId: string;
+  userId: string;
+  fromState: string;
+  toState: string;
+  surface: string;
+  /** Null for a system transition: nobody did it, and that is not a user id. */
+  actorUserId: string | null;
+  snoozedUntil: Date | null;
+  evidenceSnapshot: unknown;
+  /** A Telegram callback nonce. Unique where present, so a replay cannot repeat. */
+  idempotencyKey: string | null;
+  /** The ledger row an approval writes. Null for every other transition. */
+  intent: { kind: string; payload: unknown } | null;
+}
+
+export interface TransitionResult {
+  /** False when another writer got there first; the caller re-reads and reports. */
+  applied: boolean;
+  intentId: string | null;
+}
+
+/**
+ * Apply one transition: the row, its audit entry and - for an approval - the
+ * ledger, in a single transaction.
+ *
+ * The UPDATE carries `AND state = $fromState` because the state machine decided
+ * against a row that was read earlier, and between the read and the write
+ * another surface may have answered the same proposal. Losing that race must
+ * not produce an audit row for a transition that did not happen, so the
+ * transaction rolls back and the caller re-reads: a Telegram tap and a click in
+ * the UI a second apart end with one decision and one ledger row, not two.
+ *
+ * Guideline 2 lives here. An approval writes `intents` and nothing else - there
+ * is no broker call to disable, because there is no broker client in the
+ * repository.
+ */
+export function applyProposalTransition(
+  transition: TransitionToApply,
+): Promise<TransitionResult> {
+  return transaction(async (client) => {
+    const updated = await client.query(
+      `UPDATE proposals
+          SET state = $1,
+              snoozed_until = $2,
+              decided_at = now(),
+              decided_via = $3,
+              updated_at = now()
+        WHERE id = $4
+          AND user_id = $5
+          AND state = $6
+        RETURNING id`,
+      [
+        transition.toState,
+        transition.snoozedUntil,
+        transition.surface,
+        transition.proposalId,
+        transition.userId,
+        transition.fromState,
+      ],
+    );
+    if (updated.rowCount === 0) return { applied: false, intentId: null };
+
+    await client.query(
+      `INSERT INTO proposal_transitions
+         (proposal_id, user_id, from_state, to_state, surface, actor_user_id,
+          evidence_snapshot, idempotency_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)`,
+      [
+        transition.proposalId,
+        transition.userId,
+        transition.fromState,
+        transition.toState,
+        transition.surface,
+        transition.actorUserId,
+        JSON.stringify(transition.evidenceSnapshot ?? {}),
+        transition.idempotencyKey,
+      ],
+    );
+
+    let intentId: string | null = null;
+    if (transition.intent !== null) {
+      const intent = await client.query<{ id: string }>(
+        `INSERT INTO intents (user_id, proposal_id, kind, payload)
+         VALUES ($1, $2, $3, $4::jsonb)
+         RETURNING id`,
+        [
+          transition.userId,
+          transition.proposalId,
+          transition.intent.kind,
+          JSON.stringify(transition.intent.payload ?? {}),
+        ],
+      );
+      intentId = intent.rows[0]?.id ?? null;
+    }
+
+    return { applied: true, intentId };
+  });
+}
+
+export interface TransitionRow {
+  id: string;
+  from_state: string;
+  to_state: string;
+  surface: string;
+  actor_user_id: string | null;
+  created_at: Date;
+}
+
+/** The audit trail for one proposal, newest first. */
+export function listProposalTransitions(
+  userId: string,
+  proposalId: string,
+): Promise<TransitionRow[]> {
+  return query<TransitionRow>(
+    `SELECT id, from_state, to_state, surface, actor_user_id, created_at
+       FROM proposal_transitions
+      WHERE user_id = $1 AND proposal_id = $2
+      ORDER BY created_at DESC`,
+    [userId, proposalId],
+  );
+}
+
+// --- Per-user settings ---------------------------------------------------------
+
+export interface UserSettingsRow {
+  proposal_severity: string;
+  proposal_ttl_hours: number;
+  notify_severity: string;
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+  muted_until: Date | null;
+}
+
+/**
+ * A user's settings, materialising the defaults if they have never saved any.
+ *
+ * The INSERT is what keeps "no row" from being a case every caller has to
+ * handle: the defaults live in the schema (migration 0006), which is the only
+ * place they can be stated once for both services. `DO UPDATE` rather than
+ * `DO NOTHING` so the statement always returns the row - `DO NOTHING` returns
+ * nothing on conflict, which would need a second SELECT for the common path.
+ */
+export async function getOrCreateUserSettings(userId: string): Promise<UserSettingsRow> {
+  const row = await queryOne<UserSettingsRow>(
+    `INSERT INTO user_settings (user_id) VALUES ($1)
+     ON CONFLICT (user_id) DO UPDATE SET user_id = EXCLUDED.user_id
+     RETURNING proposal_severity, proposal_ttl_hours, notify_severity,
+               to_char(quiet_hours_start, 'HH24:MI') AS quiet_hours_start,
+               to_char(quiet_hours_end, 'HH24:MI') AS quiet_hours_end,
+               muted_until`,
+    [userId],
+  );
+  // The INSERT ... RETURNING always yields a row; the null branch exists only to
+  // satisfy the type, and would mean the user was deleted mid-request.
+  if (row === null) throw new Error(`user_settings could not be materialised for ${userId}`);
+  return row;
 }
 
 export { transaction };
