@@ -259,6 +259,11 @@ export interface components {
             /** Holdings */
             holdings: components["schemas"]["ScanHolding"][];
             /**
+             * Known Dedupe Keys
+             * @description Dedupe keys the caller has already stored. Matching findings are counted and skipped before narration, so a repeat costs a hash rather than a model call. Omit to narrate everything.
+             */
+            known_dedupe_keys?: string[];
+            /**
              * Target Weights
              * @description symbol -> target weight as a decimal string, e.g. {'VOO': '0.25'}.
              */
@@ -355,6 +360,11 @@ export interface components {
         };
         /** ScanStatsOut */
         ScanStatsOut: {
+            /**
+             * Already Known
+             * @default 0
+             */
+            already_known: number;
             /** Drift Skipped Reason */
             drift_skipped_reason?: string | null;
             /**

@@ -1,6 +1,6 @@
 # Project memory — Traders
 
-Updated: 2026-09-15. Maintained per [CLAUDE.md](../CLAUDE.md) "Session management & memory".
+Updated: 2026-09-16. Maintained per [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
 ---
 
@@ -11,7 +11,7 @@ Updated: 2026-09-15. Maintained per [CLAUDE.md](../CLAUDE.md) "Session managemen
 | **M0 — Repo skeleton & contracts** | ✅ **Complete** | monorepo, compose stack, CI, OpenAPI contract + generated client |
 | **M1 — Vertical slice: portfolio in, valued portfolio out** | ✅ **Complete** | built and verified end to end against the running stack |
 | **M1.5 — Trustworthy quote path** (unplanned, inserted) | ✅ **Complete** | correctness work M2 depends on; see below |
-| M2 — Analysis engine & observations | ⏭️ Next | rule layer, news ingestion, correlation, narration behind the evidence validator |
+| **M2 — Analysis engine & observations** | ✅ **Complete** | PRs #12-#22; the product now finds things, explains them and shows the figures |
 | M3 — RAG & educational engine | Not started | |
 | M4 — Scheduling, HITL & Telegram | Not started | Mastra lands here |
 | M5 — Market discovery & topics | Not started | |
@@ -72,6 +72,31 @@ built on. Every item was measured before and after, not assumed.
   the whole set transactionally, and `portfolioScan.ts` now sends the user's real targets instead
   of `{}`. Allocation drift had been implemented and unreachable: nothing could fill the table.
 
+**M2 — analysis engine and observations** (PRs #12-#22, 2026-09-16)
+
+- **`runs` and `observations`** (migration `0003`). Run claims moved from a process-local Map to a
+  unique `run_key` INSERT, so idempotency survives a restart and works across replicas. A run that
+  throws is recorded failed rather than leaving its key claimed; one abandoned by a killed process
+  is reclaimed after thirty minutes.
+- **LLM provider factory** with one adapter covering OpenRouter, OpenAI and Ollama, a null provider
+  so running without a model is a tested path, and a daily spend guard in micro-USD. Misconfiguration
+  raises at boot in production and degrades elsewhere.
+- **Rule layer**: price move, sigma move, drawdown, allocation drift. Pure functions; every finding
+  carries the figures it rests on.
+- **News ingestion** (migration `0004`): fixture provider, dedupe on URL and content hashes, entity
+  extraction that refuses a bare ticker without corroboration, deterministic lexicon sentiment.
+- **Narration behind the evidence validator**: every number in generated text is checked against the
+  finding's evidence, and one unsupported figure discards the whole narration. Five failure paths
+  land on deterministic templates, with `fallback_reason` recorded.
+- **Price-history fixture** (70 daily closes per symbol, committed, seeded by a script that shifts
+  the series to end yesterday) — without it every rule correctly found nothing.
+- **Scan workflow**: `POST /internal/runs {kind: portfolio_scan}`, observations stored with a
+  `dedupe_key`, skips recorded as loudly as findings.
+- **Scheduled scans**, with the run-key bucket deciding what counts as a repeat (snapshot daily,
+  scan half-hourly) and timers that fire more often than the work is allowed to happen.
+- **Target weights API**, without which allocation drift could never fire.
+- **Observations feed** with an evidence drawer that renders `price_minor: 11845` as `$118.45`.
+
 ## Architectural decisions
 
 Full reasoning in [docs/DESIGN.md](../docs/DESIGN.md) section 2. The ones that constrain future work:
@@ -94,7 +119,12 @@ Full reasoning in [docs/DESIGN.md](../docs/DESIGN.md) section 2. The ones that c
    pricing for a day - failing in the expensive direction, where the current design fails in the
    cheap one. If scheduled scans ever make holidays material, the answer is a static calendar
    applied at the scheduler, not a network call per quote.
-10. **Partial snapshots are stored and marked, not refused.** A silent hole in the equity curve is
+10. **Identity is decided before narration, not after.** The rules are deterministic and the scan
+    runs half-hourly, so most of what a scan finds is what the last scan found. The caller sends the
+    dedupe keys it already holds and the pipeline skips those before calling a model: a repeat costs
+    a hash rather than a completion. Narrating and then discarding was roughly two hundred throwaway
+    model calls a day.
+11. **Partial snapshots are stored and marked, not refused.** A silent hole in the equity curve is
     as misleading as an understated total; `degraded` lets every consumer tell the difference.
 11. **Target weights are replaced, never patched.** A set of weights is one statement about the
     intended shape of the portfolio, and its only cross-row rule (they sum to at most 1) is a
@@ -125,6 +155,9 @@ Full reasoning in [docs/DESIGN.md](../docs/DESIGN.md) section 2. The ones that c
 | No component/DOM tests on the web app | `apps/web/test` | store logic is covered; rendering is not. Add a DOM test runner in M6 |
 | Crypto detection is a symbol-shape heuristic | `core/cache_policy.py` | `-USD` suffix, because the AI service receives bare symbols. Fix by passing `asset_class` and `exchange` on the quote request |
 | Market hours assume US sessions for every symbol | `core/cache_policy.py` | SAP.DE trades on XETRA (08:00-16:30 UTC) but is judged against NYSE hours: ~5 hours a day of needlessly stale prices. Same wire change fixes it |
+| Explanation provenance is invisible | `observations` | Nothing records whether a sentence was written by a model or a template, so the UI cannot show it and a reader cannot weigh it. Needs a column |
+| Concept chips point nowhere | `apps/web` | FR-16 wants one click to an explanation; the corpus arrives in M3 |
+| No UI for target weights | `apps/web` | The API exists and is tested; setting them still requires curl |
 | Redis cold start refetches everything | `core/cache.py` | the `quotes` table holds usable recent prices; warming from it was deferred to pair with M2 |
 | `instruments` and `quotes` have no `user_id` | migration `0001` | intentional: shared reference and market data, not user-owned. Documented so the audit does not re-flag it |
 | Snapshots written before `0002` carry default counts | migration `0002` | `holdings_count = 0` on a non-zero total means "provenance unknown"; not backfilled, and `0002` has not yet run against a live database |

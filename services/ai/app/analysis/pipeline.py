@@ -13,7 +13,7 @@ failure mode this project keeps having to design against.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -73,6 +73,9 @@ class ScanStats:
     narration_fallbacks: dict[str, int] = field(default_factory=dict)
     drift_skipped_reason: str | None = None
     insufficient_history: list[str] = field(default_factory=list)
+    #: Findings the caller already has. Counted rather than narrated: see the
+    #: note above `run_portfolio_scan`.
+    already_known: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,9 +96,22 @@ async def run_portfolio_scan(
     thresholds: AnalysisThresholds,
     llm: LLMProvider | None,
     articles: Sequence[CandidateArticle] = (),
+    known_dedupe_keys: Iterable[str] = (),
     now: datetime | None = None,
 ) -> tuple[list[ScanObservation], ScanStats]:
-    """Run every rule over `subjects`, narrate what they find, and report the rest."""
+    """Run every rule over `subjects`, narrate what is new, and report the rest.
+
+    Identity is decided before narration, not after. The rules are deterministic
+    and the scan runs every half hour, so most of what a scan finds is what the
+    last scan found - and narrating a finding the caller already has means paying
+    a model to write a sentence that is then discarded on insert. At a
+    thirty-minute cadence with eight findings, that is some two hundred
+    throwaway narrations a day.
+
+    `known_dedupe_keys` is what the caller has already stored. Findings matching
+    one are counted in `already_known` and dropped here, so the cost of a repeat
+    is a hash rather than a completion.
+    """
     moment = now or datetime.now(UTC)
     since = moment - timedelta(days=HISTORY_DAYS)
     stats = ScanStats(subjects=len(subjects))
@@ -146,22 +162,28 @@ async def run_portfolio_scan(
 
     stats.findings = len(findings)
 
+    known = set(known_dedupe_keys)
     observations: list[ScanObservation] = []
     for finding in findings:
+        key = dedupe_key(finding)
+        if key in known:
+            # Same rule, same subject, same severity, same day: the feed already
+            # says this. Nothing new to write and nothing to pay for.
+            stats.already_known += 1
+            continue
         narration = await narrate(finding, list(correlate(finding, list(articles))), llm)
         if narration.source == "llm":
             stats.narrated_by_llm += 1
         else:
             reason = narration.fallback_reason
             stats.narration_fallbacks[reason] = stats.narration_fallbacks.get(reason, 0) + 1
-        observations.append(
-            ScanObservation(finding=finding, narration=narration, dedupe_key=dedupe_key(finding))
-        )
+        observations.append(ScanObservation(finding=finding, narration=narration, dedupe_key=key))
 
     log.info(
         "analysis.scan_complete",
         subjects=stats.subjects,
         findings=stats.findings,
+        already_known=stats.already_known,
         narrated_by_llm=stats.narrated_by_llm,
         drift_skipped=bool(stats.drift_skipped_reason),
     )

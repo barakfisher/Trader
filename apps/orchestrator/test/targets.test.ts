@@ -66,6 +66,7 @@ vi.mock('../src/db/queries.js', () => ({
   listRuns: vi.fn(async () => []),
   insertObservations: vi.fn(async () => ({ created: 0, suppressed: 0 })),
   listObservations: vi.fn(async () => []),
+  listRecentDedupeKeys: vi.fn(async () => []),
   listTargetWeights: vi.fn(async () => []),
   findInstrumentsBySymbols: vi.fn(async (symbols: string[]) =>
     symbols.map((symbol) => INSTRUMENTS[symbol.toUpperCase()]).filter(Boolean),

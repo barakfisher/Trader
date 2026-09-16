@@ -13,6 +13,7 @@ import type { AiClient } from '@traders/shared/ai';
 import {
   insertObservations,
   listHoldings,
+  listRecentDedupeKeys,
   listTargetWeights,
   type ObservationToStore,
   type UserRow,
@@ -25,6 +26,9 @@ export interface ScanResult {
   priced: number;
   findings: number;
   created: number;
+  /** Skipped before narration, because the feed already had them. */
+  alreadyKnown: number;
+  /** Lost a race with a concurrent scan. Expected to be zero. */
   suppressed: number;
   narratedByLlm: number;
   narrationFallbacks: Record<string, number>;
@@ -46,6 +50,7 @@ export async function runPortfolioScan(
       priced: 0,
       findings: 0,
       created: 0,
+      alreadyKnown: 0,
       suppressed: 0,
       narratedByLlm: 0,
       narrationFallbacks: {},
@@ -58,6 +63,8 @@ export async function runPortfolioScan(
   // rather than defaulted to `{}`: until this call existed the drift rule had
   // nothing to compare against and every scan reported it as skipped.
   const targets = await listTargetWeights(user.id);
+
+  const knownKeys = await listRecentDedupeKeys(user.id);
 
   const portfolio = await valuePortfolio(rows, {
     baseCurrency: user.base_currency,
@@ -85,6 +92,11 @@ export async function runPortfolioScan(
       target_weights: Object.fromEntries(
         targets.map((target) => [target.symbol, target.weight]),
       ),
+      // What the feed already holds. The scan skips these before narrating, so a
+      // repeated finding costs a hash rather than a model call - which matters
+      // at a thirty-minute cadence, where most of what a scan finds is what the
+      // last one found.
+      known_dedupe_keys: knownKeys,
     },
     requestId,
   );
@@ -120,6 +132,7 @@ export async function runPortfolioScan(
     priced: portfolio.summary.pricedCount,
     findings: response.stats.findings,
     created,
+    alreadyKnown: response.stats.already_known ?? 0,
     suppressed,
     narratedByLlm: response.stats.narrated_by_llm,
     narrationFallbacks: response.stats.narration_fallbacks ?? {},
