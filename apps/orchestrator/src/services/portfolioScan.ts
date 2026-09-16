@@ -13,6 +13,7 @@ import type { AiClient } from '@traders/shared/ai';
 import {
   insertObservations,
   listHoldings,
+  listTargetWeights,
   type ObservationToStore,
   type UserRow,
 } from '../db/queries.js';
@@ -53,6 +54,11 @@ export async function runPortfolioScan(
     };
   }
 
+  // The user's own statement of the allocation they meant to hold. Read here
+  // rather than defaulted to `{}`: until this call existed the drift rule had
+  // nothing to compare against and every scan reported it as skipped.
+  const targets = await listTargetWeights(user.id);
+
   const portfolio = await valuePortfolio(rows, {
     baseCurrency: user.base_currency,
     ai,
@@ -74,7 +80,11 @@ export async function runPortfolioScan(
         // without this cannot take part in the calculation at all.
         as_of: holding.quote?.asOf ?? null,
       })),
-      target_weights: {},
+      // Symbol -> decimal string, exactly as stored. The weight never becomes a
+      // number on this side of the wire.
+      target_weights: Object.fromEntries(
+        targets.map((target) => [target.symbol, target.weight]),
+      ),
     },
     requestId,
   );

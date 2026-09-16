@@ -57,6 +57,9 @@ vi.mock('../src/db/queries.js', () => ({
   listRuns: vi.fn(async () => []),
   insertObservations: vi.fn(async () => ({ created: 0, suppressed: 0 })),
   listObservations: vi.fn(async () => []),
+  listTargetWeights: vi.fn(async () => []),
+  findInstrumentsBySymbols: vi.fn(async () => []),
+  replaceTargetWeights: vi.fn(async () => 0),
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
 }));
 

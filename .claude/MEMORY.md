@@ -68,6 +68,9 @@ built on. Every item was measured before and after, not assumed.
 - **Snapshot integrity** (migration `0002`): snapshots record `holdings_count`, `priced_count` and
   `degraded`, so a partial day is stored marked rather than silently understated.
 - **UI honesty**: the dashboard reports when prices were *observed*, not when they were fetched.
+- **Target weights API** (`apps/orchestrator/src/http/routes/targets.ts`): `GET/PUT /targets` write
+  the whole set transactionally, and `portfolioScan.ts` now sends the user's real targets instead
+  of `{}`. Allocation drift had been implemented and unreachable: nothing could fill the table.
 
 ## Architectural decisions
 
@@ -93,6 +96,14 @@ Full reasoning in [docs/DESIGN.md](../docs/DESIGN.md) section 2. The ones that c
    applied at the scheduler, not a network call per quote.
 10. **Partial snapshots are stored and marked, not refused.** A silent hole in the equity curve is
     as misleading as an understated total; `degraded` lets every consumer tell the difference.
+11. **Target weights are replaced, never patched.** A set of weights is one statement about the
+    intended shape of the portfolio, and its only cross-row rule (they sum to at most 1) is a
+    property of the set. A partial update could leave a combination the user never chose, and the
+    drift rule would report against it as if they had. A target may name any resolved instrument,
+    held or not, because "I meant 10% of this and hold none" is a real drift; it may not name a
+    symbol we have never resolved, so `PUT /targets` makes no provider call and a market-data
+    outage can never block someone correcting their own targets.
+
 9. **A partially priced snapshot is stored marked, not refused** (Alembic `0002_snapshot_integrity`:
    `holdings_count`, `priced_count`, `degraded`). A hole in the series reads as "no change" and
    misleads exactly as much as an understated total; snapshots are never recomputed, so the marker
