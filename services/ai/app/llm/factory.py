@@ -33,6 +33,10 @@ log = get_logger("llm.factory")
 _DISABLED_NAMES = frozenset({"", "null", "none", "off", "disabled"})
 
 
+class LLMConfigurationError(RuntimeError):
+    """A production deployment asked for an LLM it cannot actually use."""
+
+
 def build_llm(
     settings: Settings,
     redis: Redis | None = None,
@@ -40,6 +44,17 @@ def build_llm(
     transport: object | None = None,
 ) -> LLMProvider:
     """Build the provider named by LLM_PROVIDER, wrapped in the spend guard.
+
+    Misconfiguration degrades to NullProvider in development and raises in
+    production. The distinction that matters is between an LLM that is
+    deliberately off (LLM_PROVIDER=null, always honoured) and one that is
+    broken - a typo in the provider name, or a missing key. Degrading on the
+    second is right while developing, where narration is optional and a typo
+    must not take down the quotes API. In production it is the silent-failure
+    pattern this project exists to avoid: the product quietly loses a core
+    feature and nothing says so. Settings already refuses to boot in production
+    with a default internal key; this is the same rule applied to the same class
+    of mistake.
 
     `transport` is an httpx transport injected by tests; production passes none.
     """
@@ -59,11 +74,15 @@ def build_llm(
             hint="use LLM_PROVIDER=openrouter with LLM_MODEL=anthropic/... until a "
             "native Anthropic adapter exists",
         )
-        return NullProvider("the native Anthropic adapter is not implemented")
+        return _misconfigured(
+            settings,
+            "the native Anthropic adapter is not implemented",
+            provider=name,
+        )
 
     if name == "openrouter":
         if not settings.openrouter_api_key:
-            return _missing_key(name, "OPENROUTER_API_KEY")
+            return _missing_key(settings, name, "OPENROUTER_API_KEY")
         provider = OpenAICompatibleProvider(
             name=name,
             base_url=settings.openrouter_base_url,
@@ -78,7 +97,7 @@ def build_llm(
         )
     elif name == "openai":
         if not settings.openai_api_key:
-            return _missing_key(name, "OPENAI_API_KEY")
+            return _missing_key(settings, name, "OPENAI_API_KEY")
         provider = OpenAICompatibleProvider(
             name=name,
             base_url=settings.openai_base_url,
@@ -111,7 +130,11 @@ def build_llm(
             provider=name,
             known=["openrouter", "openai", "ollama", "anthropic", "null"],
         )
-        return NullProvider(f"LLM_PROVIDER={name!r} is not a known provider")
+        return _misconfigured(
+            settings,
+            f"LLM_PROVIDER={name!r} is not a known provider",
+            provider=name,
+        )
 
     if not provider.charges_per_token:
         log.info("llm.provider_selected", provider=provider.name, model=provider.model, budget=None)
@@ -147,9 +170,24 @@ def _shared_options(settings: Settings) -> dict[str, object]:
     }
 
 
-def _missing_key(provider: str, env_var: str) -> NullProvider:
-    log.warning("llm.missing_credential", provider=provider, setting=env_var)
-    return NullProvider(f"{env_var} is not set, so {provider} cannot be used")
+def _misconfigured(settings: Settings, reason: str, **log_fields: object) -> NullProvider:
+    """Refuse loudly in production, degrade with a warning everywhere else."""
+    if settings.is_production:
+        log.error("llm.misconfigured", reason=reason, **log_fields)
+        raise LLMConfigurationError(
+            f"{reason}. Set LLM_PROVIDER=null to run deliberately without narration."
+        )
+    log.warning("llm.misconfigured", reason=reason, **log_fields)
+    return NullProvider(reason)
+
+
+def _missing_key(settings: Settings, provider: str, env_var: str) -> NullProvider:
+    return _misconfigured(
+        settings,
+        f"{env_var} is not set, so {provider} cannot be used",
+        provider=provider,
+        setting=env_var,
+    )
 
 
 def _ollama_openai_base_url(base_url: str) -> str:

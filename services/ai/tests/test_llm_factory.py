@@ -10,10 +10,11 @@ is given a MockTransport.
 from __future__ import annotations
 
 import httpx
+import pytest
 
 from app.config import Settings
 from app.llm.budget import BudgetedProvider
-from app.llm.factory import build_llm
+from app.llm.factory import LLMConfigurationError, build_llm
 from app.llm.null_provider import NullProvider
 from app.llm.openai_compatible import OpenAICompatibleProvider
 from tests.fakes import FakeRedis
@@ -158,3 +159,50 @@ async def test_the_factory_output_completes_a_call_end_to_end():
     assert result.estimated_cost_micro_usd > 0
     # The spend landed in the day's counter, which is what makes the cap enforceable.
     assert await provider._guard.spent_micro_usd() == result.estimated_cost_micro_usd
+
+
+class TestProductionRefusesMisconfiguration:
+    """A broken LLM config degrades while developing and raises in production.
+
+    Degrading is right locally: narration is optional and a typo must not take
+    down the quotes API. In production the same degrade is the silent-failure
+    pattern this project exists to avoid - the product loses a core feature and
+    nothing says so. The distinction is between deliberately off and broken.
+    """
+
+    def test_unknown_provider_raises(self):
+        settings = Settings(
+            _env_file=None, app_env="production", internal_api_key="real", llm_provider="grok"
+        )
+        with pytest.raises(LLMConfigurationError, match="not a known provider"):
+            build_llm(settings)
+
+    def test_missing_key_raises(self):
+        settings = Settings(
+            _env_file=None,
+            app_env="production",
+            internal_api_key="real",
+            llm_provider="openrouter",
+            openrouter_api_key=None,
+        )
+        with pytest.raises(LLMConfigurationError, match="OPENROUTER_API_KEY"):
+            build_llm(settings)
+
+    def test_unimplemented_adapter_raises(self):
+        settings = Settings(
+            _env_file=None, app_env="production", internal_api_key="real", llm_provider="anthropic"
+        )
+        with pytest.raises(LLMConfigurationError):
+            build_llm(settings)
+
+    def test_deliberately_disabled_is_always_honoured(self):
+        # "I do not want narration" is a valid production configuration, and is
+        # the escape hatch the error message points at.
+        settings = Settings(
+            _env_file=None, app_env="production", internal_api_key="real", llm_provider="null"
+        )
+        assert build_llm(settings).name == "null"
+
+    def test_development_still_degrades(self):
+        settings = Settings(_env_file=None, app_env="development", llm_provider="grok")
+        assert build_llm(settings).name == "null"
