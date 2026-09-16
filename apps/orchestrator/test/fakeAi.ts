@@ -26,7 +26,11 @@ export interface FakeAiOptions {
   stale?: string[];
 }
 
+/** The last scan request the fake received, so a test can assert what was sent. */
+export let lastScanRequest: { known_dedupe_keys?: string[] } | null = null;
+
 export function createFakeAi(options: FakeAiOptions = {}): AiClient {
+  lastScanRequest = null;
   const unpriceable = new Set((options.unpriceable ?? []).map((s) => s.toUpperCase()));
   const stale = new Set((options.stale ?? []).map((s) => s.toUpperCase()));
   const missingFx = new Set(options.missingFx ?? []);
@@ -104,7 +108,8 @@ export function createFakeAi(options: FakeAiOptions = {}): AiClient {
       return { base, quote, rate, as_of: '2026-09-14T12:00:00Z', source: 'fake' };
     },
 
-    async portfolioScan() {
+    async portfolioScan(payload: { known_dedupe_keys?: string[] }) {
+      lastScanRequest = payload;
       return {
         observations: options.observations ?? [
           {
@@ -126,6 +131,7 @@ export function createFakeAi(options: FakeAiOptions = {}): AiClient {
           subjects_with_history: 1,
           findings: 1,
           narrated_by_llm: 0,
+          already_known: 0,
           narration_fallbacks: { no_provider: 1 },
           drift_skipped_reason: null,
           insufficient_history: [],

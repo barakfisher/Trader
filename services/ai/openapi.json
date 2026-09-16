@@ -281,6 +281,15 @@
             "title": "Holdings",
             "type": "array"
           },
+          "known_dedupe_keys": {
+            "description": "Dedupe keys the caller has already stored. Matching findings are counted and skipped before narration, so a repeat costs a hash rather than a model call. Omit to narrate everything.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5000,
+            "title": "Known Dedupe Keys",
+            "type": "array"
+          },
           "target_weights": {
             "additionalProperties": {
               "type": "string"
@@ -479,6 +488,11 @@
       },
       "ScanStatsOut": {
         "properties": {
+          "already_known": {
+            "default": 0,
+            "title": "Already Known",
+            "type": "integer"
+          },
           "drift_skipped_reason": {
             "anyOf": [
               {

@@ -123,6 +123,15 @@ class PortfolioScanRequest(BaseModel):
         default_factory=dict,
         description="symbol -> target weight as a decimal string, e.g. {'VOO': '0.25'}.",
     )
+    known_dedupe_keys: list[str] = Field(
+        default_factory=list,
+        max_length=5000,
+        description=(
+            "Dedupe keys the caller has already stored. Matching findings are counted "
+            "and skipped before narration, so a repeat costs a hash rather than a model "
+            "call. Omit to narrate everything."
+        ),
+    )
 
 
 class ObservationOut(BaseModel):
@@ -151,6 +160,7 @@ class ScanStatsOut(BaseModel):
     subjects: int = 0
     subjects_with_history: int = 0
     findings: int = 0
+    already_known: int = 0
     narrated_by_llm: int = 0
     narration_fallbacks: dict[str, int] = Field(default_factory=dict)
     drift_skipped_reason: str | None = None

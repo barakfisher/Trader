@@ -137,6 +137,35 @@ via `NewsProvider`.
 8. **Dedupe + throttle:** `dedupe_key = hash(kind, subject, bucket, severity)`; suppress if an equivalent observation was emitted within the cool-off window.
 9. Persist observations; create proposals where a finding is actionable; hand off to notification fan-out (respects quiet hours; batches into digest unless severity is high).
 
+### 5.1 What makes a claim shippable
+
+Steps 6 to 8 above are the part worth stating precisely, because they are where the product's
+central rule is enforced rather than described.
+
+**Evidence first.** Each rule emits a `Finding` carrying the figures it rests on: both prices and
+their observation times, the computed statistic, the thresholds applied, and whether any floor was
+used. Nothing downstream may state a number that is not in there.
+
+**Identity before words.** A finding's `dedupe_key` hashes the rule, the subject, the severity and
+the day the observed data belongs to - from the finding's own `as_of`, never a clock. The caller
+sends the keys it already holds, so a repeat is dropped before anything is narrated: the rules are
+deterministic and the scan runs half-hourly, so most of what a scan finds is what the last one
+found, and narrating those meant paying a model to write sentences that were discarded on insert.
+
+**Narration last, and least trusted.** The model is offered a finding whose deterministic narration
+already exists and is correct. Every number in what it returns is checked against the evidence, with
+tolerance for how a number is *written* (minor units rendered as major, ratios as percentages,
+rounding at the writer's precision, a dropped sign) but none for a different number. One unsupported
+figure discards the whole narration; partial trust in a sentence is not something this product can
+offer. Five paths - no provider, budget exhausted, provider error, malformed reply, unsourced
+figures - land on the same deterministic template, and `fallback_reason` records which, so the
+rejection rate is measurable rather than anecdotal.
+
+**Skips are reported as loudly as findings.** A scan that produced nothing because allocation drift
+had no targets configured is a different thing from a quiet market, and an empty feed cannot tell
+them apart. A run finishes `degraded` rather than `ok` whenever a rule declined to run or a holding
+could not be priced.
+
 ## 6. RAG design
 
 - **Corpus:** curated, licence-clean financial concept material + our own written explainers, plus ingested article text (separate namespace, never mixed with definitions).

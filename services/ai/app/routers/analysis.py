@@ -59,6 +59,7 @@ async def portfolio_scan(
             base_currency=payload.base_currency.upper(),
             thresholds=AnalysisThresholds.from_settings(settings),
             llm=llm,
+            known_dedupe_keys=payload.known_dedupe_keys,
         )
 
     return PortfolioScanResponse(

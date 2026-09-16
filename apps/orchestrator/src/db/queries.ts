@@ -556,6 +556,25 @@ export interface ObservationRow {
   created_at: Date;
 }
 
+/**
+ * Dedupe keys the feed already holds, for the scan to skip before narrating.
+ *
+ * Bounded by age rather than count: a key buckets by the day of the observed
+ * data, so anything older than a couple of days can no longer collide with a
+ * finding the next scan produces. Sending the whole history would grow the
+ * request without changing a single decision.
+ */
+export async function listRecentDedupeKeys(userId: string, days = 2): Promise<string[]> {
+  const rows = await query<{ dedupe_key: string }>(
+    `SELECT dedupe_key
+       FROM observations
+      WHERE user_id = $1
+        AND created_at > now() - ($2 || ' days')::interval`,
+    [userId, String(days)],
+  );
+  return rows.map((row) => row.dedupe_key);
+}
+
 export function listObservations(userId: string, limit = 50): Promise<ObservationRow[]> {
   return query<ObservationRow>(
     `SELECT id, kind, severity, subject_kind, subject_ref, headline, explanation,

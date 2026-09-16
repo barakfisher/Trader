@@ -72,10 +72,15 @@ def headline_for(finding: Finding) -> str:
         return f"{symbol} is {_pct(evidence['drawdown_pct'])} from its {span}"
 
     if finding.kind == "allocation_drift":
-        return (
-            f"{symbol} is {_pct(evidence['drift'], 1)} away from its target weight "
-            f"of {_pct(evidence['target_weight'], 1).lstrip('+')}"
-        )
+        # Percentage POINTS, not percent. A weight of 12.7% against a target of
+        # 25% differs by 12.3 points, not by 12.3 percent - and in a product whose
+        # argument is precision about numbers, writing "-12.3% away from 25.0%"
+        # invites exactly the misreading it cannot afford.
+        drift = Decimal(str(evidence["drift"])) * 100
+        direction = "below" if drift < 0 else "above"
+        points = abs(drift).quantize(Decimal("0.1"))
+        target = _pct(evidence["target_weight"], 1).lstrip("+")
+        return f"{symbol} is {points} percentage points {direction} its {target} target"
 
     # A new rule without a template should be obvious, not silently blank.
     return f"{symbol}: {finding.kind.replace('_', ' ')}"
