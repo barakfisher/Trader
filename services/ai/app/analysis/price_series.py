@@ -66,7 +66,22 @@ class Step:
 
 
 def normalise(points: Iterable[PricePoint]) -> list[PricePoint]:
-    """Sort ascending by observation time, drop unusable rows, collapse duplicates.
+    """Sort ascending by observation time, drop unusable rows, collapse to daily closes.
+
+    Every rule in this package reasons in days - a one-day move, a standard
+    deviation of daily returns, a drawdown over a window of days - so the series
+    they see must be one observation per day. The stored series is not: the
+    portfolio endpoint records a quote on every page load, so an actively used
+    dashboard writes many rows a day. Left intraday, "the latest one-day move"
+    becomes the gap between two observations minutes apart, which is ~0% - the
+    rules would fall silent precisely when someone is using the product, and
+    look correct while doing it.
+
+    The last observation of each UTC day wins, which is the closest thing to a
+    close that a series without exchange calendars can offer. UTC rather than
+    market-local because the instrument's exchange is not available here; for US
+    sessions the two agree, and for a 20:00 UTC close they agree everywhere west
+    of the date line. Noted as a limitation rather than hidden.
 
     Three defects are filtered here rather than inside each rule:
 
@@ -88,6 +103,12 @@ def normalise(points: Iterable[PricePoint]) -> list[PricePoint]:
         moment = point.as_of if point.as_of.tzinfo else point.as_of.replace(tzinfo=UTC)
         moment = moment.astimezone(UTC)
         cleaned[moment] = PricePoint(moment, point.price_minor, point.currency)
+
+    # Collapse to one point per UTC day, keeping the last observation of each.
+    daily: dict[object, PricePoint] = {}
+    for moment in sorted(cleaned):
+        daily[moment.date()] = cleaned[moment]
+    cleaned = {point.as_of: point for point in daily.values()}
     return [cleaned[key] for key in sorted(cleaned)]
 
 
