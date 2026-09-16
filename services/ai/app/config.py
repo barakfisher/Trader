@@ -96,6 +96,46 @@ class Settings(BaseSettings):
     # Empty means no daily cap for any provider.
     provider_daily_limits: str = ""
 
+    # Analysis rule layer (app/analysis). Fractions, never percentages: 0.03 is
+    # 3%. Each rule has three ascending bands - the emit floor, then notable,
+    # then high - and a finding's severity is whichever band its statistic
+    # clears; see app/analysis/findings.py. The defaults live in
+    # AnalysisThresholds and are mirrored here so an operator can retune without
+    # touching code.
+    analysis_price_move_pct: float = 0.03
+    analysis_price_move_notable_pct: float = 0.05
+    analysis_price_move_high_pct: float = 0.08
+
+    # Sigma move: today's return over the trailing standard deviation of returns.
+    # ANALYSIS_SIGMA_MIN_MOVE_PCT keeps a quiet instrument's 0.3% wiggle from
+    # reading as a 4-sigma event, and ANALYSIS_SIGMA_STDEV_FLOOR keeps a
+    # near-flat series from becoming a small denominator.
+    analysis_sigma_z: float = 2.0
+    analysis_sigma_notable_z: float = 3.0
+    analysis_sigma_high_z: float = 4.0
+    analysis_sigma_window_days: int = 30
+    analysis_sigma_min_observations: int = 10
+    analysis_sigma_min_move_pct: float = 0.01
+    analysis_sigma_stdev_floor: float = 0.0025
+
+    # Drawdown from the trailing high inside a window ("local high", FR-6).
+    analysis_drawdown_pct: float = 0.10
+    analysis_drawdown_notable_pct: float = 0.15
+    analysis_drawdown_high_pct: float = 0.25
+    analysis_drawdown_window_days: int = 30
+    analysis_drawdown_min_observations: int = 5
+
+    # Allocation drift, in weight difference: 0.05 is five percentage points of
+    # portfolio weight away from the target, not 5% of the target.
+    analysis_drift_pct: float = 0.05
+    analysis_drift_notable_pct: float = 0.10
+    analysis_drift_high_pct: float = 0.15
+
+    # Widest calendar gap, in days, that two consecutive observations may span and
+    # still be described as a one-day move. Four covers a Friday-to-Tuesday
+    # holiday weekend; five covers the awkward ones.
+    analysis_max_gap_days: float = 5.0
+
     # Absolute path to the fixture data directory. Resolved for the current
     # runtime; FIXTURES_DIR in the environment always wins.
     fixtures_dir: str = Field(default_factory=_default_fixtures_dir)
