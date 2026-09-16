@@ -6,13 +6,14 @@ import { AllocationChart } from '../components/AllocationChart.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { HoldingsTable } from '../components/HoldingsTable.tsx';
 import { ImportWizard } from '../components/ImportWizard.tsx';
+import { ObservationsFeed } from '../components/ObservationsFeed.tsx';
 import { SummaryCards } from '../components/SummaryCards.tsx';
 import { Button, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { useStore } from '../stores/context.tsx';
 
 export const DashboardPage = observer(function DashboardPage() {
-  const { auth, portfolio, import: importStore } = useStore();
+  const { auth, portfolio, observations, import: importStore } = useStore();
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6">
@@ -35,7 +36,13 @@ export const DashboardPage = observer(function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => void portfolio.load({ silent: true })}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              void portfolio.load({ silent: true });
+              void observations.load({ silent: true });
+            }}
+          >
             <span className="flex items-center gap-1">
               <RefreshCw className={`size-4 ${portfolio.refreshing ? 'animate-spin' : ''}`} aria-hidden />
               Refresh
@@ -82,6 +89,10 @@ export const DashboardPage = observer(function DashboardPage() {
               <AddHoldingForm />
             </div>
           </div>
+          {/* The feed sits below the portfolio rather than above it: an empty
+              feed is the normal result of a quiet day, and it should not take
+              the top of the page to say so. */}
+          <ObservationsFeed />
         </>
       )}
 
