@@ -19,6 +19,7 @@ import type { components } from '../generated/ai-api.js';
 import {
   fxRateSchema,
   healthResponseSchema,
+  backfillResponseSchema,
   instrumentResolutionSchema,
   portfolioScanResponseSchema,
   quoteResponseSchema,
@@ -33,6 +34,8 @@ export type HealthResponse = components['schemas']['HealthResponse'];
 export type PortfolioScanRequest = components['schemas']['PortfolioScanRequest'];
 export type PortfolioScanResponse = components['schemas']['PortfolioScanResponse'];
 export type ObservationOut = components['schemas']['ObservationOut'];
+export type BackfillRequest = components['schemas']['BackfillRequest'];
+export type BackfillResponse = components['schemas']['BackfillResponse'];
 
 /**
  * A scan loads history for every holding and may call a model once per finding,
@@ -154,6 +157,20 @@ export class AiClient {
       portfolioScanResponseSchema,
       { method: 'POST', body: JSON.stringify(payload), requestId, timeoutMs: SCAN_TIMEOUT_MS },
     );
+  }
+
+  /**
+   * Fill the price history the analysis rules read. One provider call per
+   * instrument, so it shares the scan's longer timeout rather than the quote
+   * client's.
+   */
+  backfillHistory(payload: BackfillRequest, requestId?: string): Promise<BackfillResponse> {
+    return this.request<BackfillResponse>('/market/history/backfill', backfillResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      requestId,
+      timeoutMs: SCAN_TIMEOUT_MS,
+    });
   }
 
   fxRate(base: string, quote: string, requestId?: string): Promise<FxRate> {

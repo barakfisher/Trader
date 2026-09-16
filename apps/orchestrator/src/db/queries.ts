@@ -564,6 +564,18 @@ export interface ObservationRow {
  * finding the next scan produces. Sending the whole history would grow the
  * request without changing a single decision.
  */
+/** The instruments a user holds, for backfilling their price history. */
+export function listHeldInstruments(userId: string): Promise<{ id: string; symbol: string }[]> {
+  return query<{ id: string; symbol: string }>(
+    `SELECT DISTINCT i.id, i.symbol
+       FROM holdings h
+       JOIN instruments i ON i.id = h.instrument_id
+      WHERE h.user_id = $1
+      ORDER BY i.symbol`,
+    [userId],
+  );
+}
+
 export async function listRecentDedupeKeys(userId: string, days = 2): Promise<string[]> {
   const rows = await query<{ dedupe_key: string }>(
     `SELECT dedupe_key

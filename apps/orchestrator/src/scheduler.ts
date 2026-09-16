@@ -24,12 +24,18 @@ import { logger } from './logger.js';
 const INTERVALS_MS: Record<string, number> = {
   snapshot: 60 * 60 * 1000,
   portfolio_scan: 15 * 60 * 1000,
+  // Hourly against a daily bucket: the extras cost one HTTP request each and
+  // mean a restart cannot skip the day's history.
+  backfill: 60 * 60 * 1000,
 };
 
 /** Stagger the first run of each kind so a restart does not fire both at once. */
 const FIRST_RUN_DELAY_MS: Record<string, number> = {
-  snapshot: 10_000,
-  portfolio_scan: 25_000,
+  // Backfill goes first: a scan that runs before the history exists finds
+  // nothing and says so, which is correct and useless.
+  backfill: 8_000,
+  snapshot: 20_000,
+  portfolio_scan: 40_000,
 };
 
 const timers: NodeJS.Timeout[] = [];

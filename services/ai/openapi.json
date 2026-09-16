@@ -1,6 +1,81 @@
 {
   "components": {
     "schemas": {
+      "BackfillInstrument": {
+        "properties": {
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "symbol"
+        ],
+        "title": "BackfillInstrument",
+        "type": "object"
+      },
+      "BackfillRequest": {
+        "description": "Which instruments to fetch daily closes for, and how far back.",
+        "properties": {
+          "days": {
+            "default": 180,
+            "maximum": 3650.0,
+            "minimum": 2.0,
+            "title": "Days",
+            "type": "integer"
+          },
+          "instruments": {
+            "items": {
+              "$ref": "#/components/schemas/BackfillInstrument"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Instruments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "instruments"
+        ],
+        "title": "BackfillRequest",
+        "type": "object"
+      },
+      "BackfillResponse": {
+        "properties": {
+          "already_present": {
+            "default": 0,
+            "title": "Already Present",
+            "type": "integer"
+          },
+          "per_symbol": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Per Symbol",
+            "type": "object"
+          },
+          "without_history": {
+            "description": "Symbols no provider could supply a series for. Reported rather than omitted: a holding the engine cannot analyse is something the user should be able to discover.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Without History",
+            "type": "array"
+          },
+          "written": {
+            "default": 0,
+            "title": "Written",
+            "type": "integer"
+          }
+        },
+        "title": "BackfillResponse",
+        "type": "object"
+      },
       "FxRate": {
         "properties": {
           "as_of": {
@@ -737,6 +812,66 @@
           }
         },
         "summary": "Get Fx Rate",
+        "tags": [
+          "market"
+        ]
+      }
+    },
+    "/market/history/backfill": {
+      "post": {
+        "description": "Fill the price history the analysis rules read.\n\nIdempotent, so a scheduled daily call and a manual one after an import do\nthe same safe thing: today's close is added once and everything already\nstored is left alone.",
+        "operationId": "backfill_market_history_backfill_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackfillRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackfillResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Backfill",
         "tags": [
           "market"
         ]

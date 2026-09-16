@@ -16,7 +16,7 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
 
-import { claimRun, finishRun, getUser, listRuns } from '../../db/queries.js';
+import { claimRun, finishRun, getUser, listHeldInstruments, listRuns } from '../../db/queries.js';
 import { runPortfolioScan } from '../../services/portfolioScan.js';
 import { logger } from '../../logger.js';
 import { localDate, takeSnapshot } from '../../services/snapshot.js';
@@ -38,6 +38,9 @@ import { ApiProblem, badRequest, notFound } from '../errors.js';
 const RUN_BUCKET_MINUTES: Record<string, number> = {
   snapshot: 24 * 60,
   portfolio_scan: 30,
+  // Daily closes appear once a day, so asking more often fetches the same
+  // series and writes nothing. The provider quota is the reason to care.
+  backfill: 24 * 60,
 };
 
 /** The bucket a moment falls into, as a readable suffix for the run key. */
@@ -51,7 +54,7 @@ export function runBucket(kind: string, localDate: string, now: Date = new Date(
 }
 
 const runSchema = z.object({
-  kind: z.enum(['snapshot', 'portfolio_scan']),
+  kind: z.enum(['snapshot', 'portfolio_scan', 'backfill']),
   userId: z.string().uuid().optional(),
   runKey: z.string().max(200).optional(),
   trigger: z.string().max(40).optional(),
@@ -95,6 +98,33 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
 
     const runId = claim.runId as string;
     try {
+      if (parsed.data.kind === 'backfill') {
+        const instruments = await listHeldInstruments(userId);
+        if (instruments.length === 0) {
+          await finishRun(runId, 'skipped', { reason: 'no holdings' });
+          return context.json({ kind: parsed.data.kind, runKey, runId, status: 'skipped' });
+        }
+        const result = await context.get('ai').backfillHistory(
+          {
+            instruments: instruments.map((row) => ({ instrument_id: row.id, symbol: row.symbol })),
+            days: 180,
+          },
+          context.get('requestId'),
+        );
+        // A symbol with no series is a holding the engine cannot analyse, which
+        // the user should be able to discover - so it degrades rather than
+        // reporting a clean run.
+        const degraded = (result.without_history ?? []).length > 0;
+        await finishRun(runId, degraded ? 'degraded' : 'ok', result);
+        return context.json({
+          kind: parsed.data.kind,
+          runKey,
+          runId,
+          status: degraded ? 'degraded' : 'ok',
+          result,
+        });
+      }
+
       if (parsed.data.kind === 'portfolio_scan') {
         const scan = await runPortfolioScan(
           user,
