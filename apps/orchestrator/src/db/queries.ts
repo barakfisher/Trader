@@ -6,6 +6,7 @@
 import type { PoolClient } from 'pg';
 import type { AssetClass } from '@traders/shared';
 
+import { logger } from '../logger.js';
 import { query, queryOne, transaction } from './pool.js';
 
 export interface UserRow {
@@ -38,6 +39,15 @@ export interface HoldingRow {
   asset_class: AssetClass;
   exchange: string | null;
   instrument_currency: string;
+}
+
+export interface RunRow {
+  id: string;
+  kind: string;
+  run_key: string;
+  status: string;
+  started_at: Date;
+  finished_at: Date | null;
 }
 
 export interface SnapshotRow {
@@ -312,6 +322,89 @@ export function listSnapshots(userId: string, limit = 365): Promise<SnapshotRow[
       ORDER BY as_of DESC
       LIMIT $2`,
     [userId, limit],
+  );
+}
+
+// --- Runs: idempotency that survives a restart --------------------------------
+
+/**
+ * How long a run may sit in `running` before another trigger may take it over.
+ *
+ * Without this, a process killed mid-run leaves its key claimed forever and that
+ * work never happens again - for a daily key, that is a day permanently skipped.
+ * The window has to exceed the longest plausible run and stay well under the
+ * shortest gap between triggers.
+ */
+const STALE_RUN_MINUTES = 30;
+
+export interface ClaimRunInput {
+  userId: string;
+  kind: string;
+  runKey: string;
+  trigger: string;
+}
+
+/**
+ * Claim a run, or report that someone already has it.
+ *
+ * The claim is the INSERT itself: `run_key` is unique, so exactly one caller can
+ * succeed no matter how many fire at once, across processes and replicas. A
+ * previous attempt that died mid-flight is reclaimed after STALE_RUN_MINUTES;
+ * anything else already claimed returns `claimed: false` and the caller stops.
+ */
+export async function claimRun(
+  input: ClaimRunInput,
+): Promise<{ claimed: boolean; runId: string | null; existingStatus?: string }> {
+  const inserted = await queryOne<{ id: string }>(
+    `INSERT INTO runs (user_id, kind, run_key, trigger, status)
+     VALUES ($1, $2, $3, $4, 'running')
+     ON CONFLICT (run_key) DO NOTHING
+     RETURNING id`,
+    [input.userId, input.kind, input.runKey, input.trigger],
+  );
+  if (inserted) return { claimed: true, runId: inserted.id };
+
+  const reclaimed = await queryOne<{ id: string }>(
+    `UPDATE runs
+        SET status = 'running', started_at = now(), finished_at = NULL, trigger = $2
+      WHERE run_key = $1
+        AND status = 'running'
+        AND started_at < now() - ($3 || ' minutes')::interval
+      RETURNING id`,
+    [input.runKey, input.trigger, String(STALE_RUN_MINUTES)],
+  );
+  if (reclaimed) {
+    logger().warn({ runKey: input.runKey }, 'reclaimed a run left running by a dead process');
+    return { claimed: true, runId: reclaimed.id };
+  }
+
+  const existing = await queryOne<{ status: string }>(
+    'SELECT status FROM runs WHERE run_key = $1',
+    [input.runKey],
+  );
+  return { claimed: false, runId: null, existingStatus: existing?.status };
+}
+
+export async function finishRun(
+  runId: string,
+  status: 'ok' | 'degraded' | 'failed' | 'skipped',
+  stats: unknown = {},
+): Promise<void> {
+  await query(
+    `UPDATE runs SET status = $2, finished_at = now(), stats = $3::jsonb WHERE id = $1`,
+    [runId, status, JSON.stringify(stats)],
+  );
+}
+
+/** Most recent runs, newest first. Backs the "did anything run today?" check. */
+export function listRuns(userId: string, kind?: string, limit = 50): Promise<RunRow[]> {
+  return query<RunRow>(
+    `SELECT id, kind, run_key, status, started_at, finished_at
+       FROM runs
+      WHERE user_id = $1 AND ($2::text IS NULL OR kind = $2)
+      ORDER BY started_at DESC
+      LIMIT $3`,
+    [userId, kind ?? null, limit],
   );
 }
 

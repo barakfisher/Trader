@@ -52,13 +52,30 @@ vi.mock('../src/db/queries.js', () => ({
   deleteHolding: vi.fn(async () => true),
   deleteAllHoldings: vi.fn(async () => 0),
   upsertSnapshot: vi.fn(async () => undefined),
+  claimRun: vi.fn(),
+  finishRun: vi.fn(async () => undefined),
+  listRuns: vi.fn(async () => []),
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
 }));
 
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
 const { createApp } = await import('../src/http/app.js');
-const { resetRunKeysForTests } = await import('../src/http/routes/internal.js');
+
 const { createFakeAi } = await import('./fakeAi.js');
+const queries = await import('../src/db/queries.js');
+
+/** One claim succeeds, every later claim of the same key is refused - which is
+ *  what the runs table does, without needing a database in this suite. */
+function stubRunClaims() {
+  const claimed = new Set<string>();
+  vi.mocked(queries.claimRun).mockImplementation(async ({ runKey }) => {
+    if (claimed.has(runKey)) {
+      return { claimed: false, runId: null, existingStatus: 'ok' };
+    }
+    claimed.add(runKey);
+    return { claimed: true, runId: `run-${claimed.size}` };
+  });
+}
 
 const ENV = {
   APP_ENV: 'test',
@@ -94,7 +111,8 @@ describe('API', () => {
   let app: ReturnType<typeof buildApp>;
 
   beforeEach(() => {
-    resetRunKeysForTests();
+    vi.clearAllMocks();
+    stubRunClaims();
     app = buildApp();
   });
 
@@ -250,6 +268,32 @@ describe('API', () => {
       body: JSON.stringify({ kind: 'snapshot' }),
     });
     expect(response.status).toBe(401);
+  });
+
+  it('records the run and its outcome in the runs table', async () => {
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'snapshot', trigger: 'test' }),
+    });
+    expect(response.status).toBe(200);
+    expect(queries.claimRun).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'snapshot', trigger: 'test' }),
+    );
+    expect(queries.finishRun).toHaveBeenCalledWith('run-1', 'ok', expect.anything());
+  });
+
+  it('marks a run failed rather than leaving the key claimed', async () => {
+    // A claimed key that is never resolved blocks every later attempt until the
+    // stale-claim window elapses, so a thrown error must still close the run.
+    vi.mocked(queries.listHoldings).mockRejectedValueOnce(new Error('database is down'));
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'snapshot' }),
+    });
+    expect(response.status).toBe(500);
+    expect(queries.finishRun).toHaveBeenCalledWith('run-1', 'failed', expect.anything());
   });
 
   it('deduplicates a repeated run so a double trigger is a no-op', async () => {
