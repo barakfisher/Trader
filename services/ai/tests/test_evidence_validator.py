@@ -1,0 +1,92 @@
+"""The mechanism behind guideline 7: no figure without evidence."""
+
+from __future__ import annotations
+
+import pytest
+
+from app.narration.evidence_validator import is_supported, sourced_values, unsourced_figures
+
+EVIDENCE = {
+    "symbol": "NVDA",
+    "currency": "USD",
+    "price_minor": 11845,
+    "previous_price_minor": 12945,
+    "change_pct": -0.085,
+    "z_score": -3.8167,
+    "sample_size": 60,
+    "articles": [
+        {
+            "title": "Nvidia slumps after a 20-year supply deal lapses",
+            "published_at": "2026-09-16T11:30:00+00:00",
+        }
+    ],
+}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "NVDA fell 8.5% to $118.45.",
+        "NVDA fell from $129.45 to $118.45.",
+        "A 3.8 standard deviation move.",
+        "Measured over 60 daily moves.",
+        "Reported alongside a 20-year supply deal lapsing.",  # figure from a headline
+        "Published on 2026-09-16.",  # figure from a date in evidence
+        "NVDA fell about 9%.",  # a coarser rounding of 8.5 is still 8.5
+        "NVDA fell 8%.",  # and so is the other direction
+    ],
+)
+def test_supported_figures_are_accepted(text):
+    assert unsourced_figures(text, EVIDENCE) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "offender"),
+    [
+        ("NVDA fell 8.5% on 12% lower volume.", "12"),  # volume is not in evidence
+        ("NVDA dropped to $118.40.", "118.40"),  # close, and wrong
+        ("A 4.2 standard deviation move.", "4.2"),
+        ("NVDA has fallen 30% this year.", "30"),
+        ("Its market capitalisation is $2.9 trillion.", "2.9"),
+    ],
+)
+def test_invented_figures_are_rejected(text, offender):
+    assert offender in unsourced_figures(text, EVIDENCE)
+
+
+def test_a_single_bad_figure_condemns_the_whole_narration():
+    # Partial trust in a sentence is not something this product can offer.
+    text = "NVDA fell 8.5% to $118.45, its worst day in 14 months."
+    assert not is_supported(text, EVIDENCE)
+
+
+def test_minor_units_are_matched_in_major_form():
+    assert unsourced_figures("The price is $118.45", {"price_minor": 11845}) == []
+    assert unsourced_figures("The price is $11845", {"price_minor": 11845}) == []
+
+
+def test_ratios_are_matched_as_percentages():
+    assert unsourced_figures("down 8.5%", {"change_pct": -0.085}) == []
+    assert unsourced_figures("down 0.085", {"change_pct": -0.085}) == []
+
+
+def test_precision_is_the_writers_choice_not_a_licence_to_change_the_value():
+    evidence = {"change_pct": 0.08502}
+    assert unsourced_figures("rose 8.5%", evidence) == []
+    assert unsourced_figures("rose 8.50%", evidence) == []
+    assert unsourced_figures("rose 8.6%", evidence) == ["8.6"]
+
+
+def test_booleans_are_flags_not_figures():
+    # True is an int in Python; treating it as the figure 1 would let a model
+    # write "1" and have it silently accepted.
+    assert unsourced_figures("it moved 1%", {"floor_applied": True}) == ["1"]
+
+
+def test_text_without_figures_is_always_supported():
+    assert is_supported("NVDA fell sharply after the announcement.", {})
+
+
+def test_sourced_values_walks_nested_evidence():
+    values = sourced_values({"outer": {"inner": [{"deep": 42}]}})
+    assert any(value == 42 for value in values)
