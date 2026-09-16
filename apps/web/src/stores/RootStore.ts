@@ -5,10 +5,12 @@
 
 import { AuthStore } from './AuthStore.ts';
 import { ImportStore } from './ImportStore.ts';
+import { ObservationsStore } from './ObservationsStore.ts';
 import { PortfolioStore } from './PortfolioStore.ts';
 
 export class RootStore {
   readonly auth = new AuthStore(this);
   readonly portfolio = new PortfolioStore(this);
+  readonly observations = new ObservationsStore(this);
   readonly import = new ImportStore(this);
 }

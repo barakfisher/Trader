@@ -183,3 +183,51 @@ export interface ApiError {
   details?: unknown;
   requestId?: string;
 }
+
+// --- Observations (PRD FR-8, FR-16) ------------------------------------------
+
+/** The rules the analysis engine runs today. New kinds are added, never renamed. */
+export type ObservationKind = 'price_move' | 'sigma_move' | 'drawdown' | 'allocation_drift';
+
+/** Derived from the size of the statistic, never chosen by a narrator. */
+export type ObservationSeverity = 'info' | 'notable' | 'high';
+
+export type ObservationSubjectKind = 'instrument' | 'portfolio' | 'topic';
+
+/**
+ * One explained finding.
+ *
+ * `evidence` is the finding's own numbers, exactly as the rule recorded them,
+ * and it is deliberately untyped: each kind records the figures its own
+ * sentence might quote, and the set grows whenever a rule does. It is a bag of
+ * keys by design, so consumers must read it defensively.
+ *
+ * Its keys carry their unit as a suffix, which is the only way a reader can
+ * know what a number means: `*_minor` is integer minor units of the `currency`
+ * (or `base_currency`) recorded alongside it, `*_pct` / `*_ratio` / `*_weight`
+ * are fractions where 1 is 100%, and `as_of` / `*_as_of` are ISO 8601 UTC.
+ *
+ * `explanation` is the sentence shown to the user. Every figure in it comes
+ * from `evidence` and is rejected by the evidence validator otherwise
+ * (guideline 7), which is what makes the drawer below it a real check rather
+ * than decoration.
+ */
+export interface Observation {
+  id: string;
+  kind: ObservationKind;
+  severity: ObservationSeverity;
+  subjectKind: ObservationSubjectKind;
+  /** `instrument:NVDA`, `portfolio:allocation:AAPL` — a kind-prefixed handle. */
+  subjectRef: string;
+  headline: string;
+  explanation: string;
+  evidence: Record<string, unknown>;
+  /** Slugs of the concepts the finding invoked, e.g. `daily-return`. */
+  conceptRefs: string[];
+  createdAt: string;
+}
+
+export interface ObservationsResponse {
+  /** Newest first, as returned. */
+  observations: Observation[];
+}

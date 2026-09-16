@@ -26,7 +26,10 @@ export class AuthStore {
       runInAction(() => {
         this.user = response.authenticated ? (response.user ?? null) : null;
       });
-      if (this.user) void this.root.portfolio.load();
+      if (this.user) {
+        void this.root.portfolio.load();
+        void this.root.observations.load();
+      }
     } catch {
       runInAction(() => {
         this.user = null;
@@ -47,6 +50,7 @@ export class AuthStore {
         this.user = user;
       });
       await this.root.portfolio.load();
+      void this.root.observations.load();
     } catch (error) {
       runInAction(() => {
         this.error =
@@ -66,6 +70,7 @@ export class AuthStore {
       runInAction(() => {
         this.user = null;
         this.root.portfolio.reset();
+        this.root.observations.reset();
       });
     }
   }
