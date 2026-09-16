@@ -23,6 +23,33 @@ import { localDate, takeSnapshot } from '../../services/snapshot.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { ApiProblem, badRequest, notFound } from '../errors.js';
 
+/**
+ * How often a kind of run is allowed to do work, expressed as the bucket its
+ * default run key falls into.
+ *
+ * The policy lives here rather than in the caller so that the local timer and a
+ * Kubernetes CronJob inherit the same behaviour: a trigger is a request to run,
+ * and this endpoint decides whether that request is a repeat. A snapshot is the
+ * day's closing value, so a second trigger the same day has nothing to add. A
+ * scan looks for new findings, so it may run through the day - but two triggers
+ * minutes apart would analyse identical data, which is why the bucket is a
+ * window rather than an instant.
+ */
+const RUN_BUCKET_MINUTES: Record<string, number> = {
+  snapshot: 24 * 60,
+  portfolio_scan: 30,
+};
+
+/** The bucket a moment falls into, as a readable suffix for the run key. */
+export function runBucket(kind: string, localDate: string, now: Date = new Date()): string {
+  const minutes = RUN_BUCKET_MINUTES[kind] ?? 24 * 60;
+  if (minutes >= 24 * 60) return localDate;
+  const minuteOfDay = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const slot = Math.floor(minuteOfDay / minutes);
+  // Zero-padded so keys sort chronologically when read in psql.
+  return `${localDate}:${String(slot).padStart(2, '0')}`;
+}
+
 const runSchema = z.object({
   kind: z.enum(['snapshot', 'portfolio_scan']),
   userId: z.string().uuid().optional(),
@@ -46,7 +73,9 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
     const user = await getUser(userId);
     if (!user) throw notFound('user not found');
 
-    const runKey = parsed.data.runKey ?? `${parsed.data.kind}:${userId}:${localDate(user.timezone)}`;
+    const runKey =
+      parsed.data.runKey ??
+      `${parsed.data.kind}:${userId}:${runBucket(parsed.data.kind, localDate(user.timezone))}`;
     const claim = await claimRun({
       userId,
       kind: parsed.data.kind,
