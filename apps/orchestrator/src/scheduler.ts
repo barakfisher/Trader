@@ -4,15 +4,35 @@
  * In Kubernetes a CronJob posts to /internal/runs and this timer is disabled
  * (SCHEDULER_ENABLED=false), so there is never more than one trigger path for a
  * given run - see DESIGN.md section 2. Both paths go through the same HTTP
- * endpoint and the same run-key deduplication.
+ * endpoint, and that endpoint - not this file - decides whether a trigger is a
+ * repeat. The timers here are deliberately dumber than the cadence they produce:
+ * they ask often, and the run key answers.
  */
 
 import type { Config } from './config.js';
 import { logger } from './logger.js';
 
-const SNAPSHOT_INTERVAL_MS = 60 * 60 * 1000;
+/**
+ * How often each kind is offered the chance to run.
+ *
+ * Both are more frequent than the work they trigger, which is intentional. The
+ * run-key bucket collapses the extras, so a missed tick costs at most one
+ * interval rather than a whole day - the failure mode of a timer that fires
+ * exactly once per period is that a restart at the wrong moment skips it
+ * silently, and a silently skipped run looks exactly like a quiet market.
+ */
+const INTERVALS_MS: Record<string, number> = {
+  snapshot: 60 * 60 * 1000,
+  portfolio_scan: 15 * 60 * 1000,
+};
 
-let timer: NodeJS.Timeout | null = null;
+/** Stagger the first run of each kind so a restart does not fire both at once. */
+const FIRST_RUN_DELAY_MS: Record<string, number> = {
+  snapshot: 10_000,
+  portfolio_scan: 25_000,
+};
+
+const timers: NodeJS.Timeout[] = [];
 
 export function startScheduler(config: Config): void {
   if (process.env.SCHEDULER_ENABLED === 'false') {
@@ -20,27 +40,32 @@ export function startScheduler(config: Config): void {
     return;
   }
 
-  const trigger = async () => {
-    try {
-      const response = await fetch(`http://127.0.0.1:${config.ORCHESTRATOR_PORT}/internal/runs`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-internal-key': config.INTERNAL_API_KEY },
-        body: JSON.stringify({ kind: 'snapshot' }),
-      });
-      const body = (await response.json()) as { status?: string };
-      logger().info({ status: body.status }, 'scheduled snapshot run');
-    } catch (error) {
-      logger().warn({ err: error }, 'scheduled snapshot trigger failed');
-    }
-  };
+  for (const [kind, intervalMs] of Object.entries(INTERVALS_MS)) {
+    const trigger = () => triggerRun(config, kind);
+    timers.push(setInterval(trigger, intervalMs));
+    setTimeout(trigger, FIRST_RUN_DELAY_MS[kind] ?? 10_000).unref();
+    logger().info({ kind, intervalMs }, 'scheduled run registered');
+  }
+}
 
-  // Hourly, with the run key collapsing repeats to one snapshot per local day.
-  timer = setInterval(trigger, SNAPSHOT_INTERVAL_MS);
-  setTimeout(trigger, 10_000).unref();
-  logger().info({ intervalMs: SNAPSHOT_INTERVAL_MS }, 'local scheduler started');
+async function triggerRun(config: Config, kind: string): Promise<void> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${config.ORCHESTRATOR_PORT}/internal/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': config.INTERNAL_API_KEY },
+      body: JSON.stringify({ kind, trigger: 'scheduler' }),
+    });
+    const body = (await response.json()) as { status?: string; reason?: string };
+    // 'skipped' is the common case and is not a problem: it means the bucket has
+    // already been served. Logged at debug so the ordinary path stays quiet.
+    const log = logger();
+    if (body.status === 'skipped') log.debug({ kind, reason: body.reason }, 'scheduled run skipped');
+    else log.info({ kind, status: body.status }, 'scheduled run');
+  } catch (error) {
+    logger().warn({ kind, err: error }, 'scheduled run trigger failed');
+  }
 }
 
 export function stopScheduler(): void {
-  if (timer) clearInterval(timer);
-  timer = null;
+  while (timers.length) clearInterval(timers.pop());
 }
