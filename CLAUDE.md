@@ -58,15 +58,39 @@ Each of these cost real time. They are listed so the cost is paid once.
   both.
 - Tests must be hermetic: the fixture provider means no network and no API keys in CI.
 
-## Session management & memory
+## Session management & handoff
 
-1. **Memory file**: maintain [`.claude/MEMORY.md`](.claude/MEMORY.md). At the end of every feature
-   or milestone, update it with:
-   - completed features and current milestone status,
-   - architectural decisions made,
-   - known issues and pending technical debt.
-2. **Context housekeeping**: if a task runs long or the context window saturates, update
-   `MEMORY.md` first, then tell the user to run `/compact` or start a fresh session.
+`.claude/MEMORY.md` is the handoff document. It is written for a session that has never seen the
+conversation that produced the code: the code is readable, the reasoning behind it is not, and the
+reasoning is the part that is lost when a session ends.
+
+### When to hand off
+
+**At a milestone boundary, or after five merged PRs — whichever comes first.** Not "when the
+context window saturates": that was the rule for twenty-three PRs and it never once fired, because
+nothing counts a feeling. These triggers are countable, so they can be obeyed or visibly broken.
+
+A handoff is three steps, in order:
+
+1. Update `.claude/MEMORY.md` — milestone status, decisions argued rather than obvious and *why*,
+   bugs that cost real time and the lesson from each, current debt, and anything about the local
+   environment that would waste an hour to rediscover.
+2. Commit it, open a PR, and stop.
+3. Tell the user to start a fresh session, and say what the next milestone is.
+
+### What belongs in MEMORY.md
+
+The test is whether a capable stranger with the repository would otherwise have to re-derive it.
+
+- **Decisions with their alternatives and the failure they prevent.** "We rejected X because Y
+  fails in the expensive direction" is worth ten lines of what the code already shows.
+- **Bugs whose lesson generalises**, written as the lesson. A bug nobody can learn from is
+  `git log` material, not memory.
+- **Debt as consequences**, not as a wish list: what breaks, and for whom.
+- **Deliberate asymmetries** — a local `.env` that differs from `.env.example` on purpose, an
+  exception to a convention - so the next session does not "fix" them.
+
+Not: what the code says, what a test asserts, or anything a `grep` would answer faster.
 
 ## Quality Assurance, Pre-PR Checklist & Interactive Learning Quiz
 
