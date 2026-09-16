@@ -23,6 +23,7 @@ import { registerHoldingsRoutes } from './routes/holdings.js';
 import { registerImportRoutes } from './routes/imports.js';
 import { registerInternalRoutes } from './routes/internal.js';
 import { registerPortfolioRoutes } from './routes/portfolio.js';
+import { registerTargetsRoutes } from './routes/targets.js';
 
 export interface AppEnv {
   Variables: {
@@ -36,7 +37,14 @@ export interface AppEnv {
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 /** Route prefixes that require a signed-in session. */
-const PROTECTED_PREFIXES = ['/portfolio', '/holdings', '/imports', '/runs', '/observations'];
+const PROTECTED_PREFIXES = [
+  '/portfolio',
+  '/holdings',
+  '/imports',
+  '/runs',
+  '/observations',
+  '/targets',
+];
 
 export function createApp(config: Config, ai: AiClient): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
@@ -130,6 +138,7 @@ export function createApp(config: Config, ai: AiClient): Hono<AppEnv> {
   registerAuthRoutes(app);
   registerPortfolioRoutes(app);
   registerHoldingsRoutes(app);
+  registerTargetsRoutes(app);
   registerImportRoutes(app);
   registerInternalRoutes(app);
 
