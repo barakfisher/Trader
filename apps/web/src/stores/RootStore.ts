@@ -10,6 +10,7 @@ import { ObservationsStore } from './ObservationsStore.ts';
 import { PortfolioStore } from './PortfolioStore.ts';
 import { ProposalsStore } from './ProposalsStore.ts';
 import { SettingsStore } from './SettingsStore.ts';
+import { TargetsStore } from './TargetsStore.ts';
 
 export class RootStore {
   readonly auth = new AuthStore(this);
@@ -18,5 +19,6 @@ export class RootStore {
   readonly import = new ImportStore(this);
   readonly proposals = new ProposalsStore(this);
   readonly settings = new SettingsStore(this);
+  readonly targets = new TargetsStore(this);
   readonly navigation = new NavigationStore(this);
 }

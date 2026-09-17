@@ -80,6 +80,7 @@ export class AuthStore {
         // than waiting on screen for whoever signs in next.
         this.root.proposals.reset();
         this.root.settings.reset();
+        this.root.targets.reset();
         this.root.navigation.reset();
       });
     }

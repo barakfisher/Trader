@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { FileUp, Inbox, LineChart, LogOut, RefreshCw, Settings } from 'lucide-react';
+import { FileUp, Inbox, LineChart, LogOut, RefreshCw, Settings, Target } from 'lucide-react';
 
 import { AddHoldingForm } from '../components/AddHoldingForm.tsx';
 import { AllocationChart } from '../components/AllocationChart.tsx';
@@ -13,8 +13,16 @@ import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { useStore } from '../stores/context.tsx';
 
 export const DashboardPage = observer(function DashboardPage() {
-  const { auth, portfolio, observations, import: importStore, navigation, proposals, settings } =
-    useStore();
+  const {
+    auth,
+    portfolio,
+    observations,
+    import: importStore,
+    navigation,
+    proposals,
+    settings,
+    targets,
+  } = useStore();
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6">
@@ -54,6 +62,21 @@ export const DashboardPage = observer(function DashboardPage() {
             <span className="flex items-center gap-1">
               <FileUp className="size-4" aria-hidden />
               Import
+            </span>
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              navigation.show('targets');
+              // Read on arrival, like settings: a dashboard that fetches targets
+              // on every login spends a request nobody asked for. The page needs
+              // the portfolio too, and the dashboard has already loaded it.
+              void targets.load();
+            }}
+          >
+            <span className="flex items-center gap-1">
+              <Target className="size-4" aria-hidden />
+              Targets
             </span>
           </Button>
           <Button variant="secondary" onClick={() => navigation.show('proposals')}>
