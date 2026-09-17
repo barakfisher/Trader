@@ -135,8 +135,24 @@ failure they prevent.
 10. **Cost basis is stored per unit, not as a position total.** Editing quantity would otherwise
     leave a total nobody paid, and the system could not tell a correction from a purchase.
 
-11. **Mastra is deferred to M4** — see `apps/orchestrator/src/mastra/README.md` for the seams it
-    will use. A workflow engine with no observations to act on could not have been tested.
+11. **Mastra is adopted for `proposalLifecycle` only** — and this **diverges from MILESTONES.md
+    M4**, which lists four workflows (`portfolioScan`, `topicScan`, `dailyDigest`,
+    `proposalLifecycle`). The scheduling half already works: run kinds, run keys, the half-hour
+    bucket and the claim in the `runs` table. Porting it would buy a different spelling of the
+    same behaviour and risk a regression in the one subsystem whose failure mode is *silence* —
+    and Mastra's scheduler would want to own the trigger, while DESIGN.md §2 has exactly one
+    (`POST /internal/runs`) precisely so a CronJob and a local timer cannot both fire. What the
+    existing scheduler genuinely cannot express is a **suspension**: a run that pauses for hours
+    waiting on a person and is still there after a restart. That is the whole reason the
+    dependency earns its place, and it is the only thing it is used for. If a later milestone
+    wants `dailyDigest` as a workflow, the argument to re-examine is that one, not this
+    precedent.
+
+    Two rules keep the adoption from rotting, both stated in
+    `apps/orchestrator/src/mastra/README.md`: **nothing under `mastra/` decides anything** (every
+    transition goes through `applyDecision`, or F3's invariants stop being properties of the
+    system), and **every entry point degrades to the service when the runtime is absent** — a
+    coordinator that can block a decision the user made would be worse than no coordinator.
 
 12. **Session auth is a signed self-describing cookie**, no session table. Only `http/auth.ts` and
     the login route change when real multi-user auth arrives.
@@ -205,6 +221,7 @@ the green test as coverage.
 
 | Item | Where | Impact |
 |---|---|---|
+| **Migration 0008 hard-codes a table Mastra owns** | `0008_mastra_workflow_state.py` | The library would create `mastra_workflow_snapshot` itself; Alembic creates it instead (`disableInit: true`), because CLAUDE.md says the AI service owns the schema. An upgrade that changes the shape breaks suspended runs — so `test/mastraSchemaOwnership.test.ts` compares the migration against `WorkflowsPG.getExportDDL()` and fails the build first. Two other things cost time to find: `PostgresStore` creates **43** tables for 24 storage domains unless you route only `workflows`, and `@mastra/core` posts feature-usage telemetry to PostHog unless `MASTRA_TELEMETRY_DISABLED` is set (it is, in `workflowRuntime.ts`, in code rather than `.env`) |
 | **Explanation provenance is not stored** | `observations` | Nothing records whether a sentence came from the model or a template, so the UI cannot show it and a reader cannot weigh it. Needs a column; the pipeline already computes `narration_source` and `fallback_reason` and throws them away on insert |
 | **Concept chips point nowhere** | `apps/web` | PRD FR-16 wants one click to an explanation; the corpus arrives in M3. They render as labels rather than dead links |
 | **Target weights have an API and no UI** | `apps/web` | `PUT /targets` is tested and works; setting them requires curl. Allocation drift is invisible to a user who does not know the endpoint exists |

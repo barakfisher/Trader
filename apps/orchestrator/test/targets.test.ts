@@ -73,7 +73,7 @@ vi.mock('../src/db/queries.js', () => ({
     quiet_hours_end: '07:00',
     muted_until: null,
   })),
-  createProposals: vi.fn(async () => 0),
+  createProposals: vi.fn(async () => []),
   listObservations: vi.fn(async () => []),
   listRecentDedupeKeys: vi.fn(async () => []),
   listTargetWeights: vi.fn(async () => []),
