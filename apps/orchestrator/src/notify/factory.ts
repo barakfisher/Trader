@@ -21,7 +21,9 @@
  */
 
 import type { Config } from '../config.js';
+import { findTelegramBindingByUser } from '../db/queries.js';
 import { logger } from '../logger.js';
+import { TelegramNotifier } from '../telegram/client.js';
 import { NullNotifier, type Notifier } from './notifier.js';
 
 export function buildNotifier(config: Config): Notifier {
@@ -35,16 +37,24 @@ export function buildNotifier(config: Config): Notifier {
     );
   }
 
-  // The Telegram adapter lands in the next PR. Until it does, a configured
-  // token still gets a null channel - but with a different reason, because
-  // "you configured this and it is not wired up yet" and "you configured
-  // nothing" are different problems with different fixes, and a single message
-  // covering both would send somebody looking for a typo in a correct token.
-  logger().warn(
-    { channel: 'telegram' },
-    'TELEGRAM_BOT_TOKEN is set but the Telegram adapter is not implemented yet',
-  );
-  return new NullNotifier(
-    'the Telegram adapter is not implemented yet; the token is configured and unused',
-  );
+  if (!config.TELEGRAM_CALLBACK_SECRET) {
+    // A token with no callback secret can send, but every inline button it
+    // rendered would be unverifiable - so it would deliver alerts nobody could
+    // act on. Refused as a configuration gap with its own message, because "you
+    // set half of this" is a different problem from "you set none of it".
+    logger().warn({ channel: 'telegram' }, 'TELEGRAM_CALLBACK_SECRET is not set');
+    return new NullNotifier(
+      'TELEGRAM_BOT_TOKEN is set but TELEGRAM_CALLBACK_SECRET is not, so no button could be trusted',
+    );
+  }
+
+  logger().info({ channel: 'telegram' }, 'telegram notifier selected');
+  return new TelegramNotifier({
+    botToken: config.TELEGRAM_BOT_TOKEN,
+    callbackSecret: config.TELEGRAM_CALLBACK_SECRET,
+    // Looked up per send rather than cached: a user can connect, disconnect and
+    // reconnect a chat between two scans, and a cached id would keep alerting a
+    // chat the user deliberately detached.
+    resolveChatId: async (userId) => (await findTelegramBindingByUser(userId))?.chat_id ?? null,
+  });
 }
