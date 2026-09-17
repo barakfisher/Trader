@@ -86,14 +86,16 @@ export interface FindingForProposal {
  * Returns the number actually created, which is less than the number selected
  * whenever a previous run already raised one - see `createProposals` for why
  * that suppression defers to the observation layer's `dedupe_key` rather than
- * inventing a second identity scheme.
+ * inventing a second identity scheme. The ids come back too, because a proposal
+ * is now something a workflow run waits on and the caller has to be able to
+ * name the one it just raised.
  */
 export async function raiseProposals(
   userId: string,
   findings: FindingForProposal[],
   settings: { proposalSeverity: string; proposalTtlHours: number },
   now: Date = new Date(),
-): Promise<{ selected: number; created: number }> {
+): Promise<{ selected: number; created: number; proposalIds: string[] }> {
   const expiresAt = new Date(now.getTime() + settings.proposalTtlHours * 3_600_000);
 
   const selected: ProposalToCreate[] = findings
@@ -113,8 +115,8 @@ export async function raiseProposals(
       expiresAt,
     }));
 
-  const created = await createProposals(selected);
-  return { selected: selected.length, created };
+  const proposalIds = await createProposals(selected);
+  return { selected: selected.length, created: proposalIds.length, proposalIds };
 }
 
 /** How a proposal reads right now, deadline and snooze taken into account. */
@@ -243,6 +245,12 @@ async function expireProposal(row: ProposalRow, now: Date): Promise<void> {
   });
 }
 
+/** A proposal the sweep has just expired, and the observation behind it. */
+export interface ExpiredProposal {
+  id: string;
+  observationId: string;
+}
+
 /**
  * Expire every proposal whose deadline has passed.
  *
@@ -251,15 +259,19 @@ async function expireProposal(row: ProposalRow, now: Date): Promise<void> {
  * approve anything. What it buys is an inbox query that can filter on the
  * stored state, and an audit trail that says when each proposal died rather
  * than leaving the reader to infer it from a timestamp.
+ *
+ * What was expired is returned rather than counted, because something else is
+ * now waiting on these: a suspended workflow run per proposal, which has to be
+ * told that the question it is holding open is over.
  */
-export async function sweepExpiredProposals(now: Date = new Date()): Promise<number> {
+export async function sweepExpiredProposals(now: Date = new Date()): Promise<ExpiredProposal[]> {
   const due = await listProposalsToExpire();
-  let expired = 0;
+  const expired: ExpiredProposal[] = [];
   for (const row of due) {
     await expireProposal(row, now);
-    expired += 1;
+    expired.push({ id: row.id, observationId: row.observation_id });
   }
-  if (expired > 0) logger().info({ expired }, 'proposal.sweep');
+  if (expired.length > 0) logger().info({ expired: expired.length }, 'proposal.sweep');
   return expired;
 }
 

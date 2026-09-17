@@ -58,7 +58,7 @@ vi.mock('../src/db/queries.js', () => ({
   findProposal: vi.fn(async () => null),
   listProposalTransitions: vi.fn(async () => []),
   applyProposalTransition: vi.fn(async () => ({ applied: true, intentId: 'intent-1' })),
-  createProposals: vi.fn(async () => 0),
+  createProposals: vi.fn(async () => []),
   listProposalsToExpire: vi.fn(async () => []),
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
 }));

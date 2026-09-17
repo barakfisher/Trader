@@ -11,7 +11,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../src/db/queries.js', () => ({
-  createProposals: vi.fn(async () => 0),
+  createProposals: vi.fn(async () => []),
   findProposal: vi.fn(async () => null),
   listProposalsToExpire: vi.fn(async () => []),
   applyProposalTransition: vi.fn(async () => ({ applied: true, intentId: 'intent-1' })),
@@ -66,7 +66,7 @@ function proposalRow(overrides: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
-  vi.mocked(queries.createProposals).mockClear().mockResolvedValue(1);
+  vi.mocked(queries.createProposals).mockClear().mockResolvedValue(['proposal-1']);
   vi.mocked(queries.applyProposalTransition)
     .mockClear()
     .mockResolvedValue({ applied: true, intentId: 'intent-1' });
@@ -96,7 +96,7 @@ describe('meetsSeverity', () => {
 describe('raiseProposals', () => {
   it('raises a proposal for an actionable finding at or above the floor', async () => {
     const result = await raiseProposals(USER, [finding()], SETTINGS, NOW);
-    expect(result).toEqual({ selected: 1, created: 1 });
+    expect(result).toEqual({ selected: 1, created: 1, proposalIds: ['proposal-1'] });
 
     const [selected] = vi.mocked(queries.createProposals).mock.calls[0]!;
     expect(selected).toEqual([
@@ -134,9 +134,9 @@ describe('raiseProposals', () => {
   it('reports fewer created than selected when one was already raised', async () => {
     // The database suppresses by observation_id. The gap between the two counts
     // is the honest measure of how much a re-scan repeats itself.
-    vi.mocked(queries.createProposals).mockResolvedValueOnce(0);
+    vi.mocked(queries.createProposals).mockResolvedValueOnce([]);
     const result = await raiseProposals(USER, [finding()], SETTINGS, NOW);
-    expect(result).toEqual({ selected: 1, created: 0 });
+    expect(result).toEqual({ selected: 1, created: 0, proposalIds: [] });
   });
 });
 
@@ -263,7 +263,7 @@ describe('sweepExpiredProposals', () => {
       proposalRow({ id: 'b', expires_at: at(-2) }),
     ] as never);
 
-    expect(await sweepExpiredProposals(NOW)).toBe(2);
+    expect(await sweepExpiredProposals(NOW)).toHaveLength(2);
     expect(queries.applyProposalTransition).toHaveBeenCalledTimes(2);
     for (const [transition] of vi.mocked(queries.applyProposalTransition).mock.calls) {
       expect(transition).toMatchObject({ toState: 'expired', surface: 'system', intent: null });
@@ -271,7 +271,7 @@ describe('sweepExpiredProposals', () => {
   });
 
   it('does nothing when no deadline has passed', async () => {
-    expect(await sweepExpiredProposals(NOW)).toBe(0);
+    expect(await sweepExpiredProposals(NOW)).toHaveLength(0);
     expect(queries.applyProposalTransition).not.toHaveBeenCalled();
   });
 });

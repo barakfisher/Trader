@@ -20,9 +20,9 @@ import {
   type UserRow,
 } from '../db/queries.js';
 import { logger } from '../logger.js';
+import { mayRaiseProposal, startProposalLifecycle } from '../mastra/proposalLifecycle.js';
 import type { Notifier } from '../notify/notifier.js';
 import { fanOut, settingsForNotification, type NotifiableFinding } from './notifications.js';
-import { raiseProposals } from './proposals.js';
 import { valuePortfolio } from './valuation.js';
 
 export interface ScanResult {
@@ -102,9 +102,7 @@ export async function runPortfolioScan(
       })),
       // Symbol -> decimal string, exactly as stored. The weight never becomes a
       // number on this side of the wire.
-      target_weights: Object.fromEntries(
-        targets.map((target) => [target.symbol, target.weight]),
-      ),
+      target_weights: Object.fromEntries(targets.map((target) => [target.symbol, target.weight])),
       // What the feed already holds. The scan skips these before narrating, so a
       // repeated finding costs a hash rather than a model call - which matters
       // at a thirty-minute cadence, where most of what a scan finds is what the
@@ -143,20 +141,37 @@ export async function runPortfolioScan(
    * incoherent.
    */
   const settings = await getOrCreateUserSettings(user.id);
-  const proposals = await raiseProposals(
-    user.id,
-    inserted.map((observation) => ({
+  const proposalSettings = {
+    proposalSeverity: settings.proposal_severity,
+    proposalTtlHours: settings.proposal_ttl_hours,
+  };
+
+  /**
+   * One lifecycle per candidate, rather than one batch insert for all of them.
+   *
+   * The raise itself still happens inside `raiseProposals`, called by the
+   * workflow's first step - what changed is that a proposal is now raised *by*
+   * the run that will wait for its answer, so there is no window in which a
+   * question exists and nothing is holding it open. The cost is one INSERT per
+   * proposal instead of one for the batch, which at the current policy (one
+   * proposable kind, one finding at a time) is the same INSERT.
+   */
+  const candidates = inserted
+    .map((observation) => ({
       id: observation.id,
       kind: observation.kind,
       severity: observation.severity,
       subjectRef: observation.subject_ref,
       evidence: observation.evidence,
-    })),
-    {
-      proposalSeverity: settings.proposal_severity,
-      proposalTtlHours: settings.proposal_ttl_hours,
-    },
-  );
+    }))
+    .filter((finding) => mayRaiseProposal(finding, settings.proposal_severity));
+
+  const raised: { proposalId: string | null }[] = [];
+  for (const finding of candidates) {
+    raised.push(
+      await startProposalLifecycle({ userId: user.id, finding, settings: proposalSettings }),
+    );
+  }
 
   const skipped: string[] = [];
   if (response.stats.drift_skipped_reason) {
@@ -179,13 +194,34 @@ export async function runPortfolioScan(
    * can act on carries its proposal id, and a channel can offer the buttons
    * rather than a link to go and find them.
    */
-  const notifiable: NotifiableFinding[] = inserted.map((observation) => ({
-    refKind: 'observation' as const,
-    refId: observation.id,
-    severity: observation.severity,
-    headline: observation.headline,
-    explanation: observation.explanation,
-  }));
+  /**
+   * Which findings became answerable questions, by observation.
+   *
+   * Zipped by index against `candidates` because the lifecycle reports only the
+   * proposal it raised - the loop above walks the candidates in order, so the
+   * positions correspond. A proposal id of null means this scan did not raise
+   * one (an earlier run already had), and that finding gets no buttons.
+   */
+  const proposalByObservation = new Map(
+    candidates
+      .map((finding, index) => [finding.id, raised[index]?.proposalId ?? null] as const)
+      .filter((entry): entry is readonly [string, string] => entry[1] !== null),
+  );
+  const notifiable: NotifiableFinding[] = inserted.map((observation) => {
+    const proposalId = proposalByObservation.get(observation.id);
+    return {
+      refKind: 'observation' as const,
+      refId: observation.id,
+      severity: observation.severity,
+      headline: observation.headline,
+      explanation: observation.explanation,
+      // Only set when this finding actually became a question. A channel uses
+      // it to render Approve/Reject inline, so attaching one to a finding with
+      // no proposal behind it would put buttons on a message that cannot be
+      // answered.
+      ...(proposalId === undefined ? {} : { proposalId }),
+    };
+  });
   const notified = await fanOut(
     user.id,
     notifiable,
@@ -207,8 +243,8 @@ export async function runPortfolioScan(
     // did less than it appears to have done. Recording that is the difference
     // between "nothing happened" and "we did not look".
     degraded: portfolio.summary.degraded || skipped.length > 0,
-    proposalsSelected: proposals.selected,
-    proposalsCreated: proposals.created,
+    proposalsSelected: candidates.length,
+    proposalsCreated: raised.filter((lifecycle) => lifecycle.proposalId !== null).length,
     notified: {
       pushed: notified.pushed,
       deferred: notified.deferred,

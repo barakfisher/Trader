@@ -659,9 +659,13 @@ export interface ProposalToCreate {
  * this is the same guarantee one level up, for the case where an observation
  * survives but its proposal was created by an earlier run. Two suppression
  * schemes would eventually disagree; this one defers to the first.
+ *
+ * The ids are returned rather than counted because a raised proposal is now the
+ * start of something - a workflow run waits on it - and a caller that only
+ * learns *how many* were raised cannot address any of them.
  */
-export async function createProposals(proposals: ProposalToCreate[]): Promise<number> {
-  if (proposals.length === 0) return 0;
+export async function createProposals(proposals: ProposalToCreate[]): Promise<string[]> {
+  if (proposals.length === 0) return [];
 
   const values: string[] = [];
   const params: unknown[] = [];
@@ -686,7 +690,7 @@ export async function createProposals(proposals: ProposalToCreate[]): Promise<nu
      RETURNING id`,
     params,
   );
-  return inserted.length;
+  return inserted.map((row) => row.id);
 }
 
 /** The columns every proposal read returns, joined to the finding behind it. */

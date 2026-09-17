@@ -20,7 +20,8 @@ import {
   listProposals,
   type ProposalRow,
 } from '../../db/queries.js';
-import { applyDecision, factsOf } from '../../services/proposals.js';
+import { decideProposal } from '../../mastra/proposalLifecycle.js';
+import { factsOf } from '../../services/proposals.js';
 import { effectiveState, type RefusalReason } from '../../services/proposalState.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, notFound, unprocessable } from '../errors.js';
@@ -126,7 +127,15 @@ export function registerProposalsRoutes(app: Hono<AppEnv>): void {
       throw badRequest('snooze_until_required', 'a snooze must say when it ends');
     }
 
-    const result = await applyDecision({
+    /**
+     * Through the workflow rather than straight to `applyDecision`: the run
+     * suspended on this proposal is what wakes, and the step it wakes into is
+     * what applies the transition. The route sees the same `DecisionOutcome`
+     * either way, because `decideProposal` falls back to the service whenever
+     * there is no run to resume - which is what keeps the engine out of the
+     * critical path of a decision somebody is waiting on.
+     */
+    const result = await decideProposal({
       userId: currentUserId(context),
       proposalId: context.req.param('id'),
       action,
