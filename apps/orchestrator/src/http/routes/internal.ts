@@ -18,6 +18,7 @@ import { z } from 'zod';
 
 import { claimRun, finishRun, getUser, listHeldInstruments, listRuns } from '../../db/queries.js';
 import { runPortfolioScan } from '../../services/portfolioScan.js';
+import { sendDigest } from '../../services/notifications.js';
 import { sweepExpiredProposals } from '../../services/proposals.js';
 import { logger } from '../../logger.js';
 import { localDate, takeSnapshot } from '../../services/snapshot.js';
@@ -47,6 +48,10 @@ const RUN_BUCKET_MINUTES: Record<string, number> = {
   // Fifteen minutes bounds how long a dead proposal can sit in the inbox
   // looking answerable - and `effectiveState` means it never actually is.
   proposal_sweep: 15,
+  // One digest a day, which is what makes it a digest. A second one the same
+  // day would split the day's deferred findings across two messages and defeat
+  // the batching that is the entire point of deferring them.
+  daily_digest: 24 * 60,
 };
 
 /** The bucket a moment falls into, as a readable suffix for the run key. */
@@ -60,7 +65,7 @@ export function runBucket(kind: string, localDate: string, now: Date = new Date(
 }
 
 const runSchema = z.object({
-  kind: z.enum(['snapshot', 'portfolio_scan', 'backfill', 'proposal_sweep']),
+  kind: z.enum(['snapshot', 'portfolio_scan', 'backfill', 'proposal_sweep', 'daily_digest']),
   userId: z.string().uuid().optional(),
   runKey: z.string().max(200).optional(),
   trigger: z.string().max(40).optional(),
@@ -131,6 +136,22 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
         });
       }
 
+      if (parsed.data.kind === 'daily_digest') {
+        const digest = await sendDigest(user, context.get('notifier'));
+        // A digest with nothing in it is not a failure and not a success worth
+        // claiming: 'skipped' says the run happened and found nothing to say,
+        // which is exactly what GET /runs is read to distinguish.
+        const status = digest.entries === 0 ? 'skipped' : digest.delivered ? 'ok' : 'degraded';
+        await finishRun(runId, status, digest);
+        return context.json({
+          kind: parsed.data.kind,
+          runKey,
+          runId,
+          status,
+          result: digest,
+        });
+      }
+
       if (parsed.data.kind === 'proposal_sweep') {
         // Deliberately not scoped to `userId`: a deadline is a deadline for
         // everybody, and a sweep that only expired the triggering user's
@@ -151,6 +172,7 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
         const scan = await runPortfolioScan(
           user,
           context.get('ai'),
+          context.get('notifier'),
           runId,
           context.get('requestId'),
         );

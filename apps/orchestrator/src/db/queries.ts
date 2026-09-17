@@ -502,6 +502,9 @@ export interface InsertedObservation {
   severity: string;
   subject_ref: string | null;
   evidence: unknown;
+  /** Carried so a notification can be rendered without re-reading the row. */
+  headline: string;
+  explanation: string | null;
 }
 
 /**
@@ -552,7 +555,7 @@ export async function insertObservations(
         evidence, concept_refs, dedupe_key)
      VALUES ${values.join(', ')}
      ON CONFLICT (dedupe_key) DO NOTHING
-     RETURNING id, kind, severity, subject_ref, evidence`,
+     RETURNING id, kind, severity, subject_ref, evidence, headline, explanation`,
     params,
   );
   return {
@@ -900,6 +903,115 @@ export async function getOrCreateUserSettings(userId: string): Promise<UserSetti
   // satisfy the type, and would mean the user was deleted mid-request.
   if (row === null) throw new Error(`user_settings could not be materialised for ${userId}`);
   return row;
+}
+
+// --- Notifications -------------------------------------------------------------
+
+export interface NotificationToRecord {
+  userId: string;
+  channel: string;
+  refKind: string;
+  refId: string;
+  route: string;
+  reason: string;
+  status: string;
+  dedupeKey: string;
+}
+
+export interface NotificationRow {
+  id: string;
+  channel: string;
+  ref_kind: string;
+  ref_id: string;
+  route: string;
+  reason: string;
+  status: string;
+  dedupe_key: string;
+  sent_at: Date | null;
+  created_at: Date;
+}
+
+/**
+ * Claim a notification before sending it.
+ *
+ * The INSERT *is* the claim: `dedupe_key` is unique, so a row coming back means
+ * this process is the one that gets to send, and no row means somebody already
+ * did. The order is what matters here - claim, then send, then mark. Sending
+ * first and recording afterwards leaves a window in which a crash loses the
+ * record of a message that already reached the user, and the retry then sends
+ * it again. A message cannot be recalled, so the window has to be on the side
+ * that costs a missing row rather than a duplicate alert.
+ */
+export async function claimNotification(
+  notification: NotificationToRecord,
+): Promise<{ id: string } | null> {
+  return queryOne<{ id: string }>(
+    `INSERT INTO notifications
+       (user_id, channel, ref_kind, ref_id, route, reason, status, dedupe_key)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (dedupe_key) DO NOTHING
+     RETURNING id`,
+    [
+      notification.userId,
+      notification.channel,
+      notification.refKind,
+      notification.refId,
+      notification.route,
+      notification.reason,
+      notification.status,
+      notification.dedupeKey,
+    ],
+  );
+}
+
+/**
+ * Record what became of a claimed notification.
+ *
+ * `sent_at` is set here rather than at claim time because the two are genuinely
+ * different moments - a digest entry is claimed when it is deferred and sent
+ * hours later - and the database refuses a 'sent' row without one.
+ */
+export async function settleNotification(
+  id: string,
+  status: 'sent' | 'failed' | 'suppressed',
+  error?: string,
+): Promise<void> {
+  await query(
+    `UPDATE notifications
+        SET status = $2,
+            sent_at = CASE WHEN $2 = 'sent' THEN now() ELSE NULL END,
+            error = $3
+      WHERE id = $1`,
+    [id, status, error ?? null],
+  );
+}
+
+/** Everything deferred into the digest and not yet rolled up. */
+export function listPendingDigest(userId: string, limit = 100): Promise<NotificationRow[]> {
+  return query<NotificationRow>(
+    `SELECT id, channel, ref_kind, ref_id, route, reason, status, dedupe_key,
+            sent_at, created_at
+       FROM notifications
+      WHERE user_id = $1
+        AND channel = 'digest'
+        AND status = 'pending'
+      ORDER BY created_at ASC
+      LIMIT $2`,
+    [userId, limit],
+  );
+}
+
+/** The notification log, newest first: what the user was told, and what they were not. */
+export function listNotifications(userId: string, limit = 50): Promise<NotificationRow[]> {
+  return query<NotificationRow>(
+    `SELECT id, channel, ref_kind, ref_id, route, reason, status, dedupe_key,
+            sent_at, created_at
+       FROM notifications
+      WHERE user_id = $1
+      ORDER BY created_at DESC
+      LIMIT $2`,
+    [userId, limit],
+  );
 }
 
 export { transaction };

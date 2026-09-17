@@ -31,6 +31,11 @@ const INTERVALS_MS: Record<string, number> = {
   // a repeated sweep has nothing to collapse - it is already idempotent, since a
   // proposal already marked expired produces no transition.
   proposal_sweep: 15 * 60 * 1000,
+  // Hourly against a daily bucket, like backfill and for the same reason: the
+  // extras cost one HTTP request each, and a restart at the wrong moment cannot
+  // swallow the day's digest - which, unlike a skipped scan, cannot be caught
+  // up later, because the findings it would have carried are already marked.
+  daily_digest: 60 * 60 * 1000,
 };
 
 /** Stagger the first run of each kind so a restart does not fire both at once. */
@@ -41,6 +46,9 @@ const FIRST_RUN_DELAY_MS: Record<string, number> = {
   snapshot: 20_000,
   portfolio_scan: 40_000,
   proposal_sweep: 55_000,
+  // Last: the digest reports on what the scan and the sweep just did, so
+  // running it first would describe the previous cycle.
+  daily_digest: 70_000,
 };
 
 const timers: NodeJS.Timeout[] = [];

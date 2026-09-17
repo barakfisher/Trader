@@ -25,6 +25,16 @@ const schema = z.object({
 
   /** Fixed single-user id, seeded by migration 0001. Replaced by real auth later. */
   SINGLE_USER_ID: z.string().uuid().default('00000000-0000-0000-0000-000000000001'),
+
+  /**
+   * Telegram bot credential. Optional, and its absence is a supported state
+   * rather than a misconfiguration: the notification fan-out, the dedupe
+   * guarantee and quiet hours all work without a channel, and every suppressed
+   * message is still recorded with its reason. An installation with no token
+   * gets a NullNotifier that declines with that reason, exactly as the LLM
+   * layer distinguishes deliberately-off from broken.
+   */
+  TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
 });
 
 export type Config = z.infer<typeof schema> & {
