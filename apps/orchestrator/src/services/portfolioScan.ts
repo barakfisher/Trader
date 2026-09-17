@@ -20,6 +20,8 @@ import {
   type UserRow,
 } from '../db/queries.js';
 import { logger } from '../logger.js';
+import type { Notifier } from '../notify/notifier.js';
+import { fanOut, settingsForNotification, type NotifiableFinding } from './notifications.js';
 import { raiseProposals } from './proposals.js';
 import { valuePortfolio } from './valuation.js';
 
@@ -40,11 +42,14 @@ export interface ScanResult {
   /** New findings that warranted a decision, and how many became one. */
   proposalsSelected: number;
   proposalsCreated: number;
+  /** Where the new findings went: pushed now, deferred to the digest, or already sent. */
+  notified: { pushed: number; deferred: number; duplicate: number; failed: number };
 }
 
 export async function runPortfolioScan(
   user: UserRow,
   ai: AiClient,
+  notifier: Notifier,
   runId: string | null,
   requestId?: string,
 ): Promise<ScanResult> {
@@ -63,6 +68,7 @@ export async function runPortfolioScan(
       degraded: false,
       proposalsSelected: 0,
       proposalsCreated: 0,
+      notified: { pushed: 0, deferred: 0, duplicate: 0, failed: 0 },
     };
   }
 
@@ -162,6 +168,31 @@ export async function runPortfolioScan(
     );
   }
 
+  /**
+   * Tell the user about what was found - but only about findings this scan
+   * actually created, for the same reason proposals are only raised for those:
+   * a repeated finding has already been announced, and announcing it again
+   * because the market has not moved is how a notification channel becomes one
+   * the user mutes.
+   *
+   * The fan-out runs after the proposals are raised so that a finding the user
+   * can act on carries its proposal id, and a channel can offer the buttons
+   * rather than a link to go and find them.
+   */
+  const notifiable: NotifiableFinding[] = inserted.map((observation) => ({
+    refKind: 'observation' as const,
+    refId: observation.id,
+    severity: observation.severity,
+    headline: observation.headline,
+    explanation: observation.explanation,
+  }));
+  const notified = await fanOut(
+    user.id,
+    notifiable,
+    settingsForNotification(settings, user.timezone),
+    notifier,
+  );
+
   const result: ScanResult = {
     holdings: rows.length,
     priced: portfolio.summary.pricedCount,
@@ -178,6 +209,12 @@ export async function runPortfolioScan(
     degraded: portfolio.summary.degraded || skipped.length > 0,
     proposalsSelected: proposals.selected,
     proposalsCreated: proposals.created,
+    notified: {
+      pushed: notified.pushed,
+      deferred: notified.deferred,
+      duplicate: notified.duplicate,
+      failed: notified.failed,
+    },
   };
 
   logger().info({ userId: user.id, ...result }, 'portfolio scan complete');

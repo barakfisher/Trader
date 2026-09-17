@@ -13,6 +13,9 @@ import { randomUUID } from 'node:crypto';
 
 import type { AiClient } from '@traders/shared/ai';
 
+import { buildNotifier } from '../notify/factory.js';
+import type { Notifier } from '../notify/notifier.js';
+
 import type { Config } from '../config.js';
 import { logger } from '../logger.js';
 import { SESSION_COOKIE, verifySessionToken } from './auth.js';
@@ -22,6 +25,7 @@ import { registerHealthRoutes } from './routes/health.js';
 import { registerHoldingsRoutes } from './routes/holdings.js';
 import { registerImportRoutes } from './routes/imports.js';
 import { registerInternalRoutes } from './routes/internal.js';
+import { registerNotificationsRoutes } from './routes/notifications.js';
 import { registerPortfolioRoutes } from './routes/portfolio.js';
 import { registerProposalsRoutes } from './routes/proposals.js';
 import { registerTargetsRoutes } from './routes/targets.js';
@@ -32,6 +36,7 @@ export interface AppEnv {
     userId?: string;
     config: Config;
     ai: AiClient;
+    notifier: Notifier;
   };
 }
 
@@ -46,9 +51,19 @@ const PROTECTED_PREFIXES = [
   '/observations',
   '/targets',
   '/proposals',
+  '/notifications',
 ];
 
-export function createApp(config: Config, ai: AiClient): Hono<AppEnv> {
+/**
+ * `notifier` is injectable so a test can assert what would have been sent
+ * without a bot token, and defaults to whatever the configuration describes -
+ * which, with no token set, is a channel that declines with the reason.
+ */
+export function createApp(
+  config: Config,
+  ai: AiClient,
+  notifier: Notifier = buildNotifier(config),
+): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
   app.use('*', async (context, next) => {
@@ -56,6 +71,7 @@ export function createApp(config: Config, ai: AiClient): Hono<AppEnv> {
     context.set('requestId', requestId);
     context.set('config', config);
     context.set('ai', ai);
+    context.set('notifier', notifier);
     context.header('x-request-id', requestId);
     const startedAt = Date.now();
     await next();
@@ -142,6 +158,7 @@ export function createApp(config: Config, ai: AiClient): Hono<AppEnv> {
   registerHoldingsRoutes(app);
   registerTargetsRoutes(app);
   registerProposalsRoutes(app);
+  registerNotificationsRoutes(app);
   registerImportRoutes(app);
   registerInternalRoutes(app);
 
