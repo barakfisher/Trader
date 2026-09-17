@@ -150,7 +150,7 @@ export function registerTelegramRoutes(app: Hono<AppEnv>): void {
    */
   app.post('/telegram/bind-token', async (context) => {
     const config = context.get('config');
-    if (!config.TELEGRAM_BOT_USERNAME || !config.TELEGRAM_WEBHOOK_SECRET) {
+    if (!config.TELEGRAM_BOT_USERNAME || !config.TELEGRAM_SIGNING_SECRET) {
       return context.json(
         { error: 'telegram_not_configured', message: 'this installation has no Telegram bot' },
         503,
@@ -158,7 +158,11 @@ export function registerTelegramRoutes(app: Hono<AppEnv>): void {
     }
     const { token, payload } = encodeBindToken(
       currentUserId(context),
-      config.TELEGRAM_WEBHOOK_SECRET,
+      // The signing key, never the webhook secret. The webhook secret is shared
+      // with Telegram and rides in every inbound header; signing a connect link
+      // with it would make a leak of that shared value into the ability to bind
+      // an attacker's chat to this account.
+      config.TELEGRAM_SIGNING_SECRET,
     );
     return context.json({
       // The deep link, ready to render as a button or a QR code.
@@ -302,9 +306,9 @@ async function handleStart(
   const config = context.get('config');
   const telegram = notifierFor(context);
   const payload =
-    token === undefined || !config.TELEGRAM_WEBHOOK_SECRET
+    token === undefined || !config.TELEGRAM_SIGNING_SECRET
       ? null
-      : decodeBindToken(token, config.TELEGRAM_WEBHOOK_SECRET);
+      : decodeBindToken(token, config.TELEGRAM_SIGNING_SECRET);
 
   if (payload === null) {
     // One message for a missing, malformed, tampered or expired link. The
@@ -341,14 +345,14 @@ async function handleCallback(
   const telegram = notifierFor(context);
   const chatId = callback.message ? String(callback.message.chat.id) : null;
 
-  if (chatId === null || callback.data === undefined || !config.TELEGRAM_CALLBACK_SECRET) {
+  if (chatId === null || callback.data === undefined || !config.TELEGRAM_SIGNING_SECRET) {
     await telegram?.answerCallback(callback.id, 'This button is no longer usable.');
     return;
   }
 
   // Check three: the signature. Verified before the payload is interpreted, so
   // nothing an attacker writes steers what happens next.
-  const payload = decodeCallbackData(callback.data, config.TELEGRAM_CALLBACK_SECRET);
+  const payload = decodeCallbackData(callback.data, config.TELEGRAM_SIGNING_SECRET);
   const binding = await findTelegramBindingByChat(chatId);
 
   if (payload === null || binding === null) {

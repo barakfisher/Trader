@@ -87,8 +87,14 @@ function bytesToUuid(buffer: Buffer): string {
   ].join('-');
 }
 
+/** See bindToken.ts: the tag keeps one token type from passing as the other. */
+const DOMAIN = 'telegram-callback-v1';
+
 function sign(secret: string, body: string): Buffer {
-  return createHmac('sha256', secret).update(body).digest().subarray(0, MAC_BYTES);
+  return createHmac('sha256', secret)
+    .update(`${DOMAIN}:${body}`)
+    .digest()
+    .subarray(0, MAC_BYTES);
 }
 
 /** A fresh nonce for one rendered button. */

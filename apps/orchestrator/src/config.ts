@@ -59,19 +59,31 @@ const schema = z.object({
   TELEGRAM_BOT_USERNAME: optionalSetting(),
 
   /**
-   * Echoed by Telegram on every webhook delivery, and also what signs the
-   * connect links. Both uses authenticate *Telegram itself* rather than a user.
+   * Echoed by Telegram on every webhook delivery, and used for **that and
+   * nothing else**: it answers "is this request really from Telegram?".
+   *
+   * It is a *shared* value. Telegram holds a copy, it rides in the header of
+   * every inbound request, and anywhere TLS terminates - an ingress, a proxy -
+   * it is plaintext that request logging will happily capture. So its blast
+   * radius is wide, and nothing may be signed with it.
    */
   TELEGRAM_WEBHOOK_SECRET: optionalSetting(16),
 
   /**
-   * Signs inline-button payloads. Deliberately a different secret from the
-   * webhook one: the webhook secret is shared with Telegram and is visible to
-   * anyone who can read the bot's configuration there, while this one never
-   * leaves this process. Sharing them would mean a leak of the value Telegram
-   * holds became the ability to forge approvals.
+   * The signing key for everything this service mints: the inline-button
+   * payloads and the "Connect Telegram" deep links.
+   *
+   * It never leaves this process, which is the whole point of it being separate
+   * from the webhook secret. The first version signed bind tokens with the
+   * webhook secret instead, and that was a real hole rather than an untidiness:
+   * `SINGLE_USER_ID` defaults to a value published in this repository, so
+   * anyone who read the shared secret out of a proxy log could mint a connect
+   * link for that account, bind their own chat, and approve its proposals.
+   *
+   * One key signs two kinds of token, so each is signed over a domain tag -
+   * see `bindToken.ts` - and neither can be presented as the other.
    */
-  TELEGRAM_CALLBACK_SECRET: optionalSetting(16),
+  TELEGRAM_SIGNING_SECRET: optionalSetting(16),
 });
 
 export type Config = z.infer<typeof schema> & {
