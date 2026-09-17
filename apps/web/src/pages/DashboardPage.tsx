@@ -24,6 +24,7 @@ export const DashboardPage = observer(function DashboardPage() {
     settings,
     targets,
     narration,
+    telegram,
   } = useStore();
 
   return (
@@ -108,6 +109,10 @@ export const DashboardPage = observer(function DashboardPage() {
               // someone goes looking for them, and a dashboard that fetches
               // them on every login spends a request nobody asked for.
               void settings.load();
+              // Alongside the settings, because the Telegram section lives on
+              // that page and a card that has to be prodded to say whether you
+              // are connected is a card that will be misread.
+              void telegram.load();
             }}
           >
             <span className="flex items-center gap-1">

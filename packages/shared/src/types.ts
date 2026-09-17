@@ -450,3 +450,25 @@ export interface NarrationHealthResponse {
   /** The raw reason, for an operator rather than a reader. */
   lastFallbackReason: string | null;
 }
+
+// --- Telegram binding (M4; GET /telegram/binding) -----------------------------
+
+export interface TelegramBindingResponse {
+  connected: boolean;
+  /** Display only. A username is changeable by its owner, so nothing authorises off it. */
+  username: string | null;
+  boundAt: string | null;
+}
+
+/**
+ * A freshly minted connect link.
+ *
+ * The URL is a bearer credential for one act: whoever opens it in Telegram
+ * binds *their* chat to this account. It is single-use and short-lived, and it
+ * is never to be shared - which the UI has to say out loud, because a `t.me`
+ * link looks like an ordinary link.
+ */
+export interface TelegramConnectLink {
+  url: string;
+  expiresAt: string;
+}

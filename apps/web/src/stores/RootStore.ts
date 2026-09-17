@@ -11,6 +11,7 @@ import { ObservationsStore } from './ObservationsStore.ts';
 import { PortfolioStore } from './PortfolioStore.ts';
 import { ProposalsStore } from './ProposalsStore.ts';
 import { SettingsStore } from './SettingsStore.ts';
+import { TelegramStore } from './TelegramStore.ts';
 import { TargetsStore } from './TargetsStore.ts';
 
 export class RootStore {
@@ -22,5 +23,6 @@ export class RootStore {
   readonly narration = new NarrationStore(this);
   readonly settings = new SettingsStore(this);
   readonly targets = new TargetsStore(this);
+  readonly telegram = new TelegramStore(this);
   readonly navigation = new NavigationStore(this);
 }

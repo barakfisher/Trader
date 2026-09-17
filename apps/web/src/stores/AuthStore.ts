@@ -86,6 +86,7 @@ export class AuthStore {
         this.root.narration.reset();
         this.root.settings.reset();
         this.root.targets.reset();
+        this.root.telegram.reset();
         this.root.navigation.reset();
       });
     }
