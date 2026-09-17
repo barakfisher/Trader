@@ -15,7 +15,7 @@ const USER = '00000000-0000-0000-0000-000000000001';
 const PROPOSAL = '11111111-2222-3333-4444-555555555555';
 const CHAT = 987654321;
 const WEBHOOK_SECRET = 'a-webhook-secret-long-enough';
-const CALLBACK_SECRET = 'a-callback-secret-long-enough';
+const SIGNING_SECRET = 'a-signing-secret-long-enough';
 
 vi.mock('../src/db/pool.js', () => ({
   queryOne: vi.fn(async () => null),
@@ -78,7 +78,7 @@ const ENV = {
   TELEGRAM_BOT_TOKEN: 'bot-token',
   TELEGRAM_BOT_USERNAME: 'traders_test_bot',
   TELEGRAM_WEBHOOK_SECRET: WEBHOOK_SECRET,
-  TELEGRAM_CALLBACK_SECRET: CALLBACK_SECRET,
+  TELEGRAM_SIGNING_SECRET: SIGNING_SECRET,
 } as unknown as NodeJS.ProcessEnv;
 
 /** Records every Telegram API call instead of making one. */
@@ -89,7 +89,7 @@ function buildApp() {
   sentCalls = [];
   const notifier = new TelegramNotifier({
     botToken: 'bot-token',
-    callbackSecret: CALLBACK_SECRET,
+    callbackSecret: SIGNING_SECRET,
     resolveChatId: async () => String(CHAT),
     fetchImpl: async (url, init) => {
       sentCalls.push({
@@ -185,7 +185,7 @@ describe('an unbound chat', () => {
     // it, but the chat that tapped it is not the chat it was sent to.
     const data = encodeCallbackData(
       { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
-      CALLBACK_SECRET,
+      SIGNING_SECRET,
     );
     await post(callbackUpdate(data));
     expect(proposals.applyDecision).not.toHaveBeenCalled();
@@ -198,7 +198,7 @@ describe('a signed callback from a bound chat', () => {
 
   it('applies the decision and answers the tap', async () => {
     const nonce = mintNonce();
-    const data = encodeCallbackData({ proposalId: PROPOSAL, action: 'approve', nonce }, CALLBACK_SECRET);
+    const data = encodeCallbackData({ proposalId: PROPOSAL, action: 'approve', nonce }, SIGNING_SECRET);
     await post(callbackUpdate(data));
 
     expect(proposals.applyDecision).toHaveBeenCalledWith(
@@ -220,7 +220,7 @@ describe('a signed callback from a bound chat', () => {
     // identity comes from the binding, so a forged payload cannot choose it.
     const data = encodeCallbackData(
       { proposalId: PROPOSAL, action: 'reject', nonce: mintNonce() },
-      CALLBACK_SECRET,
+      SIGNING_SECRET,
     );
     await post(callbackUpdate(data));
     expect(vi.mocked(proposals.applyDecision).mock.calls[0]![0].userId).toBe(USER);
@@ -229,7 +229,7 @@ describe('a signed callback from a bound chat', () => {
   it('carries a snooze deadline, since the bot has no time picker', async () => {
     const data = encodeCallbackData(
       { proposalId: PROPOSAL, action: 'snooze', nonce: mintNonce() },
-      CALLBACK_SECRET,
+      SIGNING_SECRET,
     );
     await post(callbackUpdate(data));
     expect(vi.mocked(proposals.applyDecision).mock.calls[0]![0].snoozeUntil).toBeInstanceOf(Date);
@@ -247,7 +247,7 @@ describe('a signed callback from a bound chat', () => {
   it('rejects a payload whose action was edited', async () => {
     const data = encodeCallbackData(
       { proposalId: PROPOSAL, action: 'reject', nonce: mintNonce() },
-      CALLBACK_SECRET,
+      SIGNING_SECRET,
     );
     await post(callbackUpdate(`${data.slice(0, 22)}a${data.slice(23)}`));
     expect(proposals.applyDecision).not.toHaveBeenCalled();
@@ -261,7 +261,7 @@ describe('a signed callback from a bound chat', () => {
     } as never);
     const data = encodeCallbackData(
       { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
-      CALLBACK_SECRET,
+      SIGNING_SECRET,
     );
     await post(callbackUpdate(data));
     expect(sentCalls[0]?.body.text).toContain('Approved');
@@ -275,7 +275,7 @@ describe('a signed callback from a bound chat', () => {
     } as never);
     const data = encodeCallbackData(
       { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
-      CALLBACK_SECRET,
+      SIGNING_SECRET,
     );
     await post(callbackUpdate(data));
     expect(sentCalls[0]?.body.text).toContain('expired');
@@ -287,7 +287,7 @@ describe('a signed callback from a bound chat', () => {
     // answerCallbackQuery cannot serve, because it is a toast that vanishes.
     const data = encodeCallbackData(
       { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
-      CALLBACK_SECRET,
+      SIGNING_SECRET,
     );
     await post(callbackUpdate(data));
 
@@ -305,7 +305,7 @@ describe('a signed callback from a bound chat', () => {
     // that can only be refused.
     const data = encodeCallbackData(
       { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
-      CALLBACK_SECRET,
+      SIGNING_SECRET,
     );
     await post(callbackUpdate(data));
 
@@ -323,7 +323,7 @@ describe('a signed callback from a bound chat', () => {
     } as never);
     const data = encodeCallbackData(
       { proposalId: PROPOSAL, action: 'snooze', nonce: mintNonce() },
-      CALLBACK_SECRET,
+      SIGNING_SECRET,
     );
     await post(callbackUpdate(data));
 
@@ -337,7 +337,7 @@ describe('a signed callback from a bound chat', () => {
     // button the moment it lands - and the edit must not delay it.
     const data = encodeCallbackData(
       { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
-      CALLBACK_SECRET,
+      SIGNING_SECRET,
     );
     await post(callbackUpdate(data));
     const methods = sentCalls.map((call) => call.method);
@@ -351,7 +351,7 @@ describe('a signed callback from a bound chat', () => {
     // and a non-200 would earn a redelivery of a spent nonce.
     const data = encodeCallbackData(
       { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
-      CALLBACK_SECRET,
+      SIGNING_SECRET,
     );
     const response = await post(callbackUpdate(data));
     expect(response.status).toBe(200);
@@ -363,7 +363,7 @@ describe('a signed callback from a bound chat', () => {
     vi.mocked(proposals.applyDecision).mockRejectedValueOnce(new Error('database is down'));
     const data = encodeCallbackData(
       { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
-      CALLBACK_SECRET,
+      SIGNING_SECRET,
     );
     expect((await post(callbackUpdate(data))).status).toBe(200);
   });
@@ -371,7 +371,7 @@ describe('a signed callback from a bound chat', () => {
 
 describe('/start', () => {
   it('binds the chat when the link verifies', async () => {
-    const { token } = encodeBindToken(USER, WEBHOOK_SECRET);
+    const { token } = encodeBindToken(USER, SIGNING_SECRET);
     await post(messageUpdate(`/start ${token}`));
 
     expect(queries.redeemTelegramBindToken).toHaveBeenCalledWith(
@@ -393,7 +393,7 @@ describe('/start', () => {
       bound: false,
       reason: 'already_used',
     });
-    const { token } = encodeBindToken(USER, WEBHOOK_SECRET);
+    const { token } = encodeBindToken(USER, SIGNING_SECRET);
     await post(messageUpdate(`/start ${token}`));
     expect(sentCalls[0]?.body.text).toContain('already been used');
   });
@@ -403,9 +403,37 @@ describe('/start', () => {
       bound: false,
       reason: 'chat_taken',
     });
-    const { token } = encodeBindToken(USER, WEBHOOK_SECRET);
+    const { token } = encodeBindToken(USER, SIGNING_SECRET);
     await post(messageUpdate(`/start ${token}`));
     expect(sentCalls[0]?.body.text).toContain('another account');
+  });
+
+  it('refuses a link signed with the WEBHOOK secret rather than the signing key', async () => {
+    /**
+     * The hole this separation exists to close, and it was real: the first
+     * version signed connect links with the webhook secret. That value is
+     * shared with Telegram and rides in the header of every inbound request,
+     * so anywhere TLS terminates it is plaintext a proxy log will capture -
+     * and SINGLE_USER_ID defaults to a value published in this repository.
+     * Anyone reading that header out of a log could therefore mint a link for
+     * the account, bind their own chat, and approve its proposals.
+     */
+    const { token } = encodeBindToken(USER, WEBHOOK_SECRET);
+    await post(messageUpdate(`/start ${token}`));
+
+    expect(queries.redeemTelegramBindToken).not.toHaveBeenCalled();
+    expect(sentCalls[0]?.body.text).toContain('not valid');
+  });
+
+  it('refuses a callback token presented as a connect link', async () => {
+    // Both are signed with the same key now, so the domain tag is what keeps
+    // one from passing as the other.
+    const callbackToken = encodeCallbackData(
+      { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
+      SIGNING_SECRET,
+    );
+    await post(messageUpdate(`/start ${callbackToken}`));
+    expect(queries.redeemTelegramBindToken).not.toHaveBeenCalled();
   });
 
   it('refuses a bare /start with no link', async () => {

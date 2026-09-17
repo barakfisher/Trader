@@ -78,8 +78,21 @@ function encodeExpiry(at: Date): Buffer {
   return buffer;
 }
 
+/**
+ * Domain tag mixed into every signature here.
+ *
+ * Bind tokens and callback tokens are signed with the same key, so the tag is
+ * what stops one being presented as the other. Their layouts differ today and
+ * a swap would almost certainly fail to parse - but "almost certainly fails to
+ * parse" is not a security property, and the tag costs one string.
+ */
+const DOMAIN = 'telegram-bind-v1';
+
 function sign(secret: string, body: string): Buffer {
-  return createHmac('sha256', secret).update(body).digest().subarray(0, MAC_BYTES);
+  return createHmac('sha256', secret)
+    .update(`${DOMAIN}:${body}`)
+    .digest()
+    .subarray(0, MAC_BYTES);
 }
 
 /** Mint a connect link's token. Writes nothing; the signature carries the state. */
