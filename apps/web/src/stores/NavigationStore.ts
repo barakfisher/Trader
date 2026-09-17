@@ -14,7 +14,7 @@ import { makeAutoObservable } from 'mobx';
 
 import type { RootStore } from './RootStore.ts';
 
-export type AppView = 'portfolio' | 'settings';
+export type AppView = 'portfolio' | 'settings' | 'proposals';
 
 export class NavigationStore {
   view: AppView = 'portfolio';
