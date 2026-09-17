@@ -264,3 +264,79 @@ export interface UserSettings {
 export interface UserSettingsResponse {
   settings: UserSettings;
 }
+
+// --- Proposals (migration 0006) ----------------------------------------------
+
+/** The states a proposal can be in. Mirrors the CHECK in migration 0006. */
+export type ProposalState = 'pending' | 'approved' | 'rejected' | 'snoozed' | 'expired';
+
+/** What a user can ask for. Deliberately not the same set as the states. */
+export type ProposalAction = 'approve' | 'reject' | 'snooze';
+
+/** Where a decision came in. 'system' is the expiry sweep, not a person. */
+export type DecisionSurface = 'web' | 'telegram' | 'system';
+
+/**
+ * An open question raised from a finding.
+ *
+ * `state` is **computed**: it accounts for a deadline that has passed and a
+ * snooze that has elapsed since the row was last written. `storedState` is what
+ * the database holds. They differ for real, and only briefly - between a
+ * deadline passing and the sweep noticing - and a client that renders
+ * `storedState` would offer a live Approve button on a dead question. Render
+ * `state`; `storedState` is here for a debugging session, not for the UI.
+ */
+export interface Proposal {
+  id: string;
+  observationId: string;
+  /** The action being assented to, in the shape the ledger records it. */
+  kind: string;
+  payload: unknown;
+  state: ProposalState;
+  storedState: ProposalState;
+  severity: ObservationSeverity;
+  subjectRef: string | null;
+  headline: string;
+  explanation: string | null;
+  /** The figures behind the headline. Every number in the text appears here. */
+  evidence: unknown;
+  expiresAt: string;
+  snoozedUntil: string | null;
+  decidedAt: string | null;
+  decidedVia: DecisionSurface | null;
+  createdAt: string;
+}
+
+export interface ProposalsResponse {
+  proposals: Proposal[];
+}
+
+/** One immutable entry in a proposal's audit trail. */
+export interface ProposalTransition {
+  from: ProposalState;
+  to: ProposalState;
+  surface: DecisionSurface;
+  /** False when the clock did this rather than a person. */
+  byUser: boolean;
+  at: string;
+}
+
+export interface ProposalDetailResponse {
+  proposal: Proposal;
+  /** Newest first. Explains a state the user never set themselves. */
+  transitions: ProposalTransition[];
+}
+
+/**
+ * The answer to a decision.
+ *
+ * `unchanged` is a success, not an error: it means the proposal was already in
+ * the state asked for, which is what a second tap on the same button produces -
+ * usually because the first reply was lost, and that user did nothing wrong.
+ */
+export interface DecisionResponse {
+  outcome: 'applied' | 'unchanged';
+  state: ProposalState;
+  /** The ledger row an approval wrote. Null for every other outcome. */
+  intentId: string | null;
+}

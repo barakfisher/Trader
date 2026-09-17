@@ -2,6 +2,7 @@ import { observer } from 'mobx-react-lite';
 
 import { DashboardPage } from './pages/DashboardPage.tsx';
 import { LoginPage } from './pages/LoginPage.tsx';
+import { ProposalsPage } from './pages/ProposalsPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import { Spinner } from './components/ui.tsx';
 import { useStore } from './stores/context.tsx';
@@ -20,5 +21,7 @@ export const App = observer(function App() {
   }
 
   if (!auth.isAuthenticated) return <LoginPage />;
-  return navigation.view === 'settings' ? <SettingsPage /> : <DashboardPage />;
+  if (navigation.view === 'settings') return <SettingsPage />;
+  if (navigation.view === 'proposals') return <ProposalsPage />;
+  return <DashboardPage />;
 });
