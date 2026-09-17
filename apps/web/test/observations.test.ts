@@ -55,6 +55,8 @@ const priceMove: Observation = {
     thresholds_pct: { info: 0.03, notable: 0.05, high: 0.08 },
   },
   conceptRefs: ['daily-return'],
+  narrationSource: 'llm',
+  fallbackReason: 'none',
   createdAt: '2026-09-16T14:00:00Z',
 };
 
@@ -66,6 +68,8 @@ const drift: Observation = {
   subjectKind: 'portfolio',
   subjectRef: 'portfolio:allocation:AAPL',
   conceptRefs: [],
+  narrationSource: 'template',
+  fallbackReason: 'provider_error',
   createdAt: '2026-09-16T13:00:00Z',
 };
 

@@ -224,8 +224,34 @@ export interface Observation {
   evidence: Record<string, unknown>;
   /** Slugs of the concepts the finding invoked, e.g. `daily-return`. */
   conceptRefs: string[];
+  /**
+   * Who wrote `explanation`.
+   *
+   * Both kinds are equally trustworthy about their *figures* - the evidence
+   * validator is what guarantees that, and it runs on the model's sentence
+   * before it is ever stored. They are not equally informative about anything
+   * else, and a reader deciding how much weight to give a sentence is entitled
+   * to know which one they are reading.
+   *
+   * Null on observations written before this was recorded. That is "not
+   * recorded", not "template": guessing would attribute authorship nobody
+   * checked, and a UI must say the former rather than imply the latter.
+   */
+  narrationSource: NarrationSource | null;
+  /**
+   * Why the model did not write it, when it did not.
+   *
+   * Free text rather than a union on purpose. It is diagnostic - a spent
+   * budget, a refusing provider, figures the validator would not accept are
+   * different problems with different fixes - and an unanticipated value here
+   * must never be able to reject an observation that is otherwise fine.
+   */
+  fallbackReason: string | null;
   createdAt: string;
 }
+
+/** `template` is fixed phrasing over checked figures; `llm` is validated prose. */
+export type NarrationSource = 'llm' | 'template';
 
 export interface ObservationsResponse {
   /** Newest first, as returned. */

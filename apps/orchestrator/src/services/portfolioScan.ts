@@ -124,6 +124,12 @@ export async function runPortfolioScan(
     evidence: observation.evidence ?? {},
     conceptRefs: observation.concept_refs ?? [],
     dedupeKey: observation.dedupe_key,
+    // The AI service has always reported both and this mapping used to drop
+    // them on the floor. `?? null` rather than a default: a response that omits
+    // them is a response that does not know, and inventing 'template' here
+    // would attribute authorship nobody checked.
+    narrationSource: observation.narration_source ?? null,
+    fallbackReason: observation.fallback_reason ?? null,
   }));
 
   const { created, suppressed, inserted } = await insertObservations(toStore);

@@ -73,6 +73,8 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
         explanation: row.explanation,
         evidence: row.evidence,
         conceptRefs: row.concept_refs,
+        narrationSource: row.narration_source as 'llm' | 'template' | null,
+        fallbackReason: row.fallback_reason,
         createdAt: new Date(row.created_at).toISOString(),
       })),
     });

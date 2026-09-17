@@ -530,6 +530,16 @@ export interface ObservationToStore {
   evidence: unknown;
   conceptRefs: string[];
   dedupeKey: string;
+  /**
+   * Who wrote `explanation`, and why the model did not.
+   *
+   * The pipeline has always reported both and this insert used to drop them.
+   * A reader weighs a sentence differently depending on its author, and an
+   * operator asking why narration stopped needs the reason rather than the
+   * logs. Null only for a caller that genuinely does not know.
+   */
+  narrationSource: string | null;
+  fallbackReason: string | null;
 }
 
 /** An observation that was actually written, as opposed to one suppressed. */
@@ -579,17 +589,20 @@ export async function insertObservations(
       JSON.stringify(observation.evidence ?? {}),
       observation.conceptRefs,
       observation.dedupeKey,
+      observation.narrationSource,
+      observation.fallbackReason,
     );
     values.push(
       `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, ` +
-        `$${base + 7}, $${base + 8}, $${base + 9}::jsonb, $${base + 10}::text[], $${base + 11})`,
+        `$${base + 7}, $${base + 8}, $${base + 9}::jsonb, $${base + 10}::text[], $${base + 11}, ` +
+        `$${base + 12}, $${base + 13})`,
     );
   });
 
   const inserted = await query<InsertedObservation>(
     `INSERT INTO observations
        (user_id, run_id, kind, severity, subject_kind, subject_ref, headline, explanation,
-        evidence, concept_refs, dedupe_key)
+        evidence, concept_refs, dedupe_key, narration_source, fallback_reason)
      VALUES ${values.join(', ')}
      ON CONFLICT (dedupe_key) DO NOTHING
      RETURNING id, kind, severity, subject_ref, evidence, headline, explanation`,
@@ -612,6 +625,9 @@ export interface ObservationRow {
   explanation: string | null;
   evidence: unknown;
   concept_refs: string[];
+  /** Null on rows written before provenance was recorded. Not a guess. */
+  narration_source: string | null;
+  fallback_reason: string | null;
   created_at: Date;
 }
 
@@ -649,7 +665,7 @@ export async function listRecentDedupeKeys(userId: string, days = 2): Promise<st
 export function listObservations(userId: string, limit = 50): Promise<ObservationRow[]> {
   return query<ObservationRow>(
     `SELECT id, kind, severity, subject_kind, subject_ref, headline, explanation,
-            evidence, concept_refs, created_at
+            evidence, concept_refs, narration_source, fallback_reason, created_at
        FROM observations
       WHERE user_id = $1
       ORDER BY created_at DESC, severity DESC

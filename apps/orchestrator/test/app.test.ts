@@ -363,6 +363,26 @@ describe('API', () => {
     expect(queries.insertObservations).toHaveBeenCalled();
   });
 
+  it('stores who wrote each explanation, and why the model did not', async () => {
+    // The AI service has always reported both and the insert used to drop them,
+    // which left the feed unable to say whether a sentence was a model's or a
+    // template's. Asserted against what the fake actually emits rather than a
+    // hand-written shape, because the last time a consumer was tested against
+    // invented producer output the mismatch reached production.
+    vi.mocked(queries.insertObservations).mockResolvedValueOnce({ created: 1, suppressed: 0, inserted: [] });
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'portfolio_scan' }),
+    });
+    expect(response.status).toBe(200);
+    expect(queries.insertObservations).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ narrationSource: 'template', fallbackReason: 'no_provider' }),
+      ]),
+    );
+  });
+
   it('marks a scan degraded when a rule declined to run', async () => {
     // "Nothing was found" and "we could not look" must not report the same way.
     vi.mocked(queries.insertObservations).mockResolvedValueOnce({ created: 0, suppressed: 0, inserted: [] });
