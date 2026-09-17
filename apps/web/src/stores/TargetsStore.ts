@@ -162,6 +162,16 @@ export class TargetsStore {
 
   get isDirty(): boolean {
     if (this.saved === null) return false;
+    /**
+     * A box holding text that is not a weight counts as a change, even though
+     * it contributes no value to compare. It was found by using the page: an
+     * unparseable box parses to nothing, so a draft containing one looked
+     * identical to the stored set, `isDirty` was false, and **Discard was
+     * disabled at exactly the moment it is wanted** - the user's way back from
+     * a typo was the one control switched off. The form no longer says what the
+     * server holds, so there is something to discard.
+     */
+    if (this.rows.some((row) => row.invalid)) return true;
     const pending = this.pending;
     if (pending.size !== this.saved.size) return true;
     for (const [symbol, units] of pending) {

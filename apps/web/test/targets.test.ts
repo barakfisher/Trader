@@ -312,6 +312,22 @@ describe('TargetsStore', () => {
     expect(root.targets.canSave).toBe(false);
   });
 
+  it('offers a way back from a typo: an unparseable box is a change to discard', async () => {
+    const root = await loadedStore();
+    root.targets.setTarget('AAPL', 'a lot');
+    // Found by using the page. The box contributes no value, so a draft holding
+    // one used to compare equal to the stored set — which switched Discard off
+    // at exactly the moment it is the control the user wants.
+    expect(root.targets.isDirty).toBe(true);
+    expect(root.targets.canSave).toBe(false);
+    root.targets.discard();
+    // Back to the stored 40%, not to an empty box: discard restores, it does
+    // not clear.
+    expect(root.targets.rows.find((row) => row.symbol === 'AAPL')?.targetText).toBe('40');
+    expect(root.targets.blockingIssue).toBeNull();
+    expect(root.targets.isDirty).toBe(false);
+  });
+
   it('keeps the edits on screen when a save fails', async () => {
     const root = await loadedStore();
     root.targets.setTarget('AAPL', '35');
