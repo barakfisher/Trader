@@ -28,6 +28,7 @@ import { registerInternalRoutes } from './routes/internal.js';
 import { registerNotificationsRoutes } from './routes/notifications.js';
 import { registerPortfolioRoutes } from './routes/portfolio.js';
 import { registerProposalsRoutes } from './routes/proposals.js';
+import { registerSettingsRoutes } from './routes/settings.js';
 import { registerTargetsRoutes } from './routes/targets.js';
 
 export interface AppEnv {
@@ -52,6 +53,7 @@ const PROTECTED_PREFIXES = [
   '/targets',
   '/proposals',
   '/notifications',
+  '/settings',
 ];
 
 /**
@@ -93,7 +95,11 @@ export function createApp(
       origin: config.allowedOrigins,
       credentials: true,
       allowHeaders: ['content-type', 'x-request-id'],
-      allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+      // PUT belongs here because two routes use it (`/targets`, `/settings`).
+      // Its absence was invisible from the server side - a preflight for a
+      // method the browser was not told about fails in the browser, so the
+      // request never arrives and the log shows nothing at all.
+      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     }),
   );
 
@@ -159,6 +165,7 @@ export function createApp(
   registerTargetsRoutes(app);
   registerProposalsRoutes(app);
   registerNotificationsRoutes(app);
+  registerSettingsRoutes(app);
   registerImportRoutes(app);
   registerInternalRoutes(app);
 
