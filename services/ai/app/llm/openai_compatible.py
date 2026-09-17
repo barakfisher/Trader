@@ -18,6 +18,17 @@ configured out of the box. Write `AnthropicProvider` when someone needs direct
 access (a billing relationship, prompt caching, or the beta endpoints); it
 implements the same Protocol and nothing outside this package changes.
 
+**Reasoning tokens are spent out of the same `max_tokens` as the answer.** On
+every gateway that serves reasoning models, the thinking a model does before it
+writes counts against the output cap, so a 700-token cap sized for "a headline
+plus a short explanation" can be consumed entirely by deliberation and return an
+empty or truncated narration - which the evidence validator then rejects, so the
+symptom is a template fallback rather than an error. `reasoning_effort` caps the
+thinking instead of the answer: measured against OpenRouter's free Nemotron
+route, the default effort spent ~400-570 tokens on reasoning where "low" spends
+~120. It is sent only when set, because a model that does not reason has no such
+parameter and gateways differ on whether an unknown field is ignored or refused.
+
 Retry policy: exactly one retry, on 429 and on 5xx. A 4xx will not fix itself -
 a malformed request, a revoked key or a model that does not exist returns the
 same answer however many times we ask, so retrying it only spends time and, for
@@ -75,6 +86,7 @@ class OpenAICompatibleProvider:
         timeout_seconds: float = 30.0,
         max_output_tokens: int = 700,
         temperature: float = 0.1,
+        reasoning_effort: str | None = None,
         retry_backoff_seconds: float = 1.0,
         extra_headers: dict[str, str] | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
@@ -89,6 +101,7 @@ class OpenAICompatibleProvider:
         self._timeout_seconds = timeout_seconds
         self._max_output_tokens = max_output_tokens
         self._temperature = temperature
+        self._reasoning_effort = reasoning_effort
         self._retry_backoff_seconds = retry_backoff_seconds
         self._extra_headers = extra_headers or {}
         # Injected by tests as an httpx.MockTransport, which keeps the suite
@@ -130,6 +143,10 @@ class OpenAICompatibleProvider:
             # validator could see it anyway.
             "stream": False,
         }
+        if self._reasoning_effort:
+            # OpenRouter's normalised spelling, which it translates to whatever
+            # the upstream vendor calls the same knob.
+            payload["reasoning"] = {"effort": self._reasoning_effort}
 
         response = await self._post_with_one_retry(payload)
         return self._parse(response)

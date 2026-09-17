@@ -15,6 +15,7 @@ from app.config import Settings
 from app.llm.base import MICRO_USD_PER_USD, TokenUsage, micro_usd_to_usd
 from app.llm.pricing import (
     DEFAULT_MODEL_PRICES,
+    FREE_MODEL_PRICE,
     ModelPrice,
     estimate_cost_micro_usd,
     parse_model_prices,
@@ -53,6 +54,42 @@ def test_the_estimate_rounds_up():
 
 def test_no_tokens_cost_nothing():
     assert estimate_cost_micro_usd("test/model", TokenUsage(), PRICES) == 0
+
+
+# -- models the gateway declares free -----------------------------------------
+
+
+def test_a_free_route_costs_nothing_however_many_tokens_it_uses():
+    # The counterpart to the unpriced-model rule above: `:free` is a price
+    # stated by the party that bills, so charging the pessimistic rate for it
+    # would empty the daily budget against spend that never happened.
+    usage = TokenUsage(prompt_tokens=1_000_000, completion_tokens=1_000_000)
+    assert estimate_cost_micro_usd("nvidia/some-model:free", usage, PRICES) == 0
+
+
+def test_a_free_route_is_not_priced_from_its_paid_twin():
+    # Without this, the prefix fallback in price_for would find "test/model"
+    # for "test/model:free" and bill a free route at the paid rate.
+    prices = {"test/model": ModelPrice(Decimal("3"), Decimal("15"))}
+    assert price_for("test/model:free", prices) == FREE_MODEL_PRICE
+
+
+def test_a_configured_price_cannot_make_a_free_route_cost_money():
+    # A stale LLM_MODEL_PRICES entry must not resurrect a charge for a route
+    # the gateway serves for nothing.
+    prices = parse_model_prices("test/model:free=3/15")
+    assert price_for("test/model:free", prices) == FREE_MODEL_PRICE
+
+
+def test_the_free_suffix_is_recognised_whatever_the_casing():
+    assert price_for("NVIDIA/Some-Model:FREE", PRICES) == FREE_MODEL_PRICE
+
+
+def test_a_model_merely_named_free_is_still_priced():
+    # The suffix is the declaration, not the word. "freeform/model" is a normal
+    # model id and must fall through to the pessimistic unpriced rate.
+    usage = TokenUsage(prompt_tokens=1_000_000, completion_tokens=0)
+    assert estimate_cost_micro_usd("freeform/model", usage, PRICES) > 0
 
 
 # -- unpriced models ----------------------------------------------------------

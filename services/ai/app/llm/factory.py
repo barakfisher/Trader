@@ -167,6 +167,7 @@ def _shared_options(settings: Settings) -> dict[str, object]:
         "timeout_seconds": settings.llm_timeout_seconds,
         "max_output_tokens": settings.llm_max_output_tokens,
         "temperature": settings.llm_temperature,
+        "reasoning_effort": settings.llm_reasoning_effort.strip() or None,
     }
 
 

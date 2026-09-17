@@ -91,6 +91,24 @@ async def test_the_request_carries_the_prompts_model_and_credential():
     assert payload["stream"] is False
 
 
+async def test_the_reasoning_budget_is_sent_only_when_one_is_configured():
+    # Reasoning is billed out of max_tokens, so an unbounded reasoning model can
+    # spend the whole output cap thinking and return nothing to narrate. The
+    # field is omitted entirely when unset: a model that does not reason has no
+    # such parameter, and gateways differ on whether they ignore or reject one.
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(httpx.Response(200, content=request.content).json())
+        return httpx.Response(200, json=_body())
+
+    await _provider(handler).complete(system=None, user="finding")
+    await _provider(handler, reasoning_effort="low").complete(system=None, user="finding")
+
+    assert "reasoning" not in seen[0]
+    assert seen[1]["reasoning"] == {"effort": "low"}
+
+
 async def test_the_served_model_wins_over_the_requested_one():
     # OpenRouter may route to a different upstream than the one asked for; cost
     # and logs must describe what actually ran.
