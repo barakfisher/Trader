@@ -29,6 +29,7 @@ import { registerNotificationsRoutes } from './routes/notifications.js';
 import { registerPortfolioRoutes } from './routes/portfolio.js';
 import { registerProposalsRoutes } from './routes/proposals.js';
 import { registerSettingsRoutes } from './routes/settings.js';
+import { registerTelegramRoutes } from '../telegram/webhook.js';
 import { registerTargetsRoutes } from './routes/targets.js';
 
 export interface AppEnv {
@@ -54,6 +55,12 @@ const PROTECTED_PREFIXES = [
   '/proposals',
   '/notifications',
   '/settings',
+  // Named individually, not as '/telegram': POST /telegram/webhook is called by
+  // Telegram and must stay unauthenticated - it proves itself with the secret
+  // header instead. A blanket prefix here would 401 every inbound update, and
+  // the symptom would be a bot that silently never responds.
+  '/telegram/bind-token',
+  '/telegram/binding',
 ];
 
 /**
@@ -166,6 +173,7 @@ export function createApp(
   registerProposalsRoutes(app);
   registerNotificationsRoutes(app);
   registerSettingsRoutes(app);
+  registerTelegramRoutes(app);
   registerImportRoutes(app);
   registerInternalRoutes(app);
 

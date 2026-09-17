@@ -54,6 +54,24 @@ const schema = z.object({
    * layer distinguishes deliberately-off from broken.
    */
   TELEGRAM_BOT_TOKEN: optionalSetting(),
+
+  /** The bot's @name, needed to build the t.me deep link and nothing else. */
+  TELEGRAM_BOT_USERNAME: optionalSetting(),
+
+  /**
+   * Echoed by Telegram on every webhook delivery, and also what signs the
+   * connect links. Both uses authenticate *Telegram itself* rather than a user.
+   */
+  TELEGRAM_WEBHOOK_SECRET: optionalSetting(16),
+
+  /**
+   * Signs inline-button payloads. Deliberately a different secret from the
+   * webhook one: the webhook secret is shared with Telegram and is visible to
+   * anyone who can read the bot's configuration there, while this one never
+   * leaves this process. Sharing them would mean a leak of the value Telegram
+   * holds became the ability to forge approvals.
+   */
+  TELEGRAM_CALLBACK_SECRET: optionalSetting(16),
 });
 
 export type Config = z.infer<typeof schema> & {
