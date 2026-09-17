@@ -30,6 +30,7 @@ import {
   findTelegramBindingByChat,
   findTelegramBindingByUser,
   getOrCreateUserSettings,
+  getUser,
   listProposals,
   muteUntil,
   redeemTelegramBindToken,
@@ -74,7 +75,13 @@ const updateSchema = z
         id: z.string(),
         data: z.string().optional(),
         message: z
-          .object({ chat: z.object({ id: z.number() }).passthrough() })
+          .object({
+            // Both needed to rewrite the message after a decision: the id says
+            // which one, and the text is what the outcome line is appended to.
+            message_id: z.number(),
+            text: z.string().optional(),
+            chat: z.object({ id: z.number() }).passthrough(),
+          })
           .passthrough()
           .optional(),
       })
@@ -90,6 +97,37 @@ const DECISION_REPLIES: Record<string, string> = {
   snoozed: `Snoozed for ${TELEGRAM_SNOOZE_HOURS}h`,
   expired: 'This has expired — open the app for the refreshed view.',
 };
+
+/**
+ * The line appended to the message itself once a decision is in.
+ *
+ * Separate from DECISION_REPLIES because the two are read at different moments.
+ * The reply is a toast the user sees now; this is what they find when they
+ * scroll back tomorrow - so it records what happened and when, rather than
+ * confirming an action they have just taken.
+ */
+const OUTCOME_LINES: Record<string, string> = {
+  approved: '\u2705 Approved \u2014 recorded in your ledger. No order was placed.',
+  rejected: '\u274c Rejected',
+  snoozed: '\u23f8 Snoozed \u2014 still open; decide any time before it expires',
+  expired: '\u23f3 Expired \u2014 no longer answerable',
+};
+
+/** States the user can still act on. Their buttons stay; every other state loses them. */
+const STILL_ANSWERABLE = new Set(['pending', 'snoozed']);
+
+/** A local wall-clock stamp for the outcome line, in the user's own timezone. */
+function stampedOutcome(state: string, timezone: string, now: Date): string {
+  const line = OUTCOME_LINES[state];
+  if (line === undefined) return `Now ${state}.`;
+  const at = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(now);
+  return `${line} (${at})`;
+}
 
 /** Parse `/mute 3h`, `/mute 30m`, or bare `/mute`. Null means "not a duration". */
 export function parseMuteDuration(argument: string | undefined): Date | null {
@@ -344,5 +382,43 @@ async function handleCallback(
         ? (DECISION_REPLIES[result.state] ?? 'That can no longer be changed.')
         : (DECISION_REPLIES[result.state] ?? `Now ${result.state}.`);
 
+  // The toast first: it is what the user is waiting on, and Telegram stops
+  // spinning the button the moment it lands. The edit below is slower and
+  // matters later, so it must not delay this.
   await telegram?.answerCallback(callback.id, reply);
+
+  if (result.outcome === 'not_found') return;
+
+  /**
+   * Rewrite the message so the chat keeps a record (FLOWS.md F4).
+   *
+   * Without this the alert sits in the history for ever with three live-looking
+   * buttons and nothing saying what was decided - the exact staleness the web
+   * inbox re-renders to avoid. `answerCallbackQuery` cannot serve here: it is a
+   * toast that vanishes in a second and leaves nothing behind.
+   *
+   * Failure is logged and swallowed, like the toast. The decision is already
+   * applied and in the ledger; a message that could not be rewritten is a
+   * cosmetic loss, and throwing would hand Telegram a non-200 and earn a
+   * redelivery of a callback whose nonce is already spent.
+   */
+  const original = callback.message?.text;
+  if (telegram === null || callback.message === undefined || original === undefined) return;
+
+  const user = await getUser(binding.user_id);
+  const outcome = stampedOutcome(result.state, user?.timezone ?? 'UTC', new Date());
+  const edited = await telegram.editMessage(
+    chatId,
+    callback.message.message_id,
+    `${original}\n\n${outcome}`,
+    // A snooze is "not now", not a decision: the user may still approve before
+    // the deadline, so its buttons stay. Everything else here is terminal.
+    { keepButtons: STILL_ANSWERABLE.has(result.state) },
+  );
+  if (!edited.delivered) {
+    logger().warn(
+      { chatId, messageId: callback.message.message_id, err: edited.error },
+      'telegram.edit_failed',
+    );
+  }
 }
