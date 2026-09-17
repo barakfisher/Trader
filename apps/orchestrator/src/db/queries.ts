@@ -651,6 +651,37 @@ export function listHeldInstruments(userId: string): Promise<{ id: string; symbo
   );
 }
 
+/**
+ * The narration provenance of the most recent scan that recorded any.
+ *
+ * A *scan* is the unit rather than a row or a fixed window, because the question
+ * being answered is "did narration work the last time it was tried". One row is
+ * too noisy - a single rejected sentence among successes is not an outage - and
+ * a rolling window lags a recovery, continuing to report a fault for hours after
+ * the provider came back.
+ *
+ * Rows written before provenance was recorded are excluded rather than counted
+ * as anything: they are "not recorded", and a caller that treated them as
+ * templates would invent an authorship nobody checked.
+ */
+export function listLatestNarrationProvenance(
+  userId: string,
+): Promise<{ narration_source: string; fallback_reason: string | null }[]> {
+  return query(
+    `SELECT narration_source, fallback_reason
+       FROM observations
+      WHERE user_id = $1
+        AND narration_source IS NOT NULL
+        AND run_id IS NOT DISTINCT FROM (
+              SELECT run_id FROM observations
+               WHERE user_id = $1 AND narration_source IS NOT NULL
+               ORDER BY created_at DESC
+               LIMIT 1
+            )`,
+    [userId],
+  );
+}
+
 export async function listRecentDedupeKeys(userId: string, days = 2): Promise<string[]> {
   const rows = await query<{ dedupe_key: string }>(
     `SELECT dedupe_key

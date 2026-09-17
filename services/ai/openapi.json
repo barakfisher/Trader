@@ -264,6 +264,47 @@
         "title": "InstrumentResolution",
         "type": "object"
       },
+      "NarrationConfigResponse": {
+        "description": "How narration is configured, for a UI that must not guess.\n\n`tier` is what a reader needs and the model id only implies: `free` is a\nroute that bills nothing and is served from a shared pool, `paid` bills per\ntoken, `none` means no provider was asked for at all. The last is a\nconfiguration rather than a failure, and the three are kept distinct so a UI\ncannot report \"deliberately off\" as \"broken\".",
+        "properties": {
+          "daily_budget_usd": {
+            "title": "Daily Budget Usd",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "tier": {
+            "enum": [
+              "free",
+              "paid",
+              "none"
+            ],
+            "title": "Tier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "tier",
+          "daily_budget_usd"
+        ],
+        "title": "NarrationConfigResponse",
+        "type": "object"
+      },
       "ObservationOut": {
         "description": "A finding, its words, and its identity.\n\n`evidence` carries every figure the headline and explanation rest on; the\nnarration validator rejects any that is not here. `narration_source` says who\nwrote the words, and `fallback_reason` why the model did not, so the\nrejection rate is measurable.",
         "properties": {
@@ -995,6 +1036,55 @@
         "summary": "Get Quotes",
         "tags": [
           "market"
+        ]
+      }
+    },
+    "/narration/config": {
+      "get": {
+        "operationId": "narration_config_narration_config_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NarrationConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Narration Config",
+        "tags": [
+          "narration"
         ]
       }
     },

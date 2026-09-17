@@ -5,6 +5,7 @@
 
 import { AuthStore } from './AuthStore.ts';
 import { ImportStore } from './ImportStore.ts';
+import { NarrationStore } from './NarrationStore.ts';
 import { NavigationStore } from './NavigationStore.ts';
 import { ObservationsStore } from './ObservationsStore.ts';
 import { PortfolioStore } from './PortfolioStore.ts';
@@ -18,6 +19,7 @@ export class RootStore {
   readonly observations = new ObservationsStore(this);
   readonly import = new ImportStore(this);
   readonly proposals = new ProposalsStore(this);
+  readonly narration = new NarrationStore(this);
   readonly settings = new SettingsStore(this);
   readonly targets = new TargetsStore(this);
   readonly navigation = new NavigationStore(this);

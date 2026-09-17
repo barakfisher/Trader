@@ -21,6 +21,7 @@ import {
   healthResponseSchema,
   backfillResponseSchema,
   instrumentResolutionSchema,
+  narrationConfigSchema,
   portfolioScanResponseSchema,
   quoteResponseSchema,
 } from './schemas.js';
@@ -31,6 +32,7 @@ export type InstrumentResolution = components['schemas']['InstrumentResolution']
 export type AiInstrument = components['schemas']['Instrument'];
 export type FxRate = components['schemas']['FxRate'];
 export type HealthResponse = components['schemas']['HealthResponse'];
+export type NarrationConfig = components['schemas']['NarrationConfigResponse'];
 export type PortfolioScanRequest = components['schemas']['PortfolioScanRequest'];
 export type PortfolioScanResponse = components['schemas']['PortfolioScanResponse'];
 export type ObservationOut = components['schemas']['ObservationOut'];
@@ -157,6 +159,22 @@ export class AiClient {
       portfolioScanResponseSchema,
       { method: 'POST', body: JSON.stringify(payload), requestId, timeoutMs: SCAN_TIMEOUT_MS },
     );
+  }
+
+  /**
+   * How narration is configured: which provider, which model, and whether that
+   * model bills anything.
+   *
+   * Asked of this service rather than read from the orchestrator's own
+   * environment, because the LLM belongs to the AI service and a second copy of
+   * `LLM_MODEL` would eventually disagree with the process actually making the
+   * calls - surfacing as a UI confidently naming the wrong model.
+   */
+  narrationConfig(requestId?: string): Promise<NarrationConfig> {
+    return this.request<NarrationConfig>('/narration/config', narrationConfigSchema, {
+      method: 'GET',
+      requestId,
+    });
   }
 
   /**

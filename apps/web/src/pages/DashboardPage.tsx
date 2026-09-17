@@ -6,6 +6,7 @@ import { AllocationChart } from '../components/AllocationChart.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { HoldingsTable } from '../components/HoldingsTable.tsx';
 import { ImportWizard } from '../components/ImportWizard.tsx';
+import { NarrationBadge } from '../components/NarrationBadge.tsx';
 import { ObservationsFeed } from '../components/ObservationsFeed.tsx';
 import { SummaryCards } from '../components/SummaryCards.tsx';
 import { Button, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
@@ -22,6 +23,7 @@ export const DashboardPage = observer(function DashboardPage() {
     proposals,
     settings,
     targets,
+    narration,
   } = useStore();
 
   return (
@@ -30,6 +32,7 @@ export const DashboardPage = observer(function DashboardPage() {
         <div className="flex items-center gap-2">
           <LineChart className="size-5 text-accent" aria-hidden />
           <h1 className="text-base font-semibold">Portfolio</h1>
+          <NarrationBadge />
           {portfolio.pricesAsOf && (
             <span
               className="text-xs text-text-muted"
@@ -51,6 +54,7 @@ export const DashboardPage = observer(function DashboardPage() {
               void portfolio.load({ silent: true });
               void observations.load({ silent: true });
               void proposals.load();
+              void narration.load();
             }}
           >
             <span className="flex items-center gap-1">

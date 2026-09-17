@@ -213,6 +213,23 @@ class PortfolioScanResponse(BaseModel):
     stats: ScanStatsOut
 
 
+class NarrationConfigResponse(BaseModel):
+    """How narration is configured, for a UI that must not guess.
+
+    `tier` is what a reader needs and the model id only implies: `free` is a
+    route that bills nothing and is served from a shared pool, `paid` bills per
+    token, `none` means no provider was asked for at all. The last is a
+    configuration rather than a failure, and the three are kept distinct so a UI
+    cannot report "deliberately off" as "broken".
+    """
+
+    provider: str
+    model: str | None
+    tier: Literal["free", "paid", "none"]
+    #: Decimal as a string: money never crosses a wire as a float (guideline 3).
+    daily_budget_usd: str
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"]
     service: str = "ai-service"

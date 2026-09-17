@@ -29,6 +29,9 @@ export class AuthStore {
       if (this.user) {
         void this.root.portfolio.load();
         void this.root.observations.load();
+        // Alongside the feed, because it describes the feed. One request, not a
+        // poll: the state only changes when a scan runs.
+        void this.root.narration.load();
       void this.root.proposals.load();
         // Loaded with the feed, not on arrival at the inbox: the badge in the
         // header is how a user learns a question is waiting, and an approvals
@@ -56,6 +59,7 @@ export class AuthStore {
       });
       await this.root.portfolio.load();
       void this.root.observations.load();
+      void this.root.narration.load();
     } catch (error) {
       runInAction(() => {
         this.error =
@@ -79,6 +83,7 @@ export class AuthStore {
         // Settings are one account's, so they leave with the session rather
         // than waiting on screen for whoever signs in next.
         this.root.proposals.reset();
+        this.root.narration.reset();
         this.root.settings.reset();
         this.root.targets.reset();
         this.root.navigation.reset();

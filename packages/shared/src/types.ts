@@ -410,3 +410,43 @@ export interface TargetsUpdateResponse {
    */
   sum: string;
 }
+
+// --- Narration health (M4 debt; GET /narration) -------------------------------
+
+/**
+ * Whether explanations are being written by a model, and if not, why not.
+ *
+ * The states are distinct because their remedies are. A spent budget is fixed
+ * by paying, a refusing provider by waiting or leaving a shared pool, and
+ * sentences the evidence validator refuses only by a more capable model - no
+ * amount of waiting or paying for the same one will help. A single "degraded"
+ * would send a reader to the wrong answer, and "exhausted" would be wrong
+ * outright for a free tier that answers every request and still narrates
+ * nothing.
+ */
+export type NarrationState =
+  /** No provider was asked for. A configuration, not a failure. */
+  | 'off'
+  /** The model is writing the explanations. */
+  | 'narrating'
+  /** The provider refused. A shared free pool, or an outage. */
+  | 'unavailable'
+  /** The spend ceiling stopped the calls. */
+  | 'exhausted'
+  /** The model answers and the evidence validator refuses its figures. */
+  | 'rejected'
+  /** Nothing recorded yet, or the AI service could not be reached. */
+  | 'unknown';
+
+/** `free` bills nothing and shares a pool; `paid` bills per token. */
+export type NarrationTier = 'free' | 'paid' | 'none';
+
+export interface NarrationHealthResponse {
+  state: NarrationState;
+  tier: NarrationTier;
+  model: string | null;
+  /** Explanations the state was read from. Zero means nothing is claimed. */
+  sampleSize: number;
+  /** The raw reason, for an operator rather than a reader. */
+  lastFallbackReason: string | null;
+}

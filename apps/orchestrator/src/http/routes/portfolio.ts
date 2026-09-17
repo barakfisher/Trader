@@ -10,11 +10,13 @@ import type { SnapshotsResponse } from '@traders/shared';
 import {
   getUser,
   listHoldings,
+  listLatestNarrationProvenance,
   listObservations,
   listSnapshots,
   recordQuotes,
 } from '../../db/queries.js';
 import { logger } from '../../logger.js';
+import { narrationStateFrom } from '../../services/narrationHealth.js';
 import { valuePortfolio } from '../../services/valuation.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { notFound } from '../errors.js';
@@ -77,6 +79,45 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
         fallbackReason: row.fallback_reason,
         createdAt: new Date(row.created_at).toISOString(),
       })),
+    });
+  });
+
+  /**
+   * Whether explanations are being written by a model, and if not, why not.
+   *
+   * Served here rather than folded into `/observations` because it is a fact
+   * about the *system*, not about any one finding, and the page shows it in the
+   * header whether or not the feed has anything in it.
+   *
+   * A failure to reach the AI service degrades to `unknown` rather than to an
+   * error: this endpoint reports the health of something else, and an indicator
+   * that takes the page down when it cannot read its own subject is worse than
+   * one that says it does not know.
+   */
+  app.get('/narration', async (context) => {
+    const userId = currentUserId(context);
+    const ai = context.get('ai');
+
+    let config: Awaited<ReturnType<typeof ai.narrationConfig>> | null = null;
+    try {
+      config = await ai.narrationConfig(context.get('requestId'));
+    } catch {
+      config = null;
+    }
+
+    const rows = config === null ? [] : await listLatestNarrationProvenance(userId);
+    const tier = config?.tier ?? 'none';
+    const { state, lastFallbackReason } =
+      config === null
+        ? { state: 'unknown' as const, lastFallbackReason: null }
+        : narrationStateFrom(rows, tier);
+
+    return context.json({
+      state,
+      tier: config === null ? 'none' : tier,
+      model: config?.model ?? null,
+      sampleSize: rows.length,
+      lastFallbackReason,
     });
   });
 

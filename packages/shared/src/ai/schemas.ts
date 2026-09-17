@@ -181,6 +181,17 @@ export type _AssertBackfill = Expect<
 export type _AssertPortfolioScan = Expect<
   Equal<z.infer<typeof portfolioScanResponseSchema>, Schemas['PortfolioScanResponse']>
 >;
+export const narrationConfigSchema = z.object({
+  provider: z.string(),
+  model: z.string().nullable(),
+  tier: z.enum(['free', 'paid', 'none']),
+  daily_budget_usd: z.string(),
+});
+
+export type _AssertNarrationConfig = Expect<
+  Equal<z.infer<typeof narrationConfigSchema>, Schemas['NarrationConfigResponse']>
+>;
+
 export type _AssertHealthResponse = Expect<
   Equal<z.infer<typeof healthResponseSchema>, Schemas['HealthResponse']>
 >;
