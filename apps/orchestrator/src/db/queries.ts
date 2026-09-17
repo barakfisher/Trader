@@ -273,6 +273,43 @@ export function findInstrumentsBySymbols(symbols: string[]): Promise<InstrumentR
 }
 
 /**
+ * Instruments that carry no display name, oldest first.
+ *
+ * `instruments` has no `user_id` - it is reference data shared by every account
+ * - so this is deliberately not scoped to one user. A name is a fact about the
+ * symbol, not about who holds it.
+ */
+export function listInstrumentsWithoutName(limit = 200): Promise<{ id: string; symbol: string }[]> {
+  return query<{ id: string; symbol: string }>(
+    `SELECT id, symbol
+       FROM instruments
+      WHERE name IS NULL
+      ORDER BY symbol
+      LIMIT $1`,
+    [limit],
+  );
+}
+
+/**
+ * Fill in an instrument's display name, once.
+ *
+ * `WHERE name IS NULL` rather than an unconditional SET, for the same reason
+ * `upsertInstrument` coalesces: a name a user or a better provider has already
+ * supplied must not be replaced by a later provider's guess. Returns whether a
+ * row was actually written, so the run can report what it changed.
+ */
+export async function setInstrumentName(instrumentId: string, name: string): Promise<boolean> {
+  const rows = await query<{ id: string }>(
+    `UPDATE instruments
+        SET name = $2
+      WHERE id = $1 AND name IS NULL
+      RETURNING id`,
+    [instrumentId, name],
+  );
+  return rows.length > 0;
+}
+
+/**
  * Replace the user's entire set of target weights in one transaction.
  *
  * Replace, not patch: a set of weights is a single statement about how the

@@ -70,7 +70,7 @@ Useful endpoints (all need the session cookie except `/internal/*`, which needs 
 
 | | |
 |---|---|
-| `POST /internal/runs` | `{kind: snapshot \| portfolio_scan \| backfill \| proposal_sweep \| daily_digest}` — the single entrypoint for all scheduled work |
+| `POST /internal/runs` | `{kind: snapshot \| portfolio_scan \| backfill \| proposal_sweep \| daily_digest \| instrument_metadata}` — the single entrypoint for all scheduled work |
 | `GET /runs` | run history: *did the work actually happen?* |
 | `GET /observations` | the feed, with full evidence |
 | `GET /proposals?state=open` | the approvals inbox; `POST /proposals/:id/decision` answers one |

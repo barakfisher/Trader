@@ -18,6 +18,7 @@ import { z } from 'zod';
 
 import { claimRun, finishRun, getUser, listHeldInstruments, listRuns } from '../../db/queries.js';
 import { sweepAndCloseLifecycles } from '../../mastra/proposalLifecycle.js';
+import { backfillInstrumentNames } from '../../services/instrumentMetadata.js';
 import { runPortfolioScan } from '../../services/portfolioScan.js';
 import { sendDigest } from '../../services/notifications.js';
 import { sweepExpiredProposals } from '../../services/proposals.js';
@@ -53,6 +54,10 @@ const RUN_BUCKET_MINUTES: Record<string, number> = {
   // day would split the day's deferred findings across two messages and defeat
   // the batching that is the entire point of deferring them.
   daily_digest: 24 * 60,
+  // A name Yahoo does not publish today is unlikely to appear by the afternoon,
+  // and every examined row costs an upstream request. Once a day is enough to
+  // heal rows created while the provider could not name them.
+  instrument_metadata: 24 * 60,
 };
 
 /** The bucket a moment falls into, as a readable suffix for the run key. */
@@ -66,7 +71,14 @@ export function runBucket(kind: string, localDate: string, now: Date = new Date(
 }
 
 const runSchema = z.object({
-  kind: z.enum(['snapshot', 'portfolio_scan', 'backfill', 'proposal_sweep', 'daily_digest']),
+  kind: z.enum([
+    'snapshot',
+    'portfolio_scan',
+    'backfill',
+    'proposal_sweep',
+    'daily_digest',
+    'instrument_metadata',
+  ]),
   userId: z.string().uuid().optional(),
   runKey: z.string().max(200).optional(),
   trigger: z.string().max(40).optional(),
@@ -135,6 +147,18 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
           status: degraded ? 'degraded' : 'ok',
           result,
         });
+      }
+
+      if (parsed.data.kind === 'instrument_metadata') {
+        const result = await backfillInstrumentNames(context.get('ai'), context.get('requestId'));
+        // Nothing to examine is a clean run, not a skipped one: the run asked
+        // the only question it exists to ask and the answer was "no gaps".
+        // A symbol the provider still cannot name is not a failure either - a
+        // null name is a legitimate answer that the UI already renders - so only
+        // a resolution that errored degrades the run.
+        const status = result.failed.length > 0 ? 'degraded' : 'ok';
+        await finishRun(runId, status, result);
+        return context.json({ kind: parsed.data.kind, runKey, runId, status, result });
       }
 
       if (parsed.data.kind === 'daily_digest') {

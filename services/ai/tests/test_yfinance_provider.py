@@ -60,3 +60,52 @@ async def test_price_and_day_change_mapping(monkeypatch):
     assert quote.day_change_pct == 0.2558
     assert quote.delay_seconds == 900
     assert quote.source == "yfinance"
+
+
+async def test_resolve_carries_the_provider_name(monkeypatch):
+    """The name comes from the provider or not at all.
+
+    `fast_info` - the only thing a quote reads - publishes no display name, so
+    resolution used to hardcode None and every instrument created from a live
+    provider landed with a null name. The lookup is separate because `get_info()`
+    is far heavier than `fast_info`, and resolution happens once per symbol.
+    """
+    monkeypatch.setattr(YFinanceProvider, "_fetch_one_blocking", stub_fetch)
+    monkeypatch.setattr(YFinanceProvider, "_fetch_name_blocking", lambda _self, _s: "Apple Inc.")
+    provider = YFinanceProvider()
+
+    resolution = await provider.resolve("aapl")
+
+    assert resolution.resolved is not None
+    assert resolution.resolved.symbol == "AAPL"
+    assert resolution.resolved.name == "Apple Inc."
+    assert resolution.resolved.asset_class == "equity"
+
+
+async def test_resolve_leaves_the_name_null_when_the_provider_has_none(monkeypatch):
+    """An unavailable name stays null; it is never derived from the symbol."""
+    monkeypatch.setattr(YFinanceProvider, "_fetch_one_blocking", stub_fetch)
+    monkeypatch.setattr(YFinanceProvider, "_fetch_name_blocking", lambda _self, _s: None)
+    provider = YFinanceProvider()
+
+    resolution = await provider.resolve("AAPL")
+
+    assert resolution.resolved is not None
+    assert resolution.resolved.name is None
+
+
+async def test_resolve_survives_a_failing_name_lookup(monkeypatch):
+    """A priced symbol resolves even when `get_info()` throws or hangs."""
+
+    def boom(_self, _symbol):
+        raise RuntimeError("Yahoo returned HTML")
+
+    monkeypatch.setattr(YFinanceProvider, "_fetch_one_blocking", stub_fetch)
+    monkeypatch.setattr(YFinanceProvider, "_fetch_name_blocking", boom)
+    provider = YFinanceProvider()
+
+    resolution = await provider.resolve("AAPL")
+
+    assert resolution.resolved is not None
+    assert resolution.resolved.name is None
+    assert resolution.confidence == 0.9
