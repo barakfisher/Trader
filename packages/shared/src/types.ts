@@ -340,3 +340,47 @@ export interface DecisionResponse {
   /** The ledger row an approval wrote. Null for every other outcome. */
   intentId: string | null;
 }
+
+// --- Target weights (migration 0001; `PUT /targets`) --------------------------
+
+/**
+ * One instrument's intended share of the portfolio.
+ *
+ * `weight` is a decimal string in the same units the database holds -
+ * `numeric(6, 4)`, so `'0.2500'` is a quarter of the portfolio - and it stays a
+ * string for the same reason a quantity does: a float on the wire would round
+ * the number the user typed, and this is a number they will later compare
+ * against the drift reported back to them.
+ *
+ * A weight of `'0.0000'` is a real target and not the absence of one. "I mean to
+ * hold none of this" produces drift equal to whatever is still held; no target
+ * at all produces no finding ever. Nothing in this contract may collapse the
+ * two.
+ */
+export interface TargetWeight {
+  symbol: string;
+  /** The instrument's name, when one is known. Present on reads only. */
+  name: string | null;
+  weight: string;
+}
+
+export interface TargetsResponse {
+  targets: TargetWeight[];
+}
+
+/** The whole set, written at once: `PUT /targets` replaces rather than merges. */
+export interface TargetsUpdateRequest {
+  targets: { symbol: string; weight: string }[];
+}
+
+export interface TargetsUpdateResponse {
+  targets: { symbol: string; weight: string }[];
+  /** Rows stored. Lower than `targets.length` only if a symbol was dropped. */
+  count: number;
+  /**
+   * What the set adds up to, as a decimal string. Reported, never assumed: a
+   * set may legitimately cover three of eight holdings, and no weight is
+   * renormalised against this.
+   */
+  sum: string;
+}
