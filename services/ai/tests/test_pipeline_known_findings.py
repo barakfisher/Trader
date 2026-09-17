@@ -28,7 +28,9 @@ class CountingLLM:
     def __init__(self) -> None:
         self.calls = 0
 
-    async def complete(self, *, system, user, max_output_tokens=None, temperature=None):
+    async def complete(
+        self, *, system, user, max_output_tokens=None, temperature=None, reasoning_effort=None
+    ):
         self.calls += 1
         raise RuntimeError("narration should not have been attempted")
 
