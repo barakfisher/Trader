@@ -6,6 +6,25 @@
 
 import { z } from 'zod';
 
+/**
+ * An optional setting whose *empty* value also means "not set".
+ *
+ * `z.string().min(1).optional()` is not enough, and the difference is not
+ * academic: docker-compose passes through every variable named in
+ * `.env.example`, so an unconfigured secret arrives as `''` rather than absent,
+ * `.optional()` does not fire, and `.min(1)` then refuses the value - taking the
+ * whole service down at boot over a setting documented as optional.
+ *
+ * Found by the compose smoke test, which is the only gate that starts the
+ * service the way it is actually deployed. The unit tests pass their env in as
+ * an object and simply omit the key, so they never saw it.
+ */
+const optionalSetting = (minLength = 1) =>
+  z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(minLength).optional(),
+  );
+
 const schema = z.object({
   APP_ENV: z.enum(['development', 'production', 'test']).default('development'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
@@ -34,7 +53,7 @@ const schema = z.object({
    * gets a NullNotifier that declines with that reason, exactly as the LLM
    * layer distinguishes deliberately-off from broken.
    */
-  TELEGRAM_BOT_TOKEN: z.string().min(1).optional(),
+  TELEGRAM_BOT_TOKEN: optionalSetting(),
 });
 
 export type Config = z.infer<typeof schema> & {
