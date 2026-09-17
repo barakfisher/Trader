@@ -27,18 +27,18 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
-  getUser: vi.fn(async () => ({
-    id: USER,
-    email: null,
-    base_currency: 'USD',
-    timezone: 'Asia/Jerusalem',
-  })),
   findTelegramBindingByChat: vi.fn(async () => null),
   findTelegramBindingByUser: vi.fn(async () => null),
   redeemTelegramBindToken: vi.fn(async () => ({ bound: true })),
   deleteTelegramBinding: vi.fn(async () => true),
   muteUntil: vi.fn(async () => undefined),
   listProposals: vi.fn(async () => []),
+  getUser: vi.fn(async () => ({
+    id: USER,
+    email: null,
+    base_currency: 'USD',
+    timezone: 'Asia/Jerusalem',
+  })),
   getOrCreateUserSettings: vi.fn(async () => ({
     proposal_severity: 'high',
     proposal_ttl_hours: 24,
@@ -115,7 +115,15 @@ const post = (body: unknown, secret: string | null = WEBHOOK_SECRET) =>
   });
 
 const callbackUpdate = (data: string) => ({
-  callback_query: { id: 'cb-1', data, message: { chat: { id: CHAT } } },
+  callback_query: {
+    id: 'cb-1',
+    data,
+    message: {
+      message_id: 99,
+      text: 'VOO is 12.4pp above your target weight',
+      chat: { id: CHAT },
+    },
+  },
 });
 
 const messageUpdate = (text: string) => ({
@@ -271,6 +279,82 @@ describe('a signed callback from a bound chat', () => {
     );
     await post(callbackUpdate(data));
     expect(sentCalls[0]?.body.text).toContain('expired');
+  });
+
+  it('rewrites the message so the chat keeps a record of the decision', async () => {
+    // FLOWS.md F4. Without this the alert sits in the history for ever with
+    // three live-looking buttons and nothing saying what was decided - and
+    // answerCallbackQuery cannot serve, because it is a toast that vanishes.
+    const data = encodeCallbackData(
+      { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
+      CALLBACK_SECRET,
+    );
+    await post(callbackUpdate(data));
+
+    const edit = sentCalls.find((call) => call.method === 'editMessageText');
+    expect(edit).toBeDefined();
+    expect(edit!.body.message_id).toBe(99);
+    // The original text is kept and the outcome appended, rather than replaced:
+    // a message that loses what it was about is not a record of anything.
+    expect(String(edit!.body.text)).toContain('VOO is 12.4pp above your target weight');
+    expect(String(edit!.body.text)).toContain('Approved');
+  });
+
+  it('removes the buttons once a proposal is decided', async () => {
+    // Leaving a live Approve button on something already approved invites a tap
+    // that can only be refused.
+    const data = encodeCallbackData(
+      { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
+      CALLBACK_SECRET,
+    );
+    await post(callbackUpdate(data));
+
+    const edit = sentCalls.find((call) => call.method === 'editMessageText');
+    expect(edit!.body.reply_markup).toEqual({ inline_keyboard: [] });
+  });
+
+  it('keeps the buttons on a snooze, which is not a decision', async () => {
+    // "Not now" leaves the question open: the user may still approve before the
+    // deadline, and taking the buttons away would make them go and find the app.
+    vi.mocked(proposals.applyDecision).mockResolvedValueOnce({
+      outcome: 'applied',
+      state: 'snoozed',
+      intentId: null,
+    } as never);
+    const data = encodeCallbackData(
+      { proposalId: PROPOSAL, action: 'snooze', nonce: mintNonce() },
+      CALLBACK_SECRET,
+    );
+    await post(callbackUpdate(data));
+
+    const edit = sentCalls.find((call) => call.method === 'editMessageText');
+    expect(edit!.body.reply_markup).toBeUndefined();
+    expect(String(edit!.body.text)).toContain('Snoozed');
+  });
+
+  it('answers the tap before it rewrites the message', async () => {
+    // The toast is what the user is waiting on - Telegram stops spinning the
+    // button the moment it lands - and the edit must not delay it.
+    const data = encodeCallbackData(
+      { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
+      CALLBACK_SECRET,
+    );
+    await post(callbackUpdate(data));
+    const methods = sentCalls.map((call) => call.method);
+    expect(methods.indexOf('answerCallbackQuery')).toBeLessThan(
+      methods.indexOf('editMessageText'),
+    );
+  });
+
+  it('still answers 200 when the message cannot be rewritten', async () => {
+    // The decision is already in the ledger. A failed edit is a cosmetic loss,
+    // and a non-200 would earn a redelivery of a spent nonce.
+    const data = encodeCallbackData(
+      { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
+      CALLBACK_SECRET,
+    );
+    const response = await post(callbackUpdate(data));
+    expect(response.status).toBe(200);
   });
 
   it('answers 200 even when applying the decision throws', async () => {
