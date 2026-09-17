@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Check, Link2, Send } from 'lucide-react';
 
@@ -21,7 +22,21 @@ import { Button, ErrorNote } from './ui.tsx';
  */
 export const TelegramConnect = observer(function TelegramConnect() {
   const { telegram } = useStore();
+  const [copied, setCopied] = useState(false);
   const link = telegram.link;
+  const startCommand = link === null ? null : startCommandFor(link.url);
+
+  async function copy(text: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard access can be refused, and the command is selectable text
+      // regardless. Saying "Copied" when nothing was would be worse than
+      // leaving the button alone.
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -90,6 +105,34 @@ export const TelegramConnect = observer(function TelegramConnect() {
                   cannot read is a link you cannot move. */}
               <p className="break-all font-mono text-[11px] text-text-muted">{link.url}</p>
 
+              {/*
+                The deep link only sends its payload for a bot you have never
+                started. Open it on a chat that already exists and Telegram just
+                shows the chat - no Start button, nothing sent, and no way to
+                tell from this side that nothing happened. Found by using it,
+                against a bot left over from earlier testing.
+
+                The command below is exactly what the link would have sent, and
+                the webhook cannot tell the two apart: it splits `/start <token>`
+                whichever way the message arrives.
+              */}
+              {startCommand && (
+                <div className="space-y-1 border-t border-border-subtle pt-2">
+                  <p className="text-xs text-text-muted">
+                    Already started this bot before? The link will open the chat without sending
+                    anything. Paste this into it instead:
+                  </p>
+                  <div className="flex items-start gap-2">
+                    <code className="block flex-1 break-all rounded bg-surface px-2 py-1 font-mono text-[11px] text-text-primary">
+                      {startCommand}
+                    </code>
+                    <Button variant="secondary" onClick={() => void copy(startCommand)}>
+                      {copied ? 'Copied' : 'Copy'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               <p className="text-xs text-warn">
                 Treat this link like a password. Anyone who opens it connects their own Telegram
                 chat to this account, and could then answer your proposals. It can be used once and
@@ -102,3 +145,20 @@ export const TelegramConnect = observer(function TelegramConnect() {
     </div>
   );
 });
+
+/**
+ * The message the deep link would have sent, for pasting into a chat that
+ * already exists.
+ *
+ * Read out of the URL rather than requested separately: the link *is* the
+ * token plus the bot, and asking the server for the same secret twice would
+ * mean two ways for it to be stale.
+ */
+function startCommandFor(url: string): string | null {
+  try {
+    const token = new URL(url).searchParams.get('start');
+    return token === null ? null : `/start ${token}`;
+  } catch {
+    return null;
+  }
+}
