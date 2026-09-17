@@ -23,6 +23,7 @@ import { registerHoldingsRoutes } from './routes/holdings.js';
 import { registerImportRoutes } from './routes/imports.js';
 import { registerInternalRoutes } from './routes/internal.js';
 import { registerPortfolioRoutes } from './routes/portfolio.js';
+import { registerProposalsRoutes } from './routes/proposals.js';
 import { registerTargetsRoutes } from './routes/targets.js';
 
 export interface AppEnv {
@@ -44,6 +45,7 @@ const PROTECTED_PREFIXES = [
   '/runs',
   '/observations',
   '/targets',
+  '/proposals',
 ];
 
 export function createApp(config: Config, ai: AiClient): Hono<AppEnv> {
@@ -139,6 +141,7 @@ export function createApp(config: Config, ai: AiClient): Hono<AppEnv> {
   registerPortfolioRoutes(app);
   registerHoldingsRoutes(app);
   registerTargetsRoutes(app);
+  registerProposalsRoutes(app);
   registerImportRoutes(app);
   registerInternalRoutes(app);
 
