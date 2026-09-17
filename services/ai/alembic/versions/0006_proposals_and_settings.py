@@ -3,6 +3,22 @@
 Four tables that together turn an observation the user reads into a decision the
 user made, without ever placing an order.
 
+**Amended after this migration was merged, because it could not be applied.**
+It rewrote `runs_kind_check` by retyping the list of kinds, and the retyped list
+omitted `backfill` - the kind migration 0005 exists entirely to add. Every
+database holding a backfill run therefore refused this migration and stopped at
+0005, taking 0007 to 0009 with it: the whole M4 schema was unreachable on any
+installation that had ever backfilled prices. The amendment is made here rather
+than in a later migration because a later one is never reached - the failure
+happens *inside* this file, so nothing after it can repair anything.
+
+Two things let it through, and both generalise. A migration that rewrites an
+enumeration by retyping it will eventually drop a value, which is why the list
+is now a named tuple extended from 0005's rather than a literal. And **a CHECK
+constraint is only exercised by data**, so a CI run that migrates an empty
+database proves the SQL parses and nothing else; the constraint that matters is
+the one applied to rows that already exist.
+
 `proposals` is the state machine from FLOWS.md F3. Its states are a CHECK rather
 than an enum type: adding a state to a Postgres enum is a migration either way,
 and a text column is one `psql` line to inspect.
@@ -46,6 +62,28 @@ revision = "0006_proposals_and_settings"
 down_revision = "0005_backfill_run_kind"
 branch_labels = None
 depends_on = None
+
+#: The run kinds 0005 left behind. Named so this migration's downgrade restores
+#: what was actually there, rather than a list somebody retyped from memory.
+PREVIOUS_KINDS = ("snapshot", "portfolio_scan", "topic_scan", "daily_digest", "backfill")
+
+#: Kinds after this migration: the previous set plus the sweep. Adding a kind
+#: means extending this tuple, never rewriting the literal.
+KINDS = (*PREVIOUS_KINDS, "proposal_sweep")
+
+
+def _replace_run_kind_check(kinds: tuple[str, ...]) -> None:
+    """Point `runs_kind_check` at exactly `kinds`.
+
+    One place builds the SQL, so the constraint can only ever say what a named
+    tuple says. The bug this replaces was a second hand-written copy of the list
+    that had quietly fallen behind the first.
+    """
+    op.execute("ALTER TABLE runs DROP CONSTRAINT IF EXISTS runs_kind_check")
+    op.execute(
+        f"ALTER TABLE runs ADD CONSTRAINT runs_kind_check "
+        f"CHECK (kind IN ({', '.join(repr(kind) for kind in kinds)}))"
+    )
 
 
 def upgrade() -> None:
@@ -275,27 +313,21 @@ def upgrade() -> None:
     # scheduler is switched off and a CronJob calls that endpoint instead. That
     # is decision 9 in the project memory, and the cost of ignoring it is a
     # sweep that works in development and silently never runs in production.
-    op.execute("ALTER TABLE runs DROP CONSTRAINT runs_kind_check")
-    op.execute(
-        """
-        ALTER TABLE runs ADD CONSTRAINT runs_kind_check
-            CHECK (kind IN ('snapshot','portfolio_scan','topic_scan',
-                            'daily_digest','proposal_sweep'))
-        """
-    )
+    #
+    # KINDS is the previous migration's list plus this one's addition, and it is
+    # named rather than retyped. The first version of this block retyped the
+    # list and dropped 'backfill' - the kind 0005 exists entirely to add - so
+    # every database holding a backfill run refused this migration and stopped
+    # at 0005. See the module docstring.
+    _replace_run_kind_check(KINDS)
 
 
 def downgrade() -> None:
     # Drop any sweep rows before narrowing the constraint back, or the ALTER
-    # fails on data the older schema cannot describe.
+    # fails on data the older schema cannot describe. Only the sweep rows: this
+    # migration added exactly one kind, so it takes exactly one kind away.
     op.execute("DELETE FROM runs WHERE kind = 'proposal_sweep'")
-    op.execute("ALTER TABLE runs DROP CONSTRAINT runs_kind_check")
-    op.execute(
-        """
-        ALTER TABLE runs ADD CONSTRAINT runs_kind_check
-            CHECK (kind IN ('snapshot','portfolio_scan','topic_scan','daily_digest'))
-        """
-    )
+    _replace_run_kind_check(PREVIOUS_KINDS)
 
     # Put users.quiet_hours back before the table holding the values goes away,
     # so a downgrade loses the proposals but not the preference.
