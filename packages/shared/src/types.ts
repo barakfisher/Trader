@@ -231,3 +231,36 @@ export interface ObservationsResponse {
   /** Newest first, as returned. */
   observations: Observation[];
 }
+
+// --- Per-user settings (migration 0006) --------------------------------------
+
+/**
+ * The knobs that decide what reaches the user, and when.
+ *
+ * Deliberately not the analysis thresholds: those describe how the engine reads
+ * a market and belong to whoever operates it, while these describe one person's
+ * attention and belong to them. The wire shape is the whole object because
+ * `PUT /settings` replaces it whole - see the route for why a patch would let a
+ * half-written quiet-hours window exist.
+ */
+export interface UserSettings {
+  /** The floor at which a finding becomes a question to answer, not just news. */
+  proposalSeverity: ObservationSeverity;
+  /** How long a proposal stays answerable, in hours. */
+  proposalTtlHours: number;
+  /** The floor for an immediate push. Separate from `proposalSeverity` on purpose. */
+  notifySeverity: ObservationSeverity;
+  /**
+   * A recurring local-time window, `HH:MM`, during which nothing is pushed.
+   * Both ends are set or both are null: half a window has no defensible reading.
+   * Read in the user's own timezone, and a window that wraps midnight is normal.
+   */
+  quietHoursStart: string | null;
+  quietHoursEnd: string | null;
+  /** A one-off silence, ISO 8601 UTC, or null when notifications are live. */
+  mutedUntil: string | null;
+}
+
+export interface UserSettingsResponse {
+  settings: UserSettings;
+}

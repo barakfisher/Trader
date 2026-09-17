@@ -71,6 +71,10 @@ export class AuthStore {
         this.user = null;
         this.root.portfolio.reset();
         this.root.observations.reset();
+        // Settings are one account's, so they leave with the session rather
+        // than waiting on screen for whoever signs in next.
+        this.root.settings.reset();
+        this.root.navigation.reset();
       });
     }
   }

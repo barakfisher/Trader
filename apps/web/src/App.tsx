@@ -2,11 +2,12 @@ import { observer } from 'mobx-react-lite';
 
 import { DashboardPage } from './pages/DashboardPage.tsx';
 import { LoginPage } from './pages/LoginPage.tsx';
+import { SettingsPage } from './pages/SettingsPage.tsx';
 import { Spinner } from './components/ui.tsx';
 import { useStore } from './stores/context.tsx';
 
 export const App = observer(function App() {
-  const { auth } = useStore();
+  const { auth, navigation } = useStore();
 
   // Wait for the first session check so an authenticated reload does not flash
   // the login screen.
@@ -18,5 +19,6 @@ export const App = observer(function App() {
     );
   }
 
-  return auth.isAuthenticated ? <DashboardPage /> : <LoginPage />;
+  if (!auth.isAuthenticated) return <LoginPage />;
+  return navigation.view === 'settings' ? <SettingsPage /> : <DashboardPage />;
 });
