@@ -114,6 +114,35 @@ class YFinanceProvider:
             "exchange": exchange,
         }
 
+    def _fetch_name_blocking(self, symbol: str) -> str | None:
+        """Read one symbol's display name. Runs in a worker thread.
+
+        Deliberately separate from `_fetch_one_blocking`. The name lives only in
+        `Ticker.info`, which is a far heavier scrape than `fast_info` and fails
+        more often; paying for it on every quote would make a ten-symbol refresh
+        ten slow requests instead of ten fast ones. Resolution happens once per
+        new symbol and is cached, so the cost lands exactly where it is worth it.
+
+        Returns None when Yahoo publishes no usable name - the caller stores that
+        null rather than falling back to the symbol.
+        """
+        import yfinance as yf
+
+        try:
+            info = yf.Ticker(symbol).get_info() or {}
+        except Exception as exc:  # noqa: BLE001 - third-party surface
+            log.debug("yfinance.info_failed", symbol=symbol, error=str(exc))
+            return None
+
+        # longName is the full legal name ("Apple Inc."); shortName is the
+        # exchange's abbreviation and is present more often. Either is a real
+        # name that came from the provider, which is the only bar that matters.
+        for key in ("longName", "shortName"):
+            value = info.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
+
     # -- provider contract ----------------------------------------------------
 
     async def quotes(self, symbols: list[str]) -> list[Quote]:
@@ -242,11 +271,23 @@ class YFinanceProvider:
             )
 
         asset_class = _QUOTE_TYPE_MAP.get((raw.get("quote_type") or "").upper(), "unknown")
+
+        # Best-effort: a resolution that priced the symbol is still a resolution
+        # when the name lookup times out, so this never gates the result.
+        name: str | None = None
+        try:
+            name = await asyncio.wait_for(
+                asyncio.to_thread(self._fetch_name_blocking, candidate),
+                timeout=self._timeout,
+            )
+        except (TimeoutError, Exception) as exc:  # noqa: BLE001
+            log.debug("yfinance.resolve_name_failed", query=query, error=str(exc))
+
         return InstrumentResolution(
             query=query,
             resolved=Instrument(
                 symbol=candidate,
-                name=None,
+                name=name,
                 asset_class=asset_class,
                 exchange=raw.get("exchange"),
                 currency=raw["currency"],

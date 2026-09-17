@@ -36,6 +36,9 @@ const INTERVALS_MS: Record<string, number> = {
   // swallow the day's digest - which, unlike a skipped scan, cannot be caught
   // up later, because the findings it would have carried are already marked.
   daily_digest: 60 * 60 * 1000,
+  // Hourly against a daily bucket, like backfill. Most days it finds nothing to
+  // do and returns without an upstream request, so the extras are cheap.
+  instrument_metadata: 60 * 60 * 1000,
 };
 
 /** Stagger the first run of each kind so a restart does not fire both at once. */
@@ -49,6 +52,9 @@ const FIRST_RUN_DELAY_MS: Record<string, number> = {
   // Last: the digest reports on what the scan and the sweep just did, so
   // running it first would describe the previous cycle.
   daily_digest: 70_000,
+  // After backfill and before the scan: naming an instrument changes nothing
+  // the analysis reads, so it only has to stay out of the way of what does.
+  instrument_metadata: 30_000,
 };
 
 const timers: NodeJS.Timeout[] = [];

@@ -28,14 +28,25 @@ VERSIONS = REPO_ROOT / "services" / "ai" / "alembic" / "versions"
 INTERNAL_ROUTE = REPO_ROOT / "apps" / "orchestrator" / "src" / "http" / "routes" / "internal.ts"
 
 
-def _load(name: str) -> ModuleType:
-    """Import a migration by filename. They are plain modules; Alembic just runs them."""
-    path = next(VERSIONS.glob(f"{name}*.py"))
-    spec = importlib.util.spec_from_file_location(f"migration_{name}", path)
+def _load(path: Path) -> ModuleType:
+    """Import a migration by path. They are plain modules; Alembic just runs them."""
+    spec = importlib.util.spec_from_file_location(f"migration_{path.stem}", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _kind_migrations() -> list[ModuleType]:
+    """Every migration that redefines `runs_kind_check`, oldest first.
+
+    Discovered rather than named. A hardcoded "latest" would have to be edited by
+    each new kind, and the point of this file is that adding a kind means
+    extending a tuple and nothing else - a test somebody has to remember to
+    update is the same hazard as a list somebody has to remember to retype.
+    """
+    modules = [_load(path) for path in sorted(VERSIONS.glob("[0-9][0-9][0-9][0-9]_*.py"))]
+    return [module for module in modules if hasattr(module, "KINDS")]
 
 
 def _kinds_accepted_by_the_api() -> set[str]:
@@ -57,7 +68,7 @@ def test_the_database_accepts_every_kind_the_api_can_send() -> None:
     the row is written first and the constraint is met later, at upgrade time,
     on somebody else's machine.
     """
-    latest = _load("0006")
+    latest = _kind_migrations()[-1]
     assert _kinds_accepted_by_the_api() <= set(latest.KINDS)
 
 
@@ -69,8 +80,9 @@ def test_no_migration_drops_a_run_kind() -> None:
     rather than untrue. This is the property that the retyped literal broke, and
     it is stated here so the next migration to touch the constraint inherits it.
     """
-    earlier = _load("0005")
-    latest = _load("0006")
-    assert set(earlier.KINDS) <= set(latest.KINDS)
-    # And the downgrade restores what was there, rather than a remembered list.
-    assert set(earlier.KINDS) == set(latest.PREVIOUS_KINDS)
+    migrations = _kind_migrations()
+    assert len(migrations) >= 2, "expected at least two migrations touching the constraint"
+    for earlier, later in zip(migrations, migrations[1:], strict=False):
+        assert set(earlier.KINDS) <= set(later.KINDS)
+        # And the downgrade restores what was there, rather than a remembered list.
+        assert set(earlier.KINDS) == set(later.PREVIOUS_KINDS)

@@ -69,6 +69,8 @@ vi.mock('../src/db/queries.js', () => ({
   listRecentDedupeKeys: vi.fn(async () => []),
   listTargetWeights: vi.fn(async () => []),
   findInstrumentsBySymbols: vi.fn(async () => []),
+  listInstrumentsWithoutName: vi.fn(async () => []),
+  setInstrumentName: vi.fn(async () => true),
   replaceTargetWeights: vi.fn(async () => 0),
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
 }));
@@ -324,6 +326,28 @@ describe('API', () => {
     const second = (await (await app.request('/internal/runs', init)).json()) as { status: string };
     expect(first.status).toBe('ok');
     expect(second.status).toBe('skipped');
+  });
+
+  it('names instruments that are missing one and reports the ones still unnamed', async () => {
+    vi.mocked(queries.listInstrumentsWithoutName).mockResolvedValueOnce([
+      { id: 'instrument-1', symbol: 'AAPL' },
+      { id: 'instrument-2', symbol: 'ZZZZ' },
+    ]);
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'instrument_metadata' }),
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      status: string;
+      result: { examined: number; named: number; stillUnnamed: string[] };
+    };
+    // The fake provider knows AAPL and not ZZZZ, so one row is named and the
+    // other keeps its null name - which is a clean run, not a degraded one.
+    expect(body.status).toBe('ok');
+    expect(body.result).toMatchObject({ examined: 2, named: 1, stillUnnamed: ['ZZZZ'] });
+    expect(queries.setInstrumentName).toHaveBeenCalledWith('instrument-1', expect.any(String));
   });
 
   it('runs a portfolio scan and stores what it finds', async () => {
