@@ -131,6 +131,39 @@ export class TelegramNotifier implements Notifier {
     await this.call('answerCallbackQuery', { callback_query_id: callbackQueryId, text });
   }
 
+  /**
+   * Rewrite a message that has already been acted on.
+   *
+   * `answerCallbackQuery` alone is not enough, and the difference matters: the
+   * answer is a toast that shows for a second and leaves nothing behind, so a
+   * user scrolling back a day later sees an alert with three live-looking
+   * buttons and no record of having pressed one. That is the same failure the
+   * web inbox avoids by re-rendering from the server - a surface must not go on
+   * describing a world that has moved.
+   *
+   * Buttons are dropped only when the proposal can no longer be answered.
+   * A snooze keeps them, because "not now" is not a decision and the user may
+   * still approve before the deadline; an approval, a rejection and an expiry
+   * are all terminal, and leaving a live Approve button on any of them invites
+   * a tap that can only be refused.
+   */
+  async editMessage(
+    chatId: string,
+    messageId: number,
+    text: string,
+    { keepButtons }: { keepButtons: boolean },
+  ): Promise<DeliveryResult> {
+    return this.call('editMessageText', {
+      chat_id: chatId,
+      message_id: messageId,
+      text: clampMessage(text),
+      // An empty keyboard removes it. Omitting the field entirely would leave
+      // the old one in place, which is the opposite of what a terminal state
+      // needs.
+      ...(keepButtons ? {} : { reply_markup: { inline_keyboard: [] } }),
+    });
+  }
+
   /** Send plain text with no buttons: command replies and confirmations. */
   async sendText(chatId: string, text: string): Promise<DeliveryResult> {
     return this.call('sendMessage', { chat_id: chatId, text: clampMessage(text) });

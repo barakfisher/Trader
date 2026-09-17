@@ -185,7 +185,7 @@ describe('decideProposal', () => {
       proposalId,
       action: 'approve',
       surface: 'web',
-    });
+    }, NOW);
 
     expect(outcome).toEqual({ outcome: 'applied', state: 'approved', intentId: 'intent-1' });
     expect(await runStatus()).toBe('success');
@@ -202,7 +202,7 @@ describe('decideProposal', () => {
       action: 'snooze',
       surface: 'web',
       snoozeUntil: at(30),
-    });
+    }, NOW);
 
     expect(outcome).toMatchObject({ outcome: 'applied', state: 'snoozed' });
     // A snooze postpones the question; it does not answer it, so the run is
@@ -233,7 +233,7 @@ describe('decideProposal', () => {
       proposalId,
       action: 'reject',
       surface: 'web',
-    });
+    }, NOW);
 
     expect(outcome).toMatchObject({ outcome: 'applied', state: 'rejected' });
     expect(queries.applyProposalTransition).toHaveBeenCalledTimes(1);
@@ -249,7 +249,7 @@ describe('decideProposal', () => {
       proposalId,
       action: 'approve',
       surface: 'web',
-    });
+    }, NOW);
 
     // A decision lost to an orchestration failure is a decision the user made
     // and the product forgot. `applyDecision` is idempotent, so falling back
