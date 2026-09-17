@@ -4,12 +4,17 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-16, after 23 merged PRs, before Milestone 4.
+Updated: 2026-09-17, after 33 merged PRs, at the end of Milestone 4.
 
-**One-line state:** the product imports a portfolio, fetches six months of real daily prices,
-scans it every 30 minutes for four kinds of finding, explains each one in sentences whose every
-figure is checked against the evidence, and shows them in a dashboard with the numbers underneath.
-It does not yet reach the user — nothing is pushed, nothing is approved.
+**One-line state:** the product imports a portfolio, fetches six months of real daily prices, scans
+it every 30 minutes for four kinds of finding, explains each one in sentences whose every figure is
+checked against the evidence, and now **reaches the user** — an actionable finding becomes a
+proposal with a deadline, arrives in Telegram with inline buttons, and an approval writes an intent
+to a paper ledger. No order is ever placed.
+
+**What is not proven:** Telegram's own HTTP delivery to our webhook. Everything else was exercised
+against a real bot, but a webhook needs a public HTTPS URL, which arrives with M7's ingress. Until
+then the inbound path has only ever been driven by replaying genuine Telegram payloads at it.
 
 ---
 
@@ -23,8 +28,8 @@ It does not yet reach the user — nothing is pushed, nothing is approved.
 | **M2 — Analysis engine & observations** | ✅ Complete | PRs #12–#22 |
 | **M2.5 — Real price history** | ✅ Complete | **unplanned**; PR #23. Finished M1's provider layer, 18 PRs late |
 | **M3 — RAG & educational engine** | Not started | gives the feed's concept chips somewhere to point |
-| **M4 — Scheduling, HITL & Telegram** | ⏭️ Next | Mastra lands here; the scheduling half is already done |
-| M5 — Market discovery & topics | Not started | |
+| **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
+| M5 — Market discovery & topics | ⏭️ Next, or M3 | independent of each other; see "Where to go next" |
 | M6 — Frontend completion & polish | Not started | |
 | M7 — Kubernetes & documentation | Not started | |
 
@@ -44,7 +49,14 @@ bash scripts/dev-local.sh           # app processes native, Postgres+Redis in co
 bash scripts/smoke-test.sh          # end-to-end against a running stack
 ```
 
-Full gate, which every PR must pass:
+Full gate, which every PR must pass. **The compose smoke test is part of it and is easy to skip**
+— it is the only gate that starts the services the way they are actually deployed, and in M4 it
+caught a config bug that every one of 700 unit tests missed: an optional secret declared
+`z.string().min(1).optional()` is fine when the variable is *absent* and refuses to boot when it is
+*present and empty*, which is exactly what compose passes through for every key listed in
+`.env.example`. If you do not run it locally, read CI before merging rather than after.
+
+In a worktree, see "Local environment" for why the Python line below is not the one to use.
 
 ```bash
 pnpm -r typecheck && pnpm -r test
@@ -52,16 +64,20 @@ cd services/ai && .venv/bin/python -m pytest -q
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
-Test counts at handoff: **551** — 416 Python, 80 orchestrator, 39 web, 16 shared.
+Test counts at handoff: **818** — 423 Python, 299 orchestrator, 80 web, 16 shared.
 
 Useful endpoints (all need the session cookie except `/internal/*`, which needs `x-internal-key`):
 
 | | |
 |---|---|
-| `POST /internal/runs` | `{kind: snapshot \| portfolio_scan \| backfill}` — the single entrypoint for all scheduled work |
+| `POST /internal/runs` | `{kind: snapshot \| portfolio_scan \| backfill \| proposal_sweep \| daily_digest}` — the single entrypoint for all scheduled work |
 | `GET /runs` | run history: *did the work actually happen?* |
 | `GET /observations` | the feed, with full evidence |
-| `PUT /targets` | set allocation targets (no UI yet) |
+| `GET /proposals?state=open` | the approvals inbox; `POST /proposals/:id/decision` answers one |
+| `GET /notifications` | *what was the user told, and what were they deliberately not told* |
+| `GET`/`PUT /settings` | severity floors, TTL, quiet hours, mute |
+| `PUT /targets` | set allocation targets (**still no UI** — see debt) |
+| `POST /telegram/bind-token` | mints the signed connect link; `POST /telegram/webhook` is public |
 
 ---
 
@@ -74,10 +90,11 @@ validator; the Alembic schema (5 migrations) that both services share.
 
 **`apps/orchestrator`** (Node, Hono) — sessions, holdings CRUD, CSV/JSON import with per-row
 validation, valuation with FX, target weights, the scan workflow, run claims, the observations feed,
-and the local scheduler.
+the local scheduler, **the proposal state machine and its audit trail, the notification fan-out, the
+Telegram adapter, and per-user settings**.
 
 **`apps/web`** (React, MobX, Tailwind, Recharts) — login, portfolio dashboard, import wizard,
-observations feed with an evidence drawer.
+observations feed with an evidence drawer, **the approvals inbox and a settings page**.
 
 **`packages/shared`** — wire types, money helpers, and the AI-service client whose zod schemas are
 pinned to the generated OpenAPI types so Python drift becomes a compile error. That mechanism has
@@ -169,6 +186,45 @@ failure they prevent.
 
 15. **The milestone order was changed from the original brief** to ship a vertical slice first.
 
+16. **A proposal's expiry is computed on every read, never trusted from the row.** `effectiveState`
+    recomputes it, and the stored value is a cache. Trusting the column would leave a window between
+    a deadline passing and the sweep noticing in which a dead proposal is still answerable — and
+    that window widens to the whole sweep interval after a restart, which is exactly when a user is
+    most likely to be retrying something. The sweep is therefore *housekeeping*, not correctness: it
+    exists so the inbox can filter on a column and the audit trail can say when each proposal died.
+
+17. **Idempotency is an outcome, not an exception.** A decision returns `applied`, `unchanged` or
+    `refused`. `unchanged` is a **success**: it means the proposal was already in the state asked
+    for, which is what a second tap produces — usually because the first reply was lost, and that
+    user did nothing wrong. Collapsing it into an error punishes them; collapsing it into `applied`
+    writes a second audit row and a second ledger entry for one act.
+
+18. **Nothing is ever dropped on the notification path.** Quiet hours, a severity floor and an
+    explicit mute all change *when* the user hears, never *whether* — everything suppressed is
+    deferred into the digest. A notification that vanishes is indistinguishable from a market that
+    did nothing. For the same reason `notifications` is a **ledger, not a queue**: a suppressed
+    message gets a row with its reason, so "we chose not to tell you" and "we failed to tell you"
+    can never look the same afterwards. That is the question actually asked after an incident.
+
+19. **Claim, then send, then settle.** The `notifications` insert *is* the claim (`dedupe_key` is
+    unique). Sending first and recording after is the obvious alternative and it is wrong: a crash
+    between them loses the record of a message the user has already read, and the retry sends it
+    again. Claiming first fails the other way — a `pending` row for a message that never went out,
+    which the digest picks up. **A missing alert is recoverable; a duplicated one is not.**
+
+20. **Two Telegram secrets, and only one of them ever signs anything.**
+    `TELEGRAM_WEBHOOK_SECRET` answers "is this really Telegram?" and nothing else: Telegram holds a
+    copy, it rides in every inbound header, and it is plaintext wherever TLS terminates.
+    `TELEGRAM_SIGNING_SECRET` signs the inline buttons and the connect links and never leaves the
+    process. The first implementation signed connect links with the *webhook* secret, which was a
+    real hole — `SINGLE_USER_ID` defaults to a value published in this repository, so anyone who
+    read that header out of a proxy log could mint a link, bind their own chat and approve
+    proposals. Both token types are signed over a domain tag so one key cannot mint the other kind.
+
+21. **The acting user comes from the chat binding, never from the callback payload.** There is
+    nowhere in a forged token to name a victim. A forwarded Telegram message keeps working buttons,
+    so this is the property that makes forwarding harmless.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -209,6 +265,35 @@ and liveness probes cannot see it, because the process is fine and its dependenc
 → **Scheduled work needs a freshness check** ("did anything run today?"), not a liveness probe.
 `GET /runs` exists for this.
 
+**Three M4 bugs were found by *using* the product, and none had a failing test.** This is the most
+generalisable thing learned in M4, so it is stated as a group rather than three entries.
+
+- Tapping Approve on a real bot did nothing visible. `answerCallbackQuery` is a toast that fades and
+  leaves no trace, and FLOWS.md F4's "edit the message" step had simply not been implemented. Every
+  test asserted the toast, because the toast was what had been built.
+- A test pinned `NOW` to a fixed date and then called the service *without passing that clock*, so
+  it compared a frozen fixture against the real one. It passed in CI and began failing permanently
+  a few hours later, on `main`, once wall-clock time crossed the fixture's value.
+- Two secrets were documented as separate precisely so a leak of the shared one could not forge what
+  the private one protects — and the code then signed connect links with the shared one. The
+  comment was accurate about the intent and wrong about the implementation.
+
+→ **A test written after the code tests what was built, not what was specified.** All three survived
+a full green gate. Re-read the spec against the code, and use the thing; the second found two of
+these and a direct question from the user found the third.
+→ Specifically: **`now` is an argument, everywhere, and every call must actually pass it.** One call
+site in a file already did, which is what made four omissions easy to miss.
+
+**A PR merged while its fix was still being written.** The message-edit fix was pushed to
+`feat/telegram` after #30 had already merged, so it went nowhere and needed its own PR.
+→ **Once a PR is merged, its branch is dead.** A follow-up starts from `main`.
+
+**A migration number is a shared resource.** Two PRs in flight both took `0007` off `0006`, which
+would have given Alembic two heads and broken `upgrade head` outright. Neither PR could see the
+other.
+→ **Check `alembic heads` returns exactly one before merging anything with a migration**, and
+renumber the PR that is cheaper to move — the one not yet opened, not the one already in review.
+
 **A fixture that looked like a solved problem.** The synthetic price history made the analysis
 engine testable and also let the missing `history()` survive two milestones. A fixture hides an
 absence.
@@ -221,10 +306,12 @@ the green test as coverage.
 
 | Item | Where | Impact |
 |---|---|---|
+| **Telegram's inbound delivery is unproven** | deployment | Everything else was exercised against a real bot, but `setWebhook` needs a public HTTPS URL. The handler has only ever been driven by replaying genuine payloads at it locally. **The first real deployment is the first real test of that leg** — check `getWebhookInfo` for `last_error_message` immediately after |
+| **`queries.ts` conflicts on every parallel PR** | `src/db/queries.ts` | Four M4 PRs appended a section to the end of one 1,200-line file, and every rebase put a conflict marker exactly where one function's closing brace met the next block's header — the brace was lost and hand-repaired **three separate times**. It is the cost of CLAUDE.md's "all SQL in one file" rule, which is otherwise good. Worth deciding whether to split by domain with an index |
 | **Migration 0008 hard-codes a table Mastra owns** | `0008_mastra_workflow_state.py` | The library would create `mastra_workflow_snapshot` itself; Alembic creates it instead (`disableInit: true`), because CLAUDE.md says the AI service owns the schema. An upgrade that changes the shape breaks suspended runs — so `test/mastraSchemaOwnership.test.ts` compares the migration against `WorkflowsPG.getExportDDL()` and fails the build first. Two other things cost time to find: `PostgresStore` creates **43** tables for 24 storage domains unless you route only `workflows`, and `@mastra/core` posts feature-usage telemetry to PostHog unless `MASTRA_TELEMETRY_DISABLED` is set (it is, in `workflowRuntime.ts`, in code rather than `.env`) |
 | **Explanation provenance is not stored** | `observations` | Nothing records whether a sentence came from the model or a template, so the UI cannot show it and a reader cannot weigh it. Needs a column; the pipeline already computes `narration_source` and `fallback_reason` and throws them away on insert |
 | **Concept chips point nowhere** | `apps/web` | PRD FR-16 wants one click to an explanation; the corpus arrives in M3. They render as labels rather than dead links |
-| **Target weights have an API and no UI** | `apps/web` | `PUT /targets` is tested and works; setting them requires curl. Allocation drift is invisible to a user who does not know the endpoint exists |
+| **Target weights have an API and no UI** | `apps/web` | `PUT /targets` is tested and works; setting them requires curl. Allocation drift — the *only* finding that can become a proposal — is invisible to a user who does not know the endpoint exists. **This is now the single highest-value gap in the product**: without targets there is no drift, without drift there are no proposals, and the whole M4 approval path has nothing to carry. A latent cause was found in M4: `PUT` was missing from the CORS `allowMethods` list, so every `PUT` route was unreachable from a browser while working fine from curl, and the failure is invisible server-side. Fixed in #28 |
 | **Import previews live in process memory** | `services/previewStore.ts` | Forces `replicas: 1` in Kubernetes. The only remaining in-memory state — run keys moved to the `runs` table in M2 |
 | **Narration runs on a free, shared OpenRouter route** | `.env`, `app/llm` | The paid budget is spent, so `LLM_MODEL` is a `:free` route. Free routes are a shared pool: `429 overloaded` is normal under load and shows up as a template fallback, so narration coverage is now weather rather than a guarantee. Quality is a small open model's, not Sonnet's. Both are fixed by pointing `LLM_MODEL` at a paid model and funding the workspace |
 | Crypto detection is a symbol-shape heuristic | `core/cache_policy.py` | `-USD` suffix, because the AI service receives bare symbols |
@@ -253,17 +340,42 @@ the green test as coverage.
   `cd services/ai && PYTHONPATH=$PWD /Users/a/projects/Traders/services/ai/.venv/bin/python -m pytest -q`;
   `PYTHONPATH` precedes site-packages, so it wins over the `.pth`. `pnpm install` in the worktree
   does work and is needed once.
+- **A real Telegram bot is configured**: `@trade_pulse_agent_bot`. `.env` holds its token, its
+  username and the two secrets. The bot is live — anyone with that token controls it; `/revoke` in
+  BotFather if it ever leaks.
+- **No webhook is registered**, so `getUpdates` polling works for local testing and is how M4 was
+  verified. Registering one disables polling. To drive the real handler locally without a public
+  URL: poll `getUpdates`, then POST each update to `/telegram/webhook` with the
+  `x-telegram-bot-api-secret-token` header. That bridge is how approve/reject/snooze were tested.
+- **The chat binding from that testing is gone** — it lived in a scratch database that was dropped.
+  The connect flow has to be redone against whatever database is actually used.
+- Telegram hides a deep link's `?start=` payload in the message bubble: the chat shows a bare
+  `/start` while the update carries the token. Do not conclude from the UI that the payload was lost.
 
 ---
 
-## Starting M4
+## Where to go next
 
-The scheduling half of M4 is already done (run kinds, buckets, idempotent claims). What remains is
-the human-in-the-loop state machine and Telegram. The seams are in place: `POST /internal/runs` is
-the trigger, `runs.run_key` is the idempotency guarantee, `observations.dedupe_key` stops a repeat
-notifying twice, `users.quiet_hours` exists, and severity is already on every observation.
+**M4 is complete and M3 and M5 are both unblocked and independent of each other.** Two things are
+worth weighing before picking.
 
-**Two things to settle before writing code.** Proposals need a durable state machine with a TTL —
-an approval acted on hours later is a decision made against prices that have moved. And a Telegram
-callback is replayable: the payload must be signed, single-use and TTL-checked, or a forwarded
-message becomes an approval. `docs/FLOWS.md` F3 and F4 have the intended shapes.
+**The strongest argument is for neither, and for the targets UI first.** Allocation drift is the
+only finding that can become a proposal, drift requires a target, and targets can only be set with
+curl. So the entire human-in-the-loop path built in M4 currently has nothing to carry unless someone
+knows the endpoint exists. It is perhaps half a day against M3's three, and it is the difference
+between a milestone that works and one that demonstrates.
+
+**M3 (RAG) has the stronger pull otherwise**: the feed's concept chips have rendered as dead labels
+since M2, it is the last piece of the "explain it to me" promise in the PRD, and it is independent
+of everything M4 touched. **M5 (topics) adds a second source of observations**, which the
+notification and proposal layers would then carry for free — but it also widens `notifications.ref_kind`
+and wants topic-shaped proposals, so it is the larger change.
+
+Whichever is next, the seams M4 leaves are: `notifications.ref_kind` already anticipates a third
+referent, `Notifier` takes another channel without touching the fan-out, and `PROPOSABLE_KINDS` in
+`services/proposals.ts` is the entire policy for what becomes a question — one map, deliberately
+short, and the place to argue about before adding to it.
+
+**Before the first real deployment**, read decision 20 and set `TELEGRAM_SIGNING_SECRET` to a value
+that is not the webhook secret. An unset signing secret degrades to a null notifier with a stated
+reason rather than booting broken, so the mistake is visible — but a *shared* value would not be.
