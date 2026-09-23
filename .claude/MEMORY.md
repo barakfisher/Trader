@@ -4,9 +4,9 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-23. `main` is at PR #41; **M3 slice 1 is complete on
-`claude/m3-corpus-concept-links` and not yet merged**, so read this file as describing that branch.
-M4 is complete; M3's remaining three slices are not started. The session that wrote this took the parked M3 branch, renumbered the
+Updated: 2026-09-23. `main` is at PR #42: **M3 slice 1 is merged**. M4 is complete; M3's remaining
+three slices are not started, and slice 2's provider decision is already made — see "Where to go
+next". The session that wrote this took the parked M3 branch, renumbered the
 migration that would have broken `upgrade head` for everyone, finished the corpus, and made the
 concept chips actually go somewhere for the first time since M2.
 
@@ -34,7 +34,7 @@ proposals reach the notifications ledger, correctly recorded as `failed`, and re
 | **M1.5 — Trustworthy quote path** | ✅ Complete | **unplanned**; inserted after an audit found data problems M2 would have built on |
 | **M2 — Analysis engine & observations** | ✅ Complete | PRs #12–#22 |
 | **M2.5 — Real price history** | ✅ Complete | **unplanned**; PR #23. Finished M1's provider layer, 18 PRs late |
-| **M3 — RAG & educational engine** | 🟡 Slice 1 of 4, unmerged | Corpus, schema, ingestion and live concept links, on `claude/m3-corpus-concept-links`. **No embeddings yet, deliberately** — see decision 24. **Slice 2 is next and its provider is decided** |
+| **M3 — RAG & educational engine** | 🟡 Slice 1 of 4 complete | PR #42: corpus, schema, ingestion and live concept links. **No embeddings yet, deliberately** — see decision 24. **Slice 2 is next and its provider is decided** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
 | M5 — Market discovery & topics | Not started | independent of M3; deferred in favour of finishing M3 (decided 2026-09-23) |
 | M6 — Frontend completion & polish | Not started | |
@@ -583,7 +583,7 @@ the UI produced four drift findings, three became `pending` `rebalance` proposal
 deadlines, and the notification ledger recorded three `above_floor` attempts plus one `below_floor`
 deferral into the digest. And M3 slice 1's, below.
 
-**M3 slice 1 is done and unmerged**, on `claude/m3-corpus-concept-links`. Verified by using it in a
+**M3 slice 1 is merged (#42).** Verified by using it in a
 stack rebuilt from the main checkout, not by reading it: the `corpus` container ran on start and
 reported nine documents unchanged; signing in and clicking **Drawdown** on a real drawdown
 observation opened the document with its formula as a code block; clicking **Rebalancing** on an
