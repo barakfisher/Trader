@@ -83,10 +83,17 @@ jobs:
       - name: Check the corpus was ingested
         run: |
           docker compose -f infra/compose/docker-compose.yml logs corpus
-          if docker compose -f infra/compose/docker-compose.yml ps -a corpus --format '{{.State}}' | grep -q 'exited (0)'; then
+          # `.ExitCode` rather than `.State` or `.Status`: State prints "exited"
+          # with no code at all, and Status prints "Exited (0) 2 minutes ago" -
+          # so a substring match on either is a check that cannot fail for the
+          # reason it claims to. An absent container prints nothing, and the
+          # empty string is not 0, so a corpus service that never ran fails here
+          # rather than passing vacuously.
+          code="$(docker compose -f infra/compose/docker-compose.yml ps -a corpus --format '{{.ExitCode}}')"
+          if [ "$code" = "0" ]; then
             echo "corpus ingested"
           else
-            echo "corpus container did not exit cleanly"
+            echo "corpus container did not exit cleanly (exit code: '${code:-<no container>}')"
             exit 1
           fi
       - name: Wait for readiness
