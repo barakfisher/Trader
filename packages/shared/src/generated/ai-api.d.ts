@@ -113,6 +113,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/narration/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Narration Config */
+        get: operations["narration_config_narration_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/readyz": {
         parameters: {
             query?: never;
@@ -267,6 +284,29 @@ export interface components {
             /** Reason */
             reason?: string | null;
             resolved?: components["schemas"]["Instrument"] | null;
+        };
+        /**
+         * NarrationConfigResponse
+         * @description How narration is configured, for a UI that must not guess.
+         *
+         *     `tier` is what a reader needs and the model id only implies: `free` is a
+         *     route that bills nothing and is served from a shared pool, `paid` bills per
+         *     token, `none` means no provider was asked for at all. The last is a
+         *     configuration rather than a failure, and the three are kept distinct so a UI
+         *     cannot report "deliberately off" as "broken".
+         */
+        NarrationConfigResponse: {
+            /** Daily Budget Usd */
+            daily_budget_usd: string;
+            /** Model */
+            model: string | null;
+            /** Provider */
+            provider: string;
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "free" | "paid" | "none";
         };
         /**
          * ObservationOut
@@ -662,6 +702,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuoteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    narration_config_narration_config_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NarrationConfigResponse"];
                 };
             };
             /** @description Validation Error */

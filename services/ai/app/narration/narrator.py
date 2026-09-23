@@ -21,6 +21,7 @@ from typing import Literal
 from app.analysis.findings import Finding
 from app.core.logging import get_logger
 from app.llm.base import (
+    NO_REASONING,
     LLMBudgetExceededError,
     LLMError,
     LLMProvider,
@@ -122,6 +123,22 @@ async def narrate(
             system=SYSTEM_PROMPT,
             user=_user_prompt(finding, evidence),
             temperature=temperature,
+            # Narration does not think, and says so here rather than relying on
+            # a deployment setting. It restates figures it is forbidden to alter
+            # under rules it is given, so there is no judgement for reasoning to
+            # improve - and what makes the sentence trustworthy is the evidence
+            # validator below, not the model's deliberation.
+            #
+            # On a reasoning model the cost of leaving it on is not a slower
+            # answer but no answer: the thinking is billed out of the same
+            # output budget, and a reply truncated mid-thought comes back with
+            # the reasoning in place of the JSON. Measured on a free route at
+            # 1707 reasoning tokens against 700.
+            #
+            # A caller with a real judgement to make - `/ask` deciding whether
+            # its retrieved context supports an answer at all - should pass its
+            # own value, or none and inherit the deployment default.
+            reasoning_effort=NO_REASONING,
         )
     except LLMError as error:
         # The null provider raises Unavailable, so "no LLM configured" arrives

@@ -91,6 +91,19 @@ class LLMCompletion:
         return micro_usd_to_usd(self.estimated_cost_micro_usd)
 
 
+#: The `reasoning_effort` value meaning "do not think, just answer".
+#:
+#: It lives on the interface rather than in one adapter because it is part of
+#: the contract every provider honours, and a call site that had to import it
+#: from a concrete provider would be naming the vendor it is supposed not to
+#: know about (guideline 6).
+#:
+#: Spelled out rather than expressed as an empty string, because unset must keep
+#: meaning "say nothing and let the model decide" - a different request from
+#: "thinking off", and on a reasoning model a very different bill.
+NO_REASONING = "none"
+
+
 @runtime_checkable
 class LLMProvider(Protocol):
     #: Stable identifier, recorded on every completion and in every log line.
@@ -111,8 +124,18 @@ class LLMProvider(Protocol):
         user: str,
         max_output_tokens: int | None = None,
         temperature: float | None = None,
+        reasoning_effort: str | None = None,
     ) -> LLMCompletion:
         """Produce one completion, or raise an `LLMError` subclass.
+
+        `reasoning_effort` is per call, and None means "no opinion - use whatever
+        this deployment configured". It is on the call rather than only on the
+        provider because how much a model should think is a property of the
+        *task*, not of the installation: narration restates figures it may not
+        alter and wants no thinking at all, while answering a question about a
+        portfolio may genuinely need some. A single process-wide setting forces
+        one answer on both, and the caller that did not think about it inherits
+        the choice made by the one that did.
 
         Never returns a partial or placeholder answer. Narration is optional in
         this product; a fabricated one is not an acceptable substitute for its

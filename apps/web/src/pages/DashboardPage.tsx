@@ -6,6 +6,7 @@ import { AllocationChart } from '../components/AllocationChart.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { HoldingsTable } from '../components/HoldingsTable.tsx';
 import { ImportWizard } from '../components/ImportWizard.tsx';
+import { NarrationBadge } from '../components/NarrationBadge.tsx';
 import { ObservationsFeed } from '../components/ObservationsFeed.tsx';
 import { SummaryCards } from '../components/SummaryCards.tsx';
 import { Button, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
@@ -22,6 +23,8 @@ export const DashboardPage = observer(function DashboardPage() {
     proposals,
     settings,
     targets,
+    narration,
+    telegram,
   } = useStore();
 
   return (
@@ -30,6 +33,7 @@ export const DashboardPage = observer(function DashboardPage() {
         <div className="flex items-center gap-2">
           <LineChart className="size-5 text-accent" aria-hidden />
           <h1 className="text-base font-semibold">Portfolio</h1>
+          <NarrationBadge />
           {portfolio.pricesAsOf && (
             <span
               className="text-xs text-text-muted"
@@ -51,6 +55,7 @@ export const DashboardPage = observer(function DashboardPage() {
               void portfolio.load({ silent: true });
               void observations.load({ silent: true });
               void proposals.load();
+              void narration.load();
             }}
           >
             <span className="flex items-center gap-1">
@@ -104,6 +109,10 @@ export const DashboardPage = observer(function DashboardPage() {
               // someone goes looking for them, and a dashboard that fetches
               // them on every login spends a request nobody asked for.
               void settings.load();
+              // Alongside the settings, because the Telegram section lives on
+              // that page and a card that has to be prodded to say whether you
+              // are connected is a card that will be misread.
+              void telegram.load();
             }}
           >
             <span className="flex items-center gap-1">

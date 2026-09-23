@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { ArrowLeft, BellOff, Settings as SettingsIcon } from 'lucide-react';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
+import { TelegramConnect } from '../components/TelegramConnect.tsx';
 import { Button, Card, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
 import {
   MUTE_PRESET_HOURS,
@@ -221,6 +222,10 @@ export const SettingsPage = observer(function SettingsPage() {
                 </div>
               </Field>
             </div>
+          </Card>
+
+          <Card title="Telegram">
+            <TelegramConnect />
           </Card>
 
           <Card title="What the severity levels mean">

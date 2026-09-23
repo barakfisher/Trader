@@ -224,8 +224,34 @@ export interface Observation {
   evidence: Record<string, unknown>;
   /** Slugs of the concepts the finding invoked, e.g. `daily-return`. */
   conceptRefs: string[];
+  /**
+   * Who wrote `explanation`.
+   *
+   * Both kinds are equally trustworthy about their *figures* - the evidence
+   * validator is what guarantees that, and it runs on the model's sentence
+   * before it is ever stored. They are not equally informative about anything
+   * else, and a reader deciding how much weight to give a sentence is entitled
+   * to know which one they are reading.
+   *
+   * Null on observations written before this was recorded. That is "not
+   * recorded", not "template": guessing would attribute authorship nobody
+   * checked, and a UI must say the former rather than imply the latter.
+   */
+  narrationSource: NarrationSource | null;
+  /**
+   * Why the model did not write it, when it did not.
+   *
+   * Free text rather than a union on purpose. It is diagnostic - a spent
+   * budget, a refusing provider, figures the validator would not accept are
+   * different problems with different fixes - and an unanticipated value here
+   * must never be able to reject an observation that is otherwise fine.
+   */
+  fallbackReason: string | null;
   createdAt: string;
 }
+
+/** `template` is fixed phrasing over checked figures; `llm` is validated prose. */
+export type NarrationSource = 'llm' | 'template';
 
 export interface ObservationsResponse {
   /** Newest first, as returned. */
@@ -383,4 +409,66 @@ export interface TargetsUpdateResponse {
    * renormalised against this.
    */
   sum: string;
+}
+
+// --- Narration health (M4 debt; GET /narration) -------------------------------
+
+/**
+ * Whether explanations are being written by a model, and if not, why not.
+ *
+ * The states are distinct because their remedies are. A spent budget is fixed
+ * by paying, a refusing provider by waiting or leaving a shared pool, and
+ * sentences the evidence validator refuses only by a more capable model - no
+ * amount of waiting or paying for the same one will help. A single "degraded"
+ * would send a reader to the wrong answer, and "exhausted" would be wrong
+ * outright for a free tier that answers every request and still narrates
+ * nothing.
+ */
+export type NarrationState =
+  /** No provider was asked for. A configuration, not a failure. */
+  | 'off'
+  /** The model is writing the explanations. */
+  | 'narrating'
+  /** The provider refused. A shared free pool, or an outage. */
+  | 'unavailable'
+  /** The spend ceiling stopped the calls. */
+  | 'exhausted'
+  /** The model answers and the evidence validator refuses its figures. */
+  | 'rejected'
+  /** Nothing recorded yet, or the AI service could not be reached. */
+  | 'unknown';
+
+/** `free` bills nothing and shares a pool; `paid` bills per token. */
+export type NarrationTier = 'free' | 'paid' | 'none';
+
+export interface NarrationHealthResponse {
+  state: NarrationState;
+  tier: NarrationTier;
+  model: string | null;
+  /** Explanations the state was read from. Zero means nothing is claimed. */
+  sampleSize: number;
+  /** The raw reason, for an operator rather than a reader. */
+  lastFallbackReason: string | null;
+}
+
+// --- Telegram binding (M4; GET /telegram/binding) -----------------------------
+
+export interface TelegramBindingResponse {
+  connected: boolean;
+  /** Display only. A username is changeable by its owner, so nothing authorises off it. */
+  username: string | null;
+  boundAt: string | null;
+}
+
+/**
+ * A freshly minted connect link.
+ *
+ * The URL is a bearer credential for one act: whoever opens it in Telegram
+ * binds *their* chat to this account. It is single-use and short-lived, and it
+ * is never to be shared - which the UI has to say out loud, because a `t.me`
+ * link looks like an ordinary link.
+ */
+export interface TelegramConnectLink {
+  url: string;
+  expiresAt: string;
 }

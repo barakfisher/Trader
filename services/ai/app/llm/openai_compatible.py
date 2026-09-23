@@ -127,13 +127,40 @@ class OpenAICompatibleProvider:
         user: str,
         max_output_tokens: int | None = None,
         temperature: float | None = None,
+        reasoning_effort: str | None = None,
     ) -> LLMCompletion:
+        payload = self._build_payload(
+            system=system,
+            user=user,
+            max_output_tokens=max_output_tokens,
+            temperature=temperature,
+            reasoning_effort=reasoning_effort,
+        )
+        response = await self._post_with_one_retry(payload)
+        return self._parse(response)
+
+    def _build_payload(
+        self,
+        *,
+        system: str | None,
+        user: str,
+        max_output_tokens: int | None = None,
+        temperature: float | None = None,
+        reasoning_effort: str | None = None,
+    ) -> dict[str, Any]:
+        """The request body, built without sending it.
+
+        Separated so the request *shape* can be asserted in a test. The
+        difference between `{"effort": "low"}`, `{"exclude": true}` and
+        `{"enabled": false}` is invisible in a successful response and decides
+        whether a reasoning model answers at all, so it is worth pinning.
+        """
         messages: list[dict[str, str]] = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": user})
 
-        payload = {
+        payload: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
             "max_tokens": max_output_tokens or self._max_output_tokens,
@@ -143,13 +170,32 @@ class OpenAICompatibleProvider:
             # validator could see it anyway.
             "stream": False,
         }
-        if self._reasoning_effort:
+        # The call decides, and falls back to the deployment's default only when
+        # it has no opinion. `None` is "no opinion"; the string "none" is an
+        # opinion, and the two must not collapse into each other.
+        # The call decides, and falls back to the deployment's default only when
+        # it has no opinion. `None` is "no opinion"; the string "none" is an
+        # opinion, and the two must not collapse into each other.
+        effort = self._reasoning_effort if reasoning_effort is None else reasoning_effort
+        if effort:
             # OpenRouter's normalised spelling, which it translates to whatever
-            # the upstream vendor calls the same knob.
-            payload["reasoning"] = {"effort": self._reasoning_effort}
+            # the upstream vendor calls the same knob. `NO_REASONING` goes
+            # through as an effort like any other: measured against a free
+            # reasoning model, `{"effort": "none"}` returns
+            # `reasoning_tokens: 0` and clean JSON, which is the whole
+            # requirement. An `{"enabled": false}` special case was written
+            # first and removed - it behaves identically, so it was a second
+            # spelling of something the pass-through already said.
+            #
+            # Why it matters at all: reasoning is billed out of
+            # `max_output_tokens`, and a reply truncated mid-thought comes back
+            # with the reasoning in `content` instead of the answer. Measured on
+            # the narration prompt at 1707 reasoning tokens against a 700-token
+            # budget - every reply unusable, and the symptom looked like a model
+            # ignoring "reply with JSON only".
+            payload["reasoning"] = {"effort": effort}
 
-        response = await self._post_with_one_retry(payload)
-        return self._parse(response)
+        return payload
 
     async def _post_with_one_retry(self, payload: dict[str, Any]) -> httpx.Response:
         url = f"{self._base_url}/chat/completions"
