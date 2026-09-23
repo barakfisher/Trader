@@ -4,16 +4,18 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-23, after 37 merged PRs. M4 is complete; M3 has not started. The session that
-wrote this shipped the targets UI, unblocked four migrations that could not apply, and made the
-narration layer tell the truth about itself.
+Updated: 2026-09-23. `main` is at PR #41; **M3 slice 1 is complete on
+`claude/m3-corpus-concept-links` and not yet merged**, so read this file as describing that branch.
+M4 is complete; M3's remaining three slices are not started. The session that wrote this took the parked M3 branch, renumbered the
+migration that would have broken `upgrade head` for everyone, finished the corpus, and made the
+concept chips actually go somewhere for the first time since M2.
 
 **One-line state:** the product imports a portfolio, fetches six months of real daily prices, scans
 it every 30 minutes for four kinds of finding, explains each one in sentences whose every figure is
-checked against the evidence, lets the user **state the allocation they meant to hold**, and turns
-the drift from it into a proposal with a deadline that an approval writes to a paper ledger. No
-order is ever placed. The explanations are currently written by templates rather than a model, and
-the app now says so on its own dashboard.
+checked against the evidence, **links every term in those sentences to an explanation of it**, lets
+the user state the allocation they meant to hold, and turns the drift from it into a proposal with
+a deadline that an approval writes to a paper ledger. No order is ever placed. The explanations are
+currently written by templates rather than a model, and the app says so on its own dashboard.
 
 **What is not proven:** the entire Telegram leg, and this is worse than it was at M4. A webhook
 still needs the public HTTPS URL that arrives with M7's ingress — but on top of that, *no chat is
@@ -32,9 +34,9 @@ proposals reach the notifications ledger, correctly recorded as `failed`, and re
 | **M1.5 — Trustworthy quote path** | ✅ Complete | **unplanned**; inserted after an audit found data problems M2 would have built on |
 | **M2 — Analysis engine & observations** | ✅ Complete | PRs #12–#22 |
 | **M2.5 — Real price history** | ✅ Complete | **unplanned**; PR #23. Finished M1's provider layer, 18 PRs late |
-| **M3 — RAG & educational engine** | ⏭️ Next | gives the feed's concept chips somewhere to point; a WIP branch exists, see "Where to go next" |
+| **M3 — RAG & educational engine** | 🟡 Slice 1 of 4, unmerged | Corpus, schema, ingestion and live concept links, on `claude/m3-corpus-concept-links`. **No embeddings yet, deliberately** — see decision 24 |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
-| M5 — Market discovery & topics | ⏭️ Next, or M3 | independent of each other; see "Where to go next" |
+| M5 — Market discovery & topics | ⏭️ Next, or M3 slice 2 | independent of each other; see "Where to go next" |
 | M6 — Frontend completion & polish | Not started | |
 | M7 — Kubernetes & documentation | Not started | |
 
@@ -69,7 +71,11 @@ cd services/ai && .venv/bin/python -m pytest -q
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
-Test counts at handoff: **886** — 439 Python, 314 orchestrator, 117 web, 16 shared.
+The corpus is a derived copy and is not covered by any of those. `cd services/ai &&
+DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
+scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
+
+Test counts at handoff: **967** — 476 Python, 322 orchestrator, 153 web, 16 shared.
 
 Useful endpoints (all need the session cookie except `/internal/*`, which needs `x-internal-key`):
 
@@ -85,6 +91,7 @@ Useful endpoints (all need the session cookie except `/internal/*`, which needs 
 | `GET /narration` | is a model writing the explanations, and if not, why not (#38) |
 | `POST /telegram/bind-token` | the **Settings page** mints the connect link (#38) |
 | `POST /telegram/bind-token` | mints the signed connect link; `POST /telegram/webhook` is public |
+| `GET /concepts/:slug` | the explanation behind a concept chip (#M3). 404 means the corpus is not ingested, not that the app is broken |
 
 ---
 
@@ -93,7 +100,8 @@ Useful endpoints (all need the session cookie except `/internal/*`, which needs 
 **`services/ai`** (Python, FastAPI) — market data providers behind a chain with caching, rate
 limiting and per-provider daily budgets; four deterministic analysis rules; news ingestion with
 entity extraction; an LLM provider factory with a daily spend guard; narration behind an evidence
-validator; the Alembic schema (5 migrations) that both services share.
+validator; **the concept corpus: structure-aware chunking, hash-compared ingestion and slug
+lookup**; the Alembic schema (12 migrations) that both services share.
 
 **`apps/orchestrator`** (Node, Hono) — sessions, holdings CRUD, CSV/JSON import with per-row
 validation, valuation with FX, target weights, the scan workflow, run claims, the observations feed,
@@ -101,7 +109,8 @@ the local scheduler, **the proposal state machine and its audit trail, the notif
 Telegram adapter, and per-user settings**.
 
 **`apps/web`** (React, MobX, Tailwind, Recharts) — login, portfolio dashboard, import wizard,
-observations feed with an evidence drawer, **the approvals inbox and a settings page**.
+observations feed with an evidence drawer, the approvals inbox, a settings page, **and the concept
+dialog behind the feed's chips**.
 
 **`packages/shared`** — wire types, money helpers, and the AI-service client whose zod schemas are
 pinned to the generated OpenAPI types so Python drift becomes a compile error. That mechanism has
@@ -251,6 +260,58 @@ failure they prevent.
     nowhere in a forged token to name a victim. A forwarded Telegram message keeps working buttons,
     so this is the property that makes forwarding harmless.
 
+24. **M3 was sliced so that no embedding dimension is guessed.** Slice 1 ships the corpus, the
+    schema, ingestion and live concept links with **no `vector(n)` column at all**. That column is
+    a commitment to one embedding model: `n` is fixed at creation, pgvector's HNSW index is built
+    per dimension, and correcting a guess costs a migration plus a full re-embed. Nothing in slice
+    1 needs one — a concept link is an exact slug lookup, and the full-text index covers keyword
+    search — so the choice is deferred to slice 2, which can make it on evidence. The remaining
+    slices are (2) `VectorStore`, an embeddings provider and hybrid retrieval, with a deterministic
+    fixture embedder so CI stays hermetic and keyless; (3) `POST /ask` with intent routing,
+    citations and a relevance floor; (4) the ~30 Q/A eval set in CI.
+
+25. **A chunk id is what a citation points at, so ingestion compares before it writes.** The
+    obvious implementation — delete a document's chunks and re-insert them — is cheap to write and
+    wrong in a way that only appears later: an id replaced on every run cannot be cited by anything
+    that outlives the run. So a content hash over every chunk's text, heading and position decides
+    whether the document is touched at all, and when it has changed, chunks are upserted on
+    `(document_id, ord)` so only the sections that actually changed are rewritten. The hash
+    deliberately excludes title, source, uri and licence: correcting a typo in a title must update
+    the row without churning ids. The consequence worth knowing is that **re-ingesting an unchanged
+    corpus performs no writes at all**, which is what makes it safe to run on every stack start and
+    on every file edit.
+
+26. **Definitions and article text never share a namespace, and every query says so.** The
+    `namespace` column was in the schema from the start; what was *not* obvious is that every
+    statement touching `kb_documents` has to filter on it. A `news` document carries a null
+    `concept_slug` by design, so a query that forgets the filter reads ingested articles as
+    orphaned concepts — and the ingester's `--prune` would then delete them as a side effect of
+    loading definitions. See the bug below; the lesson is that a nullable discriminator is only
+    safe if every reader knows about it.
+
+27. **The concept endpoint lives in the AI service, and the orchestrator only proxies.** The corpus
+    belongs to the service that owns the schema, the ingester, and — when `/ask` lands — the
+    retrieval that will read these same tables. A second reader of `kb_chunks` in another process
+    would be a second place that has to agree about section ordering and namespace filtering. It is
+    the same argument `app/routers/narration.py` makes in its own docstring for serving the LLM
+    configuration from there, and it is why `GET /concepts/:slug` on the orchestrator contains no
+    logic but error mapping.
+
+28. **An upstream status is translated, never forwarded.** `upstreamFailure` passes 503 and 504
+    through and rewrites everything else to 502. Forwarding blindly looks more honest and is worse:
+    a 401 from the AI service means *our* internal key is wrong, and passing it to the browser
+    tells the reader their session expired and sends them to log in again over a server
+    misconfiguration they cannot affect. A 404 is the one genuine exception and is mapped to a
+    named 404, because a corpus nobody has ingested is a real state rather than a fault.
+
+29. **Corpus text is parsed into React elements, never rendered as markdown.** The documents reach
+    the browser through two services from a database anyone with a shell can write to, so a
+    markdown library would mean either `dangerouslySetInnerHTML` or a sanitiser to maintain.
+    `conceptText.ts` understands exactly four constructs — paragraphs, four-space formula blocks,
+    `**bold**` and `*italic*` — and anything else degrades to plain text, so no HTML is ever built
+    from that text at all. The cost is real and accepted: adding a list or a link to a document
+    means changing the parser, and a test over the shipped corpus fails until someone does.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -357,6 +418,53 @@ other.
 → **Check `alembic heads` returns exactly one before merging anything with a migration**, and
 renumber the PR that is cheaper to move — the one not yet opened, not the one already in review.
 
+**A parked branch's migration number went stale while it sat.** `claude/m3-corpus-concept-links`
+was written carrying `0010_kb_corpus` off `0009_telegram_bindings`. While it waited, `main` took
+the same parent for `0010_instrument_metadata` and then added `0011`. Merging it would have given
+Alembic two heads and made `upgrade head` fail outright for every installation. MEMORY.md already
+carried the remedy — "check `alembic heads` returns exactly one" — and it did not help, because an
+instruction is only followed by sessions that read it, and this branch was written before the
+instruction existed. The same collision had already been caught by hand once, when two M4 PRs both
+took `0007`.
+→ **A rule that has been broken twice belongs in a test, not in a document.**
+`services/ai/tests/test_migration_chain_contract.py` now asserts the shape of the graph: no shared
+parents, unique revisions, one base reachable from one head, and numeric prefixes sorting in chain
+order. It was confirmed to fail against the original pair before being kept.
+→ The general form: **a branch that sits still still rots**, because the numbers it reserved are
+shared with everyone else. Rebase a parked branch onto `main` before reading a line of its code.
+
+**A markdown subset was assumed rather than measured.** The concept text parser was written to
+handle `**bold**` and indented formulas, because those are what the documents *appeared* to use.
+The corpus also uses `*italic*` throughout — including in the three documents written two sessions
+earlier — and every one of those would have rendered as literal asterisks to the reader. It was
+found by grepping the nine files before writing the test that claimed they only used the supported
+constructs.
+→ **When you are about to assert something about data, read the data first.** The assertion was
+about to be written as a fixture of what the documents were believed to contain, which is the same
+shape as the M2 bug where templates were tested against hand-written evidence.
+→ The test now reads the nine real files and fails if any emphasis marker survives into rendered
+output. Confirmed failing for all nine against the bold-only parser.
+
+**A nullable discriminator was read by a query that did not know about it.** The ingester's dry-run
+selected every `kb_documents` row regardless of namespace. A `news` document carries a null
+`concept_slug` by design, so it came back as an orphaned concept and crashed a sort comparing `str`
+to `None`. `--prune` had the identical gap, which would have made "load the definitions" a command
+that silently deletes ingested articles.
+→ Found by *running it* with a news row present, not by a test — the hermetic Python suite has no
+Postgres and cannot reach the SQL's scope. This is the same lesson as the three M4 bugs, arriving
+again: **the suite cannot test the layer it is deliberately isolated from, so that layer has to be
+exercised by hand or in the compose job.**
+
+**A new data directory was not in the image, and the path that read it could not have worked
+there.** `Dockerfile.ai` copied `data/fixtures` and not `data/corpus`, and the ingester's
+repo-relative default (`parents[3]`) raises `IndexError` from `/app/scripts/`. Both would have
+shipped: every unit test passes because it runs from a checkout, where both are fine.
+→ **A path that resolves differently in a container needs the two-place resolution the codebase
+already has**, not a repo-relative guess. `Settings.corpus_dir` now mirrors `fixtures_dir` exactly:
+checkout path if it exists, container path otherwise, env var always wins.
+→ CI now starts the `corpus` container and fails unless it exits cleanly, because that is the only
+gate that can see either fault.
+
 **A fixture that looked like a solved problem.** The synthetic price history made the analysis
 engine testable and also let the missing `history()` survive two milestones. A fixture hides an
 absence.
@@ -372,7 +480,10 @@ the green test as coverage.
 | **Telegram's inbound delivery is unproven** | deployment | Everything else was exercised against a real bot, but `setWebhook` needs a public HTTPS URL. The handler has only ever been driven by replaying genuine payloads at it locally. **The first real deployment is the first real test of that leg** — check `getWebhookInfo` for `last_error_message` immediately after |
 | **`queries.ts` conflicts on every parallel PR** | `src/db/queries.ts` | Four M4 PRs appended a section to the end of one 1,200-line file, and every rebase put a conflict marker exactly where one function's closing brace met the next block's header — the brace was lost and hand-repaired **three separate times**. It is the cost of CLAUDE.md's "all SQL in one file" rule, which is otherwise good. Worth deciding whether to split by domain with an index |
 | **Migration 0008 hard-codes a table Mastra owns** | `0008_mastra_workflow_state.py` | The library would create `mastra_workflow_snapshot` itself; Alembic creates it instead (`disableInit: true`), because CLAUDE.md says the AI service owns the schema. An upgrade that changes the shape breaks suspended runs — so `test/mastraSchemaOwnership.test.ts` compares the migration against `WorkflowsPG.getExportDDL()` and fails the build first. Two other things cost time to find: `PostgresStore` creates **43** tables for 24 storage domains unless you route only `workflows`, and `@mastra/core` posts feature-usage telemetry to PostHog unless `MASTRA_TELEMETRY_DISABLED` is set (it is, in `workflowRuntime.ts`, in code rather than `.env`) |
-| **Concept chips point nowhere** | `apps/web` | PRD FR-16 wants one click to an explanation; the corpus arrives in M3. They render as labels rather than dead links |
+| ~~Concept chips point nowhere~~ | — | **Resolved in M3 slice 1.** Kept as a line rather than deleted because it stood here from M2 to M4 and its absence would otherwise read as an oversight |
+| **Retrieval is exact-match only** | `services/ai/app/corpus` | A chip resolves its own slug and nothing else. There is no `/ask`, no ranking and no embeddings, so a question phrased in the user's own words has nowhere to go. That is slice 2–3, and the `vector(n)` decision is the gate — see decision 24 |
+| **The corpus is a derived copy that three separate mechanisms keep in step** | `data/corpus`, compose, `.claude` | The files are the source of truth and `kb_documents`/`kb_chunks` are what the API serves. A hook covers Claude's edits, the `corpus` container covers every stack start, CI covers the image. None of the three covers a hand edit on a machine with no stack running — that reader sees stale text with nothing reporting the disagreement. `--dry-run` answers "are they in step?" and nobody is obliged to run it |
+| **The ingest hook does not apply to a session started before it existed** | `.claude/settings.json` | The settings watcher only watches directories that had a settings file when the session began, and `.claude/` had none. Any session started after that commit picks it up; the session that wrote it did not, and confirmed so with a sentinel rather than assuming |
 | **Import previews live in process memory** | `services/previewStore.ts` | Forces `replicas: 1` in Kubernetes. The only remaining in-memory state — run keys moved to the `runs` table in M2 |
 | **Templates are the deliberate steady state until deployment** (decided 2026-09-23) — funding narration was considered and **declined for now**, to be revisited when the product is deployed for real. So a future session should *not* treat template-only explanations as a defect to fix: the cost is known ($0.45/month), the fix is known (raise the OpenRouter workspace cap, point `LLM_MODEL` at a capable model), and the decision is to wait. | `.env` | Explanations are fixed phrasing over checked figures, and the dashboard badge says so |
 | **The free tier cannot narrate at all, and the reason is not cost** | `.env`, `app/llm` | `LLM_MODEL` is a `:free` route because the OpenRouter workspace has a **lifetime** budget of $0.01 — a cumulative cap, not an allowance, so nothing resets and only an org admin changes it. On the free model narration now reaches the evidence validator and is **rejected every time** (`unsourced_figures`, 3/3 measured) for deriving figures not in the evidence. So free means templates, reliably. Real usage is ~$0.0015 per narration and ~10 findings a day ≈ **$0.45/month**, which is what funding the workspace costs. The badge (#38) states this to the user rather than hiding it |
@@ -406,7 +517,18 @@ the green test as coverage.
 - **Every worktree shares one development database.** A background task's migration lands in the
   same Postgres the main stack uses, so the database can end up *ahead* of the running containers.
   That is how an "impossible" `Can't locate revision` appeared: the DB was at `0010_instrument_metadata`
-  while the images still held 0009.
+  while the images still held 0009. **This recurred in M3 and will recur again**: applying
+  `0012_kb_corpus` natively put the DB ahead of a `migrate` image still built from `main`, and the
+  container died with `Can't locate revision '0012_kb_corpus'`. The fix is always the same —
+  rebuild the image (`docker compose build migrate`), not touch the database.
+- **The database currently holds the ingested corpus**: 9 documents and 36 chunks in
+  `kb_documents` / `kb_chunks`. A fresh database needs `scripts/ingest_corpus.py` or a stack start,
+  or every concept chip 404s. `python scripts/ingest_corpus.py --dry-run` says whether the files
+  and the database agree without writing.
+- **`DATABASE_URL` in `.env` names the compose hostname `postgres`, which does not resolve on the
+  host.** Anything run natively against the dev database needs
+  `DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders` in front of it. This costs a
+  confusing `failed to resolve host 'postgres'` every time it is forgotten, including to alembic.
 - **`docker compose` builds from the main checkout, never from a worktree.** `REPO_ROOT` resolves to
   the script's own repo and the compose context is `/Users/a/projects/Traders`, so rebuilding while
   working in a worktree silently tests `main`. Several "fix confirmed" results this session were
@@ -416,6 +538,8 @@ the green test as coverage.
   `ALLOWED_ORIGINS` set to that web origin or CORS refuses every state-changing request.
 - **The main checkout is not pulled automatically.** It sat on `a0637be` for three merged PRs, which
   is what made the compose images stale. Pull it before rebuilding anything.
+- **`psql` is not installed on this machine.** Use `docker exec traders-postgres-1 psql -U traders
+  -d traders -c '...'`. So is `timeout(1)` absent; the Bash tool's own timeout is the substitute.
 - **An `ai.openclaw.gateway` LaunchAgent runs permanently on this machine** with a Telegram connector
   bound to bot `8778977785` — *not* ours. It is unrelated, and it is recorded here so the next
   session does not spend an hour suspecting it of eating updates, as this one did.
@@ -435,40 +559,46 @@ the green test as coverage.
 
 ## Where to go next
 
-**The targets UI is done (#35), so the M4 path now carries something real.** Verified end to end on
-this machine: targets set in the UI produced four drift findings, three of them became `pending`
-`rebalance` proposals with 24-hour deadlines, and the notification ledger recorded three
-`above_floor` attempts plus one `below_floor` deferral into the digest. That chain is no longer an
-argument, it is an observation.
+**Two chains are now proven by observation rather than by argument.** M4's (#35): targets set in
+the UI produced four drift findings, three became `pending` `rebalance` proposals with 24-hour
+deadlines, and the notification ledger recorded three `above_floor` attempts plus one `below_floor`
+deferral into the digest. And M3 slice 1's, below.
 
-**M3 (RAG) is next.** The feed's concept chips have rendered as dead labels since M2, it is the last
-piece of the "explain it to me" promise in the PRD, and it is independent of everything M4 touched.
-M5 (topics) remains the larger change: it widens `notifications.ref_kind` and wants topic-shaped
-proposals.
+**M3 slice 1 is done and unmerged**, on `claude/m3-corpus-concept-links`. Verified by using it in a
+stack rebuilt from the main checkout, not by reading it: the `corpus` container ran on start and
+reported nine documents unchanged; signing in and clicking **Drawdown** on a real drawdown
+observation opened the document with its formula as a code block; clicking **Rebalancing** on an
+allocation-drift observation showed "This system never places an order" in bold in its second
+paragraph. Clicking the same concept from a second observation served from the session cache — two
+GETs for two concepts across four clicks, read from the network log. That chain is an observation
+now, not an argument.
 
-### Picking up the parked M3 branch
+What exists: `data/corpus/concepts/*.md` (nine documents, four sections each, CC0), migration
+`0012_kb_corpus`, `app/corpus/` (pure chunking, ingestion, and a slug repository),
+`scripts/ingest_corpus.py`, `GET /concepts` and `GET /concepts/:slug` on the AI service, a proxy on
+the orchestrator, and `ConceptStore` + `ConceptDialog` on the web.
 
-`claude/m3-corpus-concept-links` holds one WIP commit: the corpus schema and three of the nine
-concept documents. **Renumber its migration before anything else** — the commit still carries
-`0010_kb_corpus.py`, and both `0010` (instrument metadata) and `0011` (narration provenance) are
-taken on `main`, so it must become `0012` with `down_revision = "0011_narration_provenance"`. Check
-`alembic heads` returns exactly one before merging anything with a migration.
+### M3 slice 2, if that is next
 
-The nine slugs the corpus has to cover, hard-coded in `app/narration/templates.py`, are
-`daily-return`, `standard-deviation`, `z-score`, `volatility`, `drawdown`, `peak-to-trough`,
-`asset-allocation`, `rebalancing`, `portfolio-weight`. Covering exactly those satisfies FR-16 and
-half the milestone's exit criterion.
+`VectorStore`, an embeddings provider and hybrid retrieval. pgvector 0.8.6 is already installed —
+M0 planned for it — and the full-text half of the hybrid already exists: `kb_chunks.text_search` is
+a generated column with a GIN index, and it works (`plainto_tsquery('english', 'approving a
+proposal places an order')` returns `rebalancing / What it is`, which is the section that says it
+does not).
 
-The sliced plan that branch was following: **(1)** corpus, schema and live concept links, with no
-embeddings at all — a `vector(n)` column is a commitment to a model and `n` should be chosen on
-evidence; **(2)** `VectorStore`, an embeddings provider and hybrid retrieval, with a deterministic
-fixture embedder so CI stays hermetic and keyless; **(3)** `POST /ask` with intent routing,
-citations and a relevance floor; **(4)** the ~30 Q/A eval set in CI. pgvector 0.8.6 is already
-installed in the database — M0 planned for it.
+**The embeddings provider is the open decision and it gates the schema**, because adding
+`vector(n)` fixes `n` for every row — see decision 24. Three options: fund a paid embeddings model,
+run a local one in-container, or ship only a deterministic fixture embedder and accept that
+retrieval quality is a placeholder until it is funded. See the free-tier debt row for what funding
+costs in practice ($0.45/month bought the narration; embeddings are a separate line).
 
-**The embeddings provider is an open decision** and shapes step 2: fund a paid embeddings model, run
-a local one in-container, or ship only a fixture embedder and accept that retrieval quality is a
-placeholder. See the free-tier debt row for what funding actually costs.
+Whatever is chosen, **the fixture embedder has to exist anyway**: CI is hermetic and keyless, and
+slice 4's eval set cannot depend on a network call.
+
+### The alternative: M5 (topics)
+
+Independent of M3's remaining slices, and the larger change: it widens `notifications.ref_kind` and
+wants topic-shaped proposals. See the seams M4 left, below.
 
 ### Left unfinished, deliberately
 
