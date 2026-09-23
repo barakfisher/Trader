@@ -34,9 +34,9 @@ proposals reach the notifications ledger, correctly recorded as `failed`, and re
 | **M1.5 — Trustworthy quote path** | ✅ Complete | **unplanned**; inserted after an audit found data problems M2 would have built on |
 | **M2 — Analysis engine & observations** | ✅ Complete | PRs #12–#22 |
 | **M2.5 — Real price history** | ✅ Complete | **unplanned**; PR #23. Finished M1's provider layer, 18 PRs late |
-| **M3 — RAG & educational engine** | 🟡 Slice 1 of 4, unmerged | Corpus, schema, ingestion and live concept links, on `claude/m3-corpus-concept-links`. **No embeddings yet, deliberately** — see decision 24 |
+| **M3 — RAG & educational engine** | 🟡 Slice 1 of 4, unmerged | Corpus, schema, ingestion and live concept links, on `claude/m3-corpus-concept-links`. **No embeddings yet, deliberately** — see decision 24. **Slice 2 is next and its provider is decided** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
-| M5 — Market discovery & topics | ⏭️ Next, or M3 slice 2 | independent of each other; see "Where to go next" |
+| M5 — Market discovery & topics | Not started | independent of M3; deferred in favour of finishing M3 (decided 2026-09-23) |
 | M6 — Frontend completion & polish | Not started | |
 | M7 — Kubernetes & documentation | Not started | |
 
@@ -465,6 +465,24 @@ checkout path if it exists, container path otherwise, env var always wins.
 → CI now starts the `corpus` container and fails unless it exits cleanly, because that is the only
 gate that can see either fault.
 
+**A CI gate that could not have failed for the reason it claimed.** The new corpus check asserted
+the container's state by grepping `docker compose ps --format '{{.State}}'` for `exited (0)`. That
+string is in no field: `.State` prints `exited` with no code, `.Status` prints `Exited (0) 2
+minutes ago` with a capital E, and only `.ExitCode` prints `0`. It failed on the first CI run while
+the ingestion it was checking had worked perfectly — nine documents created inside the container
+from the image.
+→ The lesson is not "read the docs for `--format`". It is that **the evidence was already on
+screen**: running that exact command locally had printed `exited`, and it was read without being
+compared against the pattern just written. This is the third appearance of the same failure —
+`grep -c "Done"` hiding a failing typecheck, container checks testing `main`, and now this.
+**Reading a gate's output means comparing it to what the gate asserts, not glancing at it.**
+→ It now compares a value (`.ExitCode` = `0`) rather than matching a substring, and an absent
+container yields the empty string, which is not `0` — so a service that never ran fails instead of
+passing vacuously. **A gate that cannot fail is worse than no gate**, because it is counted as
+coverage.
+→ And the process lesson: **exercise every branch of a check you add, not the one you expect.** All
+three were run this time — clean exit, missing container, and a genuinely failing ingestion.
+
 **A fixture that looked like a solved problem.** The synthetic price history made the analysis
 engine testable and also let the missing `history()` survive two milestones. A fixture hides an
 absence.
@@ -481,7 +499,8 @@ the green test as coverage.
 | **`queries.ts` conflicts on every parallel PR** | `src/db/queries.ts` | Four M4 PRs appended a section to the end of one 1,200-line file, and every rebase put a conflict marker exactly where one function's closing brace met the next block's header — the brace was lost and hand-repaired **three separate times**. It is the cost of CLAUDE.md's "all SQL in one file" rule, which is otherwise good. Worth deciding whether to split by domain with an index |
 | **Migration 0008 hard-codes a table Mastra owns** | `0008_mastra_workflow_state.py` | The library would create `mastra_workflow_snapshot` itself; Alembic creates it instead (`disableInit: true`), because CLAUDE.md says the AI service owns the schema. An upgrade that changes the shape breaks suspended runs — so `test/mastraSchemaOwnership.test.ts` compares the migration against `WorkflowsPG.getExportDDL()` and fails the build first. Two other things cost time to find: `PostgresStore` creates **43** tables for 24 storage domains unless you route only `workflows`, and `@mastra/core` posts feature-usage telemetry to PostHog unless `MASTRA_TELEMETRY_DISABLED` is set (it is, in `workflowRuntime.ts`, in code rather than `.env`) |
 | ~~Concept chips point nowhere~~ | — | **Resolved in M3 slice 1.** Kept as a line rather than deleted because it stood here from M2 to M4 and its absence would otherwise read as an oversight |
-| **Retrieval is exact-match only** | `services/ai/app/corpus` | A chip resolves its own slug and nothing else. There is no `/ask`, no ranking and no embeddings, so a question phrased in the user's own words has nowhere to go. That is slice 2–3, and the `vector(n)` decision is the gate — see decision 24 |
+| **Retrieval is exact-match only** | `services/ai/app/corpus` | A chip resolves its own slug and nothing else. There is no `/ask`, no ranking and no embeddings, so a question phrased in the user's own words has nowhere to go. That is slice 2–3 |
+| **OWED: migrate the fixture embedder to a paid OpenRouter embeddings model** (decided 2026-09-23) | `services/ai/app/corpus`, `.env` | Slice 2 ships a deterministic fixture embedder behind `BaseEmbedder` because CI is hermetic and keyless. **The consequence is that the vector half of hybrid retrieval ranks by nothing**: the fixture produces stable, meaningless vectors, so only the full-text half is real until this is done. Blocked by the same thing as narration — the OpenRouter workspace has a *lifetime* $0.01 budget and only an org admin raises it. **Do the migration when the cap is raised; do not re-open the choice before then.** The interface is the whole point: adding the real provider must not touch a call site. The `vector(n)` width is *not* deferred with it — `n` is fixed at column creation for every row, so slice 2 must pick the width of the model it intends to migrate to and record which model that number came from |
 | **The corpus is a derived copy that three separate mechanisms keep in step** | `data/corpus`, compose, `.claude` | The files are the source of truth and `kb_documents`/`kb_chunks` are what the API serves. A hook covers Claude's edits, the `corpus` container covers every stack start, CI covers the image. None of the three covers a hand edit on a machine with no stack running — that reader sees stale text with nothing reporting the disagreement. `--dry-run` answers "are they in step?" and nobody is obliged to run it |
 | **The ingest hook does not apply to a session started before it existed** | `.claude/settings.json` | The settings watcher only watches directories that had a settings file when the session began, and `.claude/` had none. Any session started after that commit picks it up; the session that wrote it did not, and confirmed so with a sentinel rather than assuming |
 | **Import previews live in process memory** | `services/previewStore.ts` | Forces `replicas: 1` in Kubernetes. The only remaining in-memory state — run keys moved to the `runs` table in M2 |
@@ -578,7 +597,7 @@ What exists: `data/corpus/concepts/*.md` (nine documents, four sections each, CC
 `scripts/ingest_corpus.py`, `GET /concepts` and `GET /concepts/:slug` on the AI service, a proxy on
 the orchestrator, and `ConceptStore` + `ConceptDialog` on the web.
 
-### M3 slice 2, if that is next
+### M3 slice 2 — decided, not started
 
 `VectorStore`, an embeddings provider and hybrid retrieval. pgvector 0.8.6 is already installed —
 M0 planned for it — and the full-text half of the hybrid already exists: `kb_chunks.text_search` is
@@ -586,19 +605,40 @@ a generated column with a GIN index, and it works (`plainto_tsquery('english', '
 proposal places an order')` returns `rebalancing / What it is`, which is the section that says it
 does not).
 
-**The embeddings provider is the open decision and it gates the schema**, because adding
-`vector(n)` fixes `n` for every row — see decision 24. Three options: fund a paid embeddings model,
-run a local one in-container, or ship only a deterministic fixture embedder and accept that
-retrieval quality is a placeholder until it is funded. See the free-tier debt row for what funding
-costs in practice ($0.45/month bought the narration; embeddings are a separate line).
+**The embeddings provider was an open decision and is now settled (2026-09-23, by the user): a
+deterministic, hermetic, keyless fixture embedder, behind a clean `BaseEmbedder` interface, with a
+migration to a paid OpenRouter embeddings model when the workspace cap allows it.** Do not re-open
+this; the debt row records the migration as an owed follow-up rather than as an unmade choice.
 
-Whatever is chosen, **the fixture embedder has to exist anyway**: CI is hermetic and keyless, and
-slice 4's eval set cannot depend on a network call.
+Three things follow from it, and the second is the one a session could get wrong:
 
-### The alternative: M5 (topics)
+1. **The interface is not optional politeness.** CLAUDE.md guideline 6 already requires external
+   dependencies to sit behind interfaces and names `VectorStore` explicitly; `BaseEmbedder` is the
+   same rule applied to the provider. Adding the paid model must not touch a call site.
 
-Independent of M3's remaining slices, and the larger change: it widens `notifications.ref_kind` and
-wants topic-shaped proposals. See the seams M4 left, below.
+2. **`n` must be chosen for the model we intend to migrate *to*, not for whatever the fixture
+   emits.** A fixture embedder can produce any dimension, so it exerts no pressure on the choice —
+   which makes it easy to pick a convenient number and discover later that no real model has that
+   width. `vector(n)` fixes `n` for every row (decision 24), and changing it costs a migration plus
+   a full re-embed of the corpus. Pick the width of the intended production model, and say in the
+   migration which model that number came from.
+
+3. **The fixture embedder is permanent, not scaffolding.** CI is hermetic and keyless, and slice
+   4's eval set cannot depend on a network call, so it stays in the tree after the paid model
+   arrives. It is the CI path, not a placeholder to be deleted.
+
+Retrieval quality until then is an acknowledged placeholder: a fixture embedder produces stable,
+meaningless vectors, so the vector half of the hybrid will rank by nothing in particular. The
+full-text half is real, which is why hybrid retrieval still gives a usable answer in the meantime —
+but no one should read a good `/ask` result as evidence that the embedding path works.
+
+### M5 (topics), deferred
+
+Independent of M3's remaining slices and the larger change: it widens `notifications.ref_kind` and
+wants topic-shaped proposals. It was weighed against slice 2 on 2026-09-23 and **deliberately
+deferred in favour of finishing M3**, on the grounds that the corpus currently exists but is inert
+— it can only answer a question phrased as the exact slug a chip already knows — and finishing
+something half-built beats opening a second front. See the seams M4 left, below.
 
 ### Left unfinished, deliberately
 
