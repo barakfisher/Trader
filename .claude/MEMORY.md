@@ -4,17 +4,22 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-17, after 33 merged PRs, at the end of Milestone 4.
+Updated: 2026-09-23, after 37 merged PRs. M4 is complete; M3 has not started. The session that
+wrote this shipped the targets UI, unblocked four migrations that could not apply, and made the
+narration layer tell the truth about itself.
 
 **One-line state:** the product imports a portfolio, fetches six months of real daily prices, scans
 it every 30 minutes for four kinds of finding, explains each one in sentences whose every figure is
-checked against the evidence, and now **reaches the user** — an actionable finding becomes a
-proposal with a deadline, arrives in Telegram with inline buttons, and an approval writes an intent
-to a paper ledger. No order is ever placed.
+checked against the evidence, lets the user **state the allocation they meant to hold**, and turns
+the drift from it into a proposal with a deadline that an approval writes to a paper ledger. No
+order is ever placed. The explanations are currently written by templates rather than a model, and
+the app now says so on its own dashboard.
 
-**What is not proven:** Telegram's own HTTP delivery to our webhook. Everything else was exercised
-against a real bot, but a webhook needs a public HTTPS URL, which arrives with M7's ingress. Until
-then the inbound path has only ever been driven by replaying genuine Telegram payloads at it.
+**What is not proven:** the entire Telegram leg, and this is worse than it was at M4. A webhook
+still needs the public HTTPS URL that arrives with M7's ingress — but on top of that, *no chat is
+currently bound and nobody has been able to bind one*: the bot our token controls receives nothing
+at all, through repeated long polls, for reasons still unexplained (see the debt table). So
+proposals reach the notifications ledger, correctly recorded as `failed`, and reach no human.
 
 ---
 
@@ -27,7 +32,7 @@ then the inbound path has only ever been driven by replaying genuine Telegram pa
 | **M1.5 — Trustworthy quote path** | ✅ Complete | **unplanned**; inserted after an audit found data problems M2 would have built on |
 | **M2 — Analysis engine & observations** | ✅ Complete | PRs #12–#22 |
 | **M2.5 — Real price history** | ✅ Complete | **unplanned**; PR #23. Finished M1's provider layer, 18 PRs late |
-| **M3 — RAG & educational engine** | Not started | gives the feed's concept chips somewhere to point |
+| **M3 — RAG & educational engine** | ⏭️ Next | gives the feed's concept chips somewhere to point; a WIP branch exists, see "Where to go next" |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
 | M5 — Market discovery & topics | ⏭️ Next, or M3 | independent of each other; see "Where to go next" |
 | M6 — Frontend completion & polish | Not started | |
@@ -64,7 +69,7 @@ cd services/ai && .venv/bin/python -m pytest -q
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
-Test counts at handoff: **818** — 423 Python, 299 orchestrator, 80 web, 16 shared.
+Test counts at handoff: **886** — 439 Python, 314 orchestrator, 117 web, 16 shared.
 
 Useful endpoints (all need the session cookie except `/internal/*`, which needs `x-internal-key`):
 
@@ -76,7 +81,9 @@ Useful endpoints (all need the session cookie except `/internal/*`, which needs 
 | `GET /proposals?state=open` | the approvals inbox; `POST /proposals/:id/decision` answers one |
 | `GET /notifications` | *what was the user told, and what were they deliberately not told* |
 | `GET`/`PUT /settings` | severity floors, TTL, quiet hours, mute |
-| `PUT /targets` | set allocation targets (**still no UI** — see debt) |
+| `PUT /targets` | set allocation targets; the **Targets page** writes it (#35) |
+| `GET /narration` | is a model writing the explanations, and if not, why not (#38) |
+| `POST /telegram/bind-token` | the **Settings page** mints the connect link (#38) |
 | `POST /telegram/bind-token` | mints the signed connect link; `POST /telegram/webhook` is public |
 
 ---
@@ -221,7 +228,26 @@ failure they prevent.
     read that header out of a proxy log could mint a link, bind their own chat and approve
     proposals. Both token types are signed over a domain tag so one key cannot mint the other kind.
 
-21. **The acting user comes from the chat binding, never from the callback payload.** There is
+21. **Reasoning effort is a property of the task, not of the installation.** It was one
+    process-wide setting baked into the provider at construction. Narration has no judgement to
+    improve — it restates figures it may not alter, and the evidence validator is what makes the
+    sentence trustworthy — so it wants thinking off; `/ask` deciding whether its retrieved context
+    supports an answer at all genuinely wants it on. One setting forces one answer on both, and the
+    caller that never considered it silently inherits the choice made by the one that did. So it is
+    a per-call argument: `None` means "no opinion, use the deployment default", the string `"none"`
+    is an opinion and overrules it, and the two are deliberately not collapsed.
+
+22. **The evidence validator is not made redundant by a better model.** It was asked directly, and
+    the answer matters: a capable model changes the *rate* of unsourced figures, never the
+    possibility, and guideline 7 is categorical. Better models also fail more dangerously — a weak
+    model's invention is clumsy, a strong one's is plausible and stylistically identical to the true
+    sentences around it. The validator is also what makes the evidence drawer an actual check rather
+    than decoration, and it is the detector that makes the template fallback possible at all: you
+    cannot degrade from a bad narration you cannot identify. It costs nothing, and its rejection
+    rate doubles as a measurement of whether a model is fit for the job — which is how we learned
+    the free one is not, without shipping a single bad sentence.
+
+23. **The acting user comes from the chat binding, never from the callback payload.** There is
     nowhere in a forged token to name a victim. A forwarded Telegram message keeps working buttons,
     so this is the property that makes forwarding harmless.
 
@@ -284,6 +310,43 @@ these and a direct question from the user found the third.
 → Specifically: **`now` is an argument, everywhere, and every call must actually pass it.** One call
 site in a file already did, which is what made four omissions easy to miss.
 
+**A migration rewrote an enumeration by retyping it, and dropped a value.** 0006 rebuilt
+`runs_kind_check` from a hand-typed list that omitted `backfill` — the kind 0005 exists entirely to
+add. Every database holding a backfill run refused 0006 and stopped at 0005, taking 0007–0009 with
+it: the entire M4 schema unreachable. This machine sat like that for days, which is why `proposals`
+and `notifications` did not exist locally and nothing downstream of an observation was ever visible.
+The fix had to be *in 0006*, because a repair migration is never reached — the failure happens
+inside the file that refuses to apply.
+→ **Extend a named list; never retype the literal.** And the deeper one:
+→ **A CHECK constraint is only exercised by data.** CI migrates an empty database, so it proves the
+SQL parses and nothing more. The constraint that matters is the one applied to rows that already
+exist — the case CI never has and every real installation does.
+`services/ai/tests/test_run_kinds_contract.py` now asserts both properties and reads both lists from
+source. It was confirmed to fail against the original bug before being kept.
+
+**A reasoning model's thinking is billed out of the answer's token budget.** Narration on a `:free`
+route returned the model's chain of thought instead of JSON, which looked like a model ignoring
+instructions. It was truncation: 1707 reasoning tokens against a 700-token ceiling, and a reply cut
+off mid-thought comes back with the reasoning in `content`. `{"exclude": true}` does not help — it
+hides the reasoning and still spends it. Only turning thinking off does.
+→ **Reasoning earns its tokens when the answer is not determined by the input.** Narration restates
+figures under rules and has no judgement to improve; `/ask` deciding whether to refuse does. That is
+why `reasoning_effort` is now a per-call argument rather than one process-wide setting — otherwise
+the caller that never thought about it inherits the choice made by the one that did.
+
+**Two changes were written against wrong diagnoses and deleted.** A JSON parser made tolerant of a
+reasoning preamble rescued none of the real replies, and an `{"enabled": false}` special case
+measured identical to the pass-through it duplicated.
+→ **Code written for a cause that turned out to be imaginary does not earn its place by being
+harmless.** Delete it and keep the measurement.
+
+**Verification methods failed three times this session, and each time looked like working code.**
+A `grep -c "Done"` hid a failing typecheck. Container-based checks of worktree code tested `main`,
+because compose builds from the main checkout. Browser clicks "succeeded" against an unfocused tab
+while screenshots looked fine, so the page appeared broken when it was not.
+→ **Read the output of a gate; never count its matches.** And when a check passes or fails
+surprisingly, suspect the harness before the code.
+
 **A PR merged while its fix was still being written.** The message-edit fix was pushed to
 `feat/telegram` after #30 had already merged, so it went nowhere and needed its own PR.
 → **Once a PR is merged, its branch is dead.** A follow-up starts from `main`.
@@ -309,14 +372,13 @@ the green test as coverage.
 | **Telegram's inbound delivery is unproven** | deployment | Everything else was exercised against a real bot, but `setWebhook` needs a public HTTPS URL. The handler has only ever been driven by replaying genuine payloads at it locally. **The first real deployment is the first real test of that leg** — check `getWebhookInfo` for `last_error_message` immediately after |
 | **`queries.ts` conflicts on every parallel PR** | `src/db/queries.ts` | Four M4 PRs appended a section to the end of one 1,200-line file, and every rebase put a conflict marker exactly where one function's closing brace met the next block's header — the brace was lost and hand-repaired **three separate times**. It is the cost of CLAUDE.md's "all SQL in one file" rule, which is otherwise good. Worth deciding whether to split by domain with an index |
 | **Migration 0008 hard-codes a table Mastra owns** | `0008_mastra_workflow_state.py` | The library would create `mastra_workflow_snapshot` itself; Alembic creates it instead (`disableInit: true`), because CLAUDE.md says the AI service owns the schema. An upgrade that changes the shape breaks suspended runs — so `test/mastraSchemaOwnership.test.ts` compares the migration against `WorkflowsPG.getExportDDL()` and fails the build first. Two other things cost time to find: `PostgresStore` creates **43** tables for 24 storage domains unless you route only `workflows`, and `@mastra/core` posts feature-usage telemetry to PostHog unless `MASTRA_TELEMETRY_DISABLED` is set (it is, in `workflowRuntime.ts`, in code rather than `.env`) |
-| **Explanation provenance is not stored** | `observations` | Nothing records whether a sentence came from the model or a template, so the UI cannot show it and a reader cannot weigh it. Needs a column; the pipeline already computes `narration_source` and `fallback_reason` and throws them away on insert |
 | **Concept chips point nowhere** | `apps/web` | PRD FR-16 wants one click to an explanation; the corpus arrives in M3. They render as labels rather than dead links |
-| **Target weights have an API and no UI** | `apps/web` | `PUT /targets` is tested and works; setting them requires curl. Allocation drift — the *only* finding that can become a proposal — is invisible to a user who does not know the endpoint exists. **This is now the single highest-value gap in the product**: without targets there is no drift, without drift there are no proposals, and the whole M4 approval path has nothing to carry. A latent cause was found in M4: `PUT` was missing from the CORS `allowMethods` list, so every `PUT` route was unreachable from a browser while working fine from curl, and the failure is invisible server-side. Fixed in #28 |
 | **Import previews live in process memory** | `services/previewStore.ts` | Forces `replicas: 1` in Kubernetes. The only remaining in-memory state — run keys moved to the `runs` table in M2 |
-| **Narration runs on a free, shared OpenRouter route** | `.env`, `app/llm` | The paid budget is spent, so `LLM_MODEL` is a `:free` route. Free routes are a shared pool: `429 overloaded` is normal under load and shows up as a template fallback, so narration coverage is now weather rather than a guarantee. Quality is a small open model's, not Sonnet's. Both are fixed by pointing `LLM_MODEL` at a paid model and funding the workspace |
+| **The free tier cannot narrate at all, and the reason is not cost** | `.env`, `app/llm` | `LLM_MODEL` is a `:free` route because the OpenRouter workspace has a **lifetime** budget of $0.01 — a cumulative cap, not an allowance, so nothing resets and only an org admin changes it. On the free model narration now reaches the evidence validator and is **rejected every time** (`unsourced_figures`, 3/3 measured) for deriving figures not in the evidence. So free means templates, reliably. Real usage is ~$0.0015 per narration and ~10 findings a day ≈ **$0.45/month**, which is what funding the workspace costs. The badge (#38) states this to the user rather than hiding it |
 | Crypto detection is a symbol-shape heuristic | `core/cache_policy.py` | `-USD` suffix, because the AI service receives bare symbols |
 | Market hours assume US sessions for every symbol | `core/cache_policy.py` | SAP.DE trades on XETRA but is judged against NYSE hours. The same wire change (pass `asset_class` and `exchange` on the quote request) fixes both this and the heuristic above |
-| No component/DOM tests on the web app | `apps/web/test` | Store and formatting logic covered; rendering is not |
+| No component/DOM tests on the web app | `apps/web/test` | Store and formatting logic covered; rendering is not. Two real UI bugs this session (Discard disabled by its own typo, a deep link that does nothing) were found by *using* the app, not by tests, and neither would have been caught by a DOM test either — but a DOM test would have caught the first |
+| **Telegram has no working binding, and why is unresolved** | deployment, `.env` | The bot our token controls (`@trade_pulse_agent_bot`, id `8840824780`) receives **nothing**: three 50-second long polls while the user was actively sending, `pending_update_count: 0`, no webhook, `getMe` fine. An unrelated OpenClaw gateway runs on this machine bound to a *different* bot (`8778977785`), so it is not the consumer. Next test: search `@trade_pulse_agent_bot` in Telegram and see whether it opens a fresh chat or the existing one — the chat may belong to another bot with the same display name. **Until this is settled the whole delivery leg is unproven**, and the notification on narration state change was deliberately left unbuilt rather than verified only to the ledger |
 | Redis cold start refetches everything | `core/cache.py` | The `quotes` table holds usable recent prices; warming from it was deferred |
 | `instruments`, `quotes` and the news tables have no `user_id` | migrations | **Intentional** — shared reference and market data, not user-owned. Documented so an audit does not re-flag it |
 
@@ -340,6 +402,22 @@ the green test as coverage.
   `cd services/ai && PYTHONPATH=$PWD /Users/a/projects/Traders/services/ai/.venv/bin/python -m pytest -q`;
   `PYTHONPATH` precedes site-packages, so it wins over the `.pth`. `pnpm install` in the worktree
   does work and is needed once.
+- **Every worktree shares one development database.** A background task's migration lands in the
+  same Postgres the main stack uses, so the database can end up *ahead* of the running containers.
+  That is how an "impossible" `Can't locate revision` appeared: the DB was at `0010_instrument_metadata`
+  while the images still held 0009.
+- **`docker compose` builds from the main checkout, never from a worktree.** `REPO_ROOT` resolves to
+  the script's own repo and the compose context is `/Users/a/projects/Traders`, so rebuilding while
+  working in a worktree silently tests `main`. Several "fix confirmed" results this session were
+  actually confirming unmodified code. To exercise a branch end to end, run the three processes from
+  the worktree instead — AI service on `:8002`, orchestrator on `:8081` (`ORCHESTRATOR_PORT`, not
+  `PORT`), web dev server on `:5179` with `VITE_API_BASE_URL` pointing at the orchestrator, and
+  `ALLOWED_ORIGINS` set to that web origin or CORS refuses every state-changing request.
+- **The main checkout is not pulled automatically.** It sat on `a0637be` for three merged PRs, which
+  is what made the compose images stale. Pull it before rebuilding anything.
+- **An `ai.openclaw.gateway` LaunchAgent runs permanently on this machine** with a Telegram connector
+  bound to bot `8778977785` — *not* ours. It is unrelated, and it is recorded here so the next
+  session does not spend an hour suspecting it of eating updates, as this one did.
 - **A real Telegram bot is configured**: `@trade_pulse_agent_bot`. `.env` holds its token, its
   username and the two secrets. The bot is live — anyone with that token controls it; `/revoke` in
   BotFather if it ever leaks.
@@ -356,20 +434,48 @@ the green test as coverage.
 
 ## Where to go next
 
-**M4 is complete and M3 and M5 are both unblocked and independent of each other.** Two things are
-worth weighing before picking.
+**The targets UI is done (#35), so the M4 path now carries something real.** Verified end to end on
+this machine: targets set in the UI produced four drift findings, three of them became `pending`
+`rebalance` proposals with 24-hour deadlines, and the notification ledger recorded three
+`above_floor` attempts plus one `below_floor` deferral into the digest. That chain is no longer an
+argument, it is an observation.
 
-**The strongest argument is for neither, and for the targets UI first.** Allocation drift is the
-only finding that can become a proposal, drift requires a target, and targets can only be set with
-curl. So the entire human-in-the-loop path built in M4 currently has nothing to carry unless someone
-knows the endpoint exists. It is perhaps half a day against M3's three, and it is the difference
-between a milestone that works and one that demonstrates.
+**M3 (RAG) is next.** The feed's concept chips have rendered as dead labels since M2, it is the last
+piece of the "explain it to me" promise in the PRD, and it is independent of everything M4 touched.
+M5 (topics) remains the larger change: it widens `notifications.ref_kind` and wants topic-shaped
+proposals.
 
-**M3 (RAG) has the stronger pull otherwise**: the feed's concept chips have rendered as dead labels
-since M2, it is the last piece of the "explain it to me" promise in the PRD, and it is independent
-of everything M4 touched. **M5 (topics) adds a second source of observations**, which the
-notification and proposal layers would then carry for free — but it also widens `notifications.ref_kind`
-and wants topic-shaped proposals, so it is the larger change.
+### Picking up the parked M3 branch
+
+`claude/m3-corpus-concept-links` holds one WIP commit: the corpus schema and three of the nine
+concept documents. **Renumber its migration before anything else** — the commit still carries
+`0010_kb_corpus.py`, and both `0010` (instrument metadata) and `0011` (narration provenance) are
+taken on `main`, so it must become `0012` with `down_revision = "0011_narration_provenance"`. Check
+`alembic heads` returns exactly one before merging anything with a migration.
+
+The nine slugs the corpus has to cover, hard-coded in `app/narration/templates.py`, are
+`daily-return`, `standard-deviation`, `z-score`, `volatility`, `drawdown`, `peak-to-trough`,
+`asset-allocation`, `rebalancing`, `portfolio-weight`. Covering exactly those satisfies FR-16 and
+half the milestone's exit criterion.
+
+The sliced plan that branch was following: **(1)** corpus, schema and live concept links, with no
+embeddings at all — a `vector(n)` column is a commitment to a model and `n` should be chosen on
+evidence; **(2)** `VectorStore`, an embeddings provider and hybrid retrieval, with a deterministic
+fixture embedder so CI stays hermetic and keyless; **(3)** `POST /ask` with intent routing,
+citations and a relevance floor; **(4)** the ~30 Q/A eval set in CI. pgvector 0.8.6 is already
+installed in the database — M0 planned for it.
+
+**The embeddings provider is an open decision** and shapes step 2: fund a paid embeddings model, run
+a local one in-container, or ship only a fixture embedder and accept that retrieval quality is a
+placeholder. See the free-tier debt row for what funding actually costs.
+
+### Left unfinished, deliberately
+
+The **notification on narration state change** (working → failing, or back, deduped so it fires on a
+transition rather than every thirty minutes) was designed and not built. It needs a bound Telegram
+chat to be verified against, and there is not one — see the debt table. Building it would have meant
+verifying only to the ledger and calling that done, which is the exact mistake M4's lessons warn
+about.
 
 Whichever is next, the seams M4 leaves are: `notifications.ref_kind` already anticipates a third
 referent, `Notifier` takes another channel without touching the fan-out, and `PROPOSABLE_KINDS` in
