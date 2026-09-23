@@ -87,6 +87,11 @@ export class AuthStore {
         this.root.settings.reset();
         this.root.targets.reset();
         this.root.telegram.reset();
+        // The corpus is shared reference material rather than one account's, so
+        // dropping the cache costs a refetch and protects nothing. It is reset
+        // anyway so that signing out cannot leave a dialog open over the login
+        // screen, and so this list stays exhaustive rather than selective.
+        this.root.concepts.reset();
         this.root.navigation.reset();
       });
     }

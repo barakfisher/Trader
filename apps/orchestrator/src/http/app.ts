@@ -21,6 +21,7 @@ import { logger } from '../logger.js';
 import { SESSION_COOKIE, verifySessionToken } from './auth.js';
 import { toErrorResponse, unauthorized, ApiProblem } from './errors.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerConceptsRoutes } from './routes/concepts.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerHoldingsRoutes } from './routes/holdings.js';
 import { registerImportRoutes } from './routes/imports.js';
@@ -51,6 +52,10 @@ const PROTECTED_PREFIXES = [
   '/imports',
   '/runs',
   '/observations',
+  // Shared reference material with no `user_id`, but still behind the gate: the
+  // corpus is part of the product, not a public API, and an unauthenticated
+  // reader has no observation to have arrived from.
+  '/concepts',
   '/targets',
   '/proposals',
   '/notifications',
@@ -175,6 +180,7 @@ export function createApp(
   registerSettingsRoutes(app);
   registerTelegramRoutes(app);
   registerImportRoutes(app);
+  registerConceptsRoutes(app);
   registerInternalRoutes(app);
 
   return app;

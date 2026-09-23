@@ -67,6 +67,14 @@ say "Starting Postgres and Redis, and applying migrations"
 "${COMPOSE[@]}" up -d postgres redis
 "${COMPOSE[@]}" run --rm migrate > /dev/null
 ok "database is migrated"
+# Idempotent: unchanged documents are compared and not rewritten, so this is
+# free on every run but the first. Not fatal - an empty corpus costs the concept
+# links, not the app.
+if "${COMPOSE[@]}" run --rm corpus > /dev/null 2>&1; then
+  ok "concept corpus is ingested"
+else
+  warn "concept corpus was not ingested; concept links will 404 until it is"
+fi
 
 # The containerised copies of the app would hold the ports this script needs,
 # and running both would be confusing: two orchestrators, one database.

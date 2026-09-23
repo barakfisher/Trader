@@ -230,6 +230,38 @@ class NarrationConfigResponse(BaseModel):
     daily_budget_usd: str
 
 
+class ConceptSection(BaseModel):
+    """One `##` section of a concept document, as chunked at ingestion.
+
+    `ord` is the position the ingester stored, so a citation can name a section
+    rather than a byte range, and `id` is the chunk's own id - stable across
+    re-ingestion of an unchanged document, which is what lets it be cited at all.
+    """
+
+    id: str
+    ord: int
+    heading: str | None
+    text: str
+
+
+class ConceptDocumentResponse(BaseModel):
+    """A concept explainer, assembled from its chunks in stored order.
+
+    Served whole rather than as a retrieval result: a chip names one concept
+    exactly, so there is nothing to rank and no relevance floor to apply. The
+    licence and source travel with it because the corpus is required to be
+    licence-clean and a reader is entitled to know where an explanation came
+    from.
+    """
+
+    slug: str
+    title: str
+    source: str
+    uri: str | None
+    license: str
+    sections: list[ConceptSection]
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"]
     service: str = "ai-service"

@@ -76,6 +76,91 @@
         "title": "BackfillResponse",
         "type": "object"
       },
+      "ConceptDocumentResponse": {
+        "description": "A concept explainer, assembled from its chunks in stored order.\n\nServed whole rather than as a retrieval result: a chip names one concept\nexactly, so there is nothing to rank and no relevance floor to apply. The\nlicence and source travel with it because the corpus is required to be\nlicence-clean and a reader is entitled to know where an explanation came\nfrom.",
+        "properties": {
+          "license": {
+            "title": "License",
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/ConceptSection"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uri"
+          }
+        },
+        "required": [
+          "slug",
+          "title",
+          "source",
+          "uri",
+          "license",
+          "sections"
+        ],
+        "title": "ConceptDocumentResponse",
+        "type": "object"
+      },
+      "ConceptSection": {
+        "description": "One `##` section of a concept document, as chunked at ingestion.\n\n`ord` is the position the ingester stored, so a citation can name a section\nrather than a byte range, and `id` is the chunk's own id - stable across\nre-ingestion of an unchanged document, which is what lets it be cited at all.",
+        "properties": {
+          "heading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "ord": {
+            "title": "Ord",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "ord",
+          "heading",
+          "text"
+        ],
+        "title": "ConceptSection",
+        "type": "object"
+      },
       "FxRate": {
         "properties": {
           "as_of": {
@@ -763,6 +848,118 @@
         "summary": "Portfolio Scan",
         "tags": [
           "analysis"
+        ]
+      }
+    },
+    "/concepts": {
+      "get": {
+        "description": "Every concept the corpus can answer for.",
+        "operationId": "list_concepts_concepts_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response List Concepts Concepts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Concepts",
+        "tags": [
+          "concepts"
+        ]
+      }
+    },
+    "/concepts/{slug}": {
+      "get": {
+        "operationId": "get_concept_concepts__slug__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConceptDocumentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Concept",
+        "tags": [
+          "concepts"
         ]
       }
     },

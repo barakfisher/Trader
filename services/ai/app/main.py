@@ -21,7 +21,7 @@ from app.core.logging import configure_logging, get_logger, request_id_var
 from app.core.ratelimit import RateLimiter
 from app.llm.factory import build_llm
 from app.providers.registry import MarketDataService, build_providers
-from app.routers import analysis, health, market, narration
+from app.routers import analysis, concepts, health, market, narration
 
 settings = get_settings()
 configure_logging(settings.log_level, json_output=settings.is_production)
@@ -80,3 +80,4 @@ app.include_router(health.router)
 app.include_router(market.router)
 app.include_router(analysis.router)
 app.include_router(narration.router)
+app.include_router(concepts.router)

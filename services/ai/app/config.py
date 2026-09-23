@@ -20,6 +20,9 @@ from app.llm.pricing import ModelPrice, parse_model_prices
 #: Where the container copies the fixtures to (see infra/docker/Dockerfile.ai).
 _CONTAINER_FIXTURES_DIR = "/app/data/fixtures"
 
+#: Where the container copies the concept corpus to (same Dockerfile).
+_CONTAINER_CORPUS_DIR = "/app/data/corpus"
+
 
 def _default_fixtures_dir() -> str:
     """Locate `data/fixtures` in both places this service runs.
@@ -35,6 +38,21 @@ def _default_fixtures_dir() -> str:
     except IndexError:  # pragma: no cover - only when the path is unusually short
         return _CONTAINER_FIXTURES_DIR
     return str(checkout) if checkout.is_dir() else _CONTAINER_FIXTURES_DIR
+
+
+def _default_corpus_dir() -> str:
+    """Locate `data/corpus`, in both places this service runs.
+
+    Same problem and same answer as the fixtures above. Guessing wrong here is
+    quieter still: the ingester reports "no documents found" and exits, and the
+    concept chips then point at an empty corpus - which looks exactly like the
+    dead labels M3 exists to remove.
+    """
+    try:
+        checkout = Path(__file__).resolve().parents[3] / "data" / "corpus"
+    except IndexError:  # pragma: no cover - only when the path is unusually short
+        return _CONTAINER_CORPUS_DIR
+    return str(checkout) if checkout.is_dir() else _CONTAINER_CORPUS_DIR
 
 
 #: Placeholder shipped in .env.example. Usable in development because both
@@ -139,6 +157,10 @@ class Settings(BaseSettings):
     # Absolute path to the fixture data directory. Resolved for the current
     # runtime; FIXTURES_DIR in the environment always wins.
     fixtures_dir: str = Field(default_factory=_default_fixtures_dir)
+
+    # Absolute path to the concept corpus. Resolved for the current runtime;
+    # CORPUS_DIR in the environment always wins.
+    corpus_dir: str = Field(default_factory=_default_corpus_dir)
 
     # News providers: ordered chain, same comma-separated convention as
     # market_data_providers and for the same pydantic-settings reason. Unlike the

@@ -192,6 +192,29 @@ export type _AssertNarrationConfig = Expect<
   Equal<z.infer<typeof narrationConfigSchema>, Schemas['NarrationConfigResponse']>
 >;
 
+export const conceptSectionSchema = z.object({
+  id: z.string(),
+  ord: z.number(),
+  heading: z.string().nullable(),
+  text: z.string(),
+});
+
+export const conceptDocumentSchema = z.object({
+  slug: z.string(),
+  title: z.string(),
+  source: z.string(),
+  uri: z.string().nullable(),
+  license: z.string(),
+  sections: z.array(conceptSectionSchema),
+});
+
+export type _AssertConceptSection = Expect<
+  Equal<z.infer<typeof conceptSectionSchema>, Schemas['ConceptSection']>
+>;
+export type _AssertConceptDocument = Expect<
+  Equal<z.infer<typeof conceptDocumentSchema>, Schemas['ConceptDocumentResponse']>
+>;
+
 export type _AssertHealthResponse = Expect<
   Equal<z.infer<typeof healthResponseSchema>, Schemas['HealthResponse']>
 >;

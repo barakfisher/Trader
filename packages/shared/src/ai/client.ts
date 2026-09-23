@@ -17,6 +17,7 @@ import type { z } from 'zod';
 
 import type { components } from '../generated/ai-api.js';
 import {
+  conceptDocumentSchema,
   fxRateSchema,
   healthResponseSchema,
   backfillResponseSchema,
@@ -38,6 +39,8 @@ export type PortfolioScanResponse = components['schemas']['PortfolioScanResponse
 export type ObservationOut = components['schemas']['ObservationOut'];
 export type BackfillRequest = components['schemas']['BackfillRequest'];
 export type BackfillResponse = components['schemas']['BackfillResponse'];
+export type ConceptDocument = components['schemas']['ConceptDocumentResponse'];
+export type ConceptSection = components['schemas']['ConceptSection'];
 
 /**
  * A scan loads history for every holding and may call a model once per finding,
@@ -189,6 +192,26 @@ export class AiClient {
       requestId,
       timeoutMs: SCAN_TIMEOUT_MS,
     });
+  }
+
+  /**
+   * One concept explainer, whole.
+   *
+   * Asked of the AI service rather than read from `kb_chunks` here, because the
+   * corpus belongs to that service along with the ingester and the retrieval
+   * `/ask` will add. A second reader of those tables would be a second place
+   * that has to agree about section ordering and namespace filtering.
+   *
+   * A slug the corpus does not hold raises `AiServiceError` with status 404,
+   * which the caller renders as "not available" rather than as a failure: an
+   * environment that has not ingested the corpus is a real state, not a bug.
+   */
+  concept(slug: string, requestId?: string): Promise<ConceptDocument> {
+    return this.request<ConceptDocument>(
+      `/concepts/${encodeURIComponent(slug)}`,
+      conceptDocumentSchema,
+      { method: 'GET', requestId },
+    );
   }
 
   fxRate(base: string, quote: string, requestId?: string): Promise<FxRate> {
