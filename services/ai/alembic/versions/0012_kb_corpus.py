@@ -25,14 +25,14 @@ account's property any more than `instruments` or `quotes` are. It is recorded
 here so a later audit against project guideline 5 reads this line instead of
 re-opening the question.
 
-Revision ID: 0010_kb_corpus
-Revises: 0009_telegram_bindings
+Revision ID: 0012_kb_corpus
+Revises: 0011_narration_provenance
 """
 
 from alembic import op
 
-revision = "0010_kb_corpus"
-down_revision = "0009_telegram_bindings"
+revision = "0012_kb_corpus"
+down_revision = "0011_narration_provenance"
 branch_labels = None
 depends_on = None
 
