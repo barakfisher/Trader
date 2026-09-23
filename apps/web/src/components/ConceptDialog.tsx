@@ -1,0 +1,168 @@
+import { useEffect, useRef } from 'react';
+import { observer } from 'mobx-react-lite';
+import { X } from 'lucide-react';
+
+import { parseConceptText, type TextSpan } from '../lib/conceptText.ts';
+import { conceptLabel } from '../lib/observationPresentation.ts';
+import { useStore } from '../stores/context.tsx';
+import { ErrorNote, Spinner } from './ui.tsx';
+
+function Spans({ spans }: { spans: TextSpan[] }) {
+  return (
+    <>
+      {spans.map((span, index) => {
+        if (span.style === 'bold') {
+          return (
+            <strong key={index} className="font-medium text-text-primary">
+              {span.text}
+            </strong>
+          );
+        }
+        if (span.style === 'italic') {
+          return (
+            <em key={index} className="italic">
+              {span.text}
+            </em>
+          );
+        }
+        return <span key={index}>{span.text}</span>;
+      })}
+    </>
+  );
+}
+
+/**
+ * The explanation behind a concept chip.
+ *
+ * A dialog rather than a page or an inline expansion. A page would take the
+ * reader away from the observation that raised the question, which is the
+ * context that makes the answer worth reading; an inline expansion would push
+ * the rest of the feed down by several screens every time somebody asked what a
+ * word meant.
+ *
+ * Nothing renders when no concept is open, so the feed pays nothing for this.
+ */
+export const ConceptDialog = observer(function ConceptDialog() {
+  const { concepts } = useStore();
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const slug = concepts.openSlug;
+
+  // Escape closes, from anywhere. Registered only while open so the handler is
+  // not sitting on the document for the whole session.
+  useEffect(() => {
+    if (slug === null) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') concepts.close();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [slug, concepts]);
+
+  // Move focus into the dialog when it opens, or a keyboard user is left on the
+  // chip behind the overlay with no way into what just appeared.
+  useEffect(() => {
+    if (slug !== null) closeRef.current?.focus();
+  }, [slug]);
+
+  if (slug === null) return null;
+
+  const document_ = concepts.current;
+  const title = document_?.title ?? conceptLabel(slug);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-8"
+      // The backdrop closes, but only when the backdrop itself is the target:
+      // without the check, a click that starts on the text and drifts onto the
+      // overlay closes the dialog mid-selection.
+      onClick={(event) => {
+        if (event.target === event.currentTarget) concepts.close();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="concept-dialog-title"
+        className="w-full max-w-2xl rounded-lg border border-border bg-surface shadow-xl"
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
+          <div>
+            <h2 id="concept-dialog-title" className="text-base font-medium text-text-primary">
+              {title}
+            </h2>
+            <p className="mt-0.5 text-[11px] uppercase tracking-wide text-text-muted">Concept</p>
+          </div>
+          <button
+            ref={closeRef}
+            type="button"
+            onClick={concepts.close}
+            aria-label="Close explanation"
+            className="rounded p-1 text-text-muted hover:bg-surface-hover hover:text-text-primary"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-5 py-4">
+          {concepts.loading && <Spinner label="Loading the explanation…" />}
+
+          {!concepts.loading && concepts.notFound && (
+            <p className="text-sm text-text-muted">
+              No explanation is available for “{conceptLabel(slug)}” yet. The concept corpus may not
+              have been ingested in this environment.
+            </p>
+          )}
+
+          {!concepts.loading && concepts.error !== null && (
+            <ErrorNote message={concepts.error} onRetry={concepts.retry} />
+          )}
+
+          {!concepts.loading && document_ !== null && (
+            <article className="space-y-5">
+              {document_.sections.map((section) => (
+                <section key={section.id}>
+                  {section.heading !== null && (
+                    <h3 className="text-sm font-medium text-text-primary">{section.heading}</h3>
+                  )}
+                  <div className="mt-1 space-y-2">
+                    {parseConceptText(section.text).map((block, index) =>
+                      block.kind === 'code' ? (
+                        <pre
+                          key={index}
+                          className="overflow-x-auto rounded bg-surface-hover px-3 py-2 text-xs text-text-primary"
+                        >
+                          {block.text}
+                        </pre>
+                      ) : (
+                        <p key={index} className="text-sm leading-relaxed text-text-muted">
+                          <Spans spans={block.spans} />
+                        </p>
+                      ),
+                    )}
+                  </div>
+                </section>
+              ))}
+
+              <p className="border-t border-border pt-3 text-[11px] text-text-muted">
+                Source: {document_.source} · Licence: {document_.license}
+                {document_.uri !== null && (
+                  <>
+                    {' · '}
+                    <a
+                      href={document_.uri}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="text-accent hover:underline"
+                    >
+                      original
+                    </a>
+                  </>
+                )}
+              </p>
+            </article>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});

@@ -5,6 +5,7 @@ import { LoginPage } from './pages/LoginPage.tsx';
 import { ProposalsPage } from './pages/ProposalsPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import { TargetsPage } from './pages/TargetsPage.tsx';
+import { ConceptDialog } from './components/ConceptDialog.tsx';
 import { Spinner } from './components/ui.tsx';
 import { useStore } from './stores/context.tsx';
 
@@ -22,8 +23,25 @@ export const App = observer(function App() {
   }
 
   if (!auth.isAuthenticated) return <LoginPage />;
-  if (navigation.view === 'settings') return <SettingsPage />;
-  if (navigation.view === 'proposals') return <ProposalsPage />;
-  if (navigation.view === 'targets') return <TargetsPage />;
-  return <DashboardPage />;
+
+  const page =
+    navigation.view === 'settings' ? (
+      <SettingsPage />
+    ) : navigation.view === 'proposals' ? (
+      <ProposalsPage />
+    ) : navigation.view === 'targets' ? (
+      <TargetsPage />
+    ) : (
+      <DashboardPage />
+    );
+
+  // Mounted here rather than inside the feed: it is an overlay, and a concept
+  // opened from one view must not be unmounted by navigating to another. It
+  // renders nothing at all while no concept is open.
+  return (
+    <>
+      {page}
+      <ConceptDialog />
+    </>
+  );
 });

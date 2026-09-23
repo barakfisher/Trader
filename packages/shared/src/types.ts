@@ -451,6 +451,40 @@ export interface NarrationHealthResponse {
   lastFallbackReason: string | null;
 }
 
+// --- Concept corpus (M3; GET /concepts/:slug) ---------------------------------
+
+/**
+ * One `##` section of a concept explainer, as the ingester chunked it.
+ *
+ * `id` is the stored chunk id and is stable across re-ingestion of an unchanged
+ * document, which is what makes it citable. `ord` is its position, so the
+ * sections render in the order they were written rather than in whatever order
+ * a query returned them.
+ */
+export interface ConceptSection {
+  id: string;
+  ord: number;
+  heading: string | null;
+  text: string;
+}
+
+/**
+ * A concept explainer, whole.
+ *
+ * Delivered entire rather than as a ranked retrieval result: a chip names one
+ * concept exactly, so there is nothing to score. `license` and `source` travel
+ * with it because the corpus is required to be licence-clean, and a reader is
+ * entitled to know who wrote the explanation they are being shown.
+ */
+export interface ConceptDocument {
+  slug: string;
+  title: string;
+  source: string;
+  uri: string | null;
+  license: string;
+  sections: ConceptSection[];
+}
+
 // --- Telegram binding (M4; GET /telegram/binding) -----------------------------
 
 export interface TelegramBindingResponse {

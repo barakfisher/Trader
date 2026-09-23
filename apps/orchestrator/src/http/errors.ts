@@ -9,7 +9,7 @@ import { HTTPException } from 'hono/http-exception';
 
 export class ApiProblem extends HTTPException {
   constructor(
-    status: 400 | 401 | 403 | 404 | 409 | 413 | 422 | 429 | 500 | 502 | 503,
+    status: 400 | 401 | 403 | 404 | 409 | 413 | 422 | 429 | 500 | 502 | 503 | 504,
     readonly code: string,
     message: string,
     readonly details?: unknown,
@@ -25,6 +25,23 @@ export const unauthorized = (message = 'authentication required') =>
 export const notFound = (message = 'not found') => new ApiProblem(404, 'not_found', message);
 export const unprocessable = (code: string, message: string, details?: unknown) =>
   new ApiProblem(422, code, message, details);
+
+/**
+ * An upstream (AI service) failure, reported as ours rather than as the
+ * browser's.
+ *
+ * Only the three gateway statuses are forwarded, because only those describe
+ * the upstream call itself. Anything else is rewritten to 502: a 401 from the
+ * AI service means *our* internal key is wrong, and passing that through would
+ * tell the browser the reader's session had expired - sending them to log in
+ * again over a server misconfiguration they cannot affect.
+ */
+export const upstreamFailure = (status: number, message: string) =>
+  new ApiProblem(
+    status === 503 || status === 504 ? status : 502,
+    'ai_service_error',
+    message,
+  );
 
 export function toErrorResponse(error: unknown, context: Context): { body: ApiError; status: number } {
   const requestId = context.get('requestId') as string | undefined;

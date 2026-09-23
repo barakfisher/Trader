@@ -21,6 +21,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/concepts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Concepts
+         * @description Every concept the corpus can answer for.
+         */
+        get: operations["list_concepts_concepts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/concepts/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Concept */
+        get: operations["get_concept_concepts__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -192,6 +229,48 @@ export interface components {
              * @default 0
              */
             written: number;
+        };
+        /**
+         * ConceptDocumentResponse
+         * @description A concept explainer, assembled from its chunks in stored order.
+         *
+         *     Served whole rather than as a retrieval result: a chip names one concept
+         *     exactly, so there is nothing to rank and no relevance floor to apply. The
+         *     licence and source travel with it because the corpus is required to be
+         *     licence-clean and a reader is entitled to know where an explanation came
+         *     from.
+         */
+        ConceptDocumentResponse: {
+            /** License */
+            license: string;
+            /** Sections */
+            sections: components["schemas"]["ConceptSection"][];
+            /** Slug */
+            slug: string;
+            /** Source */
+            source: string;
+            /** Title */
+            title: string;
+            /** Uri */
+            uri: string | null;
+        };
+        /**
+         * ConceptSection
+         * @description One `##` section of a concept document, as chunked at ingestion.
+         *
+         *     `ord` is the position the ingester stored, so a citation can name a section
+         *     rather than a byte range, and `id` is the chunk's own id - stable across
+         *     re-ingestion of an unchanged document, which is what lets it be cited at all.
+         */
+        ConceptSection: {
+            /** Heading */
+            heading: string | null;
+            /** Id */
+            id: string;
+            /** Ord */
+            ord: number;
+            /** Text */
+            text: string;
         };
         /** FxRate */
         FxRate: {
@@ -544,6 +623,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortfolioScanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_concepts_concepts_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_concept_concepts__slug__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConceptDocumentResponse"];
                 };
             };
             /** @description Validation Error */

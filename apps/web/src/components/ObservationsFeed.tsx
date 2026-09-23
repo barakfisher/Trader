@@ -71,7 +71,7 @@ const ObservationRow = observer(function ObservationRow({
   observation: Observation;
   baseCurrency: string;
 }) {
-  const { observations } = useStore();
+  const { observations, concepts } = useStore();
   const severity = severityStyle(observation.severity);
   const open = observations.isExpanded(observation.id);
   const drawerId = `evidence-${observation.id}`;
@@ -105,13 +105,15 @@ const ObservationRow = observer(function ObservationRow({
           <p className="mt-2 flex flex-wrap items-center gap-1 text-[11px] text-text-muted">
             <span className="uppercase tracking-wide">Concepts</span>
             {observation.conceptRefs.map((slug) => (
-              <span
+              <button
                 key={slug}
-                title={slug}
-                className="rounded bg-surface-hover px-1.5 py-0.5 text-text-primary"
+                type="button"
+                onClick={() => concepts.open(slug)}
+                title={`What is ${conceptLabel(slug).toLowerCase()}?`}
+                className="rounded bg-surface-hover px-1.5 py-0.5 text-text-primary hover:bg-border hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
               >
                 {conceptLabel(slug)}
-              </span>
+              </button>
             ))}
           </p>
         )}

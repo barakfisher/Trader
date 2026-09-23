@@ -4,6 +4,7 @@
  */
 
 import { AuthStore } from './AuthStore.ts';
+import { ConceptStore } from './ConceptStore.ts';
 import { ImportStore } from './ImportStore.ts';
 import { NarrationStore } from './NarrationStore.ts';
 import { NavigationStore } from './NavigationStore.ts';
@@ -24,5 +25,6 @@ export class RootStore {
   readonly settings = new SettingsStore(this);
   readonly targets = new TargetsStore(this);
   readonly telegram = new TelegramStore(this);
+  readonly concepts = new ConceptStore(this);
   readonly navigation = new NavigationStore(this);
 }
