@@ -29,6 +29,12 @@ fixed by a test.
 Metadata is handled separately from content on purpose. Correcting a typo in a
 title updates the document row and leaves every chunk id alone, because the title
 is not part of what a chunk says.
+
+**Embedding is a third pass and a separate function** (`embed_pending`), not a
+step inside the two above. The content hash means an unchanged document is never
+re-read, so an embedding step folded into it could never catch up a corpus that
+was ingested before any embedder existed - which is the state of every
+installation that ran slice 1. Its docstring has the rest of the argument.
 """
 
 from __future__ import annotations
@@ -39,7 +45,9 @@ from typing import Literal
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from app.corpus.documents import CorpusDocument
+from app.corpus.documents import NAMESPACE_CONCEPTS, CorpusDocument
+from app.corpus.embeddings import BaseEmbedder, EmbeddingError
+from app.corpus.vector_store import VectorStore
 
 #: What happened to one document. `unchanged` means no statement was executed
 #: against it, which is the expected outcome for most of a re-run.
@@ -75,7 +83,24 @@ def _write_chunks(
                 VALUES (:document_id, :ord, :heading, :text)
                 ON CONFLICT (document_id, ord) DO UPDATE
                    SET heading = EXCLUDED.heading,
-                       text    = EXCLUDED.text
+                       text    = EXCLUDED.text,
+                       -- An embedding describes the text it was made from, so
+                       -- rewriting the text without clearing the vector leaves a
+                       -- row that retrieval will happily rank on a paragraph the
+                       -- document no longer contains. Cleared here, in the same
+                       -- statement, rather than by a later pass that has to
+                       -- remember: this is what makes `embedding IS NULL` the
+                       -- complete definition of "needs embedding".
+                       --
+                       -- Conditional, because the heading is not embedded (see
+                       -- vector_store.py), so a heading-only edit must not
+                       -- discard a vector that is still accurate.
+                       embedding = CASE
+                           WHEN kb_chunks.text IS DISTINCT FROM EXCLUDED.text
+                           THEN NULL ELSE kb_chunks.embedding END,
+                       embedding_model = CASE
+                           WHEN kb_chunks.text IS DISTINCT FROM EXCLUDED.text
+                           THEN NULL ELSE kb_chunks.embedding_model END
                  WHERE kb_chunks.text    IS DISTINCT FROM EXCLUDED.text
                     OR kb_chunks.heading IS DISTINCT FROM EXCLUDED.heading
                 """
@@ -180,3 +205,64 @@ def ingest_documents(
 ) -> list[DocumentResult]:
     """Ingest every document in one transaction, in the order given."""
     return [ingest_document(connection, document) for document in documents]
+
+
+@dataclass(frozen=True, slots=True)
+class EmbeddingResult:
+    """What one embedding pass did, and with which model."""
+
+    model: str
+    chunks_embedded: int
+
+
+async def embed_pending(
+    connection: Connection,
+    store: VectorStore,
+    embedder: BaseEmbedder,
+    *,
+    namespace: str = NAMESPACE_CONCEPTS,
+    batch_size: int = 64,
+) -> EmbeddingResult:
+    """Embed every chunk that has no vector from `embedder`'s model.
+
+    Separate from `ingest_document` rather than folded into it, for two reasons
+    that pull the same way. A document whose content did not change is never
+    re-read by the ingester at all - that is the whole point of the content hash
+    - so an embedding step living inside it could never catch up a corpus that
+    was ingested before an embedder existed, which is precisely the state every
+    installation is in right now. And embedding is the only part of ingestion
+    that may reach the network, so it is the part that should be identifiable in
+    a traceback and skippable by a caller that does not want it.
+
+    Idempotent for the same reason the rest of ingestion is: a second run finds
+    nothing pending and issues no statements. Runs inside the caller's
+    transaction and never commits.
+
+    Batched because a paid provider charges per request as well as per token and
+    embeds a list in one call. The fixture ignores the batching entirely, which
+    is the point of doing it at this layer instead of inside an adapter.
+    """
+    pending = store.pending_chunks(connection, model=embedder.model, namespace=namespace)
+    if not pending:
+        return EmbeddingResult(embedder.model, 0)
+
+    written = 0
+    for start in range(0, len(pending), batch_size):
+        batch = pending[start : start + batch_size]
+        vectors = await embedder.embed_documents([chunk.text for chunk in batch])
+        if len(vectors) != len(batch):
+            # The interface promises one vector per input. A provider that
+            # breaks that promise would misattribute every vector after the
+            # missing one - a corpus where `drawdown` is indexed under
+            # `rebalancing`, which no test downstream could distinguish from a
+            # bad model. Refused rather than zipped.
+            raise EmbeddingError(
+                f"{embedder.model} returned {len(vectors)} vectors for {len(batch)} texts"
+            )
+        written += store.store_embeddings(
+            connection,
+            model=embedder.model,
+            embeddings=list(zip([chunk.id for chunk in batch], vectors, strict=True)),
+        )
+
+    return EmbeddingResult(embedder.model, written)

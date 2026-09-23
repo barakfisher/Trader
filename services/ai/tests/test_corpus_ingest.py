@@ -19,10 +19,16 @@ a rename in the query that this file did not follow shows up as an
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 
-from app.corpus.documents import Chunk, CorpusDocument, content_hash
-from app.corpus.ingest import ingest_document
+import pytest
+
+from app.corpus.documents import NAMESPACE_CONCEPTS, Chunk, CorpusDocument, content_hash
+from app.corpus.embeddings import EmbeddingError
+from app.corpus.hashed_embedder import HashedEmbedder
+from app.corpus.ingest import embed_pending, ingest_document
+from app.corpus.vector_store import EmbeddingCoverage, PendingChunk
 
 
 @dataclass(frozen=True)
@@ -153,3 +159,132 @@ def test_a_changed_document_is_never_deleted_wholesale() -> None:
     assert not any(sql.startswith("DELETE FROM kb_documents") for sql in connection.statements)
     inserts = [sql for sql in connection.statements if sql.startswith("INSERT INTO kb_chunks")]
     assert all("ON CONFLICT (document_id, ord) DO UPDATE" in sql for sql in inserts)
+
+
+# --------------------------------------------------------------------------
+# The embedding pass
+# --------------------------------------------------------------------------
+
+
+class RecordingStore:
+    """A `VectorStore` that hands out `pending` once and records what it is given."""
+
+    def __init__(self, pending: list[PendingChunk]) -> None:
+        self._pending = pending
+        self.asked_for_model: str | None = None
+        self.batches: list[list[tuple[str, list[float]]]] = []
+
+    def pending_chunks(self, _connection, *, model, namespace=NAMESPACE_CONCEPTS):  # type: ignore[no-untyped-def]
+        self.asked_for_model = model
+        return self._pending
+
+    def store_embeddings(self, _connection, *, model, embeddings):  # type: ignore[no-untyped-def]
+        self.batches.append(embeddings)
+        return len(embeddings)
+
+    def search(self, _connection, **_kwargs):  # type: ignore[no-untyped-def]
+        return []
+
+    def coverage(self, _connection, **_kwargs):  # type: ignore[no-untyped-def]
+        return EmbeddingCoverage(total=0, embedded=0, models=())
+
+
+class ShortEmbedder:
+    """Returns fewer vectors than it was given texts - the misattribution case."""
+
+    model = "broken/short"
+    dimension = 4
+    charges_per_token = False
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [[1.0, 0.0, 0.0, 0.0]] * (len(texts) - 1)
+
+    async def embed_query(self, text: str) -> list[float]:
+        return [1.0, 0.0, 0.0, 0.0]
+
+
+def test_nothing_pending_means_no_statements_at_all() -> None:
+    """The same idempotence the content hash buys for text, bought for vectors.
+
+    Embedding runs on every stack start, so a run that finds nothing to do must
+    cost nothing - and must not touch `embedding_model`, which is what decides
+    what needs re-embedding next time.
+    """
+    store = RecordingStore([])
+
+    result = asyncio.run(embed_pending(FakeConnection(None), store, HashedEmbedder()))
+
+    assert result.chunks_embedded == 0
+    assert store.batches == []
+
+
+def test_pending_chunks_are_requested_for_this_embedders_model() -> None:
+    """A row embedded by another model is stale, even though it has a vector."""
+    store = RecordingStore([])
+
+    asyncio.run(embed_pending(FakeConnection(None), store, HashedEmbedder()))
+
+    assert store.asked_for_model == HashedEmbedder.model
+
+
+def test_every_pending_chunk_is_embedded_and_paired_with_its_own_id() -> None:
+    pending = [PendingChunk(id=f"chunk-{n}", text=f"text {n}") for n in range(3)]
+    store = RecordingStore(pending)
+
+    result = asyncio.run(embed_pending(FakeConnection(None), store, HashedEmbedder()))
+
+    assert result.chunks_embedded == 3
+    assert [chunk_id for batch in store.batches for chunk_id, _ in batch] == [
+        "chunk-0",
+        "chunk-1",
+        "chunk-2",
+    ]
+
+
+def test_batching_covers_every_chunk_without_repeating_one() -> None:
+    """Batching exists for a paid provider's per-request charge, not for speed.
+
+    It is at this layer rather than inside an adapter so the fixture inherits it
+    unchanged - which is the only way a bug in the batching shows up in a suite
+    that never calls a paid provider.
+    """
+    pending = [PendingChunk(id=f"chunk-{n}", text=f"text {n}") for n in range(7)]
+    store = RecordingStore(pending)
+
+    result = asyncio.run(embed_pending(FakeConnection(None), store, HashedEmbedder(), batch_size=3))
+
+    assert [len(batch) for batch in store.batches] == [3, 3, 1]
+    assert result.chunks_embedded == 7
+
+
+def test_a_provider_returning_the_wrong_number_of_vectors_is_refused() -> None:
+    """Zipping them would index every chunk after the gap under its neighbour.
+
+    A corpus where `drawdown` is stored under `rebalancing`'s vector is wrong in
+    a way nothing downstream can distinguish from a bad embedding model, so it
+    is refused at the seam where the counts are still visible.
+    """
+    store = RecordingStore([PendingChunk(id="a", text="x"), PendingChunk(id="b", text="y")])
+
+    with pytest.raises(EmbeddingError, match="returned 1 vectors for 2 texts"):
+        asyncio.run(embed_pending(FakeConnection(None), store, ShortEmbedder()))
+
+    assert store.batches == [], "nothing is written when the counts disagree"
+
+
+def test_rewriting_a_chunks_text_clears_the_vector_that_described_it() -> None:
+    """Otherwise retrieval ranks on a paragraph the document no longer contains.
+
+    Cleared in the same statement that rewrites the text rather than by a later
+    pass, which is what makes `embedding IS NULL` the complete definition of
+    "needs embedding" instead of one of two conditions somebody has to remember.
+    """
+    document = _document(body="A different fall.")
+    stored = _stored_from(_document())
+    connection = FakeConnection(stored)
+
+    ingest_document(connection, document)
+
+    upsert = next(s for s in connection.statements if s.startswith("INSERT INTO kb_chunks"))
+    assert "embedding = CASE WHEN kb_chunks.text IS DISTINCT FROM EXCLUDED.text" in upsert
+    assert "embedding_model = CASE WHEN kb_chunks.text IS DISTINCT FROM EXCLUDED.text" in upsert

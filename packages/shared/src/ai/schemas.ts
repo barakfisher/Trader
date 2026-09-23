@@ -208,6 +208,41 @@ export const conceptDocumentSchema = z.object({
   sections: z.array(conceptSectionSchema),
 });
 
+export const conceptSearchMatchSchema = z.object({
+  chunk_id: z.string(),
+  document_id: z.string(),
+  concept_slug: z.string().nullable(),
+  title: z.string(),
+  heading: z.string().nullable(),
+  ord: z.number(),
+  text: z.string(),
+  score: z.number(),
+  // Null means that half of the hybrid did not return this chunk at all, which
+  // is a different statement from ranking it last. A null `vector_rank` on
+  // every match is how a reader can tell the corpus has never been embedded -
+  // a state that otherwise looks exactly like working hybrid retrieval.
+  vector_rank: z.number().nullable(),
+  text_rank: z.number().nullable(),
+});
+
+export const conceptSearchResponseSchema = z.object({
+  query: z.string(),
+  matches: z.array(conceptSearchMatchSchema),
+  embedding_model: z.string(),
+  // False while the configured embedder ranks by word overlap alone. On the
+  // wire rather than in a log, because a ranking produced by shared words is
+  // indistinguishable from one produced by understanding the question, and the
+  // difference is the whole of the owed embeddings migration.
+  vector_is_semantic: z.boolean(),
+});
+
+export type _AssertConceptSearchMatch = Expect<
+  Equal<z.infer<typeof conceptSearchMatchSchema>, Schemas['ConceptSearchMatch']>
+>;
+export type _AssertConceptSearchResponse = Expect<
+  Equal<z.infer<typeof conceptSearchResponseSchema>, Schemas['ConceptSearchResponse']>
+>;
+
 export type _AssertConceptSection = Expect<
   Equal<z.infer<typeof conceptSectionSchema>, Schemas['ConceptSection']>
 >;

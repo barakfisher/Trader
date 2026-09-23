@@ -41,6 +41,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/concepts/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Concepts
+         * @description Hybrid retrieval over the corpus: the half of `/ask` that finds things.
+         *
+         *     **Declared before `/concepts/{slug}`, and that is load-bearing.** FastAPI
+         *     matches routes in registration order, so a path parameter registered first
+         *     would swallow `/concepts/search` as a request for a concept called "search" -
+         *     which fails as a 404 naming a slug nobody asked for, and reads as a missing
+         *     corpus rather than as a shadowed route.
+         *
+         *     This exists in slice 2, before `/ask` in slice 3, on purpose. The hermetic
+         *     Python suite has no Postgres and therefore cannot execute a line of the SQL
+         *     underneath this - the same blind spot that shipped a namespace bug in slice 1
+         *     - so the retrieval path needs a way to be exercised by hand against a real
+         *     database *before* something else is built on top of it. It is a diagnostic
+         *     surface, not a product feature: no relevance floor, no refusal, no intent
+         *     routing. Those are judgements `/ask` makes, and making them here as well
+         *     would put them in two places at once.
+         */
+        get: operations["search_concepts_concepts_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/concepts/{slug}": {
         parameters: {
             query?: never;
@@ -253,6 +288,66 @@ export interface components {
             title: string;
             /** Uri */
             uri: string | null;
+        };
+        /**
+         * ConceptSearchMatch
+         * @description One chunk a search returned, with where each half of the hybrid put it.
+         *
+         *     `vector_rank` and `text_rank` are exposed rather than kept internal because
+         *     they are the only way a reader can tell which half found a result. A null
+         *     `vector_rank` on every match means the corpus is not embedded and the answer
+         *     came from full-text alone - a real and recoverable state, and one that would
+         *     otherwise be indistinguishable from working hybrid retrieval.
+         *
+         *     `document_id` and `chunk_id` are what a citation will point at when `/ask`
+         *     lands, which is why the chunk id is here rather than only the slug.
+         */
+        ConceptSearchMatch: {
+            /** Chunk Id */
+            chunk_id: string;
+            /** Concept Slug */
+            concept_slug: string | null;
+            /** Document Id */
+            document_id: string;
+            /** Heading */
+            heading: string | null;
+            /** Ord */
+            ord: number;
+            /** Score */
+            score: number;
+            /** Text */
+            text: string;
+            /** Text Rank */
+            text_rank: number | null;
+            /** Title */
+            title: string;
+            /** Vector Rank */
+            vector_rank: number | null;
+        };
+        /**
+         * ConceptSearchResponse
+         * @description A ranked answer, and an honest label for what produced the ranking.
+         *
+         *     `vector_is_semantic` is False while the configured embedder ranks by word
+         *     overlap alone, and it is on the wire rather than in a log because a caller
+         *     cannot otherwise distinguish "retrieval understood the question" from
+         *     "retrieval matched some words". Guideline 7 in its retrieval form: the thing
+         *     that is not available is reported as not available.
+         *
+         *     There is deliberately no relevance floor and no refusal here. Deciding that
+         *     the corpus does not cover a question is `/ask`'s judgement to make in slice
+         *     3, and making it twice - once silently at this layer and once visibly there -
+         *     would mean a question could be refused by a threshold nobody chose.
+         */
+        ConceptSearchResponse: {
+            /** Embedding Model */
+            embedding_model: string;
+            /** Matches */
+            matches: components["schemas"]["ConceptSearchMatch"][];
+            /** Query */
+            query: string;
+            /** Vector Is Semantic */
+            vector_is_semantic: boolean;
         };
         /**
          * ConceptSection
@@ -654,6 +749,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": string[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_concepts_concepts_search_get: {
+        parameters: {
+            query: {
+                /** @description A question or phrase to search the corpus for */
+                q: string;
+                limit?: number;
+            };
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConceptSearchResponse"];
                 };
             };
             /** @description Validation Error */

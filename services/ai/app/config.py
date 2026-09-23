@@ -162,6 +162,14 @@ class Settings(BaseSettings):
     # CORPUS_DIR in the environment always wins.
     corpus_dir: str = Field(default_factory=_default_corpus_dir)
 
+    # Which embedder turns corpus text into vectors. One gateway module
+    # (app/corpus/embedder_factory.py) reads this; no call site names a
+    # provider. `fixture` is deterministic, keyless and offline, which is what
+    # CI and a fresh clone need - and unlike the LLM chain, an unusable value
+    # here raises rather than degrading, because retrieval that silently ranks
+    # by nothing is indistinguishable from retrieval that works.
+    embeddings_provider: str = "fixture"
+
     # News providers: ordered chain, same comma-separated convention as
     # market_data_providers and for the same pydantic-settings reason. Unlike the
     # quote chain this one is not a fallback - `app/news/ingestion.py` queries

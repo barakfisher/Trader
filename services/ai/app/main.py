@@ -19,6 +19,8 @@ from app.config import get_settings
 from app.core.cache import Cache
 from app.core.logging import configure_logging, get_logger, request_id_var
 from app.core.ratelimit import RateLimiter
+from app.corpus.embedder_factory import build_embedder
+from app.corpus.vector_store import PgVectorStore
 from app.llm.factory import build_llm
 from app.providers.registry import MarketDataService, build_providers
 from app.routers import analysis, concepts, health, market, narration
@@ -40,6 +42,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # provider raises here in production and degrades to null elsewhere, so the
     # quotes API is never taken down by a narration setting.
     app.state.llm = build_llm(settings, redis)
+    # Unlike the LLM above, a misconfigured embedder raises here in every
+    # environment and stops the service starting. There is no honest null
+    # embedding - see app/corpus/embedder_factory.py - and the default
+    # (`fixture`) needs no key and no network, so the only way to reach this
+    # is to have typed a provider name that does not exist.
+    app.state.embedder = build_embedder(settings)
+    app.state.vector_store = PgVectorStore()
     try:
         yield
     finally:

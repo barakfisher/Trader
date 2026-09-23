@@ -125,6 +125,125 @@
         "title": "ConceptDocumentResponse",
         "type": "object"
       },
+      "ConceptSearchMatch": {
+        "description": "One chunk a search returned, with where each half of the hybrid put it.\n\n`vector_rank` and `text_rank` are exposed rather than kept internal because\nthey are the only way a reader can tell which half found a result. A null\n`vector_rank` on every match means the corpus is not embedded and the answer\ncame from full-text alone - a real and recoverable state, and one that would\notherwise be indistinguishable from working hybrid retrieval.\n\n`document_id` and `chunk_id` are what a citation will point at when `/ask`\nlands, which is why the chunk id is here rather than only the slug.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "concept_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concept Slug"
+          },
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading"
+          },
+          "ord": {
+            "title": "Ord",
+            "type": "integer"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "text_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Rank"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "vector_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector Rank"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "document_id",
+          "concept_slug",
+          "title",
+          "heading",
+          "ord",
+          "text",
+          "score",
+          "vector_rank",
+          "text_rank"
+        ],
+        "title": "ConceptSearchMatch",
+        "type": "object"
+      },
+      "ConceptSearchResponse": {
+        "description": "A ranked answer, and an honest label for what produced the ranking.\n\n`vector_is_semantic` is False while the configured embedder ranks by word\noverlap alone, and it is on the wire rather than in a log because a caller\ncannot otherwise distinguish \"retrieval understood the question\" from\n\"retrieval matched some words\". Guideline 7 in its retrieval form: the thing\nthat is not available is reported as not available.\n\nThere is deliberately no relevance floor and no refusal here. Deciding that\nthe corpus does not cover a question is `/ask`'s judgement to make in slice\n3, and making it twice - once silently at this layer and once visibly there -\nwould mean a question could be refused by a threshold nobody chose.",
+        "properties": {
+          "embedding_model": {
+            "title": "Embedding Model",
+            "type": "string"
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/ConceptSearchMatch"
+            },
+            "title": "Matches",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "vector_is_semantic": {
+            "title": "Vector Is Semantic",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "query",
+          "matches",
+          "embedding_model",
+          "vector_is_semantic"
+        ],
+        "title": "ConceptSearchResponse",
+        "type": "object"
+      },
       "ConceptSection": {
         "description": "One `##` section of a concept document, as chunked at ingestion.\n\n`ord` is the position the ingester stored, so a citation can name a section\nrather than a byte range, and `id` is the chunk's own id - stable across\nre-ingestion of an unchanged document, which is what lets it be cited at all.",
         "properties": {
@@ -900,6 +1019,79 @@
           }
         },
         "summary": "List Concepts",
+        "tags": [
+          "concepts"
+        ]
+      }
+    },
+    "/concepts/search": {
+      "get": {
+        "description": "Hybrid retrieval over the corpus: the half of `/ask` that finds things.\n\n**Declared before `/concepts/{slug}`, and that is load-bearing.** FastAPI\nmatches routes in registration order, so a path parameter registered first\nwould swallow `/concepts/search` as a request for a concept called \"search\" -\nwhich fails as a 404 naming a slug nobody asked for, and reads as a missing\ncorpus rather than as a shadowed route.\n\nThis exists in slice 2, before `/ask` in slice 3, on purpose. The hermetic\nPython suite has no Postgres and therefore cannot execute a line of the SQL\nunderneath this - the same blind spot that shipped a namespace bug in slice 1\n- so the retrieval path needs a way to be exercised by hand against a real\ndatabase *before* something else is built on top of it. It is a diagnostic\nsurface, not a product feature: no relevance floor, no refusal, no intent\nrouting. Those are judgements `/ask` makes, and making them here as well\nwould put them in two places at once.",
+        "operationId": "search_concepts_concepts_search_get",
+        "parameters": [
+          {
+            "description": "A question or phrase to search the corpus for",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "A question or phrase to search the corpus for",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConceptSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Concepts",
         "tags": [
           "concepts"
         ]
