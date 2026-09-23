@@ -4,15 +4,16 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-23. `main` is at PR #42: **M3 slice 1 is merged**. M4 is complete; M3's remaining
-three slices are not started, and slice 2's provider decision is already made — see "Where to go
-next". The session that wrote this took the parked M3 branch, renumbered the
-migration that would have broken `upgrade head` for everyone, finished the corpus, and made the
-concept chips actually go somewhere for the first time since M2.
+Updated: 2026-09-23. **M3 slice 2 is merged** (#42 was slice 1). M4 is complete; M3's remaining
+two slices — `POST /ask`, then the eval set — are not started. The session that wrote this gave the
+corpus an embedding column whose width was chosen for a named model rather than for the fixture
+that fills it, and then found two retrieval bugs by running the SQL that 40 passing tests could not
+have caught.
 
 **One-line state:** the product imports a portfolio, fetches six months of real daily prices, scans
 it every 30 minutes for four kinds of finding, explains each one in sentences whose every figure is
-checked against the evidence, **links every term in those sentences to an explanation of it**, lets
+checked against the evidence, **links every term in those sentences to an explanation of it**,
+**answers a question phrased in the user's own words with the passages that bear on it**, lets
 the user state the allocation they meant to hold, and turns the drift from it into a proposal with
 a deadline that an approval writes to a paper ledger. No order is ever placed. The explanations are
 currently written by templates rather than a model, and the app says so on its own dashboard.
@@ -34,7 +35,7 @@ proposals reach the notifications ledger, correctly recorded as `failed`, and re
 | **M1.5 — Trustworthy quote path** | ✅ Complete | **unplanned**; inserted after an audit found data problems M2 would have built on |
 | **M2 — Analysis engine & observations** | ✅ Complete | PRs #12–#22 |
 | **M2.5 — Real price history** | ✅ Complete | **unplanned**; PR #23. Finished M1's provider layer, 18 PRs late |
-| **M3 — RAG & educational engine** | 🟡 Slice 1 of 4 complete | PR #42: corpus, schema, ingestion and live concept links. **No embeddings yet, deliberately** — see decision 24. **Slice 2 is next and its provider is decided** |
+| **M3 — RAG & educational engine** | 🟡 Slices 1–2 of 4 complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. **Slice 3 (`POST /ask`) is next**; the reranker DESIGN.md asks for went with it, deliberately — see decision 30 |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
 | M5 — Market discovery & topics | Not started | independent of M3; deferred in favour of finishing M3 (decided 2026-09-23) |
 | M6 — Frontend completion & polish | Not started | |
@@ -75,7 +76,11 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts at handoff: **967** — 476 Python, 322 orchestrator, 153 web, 16 shared.
+Test counts at handoff: **1,017** — 517 Python, 331 orchestrator, 153 web, 16 shared.
+
+**None of them executes a line of retrieval SQL**, and that is structural rather than an oversight:
+the Python suite is hermetic and has no Postgres. Exercise it by hand after touching
+`app/corpus/` — see the two bugs below that a full green gate did not catch.
 
 Useful endpoints (all need the session cookie except `/internal/*`, which needs `x-internal-key`):
 
@@ -92,6 +97,7 @@ Useful endpoints (all need the session cookie except `/internal/*`, which needs 
 | `POST /telegram/bind-token` | the **Settings page** mints the connect link (#38) |
 | `POST /telegram/bind-token` | mints the signed connect link; `POST /telegram/webhook` is public |
 | `GET /concepts/:slug` | the explanation behind a concept chip (#M3). 404 means the corpus is not ingested, not that the app is broken |
+| `GET /concepts/search?q=` | hybrid retrieval: the half of `/ask` that finds things. A diagnostic surface with no relevance floor and no refusal — those are `/ask`'s judgements. Every match reports `vector_rank` and `text_rank`, so *which half found this* is answerable; `vector_is_semantic: false` says the embedder ranks by shared words alone |
 
 ---
 
@@ -101,7 +107,9 @@ Useful endpoints (all need the session cookie except `/internal/*`, which needs 
 limiting and per-provider daily budgets; four deterministic analysis rules; news ingestion with
 entity extraction; an LLM provider factory with a daily spend guard; narration behind an evidence
 validator; **the concept corpus: structure-aware chunking, hash-compared ingestion and slug
-lookup**; the Alembic schema (12 migrations) that both services share.
+lookup, and **hybrid retrieval over it: an embedder behind `BaseEmbedder`, a `VectorStore` over
+pgvector, and reciprocal-rank fusion of the vector and full-text halves**; the Alembic schema (13
+migrations) that both services share.
 
 **`apps/orchestrator`** (Node, Hono) — sessions, holdings CRUD, CSV/JSON import with per-row
 validation, valuation with FX, target weights, the scan workflow, run claims, the observations feed,
@@ -312,6 +320,36 @@ failure they prevent.
     from that text at all. The cost is real and accepted: adding a list or a link to a document
     means changing the parser, and a test over the shipped corpus fails until someone does.
 
+30. **The reranker was moved from slice 2 to slice 3, and the embedding width
+    was not guessed.** DESIGN.md specifies "vector + FTS + RRF + rerank", and the
+    rerank is the one piece of that sentence that could not be built here: it
+    reorders a candidate list, and until slice 4's eval set exists there is no
+    way to tell a good reordering from a bad one. A component nothing can
+    measure, sitting on the path where being subtly wrong looks exactly like
+    being right, is worse than an absent one. **`n` = 1536 is the width of
+    `openai/text-embedding-3-small`**, the model the owed migration targets, and
+    the migration says so in prose — decision 24 deferred the number so it could
+    be chosen on evidence, and a fixture embedder exerts no pressure on it at
+    all, which is precisely what makes a convenient guess so easy. 1536 also
+    keeps the cheap upgrade open: `text-embedding-3-large` truncates to 1536 via
+    the `dimensions` parameter, so moving up later is a re-embed and not a
+    migration.
+
+31. **The fixture embedder is lexical rather than random, and that was the
+    argument.** Hashing the whole text into a pseudo-random vector is simpler
+    and was rejected: random vectors make the vector half of retrieval
+    *untestable*, because there is no input for which a correct implementation
+    returns a particular row — so the ranking SQL, the fusion and the ordering
+    could all be wrong in CI and look exactly like working code. A hashing-trick
+    embedder over word tokens has checkable behaviour, so the retrieval path is
+    exercised by tests rather than merely executed by them. The honest cost is
+    that it correlates with the full-text half, so fusing the two adds less than
+    fusing independent rankers would — a property of the placeholder that
+    disappears with the real model. It has **no semantic knowledge whatsoever**,
+    and every search response says so on the wire (`vector_is_semantic: false`)
+    rather than in a log, because a ranking produced by shared words is
+    indistinguishable from one produced by understanding.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -483,6 +521,50 @@ coverage.
 → And the process lesson: **exercise every branch of a check you add, not the one you expect.** All
 three were run this time — clean exit, missing container, and a genuinely failing ingestion.
 
+**Two retrieval bugs, both invisible to a hermetic suite, both found on the
+first real query.** Slice 2's SQL was written, reviewed, and covered by 40 new
+tests that all passed, and neither of these survived one second of contact with
+Postgres.
+
+- An optional parameter compared only against NULL — `(:model IS NULL OR
+  c.embedding_model = :model)` — is rejected outright: `could not determine data
+  type of parameter $3`. Postgres has nothing to infer the type from. The fix is
+  a cast; the point is that the statement *never runs at all*, and nothing in
+  the suite executes a statement.
+- `plainto_tsquery` **ANDs** its terms, so "how do I bring my portfolio back to
+  its target weights" becomes `bring & portfolio & back & target & weight` and
+  requires one chunk to contain all five. Three of the four natural-language
+  questions tried returned **nothing** from the full-text half. MEMORY.md's own
+  claim that "the full-text half is real, which is why hybrid retrieval still
+  gives a usable answer in the meantime" was therefore false as written: the
+  half that was supposed to carry the placeholder period was silent for exactly
+  the queries `/ask` exists to serve. The query is now rewritten to OR by
+  rendering `plainto_tsquery`'s output and replacing its operator, so the
+  parsing, stemming and quoting stay with Postgres and no user input is ever
+  interpolated.
+
+→ The lesson is not "write better SQL". It is that **the hermetic suite cannot
+test the layer it is deliberately isolated from, and that layer is where the
+bugs are** — this is now the third consecutive slice where running the thing
+found what a full green gate did not. Budget the hand-exercise; it is not
+optional polish.
+→ And specifically: **a belief about retrieval quality written into MEMORY.md is
+still a belief.** The AND semantics could have been checked in one `psql` line
+at any point in the two sessions the claim sat there.
+
+**A stale placeholder in `.env.example` became a boot failure.** M0 wrote an
+`EMBEDDINGS_PROVIDER=fastembed` block with a 384-wide model, two milestones
+before anything read it, and every local `.env` copied it. Slice 2's factory
+refuses an unknown provider by design, so those installations would have met
+"not a known embedder" on upgrade — a message that reads like a typo the reader
+did not make. `fastembed` is now named explicitly and answered with "this is an
+M0 placeholder, set `fixture`".
+→ **A setting written before anything reads it is a guess that will be found by
+the code that finally reads it.** Prefer adding configuration with its consumer.
+→ `EMBEDDINGS_DIM` was deleted rather than honoured: the width is fixed by the
+column, so an env var appearing to change it is a lie about what is
+configurable.
+
 **A fixture that looked like a solved problem.** The synthetic price history made the analysis
 engine testable and also let the missing `history()` survive two milestones. A fixture hides an
 absence.
@@ -499,8 +581,9 @@ the green test as coverage.
 | **`queries.ts` conflicts on every parallel PR** | `src/db/queries.ts` | Four M4 PRs appended a section to the end of one 1,200-line file, and every rebase put a conflict marker exactly where one function's closing brace met the next block's header — the brace was lost and hand-repaired **three separate times**. It is the cost of CLAUDE.md's "all SQL in one file" rule, which is otherwise good. Worth deciding whether to split by domain with an index |
 | **Migration 0008 hard-codes a table Mastra owns** | `0008_mastra_workflow_state.py` | The library would create `mastra_workflow_snapshot` itself; Alembic creates it instead (`disableInit: true`), because CLAUDE.md says the AI service owns the schema. An upgrade that changes the shape breaks suspended runs — so `test/mastraSchemaOwnership.test.ts` compares the migration against `WorkflowsPG.getExportDDL()` and fails the build first. Two other things cost time to find: `PostgresStore` creates **43** tables for 24 storage domains unless you route only `workflows`, and `@mastra/core` posts feature-usage telemetry to PostHog unless `MASTRA_TELEMETRY_DISABLED` is set (it is, in `workflowRuntime.ts`, in code rather than `.env`) |
 | ~~Concept chips point nowhere~~ | — | **Resolved in M3 slice 1.** Kept as a line rather than deleted because it stood here from M2 to M4 and its absence would otherwise read as an oversight |
-| **Retrieval is exact-match only** | `services/ai/app/corpus` | A chip resolves its own slug and nothing else. There is no `/ask`, no ranking and no embeddings, so a question phrased in the user's own words has nowhere to go. That is slice 2–3 |
-| **OWED: migrate the fixture embedder to a paid OpenRouter embeddings model** (decided 2026-09-23) | `services/ai/app/corpus`, `.env` | Slice 2 ships a deterministic fixture embedder behind `BaseEmbedder` because CI is hermetic and keyless. **The consequence is that the vector half of hybrid retrieval ranks by nothing**: the fixture produces stable, meaningless vectors, so only the full-text half is real until this is done. Blocked by the same thing as narration — the OpenRouter workspace has a *lifetime* $0.01 budget and only an org admin raises it. **Do the migration when the cap is raised; do not re-open the choice before then.** The interface is the whole point: adding the real provider must not touch a call site. The `vector(n)` width is *not* deferred with it — `n` is fixed at column creation for every row, so slice 2 must pick the width of the model it intends to migrate to and record which model that number came from |
+| ~~Retrieval is exact-match only~~ | — | **Resolved in M3 slice 2.** Hybrid retrieval exists and `GET /concepts/search` serves it. What is still missing is the *answer*: there is no `/ask`, no intent routing, no citations and no relevance floor, so a nonsense query still returns the three least-bad chunks rather than a refusal. That is slice 3 |
+| **No test executes a line of retrieval SQL** | `services/ai/tests` | The Python suite is hermetic and has no Postgres, by design. Both of slice 2's real bugs lived there and both passed a full green gate. The compose `corpus` container covers ingestion only; the search path has no CI coverage at all and is exercised by hand. Closing this means a Postgres-backed test job, which is a real decision about what "hermetic" is worth |
+| **OWED: migrate the fixture embedder to a paid OpenRouter embeddings model** (decided 2026-09-23, still owed) | `services/ai/app/corpus`, `.env` | The fixture embedder ranks by **shared words only** — "how much did I lose from the top" and "drawdown" score near zero — so the vector half of the hybrid contributes lexical agreement rather than meaning. The full-text half is genuinely real (since the OR fix below), so results are usable; nobody should read a good one as evidence the embedding path works, and the API says so on every response. Blocked on the OpenRouter workspace's *lifetime* $0.01 cap, which only an org admin raises. **The groundwork is done and the interface is the proof**: the column is already `vector(1536)` for `openai/text-embedding-3-small`, `embedding_model` is stored per row so a re-embed is a `WHERE` clause, and adding the adapter is one new module plus one branch in `embedder_factory.py` — if it needs more than that, this layer is wrong. The fixture is **not** deleted afterwards: it is the hermetic CI path and slice 4's eval set depends on it |
 | **The corpus is a derived copy that three separate mechanisms keep in step** | `data/corpus`, compose, `.claude` | The files are the source of truth and `kb_documents`/`kb_chunks` are what the API serves. A hook covers Claude's edits, the `corpus` container covers every stack start, CI covers the image. None of the three covers a hand edit on a machine with no stack running — that reader sees stale text with nothing reporting the disagreement. `--dry-run` answers "are they in step?" and nobody is obliged to run it |
 | **The ingest hook does not apply to a session started before it existed** | `.claude/settings.json` | The settings watcher only watches directories that had a settings file when the session began, and `.claude/` had none. Any session started after that commit picks it up; the session that wrote it did not, and confirmed so with a sentinel rather than assuming |
 | **Import previews live in process memory** | `services/previewStore.ts` | Forces `replicas: 1` in Kubernetes. The only remaining in-memory state — run keys moved to the `runs` table in M2 |
@@ -541,9 +624,21 @@ the green test as coverage.
   container died with `Can't locate revision '0012_kb_corpus'`. The fix is always the same —
   rebuild the image (`docker compose build migrate`), not touch the database.
 - **The database currently holds the ingested corpus**: 9 documents and 36 chunks in
-  `kb_documents` / `kb_chunks`. A fresh database needs `scripts/ingest_corpus.py` or a stack start,
-  or every concept chip 404s. `python scripts/ingest_corpus.py --dry-run` says whether the files
-  and the database agree without writing.
+  `kb_documents` / `kb_chunks`, **all 36 embedded by `fixture/hashed-v1`**. A fresh database needs
+  `scripts/ingest_corpus.py` or a stack start, or every concept chip 404s and every search returns
+  nothing. `--dry-run` says whether the files and the database agree without writing, and now
+  reports embedding coverage as well as text — vectors are a second derived copy with the same
+  drift.
+- **The dev database is at `0013_kb_embeddings`, applied natively while the running containers were
+  built from `main` at 0012.** This is the recurring hazard recorded below, and it is harmless in
+  this direction — 0013 only adds nullable columns and an index, which the 0012-era code ignores.
+  It stops being harmless on the next `dev-docker.sh`, where the `migrate` image still built from
+  `main` dies with `Can't locate revision '0013_kb_embeddings'`. The fix is always `docker compose
+  build`, never touching the database.
+- **Your `.env` may still carry the M0 placeholders `EMBEDDINGS_PROVIDER=fastembed`,
+  `EMBEDDINGS_MODEL` and `EMBEDDINGS_DIM=384`.** Delete all three and set
+  `EMBEDDINGS_PROVIDER=fixture`, or the AI service refuses to start — deliberately, with a message
+  saying exactly that.
 - **`DATABASE_URL` in `.env` names the compose hostname `postgres`, which does not resolve on the
   host.** Anything run natively against the dev database needs
   `DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders` in front of it. This costs a
@@ -581,7 +676,7 @@ the green test as coverage.
 **Two chains are now proven by observation rather than by argument.** M4's (#35): targets set in
 the UI produced four drift findings, three became `pending` `rebalance` proposals with 24-hour
 deadlines, and the notification ledger recorded three `above_floor` attempts plus one `below_floor`
-deferral into the digest. And M3 slice 1's, below.
+deferral into the digest. And M3 slices 1 and 2's, below.
 
 **M3 slice 1 is merged (#42).** Verified by using it in a
 stack rebuilt from the main checkout, not by reading it: the `corpus` container ran on start and
@@ -597,40 +692,57 @@ What exists: `data/corpus/concepts/*.md` (nine documents, four sections each, CC
 `scripts/ingest_corpus.py`, `GET /concepts` and `GET /concepts/:slug` on the AI service, a proxy on
 the orchestrator, and `ConceptStore` + `ConceptDialog` on the web.
 
-### M3 slice 2 — decided, not started
+### M3 slice 2 is merged
 
-`VectorStore`, an embeddings provider and hybrid retrieval. pgvector 0.8.6 is already installed —
-M0 planned for it — and the full-text half of the hybrid already exists: `kb_chunks.text_search` is
-a generated column with a GIN index, and it works (`plainto_tsquery('english', 'approving a
-proposal places an order')` returns `rebalancing / What it is`, which is the section that says it
-does not).
+**Verified by running it, not by reading it** — against the real dev database, because nothing in
+CI can reach this SQL. Migration `0013` applied cleanly; the ingester embedded all 36 chunks and a
+second run embedded none; **all 36 chunk ids were byte-identical afterwards**, which is what makes
+a citation survive a re-ingest. Appending a sentence to one document rewrote exactly one chunk and
+re-embedded exactly that one, leaving the other 35 vectors and every id untouched — the conditional
+`embedding = CASE WHEN ... text IS DISTINCT FROM ...` in `ingest.py` doing its job. Through HTTP,
+`GET /concepts/search?q=approving+a+proposal+places+an+order` returns `rebalancing / What it is` —
+the section that says the system never places one — at rank 1, found by **both** halves.
 
-**The embeddings provider was an open decision and is now settled (2026-09-23, by the user): a
-deterministic, hermetic, keyless fixture embedder, behind a clean `BaseEmbedder` interface, with a
-migration to a paid OpenRouter embeddings model when the workspace cap allows it.** Do not re-open
-this; the debt row records the migration as an owed follow-up rather than as an unmade choice.
+What exists: migration `0013_kb_embeddings` (`vector(1536)` + `embedding_model` + an HNSW cosine
+index + a CHECK that the two columns are null together), `app/corpus/embeddings.py` (`BaseEmbedder`,
+`EMBEDDING_DIMENSION`), `hashed_embedder.py`, `embedder_factory.py`, `vector_store.py`
+(`VectorStore` + `PgVectorStore`), `retrieval.py` (RRF + the full-text half + `hybrid_search`),
+`GET /concepts/search` with an orchestrator proxy, and `EMBEDDINGS_PROVIDER` in config.
 
-Three things follow from it, and the second is the one a session could get wrong:
+Three things a later session should not re-derive:
 
-1. **The interface is not optional politeness.** CLAUDE.md guideline 6 already requires external
-   dependencies to sit behind interfaces and names `VectorStore` explicitly; `BaseEmbedder` is the
-   same rule applied to the provider. Adding the paid model must not touch a call site.
+1. **`embedding_model` per row is what makes the owed migration safe.** Fixture vectors and OpenAI
+   vectors are the same width and are not comparable, so a partial re-embed would rank two
+   coordinate systems against each other and call the result relevance. With the model on the row,
+   "embed everything this embedder did not produce" is a `WHERE` clause, and `search` filters to
+   one model so a half-migrated corpus degrades visibly instead of lying.
 
-2. **`n` must be chosen for the model we intend to migrate *to*, not for whatever the fixture
-   emits.** A fixture embedder can produce any dimension, so it exerts no pressure on the choice —
-   which makes it easy to pick a convenient number and discover later that no real model has that
-   width. `vector(n)` fixes `n` for every row (decision 24), and changing it costs a migration plus
-   a full re-embed of the corpus. Pick the width of the intended production model, and say in the
-   migration which model that number came from.
+2. **Both halves' ranks are on the wire, and so is `vector_is_semantic`.** A null `vector_rank` on
+   every match means the corpus was never embedded — otherwise indistinguishable from working
+   hybrid retrieval. These are diagnostics that survive into production, not debug output.
 
-3. **The fixture embedder is permanent, not scaffolding.** CI is hermetic and keyless, and slice
-   4's eval set cannot depend on a network call, so it stays in the tree after the paid model
-   arrives. It is the CI path, not a placeholder to be deleted.
+3. **There is deliberately no relevance floor.** A nonsense query returns the three least-bad
+   chunks today. Deciding the corpus does not cover a question is `/ask`'s judgement; making it
+   here as well would put one threshold in two places and let a question be refused by a number
+   nobody chose.
 
-Retrieval quality until then is an acknowledged placeholder: a fixture embedder produces stable,
-meaningless vectors, so the vector half of the hybrid will rank by nothing in particular. The
-full-text half is real, which is why hybrid retrieval still gives a usable answer in the meantime —
-but no one should read a good `/ask` result as evidence that the embedding path works.
+### M3 slice 3 — `POST /ask`, next
+
+Intent routing (portfolio vs concept), citations, a relevance floor, and the refusal that the exit
+criterion actually names: *"correctly refuses out-of-index questions"*. The retrieval it needs is
+done and exercised. Three things worth knowing before starting:
+
+- **The floor is the hard part and the fixture embedder makes it harder.** RRF scores are not
+  comparable across queries — they are a function of how many halves returned a chunk and where —
+  so a floor on the fused score is a floor on a number with no fixed meaning. The honest version
+  probably floors on the *full-text* half's `ts_rank_cd` or on term coverage, because that half is
+  real while the vector half is a placeholder. Decide this deliberately; it is the difference
+  between refusing and confabulating.
+- **The reranker belongs here, and only once slice 4's eval set can measure it** (decision 30).
+- **`reasoning_effort` is per call and `/ask` is the caller that wants it on** (decision 21) —
+  deciding whether retrieved context supports an answer is exactly the judgement narration does
+  not have.
+
 
 ### M5 (topics), deferred
 

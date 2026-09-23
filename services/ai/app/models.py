@@ -262,6 +262,52 @@ class ConceptDocumentResponse(BaseModel):
     sections: list[ConceptSection]
 
 
+class ConceptSearchMatch(BaseModel):
+    """One chunk a search returned, with where each half of the hybrid put it.
+
+    `vector_rank` and `text_rank` are exposed rather than kept internal because
+    they are the only way a reader can tell which half found a result. A null
+    `vector_rank` on every match means the corpus is not embedded and the answer
+    came from full-text alone - a real and recoverable state, and one that would
+    otherwise be indistinguishable from working hybrid retrieval.
+
+    `document_id` and `chunk_id` are what a citation will point at when `/ask`
+    lands, which is why the chunk id is here rather than only the slug.
+    """
+
+    chunk_id: str
+    document_id: str
+    concept_slug: str | None
+    title: str
+    heading: str | None
+    ord: int
+    text: str
+    score: float
+    vector_rank: int | None
+    text_rank: int | None
+
+
+class ConceptSearchResponse(BaseModel):
+    """A ranked answer, and an honest label for what produced the ranking.
+
+    `vector_is_semantic` is False while the configured embedder ranks by word
+    overlap alone, and it is on the wire rather than in a log because a caller
+    cannot otherwise distinguish "retrieval understood the question" from
+    "retrieval matched some words". Guideline 7 in its retrieval form: the thing
+    that is not available is reported as not available.
+
+    There is deliberately no relevance floor and no refusal here. Deciding that
+    the corpus does not cover a question is `/ask`'s judgement to make in slice
+    3, and making it twice - once silently at this layer and once visibly there -
+    would mean a question could be refused by a threshold nobody chose.
+    """
+
+    query: str
+    matches: list[ConceptSearchMatch]
+    embedding_model: str
+    vector_is_semantic: bool
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"]
     service: str = "ai-service"

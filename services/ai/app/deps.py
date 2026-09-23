@@ -8,6 +8,8 @@ from typing import Annotated
 from fastapi import Depends, Header, HTTPException, Request, status
 
 from app.config import Settings, get_settings
+from app.corpus.embeddings import BaseEmbedder
+from app.corpus.vector_store import VectorStore
 from app.providers.registry import MarketDataService
 
 
@@ -44,3 +46,17 @@ async def require_internal_key(
 
 MarketDataDep = Annotated[MarketDataService, Depends(get_market_data)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+
+
+def get_embedder(request: Request) -> BaseEmbedder:
+    service = getattr(request.app.state, "embedder", None)
+    if service is None:  # pragma: no cover - only reachable if startup failed
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "embedder not initialised")
+    return service
+
+
+def get_vector_store(request: Request) -> VectorStore:
+    service = getattr(request.app.state, "vector_store", None)
+    if service is None:  # pragma: no cover - only reachable if startup failed
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "vector store not initialised")
+    return service

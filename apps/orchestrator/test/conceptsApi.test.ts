@@ -62,10 +62,11 @@ const ENV = {
 const ORIGIN = { origin: 'http://localhost:5173', 'content-type': 'application/json' };
 
 const concept = vi.fn();
+const searchConcepts = vi.fn();
 
 function buildApp() {
   resetConfigForTests();
-  return createApp(loadConfig(ENV), { concept } as never);
+  return createApp(loadConfig(ENV), { concept, searchConcepts } as never);
 }
 
 async function loginCookie(app: ReturnType<typeof buildApp>): Promise<string> {
@@ -158,5 +159,127 @@ describe('GET /concepts/:slug', () => {
     await app.request('/concepts/peak-to-trough', { headers: { cookie } });
 
     expect(concept).toHaveBeenCalledWith('peak-to-trough', expect.anything());
+  });
+});
+
+const SEARCH = {
+  query: 'what is a drawdown',
+  matches: [
+    {
+      chunk_id: 'chunk-1',
+      document_id: 'doc-1',
+      concept_slug: 'drawdown',
+      title: 'Drawdown',
+      heading: 'What it is',
+      ord: 1,
+      text: 'A fall from a peak to a trough.',
+      score: 0.032,
+      vector_rank: 1,
+      text_rank: 2,
+    },
+  ],
+  embedding_model: 'fixture/hashed-v1',
+  vector_is_semantic: false,
+};
+
+describe('GET /concepts/search', () => {
+  let app: ReturnType<typeof buildApp>;
+  let cookie: string;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    app = buildApp();
+    cookie = await loginCookie(app);
+  });
+
+  /**
+   * The test worth having. Hono matches routes in registration order, so
+   * `/concepts/:slug` declared first would swallow this as a request for a
+   * concept called "search" - which answers 404 about a slug nobody asked for
+   * and reads as an un-ingested corpus rather than as a shadowed route. It is
+   * invisible in review and costs nothing to pin.
+   */
+  it('is not shadowed by the slug route', async () => {
+    searchConcepts.mockResolvedValueOnce(SEARCH);
+
+    const response = await app.request('/concepts/search?q=what+is+a+drawdown', {
+      headers: { cookie },
+    });
+
+    expect(response.status).toBe(200);
+    expect(concept).not.toHaveBeenCalled();
+    expect(searchConcepts).toHaveBeenCalledWith('what is a drawdown', undefined, expect.anything());
+  });
+
+  it('carries the honesty flag through to the browser', async () => {
+    // A ranking produced by word overlap is indistinguishable from one produced
+    // by understanding the question. The reader is told which it was, which is
+    // guideline 7 applied to retrieval rather than to figures.
+    searchConcepts.mockResolvedValueOnce(SEARCH);
+
+    const response = await app.request('/concepts/search?q=drawdown', { headers: { cookie } });
+
+    await expect(response.json()).resolves.toMatchObject({
+      vector_is_semantic: false,
+      embedding_model: 'fixture/hashed-v1',
+    });
+  });
+
+  it('refuses an empty query rather than returning arbitrary chunks', async () => {
+    const response = await app.request('/concepts/search?q=%20%20', { headers: { cookie } });
+
+    expect(response.status).toBe(400);
+    expect(searchConcepts).not.toHaveBeenCalled();
+  });
+
+  it('refuses a missing query', async () => {
+    const response = await app.request('/concepts/search', { headers: { cookie } });
+
+    expect(response.status).toBe(400);
+    expect(searchConcepts).not.toHaveBeenCalled();
+  });
+
+  it('bounds the limit at this edge rather than trusting the AI service', async () => {
+    const response = await app.request('/concepts/search?q=drawdown&limit=500', {
+      headers: { cookie },
+    });
+
+    expect(response.status).toBe(400);
+    expect(searchConcepts).not.toHaveBeenCalled();
+  });
+
+  it('refuses a limit that is not a whole number', async () => {
+    const response = await app.request('/concepts/search?q=drawdown&limit=2.5', {
+      headers: { cookie },
+    });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('passes a valid limit through', async () => {
+    searchConcepts.mockResolvedValueOnce(SEARCH);
+
+    await app.request('/concepts/search?q=drawdown&limit=3', { headers: { cookie } });
+
+    expect(searchConcepts).toHaveBeenCalledWith('drawdown', 3, expect.anything());
+  });
+
+  it('reports an upstream failure as ours, not as an empty corpus', async () => {
+    // Unlike the slug route there is no 404 case here: a search that matches
+    // nothing is an empty list, not a missing document. So every AI-service
+    // failure is an upstream fault, including a 404, which at this path could
+    // only mean the endpoint itself is gone.
+    searchConcepts.mockRejectedValueOnce(new AiServiceError('not found', 404));
+
+    const response = await app.request('/concepts/search?q=drawdown', { headers: { cookie } });
+
+    expect(response.status).toBe(502);
+  });
+
+  it('requires a session', async () => {
+    const response = await app.request('/concepts/search?q=drawdown');
+
+    expect(response.status).toBe(401);
+    expect(searchConcepts).not.toHaveBeenCalled();
   });
 });

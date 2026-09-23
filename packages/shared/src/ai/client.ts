@@ -18,6 +18,7 @@ import type { z } from 'zod';
 import type { components } from '../generated/ai-api.js';
 import {
   conceptDocumentSchema,
+  conceptSearchResponseSchema,
   fxRateSchema,
   healthResponseSchema,
   backfillResponseSchema,
@@ -41,6 +42,8 @@ export type BackfillRequest = components['schemas']['BackfillRequest'];
 export type BackfillResponse = components['schemas']['BackfillResponse'];
 export type ConceptDocument = components['schemas']['ConceptDocumentResponse'];
 export type ConceptSection = components['schemas']['ConceptSection'];
+export type ConceptSearchResponse = components['schemas']['ConceptSearchResponse'];
+export type ConceptSearchMatch = components['schemas']['ConceptSearchMatch'];
 
 /**
  * A scan loads history for every holding and may call a model once per finding,
@@ -210,6 +213,29 @@ export class AiClient {
     return this.request<ConceptDocument>(
       `/concepts/${encodeURIComponent(slug)}`,
       conceptDocumentSchema,
+      { method: 'GET', requestId },
+    );
+  }
+
+  /**
+   * Hybrid retrieval over the corpus: the half of `/ask` that finds things.
+   *
+   * A diagnostic surface, not a product feature. The AI service's Python suite
+   * is hermetic and has no Postgres, so nothing in CI executes a line of the
+   * retrieval SQL - the same blind spot that shipped a namespace bug in the
+   * previous slice. This is how that SQL gets exercised against a real database
+   * before `/ask` is built on top of it.
+   *
+   * Deliberately no relevance floor and no refusal: deciding that the corpus
+   * does not cover a question is `/ask`'s judgement, and making it here as well
+   * would put one threshold in two places.
+   */
+  searchConcepts(query: string, limit?: number, requestId?: string): Promise<ConceptSearchResponse> {
+    const params = new URLSearchParams({ q: query });
+    if (limit !== undefined) params.set('limit', String(limit));
+    return this.request<ConceptSearchResponse>(
+      `/concepts/search?${params.toString()}`,
+      conceptSearchResponseSchema,
       { method: 'GET', requestId },
     );
   }
