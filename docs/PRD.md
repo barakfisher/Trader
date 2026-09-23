@@ -26,7 +26,7 @@ These shape the whole architecture, so they are stated as requirements, not opin
 | # | Stance |
 |---|--------|
 | P1 | **No order execution.** The system never places a trade. An approved proposal writes an intent + optional paper-trade fill to our own ledger. Broker integration is explicitly out of scope for v1. |
-| P2 | **Educational framing, not advice.** Output is framed as observation + explanation + "what to read up on". No personalized advice, no price targets, no position sizing recommendations. A persistent disclaimer is shown in UI and appended to every Telegram digest. |
+| P2 | **Educational framing, not advice.** Output is framed as observation + explanation + "what to read up on". For the user's **real** portfolio: no personalized advice, no price targets, no position sizing recommendations. **Amended for simulated agents** (see [PROPOSAL-MULTI-AGENT.md](PROPOSAL-MULTI-AGENT.md) §2): a simulated agent may propose a sized transaction within its own paper budget, on three conditions — it is proposal-only and never executes (P1, unscoped); its performance is scored and shown, so a philosophy can be judged rather than merely heard; and it is labelled as a simulation at every surface. A persistent disclaimer is shown in UI and appended to every Telegram digest. |
 | P3 | **Every claim is sourced.** Each observation carries the data points and article URLs that produced it. If the engine can't cite, it doesn't emit. |
 | P4 | **Approvals expire.** A proposal has a TTL (default 60 min). Markets move; a stale approval must be re-derived, not honoured. |
 | P5 | **Quiet by default.** Cost and attention are budgets. Dedupe, rate-limit and quiet-hours are v1 features, not v2 polish. |
