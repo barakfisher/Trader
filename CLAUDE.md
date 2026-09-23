@@ -57,6 +57,26 @@ Each of these cost real time. They are listed so the cost is paid once.
   changing a pydantic wire model: `python scripts/export_openapi.py && pnpm gen:api`, and commit
   both.
 - Tests must be hermetic: the fixture provider means no network and no API keys in CI.
+- **The concept corpus is ingested, not read from disk at runtime.** `data/corpus/` is the source of
+  truth; `kb_documents` / `kb_chunks` are a derived copy that the API actually serves. **After
+  adding or editing any file under `data/corpus/`, re-ingest it** - otherwise the markdown says one
+  thing, the concept chips serve another, and nothing reports the disagreement. Three things do
+  this, and none of them replaces the others:
+  - a `PostToolUse` hook in `.claude/settings.json` runs `scripts/ingest-corpus-hook.sh` after a
+    Claude session edits a corpus file. It is silent for every other path and never fails the edit,
+    so a missing database costs a message rather than the edit;
+  - the `corpus` container runs on every `dev-docker.sh` / `dev-local.sh` start, which covers edits
+    made by hand, by a merge, or by a `git checkout` that the hook never saw;
+  - CI starts the same container and fails if it does not exit cleanly, which is the only gate that
+    proves the corpus reached the image at all.
+
+  Re-running is always free: each document is compared by content hash and rewritten only when it
+  changed, so an unchanged corpus performs no writes and no chunk id moves. To do it by hand:
+  `cd services/ai && .venv/bin/python scripts/ingest_corpus.py [--dry-run]`. `--dry-run` answers
+  "is the database in step with the files?" without writing.
+- **Every concept slug in `app/narration/templates.py` needs a document, and every document needs a
+  slug.** `test_concept_corpus_contract.py` enforces both directions: a rule naming a concept with
+  nothing behind it is the dead chip FR-16 exists to remove.
 
 ## Session management & handoff
 

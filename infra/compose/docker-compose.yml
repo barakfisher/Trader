@@ -67,6 +67,31 @@ services:
         condition: service_healthy
     restart: 'no'
 
+  # Loads data/corpus into kb_documents/kb_chunks, once per stack start. It is
+  # separate from `migrate` rather than folded into it for two reasons: a corpus
+  # that fails to parse should not read as a failed schema migration, and - more
+  # importantly - it must not stop the app from starting. An empty corpus costs
+  # the concept links and nothing else, so the services below deliberately wait
+  # on `migrate` and not on this. A failure shows as `Exited (1)` in the
+  # `compose ps` table that dev-docker.sh prints.
+  #
+  # Re-running it is free: the ingester compares a content hash per document and
+  # writes nothing when the files have not changed, so restarting the stack does
+  # not churn the chunk ids that citations point at.
+  corpus:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.ai
+    <<: *env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-traders}:${POSTGRES_PASSWORD:-traders}@postgres:5432/${POSTGRES_DB:-traders}
+      CORPUS_DIR: /app/data/corpus
+    command: ['python', 'scripts/ingest_corpus.py']
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: 'no'
+
   ai-service:
     build:
       context: ../..

@@ -75,7 +75,20 @@ jobs:
           sed -i 's/^SESSION_SECRET=.*/SESSION_SECRET=ci-session-secret-value-long-enough/' .env
           sed -i 's/^MARKET_DATA_PROVIDERS=.*/MARKET_DATA_PROVIDERS=fixture/' .env
       - name: Start the stack
-        run: docker compose -f infra/compose/docker-compose.yml up -d --build postgres redis migrate ai-service orchestrator
+        run: docker compose -f infra/compose/docker-compose.yml up -d --build postgres redis migrate corpus ai-service orchestrator
+      # The hermetic Python suite cannot reach this: it has no Postgres, and its
+      # corpus tests run against the checkout rather than the image. This is the
+      # only gate that proves data/corpus was actually copied in, that the
+      # in-container path resolves, and that the ingester's SQL runs.
+      - name: Check the corpus was ingested
+        run: |
+          docker compose -f infra/compose/docker-compose.yml logs corpus
+          if docker compose -f infra/compose/docker-compose.yml ps -a corpus --format '{{.State}}' | grep -q 'exited (0)'; then
+            echo "corpus ingested"
+          else
+            echo "corpus container did not exit cleanly"
+            exit 1
+          fi
       - name: Wait for readiness
         run: |
           for attempt in $(seq 1 30); do

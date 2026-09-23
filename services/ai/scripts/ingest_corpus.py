@@ -28,30 +28,42 @@ from pathlib import Path
 
 from sqlalchemy import text
 
+from app.config import get_settings
 from app.corpus.documents import CorpusError, load_directory
 from app.corpus.ingest import ingest_documents
 from app.db import get_engine
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_CORPUS = REPO_ROOT / "data" / "corpus" / "concepts"
+
+def default_corpus() -> Path:
+    """The `concepts` namespace inside whichever corpus this runtime has.
+
+    Resolved through `Settings.corpus_dir` rather than from this file's own
+    location, because the script runs from a checkout *and* from /app inside the
+    migrate container, where a repo-relative guess raises IndexError.
+    """
+    return Path(get_settings().corpus_dir) / "concepts"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Ingest the concept corpus.")
     parser.add_argument("--dry-run", action="store_true", help="report changes, write nothing")
     parser.add_argument(
-        "--corpus", type=Path, default=DEFAULT_CORPUS, help=f"directory (default: {DEFAULT_CORPUS})"
+        "--corpus",
+        type=Path,
+        default=None,
+        help="directory to ingest (default: the `concepts` namespace of CORPUS_DIR)",
     )
     parser.add_argument("--prune", action="store_true", help="delete stored documents with no file")
     args = parser.parse_args()
+    corpus = args.corpus or default_corpus()
 
     try:
-        documents = load_directory(args.corpus)
+        documents = load_directory(corpus)
     except CorpusError as error:
         print(f"error: {error}")
         return 1
 
-    print(f"parsed {len(documents)} documents from {args.corpus}")
+    print(f"parsed {len(documents)} documents from {corpus}")
 
     # Every statement below is scoped to the namespace being ingested. Without
     # it, a `news` document - which carries a null `concept_slug` by design -
