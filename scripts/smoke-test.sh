@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
-# End-to-end check of the Milestone 1 vertical slice against a running stack:
-# log in, import the demo portfolio, read back a valued portfolio, trigger the
-# snapshot run, and confirm the run is idempotent.
+# End-to-end check against a running stack: log in, import the demo portfolio,
+# read back a valued portfolio, trigger the snapshot run, confirm it is
+# idempotent, then ask the corpus questions (M3).
+#
+# !! THIS REPLACES EVERY HOLDING IN THE TARGET DATABASE !!
+# The import below commits with `mode: "replace"`, so whatever portfolio the
+# database held is deleted and the demo portfolio is written in its place. On a
+# development stack seeded from the demo file that is a no-op; on a database
+# holding a real portfolio, or cost bases edited by hand in the UI, it is not,
+# and nothing here asks first. Target weights survive (they are keyed by symbol)
+# and no foreign key points at a holding id, so nothing is left dangling - but
+# the holdings themselves are gone. Point it at a stack you are willing to reset.
 #
 # Usage: bash scripts/smoke-test.sh [orchestrator_url]
 set -euo pipefail
@@ -96,5 +105,66 @@ say "internal route rejects a missing key"
 status=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE_URL/internal/runs" \
   -H 'content-type: application/json' -d '{"kind":"snapshot"}')
 [ "$status" = "401" ] || fail "expected 401 without the internal key, got $status"
+
+# --- M3: the corpus, and the questions asked of it ---------------------------
+#
+# Added because the compose job was being counted as coverage for `/ask` while
+# never calling it. A gate that cannot fail for the thing it is cited for is
+# worse than no gate, because it occupies the space where a real one would go.
+#
+# Every assertion below is reachable on the FIXTURE embedder, which is what CI
+# runs. That rules out one case on purpose: the `not_in_corpus` refusal cannot
+# happen here at all, because the relevance floor abstains when the vector half
+# is a placeholder (see app/ask/relevance.py). Asserting it would be asserting
+# something that cannot be true in this environment — the failure mode this
+# block exists to avoid.
+
+say "a concept question is answered from the corpus, with citations"
+curl -fsS -b "$COOKIE_JAR" -X POST "$BASE_URL/ask" \
+  -H 'content-type: application/json' -d '{"question":"what is a drawdown"}' \
+  | python3 -c '
+import json, sys
+body = json.load(sys.stdin)
+assert body["answered"] is True, f"expected an answer, got {body}"
+assert body["citations"], "an answer with no citations is not checkable"
+assert body["intent"] == "concept", body["intent"]
+# The corpus must actually be ingested for this to pass; an empty corpus would
+# answer nothing, which is the state this check is really guarding.
+# No quotes inside f-string expressions: that is a SyntaxError before Python
+# 3.12, and this runs on whatever python3 the host happens to have.
+cites, source = len(body["citations"]), body["answer_source"]
+relevance, semantic = body["relevance"], body["vector_is_semantic"]
+print(f"  {cites} citations, source={source}, relevance={relevance}, semantic={semantic}")
+'
+
+say "a portfolio question is computed, never generated"
+curl -fsS -b "$COOKIE_JAR" -X POST "$BASE_URL/ask" \
+  -H 'content-type: application/json' -d '{"question":"what is my portfolio worth"}' \
+  | python3 -c '
+import json, sys
+body = json.load(sys.stdin)
+assert body["intent"] == "portfolio", body["intent"]
+# A model is never asked what a portfolio contains. If this ever reads "llm",
+# something has routed money questions through a language model.
+assert body["answer_source"] in {"computed", "none"}, body["answer_source"]
+text = body["text"]
+print("  " + text[:100])
+'
+
+say "a concept chip resolves to its document"
+curl -fsS -b "$COOKIE_JAR" "$BASE_URL/concepts/drawdown" \
+  | python3 -c '
+import json, sys
+doc = json.load(sys.stdin)
+assert doc["sections"], "the corpus is not ingested"
+assert doc["license"], "an unlicensed document must never be served"
+title, count, licence = doc["title"], len(doc["sections"]), doc["license"]
+print(f"  {title}: {count} sections, {licence}")
+'
+
+say "an empty question is refused before it reaches the AI service"
+status=$(curl -s -o /dev/null -w '%{http_code}' -b "$COOKIE_JAR" -X POST "$BASE_URL/ask" \
+  -H 'content-type: application/json' -d '{"question":"   "}')
+[ "$status" = "400" ] || fail "expected 400 for an empty question, got $status"
 
 printf '\nAll smoke checks passed.\n'

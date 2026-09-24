@@ -1,6 +1,212 @@
 {
   "components": {
     "schemas": {
+      "AskCitation": {
+        "description": "One passage an answer rests on, quoted rather than summarised.\n\n`text` is the chunk verbatim. A citation the reader cannot read is a\nfootnote, not evidence, and the whole claim of this endpoint is that its\nanswers are checkable.",
+        "properties": {
+          "chunk_id": {
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "concept_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concept Slug"
+          },
+          "document_id": {
+            "title": "Document Id",
+            "type": "string"
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading"
+          },
+          "similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarity"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "chunk_id",
+          "document_id",
+          "concept_slug",
+          "title",
+          "heading",
+          "text",
+          "similarity"
+        ],
+        "title": "AskCitation",
+        "type": "object"
+      },
+      "AskRequest": {
+        "description": "One question, plus the portfolio context needed to answer it.\n\n`holdings` and `target_weights` mirror `PortfolioScanRequest` exactly rather\nthan defining a second portfolio shape, so the orchestrator sends what it\nalready builds. Both are optional: a concept question needs neither, and a\nportfolio question asked without them is refused with `no_holdings` - which\nis deliberately a different refusal from \"the corpus does not cover that\".",
+        "properties": {
+          "base_currency": {
+            "default": "USD",
+            "title": "Base Currency",
+            "type": "string"
+          },
+          "holdings": {
+            "items": {
+              "$ref": "#/components/schemas/ScanHolding"
+            },
+            "maxItems": 500,
+            "title": "Holdings",
+            "type": "array"
+          },
+          "question": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          },
+          "target_weights": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Target Weights",
+            "type": "object"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "AskRequest",
+        "type": "object"
+      },
+      "AskResponse": {
+        "description": "An answer, a refusal, and in both cases how it was decided.\n\n`answered` is the field to branch on. A refusal is a normal 200 with\n`answered: false` and a `refused_reason`, because it is an outcome rather\nthan a fault - M3's exit criterion names refusing out-of-index questions as\na thing the product must do well, and an HTTP error would make it\nindistinguishable from a broken corpus.\n\n`answer_source` is `extractive` (the passages, verbatim), `llm` (a model\nwrote a connecting paragraph over them, and it passed the evidence check),\n`computed` (arithmetic over the caller's holdings - never a model), or\n`none` for a refusal. It mirrors `ObservationOut.narration_source`, and\n`fallback_reason` says why a model did not write it.\n\n`relevance` and `best_similarity` are the floor's reasoning, exposed rather\nthan hidden: \"0.19, refused, floor 0.23\" can be argued with, and \"refused\"\nalone cannot. `relevance: weak` means the answer is given but the match was\nclose to the noise floor and the reader should be told so.",
+        "properties": {
+          "answer_source": {
+            "enum": [
+              "extractive",
+              "llm",
+              "computed",
+              "none"
+            ],
+            "title": "Answer Source",
+            "type": "string"
+          },
+          "answered": {
+            "title": "Answered",
+            "type": "boolean"
+          },
+          "best_similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Similarity"
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/AskCitation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "concept_refs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Concept Refs",
+            "type": "array"
+          },
+          "evidence": {
+            "additionalProperties": true,
+            "title": "Evidence",
+            "type": "object"
+          },
+          "fallback_reason": {
+            "default": "none",
+            "title": "Fallback Reason",
+            "type": "string"
+          },
+          "intent": {
+            "enum": [
+              "concept",
+              "portfolio"
+            ],
+            "title": "Intent",
+            "type": "string"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          },
+          "refused_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refused Reason"
+          },
+          "relevance": {
+            "enum": [
+              "confident",
+              "weak",
+              "none"
+            ],
+            "title": "Relevance",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "vector_is_semantic": {
+            "title": "Vector Is Semantic",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "question",
+          "intent",
+          "answered",
+          "text",
+          "answer_source",
+          "relevance",
+          "vector_is_semantic"
+        ],
+        "title": "AskResponse",
+        "type": "object"
+      },
       "BackfillInstrument": {
         "properties": {
           "instrument_id": {
@@ -967,6 +1173,65 @@
         "summary": "Portfolio Scan",
         "tags": [
           "analysis"
+        ]
+      }
+    },
+    "/ask": {
+      "post": {
+        "operationId": "ask_ask_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ask",
+        "tags": [
+          "ask"
         ]
       }
     },

@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask */
+        post: operations["ask_ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/concepts": {
         parameters: {
             query?: never;
@@ -223,6 +240,118 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AskCitation
+         * @description One passage an answer rests on, quoted rather than summarised.
+         *
+         *     `text` is the chunk verbatim. A citation the reader cannot read is a
+         *     footnote, not evidence, and the whole claim of this endpoint is that its
+         *     answers are checkable.
+         */
+        AskCitation: {
+            /** Chunk Id */
+            chunk_id: string;
+            /** Concept Slug */
+            concept_slug: string | null;
+            /** Document Id */
+            document_id: string;
+            /** Heading */
+            heading: string | null;
+            /** Similarity */
+            similarity: number | null;
+            /** Text */
+            text: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * AskRequest
+         * @description One question, plus the portfolio context needed to answer it.
+         *
+         *     `holdings` and `target_weights` mirror `PortfolioScanRequest` exactly rather
+         *     than defining a second portfolio shape, so the orchestrator sends what it
+         *     already builds. Both are optional: a concept question needs neither, and a
+         *     portfolio question asked without them is refused with `no_holdings` - which
+         *     is deliberately a different refusal from "the corpus does not cover that".
+         */
+        AskRequest: {
+            /**
+             * Base Currency
+             * @default USD
+             */
+            base_currency: string;
+            /** Holdings */
+            holdings?: components["schemas"]["ScanHolding"][];
+            /** Question */
+            question: string;
+            /** Target Weights */
+            target_weights?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * AskResponse
+         * @description An answer, a refusal, and in both cases how it was decided.
+         *
+         *     `answered` is the field to branch on. A refusal is a normal 200 with
+         *     `answered: false` and a `refused_reason`, because it is an outcome rather
+         *     than a fault - M3's exit criterion names refusing out-of-index questions as
+         *     a thing the product must do well, and an HTTP error would make it
+         *     indistinguishable from a broken corpus.
+         *
+         *     `answer_source` is `extractive` (the passages, verbatim), `llm` (a model
+         *     wrote a connecting paragraph over them, and it passed the evidence check),
+         *     `computed` (arithmetic over the caller's holdings - never a model), or
+         *     `none` for a refusal. It mirrors `ObservationOut.narration_source`, and
+         *     `fallback_reason` says why a model did not write it.
+         *
+         *     `relevance` and `best_similarity` are the floor's reasoning, exposed rather
+         *     than hidden: "0.19, refused, floor 0.23" can be argued with, and "refused"
+         *     alone cannot. `relevance: weak` means the answer is given but the match was
+         *     close to the noise floor and the reader should be told so.
+         */
+        AskResponse: {
+            /**
+             * Answer Source
+             * @enum {string}
+             */
+            answer_source: "extractive" | "llm" | "computed" | "none";
+            /** Answered */
+            answered: boolean;
+            /** Best Similarity */
+            best_similarity?: number | null;
+            /** Citations */
+            citations?: components["schemas"]["AskCitation"][];
+            /** Concept Refs */
+            concept_refs?: string[];
+            /** Evidence */
+            evidence?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Fallback Reason
+             * @default none
+             */
+            fallback_reason: string;
+            /**
+             * Intent
+             * @enum {string}
+             */
+            intent: "concept" | "portfolio";
+            /** Question */
+            question: string;
+            /** Refused Reason */
+            refused_reason?: string | null;
+            /**
+             * Relevance
+             * @enum {string}
+             */
+            relevance: "confident" | "weak" | "none";
+            /** Text */
+            text: string;
+            /** Vector Is Semantic */
+            vector_is_semantic: boolean;
+        };
         /** BackfillInstrument */
         BackfillInstrument: {
             /** Instrument Id */
@@ -718,6 +847,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortfolioScanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ask_ask_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AskResponse"];
                 };
             };
             /** @description Validation Error */

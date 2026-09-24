@@ -84,6 +84,12 @@ class ScoredChunk:
     score: float
     vector_rank: int | None
     text_rank: int | None
+    #: Cosine similarity from the vector half, or None when that half did not
+    #: return this chunk. Carried through fusion rather than discarded because
+    #: it is the only score in this system that means the same thing across
+    #: different queries - which is what makes a relevance floor possible
+    #: (`app/ask/relevance.py`). The fused score cannot do that job.
+    vector_similarity: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +102,11 @@ class HybridResult:
     #: False while the configured embedder ranks by word overlap alone. Carried
     #: into the API response; see the module docstring.
     vector_is_semantic: bool
+    #: The strongest cosine similarity the vector half found for this query,
+    #: across all candidates and not only the ones that survived fusion. None
+    #: when that half returned nothing - an un-embedded corpus, which is an
+    #: absence of evidence rather than evidence of irrelevance.
+    best_similarity: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -295,6 +306,7 @@ async def hybrid_search(
             query=query,
             chunks=(),
             embedding_model=embedder.model,
+            best_similarity=None,
             vector_is_semantic=embedder.model not in _NON_SEMANTIC_MODELS,
         )
 
@@ -319,8 +331,10 @@ async def hybrid_search(
     )
 
     by_id: dict[str, _Candidate] = {}
+    similarities: dict[str, float] = {}
     for match in vector_matches:
         by_id.setdefault(match.chunk_id, _candidate_from_vector_match(match))
+        similarities.setdefault(match.chunk_id, match.similarity)
     for candidate in text_matches:
         by_id.setdefault(candidate.chunk_id, candidate)
 
@@ -352,6 +366,7 @@ async def hybrid_search(
             score=score,
             vector_rank=ranks[0],
             text_rank=ranks[1],
+            vector_similarity=similarities.get(chunk_id),
         )
         for chunk_id, (score, ranks) in ordered
     )
@@ -360,5 +375,9 @@ async def hybrid_search(
         query=query,
         chunks=chunks,
         embedding_model=embedder.model,
+        # Over every candidate, not only the survivors: a strong match pushed
+        # out of the top `limit` by fusion is still evidence that the corpus
+        # covers the question, and the floor is asking exactly that.
+        best_similarity=max(similarities.values(), default=None),
         vector_is_semantic=is_semantic,
     )

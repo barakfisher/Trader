@@ -17,6 +17,7 @@ import type { z } from 'zod';
 
 import type { components } from '../generated/ai-api.js';
 import {
+  askResponseSchema,
   conceptDocumentSchema,
   conceptSearchResponseSchema,
   fxRateSchema,
@@ -44,6 +45,9 @@ export type ConceptDocument = components['schemas']['ConceptDocumentResponse'];
 export type ConceptSection = components['schemas']['ConceptSection'];
 export type ConceptSearchResponse = components['schemas']['ConceptSearchResponse'];
 export type ConceptSearchMatch = components['schemas']['ConceptSearchMatch'];
+export type AskRequest = components['schemas']['AskRequest'];
+export type AskResponse = components['schemas']['AskResponse'];
+export type AskCitation = components['schemas']['AskCitation'];
 
 /**
  * A scan loads history for every holding and may call a model once per finding,
@@ -238,6 +242,28 @@ export class AiClient {
       conceptSearchResponseSchema,
       { method: 'GET', requestId },
     );
+  }
+
+  /**
+   * Ask one question of the corpus or of the caller's own holdings.
+   *
+   * A refusal comes back as a normal 200 with `answered: false` and a
+   * `refused_reason`, so a caller must branch on the body rather than on the
+   * status. That is deliberate: refusing a question the corpus does not cover
+   * is something the product is required to do well, and an error status would
+   * make a correct refusal indistinguishable from a corpus that failed to load.
+   *
+   * Shares the scan's longer timeout rather than the quote client's, because a
+   * concept answer may call a model and a cold embedding call adds a round
+   * trip - and losing the work to a timeout would be the expensive direction.
+   */
+  ask(payload: AskRequest, requestId?: string): Promise<AskResponse> {
+    return this.request<AskResponse>('/ask', askResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      requestId,
+      timeoutMs: SCAN_TIMEOUT_MS,
+    });
   }
 
   fxRate(base: string, quote: string, requestId?: string): Promise<FxRate> {

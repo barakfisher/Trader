@@ -21,6 +21,7 @@ import { logger } from '../logger.js';
 import { SESSION_COOKIE, verifySessionToken } from './auth.js';
 import { toErrorResponse, unauthorized, ApiProblem } from './errors.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerAskRoutes } from './routes/ask.js';
 import { registerConceptsRoutes } from './routes/concepts.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerHoldingsRoutes } from './routes/holdings.js';
@@ -181,6 +182,7 @@ export function createApp(
   registerTelegramRoutes(app);
   registerImportRoutes(app);
   registerConceptsRoutes(app);
+  registerAskRoutes(app);
   registerInternalRoutes(app);
 
   return app;

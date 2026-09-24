@@ -208,6 +208,55 @@ export const conceptDocumentSchema = z.object({
   sections: z.array(conceptSectionSchema),
 });
 
+export const askCitationSchema = z.object({
+  chunk_id: z.string(),
+  document_id: z.string(),
+  concept_slug: z.string().nullable(),
+  title: z.string(),
+  heading: z.string().nullable(),
+  // Verbatim. A citation the reader cannot read is a footnote, not evidence,
+  // and the whole claim of `/ask` is that its answers are checkable.
+  text: z.string(),
+  similarity: z.number().nullable(),
+});
+
+export const askResponseSchema = z.object({
+  question: z.string(),
+  intent: z.enum(['concept', 'portfolio']),
+  // The field to branch on. A refusal is a 200 with `answered: false`, because
+  // declining an out-of-index question is an outcome the milestone requires the
+  // product to do well - not a fault to be signalled with a status code.
+  answered: z.boolean(),
+  text: z.string(),
+  // Optional, not missing-by-accident: these three use default_factory, which
+  // pydantic publishes with no `default`, so the generator treats them as
+  // optional. `fallback_reason` below carries a plain default and therefore
+  // arrives required. Matching that split exactly is what the assertions at the
+  // bottom of this file are for.
+  citations: z.array(askCitationSchema).optional(),
+  concept_refs: z.array(z.string()).optional(),
+  evidence: z.record(z.string(), z.unknown()).optional(),
+  // `computed` is arithmetic over the caller's holdings and is never a model:
+  // a plausible wrong number about someone's money is the worst output this
+  // product could produce.
+  answer_source: z.enum(['extractive', 'llm', 'computed', 'none']),
+  fallback_reason: z.string(),
+  // `weak` means answered, but the match sat close to the noise floor. Three
+  // states rather than two because the measurement behind the threshold
+  // supported three - see app/ask/relevance.py.
+  relevance: z.enum(['confident', 'weak', 'none']),
+  best_similarity: z.number().nullish(),
+  refused_reason: z.string().nullish(),
+  vector_is_semantic: z.boolean(),
+});
+
+export type _AssertAskCitation = Expect<
+  Equal<z.infer<typeof askCitationSchema>, Schemas['AskCitation']>
+>;
+export type _AssertAskResponse = Expect<
+  Equal<z.infer<typeof askResponseSchema>, Schemas['AskResponse']>
+>;
+
 export const conceptSearchMatchSchema = z.object({
   chunk_id: z.string(),
   document_id: z.string(),

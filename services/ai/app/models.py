@@ -308,6 +308,75 @@ class ConceptSearchResponse(BaseModel):
     vector_is_semantic: bool
 
 
+class AskRequest(BaseModel):
+    """One question, plus the portfolio context needed to answer it.
+
+    `holdings` and `target_weights` mirror `PortfolioScanRequest` exactly rather
+    than defining a second portfolio shape, so the orchestrator sends what it
+    already builds. Both are optional: a concept question needs neither, and a
+    portfolio question asked without them is refused with `no_holdings` - which
+    is deliberately a different refusal from "the corpus does not cover that".
+    """
+
+    question: str = Field(min_length=1, max_length=1000)
+    base_currency: str = "USD"
+    holdings: list[ScanHolding] = Field(default_factory=list, max_length=500)
+    target_weights: dict[str, str] = Field(default_factory=dict)
+
+
+class AskCitation(BaseModel):
+    """One passage an answer rests on, quoted rather than summarised.
+
+    `text` is the chunk verbatim. A citation the reader cannot read is a
+    footnote, not evidence, and the whole claim of this endpoint is that its
+    answers are checkable.
+    """
+
+    chunk_id: str
+    document_id: str
+    concept_slug: str | None
+    title: str
+    heading: str | None
+    text: str
+    similarity: float | None
+
+
+class AskResponse(BaseModel):
+    """An answer, a refusal, and in both cases how it was decided.
+
+    `answered` is the field to branch on. A refusal is a normal 200 with
+    `answered: false` and a `refused_reason`, because it is an outcome rather
+    than a fault - M3's exit criterion names refusing out-of-index questions as
+    a thing the product must do well, and an HTTP error would make it
+    indistinguishable from a broken corpus.
+
+    `answer_source` is `extractive` (the passages, verbatim), `llm` (a model
+    wrote a connecting paragraph over them, and it passed the evidence check),
+    `computed` (arithmetic over the caller's holdings - never a model), or
+    `none` for a refusal. It mirrors `ObservationOut.narration_source`, and
+    `fallback_reason` says why a model did not write it.
+
+    `relevance` and `best_similarity` are the floor's reasoning, exposed rather
+    than hidden: "0.19, refused, floor 0.23" can be argued with, and "refused"
+    alone cannot. `relevance: weak` means the answer is given but the match was
+    close to the noise floor and the reader should be told so.
+    """
+
+    question: str
+    intent: Literal["concept", "portfolio"]
+    answered: bool
+    text: str
+    citations: list[AskCitation] = Field(default_factory=list)
+    concept_refs: list[str] = Field(default_factory=list)
+    evidence: dict[str, Any] = Field(default_factory=dict)
+    answer_source: Literal["extractive", "llm", "computed", "none"]
+    fallback_reason: str = "none"
+    relevance: Literal["confident", "weak", "none"]
+    best_similarity: float | None = None
+    refused_reason: str | None = None
+    vector_is_semantic: bool
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"]
     service: str = "ai-service"
