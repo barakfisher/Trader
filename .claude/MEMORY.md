@@ -4,9 +4,11 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-24. **M3 slice 2 is merged (#44)**, and the paid embedder that slice
-recorded as owed is **done and verified against the live endpoint** — retrieval is
-genuinely semantic now, not a placeholder. M4 is complete; M3's remaining
+Updated: 2026-09-24. **M3 slices 1–3 are done.** The paid embedder that slice 2
+recorded as owed is verified against the live endpoint, so retrieval is genuinely
+semantic; `POST /ask` answers concept and portfolio questions with citations and refuses
+what the corpus does not cover. **Only slice 4 — the eval set — remains**, and several
+numbers recorded here are explicitly waiting on it. M4 is complete; M3's remaining
 two slices — `POST /ask`, then the eval set — are not started. The session that wrote this gave the
 corpus an embedding column whose width was chosen for a named model rather than for the fixture
 that fills it, and then found two retrieval bugs by running the SQL that 40 passing tests could not
@@ -38,7 +40,7 @@ proposals reach the notifications ledger, correctly recorded as `failed`, and re
 | **M1.5 — Trustworthy quote path** | ✅ Complete | **unplanned**; inserted after an audit found data problems M2 would have built on |
 | **M2 — Analysis engine & observations** | ✅ Complete | PRs #12–#22 |
 | **M2.5 — Real price history** | ✅ Complete | **unplanned**; PR #23. Finished M1's provider layer, 18 PRs late |
-| **M3 — RAG & educational engine** | 🟡 Slices 1–2 of 4 complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. **Slice 3 (`POST /ask`) is next**; the reranker DESIGN.md asks for went with it, deliberately — see decision 30 |
+| **M3 — RAG & educational engine** | 🟡 Slices 1–3 of 4 complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. Slice 3 (#46): `POST /ask`, intent routing, citations, a three-state relevance floor. **Slice 4 (the eval set) is next and several numbers are waiting on it** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
 | M5 — Market discovery & topics | Not started | independent of M3; deferred in favour of finishing M3 (decided 2026-09-23) |
 | M6 — Frontend completion & polish | Not started | |
@@ -79,7 +81,7 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts at handoff: **1,017** — 517 Python, 331 orchestrator, 153 web, 16 shared.
+Test counts at handoff: **1,083** — 573 Python, 341 orchestrator, 153 web, 16 shared.
 
 **None of them executes a line of retrieval SQL**, and that is structural rather than an oversight:
 the Python suite is hermetic and has no Postgres. Exercise it by hand after touching
@@ -100,6 +102,7 @@ Useful endpoints (all need the session cookie except `/internal/*`, which needs 
 | `POST /telegram/bind-token` | the **Settings page** mints the connect link (#38) |
 | `POST /telegram/bind-token` | mints the signed connect link; `POST /telegram/webhook` is public |
 | `GET /concepts/:slug` | the explanation behind a concept chip (#M3). 404 means the corpus is not ingested, not that the app is broken |
+| `POST /ask` | a question in, a checkable answer out. **A refusal is a 200** with `answered: false` — declining an out-of-index question is an outcome, and a 4xx would make it look like a broken corpus. `answer_source` is `extractive` \| `llm` \| `computed` \| `none`; `computed` is arithmetic over holdings and is *never* a model |
 | `GET /concepts/search?q=` | hybrid retrieval: the half of `/ask` that finds things. A diagnostic surface with no relevance floor and no refusal — those are `/ask`'s judgements. Every match reports `vector_rank` and `text_rank`, so *which half found this* is answerable; `vector_is_semantic: false` says the embedder ranks by shared words alone |
 
 ---
@@ -353,6 +356,36 @@ failure they prevent.
     rather than in a log, because a ranking produced by shared words is
     indistinguishable from one produced by understanding.
 
+32. **`/ask` refuses in three different ways, and they are kept apart.** Below the
+    relevance floor means the corpus does not cover it; `no_holdings` means the caller
+    did not send a portfolio; `not_computable` means the question is outside the short
+    list of things arithmetic can answer. Collapsing them would tell someone their
+    question was out of scope when the truth was that their portfolio had not loaded —
+    the same class of error as a notification that vanishes (decision 18).
+
+33. **The relevance floor has three states because the measurement supported three.**
+    Eight in-domain and eight out-of-domain questions separated by **0.0289** of cosine
+    (lowest in-domain 0.2498, highest out-of-domain 0.2208). That is enough to tell
+    clearly-relevant from clearly-irrelevant and **not enough to draw a line**, so
+    between the bounds an answer is given and *labelled weak* rather than a coin-flip
+    being reported as a decision. Same instinct as `null` for an unpriced holding: the
+    uncertain case gets its own value instead of being rounded into a confident one.
+    The floor is on **cosine** and not on the fused RRF score, because RRF is a function
+    of how many halves returned a chunk and where — the same number means different
+    things for different queries. Cosine is bounded and behaves the same way across
+    queries, which is the only property that makes a fixed threshold meaningful.
+    **The floor abstains entirely when the embedder is the fixture** (CI's path): those
+    similarities measure shared words and are not on the scale the thresholds were
+    measured against, so applying it there would refuse or admit at random while looking
+    like a considered decision.
+
+34. **A portfolio answer is never written by a model, and the wire says so.**
+    `answer_source: "computed"` is arithmetic over what the caller supplied, checked by
+    the same evidence validator narration uses. A plausible wrong number about someone's
+    money is the worst output this product could produce, and the set of computable
+    questions is therefore short, explicit and listed — the `PROPOSABLE_KINDS` argument
+    applied to questions.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -589,6 +622,31 @@ reasoning ("the hybrid would be one placeholder embedder wearing two hats") beca
 the moment the placeholder was replaced. Comments that record *why* are what make this
 detectable; a comment that had only recorded *what* would have survived unchallenged.
 
+**First person does not mean "about my portfolio", and the obvious router ships that
+bug.** Keying intent on "my"/"I" fails immediately on *"how much did I lose from the
+top"* — first-person, and a **concept** question about drawdown. So is "should I sell
+when things drop". What separates the two is a reference to their *holdings*, not to
+them.
+→ **Pronouns describe how someone writes, not what they are asking about.**
+
+**A word boundary does not make a ticker unambiguous.** The symbol matcher was written
+as `\bSO\b` with a comment claiming it stopped Southern Company firing on the word
+"so". It does not — `\bso\b` matches "so" perfectly well, and a test written to check
+the comment failed on the first run. Tickers are conventionally upper case, so the match
+is now **case-sensitive against the original question**, and a lowercase "aapl" falls
+through to CONCEPT (the harmless direction).
+→ **A comment asserting a property is not the property.** This one was written,
+believed, and disproved by the test that was written to confirm it — which is the whole
+argument for writing the test.
+
+**The evidence validator caught a derived figure in a template, not a model.** "This
+excludes **1** unpriced holding" — the 1 is `holdings_count - priced_count`, computed in
+the sentence and absent from the evidence. The validator rejected it exactly as it
+rejects a model's invention.
+→ **The validator is not an LLM guard, it is a provenance check**, and it is worth
+pointing at deterministic text too. A figure the reader cannot trace is untraceable
+whoever wrote it.
+
 **A stale placeholder in `.env.example` became a boot failure.** M0 wrote an
 `EMBEDDINGS_PROVIDER=fastembed` block with a 384-wide model, two milestones
 before anything read it, and every local `.env` copied it. Slice 2's factory
@@ -772,23 +830,38 @@ Three things a later session should not re-derive:
    here as well would put one threshold in two places and let a question be refused by a number
    nobody chose.
 
-### M3 slice 3 — `POST /ask`, next
+### M3 slice 3 is done (#46)
 
-Intent routing (portfolio vs concept), citations, a relevance floor, and the refusal that the exit
-criterion actually names: *"correctly refuses out-of-index questions"*. The retrieval it needs is
-done and exercised. Three things worth knowing before starting:
+`POST /ask` on the AI service, proxied by the orchestrator, which values the portfolio
+and sends it with **every** question — routing happens in the AI service, so a second
+classifier here could disagree with it, and the disagreement is silent.
 
-- **The floor is the hard part and the fixture embedder makes it harder.** RRF scores are not
-  comparable across queries — they are a function of how many halves returned a chunk and where —
-  so a floor on the fused score is a floor on a number with no fixed meaning. The honest version
-  probably floors on the *full-text* half's `ts_rank_cd` or on term coverage, because that half is
-  real while the vector half is a placeholder. Decide this deliberately; it is the difference
-  between refusing and confabulating.
-- **The reranker belongs here, and only once slice 4's eval set can measure it** (decision 30).
-- **`reasoning_effort` is per call and `/ask` is the caller that wants it on** (decision 21) —
-  deciding whether retrieved context supports an answer is exactly the judgement narration does
-  not have.
+Verified by running it against the real corpus, not by reading it: "what is a drawdown"
+→ confident (0.712), three citations; "how much did I lose from the top" → weak (0.338),
+answered from the drawdown document; "how do I roast a chicken" → **refused** (0.052);
+"what is my largest position" → computed, 72.2% of the priced total, with the unpriced
+holding reported rather than dropped. Both narration branches were exercised: the free
+route timed out and fell back to the extract, and a paid model produced a grounded
+answer that passed the evidence validator.
 
+### M3 slice 4 — the eval set, and the numbers waiting on it
+
+~30 Q/A pairs run in CI. It is the last slice, and it is **not** a formality: three
+separate decisions are currently resting on evidence too weak to defend, all of them
+recorded above as debt.
+
+1. **The relevance thresholds** (`REFUSE_BELOW = 0.23`, `CONFIDENT_ABOVE = 0.40`) come
+   from sixteen questions written by the session that chose them. Re-derive them.
+2. **The strict/wide lexical switch** rests on six paraphrased questions. Six.
+3. **The reranker** DESIGN.md asks for was deferred *specifically* until something could
+   measure it. This is that something — build the eval set first, then the reranker
+   against it, in that order.
+
+The eval set must run on the **fixture** embedder, because CI is keyless. That is a real
+constraint on its design: it cannot measure semantic retrieval quality, only that the
+pipeline is stable and that refusals behave. Measuring the real embedder needs a second,
+opt-in job with a key — decide deliberately whether that is worth it rather than
+discovering the gap later.
 
 ### M5 (topics), deferred
 
