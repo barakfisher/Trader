@@ -144,17 +144,23 @@ def _run(
     fulltext: list[str],
     query: str = "what is a drawdown",
     limit: int = 5,
+    embedder: object | None = None,
+    seen: dict[str, object] | None = None,
 ) -> tuple[tuple[ScoredChunk, ...], FakeStore]:
     from app.corpus import retrieval
 
     store = FakeStore(vector)
-    monkeypatch.setattr(  # type: ignore[attr-defined]
-        retrieval,
-        "text_search",
-        lambda _c, **_k: [retrieval._candidate_from_vector_match(_match(i)) for i in fulltext],
-    )
+
+    def fake_text_search(_c: object, **kwargs: object) -> list[object]:
+        if seen is not None:
+            seen.update(kwargs)
+        return [retrieval._candidate_from_vector_match(_match(i)) for i in fulltext]
+
+    monkeypatch.setattr(retrieval, "text_search", fake_text_search)  # type: ignore[attr-defined]
     result = asyncio.run(
-        hybrid_search(None, store, HashedEmbedder(), query=query, limit=limit)  # type: ignore[arg-type]
+        hybrid_search(  # type: ignore[arg-type]
+            None, store, embedder or HashedEmbedder(), query=query, limit=limit
+        )
     )
     return result.chunks, store
 
@@ -254,3 +260,72 @@ def test_the_answer_states_that_the_fixture_embedder_is_not_semantic(
 def test_the_query_embedding_is_the_width_the_column_declares() -> None:
     """A mis-sized query vector fails in Postgres, naming the column not the model."""
     assert len(asyncio.run(HashedEmbedder().embed_query("drawdown"))) == EMBEDDING_DIMENSION
+
+
+# --------------------------------------------------------------------------
+# How strict the lexical half is depends on what the other half can do
+# --------------------------------------------------------------------------
+
+
+class SemanticEmbedder(HashedEmbedder):
+    """A stand-in for a real embedding model - same vectors, different name.
+
+    Only the model id matters here: `_NON_SEMANTIC_MODELS` is a list rather
+    than a detected property precisely so that adding a real provider cannot
+    quietly flip the flag for an embedder nobody assessed.
+    """
+
+    model = "openai/text-embedding-3-small"
+
+
+def test_a_placeholder_embedder_widens_the_lexical_half(monkeypatch: object) -> None:
+    """AND matched nothing for three of four real questions, measured.
+
+    When the vector half ranks by shared words, the lexical half is the only
+    real one - and a real half that is silent is no half at all.
+    """
+    seen: dict[str, object] = {}
+
+    _run(monkeypatch, vector=[], fulltext=["t1"], seen=seen)
+
+    assert seen["require_all_terms"] is False
+
+
+def test_a_semantic_embedder_tightens_the_lexical_half(monkeypatch: object) -> None:
+    """Fusing a 2/6 ranker with a 5/6 ranker at equal weight measured 4/6.
+
+    Once the vector half can carry a paraphrase, the widened lexical half
+    competes with it instead of complementing it. Strict, it stays silent
+    unless confident - which is what took the hybrid back to 5/6.
+    """
+    seen: dict[str, object] = {}
+
+    _run(monkeypatch, vector=[], fulltext=["t1"], embedder=SemanticEmbedder(), seen=seen)
+
+    assert seen["require_all_terms"] is True
+
+
+def test_the_strictness_and_the_reported_flag_come_from_one_decision(
+    monkeypatch: object,
+) -> None:
+    """They must never disagree.
+
+    `vector_is_semantic` is what the API tells a reader, and `require_all_terms`
+    is what the query actually did. If one could be true while the other was
+    false, the response would describe a search that did not happen.
+    """
+    from app.corpus import retrieval
+
+    seen: dict[str, object] = {}
+    monkeypatch.setattr(  # type: ignore[attr-defined]
+        retrieval,
+        "text_search",
+        lambda _c, **kwargs: (seen.update(kwargs), [])[1],
+    )
+    result = asyncio.run(
+        hybrid_search(  # type: ignore[arg-type]
+            None, FakeStore(), SemanticEmbedder(), query="drawdown", limit=3
+        )
+    )
+
+    assert result.vector_is_semantic is seen["require_all_terms"]
