@@ -66,6 +66,7 @@ def _match(symbol: str, similarity: float, vector: list[float], *, etf: bool = F
         description=f"{symbol} does things.",
         similarity=similarity,
         size_minor=size,
+        size_currency=None if size is None else "USD",
         embedding=vector,
     )
 
@@ -167,3 +168,22 @@ def test_at_most_the_source_limit_coherent_funds_are_kept_closest_first() -> Non
     scores = {f.symbol: [0.5] for f in funds}
 
     assert resolution.coherent(funds, scores, best=0.5) == funds[: resolution.ETF_SOURCES]
+
+
+def test_a_candidate_carries_what_confirmation_stores_and_its_currency() -> None:
+    sized = _match("NVDA", 0.5, CHIP_A, size=544_540_000_000_000)
+    unsized = _match("NEW", 0.49, CHIP_B, size=None)
+
+    interpretation = resolution._interpretation(
+        "chips", [sized, unsized], limit=15, semantic=True, held={}
+    )
+
+    by_symbol = {c.symbol: c for c in interpretation.candidates}
+    assert by_symbol["NVDA"].instrument_id == "NVDA"  # _match uses the symbol as the id
+    assert (by_symbol["NVDA"].size_minor, by_symbol["NVDA"].size_currency) == (
+        544_540_000_000_000,
+        "USD",
+    )
+    # Unknown size is null with no currency - never a zero, never a stray code.
+    assert (by_symbol["NEW"].size_minor, by_symbol["NEW"].size_currency) == (None, None)
+    assert [c.symbol for c in interpretation.candidates] == ["NVDA", "NEW"]

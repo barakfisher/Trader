@@ -181,6 +181,9 @@ _STOPWORDS = frozenset(
 
 @dataclass(frozen=True, slots=True)
 class TopicCandidate:
+    #: `instruments.id`: what a confirmed topic stores, so confirmation never
+    #: has to look a symbol up again.
+    instrument_id: str
     symbol: str
     name: str | None
     asset_class: str
@@ -189,6 +192,8 @@ class TopicCandidate:
     similarity: float
     #: Market cap (equity) or net assets (ETF), minor units; None if unknown.
     size_minor: int | None
+    #: ISO currency of `size_minor`; None exactly when `size_minor` is None.
+    size_currency: str | None
     #: `confident` or `weak`, by `STRONG_ABOVE`.
     confidence: Relevance
     #: A sentence from the instrument's own description, verbatim.
@@ -328,6 +333,7 @@ def _interpretation(
         label=industries.most_common(1)[0][0] if industries else None,
         candidates=[
             TopicCandidate(
+                instrument_id=m.instrument_id,
                 symbol=m.symbol,
                 name=m.name,
                 asset_class=m.asset_class,
@@ -335,6 +341,7 @@ def _interpretation(
                 industry=m.industry,
                 similarity=m.similarity,
                 size_minor=m.size_minor,
+                size_currency=m.size_currency,
                 confidence=Relevance.CONFIDENT
                 if semantic and m.similarity >= STRONG_ABOVE
                 else Relevance.WEAK,

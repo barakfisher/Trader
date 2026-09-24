@@ -73,9 +73,12 @@ class ProfileMatch:
     description: str
     #: Cosine similarity in [-1, 1]; rises with relevance.
     similarity: float
-    #: Market cap for an equity, net assets for an ETF, in minor units of the
-    #: listing currency; None when the snapshot had neither.
+    #: Market cap for an equity, net assets for an ETF, in minor units of
+    #: `size_currency`; None when the snapshot had neither.
     size_minor: int | None
+    #: ISO currency of `size_minor` (guideline 3: minor units never travel
+    #: without their currency). None only when `size_minor` is None.
+    size_currency: str | None
     #: The stored description vector. Carried so a caller can compare
     #: candidates with each other, not only with the query.
     embedding: Embedding
@@ -246,6 +249,7 @@ def _profile_match(row: Any) -> ProfileMatch:
         description=row.description,
         similarity=float(row.similarity),
         size_minor=row.size_minor,
+        size_currency=row.size_currency if row.size_minor is not None else None,
         # pgvector renders a vector as '[x,y,...]', which is valid JSON.
         embedding=json.loads(row.embedding),
     )
@@ -272,6 +276,7 @@ def search_profiles(
             SELECT p.instrument_id, i.symbol, i.name, i.asset_class,
                    p.sector, p.industry, p.category, p.description,
                    COALESCE(p.market_cap_minor, p.net_assets_minor) AS size_minor,
+                   p.size_currency,
                    p.embedding::text AS embedding,
                    1 - (p.embedding <=> CAST(:embedding AS vector)) AS similarity
               FROM instrument_profiles p
@@ -492,6 +497,7 @@ def profiles_by_id(
             SELECT p.instrument_id, i.symbol, i.name, i.asset_class,
                    p.sector, p.industry, p.category, p.description,
                    COALESCE(p.market_cap_minor, p.net_assets_minor) AS size_minor,
+                   p.size_currency,
                    p.embedding::text AS embedding,
                    1 - (p.embedding <=> CAST(:embedding AS vector)) AS similarity
               FROM instrument_profiles p
