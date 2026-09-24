@@ -511,3 +511,73 @@ export interface TelegramConnectLink {
   url: string;
   expiresAt: string;
 }
+
+// --- Topics (M5; /topics) -----------------------------------------------------
+
+export type TopicStatus = 'active' | 'proposed';
+
+/** One of the user's topics, without its instruments. */
+export interface TopicSummary {
+  id: string;
+  /** The user's own words, trimmed. */
+  label: string;
+  status: TopicStatus;
+  createdBy: 'user' | 'auto';
+  createdAt: string;
+  updatedAt: string;
+  /** When the user last confirmed the instrument set; null for an unconfirmed proposal. */
+  confirmedAt: string | null;
+  instrumentCount: number;
+}
+
+/**
+ * One confirmed instrument, and why it is in the topic.
+ *
+ * `source: 'resolver'` means the user ticked a suggestion. It carries the band,
+ * a sentence quoted verbatim from the instrument's own description, and the
+ * source ETFs that held it, all as they were when the user confirmed. `'user'`
+ * means the user added a ticker the resolver missed. It carries no reasons,
+ * because it was not suggested for any.
+ */
+export interface TopicInstrument {
+  instrumentId: string;
+  symbol: string;
+  name: string | null;
+  assetClass: AssetClass;
+  source: 'resolver' | 'user';
+  confidence: 'confident' | 'weak' | null;
+  rationale: string | null;
+  /** Weights are fractions of the fund as decimal strings: '0.2195' is 21.95%. */
+  heldBy: { etf: string; weight: string }[];
+  addedAt: string;
+}
+
+export interface TopicDetail extends TopicSummary {
+  instruments: TopicInstrument[];
+}
+
+/** The bounds a topic write is held to, published so the UI can show them. */
+export interface TopicLimits {
+  maxActiveTopics: number;
+  maxInstrumentsPerTopic: number;
+  maxLabelLength: number;
+}
+
+export interface TopicsResponse {
+  topics: TopicSummary[];
+  limits: TopicLimits;
+}
+
+/**
+ * Confirm a topic: its label and the exact instrument set the user chose.
+ *
+ * `symbols` mixes ticked suggestions and added tickers, and the server tells
+ * them apart itself. It resolves the label again and records a symbol as
+ * `resolver` only if the resolver offers it. Provenance is never taken from
+ * the request, because a rationale is a quotation and the browser must not be
+ * able to write one.
+ */
+export interface TopicConfirmRequest {
+  label: string;
+  symbols: string[];
+}

@@ -56,7 +56,7 @@ portfolio_snapshots(id, user_id, as_of, total_minor, cost_minor, currency, break
 quotes(instrument_id, as_of, price_minor, currency, source, delay_seconds)  -- time-series, retained N days
 
 topics(id, user_id, label, status[active|proposed|rejected], created_by[user|auto])
-topic_instruments(topic_id, instrument_id, confidence, confirmed_by_user bool)
+topic_instruments(topic_id, user_id, instrument_id, source[resolver|user], confidence, rationale, held_by)  -- confirmed rows only (migration 0017)
 
 articles(id, url_hash unique, url, source, published_at, title, raw_text, content_hash)
 article_entities(article_id, instrument_id|topic_id, kind, salience)
