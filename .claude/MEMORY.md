@@ -1022,8 +1022,10 @@ topic observations; a rejected auto-proposal never returns.**
 
 **Done — resolution (slices 1–2).** `app/topics/resolution.resolve_topic(connection, embedder,
 topic)` returns a `TopicResolution`: a three-state verdict, and one or more interpretations, each
-up to 15 `TopicCandidate`s with symbol, similarity, size, `confident`/`weak`, a quoted rationale and
-`held_by`. Verified against the real database and embedder, not only by the hermetic suite. How it
+up to 15 `TopicCandidate`s with `instrument_id` (what `topic_instruments` stores), symbol,
+similarity, `size_minor` + `size_currency`, `confident`/`weak`, a quoted rationale and `held_by`.
+The contract was checked against what confirmation needs before handoff; the ticker-search
+fallback for "add what the resolver missed" is the existing `GET /instruments/resolve`. Verified against the real database and embedder, not only by the hermetic suite. How it
 works, what it scores, why it fails and what to try next: **`docs/TOPIC_RESOLUTION.md`** — read §3
 and §5 before changing a threshold.
 
