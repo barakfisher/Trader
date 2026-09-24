@@ -22,7 +22,12 @@ import {
 } from '../../db/queries.js';
 import { decideProposal } from '../../mastra/proposalLifecycle.js';
 import { factsOf } from '../../services/proposals.js';
-import { effectiveState, type RefusalReason } from '../../services/proposalState.js';
+import {
+  effectiveState,
+  undoableUntil,
+  UNDO_WINDOW_SECONDS,
+  type RefusalReason,
+} from '../../services/proposalState.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, notFound, unprocessable } from '../errors.js';
 
@@ -30,7 +35,7 @@ import { badRequest, notFound, unprocessable } from '../errors.js';
 const MAX_PROPOSALS = 200;
 
 const decisionSchema = z.object({
-  action: z.enum(['approve', 'reject', 'snooze']),
+  action: z.enum(['approve', 'reject', 'snooze', 'undo']),
   // ISO 8601 UTC, like every other timestamp crossing this wire. A duration
   // ("snooze for 4h") was the alternative and was rejected: it has to be
   // resolved against a clock, and the client's clock is not the one the
@@ -45,7 +50,9 @@ const decisionSchema = z.object({
  */
 const REFUSAL_MESSAGES: Record<RefusalReason, string> = {
   expired: 'this proposal has expired and can no longer be decided',
-  already_decided: 'this proposal has already been decided and cannot be reversed',
+  already_decided: 'this proposal has already been decided; an approval can be undone, nothing else can',
+  not_undoable: 'only an approval can be undone',
+  undo_window_closed: `an approval can only be undone within ${UNDO_WINDOW_SECONDS} seconds`,
   snooze_past_expiry: 'a snooze cannot outlast the proposal it postpones',
   snooze_in_the_past: 'a snooze must end in the future',
 };
@@ -71,19 +78,28 @@ function toWire(row: ProposalRow, now: Date) {
     snoozedUntil: row.snoozed_until?.toISOString() ?? null,
     decidedAt: row.decided_at?.toISOString() ?? null,
     decidedVia: row.decided_via,
+    // Stated by the server rather than recomputed by the client, so the web
+    // cannot offer an Undo the state machine would refuse. Null once there is
+    // nothing to undo.
+    undoableUntil: undoableUntil(factsOf(row))?.toISOString() ?? null,
     createdAt: row.created_at.toISOString(),
   };
 }
 
 export function registerProposalsRoutes(app: Hono<AppEnv>): void {
   app.get('/proposals', async (context) => {
-    const open = context.req.query('state') === 'open';
+    const filter = context.req.query('state');
+    const open = filter === 'open';
     const requested = Number(context.req.query('limit') ?? '50');
     const limit =
       Number.isInteger(requested) && requested > 0 ? Math.min(requested, MAX_PROPOSALS) : 50;
 
     const now = new Date();
-    const rows = await listProposals(currentUserId(context), { open, limit });
+    const rows = await listProposals(currentUserId(context), {
+      open,
+      approved: filter === 'approved',
+      limit,
+    });
     const proposals = rows.map((row) => toWire(row, now));
 
     return context.json({

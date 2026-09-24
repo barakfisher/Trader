@@ -20,6 +20,7 @@ const { ProposalsStore, SNOOZE_HOURS } = await import('../src/stores/ProposalsSt
 const { isUrgent, snoozeDescription, timeLeft } = await import(
   '../src/lib/proposalCountdown.ts'
 );
+const { undoSecondsLeft } = await import('../src/lib/undoWindow.ts');
 
 const NOW = new Date('2026-09-17T12:00:00.000Z');
 const at = (minutes: number) => new Date(NOW.getTime() + minutes * 60_000).toISOString();
@@ -41,6 +42,7 @@ function proposal(overrides: Record<string, unknown> = {}) {
     snoozedUntil: null,
     decidedAt: null,
     decidedVia: null,
+    undoableUntil: null,
     createdAt: at(-10),
     ...overrides,
   };
@@ -96,9 +98,21 @@ describe('deciding', () => {
     const inbox = store();
     await inbox.load();
 
+    // The re-read an approval triggers, carrying the server's undo window.
+    vi.mocked(api.get).mockImplementation(async (url: string) =>
+      url.includes('state=approved')
+        ? ({
+            proposals: [
+              proposal({ state: 'approved', storedState: 'approved', undoableUntil: at(1) }),
+            ],
+          } as never)
+        : ({ proposals: [] } as never),
+    );
     await inbox.decide('proposal-1', 'approve');
     expect(api.post).toHaveBeenCalledWith('/proposals/proposal-1/decision', { action: 'approve' });
     expect(inbox.proposals[0]!.state).toBe('approved');
+    // Fetched straight away, not on the next background tick.
+    expect(inbox.proposals[0]!.undoableUntil).toBe(at(1));
   });
 
   it('sends a snooze as an absolute instant, not a duration', async () => {
@@ -155,7 +169,10 @@ describe('deciding', () => {
     });
     // Reloaded: the refused proposal is gone rather than sitting there beside a
     // message explaining that it is gone.
-    expect(api.get).toHaveBeenCalledTimes(2);
+    const openReads = vi
+      .mocked(api.get)
+      .mock.calls.filter(([url]) => url === '/proposals?state=open');
+    expect(openReads).toHaveLength(2);
     expect(inbox.proposals).toHaveLength(0);
   });
 
@@ -198,6 +215,120 @@ describe('deciding', () => {
   });
 });
 
+describe('which button was clicked', () => {
+  it('records the action in flight, not merely that one is', async () => {
+    // So the clicked button can say "Rejecting…" while its siblings only
+    // disable - the user sees which choice registered.
+    vi.mocked(api.get).mockResolvedValueOnce({ proposals: [proposal()] } as never);
+    const inbox = store();
+    await inbox.load();
+
+    let release: (value: unknown) => void = () => {};
+    vi.mocked(api.post).mockReturnValueOnce(
+      new Promise((resolve) => {
+        release = resolve;
+      }) as never,
+    );
+    const pending = inbox.decide('proposal-1', 'reject');
+    expect(inbox.decidingAction('proposal-1')).toBe('reject');
+
+    // A different button on the same card is ignored too, not just a repeat.
+    await inbox.decide('proposal-1', 'approve');
+    expect(api.post).toHaveBeenCalledTimes(1);
+
+    release({ outcome: 'applied', state: 'rejected', intentId: null });
+    await pending;
+    expect(inbox.decidingAction('proposal-1')).toBeNull();
+  });
+});
+
+describe('undo', () => {
+  it('keeps recent approvals in reach, apart from the open questions', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) =>
+      url.includes('state=approved')
+        ? ({ proposals: [proposal({ id: 'p-2', state: 'approved', storedState: 'approved' })] } as never)
+        : ({ proposals: [proposal()] } as never),
+    );
+    const inbox = store();
+    await inbox.load();
+    expect(inbox.open.map((p) => p.id)).toEqual(['proposal-1']);
+    expect(inbox.recentlyApproved.map((p) => p.id)).toEqual(['p-2']);
+    expect(inbox.openCount).toBe(1);
+  });
+
+  it('moves an approval back to the open questions when it is undone', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) =>
+      url.includes('state=approved')
+        ? ({ proposals: [proposal({ state: 'approved', storedState: 'approved' })] } as never)
+        : ({ proposals: [] } as never),
+    );
+    const inbox = store();
+    await inbox.load();
+    vi.mocked(api.post).mockResolvedValueOnce({
+      outcome: 'applied',
+      state: 'pending',
+      intentId: null,
+    } as never);
+
+    await inbox.decide('proposal-1', 'undo');
+    expect(api.post).toHaveBeenCalledWith('/proposals/proposal-1/decision', { action: 'undo' });
+    expect(inbox.recentlyApproved).toHaveLength(0);
+    expect(inbox.open.map((p) => p.id)).toEqual(['proposal-1']);
+  });
+
+  it('is not an empty inbox just because approvals are listed', async () => {
+    vi.mocked(api.get).mockImplementation(async (url: string) =>
+      url.includes('state=approved')
+        ? ({ proposals: [proposal({ state: 'approved', storedState: 'approved' })] } as never)
+        : ({ proposals: [] } as never),
+    );
+    const inbox = store();
+    await inbox.load();
+    expect(inbox.isEmpty).toBe(true);
+  });
+});
+
+describe('refreshing in the background', () => {
+  it('picks up a decision made elsewhere, such as a Telegram tap', async () => {
+    vi.mocked(api.get).mockResolvedValue({ proposals: [proposal()] } as never);
+    const inbox = store();
+    await inbox.load();
+    expect(inbox.openCount).toBe(1);
+
+    vi.mocked(api.get).mockImplementation(async (url: string) =>
+      url.includes('state=approved')
+        ? ({ proposals: [proposal({ state: 'approved', storedState: 'approved' })] } as never)
+        : ({ proposals: [] } as never),
+    );
+    await inbox.refresh();
+    expect(inbox.openCount).toBe(0);
+    expect(inbox.recentlyApproved).toHaveLength(1);
+  });
+
+  it('stays out of the way of a decision in flight', async () => {
+    vi.mocked(api.get).mockResolvedValue({ proposals: [proposal()] } as never);
+    const inbox = store();
+    await inbox.load();
+    vi.mocked(api.post).mockReturnValueOnce(new Promise(() => {}) as never);
+    void inbox.decide('proposal-1', 'approve');
+    vi.mocked(api.get).mockClear();
+
+    await inbox.refresh();
+    expect(api.get).not.toHaveBeenCalled();
+  });
+
+  it('keeps the last good view when a background read fails', async () => {
+    vi.mocked(api.get).mockResolvedValue({ proposals: [proposal()] } as never);
+    const inbox = store();
+    await inbox.load();
+    vi.mocked(api.get).mockRejectedValue(new Error('offline'));
+
+    await inbox.refresh();
+    expect(inbox.error).toBeNull();
+    expect(inbox.openCount).toBe(1);
+  });
+});
+
 describe('reset', () => {
   it('clears one account’s questions so the next sign-in does not see them', async () => {
     vi.mocked(api.get).mockResolvedValueOnce({ proposals: [proposal()] } as never);
@@ -206,6 +337,24 @@ describe('reset', () => {
     inbox.reset();
     expect(inbox.proposals).toHaveLength(0);
     expect(inbox.openCount).toBe(0);
+  });
+});
+
+describe('undoSecondsLeft', () => {
+  const now = NOW.getTime();
+
+  it('counts whole seconds down to the end of the window', () => {
+    expect(undoSecondsLeft(new Date(now + 29_900).toISOString(), now)).toBe(29);
+  });
+
+  it('is null once the window has closed, so the button goes', () => {
+    expect(undoSecondsLeft(new Date(now - 1).toISOString(), now)).toBeNull();
+    expect(undoSecondsLeft(new Date(now + 400).toISOString(), now)).toBeNull();
+  });
+
+  it('is null when there is no window, or one it cannot read', () => {
+    expect(undoSecondsLeft(null, now)).toBeNull();
+    expect(undoSecondsLeft('soon', now)).toBeNull();
   });
 });
 
