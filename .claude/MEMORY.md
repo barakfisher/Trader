@@ -4,7 +4,9 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-23. **M3 slice 2 is merged** (#42 was slice 1). M4 is complete; M3's remaining
+Updated: 2026-09-24. **M3 slice 2 is merged (#44)**, and the paid embedder that slice
+recorded as owed is **done and verified against the live endpoint** — retrieval is
+genuinely semantic now, not a placeholder. M4 is complete; M3's remaining
 two slices — `POST /ask`, then the eval set — are not started. The session that wrote this gave the
 corpus an embedding column whose width was chosen for a named model rather than for the fixture
 that fills it, and then found two retrieval bugs by running the SQL that 40 passing tests could not
@@ -13,7 +15,8 @@ have caught.
 **One-line state:** the product imports a portfolio, fetches six months of real daily prices, scans
 it every 30 minutes for four kinds of finding, explains each one in sentences whose every figure is
 checked against the evidence, **links every term in those sentences to an explanation of it**,
-**answers a question phrased in the user's own words with the passages that bear on it**, lets
+**answers a question phrased in the user's own words with the passages that bear on it —
+by meaning, not by shared vocabulary**, lets
 the user state the allocation they meant to hold, and turns the drift from it into a proposal with
 a deadline that an approval writes to a paper ledger. No order is ever placed. The explanations are
 currently written by templates rather than a model, and the app says so on its own dashboard.
@@ -552,6 +555,40 @@ optional polish.
 still a belief.** The AND semantics could have been checked in one `psql` line
 at any point in the two sessions the claim sat there.
 
+**"Blocked on X" was inherited for two sessions, and then disproved with the wrong
+argument.** MEMORY.md recorded the paid embedder as blocked behind the same OpenRouter
+spend cap as narration. Checking the price dissolved that: embedding the whole corpus is
+5,114 tokens ≈ **$0.0001**, against narration's ~$0.45/month — four orders of magnitude
+apart, filed under one sentence. So the migration was started on the strength of "it is
+not actually blocked"; the first live call returned **403, budget already exceeded**. The
+cap is a *lifetime* budget that was already spent, so the cost of the operation was never
+the relevant number.
+→ Two distinct lessons, and the second is the sharper one. **A constraint copied forward
+is not a verified constraint** — that sentence sat unchallenged through two sessions and
+one line of arithmetic moved it. And: **checking the price is not checking the balance.**
+Having just criticised an inherited belief, the replacement belief was adopted with
+exactly the same rigour it was accused of lacking. When correcting an assumption, verify
+the *new* claim at least as hard as the one being discarded.
+→ Practical form: `GET /api/v1/credits` reported `total_credits: 0` even *after* the
+budget was raised and calls were succeeding. **The only reliable test of a paid endpoint
+is a paid call.** One 5-token request costs $0.0000001 and answers definitively.
+
+**Fusing a weak ranker with a strong one at equal weight made the strong one worse.**
+Once the embedder became semantic, the ORed full-text half went from lifeline to liability:
+over six paraphrased questions the vector half alone scored **5/6**, the lexical half
+**2/6**, and RRF over both **4/6**. Reverting the lexical half to AND restored **5/6** —
+because strict, it returns nothing rather than something plausible, and a half that
+abstains cannot outvote a half that knows.
+→ **The right strictness for one half is a function of what the other half can do**, so it
+is passed in rather than configured: `require_all_terms=vector_is_semantic`. A weight
+would have needed a number nobody could justify; a boolean derived from a property the
+system already knows needs none.
+→ The general form, and the reason this is written down: **a justification can expire.**
+The OR rewrite was correct, measured, and documented with its reasoning — and that
+reasoning ("the hybrid would be one placeholder embedder wearing two hats") became false
+the moment the placeholder was replaced. Comments that record *why* are what make this
+detectable; a comment that had only recorded *what* would have survived unchallenged.
+
 **A stale placeholder in `.env.example` became a boot failure.** M0 wrote an
 `EMBEDDINGS_PROVIDER=fastembed` block with a 384-wide model, two milestones
 before anything read it, and every local `.env` copied it. Slice 2's factory
@@ -583,7 +620,8 @@ the green test as coverage.
 | ~~Concept chips point nowhere~~ | — | **Resolved in M3 slice 1.** Kept as a line rather than deleted because it stood here from M2 to M4 and its absence would otherwise read as an oversight |
 | ~~Retrieval is exact-match only~~ | — | **Resolved in M3 slice 2.** Hybrid retrieval exists and `GET /concepts/search` serves it. What is still missing is the *answer*: there is no `/ask`, no intent routing, no citations and no relevance floor, so a nonsense query still returns the three least-bad chunks rather than a refusal. That is slice 3 |
 | **No test executes a line of retrieval SQL** | `services/ai/tests` | The Python suite is hermetic and has no Postgres, by design. Both of slice 2's real bugs lived there and both passed a full green gate. The compose `corpus` container covers ingestion only; the search path has no CI coverage at all and is exercised by hand. Closing this means a Postgres-backed test job, which is a real decision about what "hermetic" is worth |
-| **OWED: migrate the fixture embedder to a paid OpenRouter embeddings model** (decided 2026-09-23, still owed) | `services/ai/app/corpus`, `.env` | The fixture embedder ranks by **shared words only** — "how much did I lose from the top" and "drawdown" score near zero — so the vector half of the hybrid contributes lexical agreement rather than meaning. The full-text half is genuinely real (since the OR fix below), so results are usable; nobody should read a good one as evidence the embedding path works, and the API says so on every response. Blocked on the OpenRouter workspace's *lifetime* $0.01 cap, which only an org admin raises. **The groundwork is done and the interface is the proof**: the column is already `vector(1536)` for `openai/text-embedding-3-small`, `embedding_model` is stored per row so a re-embed is a `WHERE` clause, and adding the adapter is one new module plus one branch in `embedder_factory.py` — if it needs more than that, this layer is wrong. The fixture is **not** deleted afterwards: it is the hermetic CI path and slice 4's eval set depends on it |
+| ~~OWED: migrate the fixture embedder to a paid OpenRouter embeddings model~~ | — | **Done.** `openai/text-embedding-3-small` through OpenRouter, verified against the live endpoint: 36 chunks, 5,114 tokens, **$0.00010228**, no chunk id moved. Set `EMBEDDINGS_PROVIDER=openrouter` to use it; the code default stays `fixture` so CI and a fresh clone remain keyless. The fixture was **not** deleted — it is the hermetic CI path and slice 4's eval set needs it |
+| **Retrieval quality rests on six hand-written questions** | `services/ai/app/corpus/retrieval.py` | The strict/wide lexical switch, and the claim that the real embedder is 5/6 against the fixture's 1/6, come from six questions this session wrote — chosen after seeing the corpus, which is the weakest possible evidence short of none. The direction matches theory and the mechanism is understood, but **nobody should tune retrieval further on this basis**. Slice 4's eval set is what turns it into a measurement |
 | **The corpus is a derived copy that three separate mechanisms keep in step** | `data/corpus`, compose, `.claude` | The files are the source of truth and `kb_documents`/`kb_chunks` are what the API serves. A hook covers Claude's edits, the `corpus` container covers every stack start, CI covers the image. None of the three covers a hand edit on a machine with no stack running — that reader sees stale text with nothing reporting the disagreement. `--dry-run` answers "are they in step?" and nobody is obliged to run it |
 | **The ingest hook does not apply to a session started before it existed** | `.claude/settings.json` | The settings watcher only watches directories that had a settings file when the session began, and `.claude/` had none. Any session started after that commit picks it up; the session that wrote it did not, and confirmed so with a sentinel rather than assuming |
 | **Import previews live in process memory** | `services/previewStore.ts` | Forces `replicas: 1` in Kubernetes. The only remaining in-memory state — run keys moved to the `runs` table in M2 |
@@ -624,7 +662,9 @@ the green test as coverage.
   container died with `Can't locate revision '0012_kb_corpus'`. The fix is always the same —
   rebuild the image (`docker compose build migrate`), not touch the database.
 - **The database currently holds the ingested corpus**: 9 documents and 36 chunks in
-  `kb_documents` / `kb_chunks`, **all 36 embedded by `fixture/hashed-v1`**. A fresh database needs
+  `kb_documents` / `kb_chunks`, **all 36 embedded by `openai/text-embedding-3-small`**.
+  Switching `EMBEDDINGS_PROVIDER` re-embeds on the next ingest and moves no chunk id,
+  because the model is recorded per row. A fresh database needs
   `scripts/ingest_corpus.py` or a stack start, or every concept chip 404s and every search returns
   nothing. `--dry-run` says whether the files and the database agree without writing, and now
   reports embedding coverage as well as text — vectors are a second derived copy with the same
@@ -635,10 +675,16 @@ the green test as coverage.
   It stops being harmless on the next `dev-docker.sh`, where the `migrate` image still built from
   `main` dies with `Can't locate revision '0013_kb_embeddings'`. The fix is always `docker compose
   build`, never touching the database.
-- **Your `.env` may still carry the M0 placeholders `EMBEDDINGS_PROVIDER=fastembed`,
-  `EMBEDDINGS_MODEL` and `EMBEDDINGS_DIM=384`.** Delete all three and set
-  `EMBEDDINGS_PROVIDER=fixture`, or the AI service refuses to start — deliberately, with a message
-  saying exactly that.
+- **`.env` must set `EMBEDDINGS_PROVIDER=openrouter`** to get semantic retrieval; the code
+  default is `fixture` and stays that way so CI and a fresh clone need no key. This is a
+  deliberate `.env` / `.env.example` asymmetry, like `MARKET_DATA_PROVIDERS` above — do not
+  "fix" it. The M0 placeholders `EMBEDDINGS_MODEL=BAAI/bge-small-en-v1.5` and
+  `EMBEDDINGS_DIM=384` must be deleted; `fastembed` names an adapter nobody wrote and the
+  service refuses to start on it, deliberately and with a message saying what to set.
+- **The OpenRouter workspace now has budget**, which also unblocks narration (~$0.45/month) —
+  the dashboard badge still reports templates, and whether that is still the right steady
+  state is now a measurement nobody has taken rather than a constraint. `LLM_MODEL` is also
+  no longer the route MEMORY.md measured as 3/3 rejected, so that finding may not apply.
 - **`DATABASE_URL` in `.env` names the compose hostname `postgres`, which does not resolve on the
   host.** Anything run natively against the dev database needs
   `DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders` in front of it. This costs a

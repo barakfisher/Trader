@@ -170,6 +170,23 @@ class Settings(BaseSettings):
     # by nothing is indistinguishable from retrieval that works.
     embeddings_provider: str = "fixture"
 
+    # Which model the paid embedder asks for. Only consulted when
+    # EMBEDDINGS_PROVIDER names a real provider; the fixture has no model to
+    # choose. The default is the model `kb_chunks.embedding` was sized for -
+    # see migration 0013, which records why 1536 and not another width.
+    #
+    # Switching this to `openai/text-embedding-3-large` needs one more line in
+    # app/corpus/openrouter_embedder.py (`"dimensions": 1536`), because it is
+    # natively 3072 wide. Without that line it fails on its first call with both
+    # numbers named rather than storing anything, which is the safe direction.
+    embeddings_model: str = "openai/text-embedding-3-small"
+
+    # Embedding a batch of 64 chunks is one request and is not on a user's
+    # critical path during ingestion; a query embedding is, but it is ten tokens
+    # and returns in well under a second. Thirty seconds is the same ceiling the
+    # LLM adapter uses and exists to stop a wedged request holding a run open.
+    embeddings_timeout_seconds: float = 30.0
+
     # News providers: ordered chain, same comma-separated convention as
     # market_data_providers and for the same pydantic-settings reason. Unlike the
     # quote chain this one is not a fallback - `app/news/ingestion.py` queries

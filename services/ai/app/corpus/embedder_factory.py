@@ -17,12 +17,13 @@ whole of this repository's guideline 7 is that an unavailable thing is reported
 as unavailable. So a misconfigured embedder stops ingestion, loudly, at the point
 where it is cheap to fix.
 
-**Adding the paid provider is a new module and one branch below.** That is the
-test of whether the interface earned its place, and it is written down so the
-session that does it can check the claim rather than take it on faith: if adding
-`openrouter` here requires touching `ingest.py`, `vector_store.py`, `retrieval.py`
-or a router, something in this layer is wrong and the fix belongs there, not in a
-special case here.
+**Adding the paid provider was a new module and one branch below, as claimed.**
+Slice 2 wrote that down as a falsifiable prediction - if adding `openrouter` had
+required touching `ingest.py`, `vector_store.py`, `retrieval.py` or a router,
+something in this layer was wrong. It required none of them: `OpenRouterEmbedder`
+plus the branch below, and the call sites did not move. Recorded because the
+claim is cheap to make and was worth checking, and because the same standard
+applies to the next provider.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from app.config import Settings
 from app.core.logging import get_logger
 from app.corpus.embeddings import BaseEmbedder
 from app.corpus.hashed_embedder import HashedEmbedder
+from app.corpus.openrouter_embedder import OpenRouterEmbedder
 
 log = get_logger("corpus.embedder_factory")
 
@@ -39,11 +41,8 @@ class EmbedderConfigurationError(RuntimeError):
     """`EMBEDDINGS_PROVIDER` names something this service cannot build."""
 
 
-#: Providers that exist today. `openrouter` is the owed migration and is listed
-#: in the error below rather than here, so an operator who sets it is told it is
-#: planned and not implemented - which is a different thing from a typo, and the
-#: two should not produce the same message.
-_KNOWN = ("fixture",)
+#: Providers that exist today.
+_KNOWN = ("fixture", "openrouter")
 
 _PLANNED = {
     # Named explicitly because every .env written from the M0 example carries
@@ -56,13 +55,10 @@ _PLANNED = {
         "no fastembed adapter was ever written; this value is an M0 placeholder "
         "from .env.example - set EMBEDDINGS_PROVIDER=fixture"
     ),
-    "openrouter": (
-        "the OpenRouter embeddings adapter is not implemented yet; it is owed once "
-        "the workspace spend cap allows a paid model (see .claude/MEMORY.md)"
-    ),
     "openai": (
         "no direct OpenAI embeddings adapter exists; the intended production route "
-        "is openai/text-embedding-3-small through OpenRouter"
+        "is openai/text-embedding-3-small through OpenRouter - set "
+        "EMBEDDINGS_PROVIDER=openrouter"
     ),
 }
 
@@ -86,6 +82,33 @@ def build_embedder(settings: Settings) -> BaseEmbedder:
             # must not conclude from a working search is that the embedding half
             # of it means anything. See hashed_embedder.py.
             semantic=False,
+        )
+        return embedder
+
+    if name == "openrouter":
+        if not settings.openrouter_api_key:
+            # The same refusal as an unknown name, for the same reason: there is
+            # no honest null embedding, so a provider that cannot authenticate
+            # stops the caller rather than quietly handing back the fixture and
+            # letting a corpus be embedded by something nobody asked for.
+            log.error("corpus.embedder_missing_key", provider=name, setting="OPENROUTER_API_KEY")
+            raise EmbedderConfigurationError(
+                "EMBEDDINGS_PROVIDER=openrouter needs OPENROUTER_API_KEY; set it, or "
+                "set EMBEDDINGS_PROVIDER=fixture to embed offline"
+            )
+
+        embedder = OpenRouterEmbedder(
+            model=settings.embeddings_model,
+            base_url=settings.openrouter_base_url,
+            api_key=settings.openrouter_api_key,
+            timeout_seconds=settings.embeddings_timeout_seconds,
+        )
+        log.info(
+            "corpus.embedder_selected",
+            provider=name,
+            model=embedder.model,
+            dimension=embedder.dimension,
+            semantic=True,
         )
         return embedder
 

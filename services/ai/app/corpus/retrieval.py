@@ -149,6 +149,7 @@ def text_search(
     query: str,
     limit: int,
     namespace: str = NAMESPACE_CONCEPTS,
+    require_all_terms: bool = False,
 ) -> list[_Candidate]:
     """The full-text half: every query term, ORed, against the generated tsvector.
 
@@ -157,22 +158,38 @@ def text_search(
     raises a syntax error on ordinary prose, which would turn a question with a
     stray `&` in it into a 500.
 
-    **But `plainto_tsquery` ANDs its terms, and that had to be undone.** It was
-    measured rather than assumed: "how do I bring my portfolio back to its target
-    weights" becomes `bring & portfolio & back & target & weight`, which requires
-    one chunk to contain all five and therefore matched nothing at all - as did
-    three of the four natural-language questions tried against the real corpus.
-    A half that answers only when every word of a sentence appears in one
-    paragraph is silent for exactly the queries `/ask` exists to serve, and the
-    hybrid would then be one placeholder embedder wearing two hats.
+    **`require_all_terms` decides how strict this half is, and the right answer
+    depends on the other half.** `plainto_tsquery` ANDs its terms, so "how do I
+    bring my portfolio back to its target weights" becomes
+    `bring & portfolio & back & target & weight` and requires one chunk to
+    contain all five. Both settings were measured against the real corpus rather
+    than reasoned about, and they disagree in opposite directions:
 
-    So the query is rewritten to OR. It is done by rendering `plainto_tsquery`'s
-    output and replacing its operators rather than by building a tsquery from the
-    raw string: `plainto_tsquery` has already done the parsing, stemming,
-    stopword removal and quoting, so no user input is ever interpolated into an
-    expression. The ranking still prefers the chunk that matched more of the
-    question, because that is what `ts_rank_cd` measures - OR changes which rows
-    are candidates, not how they are ordered.
+      * With a **placeholder** embedder, AND matched *nothing* for three of four
+        natural-language questions. The lexical half was the only real one, and
+        a real half that is silent is no half at all - so it has to be widened
+        to OR or the hybrid is one fixture embedder wearing two hats.
+      * With a **semantic** embedder, OR actively hurts. Over six paraphrased
+        questions, the vector half alone put the right concept in its top three
+        **5/6**, the ORed lexical half **2/6**, and fusing them **4/6** - the
+        weak ranker dragging the strong one down, which is what equal-weight RRF
+        does when the halves are not of comparable quality. AND scored **5/6**,
+        because it stays silent unless it is confident and then complements
+        rather than competes.
+
+    So the caller passes what it knows: strict when the vector half can carry a
+    paraphrase, wide when it cannot. This is a property the system already has,
+    not a tuning constant - which is why it is a boolean rather than a weight.
+    **The evidence is six hand-written questions and should be treated as a
+    direction, not a measurement**; slice 4's eval set is what settles it.
+
+    The widening is done by rendering `plainto_tsquery`'s output and replacing
+    its operator rather than by building a tsquery from the raw string:
+    `plainto_tsquery` has already done the parsing, stemming, stopword removal
+    and quoting, so no user input is ever interpolated into an expression. The
+    ranking still prefers the chunk that matched more of the question, because
+    that is what `ts_rank_cd` measures - the operator changes which rows are
+    candidates, not how they are ordered.
 
     `'english'` is pinned here and in the generated column in migration 0012. A
     mismatch between the two does not fail - it returns nothing, every time, for
@@ -183,13 +200,16 @@ def text_search(
         text(
             """
             WITH q AS (
-                -- plainto_tsquery does the parsing and quoting; this only
-                -- swaps its conjunction for a disjunction. The lexemes it
+                -- plainto_tsquery does the parsing and quoting; the widening
+                -- only swaps its conjunction for a disjunction. The lexemes it
                 -- emits are already quoted, so the replacement cannot reach
                 -- anything the user typed.
-                SELECT replace(
-                           plainto_tsquery('english', :query)::text, ' & ', ' | '
-                       )::tsquery AS query
+                SELECT CASE WHEN :require_all_terms
+                            THEN plainto_tsquery('english', :query)
+                            ELSE replace(
+                                plainto_tsquery('english', :query)::text, ' & ', ' | '
+                            )::tsquery
+                       END AS query
             )
             SELECT c.id           AS chunk_id,
                    d.id           AS document_id,
@@ -212,7 +232,12 @@ def text_search(
              LIMIT :limit
             """
         ),
-        {"namespace": namespace, "query": query, "limit": limit},
+        {
+            "namespace": namespace,
+            "query": query,
+            "limit": limit,
+            "require_all_terms": require_all_terms,
+        },
     ).all()
 
     return [
@@ -273,6 +298,7 @@ async def hybrid_search(
             vector_is_semantic=embedder.model not in _NON_SEMANTIC_MODELS,
         )
 
+    is_semantic = embedder.model not in _NON_SEMANTIC_MODELS
     embedding = await embedder.embed_query(query)
     vector_matches = store.search(
         connection,
@@ -281,8 +307,15 @@ async def hybrid_search(
         namespace=namespace,
         model=embedder.model,
     )
+    # Strict when the vector half is semantic, wide when it is a placeholder.
+    # See `text_search`: the two settings were measured and disagree in opposite
+    # directions depending on what the other half can do.
     text_matches = text_search(
-        connection, query=query, limit=candidates_per_half, namespace=namespace
+        connection,
+        query=query,
+        limit=candidates_per_half,
+        namespace=namespace,
+        require_all_terms=is_semantic,
     )
 
     by_id: dict[str, _Candidate] = {}
@@ -327,5 +360,5 @@ async def hybrid_search(
         query=query,
         chunks=chunks,
         embedding_model=embedder.model,
-        vector_is_semantic=embedder.model not in _NON_SEMANTIC_MODELS,
+        vector_is_semantic=is_semantic,
     )

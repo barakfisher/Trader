@@ -181,10 +181,16 @@ def test_an_unknown_provider_refuses_rather_than_degrading() -> None:
 
 
 def test_a_planned_provider_says_it_is_planned_not_that_it_is_a_typo() -> None:
-    """`openrouter` is the owed migration; an operator who tries it deserves to know."""
-    settings = Settings(_env_file=None, embeddings_provider="openrouter")  # type: ignore[arg-type]
+    """A name we understand but do not implement must not read as a typo.
 
-    with pytest.raises(EmbedderConfigurationError, match="not implemented yet"):
+    `openrouter` used to be this case and is now real, which is why this test
+    moved to `openai` rather than being deleted: the branch it covers is the
+    one that tells an operator *what to set instead*, and that branch outlives
+    any particular provider sitting in it.
+    """
+    settings = Settings(_env_file=None, embeddings_provider="openai")  # type: ignore[arg-type]
+
+    with pytest.raises(EmbedderConfigurationError, match="EMBEDDINGS_PROVIDER=openrouter"):
         build_embedder(settings)
 
 
