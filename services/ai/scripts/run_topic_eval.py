@@ -154,9 +154,10 @@ async def run(data: dict[str, Any], *, verbose: bool, unseal: bool) -> int:
                 for interpretation in resolution.interpretations:
                     print(f"     -- {interpretation.label}")
                     for candidate in interpretation.candidates:
+                        held = ",".join(f"{h.etf}:{h.weight}" for h in candidate.held_by)
                         print(
                             f"       {candidate.symbol:6} {candidate.similarity:.4f} "
-                            f"{candidate.confidence.value:9} {candidate.rationale[:80]}"
+                            f"{candidate.confidence.value:9} [{held}] {candidate.rationale[:70]}"
                         )
 
         fitting = data["threshold_fitting_topics"]

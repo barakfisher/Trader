@@ -2,7 +2,7 @@
 
 "Uranium & Nuclear Energy" becomes instruments whose business is that, for the
 user to confirm. Nothing here subscribes to anything: resolution proposes, the
-user decides. Four steps, each for a measured reason.
+user decides. Five steps, each for a measured reason.
 
 1. **Match on what a business does, not its sector label.** Yahoo files NuScale
    under "Specialty Industrial Machinery" and Palantir under "Software -
@@ -34,6 +34,17 @@ user decides. Four steps, each for a measured reason.
    the most words with the topic. A model could write a nicer one, and could
    also write one that is plausible and false about a real company.
 
+5. **What the matching ETFs hold is a second route in** (M5 slice 2). A company
+   whose description is too broad to sit near any one theme - Palantir scores
+   0.32 against defense, Amazon ranks below 100th for e-commerce - is still
+   *held* by the funds that are about that theme. Up to `ETF_SOURCES` ETFs
+   similar to the topic (above `ETF_SOURCE_FLOOR`) whose own holdings are about
+   it (`COHERENCE_BAND`) are its sources; their
+   matched top holdings join the candidates without passing the similarity
+   gate, because the holding is the evidence. Every candidate carries
+   `held_by`, so "held by SHLD (10.8% of the fund)" is checkable in the same
+   way a quoted sentence is.
+
 Confidence is a band, not a number, for the reason `/ask` learned: a cosine of
 0.43 is not a probability. The whole-topic verdict reuses
 `app/ask/relevance.judge`, including its abstention on the fixture embedder.
@@ -53,7 +64,13 @@ from app.ask.relevance import Relevance, RelevanceJudgement, judge
 from app.corpus.embeddings import BaseEmbedder
 from app.corpus.retrieval import _NON_SEMANTIC_MODELS
 from app.topics.meanings import group, nearest_group
-from app.universe.profiles import ProfileMatch, search_profiles
+from app.universe.profiles import (
+    Holder,
+    ProfileMatch,
+    holdings_of,
+    profiles_by_id,
+    search_profiles,
+)
 
 #: How many candidates each interpretation offers the user to confirm. A
 #: readability choice, fixed before the eval was first run so the eval could not
@@ -113,6 +130,39 @@ MAX_ADMITTED = 30
 #: example left, and this value is carried over rather than re-derived.
 MEANINGS_SPLIT_BELOW = 0.39
 
+#: How many of the ETFs most similar to a topic act as its sources, and how
+#: similar an ETF must be to count. Labelled on `threshold_fitting_topics`
+#: (universe as of 2026-09-24T12:04Z): ETFs that are about the topic score
+#: 0.306-0.509 (JETS 0.450 for airlines, ESPO 0.327 for video games, XTN 0.306
+#: for shipping); the best unrelated ETF for a real topic scores 0.269 (an MLP
+#: fund for railroads) and the best for a nonsense one 0.262. The floor sits in
+#: that gap. Three, because gold, oil, gene editing, home builders and
+#: pipelines each have three or four genuinely thematic funds.
+#:
+#: Known weakness, measured and not tuned away: "data center real estate" finds
+#: DTCR (0.446) and then an industrial REIT fund (0.440) and a broad real-estate
+#: fund (0.429) - the topic's second noun matched on its own. No floor separates
+#: them from DTCR, so their holdings come in too.
+ETF_SOURCES = 3
+ETF_SOURCE_FLOOR = 0.29
+
+#: A fund is only a source if what it holds is about the topic: the mean
+#: similarity of its matched holdings must be within `COHERENCE_BAND` of the
+#: topic's best match. Without it, broad sector funds that happen to match a
+#: topic's words bring their giants in - BBH put Amgen and Gilead under "gene
+#: editing biotech", XHB put Home Depot under "home builders", IYR put
+#: Welltower under "data center real estate" - and size ordering puts those
+#: first. Labelled on the fitting topics, this keeps every gold fund, JETS,
+#: ESPO, ITB, DTCR and the pipeline funds, and drops BBH/PBE/IDNA/XBI, XHB/PKB,
+#: IYR and WGMI (a bitcoin-mining fund now holding AI-cloud companies). It does
+#: not drop INDS (industrial REITs) for "data center real estate": the topic's
+#: second noun is genuinely what that fund holds.
+COHERENCE_BAND = 0.13
+
+#: How many of the ETFs above the floor are examined for coherence before the
+#: first `ETF_SOURCES` coherent ones are kept.
+ETF_SOURCE_CANDIDATES = 6
+
 #: A group needs this many equities to count as a meaning; a lone outlier is
 #: attached to the nearest real group rather than offered as an interpretation.
 MIN_MEANING_SIZE = 2
@@ -143,6 +193,9 @@ class TopicCandidate:
     confidence: Relevance
     #: A sentence from the instrument's own description, verbatim.
     rationale: str
+    #: The topic's source ETFs that hold this instrument, largest weight first.
+    #: Empty when it was found by its description alone.
+    held_by: tuple[Holder, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,6 +260,32 @@ def admit(matches: list[ProfileMatch]) -> list[ProfileMatch]:
     return [m for m in matches if m.similarity >= line][:MAX_ADMITTED]
 
 
+def source_candidates(matches: list[ProfileMatch]) -> list[ProfileMatch]:
+    """The ETFs close enough to the topic to be examined as sources, closest first."""
+    etfs = [m for m in matches if m.asset_class == "etf" and m.similarity >= ETF_SOURCE_FLOOR]
+    return etfs[:ETF_SOURCE_CANDIDATES]
+
+
+def coherent(
+    candidates: list[ProfileMatch],
+    holding_similarities: dict[str, list[float]],
+    *,
+    best: float,
+) -> list[ProfileMatch]:
+    """The first `ETF_SOURCES` candidates whose holdings are about the topic.
+
+    `holding_similarities` maps an ETF's symbol to the topic similarity of each
+    of its matched holdings. A fund with no matched holding says nothing and is
+    not a source.
+    """
+    kept = []
+    for etf in candidates:
+        scores = holding_similarities.get(etf.symbol, [])
+        if scores and sum(scores) / len(scores) >= best - COHERENCE_BAND:
+            kept.append(etf)
+    return kept[:ETF_SOURCES]
+
+
 def split_meanings(admitted: list[ProfileMatch]) -> list[list[ProfileMatch]]:
     """Admitted matches partitioned into meanings, most relevant meaning first.
 
@@ -236,7 +315,12 @@ def _by_size(match: ProfileMatch) -> tuple[bool, int, float]:
 
 
 def _interpretation(
-    topic: str, meaning: list[ProfileMatch], *, limit: int, semantic: bool
+    topic: str,
+    meaning: list[ProfileMatch],
+    *,
+    limit: int,
+    semantic: bool,
+    held: dict[str, list[Holder]],
 ) -> Interpretation:
     industries = Counter(m.industry for m in meaning if m.asset_class != "etf" and m.industry)
     ordered = sorted(meaning, key=_by_size) if semantic else meaning
@@ -255,6 +339,7 @@ def _interpretation(
                 if semantic and m.similarity >= STRONG_ABOVE
                 else Relevance.WEAK,
                 rationale=rationale(topic, m.description),
+                held_by=tuple(held.get(m.instrument_id, ())),
             )
             for m in ordered[:limit]
         ],
@@ -285,9 +370,35 @@ async def resolve_topic(
         # words and mean nothing on that scale, so on it resolution abstains
         # the way `judge` does: similarity order, one meaning, every candidate
         # weak.
-        meanings = split_meanings(admit(matches)) if is_semantic else [matches]
+        held: dict[str, list[Holder]] = {}
+        if is_semantic:
+            candidates = admit(matches)
+            examined = source_candidates(matches)
+            offered = holdings_of(connection, [etf.instrument_id for etf in examined])
+            profiles = {
+                p.instrument_id: p
+                for p in profiles_by_id(
+                    connection, ids=list(offered), embedding=embedding, model=embedder.model
+                )
+            }
+            by_etf: dict[str, list[float]] = {}
+            for instrument_id, holders in offered.items():
+                if instrument_id in profiles:
+                    for holder in holders:
+                        by_etf.setdefault(holder.etf, []).append(profiles[instrument_id].similarity)
+            chosen = {etf.symbol for etf in coherent(examined, by_etf, best=matches[0].similarity)}
+            held = {
+                instrument_id: kept
+                for instrument_id, holders in offered.items()
+                if (kept := [h for h in holders if h.etf in chosen])
+            }
+            present = {m.instrument_id for m in candidates}
+            candidates += [p for i, p in profiles.items() if i in held and i not in present]
+            meanings = split_meanings(candidates)
+        else:
+            meanings = [matches]
         interpretations = [
-            _interpretation(topic, meaning, limit=limit, semantic=is_semantic)
+            _interpretation(topic, meaning, limit=limit, semantic=is_semantic, held=held)
             for meaning in meanings
         ]
 

@@ -1,6 +1,7 @@
 """Build the committed instrument universe from Yahoo's screener.
 
-    python scripts/build_instrument_universe.py [--out DIR] [--cache FILE] [--workers N]
+    python scripts/build_instrument_universe.py --cache FILE --holdings-cache FILE
+        [--out DIR] [--workers N]
 
 Writes `data/universe/instruments.jsonl` (one instrument per line, sorted by
 symbol, so a rebuild diffs as the listings that actually changed),
@@ -28,6 +29,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -37,9 +39,11 @@ from yfinance import EquityQuery, ETFQuery
 from app.config import get_settings
 from app.universe.snapshot import (
     DESCRIPTIONS_FILE,
+    ETF_HOLDINGS_FILE,
     MANIFEST_FILE,
     MEMBERSHIP_FILE,
-    MIN_SIZE_MINOR,
+    MIN_EQUITY_SIZE_MINOR,
+    MIN_ETF_SIZE_MINOR,
     PRIMARY_US_EXCHANGES,
     SCREEN,
     select,
@@ -47,8 +51,11 @@ from app.universe.snapshot import (
 )
 
 PAGE = 250
+#: Yahoo's words for "this fund reports no holdings" - an answer, not a failure.
+NO_FUND_DATA = "No Fund data found"
 #: Yahoo's screener takes whole dollars.
-MIN_SIZE_DOLLARS = MIN_SIZE_MINOR // 100
+MIN_EQUITY_SIZE_DOLLARS = MIN_EQUITY_SIZE_MINOR // 100
+MIN_ETF_SIZE_DOLLARS = MIN_ETF_SIZE_MINOR // 100
 
 
 def default_out() -> Path:
@@ -75,7 +82,7 @@ def screen_market() -> list[dict[str, Any]]:
             [
                 EquityQuery("eq", ["region", "us"]),
                 EquityQuery("is-in", ["exchange", *PRIMARY_US_EXCHANGES]),
-                EquityQuery("gte", ["intradaymarketcap", MIN_SIZE_DOLLARS]),
+                EquityQuery("gte", ["intradaymarketcap", MIN_EQUITY_SIZE_DOLLARS]),
             ],
         ),
         "intradaymarketcap",
@@ -86,7 +93,7 @@ def screen_market() -> list[dict[str, Any]]:
             [
                 ETFQuery("eq", ["region", "us"]),
                 ETFQuery("is-in", ["exchange", *PRIMARY_US_EXCHANGES]),
-                ETFQuery("gte", ["fundnetassets", MIN_SIZE_DOLLARS]),
+                ETFQuery("gte", ["fundnetassets", MIN_ETF_SIZE_DOLLARS]),
             ],
         ),
         "fundnetassets",
@@ -156,10 +163,74 @@ def fetch_infos(symbols: list[str], cache_path: Path, workers: int) -> dict[str,
     return cache
 
 
+def _fetch_holdings(symbol: str) -> list[dict[str, Any]] | None:
+    """An ETF's top holdings as rows, or None if every attempt failed.
+
+    An empty list is Yahoo saying the fund reports none, and is cached; None is
+    a failure and is not, for `_fetch_info`'s reason. The two arrive as the same
+    exception type - an exchange-traded note like FNGU has no holdings and raises
+    `YFDataException` exactly as a transient error does - so the message decides:
+    "No Fund data found" is an answer, anything else is retried.
+    """
+    for attempt in range(4):
+        try:
+            frame = yf.Ticker(symbol).funds_data.top_holdings
+            return [
+                {
+                    "etf": symbol,
+                    "position": position,
+                    "symbol": str(held),
+                    "name": None if row.get("Name") is None else str(row["Name"]),
+                    "weight": str(Decimal(str(row["Holding Percent"]))),
+                }
+                for position, (held, row) in enumerate(frame.iterrows(), 1)
+            ]
+        except Exception as exc:  # noqa: BLE001 - yfinance raises whatever requests does
+            if NO_FUND_DATA in str(exc):
+                return []
+            wait = 2**attempt * 5
+            print(
+                f"  {symbol} holdings: {type(exc).__name__}, retrying in {wait}s", file=sys.stderr
+            )
+            time.sleep(wait)
+    return None
+
+
+def fetch_holdings(etfs: list[str], cache_path: Path, workers: int) -> list[dict[str, Any]]:
+    cache: dict[str, list[dict[str, Any]]] = {}
+    if cache_path.exists():
+        for line in cache_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                entry = json.loads(line)
+                cache[entry["etf"]] = entry["holdings"]
+    todo = [s for s in etfs if s not in cache]
+    print(f"holdings: {len(cache)} cached, {len(todo)} to fetch", file=sys.stderr)
+    failed: list[str] = []
+    with cache_path.open("a", encoding="utf-8") as sink, ThreadPoolExecutor(workers) as pool:
+        futures = {pool.submit(_fetch_holdings, s): s for s in todo}
+        for done, future in enumerate(as_completed(futures), 1):
+            etf = futures[future]
+            rows = future.result()
+            if rows is None:
+                failed.append(etf)
+                continue
+            cache[etf] = rows
+            sink.write(json.dumps({"etf": etf, "holdings": rows}) + "\n")
+            sink.flush()
+            if done % 200 == 0:
+                print(f"  holdings {done}/{len(todo)}", file=sys.stderr)
+    if failed:
+        raise SystemExit(f"{len(failed)} ETFs' holdings failed; rerun to retry: {failed[:20]}")
+    return [row for etf in sorted(etfs) for row in cache[etf]]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--cache", type=Path, required=True, help="resumable info cache (JSONL)")
+    parser.add_argument(
+        "--holdings-cache", type=Path, required=True, help="resumable ETF holdings cache (JSONL)"
+    )
     parser.add_argument("--workers", type=int, default=4)
     args = parser.parse_args()
     out: Path = args.out or default_out()
@@ -169,6 +240,8 @@ def main() -> int:
     chosen = select(screened)
     infos = fetch_infos([str(q["symbol"]) for q in chosen], args.cache, args.workers)
     instruments = [to_instrument(q, infos.get(str(q["symbol"]), {})) for q in chosen]
+    etfs = [i.symbol for i in instruments if i.asset_class == "etf"]
+    holdings = fetch_holdings(etfs, args.holdings_cache, args.workers)
 
     out.mkdir(parents=True, exist_ok=True)
     with (out / MEMBERSHIP_FILE).open("w", encoding="utf-8") as sink:
@@ -179,6 +252,10 @@ def main() -> int:
             if instrument.description is not None:
                 row = {"symbol": instrument.symbol, "description": instrument.description}
                 sink.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    with (out / ETF_HOLDINGS_FILE).open("w", encoding="utf-8") as sink:
+        for row in holdings:
+            sink.write(json.dumps(row, sort_keys=True) + "\n")
 
     undescribed = sorted(i.symbol for i in instruments if i.description is None)
     manifest = {
@@ -192,6 +269,8 @@ def main() -> int:
             "etfs": sum(i.asset_class == "etf" for i in instruments),
             "dropped_preferred_or_duplicate_listing": len(screened) - len(chosen),
             "without_description": len(undescribed),
+            "etf_holdings": len(holdings),
+            "etfs_reporting_no_holdings": len(set(etfs) - {row["etf"] for row in holdings}),
         },
         "without_description": undescribed,
     }

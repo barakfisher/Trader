@@ -128,3 +128,42 @@ def test_one_cluster_is_one_interpretation_with_everything_in_it() -> None:
     ]
 
     assert resolution.split_meanings(matches) == [matches]
+
+
+def test_source_candidates_are_the_closest_etfs_above_the_floor() -> None:
+    above = resolution.ETF_SOURCE_FLOOR + 0.05
+    matches = [
+        _match("STOCK", above + 0.1, SNACK_A),
+        *[
+            _match(f"ETF{i}", above - i * 0.001, SNACK_A, etf=True)
+            for i in range(resolution.ETF_SOURCE_CANDIDATES + 2)
+        ],
+        _match("FAR", resolution.ETF_SOURCE_FLOOR - 0.01, SNACK_A, etf=True),
+    ]
+
+    chosen = [m.symbol for m in resolution.source_candidates(matches)]
+
+    assert chosen == [f"ETF{i}" for i in range(resolution.ETF_SOURCE_CANDIDATES)]
+
+
+def test_a_fund_whose_holdings_are_off_topic_is_not_a_source() -> None:
+    best = 0.50
+    thematic = _match("DTCR", 0.44, SNACK_A, etf=True)
+    broad = _match("IYR", 0.43, SNACK_A, etf=True)
+    empty = _match("USO", 0.42, SNACK_A, etf=True)
+    scores = {
+        "DTCR": [best - resolution.COHERENCE_BAND + 0.01] * 3,
+        "IYR": [best - resolution.COHERENCE_BAND - 0.01] * 3,
+    }
+
+    assert resolution.coherent([thematic, broad, empty], scores, best=best) == [thematic]
+
+
+def test_at_most_the_source_limit_coherent_funds_are_kept_closest_first() -> None:
+    funds = [
+        _match(f"F{i}", 0.45 - i * 0.001, SNACK_A, etf=True)
+        for i in range(resolution.ETF_SOURCES + 2)
+    ]
+    scores = {f.symbol: [0.5] for f in funds}
+
+    assert resolution.coherent(funds, scores, best=0.5) == funds[: resolution.ETF_SOURCES]
