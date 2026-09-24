@@ -88,6 +88,74 @@ demoable, with explicit exit criteria.
 
 ---
 
+## M8 — Admin operations & observability *(post-M7, 4–6 days)*
+
+Placed after M7, not M6: the quarterly rescreen is a K8s CronJob and the on-demand rescreen is a
+Job, and both need M7's `/internal/runs` wiring. Written against the stack as it exists; where the
+original brief named something this repository does not have, the reconciliation is stated.
+
+**1. Admin surface (prerequisite for the rest)**
+- `users.role` (`'user' | 'admin'`, default `'user'`); the v1 passphrase account is migrated to
+  `admin`. The role travels in the server-side session, never in anything the browser can edit.
+- Enforcement is in the **orchestrator's routing layer**, the only browser-facing API: every
+  `/admin/*` route sits behind one guard that returns `403` for a valid non-admin session and `401`
+  for none. The AI service stays internal-only. A route test enumerates every registered `/admin/*`
+  path and asserts the guard, so a new route cannot ship unguarded.
+- Universe status: `as_of`, instrument count, equity/ETF split — read from the database
+  (`instrument_profiles`, `etf_holdings`), with the snapshot manifest shown beside it so a
+  database/file disagreement is visible rather than silent.
+- Gap monitoring, as rows in an `ops_events` table (`kind`, `detail jsonb`, `occurred_at`,
+  `dedupe_key`):
+  - `UNIVERSE_GAP_MISSING_TICKER` — a symbol a user searched for or imported that is not in the
+    universe.
+  - `UNIVERSE_GAP_LOW_CONFIDENCE` — a topic resolution whose candidates all fell below the gate.
+    (The resolver has a relative gate, not one fixed similarity threshold; the event records the
+    gate and the best score so the threshold question can be asked of real data.)
+  - Narration rejections — **already recorded** as `observations.fallback_reason`; the panel is a
+    query over that column, not a new log.
+  - Events carrying a user's query text are user data and carry `user_id` (guideline 5).
+- "Rescreen universe": enqueues a run via `POST /internal/runs` with run key
+  `universe-rescreen:<date>`, so a double click, two admins or a retry is one run (guideline 8),
+  and at most one rescreen is in flight. Runs `build_instrument_universe.py` (~1 h of Yahoo
+  fetching, resumable) then `ingest_universe.py`. **Depends on fixing the debt that the universe is
+  not reachable from the running stack** (`data/universe` is not in the image).
+
+**2. LLM observability**
+- An `llm_calls` table written by the provider factory for every call: agent (`narration`, `ask`,
+  topic resolution), provider, model, latency, prompt/completion tokens, cost from `pricing.py`
+  (integer minor units, guideline 3), outcome. Prompts and completions are stored too; because they
+  contain portfolio data, rows carry `user_id` and expire after a retention window.
+- Fallback health uses the real reason set: `no_provider`, `budget_exhausted`, `provider_error`,
+  `malformed`, `unsourced_figures`. (The brief's `rate_limited` is `provider_error` today; split it
+  out only if the panel needs it.)
+- Native panel first. Langfuse/Phoenix are optional **self-hosted** exporters behind an interface;
+  a hosted tracer would ship user holdings to a third party.
+- Not in scope until they exist: **TTFT** (calls do not stream — `app/llm/base.py`) and **semantic
+  cache hit rate** (there is no semantic cache). Both are listed so they are not measured as zero.
+
+**3. Quarterly baseline refresh** — a K8s CronJob hitting `/internal/runs` with
+`universe-rescreen:<quarter>`, the same job the button triggers. "Rebalancing" here means
+recomputing universe membership and ETF weights; it never touches a user's holdings or proposals.
+
+**4. On-demand ingestion (fast path)** — a missing ticker is fetched from Yahoo in the background
+and written with `source = 'on_demand'`, not `'screened'`: it was never screened, so it is
+priceable and resolvable by symbol but excluded from topic resolution until the next rescreen
+admits or drops it. The user's import or topic flow never waits on it; the `MISSING_TICKER`
+event is logged either way.
+
+**5. Isolation and audit**
+- Universe and market data stay unscoped (no `user_id`), as today.
+- `admin_audit` (`admin_user_id`, `action`, `detail`, `ip_address`, `occurred_at`) is append-only:
+  the application role has `INSERT`/`SELECT` only, so immutability is enforced by Postgres, not by
+  convention.
+
+**Exit:** a non-admin session gets `403` on every `/admin/*` route (proved by a test that
+enumerates them); the rescreen button and the CronJob produce the same single run; the panel shows
+per-agent latency, tokens, cost and fallback reasons from real calls; a searched missing ticker is
+priceable within one background fetch and appears as a gap event.
+
+---
+
 ## Ordering notes
 - M2 depends on M1's provider layer; M3 is independent of M2 and can be parallelised if you want.
 - The Telegram bot (M4) is deliberately after observations exist — a bot with nothing to say is untestable.
