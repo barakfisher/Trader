@@ -29,6 +29,12 @@ COPY data/fixtures /app/data/fixtures
 # The concept corpus. `corpus_dir` in app/config.py resolves to this path
 # when the repository checkout is not present, i.e. inside this image.
 COPY data/corpus /app/data/corpus
+# The /ask eval set (M3 slice 4). Beside the corpus on purpose: run_eval.py
+# resolves it from CORPUS_DIR's parent, the same two-place resolution the
+# corpus already uses, so the path is right in a checkout and in this image
+# without a third guess. Without this line the CI eval step would fail with a
+# missing file - which would at least be loud, unlike most path mistakes.
+COPY data/eval /app/data/eval
 
 RUN pip install --no-cache-dir --no-deps -e .
 

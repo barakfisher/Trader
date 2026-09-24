@@ -4,21 +4,19 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-24. **M3 slices 1–3 are done.** The paid embedder that slice 2
-recorded as owed is verified against the live endpoint, so retrieval is genuinely
-semantic; `POST /ask` answers concept and portfolio questions with citations and refuses
-what the corpus does not cover. **Only slice 4 — the eval set — remains**, and several
-numbers recorded here are explicitly waiting on it. M4 is complete; M3's remaining
-two slices — `POST /ask`, then the eval set — are not started. The session that wrote this gave the
-corpus an embedding column whose width was chosen for a named model rather than for the fixture
-that fills it, and then found two retrieval bugs by running the SQL that 40 passing tests could not
-have caught.
+Updated: 2026-09-24. **M3 is complete** — all four slices, PRs #42, #44, #45, #46 and #47.
+**This is a handoff**: M3 closing is a milestone boundary, which CLAUDE.md makes a trigger. The
+session that wrote this took M3 from "a corpus that can only be reached by exact slug" to `/ask`
+answering questions in the user's own words, refusing what the corpus does not cover, and an eval
+set that measures both — and on its first run found three real bugs and one threshold in the wrong
+place. **Next is M5 (market discovery & topics)**, deferred on 2026-09-23 specifically so M3 could
+finish; see "Where to go next".
 
 **One-line state:** the product imports a portfolio, fetches six months of real daily prices, scans
 it every 30 minutes for four kinds of finding, explains each one in sentences whose every figure is
 checked against the evidence, **links every term in those sentences to an explanation of it**,
 **answers a question phrased in the user's own words with the passages that bear on it —
-by meaning, not by shared vocabulary**, lets
+by meaning, not by shared vocabulary — and says so when it is not sure**, lets
 the user state the allocation they meant to hold, and turns the drift from it into a proposal with
 a deadline that an approval writes to a paper ledger. No order is ever placed. The explanations are
 currently written by templates rather than a model, and the app says so on its own dashboard.
@@ -40,9 +38,9 @@ proposals reach the notifications ledger, correctly recorded as `failed`, and re
 | **M1.5 — Trustworthy quote path** | ✅ Complete | **unplanned**; inserted after an audit found data problems M2 would have built on |
 | **M2 — Analysis engine & observations** | ✅ Complete | PRs #12–#22 |
 | **M2.5 — Real price history** | ✅ Complete | **unplanned**; PR #23. Finished M1's provider layer, 18 PRs late |
-| **M3 — RAG & educational engine** | 🟡 Slices 1–3 of 4 complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. Slice 3 (#46): `POST /ask`, intent routing, citations, a three-state relevance floor. **Slice 4 (the eval set) is next and several numbers are waiting on it** |
+| **M3 — RAG & educational engine** | ✅ Complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. #45: the paid embedder. #46: `POST /ask`, intent routing, citations, a three-state relevance floor. #47: the 35-case eval set in two CI tiers. **The relevance floor is measured to be in the wrong place — see the debt table** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
-| M5 — Market discovery & topics | Not started | independent of M3; deferred in favour of finishing M3 (decided 2026-09-23) |
+| M5 — Market discovery & topics | **Next** | deferred 2026-09-23 so M3 could finish; M3 is now finished |
 | M6 — Frontend completion & polish | Not started | |
 | M7 — Kubernetes & documentation | Not started | |
 
@@ -81,7 +79,8 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts at handoff: **1,083** — 573 Python, 341 orchestrator, 153 web, 16 shared.
+Test counts at handoff: **1,096** — 586 Python, 341 orchestrator, 153 web, 16 shared. Plus the
+eval set, which is not a test count: **35 cases**, 16 keyless on every PR, all 35 when keyed.
 
 **None of them executes a line of retrieval SQL**, and that is structural rather than an oversight:
 the Python suite is hermetic and has no Postgres. Exercise it by hand after touching
@@ -386,6 +385,34 @@ failure they prevent.
     questions is therefore short, explicit and listed — the `PROPOSABLE_KINDS` argument
     applied to questions.
 
+35. **The eval set is held out from the thresholds, and a test enforces it.** `relevance.py`'s
+    numbers were fitted to sixteen questions and the lexical switch to six more. An eval that
+    reused any of them would test the thresholds on the data that picked them — which measures
+    nothing and looks exactly like a pass. The fitting questions are recorded in
+    `data/eval/ask.json` and `test_eval_set_contract.py` fails if a case repeats one (confirmed
+    by planting one with different casing and whitespace). The disclosure that goes with it: every
+    case was written by the session that had read the whole corpus. Held-out from the thresholds
+    is not the same as held-out from the author, and **questions from someone who has never read
+    the corpus would be worth more than any number of these**.
+
+36. **At the relevance boundary, the answer hedges instead of the threshold moving.** The first
+    keyed run found "what is the current price of gold" (out of domain) at **0.2502** and "why
+    does my mix keep changing on its own" (legitimate) at **0.2498**. They overlap; no threshold
+    classifies both. Raising the floor would have swapped a wrong answer for a wrong refusal *and*
+    turned the held-out set into a training set. So a weak match now opens with
+    `WEAK_MATCH_PREFIX` — "I'm not sure the reference corpus covers this. The closest match I
+    found is:" — applied by the service from the verdict, never by a model, so whether an answer
+    admits uncertainty cannot depend on how a model phrased it. `relevance: weak` had been on the
+    wire from the start, but the *text* of a weak answer was identical to a confident one, so a
+    reader of the reply alone got no signal at all. Decided by the user, 2026-09-24.
+
+37. **The keyed eval tier is opt-in by the presence of a secret, and skips visibly.** CI stays
+    hermetic for anyone without `OPENROUTER_API_KEY` — forks, fresh clones, a spent budget —
+    because the job then prints a `::notice` and succeeds, instead of turning every PR red for a
+    reason unrelated to the change. A notice rather than silence, because a green job that did
+    nothing looks exactly like a green job that tested the refusal path. It is the *only*
+    automated test of the `not_in_corpus` refusal, because the floor abstains on the fixture.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -556,6 +583,16 @@ passing vacuously. **A gate that cannot fail is worse than no gate**, because it
 coverage.
 → And the process lesson: **exercise every branch of a check you add, not the one you expect.** All
 three were run this time — clean exit, missing container, and a genuinely failing ingestion.
+→ **Correction, M3 slice 4: that was three of four branches, and the fourth passed vacuously.** A
+container that is *still running* reports `ExitCode` **`0`** — measured with a probe that slept and
+then exited 3: `ExitCode='0' State='running'` mid-sleep. So this check passed whenever it read
+mid-ingestion, which is precisely the failure this entry says it fixed. It never bit only because
+fixture ingestion is fast. The obvious replacement, `docker compose wait`, is wrong the other way:
+for a service that has *already* exited it prints "No containers for project" and returns 1, which
+would have failed CI on nearly every run. `scripts/wait-for-exit.sh` polls `.State` until it reads
+`exited` and only then trusts `.ExitCode`, and was run against all four states before being used.
+**The lesson that generalises: "every branch" is a claim about the state space, and it is only as
+good as the enumeration. Three was believed to be all of them.**
 
 **Two retrieval bugs, both invisible to a hermetic suite, both found on the
 first real query.** Slice 2's SQL was written, reviewed, and covered by 40 new
@@ -621,6 +658,24 @@ The OR rewrite was correct, measured, and documented with its reasoning — and 
 reasoning ("the hybrid would be one placeholder embedder wearing two hats") became false
 the moment the placeholder was replaced. Comments that record *why* are what make this
 detectable; a comment that had only recorded *what* would have survived unchallenged.
+
+**The eval set found three bugs on its first run, and two were predicted and still shipped
+first.** "What will my portfolio be worth next year" contains "worth", so the total handler
+answered a forecast with *today's* figure. "Should I sell my largest position" names the largest
+position, so that handler answered with its value — dodging a request for advice silently instead
+of declining it (guideline 2). Both were written into the eval *expecting* them to fail, and they
+did; both are now refused before any handler runs. The third was the gold case above.
+→ **Write the case for the bug you suspect before fixing it.** A fix with no failing case first
+cannot show that it fixed anything, and an eval that has only ever passed has not yet been shown
+to be able to fail.
+
+**A metric improved because a case was relabelled.** Once the gold case expected "hedged" rather
+than "refused", the threshold report stopped counting it as out-of-domain — and separation jumped
+from +0.0667 to **+0.1404** with the floor reported "inside the gap". Nothing about retrieval had
+changed. Cases now carry `out_of_domain` for what they *are*, independent of what is expected of
+them, and the report is back to the true figure.
+→ **What a case is must not change because what we do about it changed.** Otherwise every
+decision to accept a behaviour also quietly improves the measurement of it.
 
 **First person does not mean "about my portfolio", and the obvious router ships that
 bug.** Keying intent on "my"/"I" fails immediately on *"how much did I lose from the
@@ -705,7 +760,10 @@ the green test as coverage.
 | ~~Retrieval is exact-match only~~ | — | **Resolved in M3 slice 2.** Hybrid retrieval exists and `GET /concepts/search` serves it. What is still missing is the *answer*: there is no `/ask`, no intent routing, no citations and no relevance floor, so a nonsense query still returns the three least-bad chunks rather than a refusal. That is slice 3 |
 | **No test executes a line of retrieval SQL** | `services/ai/tests` | The Python suite is hermetic and has no Postgres, by design. Both of slice 2's real bugs lived there and both passed a full green gate. The compose `corpus` container covers ingestion only; the search path has no CI coverage at all and is exercised by hand. Closing this means a Postgres-backed test job, which is a real decision about what "hermetic" is worth |
 | ~~OWED: migrate the fixture embedder to a paid OpenRouter embeddings model~~ | — | **Done.** `openai/text-embedding-3-small` through OpenRouter, verified against the live endpoint: 36 chunks, 5,114 tokens, **$0.00010228**, no chunk id moved. Set `EMBEDDINGS_PROVIDER=openrouter` to use it; the code default stays `fixture` so CI and a fresh clone remain keyless. The fixture was **not** deleted — it is the hermetic CI path and slice 4's eval set needs it |
-| **Retrieval quality rests on six hand-written questions** | `services/ai/app/corpus/retrieval.py` | The strict/wide lexical switch, and the claim that the real embedder is 5/6 against the fixture's 1/6, come from six questions this session wrote — chosen after seeing the corpus, which is the weakest possible evidence short of none. The direction matches theory and the mechanism is understood, but **nobody should tune retrieval further on this basis**. Slice 4's eval set is what turns it into a measurement |
+| **The relevance floor is measured to be in the wrong place** | `app/ask/relevance.py` | `REFUSE_BELOW = 0.23` was fitted to sixteen questions. On the eval's held-out questions the classes separate at **(0.2502, 0.3169]**, so 0.23 sits *outside* the gap — and every keyed CI run prints that verdict. It was deliberately **not** moved: combined with the fitting set the classes overlap (0.2498 vs 0.2502), and a value chosen to make the held-out set pass would make it a training set. The hedged weak answer (decision 36) is what covers the boundary meanwhile. **The honest next step is more questions, written by someone who has not read the corpus**, not a new number |
+| **The keyed eval tier does nothing until a secret exists** | GitHub repo settings | The `eval-keyed` job skips with a notice unless `OPENROUTER_API_KEY` is a repository secret. **Until it is added, nothing automated tests the `not_in_corpus` refusal** — the one M3's exit criterion names — because the floor abstains on the fixture path. Adding the secret is a settings change only a repo admin can make; it was deliberately not done from a session |
+| **`/ask` has no user interface** | `apps/web` | It is complete on the AI service and proxied by the orchestrator, and nothing in the web app calls it. A reader can only reach it through the API. The response already carries everything a UI needs to be honest — `answered`, `relevance`, `answer_source`, verbatim citations — so this is M6's to build, not a missing contract |
+| **`narration/templates.py` divides money by 100 unconditionally** | `app/narration/templates.py` | `_money` assumes two decimal places, so a JPY or KRW figure would be off by two orders of magnitude. `core/money.py`'s `from_minor` already handles the exponent and `app/ask/portfolio.py` uses it; the template does not. Latent: every holding in this installation is USD or EUR |
 | **The corpus is a derived copy that three separate mechanisms keep in step** | `data/corpus`, compose, `.claude` | The files are the source of truth and `kb_documents`/`kb_chunks` are what the API serves. A hook covers Claude's edits, the `corpus` container covers every stack start, CI covers the image. None of the three covers a hand edit on a machine with no stack running — that reader sees stale text with nothing reporting the disagreement. `--dry-run` answers "are they in step?" and nobody is obliged to run it |
 | **The ingest hook does not apply to a session started before it existed** | `.claude/settings.json` | The settings watcher only watches directories that had a settings file when the session began, and `.claude/` had none. Any session started after that commit picks it up; the session that wrote it did not, and confirmed so with a sentinel rather than assuming |
 | **Import previews live in process memory** | `services/previewStore.ts` | Forces `replicas: 1` in Kubernetes. The only remaining in-memory state — run keys moved to the `runs` table in M2 |
@@ -803,105 +861,51 @@ the green test as coverage.
 
 ## Where to go next
 
-**Two chains are now proven by observation rather than by argument.** M4's (#35): targets set in
-the UI produced four drift findings, three became `pending` `rebalance` proposals with 24-hour
-deadlines, and the notification ledger recorded three `above_floor` attempts plus one `below_floor`
-deferral into the digest. And M3 slices 1 and 2's, below.
+### M3 is complete, and how it was verified
 
-**M3 slice 1 is merged (#42).** Verified by using it in a
-stack rebuilt from the main checkout, not by reading it: the `corpus` container ran on start and
-reported nine documents unchanged; signing in and clicking **Drawdown** on a real drawdown
-observation opened the document with its formula as a code block; clicking **Rebalancing** on an
-allocation-drift observation showed "This system never places an order" in bold in its second
-paragraph. Clicking the same concept from a second observation served from the session cache — two
-GETs for two concepts across four clicks, read from the network log. That chain is an observation
-now, not an argument.
+Every slice was verified by running it against the real database and, where it mattered, the real
+embedding endpoint — not by reading it and not only by the hermetic suite, which structurally
+cannot reach any of the SQL. What exists end to end:
 
-What exists: `data/corpus/concepts/*.md` (nine documents, four sections each, CC0), migration
-`0012_kb_corpus`, `app/corpus/` (pure chunking, ingestion, and a slug repository),
-`scripts/ingest_corpus.py`, `GET /concepts` and `GET /concepts/:slug` on the AI service, a proxy on
-the orchestrator, and `ConceptStore` + `ConceptDialog` on the web.
+- **The corpus** (`data/corpus/concepts/`, 9 documents, CC0), hash-compared ingestion that moves
+  no chunk id on an unchanged run, and concept chips that open the document behind them (#42).
+- **Hybrid retrieval**: `vector(1536)` sized for `openai/text-embedding-3-small`, `BaseEmbedder`
+  and `VectorStore` behind Protocols, RRF over pgvector cosine and Postgres full-text, with the
+  lexical half strict when the vector half is semantic and wide when it is the fixture (#44, #45).
+- **`POST /ask`**: intent routing, citations quoted verbatim, a three-state relevance floor, three
+  named ways to decline plus `advice`, arithmetic-only portfolio answers, and a hedge in the text
+  of every weak match (#46, #47).
+- **The eval set**: 35 cases in `data/eval/ask.json`, held out from the thresholds, run by
+  `scripts/run_eval.py` — 16 keyless on every PR, all 35 when `OPENROUTER_API_KEY` is a repo
+  secret. Last keyed run: **35/35**; last keyless: **16/16**.
 
-### M3 slice 2 is merged
+The paid embedder is live in *this* installation's database and costs about a hundredth of a cent
+per full re-embed. A fresh clone and CI use the keyless fixture, on purpose.
 
-**Verified by running it, not by reading it** — against the real dev database, because nothing in
-CI can reach this SQL. Migration `0013` applied cleanly; the ingester embedded all 36 chunks and a
-second run embedded none; **all 36 chunk ids were byte-identical afterwards**, which is what makes
-a citation survive a re-ingest. Appending a sentence to one document rewrote exactly one chunk and
-re-embedded exactly that one, leaving the other 35 vectors and every id untouched — the conditional
-`embedding = CASE WHEN ... text IS DISTINCT FROM ...` in `ingest.py` doing its job. Through HTTP,
-`GET /concepts/search?q=approving+a+proposal+places+an+order` returns `rebalancing / What it is` —
-the section that says the system never places one — at rank 1, found by **both** halves.
+### M5 — market discovery & topics, next
 
-What exists: migration `0013_kb_embeddings` (`vector(1536)` + `embedding_model` + an HNSW cosine
-index + a CHECK that the two columns are null together), `app/corpus/embeddings.py` (`BaseEmbedder`,
-`EMBEDDING_DIMENSION`), `hashed_embedder.py`, `embedder_factory.py`, `vector_store.py`
-(`VectorStore` + `PgVectorStore`), `retrieval.py` (RRF + the full-text half + `hybrid_search`),
-`GET /concepts/search` with an orchestrator proxy, and `EMBEDDINGS_PROVIDER` in config.
+MILESTONES.md: topic CRUD, resolving a free-text topic to candidate instruments with confidence and
+rationale, user confirmation, auto-discovered themes as proposals only, rejection memory, per-topic
+sentiment. **Exit: a free-text topic resolves to a sensible confirmed instrument set and produces
+topic observations; a rejected auto-proposal never returns.**
 
-Three things a later session should not re-derive:
+It was deferred on 2026-09-23 so M3 could finish. Three things from M3 bear directly on it:
 
-1. **`embedding_model` per row is what makes the owed migration safe.** Fixture vectors and OpenAI
-   vectors are the same width and are not comparable, so a partial re-embed would rank two
-   coordinate systems against each other and call the result relevance. With the model on the row,
-   "embed everything this embedder did not produce" is a `WHERE` clause, and `search` filters to
-   one model so a half-migrated corpus degrades visibly instead of lying.
+1. **Resolving a topic to instruments is a retrieval problem that already has a retriever.** "AI
+   chip makers" → candidate instruments is the same shape as a question → candidate passages.
+   `BaseEmbedder`, `VectorStore` and the `namespace` column (which already anticipates a second
+   kind of document) are the seams. Weigh reusing them against a separate path before writing one.
+2. **"Confidence + rationale" is the relevance-floor problem again**, and M3 learned it the hard
+   way: a single similarity threshold did not separate the classes on held-out data. Do not
+   promise a confidence number the evidence cannot support — the three-state verdict and the
+   hedge (decisions 33, 36) are the precedent.
+3. **"A rejected auto-proposal never returns"** is the notification ledger's dedupe problem (decision
+   18) wearing different clothes. `notifications.ref_kind` already anticipates a third referent and
+   `PROPOSABLE_KINDS` is the one place that decides what becomes a question.
 
-2. **Both halves' ranks are on the wire, and so is `vector_is_semantic`.** A null `vector_rank` on
-   every match means the corpus was never embedded — otherwise indistinguishable from working
-   hybrid retrieval. These are diagnostics that survive into production, not debug output.
-
-3. **There is deliberately no relevance floor.** A nonsense query returns the three least-bad
-   chunks today. Deciding the corpus does not cover a question is `/ask`'s judgement; making it
-   here as well would put one threshold in two places and let a question be refused by a number
-   nobody chose.
-
-### M3 slice 3 is done (#46)
-
-`POST /ask` on the AI service, proxied by the orchestrator, which values the portfolio
-and sends it with **every** question — routing happens in the AI service, so a second
-classifier here could disagree with it, and the disagreement is silent.
-
-Verified by running it against the real corpus, not by reading it: "what is a drawdown"
-→ confident (0.712), three citations; "how much did I lose from the top" → weak (0.338),
-answered from the drawdown document; "how do I roast a chicken" → **refused** (0.052);
-"what is my largest position" → computed, 72.2% of the priced total, with the unpriced
-holding reported rather than dropped. Both narration branches were exercised: the free
-route timed out and fell back to the extract, and a paid model produced a grounded
-answer that passed the evidence validator.
-
-### M3 slice 4 — the eval set, and the numbers waiting on it
-
-~30 Q/A pairs run in CI. It is the last slice, and it is **not** a formality: three
-separate decisions are currently resting on evidence too weak to defend, all of them
-recorded above as debt.
-
-1. **The relevance thresholds** (`REFUSE_BELOW = 0.23`, `CONFIDENT_ABOVE = 0.40`) come
-   from sixteen questions written by the session that chose them. Re-derive them.
-2. **The strict/wide lexical switch** rests on six paraphrased questions. Six.
-3. **The reranker** DESIGN.md asks for was deferred *specifically* until something could
-   measure it. This is that something — build the eval set first, then the reranker
-   against it, in that order.
-
-The eval set must run on the **fixture** embedder, because CI is keyless — and that
-constrains it more than it first appears. It cannot measure semantic retrieval quality,
-and **it cannot measure the `not_in_corpus` refusal either**: the relevance floor
-deliberately abstains when the vector half is a placeholder, so on the fixture path
-*every* concept question is answerable and graded `weak`. That refusal — the one M3's
-exit criterion actually names — is reachable **only with a real embedder**. (This file
-said otherwise until the smoke test was extended and the assertion turned out to be
-unwritable; see the bug below.) What CI *can* measure is the deterministic half: intent
-routing, the `no_holdings` and `not_computable` refusals, citation shape, and pipeline
-stability. So the decision for slice 4 is sharper than "is a keyed job worth it": **without
-one, the headline refusal behaviour is never tested by anything automated.**
-
-### M5 (topics), deferred
-
-Independent of M3's remaining slices and the larger change: it widens `notifications.ref_kind` and
-wants topic-shaped proposals. It was weighed against slice 2 on 2026-09-23 and **deliberately
-deferred in favour of finishing M3**, on the grounds that the corpus currently exists but is inert
-— it can only answer a question phrased as the exact slug a chip already knows — and finishing
-something half-built beats opening a second front. See the seams M4 left, below.
+Write the M5 eval cases **before** the resolver, and have someone who has not read the code write
+some of them. M3's eval found three bugs on its first run precisely because two cases were written
+to fail.
 
 ### Left unfinished, deliberately
 

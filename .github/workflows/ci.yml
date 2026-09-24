@@ -81,21 +81,13 @@ jobs:
       # only gate that proves data/corpus was actually copied in, that the
       # in-container path resolves, and that the ingester's SQL runs.
       - name: Check the corpus was ingested
-        run: |
-          docker compose -f infra/compose/docker-compose.yml logs corpus
-          # `.ExitCode` rather than `.State` or `.Status`: State prints "exited"
-          # with no code at all, and Status prints "Exited (0) 2 minutes ago" -
-          # so a substring match on either is a check that cannot fail for the
-          # reason it claims to. An absent container prints nothing, and the
-          # empty string is not 0, so a corpus service that never ran fails here
-          # rather than passing vacuously.
-          code="$(docker compose -f infra/compose/docker-compose.yml ps -a corpus --format '{{.ExitCode}}')"
-          if [ "$code" = "0" ]; then
-            echo "corpus ingested"
-          else
-            echo "corpus container did not exit cleanly (exit code: '${code:-<no container>}')"
-            exit 1
-          fi
+        # Waits for the container to *stop* before reading its exit code. The
+        # check this replaced read `.ExitCode` immediately, and a container that
+        # is still running reports 0 - so it passed whenever it read mid-
+        # ingestion. `docker compose wait` is not the fix either: for a service
+        # that has already exited it returns 1. See scripts/wait-for-exit.sh,
+        # which was run against all four states before being trusted.
+        run: bash scripts/wait-for-exit.sh infra/compose/docker-compose.yml corpus
       - name: Wait for readiness
         run: |
           for attempt in $(seq 1 30); do
@@ -106,9 +98,86 @@ jobs:
           exit 1
       - name: Smoke test the vertical slice
         run: bash scripts/smoke-test.sh
+      # The /ask eval set, keyless tier (M3 slice 4). Runs inside the image
+      # against the corpus the `corpus` container just ingested, on the fixture
+      # embedder - so it proves routing, the deterministic refusals, portfolio
+      # arithmetic and citation shape on every PR. It cannot prove the
+      # `not_in_corpus` refusal: the relevance floor abstains on the fixture by
+      # design. That is the keyed job's, below.
+      - name: Eval set (keyless tier)
+        run: >
+          docker compose -f infra/compose/docker-compose.yml exec -T
+          -e CORPUS_DIR=/app/data/corpus
+          ai-service python scripts/run_eval.py --tier keyless
       - name: Dump logs on failure
         if: failure()
         run: docker compose -f infra/compose/docker-compose.yml logs
       - name: Tear down
         if: always()
+        run: docker compose -f infra/compose/docker-compose.yml down -v
+
+  # The /ask eval set, keyed tier: the only automated test of the refusal M3's
+  # exit criterion names, and of the relevance thresholds on held-out questions.
+  #
+  # Opt-in by the presence of a secret, not by a flag, and that is the design
+  # rather than a compromise. CI stays hermetic for anyone without the key -
+  # forks, a fresh clone, an expired or spent budget - because the job then
+  # *skips visibly* and succeeds, instead of turning every PR red for a reason
+  # unrelated to the change. A test that depends on a credential is the
+  # `.env`-dependent-test failure CLAUDE.md warns about, at CI scale; making it
+  # a separate, skippable job is what keeps that failure out of the other three.
+  #
+  # Cost per run: re-embedding the corpus is ~5,100 tokens at $0.02/1M, about
+  # one hundredth of a cent, plus 35 query embeddings. No model is called.
+  eval-keyed:
+    name: eval set (keyed, opt-in)
+    runs-on: ubuntu-latest
+    env:
+      # `secrets` cannot be read in a job-level `if`, so presence is computed
+      # once here and every step keys off it.
+      HAS_KEY: ${{ secrets.OPENROUTER_API_KEY != '' }}
+    steps:
+      - name: Skip visibly when no key is configured
+        if: env.HAS_KEY != 'true'
+        # A notice rather than silence: a green job that did nothing looks
+        # exactly like a green job that tested the refusal path, and only one
+        # of them did.
+        run: >
+          echo "::notice title=Keyed eval skipped::No OPENROUTER_API_KEY secret is configured,
+          so the not_in_corpus refusal and the relevance thresholds were NOT tested on this run."
+      - uses: actions/checkout@v4
+        if: env.HAS_KEY == 'true'
+      - name: Prepare environment
+        if: env.HAS_KEY == 'true'
+        env:
+          KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        # The key is appended rather than substituted with sed, so no character
+        # in it can be read as sed syntax. GitHub masks it in every log line.
+        run: |
+          grep -vE '^(OPENROUTER_API_KEY|EMBEDDINGS_PROVIDER|LLM_PROVIDER)=' .env.example > .env
+          printf 'OPENROUTER_API_KEY=%s\nEMBEDDINGS_PROVIDER=openrouter\nLLM_PROVIDER=null\n' "$KEY" >> .env
+          sed -i 's/^MARKET_DATA_PROVIDERS=.*/MARKET_DATA_PROVIDERS=fixture/' .env
+      - name: Start the database and ingest with the real embedder
+        if: env.HAS_KEY == 'true'
+        run: docker compose -f infra/compose/docker-compose.yml up -d --build postgres redis migrate corpus ai-service
+      - name: Check the corpus was embedded by the real model
+        if: env.HAS_KEY == 'true'
+        run: |
+          bash scripts/wait-for-exit.sh infra/compose/docker-compose.yml corpus
+          # A run that silently fell back to the fixture would still exit 0, and
+          # every keyed case would then be measured against the wrong embedder.
+          docker compose -f infra/compose/docker-compose.yml logs corpus \
+            | grep -q 'chunks embedded: .* (model: openai/text-embedding-3-small)' \
+            || { echo "corpus was not embedded by the real model"; exit 1; }
+      - name: Eval set (keyed tier)
+        if: env.HAS_KEY == 'true'
+        run: >
+          docker compose -f infra/compose/docker-compose.yml exec -T
+          -e CORPUS_DIR=/app/data/corpus
+          ai-service python scripts/run_eval.py --tier keyed
+      - name: Dump logs on failure
+        if: failure() && env.HAS_KEY == 'true'
+        run: docker compose -f infra/compose/docker-compose.yml logs
+      - name: Tear down
+        if: always() && env.HAS_KEY == 'true'
         run: docker compose -f infra/compose/docker-compose.yml down -v

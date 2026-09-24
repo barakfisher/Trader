@@ -58,6 +58,23 @@ DEFAULT_PASSAGES = 3
 #: narration, built from prose instead of from computed figures.
 _NUMBER = re.compile(r"-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?")
 
+#: What a weak match says before anything else. The `relevance: weak` flag was
+#: on the wire from the start, but the *text* of a weak answer was identical to a
+#: confident one - so a reader of the reply alone got no signal at all, and "what
+#: is the current price of gold" came back as the drawdown formula, stated flatly.
+#:
+#: The eval set is what made this unavoidable. On held-out questions the floor
+#: could not separate that gold question (0.2502) from a legitimate one - "why
+#: does my mix keep changing on its own" (0.2498) - which overlap by 0.0004. No
+#: threshold classifies both correctly, and moving one to fix the eval would have
+#: turned the held-out set into a training set. So the uncertainty is stated in
+#: the answer instead of being resolved by a coin flip: at the boundary, the
+#: honest reply is "I don't know, and here is the closest thing I found".
+#:
+#: Applied by the service from the verdict, never by the model, so whether an
+#: answer is hedged cannot depend on how a model chose to phrase it.
+WEAK_MATCH_PREFIX = "I'm not sure the reference corpus covers this. The closest match I found is:"
+
 _SYSTEM_PROMPT = (
     "You explain financial terms to a non-expert. You are given passages from a "
     "reference corpus and a question. Write at most three sentences that answer the "
@@ -218,6 +235,9 @@ async def answer_concept_question(
         if generated is not None:
             text, source = generated, "llm"
 
+    if verdict.relevance is Relevance.WEAK:
+        text = f"{WEAK_MATCH_PREFIX}\n\n{text}"
+
     return Answer(
         question=question,
         intent=Intent.CONCEPT,
@@ -245,6 +265,44 @@ _PORTFOLIO_HANDLERS: tuple[tuple[tuple[str, ...], str], ...] = (
 )
 
 
+#: Asking what to *do* with a holding. Checked before any handler, because each
+#: of these can contain a phrase a handler matches - "should I sell my largest
+#: position" names the largest position, and answering it with that position's
+#: value would dodge the question silently instead of declining it. Guideline 2:
+#: no personalised investment advice. Found by the eval set, not by review.
+_ADVICE_MARKERS: tuple[str, ...] = (
+    "should i buy",
+    "should i sell",
+    "should i hold",
+    "should i invest",
+    "should i add",
+    "should i trim",
+    "should i rebalance",
+    "is it a good time",
+    "is now a good time",
+    "what should i do",
+    "do you recommend",
+    "would you recommend",
+)
+
+#: Asking about a future value. A forecast is not arithmetic over what the caller
+#: supplied, so no handler can answer it - but "what will my portfolio be worth
+#: next year" contains "worth", and the total handler would answer with today's
+#: figure, confidently, to a question about next year. Also found by the eval.
+_FORECAST_MARKERS: tuple[str, ...] = (
+    " will ",
+    "going to be",
+    "next year",
+    "next month",
+    "next week",
+    "in the future",
+    "predict",
+    "forecast",
+    "expect it to",
+    "by the end of",
+)
+
+
 def _match_handler(question: str) -> str | None:
     text = question.lower()
     for markers, name in _PORTFOLIO_HANDLERS:
@@ -262,9 +320,12 @@ def answer_portfolio_question(
 ) -> Answer:
     """Answer from arithmetic over the caller's holdings, or decline by name.
 
-    The three ways of declining are kept apart deliberately - see the module
+    The ways of declining are kept apart deliberately - see the module
     docstring. `no_holdings` is the caller's problem to fix, `not_computable` is
-    the product's boundary, and neither is "the corpus does not cover it".
+    the product's boundary, `advice` is guideline 2, and none of them is "the
+    corpus does not cover it". Advice and forecasts are checked *before* the
+    handlers, because both kinds of question routinely contain a phrase some
+    handler would otherwise answer.
     """
     if not positions:
         return Answer(
@@ -277,6 +338,37 @@ def answer_portfolio_question(
             ),
             answer_source="none",
             refused_reason="no_holdings",
+        )
+
+    # Padded so a marker with its own spaces (" will ") matches at either end.
+    lowered = f" {question.lower().strip()} "
+
+    if any(marker in lowered for marker in _ADVICE_MARKERS):
+        return Answer(
+            question=question,
+            intent=Intent.PORTFOLIO,
+            answered=False,
+            text=(
+                "I can't tell you whether to buy, sell or hold anything - this product "
+                "never gives personal investment advice. I can tell you what your "
+                "holdings are worth, how large each one is, and how far your weights "
+                "sit from the targets you set."
+            ),
+            answer_source="none",
+            refused_reason="advice",
+        )
+
+    if any(marker in lowered for marker in _FORECAST_MARKERS):
+        return Answer(
+            question=question,
+            intent=Intent.PORTFOLIO,
+            answered=False,
+            text=(
+                "I can only report what your portfolio is worth now, from current "
+                "prices. I can't forecast what it will be worth later."
+            ),
+            answer_source="none",
+            refused_reason="not_computable",
         )
 
     handler = _match_handler(question)
