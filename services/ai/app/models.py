@@ -382,3 +382,101 @@ class HealthResponse(BaseModel):
     service: str = "ai-service"
     version: str
     checks: dict[str, str] = Field(default_factory=dict)
+
+
+class TopicResolveRequest(BaseModel):
+    """A theme in the user's own words: "uranium", "robot surgery", "GLP-1"."""
+
+    #: At least one non-space character; surrounding whitespace is ignored.
+    topic: str = Field(min_length=1, max_length=200, pattern=r"\S")
+
+
+class TopicHolder(BaseModel):
+    """A source ETF that holds a candidate, and what fraction of the fund it is."""
+
+    etf: str
+    #: A fraction of the fund, as a decimal string (guideline 4): "0.108" is 10.8%.
+    weight: str
+
+
+class TopicCandidateOut(BaseModel):
+    """One instrument offered for a topic, with the reason it was offered.
+
+    `rationale` is a sentence from the instrument's own description, verbatim -
+    never written by a model. `held_by` is the second, independent reason: the
+    topic's source ETFs that hold it. Either can be checked by the reader.
+
+    `confidence` is a band, not a number, because a cosine is not a
+    probability; `similarity` is exposed for debugging and for the record, not
+    for display as a percentage.
+    """
+
+    instrument_id: str
+    symbol: str
+    name: str | None
+    asset_class: str
+    sector: str | None
+    industry: str | None
+    similarity: float
+    #: Market cap (equity) or net assets (ETF) in minor units; null when unknown.
+    size_minor: int | None
+    #: ISO currency of `size_minor`; null exactly when `size_minor` is null.
+    size_currency: str | None
+    confidence: Literal["confident", "weak"]
+    rationale: str
+    held_by: list[TopicHolder] = Field(default_factory=list)
+
+
+class TopicInterpretationOut(BaseModel):
+    """One meaning of the topic. `label` is the commonest Yahoo industry in it."""
+
+    label: str | None
+    candidates: list[TopicCandidateOut]
+
+
+class UniverseCoverageOut(BaseModel):
+    """What the resolver could see: the installation's side of the answer.
+
+    `state` is `ready`, `partially_embedded` (resolution ran over `embedded` of
+    `profiles`), `not_embedded` or `not_loaded`. The last two mean the topic
+    was never looked at, which is why they carry a verdict of their own.
+    """
+
+    state: Literal["ready", "partially_embedded", "not_embedded", "not_loaded"]
+    profiles: int
+    embedded: int
+
+
+class TopicResolveResponse(BaseModel):
+    """Candidate instruments for a topic, or a named reason there are none.
+
+    `verdict` is the field to branch on, and it has four values because there
+    are four different situations:
+
+    - `confident` / `weak` - candidates are offered; `weak` means the best
+      match was near the floor and the reader should be told so.
+    - `none` - the universe was searched and nothing in it is about this
+      topic. `interpretations` is empty on purpose: the least-bad rows for a
+      topic nothing is about are the failure the floor exists to prevent.
+    - `unavailable` - the universe was **not** searched, because this
+      installation has no searchable universe (`universe.state` says which
+      step is missing). A 200 rather than an error for the reason `/ask`'s
+      refusal is one, and a separate value from `none` so that "no universe"
+      can never be shown to the user as "your topic matches nothing".
+
+    Every threshold the verdict was judged by travels with it, as in `/ask`.
+    """
+
+    topic: str
+    verdict: Literal["confident", "weak", "none", "unavailable"]
+    #: The best cosine found; null when the universe was not searched.
+    best_similarity: float | None
+    refuse_below: float
+    confident_above: float
+    interpretations: list[TopicInterpretationOut] = Field(default_factory=list)
+    #: More than one interpretation: the candidates split into unrelated
+    #: businesses and the user should choose between them.
+    ambiguous: bool
+    universe: UniverseCoverageOut
+    embedding_model: str
+    vector_is_semantic: bool

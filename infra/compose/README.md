@@ -23,4 +23,13 @@ to parse must not keep the app down. Check for it as `Exited (1)` in `compose ps
 Re-running is free - each document is compared by content hash and rewritten only
 when it changed.
 
+`universe` is a third, the same shape: it loads the instrument universe (`data/universe`) that topic
+resolution searches. Membership and ETF holdings are committed and in the image. The descriptions
+are not, because they are Yahoo's text and licensed per installation. The checkout's
+`data/universe` is mounted read-only into this container, so a local `descriptions.local.jsonl`
+reaches the loader that way. **With no such file it exits 0 having profiled nothing**, and
+`POST /topics/resolve` then answers `verdict: unavailable` with `universe.state: not_loaded`. The
+first run with the file takes about 45 s plus embedding (about two minutes and two cents on the
+OpenRouter embedder). Later starts take about 20 s and embed nothing.
+
 Fully offline run (no Yahoo Finance calls): set `MARKET_DATA_PROVIDERS=fixture` in `.env`.

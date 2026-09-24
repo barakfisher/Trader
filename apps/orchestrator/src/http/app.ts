@@ -33,6 +33,7 @@ import { registerProposalsRoutes } from './routes/proposals.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerTelegramRoutes } from '../telegram/webhook.js';
 import { registerTargetsRoutes } from './routes/targets.js';
+import { registerTopicsRoutes } from './routes/topics.js';
 
 export interface AppEnv {
   Variables: {
@@ -58,6 +59,8 @@ const PROTECTED_PREFIXES = [
   // reader has no observation to have arrived from.
   '/concepts',
   '/targets',
+  // Like '/concepts': the universe has no `user_id`, and is still the product.
+  '/topics',
   '/proposals',
   '/notifications',
   '/settings',
@@ -183,6 +186,7 @@ export function createApp(
   registerImportRoutes(app);
   registerConceptsRoutes(app);
   registerAskRoutes(app);
+  registerTopicsRoutes(app);
   registerInternalRoutes(app);
 
   return app;

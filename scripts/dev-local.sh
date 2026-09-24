@@ -75,6 +75,19 @@ if "${COMPOSE[@]}" run --rm corpus > /dev/null 2>&1; then
 else
   warn "concept corpus was not ingested; concept links will 404 until it is"
 fi
+# The same for the instrument universe (M5). Its descriptions are not committed,
+# so on a fresh clone the loader succeeds having profiled nothing - which is
+# worth a warning rather than an "ok", because every topic will then answer
+# `unavailable`.
+if universe_log=$("${COMPOSE[@]}" run --rm universe 2>&1); then
+  if grep -q '^no descriptions' <<<"$universe_log"; then
+    warn "no data/universe/descriptions.local.jsonl; topics resolve only against profiles already in the database"
+  else
+    ok "instrument universe is loaded"
+  fi
+else
+  warn "instrument universe was not loaded; topics will answer 'unavailable' until it is"
+fi
 
 # The containerised copies of the app would hold the ports this script needs,
 # and running both would be confusing: two orchestrators, one database.

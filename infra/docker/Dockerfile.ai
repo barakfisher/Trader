@@ -35,6 +35,13 @@ COPY data/corpus /app/data/corpus
 # without a third guess. Without this line the CI eval step would fail with a
 # missing file - which would at least be loud, unlike most path mistakes.
 COPY data/eval /app/data/eval
+# The instrument universe (M5): committed membership, facts and ETF holdings.
+# Beside the corpus for the same two-place resolution (`ingest_universe.py`
+# finds it from CORPUS_DIR's parent). Yahoo's descriptions are deliberately NOT
+# in the image - they are licensed per installation, and an image is exactly
+# the thing that gets pushed to a registry. `.dockerignore` excludes them, and
+# compose mounts the checkout's copy into the one container that loads them.
+COPY data/universe /app/data/universe
 
 RUN pip install --no-cache-dir --no-deps -e .
 

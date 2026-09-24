@@ -236,6 +236,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/topics/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve */
+        post: operations["resolve_topics_resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -803,6 +820,138 @@ export interface components {
              */
             subjects_with_history: number;
         };
+        /**
+         * TopicCandidateOut
+         * @description One instrument offered for a topic, with the reason it was offered.
+         *
+         *     `rationale` is a sentence from the instrument's own description, verbatim -
+         *     never written by a model. `held_by` is the second, independent reason: the
+         *     topic's source ETFs that hold it. Either can be checked by the reader.
+         *
+         *     `confidence` is a band, not a number, because a cosine is not a
+         *     probability; `similarity` is exposed for debugging and for the record, not
+         *     for display as a percentage.
+         */
+        TopicCandidateOut: {
+            /** Asset Class */
+            asset_class: string;
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "confident" | "weak";
+            /** Held By */
+            held_by?: components["schemas"]["TopicHolder"][];
+            /** Industry */
+            industry: string | null;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Name */
+            name: string | null;
+            /** Rationale */
+            rationale: string;
+            /** Sector */
+            sector: string | null;
+            /** Similarity */
+            similarity: number;
+            /** Size Currency */
+            size_currency: string | null;
+            /** Size Minor */
+            size_minor: number | null;
+            /** Symbol */
+            symbol: string;
+        };
+        /**
+         * TopicHolder
+         * @description A source ETF that holds a candidate, and what fraction of the fund it is.
+         */
+        TopicHolder: {
+            /** Etf */
+            etf: string;
+            /** Weight */
+            weight: string;
+        };
+        /**
+         * TopicInterpretationOut
+         * @description One meaning of the topic. `label` is the commonest Yahoo industry in it.
+         */
+        TopicInterpretationOut: {
+            /** Candidates */
+            candidates: components["schemas"]["TopicCandidateOut"][];
+            /** Label */
+            label: string | null;
+        };
+        /**
+         * TopicResolveRequest
+         * @description A theme in the user's own words: "uranium", "robot surgery", "GLP-1".
+         */
+        TopicResolveRequest: {
+            /** Topic */
+            topic: string;
+        };
+        /**
+         * TopicResolveResponse
+         * @description Candidate instruments for a topic, or a named reason there are none.
+         *
+         *     `verdict` is the field to branch on, and it has four values because there
+         *     are four different situations:
+         *
+         *     - `confident` / `weak` - candidates are offered; `weak` means the best
+         *       match was near the floor and the reader should be told so.
+         *     - `none` - the universe was searched and nothing in it is about this
+         *       topic. `interpretations` is empty on purpose: the least-bad rows for a
+         *       topic nothing is about are the failure the floor exists to prevent.
+         *     - `unavailable` - the universe was **not** searched, because this
+         *       installation has no searchable universe (`universe.state` says which
+         *       step is missing). A 200 rather than an error for the reason `/ask`'s
+         *       refusal is one, and a separate value from `none` so that "no universe"
+         *       can never be shown to the user as "your topic matches nothing".
+         *
+         *     Every threshold the verdict was judged by travels with it, as in `/ask`.
+         */
+        TopicResolveResponse: {
+            /** Ambiguous */
+            ambiguous: boolean;
+            /** Best Similarity */
+            best_similarity: number | null;
+            /** Confident Above */
+            confident_above: number;
+            /** Embedding Model */
+            embedding_model: string;
+            /** Interpretations */
+            interpretations?: components["schemas"]["TopicInterpretationOut"][];
+            /** Refuse Below */
+            refuse_below: number;
+            /** Topic */
+            topic: string;
+            universe: components["schemas"]["UniverseCoverageOut"];
+            /** Vector Is Semantic */
+            vector_is_semantic: boolean;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "confident" | "weak" | "none" | "unavailable";
+        };
+        /**
+         * UniverseCoverageOut
+         * @description What the resolver could see: the installation's side of the answer.
+         *
+         *     `state` is `ready`, `partially_embedded` (resolution ran over `embedded` of
+         *     `profiles`), `not_embedded` or `not_loaded`. The last two mean the topic
+         *     was never looked at, which is why they carry a verdict of their own.
+         */
+        UniverseCoverageOut: {
+            /** Embedded */
+            embedded: number;
+            /** Profiles */
+            profiles: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "ready" | "partially_embedded" | "not_embedded" | "not_loaded";
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -1199,6 +1348,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    resolve_topics_resolve_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TopicResolveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicResolveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

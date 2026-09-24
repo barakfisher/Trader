@@ -10,6 +10,8 @@
 .env.*
 !.env.example
 data/local
+# Yahoo business summaries: licensed per installation, never baked into an image.
+data/universe/*.local.jsonl
 docs
 *.md
 !data/fixtures/README.md

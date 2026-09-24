@@ -27,6 +27,7 @@ import {
   narrationConfigSchema,
   portfolioScanResponseSchema,
   quoteResponseSchema,
+  topicResolveResponseSchema,
 } from './schemas.js';
 
 export type Quote = components['schemas']['Quote'];
@@ -48,6 +49,10 @@ export type ConceptSearchMatch = components['schemas']['ConceptSearchMatch'];
 export type AskRequest = components['schemas']['AskRequest'];
 export type AskResponse = components['schemas']['AskResponse'];
 export type AskCitation = components['schemas']['AskCitation'];
+export type TopicResolveResponse = components['schemas']['TopicResolveResponse'];
+export type TopicCandidate = components['schemas']['TopicCandidateOut'];
+export type TopicInterpretation = components['schemas']['TopicInterpretationOut'];
+export type UniverseCoverage = components['schemas']['UniverseCoverageOut'];
 
 /**
  * A scan loads history for every holding and may call a model once per finding,
@@ -266,7 +271,27 @@ export class AiClient {
     });
   }
 
-  fxRate(base: string, quote: string, requestId?: string): Promise<FxRate> {
+  /**
+   * Candidate instruments for a free-text topic, each with a quoted reason.
+   *
+   * Branch on `verdict`, not on the status: an installation with no loaded
+   * universe answers 200 with `verdict: 'unavailable'` and a `universe.state`
+   * naming the missing step, which is a different statement from `none` (the
+   * universe was searched and holds nothing about the topic).
+   *
+   * The longer timeout, because a cold call embeds the topic at a provider
+   * before it searches.
+   */
+  resolveTopic(topic: string, requestId?: string): Promise<TopicResolveResponse> {
+    return this.request<TopicResolveResponse>('/topics/resolve', topicResolveResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify({ topic }),
+      requestId,
+      timeoutMs: SCAN_TIMEOUT_MS,
+    });
+  }
+
+    fxRate(base: string, quote: string, requestId?: string): Promise<FxRate> {
     const search = new URLSearchParams({ base, quote });
     return this.request(`/market/fx?${search}`, fxRateSchema, { method: 'GET', requestId });
   }

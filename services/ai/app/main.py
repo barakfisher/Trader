@@ -23,7 +23,7 @@ from app.corpus.embedder_factory import build_embedder
 from app.corpus.vector_store import PgVectorStore
 from app.llm.factory import build_llm
 from app.providers.registry import MarketDataService, build_providers
-from app.routers import analysis, ask, concepts, health, market, narration
+from app.routers import analysis, ask, concepts, health, market, narration, topics
 
 settings = get_settings()
 configure_logging(settings.log_level, json_output=settings.is_production)
@@ -91,3 +91,4 @@ app.include_router(analysis.router)
 app.include_router(narration.router)
 app.include_router(concepts.router)
 app.include_router(ask.router)
+app.include_router(topics.router)
