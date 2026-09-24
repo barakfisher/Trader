@@ -22,7 +22,12 @@
 
 import { logger } from '../logger.js';
 import type { DeliveryResult, Notifier, OutboundNotification } from '../notify/notifier.js';
-import { encodeCallbackData, mintNonce, type CallbackAction } from './callbackToken.js';
+import {
+  BUSY_CALLBACK_DATA,
+  encodeCallbackData,
+  mintNonce,
+  type CallbackAction,
+} from './callbackToken.js';
 
 /** Telegram truncates beyond this; we would rather cut deliberately. */
 export const MAX_MESSAGE_CHARS = 4096;
@@ -36,6 +41,35 @@ const ACTIONS: { action: CallbackAction; label: string }[] = [
   { action: 'reject', label: 'Reject' },
   { action: 'snooze', label: 'Snooze' },
 ];
+
+/** The one button an approved alert carries. */
+const UNDO_LABEL = '\u21a9 Undo approval';
+
+/** What the placeholder button says while each action is being applied. */
+const WORKING_LABELS: Record<CallbackAction, string> = {
+  approve: '\u23f3 Approving\u2026',
+  reject: '\u23f3 Rejecting\u2026',
+  snooze: '\u23f3 Snoozing\u2026',
+  undo: '\u23f3 Undoing\u2026',
+};
+
+/**
+ * Which buttons a message should carry once a tap has been handled.
+ *
+ * `decide` for a question that is still open, `undo` for an approval, `none`
+ * for everything else - a rejection and an expiry have nothing left to press.
+ */
+export type Keyboard = 'decide' | 'undo' | 'none';
+
+/** Telegram's `getUpdates` answer, left loose: the handler validates each update. */
+export interface TelegramUpdate {
+  update_id: number;
+  [key: string]: unknown;
+}
+
+export type UpdatesResult =
+  | { ok: true; updates: TelegramUpdate[] }
+  | { ok: false; status: number | null; error: string };
 
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -96,30 +130,78 @@ export class TelegramNotifier implements Notifier {
       text,
       ...(notification.proposalId === undefined
         ? {}
-        : { reply_markup: this.buttonsFor(notification.proposalId) }),
+        : { reply_markup: this.keyboardFor(notification.proposalId, 'decide') }),
     });
   }
 
   /**
-   * Inline buttons for an actionable alert.
+   * Inline buttons for a proposal in a given state.
    *
-   * Every button gets its **own** nonce. Sharing one across the three would mean
-   * that approving burns the nonce that rejecting would have used, so the second
-   * tap - a user changing their mind within the same second - would be read as a
-   * replay of the first rather than as the different act it is.
+   * Every button gets its **own** nonce, and every render mints fresh ones.
+   * Sharing one across the three would mean that approving burns the nonce that
+   * rejecting would have used, so the second tap - a user changing their mind
+   * within the same second - would be read as a replay of the first rather than
+   * as the different act it is. Fresh ones on re-render matter for Undo: the
+   * Approve button that comes back after an undo must not carry the nonce the
+   * first approval already spent.
    */
-  private buttonsFor(proposalId: string) {
-    return {
-      inline_keyboard: [
-        ACTIONS.map(({ action, label }) => ({
-          text: label,
-          callback_data: encodeCallbackData(
-            { proposalId, action, nonce: mintNonce() },
-            this.options.callbackSecret,
-          ),
-        })),
-      ],
-    };
+  private keyboardFor(proposalId: string, keyboard: Keyboard) {
+    const button = (action: CallbackAction, label: string) => ({
+      text: label,
+      callback_data: encodeCallbackData(
+        { proposalId, action, nonce: mintNonce() },
+        this.options.callbackSecret,
+      ),
+    });
+    switch (keyboard) {
+      case 'decide':
+        return { inline_keyboard: [ACTIONS.map(({ action, label }) => button(action, label))] };
+      case 'undo':
+        return { inline_keyboard: [[button('undo', UNDO_LABEL)]] };
+      case 'none':
+        // An empty keyboard removes it. Omitting `reply_markup` would leave the
+        // old one in place, which is the opposite of what a terminal state needs.
+        return { inline_keyboard: [] };
+    }
+  }
+
+  /**
+   * Replace the buttons with one inert "Approving…" placeholder while a tap is
+   * applied.
+   *
+   * Two jobs, and the second is the one that matters. It shows the tap
+   * registered, which Telegram's own spinner does only on the one button and
+   * only for a moment. And it takes the other buttons away: nothing else on the
+   * message can be pressed until the outcome is known, so a nervous double tap
+   * or an Approve-then-Reject cannot put two decisions in flight at once. A tap
+   * on the placeholder is answered "still working" and does nothing.
+   */
+  async showWorking(
+    chatId: string,
+    messageId: number,
+    action: CallbackAction,
+  ): Promise<DeliveryResult> {
+    return this.call('editMessageReplyMarkup', {
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: {
+        inline_keyboard: [[{ text: WORKING_LABELS[action], callback_data: BUSY_CALLBACK_DATA }]],
+      },
+    });
+  }
+
+  /** Put the right buttons back without touching the text: a tap that changed nothing. */
+  async setKeyboard(
+    chatId: string,
+    messageId: number,
+    proposalId: string,
+    keyboard: Keyboard,
+  ): Promise<DeliveryResult> {
+    return this.call('editMessageReplyMarkup', {
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: this.keyboardFor(proposalId, keyboard),
+    });
   }
 
   /** Acknowledge a tap, so Telegram stops showing the button's spinner. */
@@ -141,27 +223,59 @@ export class TelegramNotifier implements Notifier {
    * web inbox avoids by re-rendering from the server - a surface must not go on
    * describing a world that has moved.
    *
-   * Buttons are dropped only when the proposal can no longer be answered.
-   * A snooze keeps them, because "not now" is not a decision and the user may
-   * still approve before the deadline; an approval, a rejection and an expiry
-   * are all terminal, and leaving a live Approve button on any of them invites
-   * a tap that can only be refused.
+   * The keyboard is always sent, never left as it was: by the time this runs
+   * the buttons are the "Approving…" placeholder, so "keep them" would keep the
+   * placeholder. A snooze gets the three buttons back, because "not now" is not
+   * a decision; an approval gets Undo; a rejection and an expiry get nothing,
+   * because a live button on either invites a tap that can only be refused.
    */
   async editMessage(
     chatId: string,
     messageId: number,
     text: string,
-    { keepButtons }: { keepButtons: boolean },
+    { proposalId, keyboard }: { proposalId: string; keyboard: Keyboard },
   ): Promise<DeliveryResult> {
     return this.call('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
       text: clampMessage(text),
-      // An empty keyboard removes it. Omitting the field entirely would leave
-      // the old one in place, which is the opposite of what a terminal state
-      // needs.
-      ...(keepButtons ? {} : { reply_markup: { inline_keyboard: [] } }),
+      reply_markup: this.keyboardFor(proposalId, keyboard),
     });
+  }
+
+  /**
+   * One long poll for updates, for installations with no public webhook URL.
+   *
+   * `offset` confirms everything before it, so Telegram drops those updates;
+   * the caller advances it only after an update has been handled. The request
+   * timeout is the poll's own plus a margin, or the abort would race the
+   * answer Telegram is holding open.
+   */
+  async getUpdates(offset: number | null, timeoutSeconds: number): Promise<UpdatesResult> {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(this.url('getUpdates'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          timeout: timeoutSeconds,
+          allowed_updates: ['message', 'callback_query'],
+          ...(offset === null ? {} : { offset }),
+        }),
+        signal: AbortSignal.timeout(timeoutSeconds * 1000 + this.timeoutMs),
+      });
+    } catch (error) {
+      return { ok: false, status: null, error: `transport error: ${(error as Error).message}` };
+    }
+    if (!response.ok) {
+      return { ok: false, status: response.status, error: await this.describe(response) };
+    }
+    try {
+      const body = (await response.json()) as { result?: TelegramUpdate[] };
+      return { ok: true, updates: Array.isArray(body.result) ? body.result : [] };
+    } catch {
+      return { ok: false, status: response.status, error: 'unreadable body' };
+    }
   }
 
   /** Send plain text with no buttons: command replies and confirmations. */

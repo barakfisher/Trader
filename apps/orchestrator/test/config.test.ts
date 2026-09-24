@@ -34,6 +34,20 @@ const load = (extra: Record<string, string> = {}) =>
 
 beforeEach(() => resetConfigForTests());
 
+describe('TELEGRAM_UPDATES', () => {
+  it('polls by default, since no installation has a webhook URL yet', () => {
+    expect(load().TELEGRAM_UPDATES).toBe('polling');
+  });
+
+  it('boots with the variable present and empty, as compose passes it', () => {
+    expect(load({ TELEGRAM_UPDATES: '' }).TELEGRAM_UPDATES).toBe('polling');
+  });
+
+  it('refuses a transport it does not know rather than guessing', () => {
+    expect(() => load({ TELEGRAM_UPDATES: 'push' })).toThrow(/TELEGRAM_UPDATES/);
+  });
+});
+
 describe('optional settings', () => {
   it('boots with the variable absent', () => {
     expect(load().TELEGRAM_BOT_TOKEN).toBeUndefined();

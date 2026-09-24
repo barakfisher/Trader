@@ -21,11 +21,10 @@ the user state the allocation they meant to hold, and turns the drift from it in
 a deadline that an approval writes to a paper ledger. No order is ever placed. The explanations are
 currently written by templates rather than a model, and the app says so on its own dashboard.
 
-**What is not proven:** the entire Telegram leg, and this is worse than it was at M4. A webhook
-still needs the public HTTPS URL that arrives with M7's ingress — but on top of that, *no chat is
-currently bound and nobody has been able to bind one*: the bot our token controls receives nothing
-at all, through repeated long polls, for reasons still unexplained (see the debt table). So
-proposals reach the notifications ledger, correctly recorded as `failed`, and reach no human.
+**Telegram now works end to end locally** (2026-09-24). A chat is bound, and taps reach the ledger
+through `TelegramPoller`, which long-polls `getUpdates` because the webhook still needs M7's public
+HTTPS URL. Verified live: approve → undo → approve → undo from a real chat, each landing as an audit
+row and a ledger row marked revoked. What remains unproven is only the *webhook* transport.
 
 ---
 
@@ -513,6 +512,13 @@ surprisingly, suspect the harness before the code.
 `feat/telegram` after #30 had already merged, so it went nowhere and needed its own PR.
 → **Once a PR is merged, its branch is dead.** A follow-up starts from `main`.
 
+**Taps did nothing for a day, and every test was green.** M4 was verified with a hand-run script
+that polled `getUpdates` and replayed each update at the webhook. The script was never committed, so
+when its session ended the product lost its only inbound transport - and the webhook tests kept
+passing, because they post to the handler directly. Nothing asserted that *something delivers*.
+→ **Scaffolding that a verification depended on is part of the product until proven otherwise.**
+If a feature only worked while a script was running, the script belongs in the repository.
+
 **A migration number is a shared resource.** Two PRs in flight both took `0007` off `0006`, which
 would have given Alembic two heads and broken `upgrade head` outright. Neither PR could see the
 other.
@@ -772,7 +778,7 @@ the green test as coverage.
 | Crypto detection is a symbol-shape heuristic | `core/cache_policy.py` | `-USD` suffix, because the AI service receives bare symbols |
 | Market hours assume US sessions for every symbol | `core/cache_policy.py` | SAP.DE trades on XETRA but is judged against NYSE hours. The same wire change (pass `asset_class` and `exchange` on the quote request) fixes both this and the heuristic above |
 | No component/DOM tests on the web app | `apps/web/test` | Store and formatting logic covered; rendering is not. Two real UI bugs this session (Discard disabled by its own typo, a deep link that does nothing) were found by *using* the app, not by tests, and neither would have been caught by a DOM test either — but a DOM test would have caught the first |
-| **Telegram has no working binding, and why is unresolved** | deployment, `.env` | The bot our token controls (`@trade_pulse_agent_bot`, id `8840824780`) receives **nothing**: three 50-second long polls while the user was actively sending, `pending_update_count: 0`, no webhook, `getMe` fine. An unrelated OpenClaw gateway runs on this machine bound to a *different* bot (`8778977785`), so it is not the consumer. Next test: search `@trade_pulse_agent_bot` in Telegram and see whether it opens a fresh chat or the existing one — the chat may belong to another bot with the same display name. **Until this is settled the whole delivery leg is unproven**, and the notification on narration state change was deliberately left unbuilt rather than verified only to the ledger |
+| ~~Telegram has no working binding~~ | — | **Resolved 2026-09-24.** A chat is bound. The "receives nothing" mystery was never a Telegram problem: nothing in the repository consumed updates, because M4's polling bridge was a hand-run script that left with its session. Kept as a line so the history of the symptom survives |
 | Redis cold start refetches everything | `core/cache.py` | The `quotes` table holds usable recent prices; warming from it was deferred |
 | `instruments`, `quotes` and the news tables have no `user_id` | migrations | **Intentional** — shared reference and market data, not user-owned. Documented so an audit does not re-flag it |
 
@@ -852,12 +858,12 @@ the green test as coverage.
 - **A real Telegram bot is configured**: `@trade_pulse_agent_bot`. `.env` holds its token, its
   username and the two secrets. The bot is live — anyone with that token controls it; `/revoke` in
   BotFather if it ever leaks.
-- **No webhook is registered**, so `getUpdates` polling works for local testing and is how M4 was
-  verified. Registering one disables polling. To drive the real handler locally without a public
-  URL: poll `getUpdates`, then POST each update to `/telegram/webhook` with the
-  `x-telegram-bot-api-secret-token` header. That bridge is how approve/reject/snooze were tested.
-- **The chat binding from that testing is gone** — it lived in a scratch database that was dropped.
-  The connect flow has to be redone against whatever database is actually used.
+- **No webhook is registered**, and `TELEGRAM_UPDATES=polling` (the default) makes the orchestrator
+  long-poll instead. Telegram serves one transport at a time: registering a webhook makes polling
+  answer 409, which the poller logs as a misconfiguration. Only one process may poll a token -
+  a second poller (another worktree's stack, a script) silently steals updates.
+- **Tapping "Approve" in the real chat is the only end-to-end test of the Telegram leg.** The unit
+  suite replays recorded payloads and cannot tell you that nothing is listening.
 - Telegram hides a deep link's `?start=` payload in the message bubble: the chat shows a bare
   `/start` while the update carries the token. Do not conclude from the UI that the payload was lost.
 

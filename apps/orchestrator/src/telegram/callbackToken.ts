@@ -45,7 +45,7 @@ const MAC_BYTES = 16;
 const NONCE_BYTES = 8;
 
 /** Wire spellings, one character each - the budget does not stretch to words. */
-const ACTION_CODES = { approve: 'a', reject: 'r', snooze: 's' } as const;
+const ACTION_CODES = { approve: 'a', reject: 'r', snooze: 's', undo: 'u' } as const;
 
 export type CallbackAction = keyof typeof ACTION_CODES;
 
@@ -96,6 +96,14 @@ function sign(secret: string, body: string): Buffer {
     .digest()
     .subarray(0, MAC_BYTES);
 }
+
+/**
+ * The `callback_data` of the placeholder button shown while a tap is being
+ * applied. Deliberately unsigned and carrying nothing: it can only ever be
+ * answered with "still working", so there is nothing in it worth forging, and
+ * it cannot pass for a signed payload because it has no MAC separator.
+ */
+export const BUSY_CALLBACK_DATA = 'busy';
 
 /** A fresh nonce for one rendered button. */
 export function mintNonce(): string {

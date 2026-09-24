@@ -296,8 +296,11 @@ export interface UserSettingsResponse {
 /** The states a proposal can be in. Mirrors the CHECK in migration 0006. */
 export type ProposalState = 'pending' | 'approved' | 'rejected' | 'snoozed' | 'expired';
 
-/** What a user can ask for. Deliberately not the same set as the states. */
-export type ProposalAction = 'approve' | 'reject' | 'snooze';
+/**
+ * What a user can ask for. Deliberately not the same set as the states.
+ * `undo` withdraws an approval: back to pending, its ledger row marked revoked.
+ */
+export type ProposalAction = 'approve' | 'reject' | 'snooze' | 'undo';
 
 /** Where a decision came in. 'system' is the expiry sweep, not a person. */
 export type DecisionSurface = 'web' | 'telegram' | 'system';
@@ -329,6 +332,8 @@ export interface Proposal {
   expiresAt: string;
   snoozedUntil: string | null;
   decidedAt: string | null;
+  /** Until when Undo is accepted, for an approval still inside its window. */
+  undoableUntil: string | null;
   decidedVia: DecisionSurface | null;
   createdAt: string;
 }

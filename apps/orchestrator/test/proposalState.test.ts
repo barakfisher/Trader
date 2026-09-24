@@ -16,6 +16,8 @@ import {
   isOpen,
   isTerminal,
   sweepTransition,
+  undoableUntil,
+  UNDO_WINDOW_SECONDS,
   type ProposalFacts,
   type ProposalState,
 } from '../src/services/proposalState.js';
@@ -189,6 +191,83 @@ describe('decide', () => {
       from: 'snoozed',
       to: 'snoozed',
       snoozedUntil: at(30),
+    });
+  });
+});
+
+describe('undo', () => {
+  /** An approval made `secondsAgo` before NOW. */
+  const approved = (secondsAgo = 0, overrides: Partial<ProposalFacts> = {}) =>
+    facts({ state: 'approved', decidedAt: new Date(NOW.getTime() - secondsAgo * 1000), ...overrides });
+
+  it('takes an approval back to pending', () => {
+    expect(decide(approved(), { action: 'undo' }, NOW)).toEqual({
+      outcome: 'applied',
+      from: 'approved',
+      to: 'pending',
+      snoozedUntil: null,
+    });
+  });
+
+  it('still withdraws an approval after the deadline has passed', () => {
+    // The deadline bounds how long the question is open, not how long the user
+    // is bound by their answer. The result is pending on a dead question, which
+    // effectiveState reads as expired - so nothing comes back to life.
+    const decision = decide(approved(5, { expiresAt: new Date(NOW.getTime() - 1000) }), { action: 'undo' }, NOW);
+    expect(decision).toMatchObject({ outcome: 'applied', to: 'pending' });
+    expect(effectiveState(facts({ state: 'pending', expiresAt: at(-1) }), NOW)).toBe('expired');
+  });
+
+  it('accepts an undo on the last second of the window', () => {
+    expect(decide(approved(UNDO_WINDOW_SECONDS), { action: 'undo' }, NOW)).toMatchObject({
+      outcome: 'applied',
+    });
+  });
+
+  it('refuses an undo once the window has closed', () => {
+    // After the window an approval is as settled as a rejection.
+    expect(decide(approved(UNDO_WINDOW_SECONDS + 1), { action: 'undo' }, NOW)).toEqual({
+      outcome: 'refused',
+      reason: 'undo_window_closed',
+      state: 'approved',
+    });
+  });
+
+  it('refuses an undo on an approval with no recorded time', () => {
+    // A window with no start cannot be shown to be open; failing closed is the
+    // cheap direction for a ledger.
+    expect(decide(facts({ state: 'approved' }), { action: 'undo' }, NOW)).toMatchObject({
+      outcome: 'refused',
+      reason: 'undo_window_closed',
+    });
+  });
+
+  it('states when the window closes, and nothing for a non-approval', () => {
+    expect(undoableUntil(approved(0))!.getTime()).toBe(NOW.getTime() + UNDO_WINDOW_SECONDS * 1000);
+    expect(undoableUntil(facts({ decidedAt: NOW }))).toBeNull();
+  });
+
+  it('answers a second undo with the open state rather than an error', () => {
+    expect(decide(facts(), { action: 'undo' }, NOW)).toEqual({
+      outcome: 'unchanged',
+      state: 'pending',
+    });
+  });
+
+  it.each(['rejected', 'expired'] as ProposalState[])(
+    'refuses to undo %s, which wrote nothing to the ledger',
+    (state) => {
+      expect(decide(facts({ state }), { action: 'undo' }, NOW)).toMatchObject({
+        outcome: 'refused',
+        reason: 'not_undoable',
+      });
+    },
+  );
+
+  it('lets an undone approval be approved again', () => {
+    expect(decide(facts({ state: 'pending' }), { action: 'approve' }, NOW)).toMatchObject({
+      outcome: 'applied',
+      to: 'approved',
     });
   });
 });

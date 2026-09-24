@@ -171,6 +171,54 @@ describe('applyDecision', () => {
     });
   });
 
+  it('revokes the ledger intent when an approval is undone', async () => {
+    vi.mocked(queries.findProposal).mockResolvedValueOnce(
+      proposalRow({ state: 'approved', decided_at: at(0) }) as never,
+    );
+    const result = await applyDecision(
+      { userId: USER, proposalId: 'proposal-1', action: 'undo', surface: 'telegram' },
+      NOW,
+    );
+
+    expect(result).toMatchObject({ outcome: 'applied', state: 'pending' });
+    const [transition] = vi.mocked(queries.applyProposalTransition).mock.calls[0]!;
+    expect(transition).toMatchObject({
+      fromState: 'approved',
+      toState: 'pending',
+      surface: 'telegram',
+      intent: null,
+      revokeIntent: true,
+    });
+  });
+
+  it('reports an undo past the deadline as expired, not as open again', async () => {
+    // Telling the user "open again" would hand them buttons that can only be
+    // refused. The approval is still withdrawn - that write happens regardless.
+    vi.mocked(queries.findProposal).mockResolvedValueOnce(
+      // Approved ten seconds ago, just before a deadline that has since passed.
+      proposalRow({
+        state: 'approved',
+        expires_at: new Date(NOW.getTime() - 5_000),
+        decided_at: new Date(NOW.getTime() - 10_000),
+      }) as never,
+    );
+    const result = await applyDecision(
+      { userId: USER, proposalId: 'proposal-1', action: 'undo', surface: 'web' },
+      NOW,
+    );
+    expect(result).toMatchObject({ outcome: 'applied', state: 'expired' });
+    expect(vi.mocked(queries.applyProposalTransition).mock.calls[0]![0].revokeIntent).toBe(true);
+  });
+
+  it('revokes nothing on a transition that does not leave approved', async () => {
+    vi.mocked(queries.findProposal).mockResolvedValueOnce(proposalRow() as never);
+    await applyDecision(
+      { userId: USER, proposalId: 'proposal-1', action: 'approve', surface: 'web' },
+      NOW,
+    );
+    expect(vi.mocked(queries.applyProposalTransition).mock.calls[0]![0].revokeIntent).toBe(false);
+  });
+
   it('writes no ledger intent when a proposal is rejected', async () => {
     vi.mocked(queries.findProposal).mockResolvedValueOnce(proposalRow() as never);
     await applyDecision(
