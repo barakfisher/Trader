@@ -65,6 +65,7 @@ demoable, with explicit exit criteria.
 - Topic CRUD, resolution to candidate instruments with confidence + rationale, user confirmation.
 - Auto-discovery of themes (proposal-only), rejection memory.
 - Per-topic sentiment trend, topic cards, digest topic section.
+- Resolution design, measurements and the improvement backlog: [TOPIC_RESOLUTION.md](TOPIC_RESOLUTION.md).
 
 **Exit:** a free-text topic resolves to a sensible confirmed instrument set and produces topic observations; a rejected auto-proposal never returns.
 
