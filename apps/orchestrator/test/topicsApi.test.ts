@@ -26,13 +26,55 @@ vi.mock('../src/db/pool.js', () => ({
   closePool: vi.fn(),
 }));
 
+const TOPIC_ID = '10000000-0000-0000-0000-000000000001';
+const CREATED = new Date('2026-09-24T10:00:00Z');
+const TOPIC_ROW = {
+  id: TOPIC_ID,
+  label: 'uranium',
+  status: 'active',
+  created_by: 'user',
+  created_at: CREATED,
+  updated_at: CREATED,
+  confirmed_at: CREATED,
+  instrument_count: 1,
+};
+const INSTRUMENT_ROW = {
+  instrument_id: 'i-1',
+  symbol: 'CCJ',
+  name: 'Cameco',
+  asset_class: 'equity',
+  source: 'resolver',
+  confidence: 'confident',
+  rationale: 'Cameco mines uranium.',
+  held_by: [{ etf: 'URA', weight: '0.2195' }],
+  added_at: CREATED,
+};
+
+const queries = vi.hoisted(() => ({
+  listTopics: vi.fn(),
+  getTopic: vi.fn(),
+  listTopicInstruments: vi.fn(),
+  deleteTopic: vi.fn(),
+}));
+
 vi.mock('../src/db/queries.js', () => ({
   getUser: vi.fn(async () => USER),
+  ...queries,
+}));
+
+const confirmTopic = vi.hoisted(() => vi.fn());
+vi.mock('../src/services/topics.js', async (original) => ({
+  ...(await original<typeof import('../src/services/topics.js')>()),
+  confirmTopic,
 }));
 
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
 const { createApp } = await import('../src/http/app.js');
-const { MAX_TOPIC_LENGTH } = await import('../src/http/routes/topics.js');
+const {
+  MAX_ACTIVE_TOPICS,
+  MAX_INSTRUMENTS_PER_TOPIC,
+  MAX_TOPIC_LABEL_LENGTH: MAX_TOPIC_LENGTH,
+} = await import('../src/services/topics.js');
 const { AiServiceError } = await import('@traders/shared/ai');
 
 const ENV = {
@@ -151,3 +193,170 @@ describe('POST /topics/resolve', () => {
     expect(resolveTopic).not.toHaveBeenCalled();
   });
 });
+
+describe('topic CRUD', () => {
+  let app: ReturnType<typeof buildApp>;
+  let cookie: string;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    app = buildApp();
+    cookie = await loginCookie(app);
+  });
+
+  const send = (method: string, path: string, body?: unknown) =>
+    app.request(path, {
+      method,
+      headers: { ...ORIGIN, cookie },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+
+  it('lists topics with the limits the UI has to show', async () => {
+    queries.listTopics.mockResolvedValueOnce([TOPIC_ROW]);
+
+    const response = await send('GET', '/topics');
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { topics: unknown[]; limits: Record<string, number> };
+    expect(body.topics).toEqual([
+      {
+        id: TOPIC_ID,
+        label: 'uranium',
+        status: 'active',
+        createdBy: 'user',
+        createdAt: CREATED.toISOString(),
+        updatedAt: CREATED.toISOString(),
+        confirmedAt: CREATED.toISOString(),
+        instrumentCount: 1,
+      },
+    ]);
+    expect(body.limits).toEqual({
+      maxActiveTopics: MAX_ACTIVE_TOPICS,
+      maxInstrumentsPerTopic: MAX_INSTRUMENTS_PER_TOPIC,
+      maxLabelLength: MAX_TOPIC_LENGTH,
+    });
+  });
+
+  it('confirms a new topic with the normalised symbols, and answers 201 with its reasons', async () => {
+    confirmTopic.mockResolvedValueOnce({ ok: true, topic: TOPIC_ROW, instruments: [INSTRUMENT_ROW] });
+
+    const response = await send('POST', '/topics', { label: '  uranium ', symbols: ['ccj', 'CCJ'] });
+
+    expect(response.status).toBe(201);
+    expect(confirmTopic).toHaveBeenCalledWith(
+      expect.anything(),
+      { userId: USER.id, topicId: null, label: 'uranium', symbols: ['CCJ'] },
+      expect.anything(),
+    );
+    const body = (await response.json()) as { instruments: unknown[] };
+    expect(body.instruments).toEqual([
+      {
+        instrumentId: 'i-1',
+        symbol: 'CCJ',
+        name: 'Cameco',
+        assetClass: 'equity',
+        source: 'resolver',
+        confidence: 'confident',
+        rationale: 'Cameco mines uranium.',
+        heldBy: [{ etf: 'URA', weight: '0.2195' }],
+        addedAt: CREATED.toISOString(),
+      },
+    ]);
+  });
+
+  it.each([
+    [{ label: 'uranium' }, 400],
+    [{ label: '  ', symbols: ['CCJ'] }, 400],
+    [{ label: 'x'.repeat(MAX_TOPIC_LENGTH + 1), symbols: ['CCJ'] }, 400],
+    [{ label: 'uranium', symbols: [' ', ''] }, 422],
+    [
+      { label: 'uranium', symbols: Array.from({ length: MAX_INSTRUMENTS_PER_TOPIC + 1 }, (_, i) => `S${i}`) },
+      422,
+    ],
+  ])('refuses %j with %i before confirming anything', async (body, status) => {
+    const response = await send('POST', '/topics', body);
+
+    expect(response.status).toBe(status);
+    expect(confirmTopic).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ ok: false, reason: 'limit_reached', limit: 10 }, 422, 'topic_limit_reached'],
+    [{ ok: false, reason: 'duplicate_label', label: 'uranium' }, 409, 'duplicate_topic'],
+    [{ ok: false, reason: 'unresolved_symbols', symbols: ['NOPE'] }, 422, 'unresolved_symbols'],
+    [{ ok: false, reason: 'not_found' }, 404, 'not_found'],
+  ])('reports %j as %i %s', async (outcome, status, code) => {
+    confirmTopic.mockResolvedValueOnce(outcome);
+
+    const response = await send('POST', '/topics', { label: 'uranium', symbols: ['CCJ'] });
+
+    expect(response.status).toBe(status);
+    expect(((await response.json()) as { error: string }).error).toBe(code);
+  });
+
+  it('names the tickers no provider recognises, so the UI can mark them', async () => {
+    confirmTopic.mockResolvedValueOnce({ ok: false, reason: 'unresolved_symbols', symbols: ['NOPE'] });
+
+    const response = await send('POST', '/topics', { label: 'uranium', symbols: ['NOPE'] });
+
+    expect(((await response.json()) as { details: unknown }).details).toEqual({ symbols: ['NOPE'] });
+  });
+
+  it('refuses a confirm when the resolver cannot be asked, instead of storing bare additions', async () => {
+    confirmTopic.mockRejectedValueOnce(new AiServiceError('unreachable', 503));
+
+    const response = await send('POST', '/topics', { label: 'uranium', symbols: ['CCJ'] });
+
+    expect(response.status).toBe(503);
+  });
+
+  it('re-confirms an existing topic by id', async () => {
+    confirmTopic.mockResolvedValueOnce({ ok: true, topic: TOPIC_ROW, instruments: [] });
+
+    const response = await send('PUT', `/topics/${TOPIC_ID}`, { label: 'uranium', symbols: ['CCJ'] });
+
+    expect(response.status).toBe(200);
+    expect(confirmTopic.mock.calls[0]![1]).toMatchObject({ topicId: TOPIC_ID });
+  });
+
+  it('reads one topic with its instruments', async () => {
+    queries.getTopic.mockResolvedValueOnce(TOPIC_ROW);
+    queries.listTopicInstruments.mockResolvedValueOnce([INSTRUMENT_ROW]);
+
+    const response = await send('GET', `/topics/${TOPIC_ID}`);
+
+    expect(response.status).toBe(200);
+    expect(queries.getTopic).toHaveBeenCalledWith(USER.id, TOPIC_ID);
+    expect(((await response.json()) as { instruments: unknown[] }).instruments).toHaveLength(1);
+  });
+
+  it.each(['GET', 'PUT', 'DELETE'])('answers %s on a malformed id with 404, never touching SQL', async (method) => {
+    const body = method === 'PUT' ? { label: 'uranium', symbols: ['CCJ'] } : undefined;
+    const response = await send(method, '/topics/not-a-uuid', body);
+
+    expect(response.status).toBe(404);
+    expect(queries.getTopic).not.toHaveBeenCalled();
+    expect(queries.deleteTopic).not.toHaveBeenCalled();
+    expect(confirmTopic).not.toHaveBeenCalled();
+  });
+
+  it('answers a topic that is not the user’s with 404', async () => {
+    queries.getTopic.mockResolvedValueOnce(null);
+
+    expect((await send('GET', `/topics/${TOPIC_ID}`)).status).toBe(404);
+  });
+
+  it('deletes a topic, and 404s when there was nothing to delete', async () => {
+    queries.deleteTopic.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+    expect((await send('DELETE', `/topics/${TOPIC_ID}`)).status).toBe(204);
+    expect((await send('DELETE', `/topics/${TOPIC_ID}`)).status).toBe(404);
+    expect(queries.deleteTopic).toHaveBeenCalledWith(USER.id, TOPIC_ID);
+  });
+
+  it('keeps the list behind the session gate', async () => {
+    expect((await app.request('/topics')).status).toBe(401);
+    expect(queries.listTopics).not.toHaveBeenCalled();
+  });
+});
+

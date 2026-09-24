@@ -472,6 +472,30 @@ failure they prevent.
     resolver missed closes the gap regardless of recall; further resolver work needs a new held-out
     batch first, or it can only be measured on data that shaped it.
 
+47. **An unloaded universe is `verdict: unavailable`, never `none`** (`POST /topics/resolve`).
+    `none` says the universe was searched and holds nothing about the topic. `unavailable` says
+    nothing was searched, and `universe.state` names the missing step. The coverage count runs
+    *before* the resolver, because over an empty table `judge(None)` grades the missing evidence
+    `weak` with no candidates. A 200, like `/ask`'s refusal, so it is a typed state and not a
+    status code a caller can misread.
+
+48. **Confirming re-resolves on the server; the browser never supplies a reason.** A confirm
+    sends `{label, symbols}` only. A symbol is stored as `resolver` with its band, quoted rationale
+    and `held_by` only if re-resolving the label offers it *now*; otherwise it is a bare `user` row,
+    checked through the same instrument lookup as a new holding. The rejected alternative (posting
+    back what the browser was shown) lets any client write text the topic card presents as a
+    quotation. Consequence, seen live: relabelling "uranium" to "nuclear fuel" turned BWXT into a
+    resolver row and CCJ into a user row. That is correct, because provenance belongs to the label
+    that was confirmed.
+
+49. **There is no unconfirmed user topic.** A topic exists from the moment its set is confirmed
+    (`POST /topics`). DESIGN.md's `confirmed_by_user` flag was dropped: only confirmed instruments
+    are stored, because an unticked suggestion kept as a row is data nobody chose. It would also
+    need filtering by every later reader (topicScan, the news matcher, the digest). `proposed` exists
+    for auto-discovery only. **The cap (10 active topics) is enforced under a lock on the user's
+    row**. It was raced live with three simultaneous confirms for one free slot, and exactly one
+    won.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -973,17 +997,24 @@ data**, and it is better met here than in production.
 - Telegram hides a deep link's `?start=` payload in the message bubble: the chat shows a bare
   `/start` while the update carries the token. Do not conclude from the UI that the payload was lost.
 
-- **The topic universe lives in a scratch database, `traders_m5`, not in `traders`.** It is at
-  `0016_etf_holdings` and holds 5,223 embedded profiles and 16,363 holdings (2026-09-24). M5
-  sessions never migrated the shared dev database; `traders` is at `0014_intent_revocation`
-  (applied by the Telegram session). Point a resolver run at it with
-  `DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders_m5`. It is disposable:
-  recreating it costs `alembic upgrade head` plus `ingest_universe.py` (~2 min, ~$0.02) —
-  **provided `data/universe/descriptions.local.jsonl` exists in that checkout.**
-- **The descriptions file is in the M5 worktree only** (`.claude/worktrees/m5-topic-evaluation-*/`,
-  gitignored). The Yahoo fetch caches that made rebuilding cheap lived in a session scratchpad and
-  are gone; a fresh `build_instrument_universe.py` is ~1 h. Copy the `.local.jsonl` file rather
-  than refetching if the worktree still exists.
+- **The universe is loaded in the shared `traders` database** (2026-09-24, #53): the stack's
+  `universe` container embedded 5,223 profiles (~$0.016) and loads 16,363 holdings on every start.
+  `traders` is at `0016_etf_holdings` until the topics PR merges and the stack is restarted.
+  **`traders_m5`** is the scratch copy branches migrate natively. It is at `0017_topics` and
+  disposable: point a run at it with
+  `DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders_m5`.
+- **The descriptions file lives at `data/universe/descriptions.local.jsonl` in the main
+  checkout** (gitignored, and excluded from images by `.dockerignore`), with a spare copy at
+  `data/local/`. A worktree needs its own copy to run `ingest_universe.py`. A fresh
+  `build_instrument_universe.py` is ~1 h, so copy the file rather than refetching.
+- **Running a worktree's orchestrator natively against your `.env` starts a second Telegram
+  poller**, and MEMORY's rule is that a second poller silently steals updates from the stack's.
+  Always start it with `TELEGRAM_UPDATES=off TELEGRAM_BOT_TOKEN= SCHEDULER_ENABLED=false`.
+  **Port 8081 was held by an orchestrator left running from an old worktree**
+  (`m3-slice-2-b2e605`, started 2026-09-24 08:41). A new process on 8081 dies on `EADDRINUSE`
+  *after* logging that it started, and every request then silently reaches the old code. Check
+  `lsof -nP -iTCP:<port> -sTCP:LISTEN` and the listener's `cwd` before trusting a native
+  endpoint. 8083 was free.
 - **Run a topic eval with the main checkout's `.env` sourced** — the worktree has none:
   `set -a && source /Users/a/projects/Traders/.env && set +a`, then override `DATABASE_URL` and set
   `CORPUS_DIR` to the worktree's `data/corpus` (the eval file is found beside it).
@@ -1029,7 +1060,9 @@ fallback for "add what the resolver missed" is the existing `GET /instruments/re
 works, what it scores, why it fails and what to try next: **`docs/TOPIC_RESOLUTION.md`** — read §3
 and §5 before changing a threshold.
 
-**Next — Topic CRUD & Confirmation** (the user's chosen next step). A sketch, not a decision:
+**Topic CRUD & Confirmation, in progress.** Done: `POST /topics/resolve` and stack loading (#53).
+In review: schema 0017 and orchestrator CRUD/confirm (decisions 48–49). Next: the web screen.
+The original sketch, kept for its reasoning:
 
 1. **Schema (0017)**, per DESIGN.md: `topics(id, user_id, label, status active|proposed|rejected,
    created_by user|auto, ...)` and `topic_instruments(topic_id, instrument_id, confirmed_by_user,

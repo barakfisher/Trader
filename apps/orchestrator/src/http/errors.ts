@@ -23,6 +23,8 @@ export const badRequest = (code: string, message: string, details?: unknown) =>
 export const unauthorized = (message = 'authentication required') =>
   new ApiProblem(401, 'unauthorized', message);
 export const notFound = (message = 'not found') => new ApiProblem(404, 'not_found', message);
+export const conflict = (code: string, message: string, details?: unknown) =>
+  new ApiProblem(409, code, message, details);
 export const unprocessable = (code: string, message: string, details?: unknown) =>
   new ApiProblem(422, code, message, details);
 
