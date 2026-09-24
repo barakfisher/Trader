@@ -37,14 +37,14 @@ net assets and no market cap, and a missing figure is null, never zero.
 **No `user_id`**: this is reference data about listed instruments, like
 `instruments` and `quotes`, and is shared by every user.
 
-Revision ID: 0014_instrument_profiles
-Revises: 0013_kb_embeddings
+Revision ID: 0015_instrument_profiles
+Revises: 0014_intent_revocation
 """
 
 from alembic import op
 
-revision = "0014_instrument_profiles"
-down_revision = "0013_kb_embeddings"
+revision = "0015_instrument_profiles"
+down_revision = "0014_intent_revocation"
 branch_labels = None
 depends_on = None
 
