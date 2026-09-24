@@ -1,0 +1,464 @@
+{
+  "about": [
+    "The topic-resolution eval set (M5). Written before the resolver exists, on purpose: M3's eval found three bugs on its first run because its cases were written to fail, and a case written after the code tests what was built rather than what was asked for.",
+    "topic: the free text a user types. The resolver turns it into candidate instruments with a confidence and a rationale (PRD FR-10); the user confirms.",
+    "expect.must_include: every listed symbol must appear among the resolver's candidates. It is a floor, not the whole answer - a resolver that also offers QCOM for semiconductors is not wrong, so extra candidates are not penalised here. What a sensible upper bound on candidates is belongs to the resolver, not to this file. When a topic resolves to several interpretations (see app/topics/resolution.py), a case is judged on the interpretation holding the most expected symbols - the list the user would see after choosing that meaning.",
+    "expect.resolves_to_nothing: the topic is outside what any instrument universe can answer, and the resolver must say so rather than offer its least-bad candidates. The same lesson as /ask's relevance floor: a nonsense query must not return three plausible-looking rows.",
+    "author: 'user' cases were written by the product's user on 2026-09-24, before any resolver code existed and without reading the corpus or the code. They are the held-out set MEMORY.md asked for, and the most valuable cases in the file. 'session' cases were written by the Claude session that will also write the resolver, and carry exactly the bias the ask.json disclosure describes.",
+    "as_written: the user's line verbatim. Kept so that any correction made to a case is visible as a correction rather than silently becoming what the user said.",
+    "retired_symbols: tickers that no longer trade under that name. A case must not expect one - the resolver could never return it, so the case would fail forever and teach everyone to ignore the eval.",
+    "The user-short-* cases are the same user's phrasings of how a topic is actually typed, added 2026-09-24 at the session's request. The long labels read like category names; nobody types 'Weight Loss Drugs & Obesity Therapeutics' into a search box.",
+    "threshold_fitting_topics: what the resolver's candidate count and confidence bands are fitted to, written by the session on 2026-09-24 BEFORE any similarity was measured. No case may repeat one (test_topic_eval_set_contract.py), for the reason ask.json gives: an eval that reuses the fitting data measures nothing and looks exactly like a pass.",
+    "sealed: true marks the user's second batch (2026-09-24), written after the first run and handed over before any fix to it. run_topic_eval.py skips sealed cases unless --unseal is passed, and they were not run until the ranking and disambiguation changes were final. Once unsealed and run, they are ordinary cases - a seal only holds once.",
+    "Known before unsealing: LVMUY trades only OTC in the US, and the universe screens primary exchanges, so that case cannot pass as written. It is left as the user wrote it; the runner reports such a symbol as 'not in universe', distinct from ranked too low. 'Data Centers & Infrastructure REITs' is also close in meaning to the fitting topic 'data center real estate', so the NOTHING_BELOW line has seen a near-paraphrase of it.",
+    "threshold_fitting_topics.ambiguous: words with two unrelated market meanings (snacks or web tracking; metals or crypto; oil or software; sea freight or parcels), added by the session before measuring, to fit the disambiguation rule. The in_domain topics double as its negatives: a rule that calls 'gold mining' ambiguous is wrong."
+  ],
+  "retired_symbols": {
+    "SQ": {
+      "now": "XYZ",
+      "note": "Block, Inc. moved its NYSE ticker from SQ to XYZ in January 2025. Checked 2026-09-24: Yahoo returns no instrument for SQ and 'Block, Inc.' for XYZ."
+    }
+  },
+  "threshold_fitting_topics": {
+    "in_domain": [
+      "gold mining",
+      "airlines and air travel",
+      "oil and gas exploration",
+      "video game publishers",
+      "cruise lines",
+      "railroads",
+      "gene editing biotech",
+      "fast food restaurants",
+      "home builders",
+      "data center real estate"
+    ],
+    "out_of_domain": [
+      "knitting patterns",
+      "learn french grammar",
+      "best hiking trails in patagonia",
+      "birthday party games for kids",
+      "poems about autumn",
+      "how tall is mount everest",
+      "my cat keeps sneezing",
+      "zzqx flarb wibble"
+    ],
+    "ambiguous": [
+      "cookies",
+      "mining",
+      "pipelines",
+      "shipping"
+    ]
+  },
+  "cases": [
+    {
+      "id": "user-ai-semiconductors",
+      "author": "user",
+      "topic": "AI Hardware & Semiconductors",
+      "as_written": "AI Hardware & Semiconductors -> NVDA, AMD, TSM, AVGO",
+      "expect": {
+        "must_include": [
+          "NVDA",
+          "AMD",
+          "TSM",
+          "AVGO"
+        ]
+      }
+    },
+    {
+      "id": "user-uranium-nuclear",
+      "author": "user",
+      "topic": "Uranium & Nuclear Energy",
+      "as_written": "Uranium & Nuclear Energy -> CCJ, SMR, URA, BWXT",
+      "expect": {
+        "must_include": [
+          "CCJ",
+          "SMR",
+          "URA",
+          "BWXT"
+        ]
+      }
+    },
+    {
+      "id": "user-cybersecurity",
+      "author": "user",
+      "topic": "Cybersecurity & Cloud Protection",
+      "as_written": "Cybersecurity & Cloud Protection -> CRWD, PANW, FTNT, NET",
+      "expect": {
+        "must_include": [
+          "CRWD",
+          "PANW",
+          "FTNT",
+          "NET"
+        ]
+      }
+    },
+    {
+      "id": "user-obesity-drugs",
+      "author": "user",
+      "topic": "Weight Loss Drugs & Obesity Therapeutics",
+      "as_written": "Weight Loss Drugs & Obesity Therapeutics -> LLY, NVO",
+      "expect": {
+        "must_include": [
+          "LLY",
+          "NVO"
+        ]
+      }
+    },
+    {
+      "id": "user-electric-vehicles",
+      "author": "user",
+      "topic": "Electric Vehicles & Battery Tech",
+      "as_written": "Electric Vehicles & Battery Tech -> TSLA, RIVN",
+      "expect": {
+        "must_include": [
+          "TSLA",
+          "RIVN"
+        ]
+      }
+    },
+    {
+      "id": "user-defense-aerospace",
+      "author": "user",
+      "topic": "Defense & Aerospace Technology",
+      "as_written": "Defense & Aerospace Technology -> LMT, RTX, NOC, PLTR",
+      "expect": {
+        "must_include": [
+          "LMT",
+          "RTX",
+          "NOC",
+          "PLTR"
+        ]
+      }
+    },
+    {
+      "id": "user-quantum-computing",
+      "author": "user",
+      "topic": "Quantum Computing",
+      "as_written": "Quantum Computing -> IONQ, RGTI, IBM",
+      "expect": {
+        "must_include": [
+          "IONQ",
+          "RGTI",
+          "IBM"
+        ]
+      }
+    },
+    {
+      "id": "user-payments-fintech",
+      "author": "user",
+      "topic": "Digital Payments & FinTech Infrastructure",
+      "as_written": "Digital Payments & FinTech Infrastructure -> V, MA, SQ, PYPL",
+      "expect": {
+        "must_include": [
+          "V",
+          "MA",
+          "XYZ",
+          "PYPL"
+        ]
+      },
+      "corrections": [
+        "SQ -> XYZ: see retired_symbols. The company the user named is unchanged; only its ticker is."
+      ]
+    },
+    {
+      "id": "user-streaming-entertainment",
+      "author": "user",
+      "topic": "Streaming & Digital Entertainment",
+      "as_written": "Streaming & Digital Entertainment -> NFLX, DIS, SPOT",
+      "expect": {
+        "must_include": [
+          "NFLX",
+          "DIS",
+          "SPOT"
+        ]
+      }
+    },
+    {
+      "id": "user-ecommerce-logistics",
+      "author": "user",
+      "topic": "E-commerce & Logistics Platforms",
+      "as_written": "E-commerce & Logistics Platforms -> AMZN, MELI, SE",
+      "expect": {
+        "must_include": [
+          "AMZN",
+          "MELI",
+          "SE"
+        ]
+      }
+    },
+    {
+      "id": "user-solar-renewables",
+      "author": "user",
+      "topic": "Renewable Energy & Solar Equipment",
+      "as_written": "Renewable Energy & Solar Equipment -> ENPH, SEDG, FSLR",
+      "expect": {
+        "must_include": [
+          "ENPH",
+          "SEDG",
+          "FSLR"
+        ]
+      }
+    },
+    {
+      "id": "user-cloud-saas",
+      "author": "user",
+      "topic": "Consumer Cloud & SaaS Tools",
+      "as_written": "Consumer Cloud & SaaS Tools -> MSFT, GOOGL, CRM, ADBE",
+      "expect": {
+        "must_include": [
+          "MSFT",
+          "GOOGL",
+          "CRM",
+          "ADBE"
+        ]
+      }
+    },
+    {
+      "id": "user-short-chips",
+      "author": "user",
+      "topic": "chips",
+      "as_written": "chips -> NVDA, AMD, TSM, AVGO",
+      "expect": {
+        "must_include": [
+          "NVDA",
+          "AMD",
+          "TSM",
+          "AVGO"
+        ]
+      }
+    },
+    {
+      "id": "user-short-nuclear",
+      "author": "user",
+      "topic": "nuclear",
+      "as_written": "nuclear -> CCJ, SMR, URA, BWXT",
+      "expect": {
+        "must_include": [
+          "CCJ",
+          "SMR",
+          "URA",
+          "BWXT"
+        ]
+      }
+    },
+    {
+      "id": "user-short-cyber",
+      "author": "user",
+      "topic": "cyber",
+      "as_written": "cyber -> CRWD, PANW, FTNT, NET",
+      "expect": {
+        "must_include": [
+          "CRWD",
+          "PANW",
+          "FTNT",
+          "NET"
+        ]
+      }
+    },
+    {
+      "id": "user-short-weight-loss",
+      "author": "user",
+      "topic": "weight loss drugs",
+      "as_written": "weight loss drugs -> LLY, NVO",
+      "expect": {
+        "must_include": [
+          "LLY",
+          "NVO"
+        ]
+      }
+    },
+    {
+      "id": "user-short-ai-software",
+      "author": "user",
+      "topic": "ai software",
+      "as_written": "ai software -> PLTR, MSFT, GOOGL",
+      "expect": {
+        "must_include": [
+          "PLTR",
+          "MSFT",
+          "GOOGL"
+        ]
+      }
+    },
+    {
+      "id": "session-ood-baking",
+      "author": "session",
+      "topic": "sourdough baking techniques",
+      "expect": {
+        "resolves_to_nothing": true
+      }
+    },
+    {
+      "id": "session-ood-football",
+      "author": "session",
+      "topic": "who wins the champions league",
+      "expect": {
+        "resolves_to_nothing": true
+      }
+    },
+    {
+      "id": "session-ood-gibberish",
+      "author": "session",
+      "topic": "blue quietly underneath seven",
+      "expect": {
+        "resolves_to_nothing": true
+      }
+    },
+    {
+      "id": "sealed-space-exploration-satellite-tech",
+      "author": "user",
+      "sealed": true,
+      "topic": "Space Exploration & Satellite Tech",
+      "as_written": "Space Exploration & Satellite Tech -> LMT, PLTR, ASTS, RKLB",
+      "expect": {
+        "must_include": [
+          "LMT",
+          "PLTR",
+          "ASTS",
+          "RKLB"
+        ]
+      }
+    },
+    {
+      "id": "sealed-medical-devices-robotic-surgery",
+      "author": "user",
+      "sealed": true,
+      "topic": "Medical Devices & Robotic Surgery",
+      "as_written": "Medical Devices & Robotic Surgery -> ISRG, MDT, ABT, BSX",
+      "expect": {
+        "must_include": [
+          "ISRG",
+          "MDT",
+          "ABT",
+          "BSX"
+        ]
+      }
+    },
+    {
+      "id": "sealed-data-centers-infrastructure-reits",
+      "author": "user",
+      "sealed": true,
+      "topic": "Data Centers & Infrastructure REITs",
+      "as_written": "Data Centers & Infrastructure REITs -> EQIX, DLR, AMT",
+      "expect": {
+        "must_include": [
+          "EQIX",
+          "DLR",
+          "AMT"
+        ]
+      }
+    },
+    {
+      "id": "sealed-autonomous-driving-ai-mobility",
+      "author": "user",
+      "sealed": true,
+      "topic": "Autonomous Driving & AI Mobility",
+      "as_written": "Autonomous Driving & AI Mobility -> TSLA, MBLY, GOOGL",
+      "expect": {
+        "must_include": [
+          "TSLA",
+          "MBLY",
+          "GOOGL"
+        ]
+      }
+    },
+    {
+      "id": "sealed-rare-earths-critical-minerals",
+      "author": "user",
+      "sealed": true,
+      "topic": "Rare Earths & Critical Minerals",
+      "as_written": "Rare Earths & Critical Minerals -> MP, ALB, LAC",
+      "expect": {
+        "must_include": [
+          "MP",
+          "ALB",
+          "LAC"
+        ]
+      }
+    },
+    {
+      "id": "sealed-fintech-lending-credit-analytics",
+      "author": "user",
+      "sealed": true,
+      "topic": "Fintech Lending & Credit Analytics",
+      "as_written": "Fintech Lending & Credit Analytics -> UPST, AFRM, SOFI",
+      "expect": {
+        "must_include": [
+          "UPST",
+          "AFRM",
+          "SOFI"
+        ]
+      }
+    },
+    {
+      "id": "sealed-cloud-data-warehousing-analytics",
+      "author": "user",
+      "sealed": true,
+      "topic": "Cloud Data Warehousing & Analytics",
+      "as_written": "Cloud Data Warehousing & Analytics -> SNOW, DDOG, MDB",
+      "expect": {
+        "must_include": [
+          "SNOW",
+          "DDOG",
+          "MDB"
+        ]
+      }
+    },
+    {
+      "id": "sealed-luxury-goods-premium-brands",
+      "author": "user",
+      "sealed": true,
+      "topic": "Luxury Goods & Premium Brands",
+      "as_written": "Luxury Goods & Premium Brands -> LVMUY, RACE, TPR",
+      "expect": {
+        "must_include": [
+          "LVMUY",
+          "RACE",
+          "TPR"
+        ]
+      }
+    },
+    {
+      "id": "sealed-satellites",
+      "author": "user",
+      "sealed": true,
+      "topic": "satellites",
+      "as_written": "satellites -> LMT, ASTS, RKLB",
+      "expect": {
+        "must_include": [
+          "LMT",
+          "ASTS",
+          "RKLB"
+        ]
+      }
+    },
+    {
+      "id": "sealed-robot-surgery",
+      "author": "user",
+      "sealed": true,
+      "topic": "robot surgery",
+      "as_written": "robot surgery -> ISRG, MDT, BSX",
+      "expect": {
+        "must_include": [
+          "ISRG",
+          "MDT",
+          "BSX"
+        ]
+      }
+    },
+    {
+      "id": "sealed-cloud-data",
+      "author": "user",
+      "sealed": true,
+      "topic": "cloud data",
+      "as_written": "cloud data -> SNOW, DDOG, MDB",
+      "expect": {
+        "must_include": [
+          "SNOW",
+          "DDOG",
+          "MDB"
+        ]
+      }
+    }
+  ]
+}

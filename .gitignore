@@ -30,3 +30,6 @@ data/local/
 
 # Agent worktrees (temporary, created by parallel workers)
 .claude/worktrees/
+
+# Yahoo business summaries: fetched per installation, never committed (app/universe/snapshot.py)
+data/universe/*.local.jsonl
