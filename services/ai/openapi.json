@@ -1068,6 +1068,284 @@
         "title": "ScanStatsOut",
         "type": "object"
       },
+      "TopicCandidateOut": {
+        "description": "One instrument offered for a topic, with the reason it was offered.\n\n`rationale` is a sentence from the instrument's own description, verbatim -\nnever written by a model. `held_by` is the second, independent reason: the\ntopic's source ETFs that hold it. Either can be checked by the reader.\n\n`confidence` is a band, not a number, because a cosine is not a\nprobability; `similarity` is exposed for debugging and for the record, not\nfor display as a percentage.",
+        "properties": {
+          "asset_class": {
+            "title": "Asset Class",
+            "type": "string"
+          },
+          "confidence": {
+            "enum": [
+              "confident",
+              "weak"
+            ],
+            "title": "Confidence",
+            "type": "string"
+          },
+          "held_by": {
+            "items": {
+              "$ref": "#/components/schemas/TopicHolder"
+            },
+            "title": "Held By",
+            "type": "array"
+          },
+          "industry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Industry"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "sector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sector"
+          },
+          "similarity": {
+            "title": "Similarity",
+            "type": "number"
+          },
+          "size_currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Currency"
+          },
+          "size_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Minor"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "symbol",
+          "name",
+          "asset_class",
+          "sector",
+          "industry",
+          "similarity",
+          "size_minor",
+          "size_currency",
+          "confidence",
+          "rationale"
+        ],
+        "title": "TopicCandidateOut",
+        "type": "object"
+      },
+      "TopicHolder": {
+        "description": "A source ETF that holds a candidate, and what fraction of the fund it is.",
+        "properties": {
+          "etf": {
+            "title": "Etf",
+            "type": "string"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "string"
+          }
+        },
+        "required": [
+          "etf",
+          "weight"
+        ],
+        "title": "TopicHolder",
+        "type": "object"
+      },
+      "TopicInterpretationOut": {
+        "description": "One meaning of the topic. `label` is the commonest Yahoo industry in it.",
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/TopicCandidateOut"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "required": [
+          "label",
+          "candidates"
+        ],
+        "title": "TopicInterpretationOut",
+        "type": "object"
+      },
+      "TopicResolveRequest": {
+        "description": "A theme in the user's own words: \"uranium\", \"robot surgery\", \"GLP-1\".",
+        "properties": {
+          "topic": {
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic"
+        ],
+        "title": "TopicResolveRequest",
+        "type": "object"
+      },
+      "TopicResolveResponse": {
+        "description": "Candidate instruments for a topic, or a named reason there are none.\n\n`verdict` is the field to branch on, and it has four values because there\nare four different situations:\n\n- `confident` / `weak` - candidates are offered; `weak` means the best\n  match was near the floor and the reader should be told so.\n- `none` - the universe was searched and nothing in it is about this\n  topic. `interpretations` is empty on purpose: the least-bad rows for a\n  topic nothing is about are the failure the floor exists to prevent.\n- `unavailable` - the universe was **not** searched, because this\n  installation has no searchable universe (`universe.state` says which\n  step is missing). A 200 rather than an error for the reason `/ask`'s\n  refusal is one, and a separate value from `none` so that \"no universe\"\n  can never be shown to the user as \"your topic matches nothing\".\n\nEvery threshold the verdict was judged by travels with it, as in `/ask`.",
+        "properties": {
+          "ambiguous": {
+            "title": "Ambiguous",
+            "type": "boolean"
+          },
+          "best_similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Similarity"
+          },
+          "confident_above": {
+            "title": "Confident Above",
+            "type": "number"
+          },
+          "embedding_model": {
+            "title": "Embedding Model",
+            "type": "string"
+          },
+          "interpretations": {
+            "items": {
+              "$ref": "#/components/schemas/TopicInterpretationOut"
+            },
+            "title": "Interpretations",
+            "type": "array"
+          },
+          "refuse_below": {
+            "title": "Refuse Below",
+            "type": "number"
+          },
+          "topic": {
+            "title": "Topic",
+            "type": "string"
+          },
+          "universe": {
+            "$ref": "#/components/schemas/UniverseCoverageOut"
+          },
+          "vector_is_semantic": {
+            "title": "Vector Is Semantic",
+            "type": "boolean"
+          },
+          "verdict": {
+            "enum": [
+              "confident",
+              "weak",
+              "none",
+              "unavailable"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic",
+          "verdict",
+          "best_similarity",
+          "refuse_below",
+          "confident_above",
+          "ambiguous",
+          "universe",
+          "embedding_model",
+          "vector_is_semantic"
+        ],
+        "title": "TopicResolveResponse",
+        "type": "object"
+      },
+      "UniverseCoverageOut": {
+        "description": "What the resolver could see: the installation's side of the answer.\n\n`state` is `ready`, `partially_embedded` (resolution ran over `embedded` of\n`profiles`), `not_embedded` or `not_loaded`. The last two mean the topic\nwas never looked at, which is why they carry a verdict of their own.",
+        "properties": {
+          "embedded": {
+            "title": "Embedded",
+            "type": "integer"
+          },
+          "profiles": {
+            "title": "Profiles",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "ready",
+              "partially_embedded",
+              "not_embedded",
+              "not_loaded"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "profiles",
+          "embedded"
+        ],
+        "title": "UniverseCoverageOut",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -1760,6 +2038,65 @@
         "summary": "Readyz",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/topics/resolve": {
+      "post": {
+        "operationId": "resolve_topics_resolve_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TopicResolveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopicResolveResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve",
+        "tags": [
+          "topics"
         ]
       }
     }

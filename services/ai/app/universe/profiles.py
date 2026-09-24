@@ -24,6 +24,7 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import text
@@ -46,6 +47,11 @@ DESCRIPTION_LICENSE = (
 #: Descriptions per embedding request. Bounded so one failed call loses a
 #: batch, not the universe, and so a request stays well inside provider limits.
 EMBED_BATCH = 100
+
+#: The same, for `data/fixtures/universe/descriptions.jsonl`: eleven sentences
+#: written for CI, so that a database holding them says so.
+FIXTURE_DESCRIPTION_SOURCE = "fixture:data/fixtures/universe/descriptions.jsonl"
+FIXTURE_DESCRIPTION_LICENSE = "Written for this repository's tests. Not a real description."
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,8 +122,19 @@ def _upsert_instrument(connection: Connection, member: UniverseInstrument) -> st
     )
 
 
-def load_universe(connection: Connection, snapshot: Snapshot) -> LoadReport:
-    """Write every described member's instrument row and profile, in one transaction."""
+def load_universe(
+    connection: Connection,
+    snapshot: Snapshot,
+    *,
+    source: str = DESCRIPTION_SOURCE,
+    license: str = DESCRIPTION_LICENSE,  # noqa: A002 - the column's name
+) -> LoadReport:
+    """Write every described member's instrument row and profile, in one transaction.
+
+    `source` and `license` say where the descriptions came from, and are
+    parameters so that the hand-written CI fixtures are never recorded as
+    Yahoo's text.
+    """
     existing = {
         str(row.instrument_id): row.content_hash
         for row in connection.execute(
@@ -184,8 +201,8 @@ def load_universe(connection: Connection, snapshot: Snapshot) -> LoadReport:
                 "instrument_id": instrument_id,
                 "description": member.description,
                 "matching_text": embedded_text,
-                "source": DESCRIPTION_SOURCE,
-                "license": DESCRIPTION_LICENSE,
+                "source": source,
+                "license": license,
                 "hash": digest,
                 "sector": member.sector,
                 "industry": member.industry,
@@ -456,6 +473,11 @@ class Holder:
     weight: str
 
 
+def decimal_string(value: Decimal) -> str:
+    """`value` as a plain decimal string, trailing zeros dropped: 0.2100 -> "0.21"."""
+    return format(value.normalize(), "f")
+
+
 def holdings_of(connection: Connection, etf_ids: list[str]) -> dict[str, list[Holder]]:
     """Matched holdings of `etf_ids`: instrument id -> the ETFs holding it, largest first."""
     if not etf_ids:
@@ -476,7 +498,9 @@ def holdings_of(connection: Connection, etf_ids: list[str]) -> dict[str, list[Ho
     held: dict[str, list[Holder]] = {}
     for row in rows:
         held.setdefault(str(row.instrument_id), []).append(
-            Holder(etf=row.etf, weight=str(row.weight.normalize()))
+            # Fixed-point, never `str()`: a normalised Decimal below 1e-6
+            # prints as "1E-7", which is not a decimal string on the wire.
+            Holder(etf=row.etf, weight=decimal_string(row.weight))
         )
     return held
 
@@ -509,3 +533,70 @@ def profiles_by_id(
         {"embedding": to_pgvector(embedding), "model": model, "ids": ids},
     ).all()
     return [_profile_match(row) for row in rows]
+
+
+class UniverseState(StrEnum):
+    """Whether topics can be resolved on this installation, and if not, why not.
+
+    Kept apart from a resolution's own verdict on purpose. "Nothing in the
+    universe is about this topic" is a finding about the topic; "there is no
+    universe to look in" is a finding about the installation, and reporting the
+    second as the first would tell the user their topic is unknown when the
+    truth is that nobody ran the loader.
+    """
+
+    #: Every described profile carries a vector from the configured model.
+    READY = "ready"
+    #: Some profiles are embedded by the configured model and some are not.
+    #: Resolution runs, over the embedded part only, and says so.
+    PARTIALLY_EMBEDDED = "partially_embedded"
+    #: Profiles exist, but none has a vector from the configured model: the
+    #: loader ran with `--no-embed`, or `EMBEDDINGS_PROVIDER` changed since.
+    NOT_EMBEDDED = "not_embedded"
+    #: No profile at all. `ingest_universe.py` has not run here, or ran without
+    #: a descriptions file (they are not committed; see migration 0015).
+    NOT_LOADED = "not_loaded"
+
+
+@dataclass(frozen=True, slots=True)
+class UniverseCoverage:
+    #: Described instruments in `instrument_profiles`: the most a topic can see.
+    profiles: int
+    #: Of those, how many carry a vector from the model being asked about.
+    embedded: int
+
+    @property
+    def state(self) -> UniverseState:
+        if self.profiles == 0:
+            return UniverseState.NOT_LOADED
+        if self.embedded == 0:
+            return UniverseState.NOT_EMBEDDED
+        if self.embedded < self.profiles:
+            return UniverseState.PARTIALLY_EMBEDDED
+        return UniverseState.READY
+
+    @property
+    def searchable(self) -> bool:
+        return self.embedded > 0
+
+
+def coverage(connection: Connection, *, model: str) -> UniverseCoverage:
+    """How much of the universe a search with `model` would actually see.
+
+    The count that matters is per model, because `search_profiles` filters on
+    it: a universe embedded by one model is invisible to another, and without
+    this a changed `EMBEDDINGS_PROVIDER` would read as "no topic matches
+    anything" rather than as "nothing has been embedded for this model".
+    """
+    row = connection.execute(
+        text(
+            """
+            SELECT count(*) AS profiles,
+                   count(*) FILTER (WHERE embedding IS NOT NULL
+                                      AND embedding_model = :model) AS embedded
+              FROM instrument_profiles
+            """
+        ),
+        {"model": model},
+    ).one()
+    return UniverseCoverage(profiles=int(row.profiles), embedded=int(row.embedded))

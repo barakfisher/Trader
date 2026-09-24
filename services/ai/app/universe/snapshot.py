@@ -203,16 +203,21 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
 
-def load_snapshot(directory: Path) -> Snapshot:
+def load_snapshot(directory: Path, descriptions_path: Path | None = None) -> Snapshot:
     """The committed membership, joined to whatever descriptions this machine has.
 
     A member with no local description comes back with `description=None`
     rather than being dropped, so the caller can report how much of the
     universe it cannot match against - a count that silently shrank would look
     exactly like a universe that had.
+
+    `descriptions_path` defaults to the gitignored file beside the membership.
+    It is a parameter because the descriptions are the one part of a universe
+    that does not ship with the repository, so they are the part a deployment
+    most often keeps somewhere else.
     """
     manifest = json.loads((directory / MANIFEST_FILE).read_text(encoding="utf-8"))
-    descriptions_path = directory / DESCRIPTIONS_FILE
+    descriptions_path = descriptions_path or directory / DESCRIPTIONS_FILE
     descriptions = (
         {row["symbol"]: row["description"] for row in _read_jsonl(descriptions_path)}
         if descriptions_path.exists()

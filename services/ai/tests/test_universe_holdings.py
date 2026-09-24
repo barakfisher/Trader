@@ -7,7 +7,11 @@ written as `CCO.TO` (URA's largest position), TSMC as `2330.TW`, Kazatomprom as
 
 from __future__ import annotations
 
-from app.universe.profiles import HoldingMatcher, Member
+from decimal import Decimal
+
+import pytest
+
+from app.universe.profiles import HoldingMatcher, Member, decimal_string
 
 CAMECO = Member("1", "CCJ", "Cameco Corporation")
 TSMC = Member("2", "TSM", "Taiwan Semiconductor Manufacturing Company Limited")
@@ -73,3 +77,13 @@ def test_a_group_name_still_matches_the_same_group() -> None:
         Member("m", "MUFG", "Mitsubishi UFJ Financial Group, Inc."),
         "name",
     )
+
+
+@pytest.mark.parametrize(
+    ("stored", "wire"),
+    [("0.21949539", "0.21949539"), ("0.2100", "0.21"), ("1", "1"), ("0.0000001", "0.0000001")],
+)
+def test_a_weight_reaches_the_wire_as_a_plain_decimal_string(stored: str, wire: str) -> None:
+    # str(Decimal("0.0000001").normalize()) is "1E-7", which the TypeScript
+    # client's decimal-string check would reject along with the whole response.
+    assert decimal_string(Decimal(stored)) == wire

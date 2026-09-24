@@ -30,6 +30,21 @@ FR-10), what has been measured, and what to try next. Written at the end of M5 s
 All thresholds were fitted on `threshold_fitting_topics` in `data/eval/topics.json` — topics written
 before measuring and disjoint from the eval by test — never on eval cases.
 
+### Serving it
+
+`POST /topics/resolve` on the AI service (`app/routers/topics.py`), proxied by the orchestrator at
+the same path. `verdict` has **four** values. `confident`, `weak` and `none` are the resolver's.
+`unavailable` means the universe was not searched at all, and `universe.state` says why:
+`not_loaded` (no descriptions have ever been loaded) or `not_embedded` (none for the configured
+embedding model). `partially_embedded` still resolves, and says so. Keep `none` and `unavailable`
+apart: one is a fact about the topic, the other a fact about the installation.
+
+**Loading.** The compose `universe` container runs `scripts/ingest_universe.py` on every stack
+start. It needs `data/universe/descriptions.local.jsonl`, which is gitignored and excluded from the
+image. CI loads eleven hand-written descriptions instead (`--fixture`,
+`data/fixtures/universe/`), so the smoke test runs the resolver's SQL. That tests plumbing, not
+quality.
+
 ## 2. Scoreboard
 
 Same universe and embeddings for every row; only the resolver differs.

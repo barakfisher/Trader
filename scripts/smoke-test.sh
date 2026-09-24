@@ -167,4 +167,48 @@ status=$(curl -s -o /dev/null -w '%{http_code}' -b "$COOKIE_JAR" -X POST "$BASE_
   -H 'content-type: application/json' -d '{"question":"   "}')
 [ "$status" = "400" ] || fail "expected 400 for an empty question, got $status"
 
+# --- M5: topic resolution over the instrument universe -----------------------
+#
+# The only gate that runs the resolver's SQL: the Python suite has no Postgres.
+# It needs a universe with descriptions. CI loads eleven hand-written ones
+# (`ingest_universe.py --fixture`); a developer's stack loads the gitignored
+# data/universe/descriptions.local.jsonl through the `universe` container.
+#
+# `unavailable` FAILS here, on purpose. It is a correct answer for an
+# installation with no universe, and the AI service's own tests pin that - but
+# this check exists to prove the stack can load one, and a check that passes
+# whether or not it did would be counted as coverage it does not give.
+#
+# Every assertion holds on both embedders. On the fixture the resolver abstains
+# (similarity order, every candidate `weak`), and "uranium mining" still puts a
+# uranium company first because the fixture ranks by shared words.
+
+say "a topic resolves to candidates, each with a quoted reason"
+curl -fsS -b "$COOKIE_JAR" -X POST "$BASE_URL/topics/resolve" \
+  -H 'content-type: application/json' -H 'origin: http://localhost:5173' \
+  -d '{"topic":"uranium mining"}' \
+  | python3 -c '
+import json, sys
+body = json.load(sys.stdin)
+state, verdict = body["universe"]["state"], body["verdict"]
+assert verdict != "unavailable", (
+    f"no searchable universe (state={state}): put descriptions.local.jsonl in "
+    "data/universe and restart, or run ingest_universe.py --fixture"
+)
+assert state in {"ready", "partially_embedded"}, state
+assert verdict in {"confident", "weak"}, f"uranium mining resolved to {verdict}"
+first = body["interpretations"][0]["candidates"]
+assert all(c["rationale"] for c in first), "a candidate with no reason"
+uranium = {"CCJ", "NXE", "UEC", "LEU", "URA", "URNM", "DNN", "UUUU", "OKLO", "NLR"}
+top = [c["symbol"] for c in first[:5]]
+assert uranium & set(top), f"no uranium name in the top five: {top}"
+profiles, semantic = body["universe"]["profiles"], body["vector_is_semantic"]
+print(f"  {verdict}, {profiles} profiles ({state}), semantic={semantic}: {top}")
+'
+
+say "an empty topic is refused before it reaches the AI service"
+status=$(curl -s -o /dev/null -w '%{http_code}' -b "$COOKIE_JAR" -X POST "$BASE_URL/topics/resolve" \
+  -H 'content-type: application/json' -H 'origin: http://localhost:5173' -d '{"topic":"  "}')
+[ "$status" = "400" ] || fail "expected 400 for an empty topic, got $status"
+
 printf '\nAll smoke checks passed.\n'

@@ -75,7 +75,7 @@ jobs:
           sed -i 's/^SESSION_SECRET=.*/SESSION_SECRET=ci-session-secret-value-long-enough/' .env
           sed -i 's/^MARKET_DATA_PROVIDERS=.*/MARKET_DATA_PROVIDERS=fixture/' .env
       - name: Start the stack
-        run: docker compose -f infra/compose/docker-compose.yml up -d --build postgres redis migrate corpus ai-service orchestrator
+        run: docker compose -f infra/compose/docker-compose.yml up -d --build postgres redis migrate corpus universe ai-service orchestrator
       # The hermetic Python suite cannot reach this: it has no Postgres, and its
       # corpus tests run against the checkout rather than the image. This is the
       # only gate that proves data/corpus was actually copied in, that the
@@ -88,6 +88,22 @@ jobs:
         # that has already exited it returns 1. See scripts/wait-for-exit.sh,
         # which was run against all four states before being trusted.
         run: bash scripts/wait-for-exit.sh infra/compose/docker-compose.yml corpus
+      # The universe container runs exactly as it does on a developer's machine
+      # with no descriptions file - which is what CI is - so it loads membership
+      # and holdings, profiles nothing, and must still exit 0: a missing file is
+      # a named state, not a failure. Checked, because that is a claim.
+      - name: Check the universe loader tolerates having no descriptions
+        run: bash scripts/wait-for-exit.sh infra/compose/docker-compose.yml universe
+      # Then eleven hand-written descriptions (data/fixtures/universe), recorded
+      # with a fixture source and licence. They exist so the smoke test can
+      # resolve a topic through the real SQL - the coverage count, the profile
+      # search, the holdings join - which no other gate reaches, because the
+      # Python suite has no Postgres. They say nothing about topic quality: the
+      # resolver abstains on the fixture embedder.
+      - name: Load the fixture universe
+        run: >
+          docker compose -f infra/compose/docker-compose.yml run --rm
+          universe python scripts/ingest_universe.py --fixture
       - name: Wait for readiness
         run: |
           for attempt in $(seq 1 30); do
