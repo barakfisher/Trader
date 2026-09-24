@@ -647,6 +647,32 @@ rejects a model's invention.
 pointing at deterministic text too. A figure the reader cannot trace is untraceable
 whoever wrote it.
 
+**The compose gate was counted as coverage for `/ask` and never called it.** Slice 3's
+PR went up green with "the compose smoke test passes" as part of its evidence.
+`scripts/smoke-test.sh` exercised the M1 vertical slice and nothing since — not `/ask`,
+not even `/concepts/:slug` from slice 1. Adding the checks then found two more things: a
+Python f-string with escaped quotes in its expression, which is a `SyntaxError` before
+3.12 and would have failed on the host's 3.9 — and that the `not_in_corpus` refusal
+**cannot be asserted in CI at all**, which MEMORY.md had just claimed the eval set could
+measure.
+→ **Before citing a gate as evidence, check what it runs.** Green means "every check
+that exists passed", and says nothing about checks that do not exist.
+→ Every new check was then fed bad input to prove it could fail — six assertions, all
+failing as they should. A check that has only ever passed has not yet been shown to be
+a check.
+
+**The smoke test replaces every holding in the database it points at.** It imports with
+`mode: "replace"`. Running it against the shared dev stack deleted and rewrote the
+portfolio — harmless *this time*, because that database already held the demo portfolio,
+which was confirmed afterwards by reconciling against the last snapshot to the cent. But
+it was confirmed afterwards rather than checked before. The script header now says so in
+capitals.
+→ **Read what a script writes before running it against data you did not create.** The
+reconciliation also carried its own trap: a naive cost-basis sum was $504.93 short, and
+the entire gap was SAP.DE's euro cost basis converted at EUR/USD 1.1465 by the snapshot
+and not by the query. A mixed-currency sum is not a total (guideline 3), and an alarming
+discrepancy should be checked for that first.
+
 **A stale placeholder in `.env.example` became a boot failure.** M0 wrote an
 `EMBEDDINGS_PROVIDER=fastembed` block with a 384-wide model, two milestones
 before anything read it, and every local `.env` copied it. Slice 2's factory
@@ -857,11 +883,17 @@ recorded above as debt.
    measure it. This is that something — build the eval set first, then the reranker
    against it, in that order.
 
-The eval set must run on the **fixture** embedder, because CI is keyless. That is a real
-constraint on its design: it cannot measure semantic retrieval quality, only that the
-pipeline is stable and that refusals behave. Measuring the real embedder needs a second,
-opt-in job with a key — decide deliberately whether that is worth it rather than
-discovering the gap later.
+The eval set must run on the **fixture** embedder, because CI is keyless — and that
+constrains it more than it first appears. It cannot measure semantic retrieval quality,
+and **it cannot measure the `not_in_corpus` refusal either**: the relevance floor
+deliberately abstains when the vector half is a placeholder, so on the fixture path
+*every* concept question is answerable and graded `weak`. That refusal — the one M3's
+exit criterion actually names — is reachable **only with a real embedder**. (This file
+said otherwise until the smoke test was extended and the assertion turned out to be
+unwritable; see the bug below.) What CI *can* measure is the deterministic half: intent
+routing, the `no_holdings` and `not_computable` refusals, citation shape, and pipeline
+stability. So the decision for slice 4 is sharper than "is a keyed job worth it": **without
+one, the headline refusal behaviour is never tested by anything automated.**
 
 ### M5 (topics), deferred
 
