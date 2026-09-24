@@ -5,6 +5,7 @@ import { LoginPage } from './pages/LoginPage.tsx';
 import { ProposalsPage } from './pages/ProposalsPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import { TargetsPage } from './pages/TargetsPage.tsx';
+import { TopicsPage } from './pages/TopicsPage.tsx';
 import { ConceptDialog } from './components/ConceptDialog.tsx';
 import { Spinner } from './components/ui.tsx';
 import { useStore } from './stores/context.tsx';
@@ -31,6 +32,8 @@ export const App = observer(function App() {
       <ProposalsPage />
     ) : navigation.view === 'targets' ? (
       <TargetsPage />
+    ) : navigation.view === 'topics' ? (
+      <TopicsPage />
     ) : (
       <DashboardPage />
     );

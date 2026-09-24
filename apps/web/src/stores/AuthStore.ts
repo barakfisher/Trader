@@ -86,6 +86,7 @@ export class AuthStore {
         this.root.narration.reset();
         this.root.settings.reset();
         this.root.targets.reset();
+        this.root.topics.reset();
         this.root.telegram.reset();
         // The corpus is shared reference material rather than one account's, so
         // dropping the cache costs a refetch and protects nothing. It is reset

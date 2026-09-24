@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { FileUp, Inbox, LineChart, LogOut, RefreshCw, Settings, Target } from 'lucide-react';
+import { FileUp, Inbox, LineChart, LogOut, RefreshCw, Settings, Tags, Target } from 'lucide-react';
 
 import { AddHoldingForm } from '../components/AddHoldingForm.tsx';
 import { AllocationChart } from '../components/AllocationChart.tsx';
@@ -23,6 +23,7 @@ export const DashboardPage = observer(function DashboardPage() {
     proposals,
     settings,
     targets,
+    topics,
     narration,
     telegram,
   } = useStore();
@@ -82,6 +83,19 @@ export const DashboardPage = observer(function DashboardPage() {
             <span className="flex items-center gap-1">
               <Target className="size-4" aria-hidden />
               Targets
+            </span>
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              navigation.show('topics');
+              // Read on arrival, like targets.
+              void topics.load();
+            }}
+          >
+            <span className="flex items-center gap-1">
+              <Tags className="size-4" aria-hidden />
+              Topics
             </span>
           </Button>
           <Button variant="secondary" onClick={() => navigation.show('proposals')}>
