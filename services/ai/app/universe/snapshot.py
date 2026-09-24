@@ -10,11 +10,15 @@ whole listed market, and no rule in this file names a symbol.
 The screen (see `SCREEN`):
 
 - **Equities** listed on a primary US exchange with a market cap of at least
-  `MIN_SIZE_MINOR`. `region=us` alone admits thousands of OTC listings of foreign
-  ordinaries, which are the same companies as their ADRs under a second name.
-- **ETFs** on the same exchanges with **fund net assets** of at least the same
-  amount. An ETF has no market cap, so a market-cap screen alone would silently
-  drop every fund - including the thematic ones a topic most naturally maps to.
+  `MIN_EQUITY_SIZE_MINOR`. `region=us` alone admits thousands of OTC listings of
+  foreign ordinaries, which are the same companies as their ADRs under a second
+  name.
+- **ETFs** on the same exchanges with **fund net assets** of at least
+  `MIN_ETF_SIZE_MINOR`. An ETF has no market cap, so a market-cap screen alone
+  would silently drop every fund. The ETF floor is ten times lower than the
+  equity floor because thematic funds are small - the online-retail and cloud
+  ETFs are well under $1B - and M5 slice 2 reads what they hold as evidence of
+  which companies belong to a theme (`ETF_HOLDINGS_FILE`).
 
 Then two reductions, both about companies rather than symbols:
 
@@ -53,15 +57,19 @@ from typing import Any
 #: Capital, NYSE, NYSE American, Cboe BZX, NYSE Arca.
 PRIMARY_US_EXCHANGES = ("NMS", "NGM", "NCM", "NYQ", "ASE", "BTS", "PCX")
 
-#: One billion US dollars, in cents. The floor both screens share.
-MIN_SIZE_MINOR = 1_000_000_000 * 100
+#: One billion US dollars, in cents: the equity floor.
+MIN_EQUITY_SIZE_MINOR = 1_000_000_000 * 100
+
+#: One hundred million US dollars, in cents: the ETF floor. See the docstring.
+MIN_ETF_SIZE_MINOR = 100_000_000 * 100
 
 SCREEN: dict[str, object] = {
     "region": "us",
     "exchanges": list(PRIMARY_US_EXCHANGES),
-    "equity": "intradaymarketcap >= min_size",
-    "etf": "fundnetassets >= min_size",
-    "min_size_minor": MIN_SIZE_MINOR,
+    "equity": "intradaymarketcap >= min_equity_size",
+    "etf": "fundnetassets >= min_etf_size",
+    "min_equity_size_minor": MIN_EQUITY_SIZE_MINOR,
+    "min_etf_size_minor": MIN_ETF_SIZE_MINOR,
     "min_size_currency": "USD",
 }
 
@@ -156,6 +164,33 @@ MEMBERSHIP_FILE = "instruments.jsonl"
 MANIFEST_FILE = "manifest.json"
 #: Gitignored: Yahoo's prose, fetched per installation.
 DESCRIPTIONS_FILE = "descriptions.local.jsonl"
+#: Committed: which instruments each ETF holds and at what weight. Facts about a
+#: fund's composition, like the membership file, not prose.
+ETF_HOLDINGS_FILE = "etf_holdings.jsonl"
+
+
+@dataclass(frozen=True, slots=True)
+class EtfHolding:
+    """One of an ETF's top holdings as Yahoo reports it, before any matching.
+
+    `symbol` is kept exactly as written because it is often not a US ticker -
+    Cameco appears as `CCO.TO`, TSMC as `2330.TW` - and `name` is kept because it
+    is what matches such a holding to its US listing (`profiles.load_holdings`).
+    Yahoo exposes only each fund's ten largest positions.
+    """
+
+    etf: str
+    position: int
+    symbol: str
+    name: str | None
+    #: Fraction of the fund, as a decimal string ("0.2260"); never a float on
+    #: the wire (guideline 4).
+    weight: str
+
+
+def read_holdings(directory: Path) -> list[EtfHolding]:
+    path = directory / ETF_HOLDINGS_FILE
+    return [EtfHolding(**row) for row in _read_jsonl(path)] if path.exists() else []
 
 
 @dataclass(frozen=True, slots=True)

@@ -4,13 +4,17 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-24. **M3 is complete** — all four slices, PRs #42, #44, #45, #46 and #47.
-**This is a handoff**: M3 closing is a milestone boundary, which CLAUDE.md makes a trigger. The
-session that wrote this took M3 from "a corpus that can only be reached by exact slug" to `/ask`
-answering questions in the user's own words, refusing what the corpus does not cover, and an eval
-set that measures both — and on its first run found three real bugs and one threshold in the wrong
-place. **Next is M5 (market discovery & topics)**, deferred on 2026-09-23 specifically so M3 could
-finish; see "Where to go next".
+Updated: 2026-09-24. **M5 is in progress: topic *resolution* is done (slices 1–2), topic CRUD,
+confirmation, observations and auto-discovery are not.** Slice 1 is #50 (merged); slice 2 is the
+ETF-holdings PR opened with this handoff. **This is a handoff** — the user asked for one to start
+the next part of M5 (Topic CRUD & Confirmation) with a clean context. The session that wrote this
+built a screened universe of 5,294 instruments, a resolver that turns a free-text topic into
+candidates with a quoted rationale, and an eval the *user* wrote — and it ended with an honest
+negative: on the user's held-out batch the resolver finds **14 of 35** expected tickers, and
+slice 2 did not move that number. `docs/TOPIC_RESOLUTION.md` holds the measurements and the
+backlog; see "Where to go next".
+
+The M3 closing summary (PRs #42–#47) is kept below in "Where to go next" and the decisions list.
 
 **One-line state:** the product imports a portfolio, fetches six months of real daily prices, scans
 it every 30 minutes for four kinds of finding, explains each one in sentences whose every figure is
@@ -39,7 +43,7 @@ row and a ledger row marked revoked. What remains unproven is only the *webhook*
 | **M2.5 — Real price history** | ✅ Complete | **unplanned**; PR #23. Finished M1's provider layer, 18 PRs late |
 | **M3 — RAG & educational engine** | ✅ Complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. #45: the paid embedder. #46: `POST /ask`, intent routing, citations, a three-state relevance floor. #47: the 35-case eval set in two CI tiers. **The relevance floor is measured to be in the wrong place — see the debt table** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
-| M5 — Market discovery & topics | **Next** | deferred 2026-09-23 so M3 could finish; M3 is now finished |
+| **M5 — Market discovery & topics** | 🟡 In progress | #50: eval set, screened universe, `instrument_profiles`, resolver (gate, size order, meanings, name stripping). Slice 2: ETF holdings as a second signal. **Resolution recall on held-out topics: 14/35 — see `docs/TOPIC_RESOLUTION.md`.** Not started: topic CRUD, confirmation, topic observations, per-topic sentiment, auto-discovery, digest section |
 | M6 — Frontend completion & polish | Not started | |
 | M7 — Kubernetes & documentation | Not started | |
 
@@ -78,8 +82,9 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts at handoff: **1,096** — 586 Python, 341 orchestrator, 153 web, 16 shared. Plus the
-eval set, which is not a test count: **35 cases**, 16 keyless on every PR, all 35 when keyed.
+Test counts at handoff: **1,193** — 638 Python, 376 orchestrator, 163 web, 16 shared. Plus two
+eval sets, which are not test counts: `/ask`'s **35 cases** (16 keyless on every PR, all 35 when
+keyed), and the topic eval's **31 cases** (`scripts/run_topic_eval.py`, keyed only, **not in CI**).
 
 **None of them executes a line of retrieval SQL**, and that is structural rather than an oversight:
 the Python suite is hermetic and has no Postgres. Exercise it by hand after touching
@@ -112,8 +117,10 @@ limiting and per-provider daily budgets; four deterministic analysis rules; news
 entity extraction; an LLM provider factory with a daily spend guard; narration behind an evidence
 validator; **the concept corpus: structure-aware chunking, hash-compared ingestion and slug
 lookup, and **hybrid retrieval over it: an embedder behind `BaseEmbedder`, a `VectorStore` over
-pgvector, and reciprocal-rank fusion of the vector and full-text halves**; the Alembic schema (13
-migrations) that both services share.
+pgvector, and reciprocal-rank fusion of the vector and full-text halves**; **topic resolution
+(M5): a committed, rule-screened instrument universe (`data/universe/`, `app/universe/`), profiles
+embedded with the company's own name stripped, ETF holdings, and `app/topics/resolution.py`, which
+has no HTTP route yet**; the Alembic schema (16 migrations) that both services share.
 
 **`apps/orchestrator`** (Node, Hono) — sessions, holdings CRUD, CSV/JSON import with per-row
 validation, valuation with FX, target weights, the scan workflow, run claims, the observations feed,
@@ -411,6 +418,59 @@ failure they prevent.
     reason unrelated to the change. A notice rather than silence, because a green job that did
     nothing looks exactly like a green job that tested the refusal path. It is the *only*
     automated test of the `not_in_corpus` refusal, because the floor abstains on the fixture.
+
+38. **The topic eval was written by the user, before the resolver existed, and its second batch was
+    sealed.** `data/eval/topics.json`. A contract test fails if a user case differs from what they
+    wrote except through a named correction (SQ → XYZ is the only one), and threshold-fitting topics
+    are written down *before* measuring and kept disjoint by test. Batch 2 was handed over after the
+    first run and not run until slice 2 was final — and it is what showed slice 2 did not
+    generalise. **It is now spent**; the file says so.
+
+39. **The universe is screened by rule, never assembled from the answers.** Primary US exchanges,
+    stocks ≥ $1B, ETFs ≥ $100M (thematic funds are small); preferred series dropped; one listing
+    per company (most traded). All of the user's tickers are in it and none was added by hand — a
+    universe built from the eval's answers would make every case a choice among correct answers.
+
+40. **Yahoo's descriptions are not committed; membership, facts and holdings are.** The prose is
+    licensed from Yahoo's vendors, so it lives in `data/universe/descriptions.local.jsonl`
+    (gitignored) and the database, with a `license` column. Consequence: a fresh machine must run
+    the build script (~1 h, rate-limited) before topics can resolve. Holdings are fund composition —
+    facts — and are committed.
+
+41. **`instrument_profiles` is its own table, not a third `kb_chunks` namespace.** pgvector's HNSW
+    returns at most `ef_search` (40) rows *before* the WHERE clause; 3,600+ instrument vectors in
+    the concept index could leave `/ask` with nothing and no error. Same reason
+    `search_profiles` raises `hnsw.ef_search` to its LIMIT: otherwise "top 50" silently means 40.
+
+42. **Profiles are embedded with the company's own name removed** (`app/universe/matching_text.py`).
+    "fast food" admitted Fastenal and "mount everest" found Everest Group. Stripping moved the
+    nothing/something separation on the fitting topics from **0.018 to 0.120**. The stored
+    description stays verbatim because rationales quote it; the hash is over the embedded text plus
+    a rule version, so changing the rule re-embeds exactly once. Holdings matching uses a
+    *stricter* name rule than news (`legal_core` keeps "Group"): the news rule matched Compass
+    Group to Compass, Inc.
+
+43. **Similarity decides whether; size decides the order.** Specialists outranked the companies
+    people mean (Newmont 15th for "gold mining"). The gate (band + floor + cap 30) is what stops a
+    giant climbing a list it barely belongs to. **Rejected with measurements:** a size-scaled gate
+    (put NVDA/MSFT at #1–2 for "video game publishers"), query-expansion dictionaries, raising the
+    candidate limit, consensus of ≥ 2 source ETFs. The table is in `docs/TOPIC_RESOLUTION.md` §5.
+
+44. **ETF holdings bypass the gate, but only from coherent funds.** A fund is a source if it is near
+    the topic *and* its holdings are (mean similarity within 0.13 of the best match). Without the
+    second test, broad funds brought Amgen into "gene editing" and Home Depot into "home builders",
+    and size ordering put them first. Holdings with weight outside (0, 1] (cash lines, wrappers, one
+    reported at 66,880%) are skipped and counted, not stored.
+
+45. **Rationales are quoted, never written; confidence is a band, never a percentage.** The same
+    argument as the evidence validator: a model can write a plausible false sentence about a real
+    company, and a cosine is not a probability. `held_by` ("SHLD 10.8%") is the second, checkable
+    reason.
+
+46. **The resolver stops at 14/35 on held-out topics, and the next step is product, not tuning.**
+    The M5 exit criterion is a *confirmed* set. A confirmation screen where the user adds what the
+    resolver missed closes the gap regardless of recall; further resolver work needs a new held-out
+    batch first, or it can only be measured on data that shaped it.
 
 ---
 
@@ -753,6 +813,47 @@ absence.
 → When a fixture stands in for a real source, **record what is still missing** rather than treating
 the green test as coverage.
 
+**A renamed migration was verified by reading the working tree, and CI tested the commit.** Another
+session renumbered `0014_instrument_profiles` → `0015` to follow #49's `0014_intent_revocation`. Its
+commit was a *pure rename* (0 lines changed); the edited `revision`/`down_revision` were left
+uncommitted in the worktree. This session "verified" the renumbering by reading the file on disk,
+said it was correct, and CI failed with two Alembic heads.
+→ **Verify a commit with `git show <sha>:<path>`, or in a clean `git worktree add --detach` of it —
+never by reading the working tree.** "Verify by content" (the stacked-PR lesson) only works if the
+content you read is the content that ships.
+→ A peer session's "nothing uncommitted was touched" is a claim, not a check.
+
+**The same gate-that-cannot-fail, a fourth time.** `ruff format --check . | tail -1` exits with
+`tail`'s status, so a failing format check let a commit through. It was caught only because the
+output line was read. → **Never pipe a gate into `tail`/`grep` inside an `&&` chain.** Run it bare,
+or `set -o pipefail`.
+
+**A failed fetch cached as "no data" would have become a fact.** The first universe build cached
+`{}` for 41 symbols Yahoo rate-limited — including **GOOGL**, which two eval cases expect; it would
+have looked like a resolver miss. Now a failure is not cached and the build refuses to write a
+snapshot with holes. The mirror case arrived in slice 2: Yahoo's "No Fund data found" for an ETN
+*is* an answer (no holdings) and raises the same exception type as a transient error, so the
+message decides.
+→ **Absence and failure must never share a representation** — the `null`-price rule, again, for a
+cache.
+
+**A scripted string replacement silently did nothing.** An edit to the holdings fetch matched text
+the formatter had already re-wrapped; the constant it added landed, the `except` branch did not, and
+the build failed the same way again. → When editing by script, **assert each anchor matched
+exactly once**; a replacement that finds nothing is not an error in Python.
+
+**Tuned gains did not generalise, and only the sealed batch could show it.** Slice 2 took the
+primary suite from 5/20 to 9/20. On the sealed batch it changed nothing — 1/11 and 14/35 for both
+slices. Every design choice after the first run had been made while looking at the primary suite.
+→ **An eval you have looked at is a development set.** Keep a batch sealed until a change is final,
+and treat the unsealed number as the result.
+
+**CHECK constraints written from assumption were corrected by data — the right way round.**
+`weight <= 1` rejected a leveraged fund's 106% position and a reporting error at 66,880%; the load
+ran in one transaction and rolled back cleanly. The fix was to skip and count such rows, not to
+loosen the column. Same lesson as 0006's `runs_kind_check`: **a constraint is only exercised by
+data**, and it is better met here than in production.
+
 ---
 
 ## Current technical debt
@@ -780,7 +881,12 @@ the green test as coverage.
 | No component/DOM tests on the web app | `apps/web/test` | Store and formatting logic covered; rendering is not. Two real UI bugs this session (Discard disabled by its own typo, a deep link that does nothing) were found by *using* the app, not by tests, and neither would have been caught by a DOM test either — but a DOM test would have caught the first |
 | ~~Telegram has no working binding~~ | — | **Resolved 2026-09-24.** A chat is bound. The "receives nothing" mystery was never a Telegram problem: nothing in the repository consumed updates, because M4's polling bridge was a hand-run script that left with its session. Kept as a line so the history of the symptom survives |
 | Redis cold start refetches everything | `core/cache.py` | The `quotes` table holds usable recent prices; warming from it was deferred |
-| `instruments`, `quotes` and the news tables have no `user_id` | migrations | **Intentional** — shared reference and market data, not user-owned. Documented so an audit does not re-flag it |
+| `instruments`, `quotes` and the news tables (and `instrument_profiles`, `etf_holdings`) have no `user_id` | migrations | **Intentional** — shared reference and market data, not user-owned. Documented so an audit does not re-flag it |
+| **Topic resolution finds 14/35 expected tickers on held-out topics** | `app/topics/resolution.py` | Measured on the user's sealed batch; slice 2 did not change it. Causes, measured: one outlier sets the gate; no ETF clears the source floor for cloud/e-commerce/obesity/robot surgery; giants are described too broadly; OTC-only ADRs (LVMUY) are not in the universe. The backlog, ranked, is `docs/TOPIC_RESOLUTION.md` §4 — **and it needs a new held-out batch before any of it can be measured** |
+| **The universe is not reachable from the running stack** | `Dockerfile.ai`, compose | `data/universe` is not copied into the image, `ingest_universe.py` runs only by hand, and nothing refreshes the snapshot. `instrument_profiles` and `etf_holdings` exist only where someone ran the scripts (today: the scratch database `traders_m5`). The resolver has no HTTP route yet, so nothing is broken — but the first endpoint must also solve loading |
+| **A fresh machine needs ~1 h of Yahoo fetching before topics resolve** | `build_instrument_universe.py` | Descriptions are not committed (decision 40). The build is resumable (`--cache`, `--holdings-cache`) and refuses to write a snapshot with holes; rate-limit failures are retried on the next run. Rebuilding also re-screens, so membership near the $1B line moves (LAC sits at $1.05B) |
+| **Disambiguation is built and dormant** | `app/topics/meanings.py` | `MEANINGS_SPLIT_BELOW` was fitted before name stripping; afterwards no fitting topic splits, including "chips" and "mining". The code and its constant say so. Needs genuinely ambiguous fitting topics on current vectors before it is trusted |
+| **The topic eval is not in CI** | `scripts/run_topic_eval.py` | Needs a database holding the universe *and* a semantic embedder; CI has neither. `test_topic_eval_set_contract.py` guards the file on every PR, but no automated run measures resolution
 
 ---
 
@@ -867,6 +973,21 @@ the green test as coverage.
 - Telegram hides a deep link's `?start=` payload in the message bubble: the chat shows a bare
   `/start` while the update carries the token. Do not conclude from the UI that the payload was lost.
 
+- **The topic universe lives in a scratch database, `traders_m5`, not in `traders`.** It is at
+  `0016_etf_holdings` and holds 5,223 embedded profiles and 16,363 holdings (2026-09-24). M5
+  sessions never migrated the shared dev database; `traders` is at `0014_intent_revocation`
+  (applied by the Telegram session). Point a resolver run at it with
+  `DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders_m5`. It is disposable:
+  recreating it costs `alembic upgrade head` plus `ingest_universe.py` (~2 min, ~$0.02) —
+  **provided `data/universe/descriptions.local.jsonl` exists in that checkout.**
+- **The descriptions file is in the M5 worktree only** (`.claude/worktrees/m5-topic-evaluation-*/`,
+  gitignored). The Yahoo fetch caches that made rebuilding cheap lived in a session scratchpad and
+  are gone; a fresh `build_instrument_universe.py` is ~1 h. Copy the `.local.jsonl` file rather
+  than refetching if the worktree still exists.
+- **Run a topic eval with the main checkout's `.env` sourced** — the worktree has none:
+  `set -a && source /Users/a/projects/Traders/.env && set +a`, then override `DATABASE_URL` and set
+  `CORPUS_DIR` to the worktree's `data/corpus` (the eval file is found beside it).
+
 ---
 
 ## Where to go next
@@ -892,30 +1013,44 @@ cannot reach any of the SQL. What exists end to end:
 The paid embedder is live in *this* installation's database and costs about a hundredth of a cent
 per full re-embed. A fresh clone and CI use the keyless fixture, on purpose.
 
-### M5 — market discovery & topics, next
+### M5 — where it stands
 
 MILESTONES.md: topic CRUD, resolving a free-text topic to candidate instruments with confidence and
 rationale, user confirmation, auto-discovered themes as proposals only, rejection memory, per-topic
 sentiment. **Exit: a free-text topic resolves to a sensible confirmed instrument set and produces
 topic observations; a rejected auto-proposal never returns.**
 
-It was deferred on 2026-09-23 so M3 could finish. Three things from M3 bear directly on it:
+**Done — resolution (slices 1–2).** `app/topics/resolution.resolve_topic(connection, embedder,
+topic)` returns a `TopicResolution`: a three-state verdict, and one or more interpretations, each
+up to 15 `TopicCandidate`s with `instrument_id` (what `topic_instruments` stores), symbol,
+similarity, `size_minor` + `size_currency`, `confident`/`weak`, a quoted rationale and `held_by`.
+The contract was checked against what confirmation needs before handoff; the ticker-search
+fallback for "add what the resolver missed" is the existing `GET /instruments/resolve`. Verified against the real database and embedder, not only by the hermetic suite. How it
+works, what it scores, why it fails and what to try next: **`docs/TOPIC_RESOLUTION.md`** — read §3
+and §5 before changing a threshold.
 
-1. **Resolving a topic to instruments is a retrieval problem that already has a retriever.** "AI
-   chip makers" → candidate instruments is the same shape as a question → candidate passages.
-   `BaseEmbedder`, `VectorStore` and the `namespace` column (which already anticipates a second
-   kind of document) are the seams. Weigh reusing them against a separate path before writing one.
-2. **"Confidence + rationale" is the relevance-floor problem again**, and M3 learned it the hard
-   way: a single similarity threshold did not separate the classes on held-out data. Do not
-   promise a confidence number the evidence cannot support — the three-state verdict and the
-   hedge (decisions 33, 36) are the precedent.
-3. **"A rejected auto-proposal never returns"** is the notification ledger's dedupe problem (decision
-   18) wearing different clothes. `notifications.ref_kind` already anticipates a third referent and
-   `PROPOSABLE_KINDS` is the one place that decides what becomes a question.
+**Next — Topic CRUD & Confirmation** (the user's chosen next step). A sketch, not a decision:
 
-Write the M5 eval cases **before** the resolver, and have someone who has not read the code write
-some of them. M3's eval found three bugs on its first run precisely because two cases were written
-to fail.
+1. **Schema (0017)**, per DESIGN.md: `topics(id, user_id, label, status active|proposed|rejected,
+   created_by user|auto, ...)` and `topic_instruments(topic_id, instrument_id, confirmed_by_user,
+   ...)`. Worth storing *why* each instrument is there — `source` (resolver/user), the band, the
+   rationale and `held_by` as offered — so the topic card can show it later without re-resolving.
+   `user_id` on both (guideline 5). Migration 0004's comment promises that a later migration
+   backfills `article_entities.topic_id` from `topic_ref`; decide whether this is that migration.
+2. **An AI-service route** (`POST /topics/resolve`) with pydantic wire models, then
+   `python scripts/export_openapi.py && pnpm gen:api`. **It must decide what an unloaded universe
+   looks like** — the `/concepts/:slug` precedent (decision 27/28) is a named state, not a 500.
+   And the stack must be able to load the universe at all (see the debt table).
+3. **Orchestrator** topic CRUD + a confirm endpoint (all SQL in `queries.ts`); the user keeps a
+   subset of candidates and **adds tickers the resolver missed** through the existing
+   `GET /instruments/resolve`. That add-box is what closes the 14/35 gap (decision 46).
+4. **Web**: type a topic → interpretations → candidates with rationale, `held_by` and band →
+   tick, add, confirm. A topic-count cap (PRD risk table).
+
+After that, M5 still owes: topic observations via `topicScan`, per-topic sentiment, auto-discovery
+as proposals with rejection memory (decision 18's ledger argument applies), and the digest section.
+When the news matcher is wired for topics, pass it held and topic-linked instruments only — never
+the whole 5,294-instrument universe, whose company names ("Target", "Block") would flood it.
 
 ### Left unfinished, deliberately
 

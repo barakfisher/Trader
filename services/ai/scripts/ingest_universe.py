@@ -4,7 +4,8 @@
 
 Reads the committed membership (`data/universe/instruments.jsonl`) and this
 machine's gitignored descriptions (`descriptions.local.jsonl`, written by
-`build_instrument_universe.py`). Safe to repeat: an unchanged description keeps
+`build_instrument_universe.py`), then the committed ETF holdings, matched to the
+profiled instruments. Safe to repeat: an unchanged description keeps
 its embedding, so a second run embeds nothing and costs nothing.
 
 Embedding uses the configured embedder (`EMBEDDINGS_PROVIDER`), exactly as the
@@ -22,8 +23,8 @@ from pathlib import Path
 from app.config import get_settings
 from app.corpus.embedder_factory import EmbedderConfigurationError, build_embedder
 from app.db import get_engine
-from app.universe.profiles import embed_pending, load_universe
-from app.universe.snapshot import load_snapshot
+from app.universe.profiles import embed_pending, load_holdings, load_universe
+from app.universe.snapshot import load_snapshot, read_holdings
 
 
 def default_universe() -> Path:
@@ -36,7 +37,8 @@ def main() -> int:
     parser.add_argument("--no-embed", action="store_true", help="load text, skip embedding")
     args = parser.parse_args()
 
-    snapshot = load_snapshot(args.universe or default_universe())
+    directory = args.universe or default_universe()
+    snapshot = load_snapshot(directory)
     with get_engine().begin() as connection:
         report = load_universe(connection, snapshot)
         print(
@@ -44,6 +46,13 @@ def main() -> int:
             f"{report.created} created, {report.text_changed} changed, "
             f"{report.unchanged} unchanged, {report.undescribed} without a description, "
             f"{report.no_currency} without a currency"
+        )
+        # After the profiles, because a holding can only match a profiled instrument.
+        held = load_holdings(connection, read_holdings(directory), as_of=snapshot.as_of)
+        print(
+            f"etf holdings: {held.total} rows, {held.matched_by_symbol} matched by symbol, "
+            f"{held.matched_by_name} by name, {held.unmatched} with no US listing, "
+            f"{held.implausible} skipped as not a fraction of the fund"
         )
         if args.no_embed:
             return 0
