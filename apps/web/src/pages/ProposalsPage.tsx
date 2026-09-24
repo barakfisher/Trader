@@ -1,13 +1,14 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { ArrowLeft, Inbox, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Inbox, ShieldCheck, Undo2 } from 'lucide-react';
 
-import type { Proposal } from '@traders/shared';
+import type { Proposal, ProposalAction } from '@traders/shared';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Button, Card, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
 import { isUrgent, snoozeDescription, timeLeft } from '../lib/proposalCountdown.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
+import { undoSecondsLeft } from '../lib/undoWindow.ts';
 import { SNOOZE_HOURS } from '../stores/ProposalsStore.ts';
 import { useStore } from '../stores/context.tsx';
 
@@ -28,8 +29,9 @@ import { useStore } from '../stores/context.tsx';
  * say when; a user who cannot see a deadline cannot tell an urgent question
  * from a patient one.
  *
- * **Nothing is rendered optimistically.** The button disables while the decision
- * is in flight and the card re-renders from the server's answer. An approval
+ * **Nothing is rendered optimistically.** Every button on a card disables while
+ * a decision is in flight - the clicked one says "Approving…" - and the card
+ * re-renders from the server's answer. An approval
  * writes a ledger row, and a screen that says "Approved" for one the server
  * refused is the most expensive kind of wrong this product can be.
  */
@@ -38,6 +40,8 @@ export const ProposalsPage = observer(function ProposalsPage() {
 
   useEffect(() => {
     void proposals.load();
+    // A decision can arrive from Telegram while this page is open; see the store.
+    return proposals.startAutoRefresh();
   }, [proposals]);
 
   return (
@@ -102,14 +106,97 @@ export const ProposalsPage = observer(function ProposalsPage() {
         ))}
       </div>
 
+      {proposals.recentlyApproved.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold text-text-muted">Recently approved</h2>
+          {proposals.recentlyApproved.map((proposal) => (
+            <ApprovedCard key={proposal.id} proposal={proposal} />
+          ))}
+        </section>
+      )}
+
       <Disclaimer />
     </div>
   );
 });
 
+/** What the clicked button says while its action is in flight. */
+const IN_FLIGHT_LABELS: Record<ProposalAction, string> = {
+  approve: 'Approving…',
+  reject: 'Rejecting…',
+  snooze: 'Snoozing…',
+  undo: 'Undoing…',
+};
+
+/**
+ * The current time, re-read every second while `active` - enough to count an
+ * undo window down without re-rendering a page that has nothing ticking.
+ */
+function useNow(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [active]);
+  return now;
+}
+
+/**
+ * An approval, and - for its first 30 seconds - the one thing still possible
+ * on it.
+ *
+ * Undo withdraws the approval from the ledger - the row is marked revoked, not
+ * erased - and puts the question back in the inbox above, unless its deadline
+ * has passed, in which case it simply expires. The button counts down and then
+ * goes, because an Undo that is shown after the server stopped accepting it is
+ * a button that can only be refused.
+ */
+const ApprovedCard = observer(function ApprovedCard({ proposal }: { proposal: Proposal }) {
+  const { proposals } = useStore();
+  const inFlight = proposals.decidingAction(proposal.id);
+  const now = useNow(proposal.undoableUntil !== null);
+  const secondsLeft = undoSecondsLeft(proposal.undoableUntil, now);
+  const refusal =
+    proposals.refusal?.proposalId === proposal.id ? proposals.refusal.message : null;
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-0.5">
+          <p className="text-sm text-text-primary">{proposal.headline}</p>
+          <p className="text-xs text-text-muted">
+            Approved
+            {proposal.decidedVia === 'telegram' ? ' from Telegram' : ''}
+            {proposal.decidedAt !== null && ` at ${formatExactTime(proposal.decidedAt)}`}
+          </p>
+          {refusal !== null && <p className="text-xs text-loss">{refusal}</p>}
+        </div>
+        {(secondsLeft !== null || inFlight === 'undo') && (
+          <Button
+            variant="secondary"
+            disabled={inFlight !== null}
+            onClick={() => void proposals.decide(proposal.id, 'undo')}
+          >
+            <span className="flex items-center gap-1.5">
+              <Undo2 className="size-4" aria-hidden />
+              {inFlight === 'undo' ? IN_FLIGHT_LABELS.undo : `Undo approval (${secondsLeft}s)`}
+            </span>
+          </Button>
+        )}
+      </div>
+    </Card>
+  );
+});
+
 const ProposalCard = observer(function ProposalCard({ proposal }: { proposal: Proposal }) {
   const { proposals } = useStore();
-  const deciding = proposals.isDeciding(proposal.id);
+  const inFlight = proposals.decidingAction(proposal.id);
+  // Every button is disabled while any one is in flight; only the clicked one
+  // changes its label, so the user can see which choice registered.
+  const deciding = inFlight !== null;
+  const label = (action: ProposalAction, idle: string) =>
+    inFlight === action ? IN_FLIGHT_LABELS[action] : idle;
   const remaining = timeLeft(proposal.expiresAt);
   const urgent = isUrgent(proposal.expiresAt);
   const snoozed = proposal.state === 'snoozed' ? snoozeDescription(proposal.snoozedUntil) : null;
@@ -154,21 +241,21 @@ const ProposalCard = observer(function ProposalCard({ proposal }: { proposal: Pr
 
         <div className="flex flex-wrap gap-2">
           <Button disabled={deciding} onClick={() => void proposals.decide(proposal.id, 'approve')}>
-            {deciding ? 'Working…' : 'Approve'}
+            {label('approve', 'Approve')}
           </Button>
           <Button
             variant="secondary"
             disabled={deciding}
             onClick={() => void proposals.decide(proposal.id, 'snooze')}
           >
-            Snooze {SNOOZE_HOURS}h
+            {label('snooze', `Snooze ${SNOOZE_HOURS}h`)}
           </Button>
           <Button
             variant="danger"
             disabled={deciding}
             onClick={() => void proposals.decide(proposal.id, 'reject')}
           >
-            Reject
+            {label('reject', 'Reject')}
           </Button>
         </div>
       </div>

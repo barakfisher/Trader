@@ -33,6 +33,15 @@ vi.mock('../src/db/queries.js', () => ({
   deleteTelegramBinding: vi.fn(async () => true),
   muteUntil: vi.fn(async () => undefined),
   listProposals: vi.fn(async () => []),
+  // Re-read to decide whether a message still gets Undo. Defaults to an
+  // approval made just now, inside its window.
+  findProposal: vi.fn(async () => ({
+    id: '11111111-2222-3333-4444-555555555555',
+    state: 'approved',
+    expires_at: new Date(Date.now() + 3_600_000),
+    snoozed_until: null,
+    decided_at: new Date(),
+  })),
   getUser: vi.fn(async () => ({
     id: USER,
     email: null,
@@ -62,9 +71,12 @@ const { createApp } = await import('../src/http/app.js');
 const { createFakeAi } = await import('./fakeAi.js');
 const { TelegramNotifier } = await import('../src/telegram/client.js');
 const { encodeBindToken } = await import('../src/telegram/bindToken.js');
-const { encodeCallbackData, mintNonce } = await import('../src/telegram/callbackToken.js');
+const { BUSY_CALLBACK_DATA, decodeCallbackData, encodeCallbackData, mintNonce } = await import(
+  '../src/telegram/callbackToken.js'
+);
 const queries = await import('../src/db/queries.js');
 const proposals = await import('../src/services/proposals.js');
+const { UNDO_WINDOW_SECONDS } = await import('../src/services/proposalState.js');
 
 const ENV = {
   APP_ENV: 'test',
@@ -129,6 +141,19 @@ const callbackUpdate = (data: string) => ({
 const messageUpdate = (text: string) => ({
   message: { text, chat: { id: CHAT }, from: { username: 'someone' } },
 });
+
+/** The text of the toast a tap was answered with. */
+const toast = () =>
+  String(sentCalls.find((call) => call.method === 'answerCallbackQuery')?.body.text);
+
+/** The labels of the buttons a message was left with, row by row flattened. */
+const buttonsOf = (call: { body: Record<string, unknown> } | undefined) =>
+  (
+    (call?.body.reply_markup as { inline_keyboard: { text: string }[][] } | undefined)
+      ?.inline_keyboard ?? []
+  )
+    .flat()
+    .map((button) => button.text);
 
 const bound = () =>
   vi.mocked(queries.findTelegramBindingByChat).mockResolvedValue({
@@ -201,7 +226,7 @@ describe('a signed callback from a bound chat', () => {
     const data = encodeCallbackData({ proposalId: PROPOSAL, action: 'approve', nonce }, SIGNING_SECRET);
     await post(callbackUpdate(data));
 
-    expect(proposals.applyDecision).toHaveBeenCalledWith(
+    expect(vi.mocked(proposals.applyDecision).mock.calls[0]![0]).toEqual(
       expect.objectContaining({
         userId: USER,
         proposalId: PROPOSAL,
@@ -212,7 +237,7 @@ describe('a signed callback from a bound chat', () => {
         idempotencyKey: nonce,
       }),
     );
-    expect(sentCalls[0]?.body.text).toContain('Approved');
+    expect(toast()).toContain('Approved');
   });
 
   it('acts for the chat’s bound user, never for a user named in the payload', async () => {
@@ -264,7 +289,7 @@ describe('a signed callback from a bound chat', () => {
       SIGNING_SECRET,
     );
     await post(callbackUpdate(data));
-    expect(sentCalls[0]?.body.text).toContain('Approved');
+    expect(toast()).toContain('Approved');
   });
 
   it('tells the user when the proposal expired under them', async () => {
@@ -278,7 +303,7 @@ describe('a signed callback from a bound chat', () => {
       SIGNING_SECRET,
     );
     await post(callbackUpdate(data));
-    expect(sentCalls[0]?.body.text).toContain('expired');
+    expect(toast()).toContain('expired');
   });
 
   it('rewrites the message so the chat keeps a record of the decision', async () => {
@@ -300,11 +325,27 @@ describe('a signed callback from a bound chat', () => {
     expect(String(edit!.body.text)).toContain('Approved');
   });
 
-  it('removes the buttons once a proposal is decided', async () => {
+  it('leaves an approval with a single Undo button', async () => {
     // Leaving a live Approve button on something already approved invites a tap
-    // that can only be refused.
+    // that can only be refused; Undo is the one thing an approval still allows.
     const data = encodeCallbackData(
       { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
+      SIGNING_SECRET,
+    );
+    await post(callbackUpdate(data));
+
+    const edit = sentCalls.find((call) => call.method === 'editMessageText');
+    expect(buttonsOf(edit)).toEqual([expect.stringContaining('Undo')]);
+  });
+
+  it('removes the buttons once a proposal is rejected', async () => {
+    vi.mocked(proposals.applyDecision).mockResolvedValueOnce({
+      outcome: 'applied',
+      state: 'rejected',
+      intentId: null,
+    } as never);
+    const data = encodeCallbackData(
+      { proposalId: PROPOSAL, action: 'reject', nonce: mintNonce() },
       SIGNING_SECRET,
     );
     await post(callbackUpdate(data));
@@ -328,8 +369,178 @@ describe('a signed callback from a bound chat', () => {
     await post(callbackUpdate(data));
 
     const edit = sentCalls.find((call) => call.method === 'editMessageText');
-    expect(edit!.body.reply_markup).toBeUndefined();
+    // Sent explicitly, not left alone: by now the message carries the
+    // "Snoozing…" placeholder, and keeping *that* would strand the user.
+    expect(buttonsOf(edit)).toEqual(['Approve', 'Reject', 'Snooze']);
     expect(String(edit!.body.text)).toContain('Snoozed');
+  });
+
+  it('swaps the buttons for an inert placeholder before deciding', async () => {
+    // The visible "your tap registered", and the lock: nothing else on the
+    // message can be pressed while the decision is in flight.
+    let markupWhenDeciding: string[] = [];
+    vi.mocked(proposals.applyDecision).mockImplementationOnce(async () => {
+      markupWhenDeciding = buttonsOf(
+        sentCalls.find((call) => call.method === 'editMessageReplyMarkup'),
+      );
+      return { outcome: 'applied', state: 'approved', intentId: 'i-1' } as never;
+    });
+    const data = encodeCallbackData(
+      { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
+      SIGNING_SECRET,
+    );
+    await post(callbackUpdate(data));
+
+    expect(markupWhenDeciding).toEqual([expect.stringContaining('Approving')]);
+    const placeholder = sentCalls.find((call) => call.method === 'editMessageReplyMarkup');
+    const [[button]] = (placeholder!.body.reply_markup as { inline_keyboard: { callback_data: string }[][] })
+      .inline_keyboard as [[{ callback_data: string }]];
+    expect(button.callback_data).toBe(BUSY_CALLBACK_DATA);
+  });
+
+  it('answers a tap on the placeholder and decides nothing', async () => {
+    await post(callbackUpdate(BUSY_CALLBACK_DATA));
+    expect(proposals.applyDecision).not.toHaveBeenCalled();
+    expect(toast()).toContain('Still working');
+  });
+
+  it('restores the buttons the current state allows when a tap changes nothing', async () => {
+    // A stale message - decided on the web a minute ago - heals on its next tap
+    // rather than keeping the placeholder or buttons that no longer apply.
+    vi.mocked(proposals.applyDecision).mockResolvedValueOnce({
+      outcome: 'refused',
+      reason: 'already_decided',
+      state: 'approved',
+    } as never);
+    const data = encodeCallbackData(
+      { proposalId: PROPOSAL, action: 'reject', nonce: mintNonce() },
+      SIGNING_SECRET,
+    );
+    await post(callbackUpdate(data));
+
+    const markups = sentCalls.filter((call) => call.method === 'editMessageReplyMarkup');
+    expect(buttonsOf(markups.at(-1))).toEqual([expect.stringContaining('Undo')]);
+    // Nothing happened, so the message text gains no outcome line.
+    expect(sentCalls.some((call) => call.method === 'editMessageText')).toBe(false);
+  });
+
+  it('takes Undo away when a late tap finds the window closed', async () => {
+    vi.mocked(queries.findProposal).mockResolvedValueOnce({
+      id: PROPOSAL,
+      state: 'approved',
+      expires_at: new Date(Date.now() + 3_600_000),
+      snoozed_until: null,
+      decided_at: new Date(Date.now() - (UNDO_WINDOW_SECONDS + 5) * 1000),
+    } as never);
+    vi.mocked(proposals.applyDecision).mockResolvedValueOnce({
+      outcome: 'refused',
+      reason: 'undo_window_closed',
+      state: 'approved',
+    } as never);
+    await post(
+      callbackUpdate(
+        encodeCallbackData({ proposalId: PROPOSAL, action: 'undo', nonce: mintNonce() }, SIGNING_SECRET),
+      ),
+    );
+    expect(toast()).toContain('Too late to undo');
+    const markups = sentCalls.filter((call) => call.method === 'editMessageReplyMarkup');
+    expect(markups.at(-1)!.body.reply_markup).toEqual({ inline_keyboard: [] });
+  });
+
+  it('removes the Undo button by itself when the window closes', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    try {
+      const data = encodeCallbackData(
+        { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
+        SIGNING_SECRET,
+      );
+      await post(callbackUpdate(data));
+      const before = sentCalls.length;
+
+      await vi.advanceTimersByTimeAsync(UNDO_WINDOW_SECONDS * 1000);
+      const removal = sentCalls.slice(before).find((call) => call.method === 'editMessageReplyMarkup');
+      expect(removal!.body.reply_markup).toEqual({ inline_keyboard: [] });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('leaves the buttons alone if the approval was undone before the window closed', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    try {
+      const data = encodeCallbackData(
+        { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
+        SIGNING_SECRET,
+      );
+      await post(callbackUpdate(data));
+      vi.mocked(queries.findProposal).mockResolvedValueOnce({
+        id: PROPOSAL,
+        state: 'pending',
+        expires_at: new Date(Date.now() + 3_600_000),
+        snoozed_until: null,
+        decided_at: new Date(),
+      } as never);
+      const before = sentCalls.length;
+
+      await vi.advanceTimersByTimeAsync(UNDO_WINDOW_SECONDS * 1000);
+      expect(sentCalls.slice(before)).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('undoes an approval and offers the three buttons again', async () => {
+    vi.mocked(proposals.applyDecision).mockResolvedValueOnce({
+      outcome: 'applied',
+      state: 'pending',
+      intentId: null,
+    } as never);
+    const data = encodeCallbackData(
+      { proposalId: PROPOSAL, action: 'undo', nonce: mintNonce() },
+      SIGNING_SECRET,
+    );
+    await post({
+      callback_query: {
+        id: 'cb-2',
+        data,
+        message: {
+          message_id: 99,
+          text: 'VOO is 12.4pp above your target weight\n\n\u2705 Approved \u2014 recorded in your ledger. No order was placed. (10:02)',
+          chat: { id: CHAT },
+        },
+      },
+    });
+
+    expect(vi.mocked(proposals.applyDecision).mock.calls[0]![0].action).toBe('undo');
+    expect(toast()).toContain('undone');
+    const edit = sentCalls.find((call) => call.method === 'editMessageText');
+    expect(buttonsOf(edit)).toEqual(['Approve', 'Reject', 'Snooze']);
+    // Appended under the approval, not in place of it: both happened.
+    const lines = String(edit!.body.text).split('\n');
+    expect(lines.at(-2)).toContain('Approved');
+    expect(lines.at(-1)).toContain('Approval undone');
+  });
+
+  it('mints fresh nonces for buttons it puts back', async () => {
+    // The Approve that returns after an undo must not carry the nonce the first
+    // approval already spent, or tapping it would be read as a replay.
+    vi.mocked(proposals.applyDecision).mockResolvedValueOnce({
+      outcome: 'applied',
+      state: 'pending',
+      intentId: null,
+    } as never);
+    const nonce = mintNonce();
+    await post(
+      callbackUpdate(
+        encodeCallbackData({ proposalId: PROPOSAL, action: 'undo', nonce }, SIGNING_SECRET),
+      ),
+    );
+    const edit = sentCalls.find((call) => call.method === 'editMessageText');
+    const keyboard = (edit!.body.reply_markup as { inline_keyboard: { callback_data: string }[][] })
+      .inline_keyboard.flat();
+    const nonces = keyboard.map((button) => decodeCallbackData(button.callback_data, SIGNING_SECRET)!.nonce);
+    expect(new Set(nonces).size).toBe(3);
+    expect(nonces).not.toContain(nonce);
   });
 
   it('answers the tap before it rewrites the message', async () => {

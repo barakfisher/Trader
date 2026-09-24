@@ -2,8 +2,9 @@
  * Orchestrator entrypoint.
  *
  * Milestone 1: REST API, valuation, import and the daily snapshot timer.
- * Milestone 4 adds the proposal state machine and the Mastra workflow that
- * waits on it (see src/mastra/README.md), with the Telegram bot still to come.
+ * Milestone 4 adds the proposal state machine, the Mastra workflow that waits
+ * on it (see src/mastra/README.md), and the Telegram bot - whose updates are
+ * long-polled here until a webhook URL exists.
  */
 
 import { serve } from '@hono/node-server';
@@ -16,7 +17,11 @@ import { createApp } from './http/app.js';
 import { initLogger, logger } from './logger.js';
 import { PROPOSAL_LIFECYCLE_ID, proposalLifecycle } from './mastra/proposalLifecycle.js';
 import { closeWorkflowRuntime, initWorkflowRuntime } from './mastra/workflowRuntime.js';
+import { buildNotifier } from './notify/factory.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
+import { TelegramNotifier } from './telegram/client.js';
+import { TelegramPoller } from './telegram/poller.js';
+import { handleTelegramUpdate } from './telegram/updates.js';
 
 function main(): void {
   const config = loadConfig();
@@ -36,16 +41,31 @@ function main(): void {
     internalApiKey: config.INTERNAL_API_KEY,
   });
 
-  const app = createApp(config, ai);
+  // Built once and shared: the poller answers taps through the same client the
+  // fan-out sends alerts with.
+  const notifier = buildNotifier(config);
+  const app = createApp(config, ai, notifier);
   const server = serve({ fetch: app.fetch, port: config.ORCHESTRATOR_PORT }, (info) =>
     log.info({ port: info.port }, 'orchestrator listening'),
   );
 
   startScheduler(config);
 
+  const poller =
+    config.TELEGRAM_UPDATES === 'polling' && notifier instanceof TelegramNotifier
+      ? new TelegramPoller(notifier, {
+          handle: (update) => handleTelegramUpdate({ config, notifier }, update),
+        })
+      : null;
+  poller?.start();
+  if (poller === null && notifier instanceof TelegramNotifier) {
+    log.info({ transport: config.TELEGRAM_UPDATES }, 'telegram updates not polled');
+  }
+
   const shutdown = (signal: string) => {
     log.info({ signal }, 'shutting down');
     stopScheduler();
+    poller?.stop();
     server.close(async () => {
       await closeWorkflowRuntime();
       await closePool();

@@ -66,6 +66,7 @@ vi.mock('../src/db/queries.js', () => ({
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
 const { createApp } = await import('../src/http/app.js');
 const { createFakeAi } = await import('./fakeAi.js');
+const { UNDO_WINDOW_SECONDS } = await import('../src/services/proposalState.js');
 const queries = await import('../src/db/queries.js');
 
 const ENV = {
@@ -136,6 +137,16 @@ describe('the proposals inbox', () => {
     const response = await app.request('/proposals?state=open', { headers: auth() });
     const body = (await response.json()) as { proposals: unknown[] };
     expect(body.proposals).toHaveLength(0);
+  });
+
+  it('lists approvals, newest decision first, for the web to offer Undo on', async () => {
+    vi.mocked(queries.listProposals).mockResolvedValueOnce([]);
+    const response = await app.request('/proposals?state=approved', { headers: auth() });
+    expect(response.status).toBe(200);
+    expect(vi.mocked(queries.listProposals).mock.calls.at(-1)![1]).toMatchObject({
+      approved: true,
+      open: false,
+    });
   });
 
   it('keeps a live proposal in the open list', async () => {
@@ -230,6 +241,49 @@ describe('deciding a proposal', () => {
     expect(response.status).toBe(422);
     const body = (await response.json()) as { error: string };
     expect(body.error).toBe('already_decided');
+  });
+
+  it('undoes an approval', async () => {
+    vi.mocked(queries.findProposal).mockResolvedValueOnce(
+      proposalRow({ state: 'approved', decided_at: new Date() }) as never,
+    );
+    const response = await decide({ action: 'undo' });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ outcome: 'applied', state: 'pending' });
+  });
+
+  it('refuses an undo after the window, saying why', async () => {
+    vi.mocked(queries.findProposal).mockResolvedValueOnce(
+      proposalRow({
+        state: 'approved',
+        decided_at: new Date(Date.now() - (UNDO_WINDOW_SECONDS + 5) * 1000),
+      }) as never,
+    );
+    const response = await decide({ action: 'undo' });
+    expect(response.status).toBe(422);
+    expect(((await response.json()) as { error: string }).error).toBe('undo_window_closed');
+  });
+
+  it('tells the client until when an approval can be undone', async () => {
+    const decidedAt = new Date();
+    vi.mocked(queries.findProposal).mockResolvedValueOnce(
+      proposalRow({ state: 'approved', decided_at: decidedAt }) as never,
+    );
+    vi.mocked(queries.listProposalTransitions).mockResolvedValueOnce([]);
+    const response = await app.request(`/proposals/${proposalRow().id}`, { headers: auth() });
+    const body = (await response.json()) as { proposal: { undoableUntil: string | null } };
+    expect(Date.parse(body.proposal.undoableUntil!)).toBe(
+      decidedAt.getTime() + UNDO_WINDOW_SECONDS * 1000,
+    );
+  });
+
+  it('refuses to undo a rejection, which recorded nothing to withdraw', async () => {
+    vi.mocked(queries.findProposal).mockResolvedValueOnce(
+      proposalRow({ state: 'rejected' }) as never,
+    );
+    const response = await decide({ action: 'undo' });
+    expect(response.status).toBe(422);
+    expect(((await response.json()) as { error: string }).error).toBe('not_undoable');
   });
 
   it('rejects a snooze with no end time before it reaches the database', async () => {

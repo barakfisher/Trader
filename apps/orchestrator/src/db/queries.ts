@@ -805,16 +805,28 @@ export function findProposal(userId: string, proposalId: string): Promise<Propos
  */
 export function listProposals(
   userId: string,
-  options: { open?: boolean; limit?: number } = {},
+  options: { open?: boolean; approved?: boolean; limit?: number } = {},
 ): Promise<ProposalRow[]> {
-  const { open = false, limit = 50 } = options;
+  const { open = false, approved = false, limit = 50 } = options;
+  // Approvals are listed newest decision first - they are what the web inbox
+  // offers Undo on, and the one just made is the one most likely to be undone.
+  // Approved is terminal, so the stored state is the effective one and no
+  // deadline re-check is needed.
+  const filter = open
+    ? `AND p.state IN ('pending','snoozed')`
+    : approved
+      ? `AND p.state = 'approved'`
+      : '';
+  const order = approved
+    ? 'p.decided_at DESC NULLS LAST, p.created_at DESC'
+    : 'p.expires_at ASC, p.created_at DESC';
   return query<ProposalRow>(
     `SELECT ${PROPOSAL_COLUMNS}
        FROM proposals p
        JOIN observations o ON o.id = p.observation_id
       WHERE p.user_id = $1
-        ${open ? `AND p.state IN ('pending','snoozed')` : ''}
-      ORDER BY p.expires_at ASC, p.created_at DESC
+        ${filter}
+      ORDER BY ${order}
       LIMIT $2`,
     [userId, limit],
   );
@@ -848,6 +860,8 @@ export interface TransitionToApply {
   idempotencyKey: string | null;
   /** The ledger row an approval writes. Null for every other transition. */
   intent: { kind: string; payload: unknown } | null;
+  /** True when this transition leaves `approved`: the live ledger row is revoked. */
+  revokeIntent: boolean;
 }
 
 export interface TransitionResult {
@@ -869,7 +883,8 @@ export interface TransitionResult {
  *
  * Guideline 2 lives here. An approval writes `intents` and nothing else - there
  * is no broker call to disable, because there is no broker client in the
- * repository.
+ * repository. An undo revokes that row in the same transaction, so the ledger
+ * and the proposal can never disagree about whether assent stands.
  */
 export function applyProposalTransition(
   transition: TransitionToApply,
@@ -913,6 +928,18 @@ export function applyProposalTransition(
         transition.idempotencyKey,
       ],
     );
+
+    if (transition.revokeIntent) {
+      // Marked, never deleted - see migration 0014. The partial unique index
+      // allows one *live* intent per proposal, so revoking this one is what
+      // lets a later re-approval write its own row.
+      await client.query(
+        `UPDATE intents
+            SET revoked_at = now(), revoked_via = $3
+          WHERE proposal_id = $1 AND user_id = $2 AND revoked_at IS NULL`,
+        [transition.proposalId, transition.userId, transition.surface],
+      );
+    }
 
     let intentId: string | null = null;
     if (transition.intent !== null) {

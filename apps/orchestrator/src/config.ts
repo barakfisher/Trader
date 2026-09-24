@@ -84,6 +84,21 @@ const schema = z.object({
    * see `bindToken.ts` - and neither can be presented as the other.
    */
   TELEGRAM_SIGNING_SECRET: optionalSetting(16),
+
+  /**
+   * How taps and commands reach this service. `polling` pulls them with
+   * `getUpdates` and is the default, because the webhook needs a public HTTPS
+   * URL that no installation has until M7's ingress. `webhook` once one is
+   * registered - Telegram refuses to serve both at once. `off` for a process
+   * that must not consume updates, such as a second replica.
+   *
+   * Empty means unset, for the reason `optionalSetting` gives: compose passes a
+   * blank line through as `''`, and an enum would refuse it at boot.
+   */
+  TELEGRAM_UPDATES: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.enum(['polling', 'webhook', 'off']).default('polling'),
+  ),
 });
 
 export type Config = z.infer<typeof schema> & {

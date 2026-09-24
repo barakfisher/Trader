@@ -30,13 +30,22 @@
 /** The states a proposal row can hold. Mirrors the CHECK in migration 0006. */
 export type ProposalState = 'pending' | 'approved' | 'rejected' | 'snoozed' | 'expired';
 
-/** What a user (or the system) asks for. Not the same set as the states. */
-export type ProposalAction = 'approve' | 'reject' | 'snooze';
+/**
+ * What a user (or the system) asks for. Not the same set as the states.
+ *
+ * `undo` withdraws an approval: the proposal goes back to `pending` and the
+ * ledger row the approval wrote is marked revoked - never deleted, because a
+ * ledger that forgets what was once assented to is not a ledger.
+ */
+export type ProposalAction = 'approve' | 'reject' | 'snooze' | 'undo';
 
 /** Where a decision arrived from. 'system' is the sweep, not a person. */
 export type DecisionSurface = 'web' | 'telegram' | 'system';
 
-/** The terminal states: nothing leaves these, so nothing may re-enter them. */
+/**
+ * The terminal states: no decision leaves these. The one exception is `undo`,
+ * which may take an approval back to `pending` - see `decideUndo`.
+ */
 const TERMINAL: ReadonlySet<ProposalState> = new Set<ProposalState>([
   'approved',
   'rejected',
@@ -59,6 +68,33 @@ export interface ProposalFacts {
   state: ProposalState;
   expiresAt: Date;
   snoozedUntil: Date | null;
+  /**
+   * When the proposal last changed state. Only `undo` reads it: for an approved
+   * proposal it is the moment of approval, which starts the undo window.
+   */
+  decidedAt?: Date | null;
+}
+
+/**
+ * How long an approval can be undone, from the moment it was made.
+ *
+ * Undo exists to catch a mis-tap, not to reopen a decision at leisure - after
+ * this, an approval is as settled as a rejection. Short enough that the
+ * ledger's record of assent means something; long enough to notice a thumb that
+ * landed on the wrong button. Chosen by the product owner.
+ */
+export const UNDO_WINDOW_SECONDS = 30;
+
+/**
+ * Until when an approval can still be undone, or null if it cannot be at all.
+ *
+ * Null for anything that is not an approval, and for an approval with no
+ * recorded decision time: a window with no start cannot be shown to be open,
+ * and failing closed is the cheap direction for a ledger.
+ */
+export function undoableUntil(facts: ProposalFacts): Date | null {
+  if (facts.state !== 'approved' || !facts.decidedAt) return null;
+  return new Date(facts.decidedAt.getTime() + UNDO_WINDOW_SECONDS * 1000);
 }
 
 /**
@@ -92,6 +128,8 @@ export function effectiveState(facts: ProposalFacts, now: Date): ProposalState {
 export type RefusalReason =
   | 'expired'
   | 'already_decided'
+  | 'not_undoable'
+  | 'undo_window_closed'
   | 'snooze_past_expiry'
   | 'snooze_in_the_past';
 
@@ -117,6 +155,8 @@ export interface DecisionRequest {
 export function decide(facts: ProposalFacts, request: DecisionRequest, now: Date): Decision {
   const current = effectiveState(facts, now);
 
+  if (request.action === 'undo') return decideUndo(facts, current, now);
+
   if (current === 'expired') {
     // Checked before anything else and refused for every action: a deadline
     // that can be argued past on some paths is not a deadline. There is no
@@ -136,8 +176,9 @@ export function decide(facts: ProposalFacts, request: DecisionRequest, now: Date
       return { outcome: 'unchanged', state: current };
     }
     // Approving something already rejected, or the reverse. Refused rather than
-    // applied: a decision that can be overwritten is not an audit trail, and
-    // the ledger row an approval writes cannot be unwritten.
+    // applied: a decision that can be overwritten is not an audit trail. An
+    // approval is withdrawn with `undo`, which revokes its ledger row rather
+    // than letting a second verb quietly overwrite the first.
     return { outcome: 'refused', reason: 'already_decided', state: current };
   }
 
@@ -162,6 +203,34 @@ export function decide(facts: ProposalFacts, request: DecisionRequest, now: Date
       return { outcome: 'applied', from: current, to: 'snoozed', snoozedUntil: until };
     }
   }
+}
+
+/**
+ * Withdraw an approval.
+ *
+ * Checked before the expiry rule on purpose. An approval is terminal, so
+ * `effectiveState` never reads one as expired - and withdrawing assent must stay
+ * possible after the deadline, because the deadline bounds how long the
+ * *question* is open, not how long the user is bound by their answer. An undo
+ * past the deadline lands on `pending`, which `effectiveState` then reads as
+ * expired and the sweep records: the approval is gone, and the question does
+ * not come back to life.
+ *
+ * Only an approval can be undone, and only within `UNDO_WINDOW_SECONDS` of it.
+ * A rejection and a snooze write nothing to the
+ * ledger, so there is nothing to withdraw; an open proposal answers `unchanged`,
+ * which is what a second tap on Undo - or an Undo racing a web click - gets.
+ */
+function decideUndo(facts: ProposalFacts, current: ProposalState, now: Date): Decision {
+  if (facts.state === 'approved') {
+    const until = undoableUntil(facts);
+    if (until === null || now.getTime() > until.getTime()) {
+      return { outcome: 'refused', reason: 'undo_window_closed', state: 'approved' };
+    }
+    return { outcome: 'applied', from: 'approved', to: 'pending', snoozedUntil: null };
+  }
+  if (isOpen(current)) return { outcome: 'unchanged', state: current };
+  return { outcome: 'refused', reason: 'not_undoable', state: current };
 }
 
 /**

@@ -9,7 +9,8 @@
  * false the moment one surface can reach the UPDATE without passing the check.
  *
  * **Guideline 2 is enforced here by omission.** Approving writes a row to
- * `intents` - the paper ledger - and nothing else. There is no broker client in
+ * `intents` - the paper ledger - and nothing else; undoing marks that row
+ * revoked. There is no broker client in
  * this repository to accidentally call, and the shape of an intent is a record
  * of what the user assented to, not an order anybody could submit.
  */
@@ -125,6 +126,7 @@ export function factsOf(row: ProposalRow): ProposalFacts {
     state: row.state as ProposalState,
     expiresAt: row.expires_at,
     snoozedUntil: row.snoozed_until,
+    decidedAt: row.decided_at,
   };
 }
 
@@ -198,6 +200,10 @@ export async function applyDecision(
       decision.to === 'approved'
         ? { kind: row.kind, payload: row.payload }
         : null,
+    // Leaving `approved` by any path withdraws the assent it recorded. The row
+    // is marked, not deleted: "approved at 10:02, withdrawn at 10:05" is the
+    // history, and a ledger that kept only the second half would be lying.
+    revokeIntent: decision.from === 'approved',
   });
 
   if (!result.applied) {
@@ -222,7 +228,15 @@ export async function applyDecision(
     },
     'proposal.transition',
   );
-  return { outcome: 'applied', state: decision.to, intentId: result.intentId };
+  // Reported through `effectiveState` rather than as `decision.to`, because the
+  // two differ in exactly one case: an undo past the deadline writes `pending`
+  // onto a question that is already dead, and telling the user "open again"
+  // would hand them a button that can only be refused.
+  const state = effectiveState(
+    { state: decision.to, expiresAt: row.expires_at, snoozedUntil: decision.snoozedUntil },
+    now,
+  );
+  return { outcome: 'applied', state, intentId: result.intentId };
 }
 
 /** Write the expiry the clock has already made true. */
@@ -242,6 +256,7 @@ async function expireProposal(row: ProposalRow, now: Date): Promise<void> {
     evidenceSnapshot: row.evidence,
     idempotencyKey: null,
     intent: null,
+    revokeIntent: false,
   });
 }
 

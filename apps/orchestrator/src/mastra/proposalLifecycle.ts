@@ -83,7 +83,7 @@ const findingSchema = z.object({
  * here.
  */
 const resumeSchema = z.object({
-  action: z.enum(['approve', 'reject', 'snooze', 'refresh']),
+  action: z.enum(['approve', 'reject', 'snooze', 'undo', 'refresh']),
   surface: z.enum(['web', 'telegram', 'system']),
   /**
    * The moment the decision was made, decided at the edge and carried in rather
