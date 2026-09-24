@@ -351,20 +351,25 @@ def _name_aliases(instrument: InstrumentRef) -> list[str]:
 
 
 def _core_name(instrument: InstrumentRef) -> str:
-    """The instrument's name with the parts prose leaves out removed.
+    return core_name(instrument.name, asset_class=instrument.asset_class)
+
+
+def core_name(name: str | None, *, asset_class: str | None = None) -> str:
+    """A name with the parts prose leaves out removed: "Fastenal Company" -> "Fastenal".
 
     Case is preserved, because whether an alias is matched case-sensitively
-    depends on how it is written in the instruments table.
+    depends on how it is written in the instruments table. Public because topic
+    matching strips an instrument's own name from its description with exactly
+    this rule (`app/universe/matching_text.py`); two definitions of what a
+    company's name is would drift.
     """
-    name = (instrument.name or "").strip()
+    name = (name or "").strip()
     if not name:
         return ""
     name = _CLASS_SUFFIX.sub("", name, count=1)
 
     tokens = name.split()
-    tail_noise = _NAME_TAIL_NOISE | (
-        _CRYPTO_NAME_TAIL if instrument.asset_class == "crypto" else frozenset()
-    )
+    tail_noise = _NAME_TAIL_NOISE | (_CRYPTO_NAME_TAIL if asset_class == "crypto" else frozenset())
     while len(tokens) > 1 and tokens[-1].strip(".,").lower() in tail_noise:
         tokens.pop()
     return " ".join(tokens).strip(" .,")

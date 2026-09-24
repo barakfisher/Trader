@@ -16,6 +16,9 @@ dependencies = [
     "psycopg[binary]>=3.2.2",
     "yfinance>=0.2.44",
     "python-dateutil>=2.9.0",
+    # Topic disambiguation clusters candidate vectors (app/topics/meanings.py).
+    # Already present through yfinance; declared because it is now used directly.
+    "numpy>=2.0",
 ]
 
 [project.optional-dependencies]

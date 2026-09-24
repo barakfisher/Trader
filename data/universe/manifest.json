@@ -1,0 +1,50 @@
+{
+  "as_of": "2026-09-24T08:13:21Z",
+  "source": "yahoo finance screener + Ticker.info (yfinance 1.7.0)",
+  "screen": {
+    "region": "us",
+    "exchanges": [
+      "NMS",
+      "NGM",
+      "NCM",
+      "NYQ",
+      "ASE",
+      "BTS",
+      "PCX"
+    ],
+    "equity": "intradaymarketcap >= min_size",
+    "etf": "fundnetassets >= min_size",
+    "min_size_minor": 100000000000,
+    "min_size_currency": "USD"
+  },
+  "counts": {
+    "screened": 3730,
+    "kept": 3590,
+    "equities": 2548,
+    "etfs": 1042,
+    "dropped_preferred_or_duplicate_listing": 140,
+    "without_description": 20
+  },
+  "without_description": [
+    "ACYN",
+    "BAR",
+    "BCAT",
+    "BMEZ",
+    "BULZ",
+    "DFMC",
+    "ECAT",
+    "FISV",
+    "FNGU",
+    "GDXU",
+    "IQMM",
+    "JSM",
+    "LION",
+    "NHYB",
+    "NIQ",
+    "NUDG",
+    "NXUS",
+    "OUNZ",
+    "PDO",
+    "SBIL"
+  ]
+}
