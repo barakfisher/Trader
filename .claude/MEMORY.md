@@ -811,18 +811,22 @@ the green test as coverage.
   nothing. `--dry-run` says whether the files and the database agree without writing, and now
   reports embedding coverage as well as text — vectors are a second derived copy with the same
   drift.
-- **The dev database is at `0013_kb_embeddings`, applied natively while the running containers were
-  built from `main` at 0012.** This is the recurring hazard recorded below, and it is harmless in
-  this direction — 0013 only adds nullable columns and an index, which the 0012-era code ignores.
-  It stops being harmless on the next `dev-docker.sh`, where the `migrate` image still built from
-  `main` dies with `Can't locate revision '0013_kb_embeddings'`. The fix is always `docker compose
-  build`, never touching the database.
+- **The stack and the database are in step as of 2026-09-24**: both at `0013_kb_embeddings`,
+  images rebuilt from `main` at #47 with `bash scripts/dev-docker.sh` (no `--reset`, so the
+  Postgres volume and every holding, quote and observation were kept). Verified rather than
+  assumed: `migrate` and `corpus` both exited 0, and the keyed eval run *inside the running
+  container* passed 35/35. They will drift apart again the next time a worktree applies a
+  migration natively — see the shared-database bullet above for the symptom and the fix.
 - **`.env` must set `EMBEDDINGS_PROVIDER=openrouter`** to get semantic retrieval; the code
   default is `fixture` and stays that way so CI and a fresh clone need no key. This is a
   deliberate `.env` / `.env.example` asymmetry, like `MARKET_DATA_PROVIDERS` above — do not
-  "fix" it. The M0 placeholders `EMBEDDINGS_MODEL=BAAI/bge-small-en-v1.5` and
-  `EMBEDDINGS_DIM=384` must be deleted; `fastembed` names an adapter nobody wrote and the
-  service refuses to start on it, deliberately and with a message saying what to set.
+  "fix" it. **This machine's `.env` is already correct** (fixed 2026-09-24; the pre-edit copy
+  was backed up outside the repository). Any *other* `.env` written from the M0 example still
+  carries `EMBEDDINGS_PROVIDER=fastembed`, `EMBEDDINGS_MODEL=BAAI/bge-small-en-v1.5` and
+  `EMBEDDINGS_DIM=384`: delete the last two and set the provider. `fastembed` names an adapter
+  nobody wrote, and the service refuses to start on it, deliberately and with a message saying
+  what to set. Leaving the bge `EMBEDDINGS_MODEL` in place is the quieter trap — the real
+  embedder would ask for a 384-wide model and fail its width check on the first call.
 - **The OpenRouter workspace now has budget**, which also unblocks narration (~$0.45/month) —
   the dashboard badge still reports templates, and whether that is still the right steady
   state is now a measurement nobody has taken rather than a constraint. `LLM_MODEL` is also
