@@ -173,3 +173,44 @@ def test_a_portfolio_answer_is_never_attributed_to_a_model() -> None:
 
     assert result.answered is True
     assert result.answer_source == "computed"
+
+
+# --------------------------------------------------------------------------
+# Questions the arithmetic must refuse even though a handler would match
+# --------------------------------------------------------------------------
+
+
+def test_asking_what_to_do_with_a_holding_is_refused_as_advice() -> None:
+    """Guideline 2. Found by the eval set, not by review.
+
+    "should I sell my largest position" names the largest position, so the
+    largest-position handler would answer it with that position's value -
+    dodging the question silently instead of declining it.
+    """
+    result = answer_portfolio_question(
+        question="should I sell my largest position", positions=HOLDINGS
+    )
+
+    assert result.answered is False
+    assert result.refused_reason == "advice"
+    assert "never gives personal investment advice" in result.text
+
+
+def test_a_forecast_is_refused_rather_than_answered_with_todays_figure() -> None:
+    """Also found by the eval. "worth" matches the total handler.
+
+    Answering "what will it be worth next year" with today's total is answering
+    a different question, confidently.
+    """
+    result = answer_portfolio_question(
+        question="what will my portfolio be worth next year", positions=HOLDINGS
+    )
+
+    assert result.answered is False
+    assert result.refused_reason == "not_computable"
+
+
+def test_the_refusal_checks_do_not_swallow_ordinary_portfolio_questions() -> None:
+    """The markers must be specific enough to leave these alone."""
+    for question in ("what is my portfolio worth", "which is my biggest holding"):
+        assert answer_portfolio_question(question=question, positions=HOLDINGS).answered, question

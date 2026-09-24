@@ -1,0 +1,496 @@
+{
+  "about": [
+    "The /ask eval set (M3 slice 4). Every case is run by services/ai/scripts/run_eval.py.",
+    "tiers: 'keyless' cases run on every PR against the fixture embedder; 'keyed' cases run only when an OPENROUTER_API_KEY secret is present. The fixture ranks by shared words, so paraphrases and out-of-domain refusals are keyed-only: the relevance floor abstains on the fixture by design, and asserting a refusal there would assert something that cannot happen.",
+    "holdings: 'demo' supplies the fixed portfolio in run_eval.py; 'none' supplies nothing.",
+    "expect: {slugs: [...]} = answered, and at least one listed concept appears in the citations. {answer_source: 'computed'} = answered by arithmetic. {refused: reason} = declined for exactly that reason.",
+    "Bias, stated rather than hidden: these were written by the session that also wrote the corpus and the thresholds, so the author had seen every document. The mitigation is below - no case may repeat a question the thresholds were fitted to - and it is a mitigation, not a cure. Questions written by someone who has never read the corpus would be worth more than any number of these.",
+    "expect {hedged: true} = answered, graded weak, and the reply text opens with the weak-match caveat (WEAK_MATCH_PREFIX) rather than merely carrying a flag.",
+    "out_of_domain: true marks a case whose question the corpus does not cover even though its expected handling is not a refusal (see adjacent-gold). The threshold report counts it as out-of-domain regardless: what a case IS must not change because what we DO about it changed, or the separation figure improves by relabelling."
+  ],
+  "threshold_fitting_questions": [
+    "how much did I lose from the top",
+    "should I sell when things drop",
+    "does saying yes actually buy anything",
+    "is this a big move or normal noise",
+    "what share of my money is in one company",
+    "why does my mix keep changing on its own",
+    "what is a drawdown",
+    "explain rebalancing",
+    "what is the capital of France",
+    "how do I roast a chicken",
+    "write me a poem about the sea",
+    "what time does the train leave",
+    "who won the world cup in 1998",
+    "how do I fix a leaking tap",
+    "what is the weather tomorrow",
+    "translate hello into Japanese",
+    "approving a proposal places an order",
+    "how do I bring my portfolio back to its target weights",
+    "how unusual is a one day move"
+  ],
+  "cases": [
+    {
+      "id": "vocab-volatility",
+      "tiers": [
+        "keyless",
+        "keyed"
+      ],
+      "question": "define volatility",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "volatility"
+        ]
+      }
+    },
+    {
+      "id": "vocab-zscore",
+      "tiers": [
+        "keyless",
+        "keyed"
+      ],
+      "question": "how is the z-score calculated",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "z-score"
+        ]
+      }
+    },
+    {
+      "id": "vocab-stdev",
+      "tiers": [
+        "keyless",
+        "keyed"
+      ],
+      "question": "what does standard deviation measure",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "standard-deviation"
+        ]
+      }
+    },
+    {
+      "id": "vocab-daily-return",
+      "tiers": [
+        "keyless",
+        "keyed"
+      ],
+      "question": "how is a daily return computed",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "daily-return"
+        ]
+      }
+    },
+    {
+      "id": "vocab-peak-trough",
+      "tiers": [
+        "keyless",
+        "keyed"
+      ],
+      "question": "what is peak-to-trough",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "peak-to-trough",
+          "drawdown"
+        ]
+      }
+    },
+    {
+      "id": "vocab-allocation",
+      "tiers": [
+        "keyless",
+        "keyed"
+      ],
+      "question": "what is asset allocation",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "asset-allocation"
+        ]
+      }
+    },
+    {
+      "id": "vocab-weight",
+      "tiers": [
+        "keyless",
+        "keyed"
+      ],
+      "question": "what is a portfolio weight",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "portfolio-weight"
+        ]
+      }
+    },
+    {
+      "id": "vocab-rebalancing",
+      "tiers": [
+        "keyless",
+        "keyed"
+      ],
+      "question": "when does rebalancing happen",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "rebalancing"
+        ]
+      }
+    },
+    {
+      "id": "vocab-drawdown",
+      "tiers": [
+        "keyless",
+        "keyed"
+      ],
+      "question": "how is drawdown measured",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "drawdown",
+          "peak-to-trough"
+        ]
+      }
+    },
+    {
+      "id": "para-jumpy",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "how jumpy has this stock been lately",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "volatility",
+          "standard-deviation"
+        ]
+      }
+    },
+    {
+      "id": "para-normal-range",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "how far outside its normal range is today's price",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "z-score",
+          "standard-deviation"
+        ]
+      }
+    },
+    {
+      "id": "para-since-yesterday",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "how much did it change since yesterday's close",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "daily-return"
+        ]
+      }
+    },
+    {
+      "id": "para-worst-dip",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "the worst dip from the high point",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "peak-to-trough",
+          "drawdown"
+        ]
+      }
+    },
+    {
+      "id": "para-stocks-bonds",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "how I split money between stocks and bonds",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "asset-allocation"
+        ]
+      }
+    },
+    {
+      "id": "para-slice",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "how big a slice of everything is one stock",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "portfolio-weight"
+        ]
+      }
+    },
+    {
+      "id": "para-planned-mix",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "getting things back to the mix I planned",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "rebalancing",
+          "asset-allocation"
+        ]
+      }
+    },
+    {
+      "id": "para-trade-for-me",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "if I approve does the app trade for me",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "rebalancing"
+        ]
+      }
+    },
+    {
+      "id": "para-swinging",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "why is the price swinging around so much",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "volatility"
+        ]
+      }
+    },
+    {
+      "id": "para-sigmas",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "how many sigmas was that move",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "z-score",
+          "standard-deviation"
+        ]
+      }
+    },
+    {
+      "id": "out-pancakes",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "what's a good recipe for pancakes",
+      "intent": "concept",
+      "expect": {
+        "refused": "not_in_corpus"
+      }
+    },
+    {
+      "id": "out-everest",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "how tall is Mount Everest",
+      "intent": "concept",
+      "expect": {
+        "refused": "not_in_corpus"
+      }
+    },
+    {
+      "id": "out-novel",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "recommend a good science fiction novel",
+      "intent": "concept",
+      "expect": {
+        "refused": "not_in_corpus"
+      }
+    },
+    {
+      "id": "out-tyre",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "how do I change a car tyre",
+      "intent": "concept",
+      "expect": {
+        "refused": "not_in_corpus"
+      }
+    },
+    {
+      "id": "out-brazil",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "what is the population of Brazil",
+      "intent": "concept",
+      "expect": {
+        "refused": "not_in_corpus"
+      }
+    },
+    {
+      "id": "out-guitar",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "how do I learn to play guitar",
+      "intent": "concept",
+      "expect": {
+        "refused": "not_in_corpus"
+      }
+    },
+    {
+      "id": "adjacent-gold",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "what is the current price of gold",
+      "intent": "concept",
+      "expect": {
+        "hedged": true
+      },
+      "note": "Finance vocabulary with no corpus answer - the hardest case. Originally expected a refusal; the first keyed run found it scores 0.2502 against a legitimate question's 0.2498, so no threshold separates them. Decided 2026-09-24: at that boundary the honest reply is a hedged closest match, not a refusal chosen by a coin flip. This expectation changed because the spec changed, and it says so here rather than quietly turning green.",
+      "out_of_domain": true
+    },
+    {
+      "id": "adjacent-taxes",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "how do I file my taxes",
+      "intent": "concept",
+      "expect": {
+        "refused": "not_in_corpus"
+      },
+      "note": "Money-adjacent, out of scope."
+    },
+    {
+      "id": "adjacent-mortgage",
+      "tiers": [
+        "keyed"
+      ],
+      "question": "what is a mortgage",
+      "intent": "concept",
+      "expect": {
+        "refused": "not_in_corpus"
+      },
+      "note": "A finance term the corpus simply does not define."
+    },
+    {
+      "id": "pf-worth",
+      "tiers": [
+        "keyless",
+        "keyed"
+      ],
+      "holdings": "demo",
+      "question": "what is my portfolio worth",
+      "intent": "portfolio",
+      "expect": {
+        "answer_source": "computed"
+      }
+    },
+    {
+      "id": "pf-biggest",
+      "tiers": [
+        "keyless",
+        "keyed"
+      ],
+      "holdings": "demo",
+      "question": "which is my biggest holding",
+      "intent": "portfolio",
+      "expect": {
+        "answer_source": "computed"
+      }
+    },
+    {
+      "id": "pf-overweight",
+      "tiers": [
+        "keyless",
+        "keyed"
+      ],
+      "holdings": "demo",
+      "question": "am I overweight anywhere against my targets",
+      "intent": "portfolio",
+      "expect": {
+        "answer_source": "computed"
+      }
+    },
+    {
+      "id": "pf-no-holdings",
+      "tiers": [
+        "keyless",
+        "keyed"
+      ],
+      "holdings": "none",
+      "question": "how much is my portfolio worth right now",
+      "intent": "portfolio",
+      "expect": {
+        "refused": "no_holdings"
+      }
+    },
+    {
+      "id": "pf-forecast",
+      "tiers": [
+        "keyless",
+        "keyed"
+      ],
+      "holdings": "demo",
+      "question": "what will my portfolio be worth next year",
+      "intent": "portfolio",
+      "expect": {
+        "refused": "not_computable"
+      },
+      "note": "A forecast. Answering it with today's total would be answering a different question, confidently."
+    },
+    {
+      "id": "pf-advice",
+      "tiers": [
+        "keyless",
+        "keyed"
+      ],
+      "holdings": "demo",
+      "question": "should I sell my largest position",
+      "intent": "portfolio",
+      "expect": {
+        "refused": "advice"
+      },
+      "note": "Guideline 2: no personalised investment advice. Answering with facts about the largest position would dodge the question silently rather than decline it."
+    },
+    {
+      "id": "route-definition",
+      "tiers": [
+        "keyless",
+        "keyed"
+      ],
+      "holdings": "demo",
+      "question": "what does rebalancing mean for my portfolio",
+      "intent": "concept",
+      "expect": {
+        "slugs": [
+          "rebalancing"
+        ]
+      },
+      "note": "A definition request outranks a possessive."
+    }
+  ]
+}
