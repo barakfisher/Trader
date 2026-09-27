@@ -213,6 +213,38 @@ class PortfolioScanResponse(BaseModel):
     stats: ScanStatsOut
 
 
+class NewsInstrument(BaseModel):
+    """An instrument the matcher may link articles to. The name is what prose uses."""
+
+    instrument_id: str
+    symbol: str
+    name: str | None = None
+    asset_class: str = "unknown"
+
+
+class NewsCollectRequest(BaseModel):
+    instruments: list[NewsInstrument] = Field(min_length=1, max_length=500)
+    lookback_hours: int = Field(default=48, ge=1, le=24 * 60)
+
+
+class NewsCollectResponse(BaseModel):
+    """What one collection pass did. Every counter is here so a quiet run can be told
+    apart from a broken one after the fact."""
+
+    fetched: int = 0
+    stored: int = 0
+    inserted: int = 0
+    duplicate_urls: int = 0
+    duplicate_content: int = 0
+    empty_bodies: int = 0
+    entity_links: int = 0
+    instruments: int = 0
+    since: datetime
+    providers_used: list[str] = Field(default_factory=list)
+    provider_failures: list[str] = Field(default_factory=list)
+    linked_symbols: dict[str, int] = Field(default_factory=dict)
+
+
 class TopicScanInstrument(BaseModel):
     instrument_id: str
     symbol: str

@@ -155,6 +155,22 @@ export const topicScanResponseSchema = z.object({
   stats: topicScanStatsSchema,
 });
 
+// Counters always present; lists and the map optional (default_factory).
+export const newsCollectResponseSchema = z.object({
+  fetched: z.number().int(),
+  stored: z.number().int(),
+  inserted: z.number().int(),
+  duplicate_urls: z.number().int(),
+  duplicate_content: z.number().int(),
+  empty_bodies: z.number().int(),
+  entity_links: z.number().int(),
+  instruments: z.number().int(),
+  since: z.string(),
+  providers_used: z.array(z.string()).optional(),
+  provider_failures: z.array(z.string()).optional(),
+  linked_symbols: z.record(z.string(), z.number().int()).optional(),
+});
+
 export const backfillResponseSchema = z.object({
   written: z.number().int(),
   already_present: z.number().int(),
@@ -201,6 +217,9 @@ export type _AssertPortfolioScan = Expect<
 >;
 export type _AssertTopicScan = Expect<
   Equal<z.infer<typeof topicScanResponseSchema>, Schemas['TopicScanResponse']>
+>;
+export type _AssertNewsCollect = Expect<
+  Equal<z.infer<typeof newsCollectResponseSchema>, Schemas['NewsCollectResponse']>
 >;
 export const narrationConfigSchema = z.object({
   provider: z.string(),

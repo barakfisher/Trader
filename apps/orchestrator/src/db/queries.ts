@@ -648,9 +648,17 @@ export interface ObservationRow {
  * the topic scan with nothing to measure. `proposed` and `rejected` topics are
  * excluded: nobody chose their instruments.
  */
-export function listAnalysedInstruments(userId: string): Promise<{ id: string; symbol: string }[]> {
-  return query<{ id: string; symbol: string }>(
-    `SELECT i.id, i.symbol
+export interface AnalysedInstrumentRow {
+  id: string;
+  symbol: string;
+  /** What prose calls it. The news matcher links by name, never by a bare ticker. */
+  name: string | null;
+  asset_class: AssetClass;
+}
+
+export function listAnalysedInstruments(userId: string): Promise<AnalysedInstrumentRow[]> {
+  return query<AnalysedInstrumentRow>(
+    `SELECT i.id, i.symbol, i.name, i.asset_class
        FROM instruments i
       WHERE i.id IN (
               SELECT h.instrument_id FROM holdings h WHERE h.user_id = $1
@@ -1524,6 +1532,60 @@ export function listActiveTopicInstruments(userId: string): Promise<ActiveTopicI
       WHERE t.user_id = $1 AND t.status = 'active'
       ORDER BY t.created_at, t.id, i.symbol`,
     [userId],
+  );
+}
+
+export interface TopicArticleRow {
+  id: string;
+  url: string;
+  source: string;
+  title: string;
+  published_at: Date | null;
+  fetched_at: Date;
+  instruments: { symbol: string; match_method: string; matched_text: string | null; salience: string }[];
+  sentiment: { score: string; magnitude: string; model: string } | null;
+}
+
+/**
+ * A topic's news: articles linked to any of its confirmed instruments.
+ *
+ * Derived here rather than stored as topic links, because articles are shared
+ * market data and a topic is one user's choice (migration 0018). Syndicated
+ * copies (`duplicate_of_id`) are left out: the original carries the links, and
+ * one wire story is one item. An undated article is dated by when it was fetched
+ * for the window, so it is neither hidden nor given a publication time.
+ */
+export function listTopicArticles(
+  userId: string,
+  topicId: string,
+  days: number,
+  limit = 30,
+): Promise<TopicArticleRow[]> {
+  return query<TopicArticleRow>(
+    `SELECT a.id, a.url, a.source, a.title, a.published_at, a.fetched_at,
+            json_agg(json_build_object(
+              'symbol', i.symbol,
+              'match_method', ae.match_method,
+              'matched_text', ae.matched_text,
+              'salience', ae.salience::text
+            ) ORDER BY ae.salience DESC, i.symbol) AS instruments,
+            (SELECT json_build_object('score', s.score::text, 'magnitude', s.magnitude::text,
+                                      'model', s.model)
+               FROM article_sentiment s
+              WHERE s.article_id = a.id
+              ORDER BY s.created_at DESC
+              LIMIT 1) AS sentiment
+       FROM topic_instruments ti
+       JOIN article_entities ae ON ae.instrument_id = ti.instrument_id
+       JOIN articles a ON a.id = ae.article_id
+       JOIN instruments i ON i.id = ti.instrument_id
+      WHERE ti.user_id = $1 AND ti.topic_id = $2
+        AND a.duplicate_of_id IS NULL
+        AND coalesce(a.published_at, a.fetched_at) > now() - ($3 || ' days')::interval
+      GROUP BY a.id
+      ORDER BY coalesce(a.published_at, a.fetched_at) DESC, a.id
+      LIMIT $4`,
+    [userId, topicId, String(days), limit],
   );
 }
 

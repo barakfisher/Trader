@@ -27,6 +27,7 @@ import {
   narrationConfigSchema,
   portfolioScanResponseSchema,
   topicScanResponseSchema,
+  newsCollectResponseSchema,
   quoteResponseSchema,
   topicResolveResponseSchema,
 } from './schemas.js';
@@ -42,6 +43,8 @@ export type PortfolioScanRequest = components['schemas']['PortfolioScanRequest']
 export type PortfolioScanResponse = components['schemas']['PortfolioScanResponse'];
 export type TopicScanRequest = components['schemas']['TopicScanRequest'];
 export type TopicScanResponse = components['schemas']['TopicScanResponse'];
+export type NewsCollectRequest = components['schemas']['NewsCollectRequest'];
+export type NewsCollectResponse = components['schemas']['NewsCollectResponse'];
 export type ObservationOut = components['schemas']['ObservationOut'];
 export type BackfillRequest = components['schemas']['BackfillRequest'];
 export type BackfillResponse = components['schemas']['BackfillResponse'];
@@ -186,6 +189,19 @@ export class AiClient {
    */
   topicScan(payload: TopicScanRequest, requestId?: string): Promise<TopicScanResponse> {
     return this.request<TopicScanResponse>('/analysis/topic-scan', topicScanResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      requestId,
+      timeoutMs: SCAN_TIMEOUT_MS,
+    });
+  }
+
+  /**
+   * Fetch, match, score and store one window of news for the given instruments.
+   * The AI service writes the shared news tables; this returns what it did.
+   */
+  collectNews(payload: NewsCollectRequest, requestId?: string): Promise<NewsCollectResponse> {
+    return this.request<NewsCollectResponse>('/news/collect', newsCollectResponseSchema, {
       method: 'POST',
       body: JSON.stringify(payload),
       requestId,

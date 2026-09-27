@@ -54,6 +54,7 @@ const queries = vi.hoisted(() => ({
   listTopics: vi.fn(),
   getTopic: vi.fn(),
   listTopicInstruments: vi.fn(),
+  listTopicArticles: vi.fn(),
   deleteTopic: vi.fn(),
 }));
 
@@ -360,3 +361,61 @@ describe('topic CRUD', () => {
   });
 });
 
+
+describe('GET /topics/:id/news', () => {
+  let app: ReturnType<typeof buildApp>;
+  let cookie: string;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    app = buildApp();
+    cookie = await loginCookie(app);
+  });
+
+  const get = (id = TOPIC_ID) => app.request(`/topics/${id}/news`, { headers: { cookie } });
+
+  it('returns each article with the instrument and rule that tied it to the topic', async () => {
+    queries.getTopic.mockResolvedValueOnce(TOPIC_ROW);
+    queries.listTopicArticles.mockResolvedValueOnce([
+      {
+        id: 'a-1',
+        url: 'https://example.com/cameco',
+        source: 'Example Newswire',
+        title: 'Cameco raises output',
+        published_at: null,
+        fetched_at: new Date('2026-09-26T08:00:00Z'),
+        instruments: [
+          { symbol: 'CCJ', match_method: 'company_name', matched_text: 'Cameco', salience: '0.8000' },
+        ],
+        sentiment: { score: '0.5000', magnitude: '0.2500', model: 'lexicon-v1' },
+      },
+    ]);
+
+    const response = await get();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(queries.listTopicArticles).toHaveBeenCalledWith(USER.id, TOPIC_ID, body.days);
+    expect(body.articles).toEqual([
+      {
+        id: 'a-1',
+        url: 'https://example.com/cameco',
+        source: 'Example Newswire',
+        title: 'Cameco raises output',
+        // An undated article stays undated; the fetch time is reported beside it.
+        publishedAt: null,
+        fetchedAt: '2026-09-26T08:00:00.000Z',
+        instruments: [
+          { symbol: 'CCJ', matchMethod: 'company_name', matchedText: 'Cameco', salience: '0.8000' },
+        ],
+        sentiment: { score: '0.5000', magnitude: '0.2500', model: 'lexicon-v1' },
+      },
+    ]);
+  });
+
+  it('is a 404 for a topic that is not the user\'s', async () => {
+    queries.getTopic.mockResolvedValueOnce(null);
+    expect((await get()).status).toBe(404);
+    expect(queries.listTopicArticles).not.toHaveBeenCalled();
+  });
+});
