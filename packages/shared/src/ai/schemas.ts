@@ -171,6 +171,30 @@ export const newsCollectResponseSchema = z.object({
   linked_symbols: z.record(z.string(), z.number().int()).optional(),
 });
 
+const discoveredHeadlineSchema = z.object({
+  article_id: z.string(),
+  title: z.string(),
+  source: z.string(),
+  published_at: z.string().nullable(),
+});
+
+const discoveredPhraseSchema = z.object({
+  phrase: z.string(),
+  words: z.array(z.string()),
+  article_count: z.number().int(),
+  source_count: z.number().int(),
+  headlines: z.array(discoveredHeadlineSchema),
+});
+
+export const topicDiscoverResponseSchema = z.object({
+  since: z.string(),
+  days: z.number().int(),
+  headlines: z.number().int(),
+  min_articles: z.number().int(),
+  min_sources: z.number().int(),
+  phrases: z.array(discoveredPhraseSchema).optional(),
+});
+
 export const backfillResponseSchema = z.object({
   written: z.number().int(),
   already_present: z.number().int(),
@@ -220,6 +244,9 @@ export type _AssertTopicScan = Expect<
 >;
 export type _AssertNewsCollect = Expect<
   Equal<z.infer<typeof newsCollectResponseSchema>, Schemas['NewsCollectResponse']>
+>;
+export type _AssertTopicDiscover = Expect<
+  Equal<z.infer<typeof topicDiscoverResponseSchema>, Schemas['TopicDiscoverResponse']>
 >;
 export const narrationConfigSchema = z.object({
   provider: z.string(),

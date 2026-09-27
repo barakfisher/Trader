@@ -26,6 +26,8 @@ const INTERVALS_MS: Record<string, number> = {
   portfolio_scan: 15 * 60 * 1000,
   topic_scan: 15 * 60 * 1000,
   news_collect: 15 * 60 * 1000,
+  // Hourly against a daily bucket, like backfill: a restart cannot skip a day.
+  topic_discovery: 60 * 60 * 1000,
   // Hourly against a daily bucket: the extras cost one HTTP request each and
   // mean a restart cannot skip the day's history.
   backfill: 60 * 60 * 1000,
@@ -55,6 +57,10 @@ const FIRST_RUN_DELAY_MS: Record<string, number> = {
   // After the portfolio scan, so the two do not load the same histories at once.
   topic_scan: 48_000,
   proposal_sweep: 55_000,
+  // After news collection, which it reads. On a fresh start the first
+  // collection has usually finished by then; if not, the hourly retry of the
+  // daily bucket is the catch-up.
+  topic_discovery: 62_000,
   // Last: the digest reports on what the scan and the sweep just did, so
   // running it first would describe the previous cycle.
   daily_digest: 70_000,

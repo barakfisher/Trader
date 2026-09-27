@@ -40,7 +40,22 @@ export class TopicsStore {
   }
 
   get activeCount(): number {
-    return (this.topics ?? []).filter((t) => t.status === 'active').length;
+    return this.followed.length;
+  }
+
+  /** Topics the user confirmed. */
+  get followed(): TopicSummary[] {
+    return (this.topics ?? []).filter((t) => t.status === 'active');
+  }
+
+  /** Auto-discovered themes waiting for a yes or a no (FR-11). Never followed until confirmed. */
+  get proposals(): TopicSummary[] {
+    return (this.topics ?? []).filter((t) => t.status === 'proposed');
+  }
+
+  /** True when `topicId` is an open proposal, so confirming it would add a topic. */
+  isProposal(topicId: string | null): boolean {
+    return topicId !== null && this.proposals.some((t) => t.id === topicId);
   }
 
   /** True when a new topic would be refused by the cap. */
@@ -110,6 +125,39 @@ export class TopicsStore {
       topic.instruments.map((i) => i.symbol),
     );
     void this.composer.resolve();
+  }
+
+  /**
+   * Open the confirm screen on a proposal. Nothing is ticked, as for a topic
+   * the user typed: the symbols the resolver was confident about when it
+   * proposed are shown on the proposal as evidence, not carried in as choices.
+   * Confirming is `PUT /topics/:id`, which makes the proposal a followed topic.
+   */
+  review(topic: TopicSummary): void {
+    this.detail = null;
+    this.composer = new Composer(this, topic.id, topic.label, []);
+    void this.composer.resolve();
+  }
+
+  /**
+   * Decline a proposal. It leaves the list, and its theme is not proposed again
+   * for `limits.rejectionCooldownDays` days.
+   */
+  async reject(topicId: string): Promise<boolean> {
+    this.error = null;
+    try {
+      await api.post(`/topics/${topicId}/reject`);
+      runInAction(() => {
+        if (this.composer?.topicId === topicId) this.composer = null;
+      });
+      await this.load();
+      return true;
+    } catch (error) {
+      runInAction(() => {
+        this.error = messageOf(error, 'Could not decline that proposal.');
+      });
+      return false;
+    }
   }
 
   closeComposer(): void {
@@ -238,7 +286,8 @@ export class Composer {
     if (this.selected.length > this.maxInstruments) {
       return `A topic can hold at most ${this.maxInstruments} instruments.`;
     }
-    if (this.topicId === null && this.store.atLimit) {
+    // A proposal is not followed yet, so confirming it adds a topic like a new one does.
+    if ((this.topicId === null || this.store.isProposal(this.topicId)) && this.store.atLimit) {
       return `You follow ${this.store.limits?.maxActiveTopics} topics already, which is the most you can. Remove one to add another.`;
     }
     return null;

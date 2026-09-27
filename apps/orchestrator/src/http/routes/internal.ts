@@ -20,6 +20,7 @@ import { claimRun, finishRun, getUser, listAnalysedInstruments, listRuns } from 
 import { sweepAndCloseLifecycles } from '../../mastra/proposalLifecycle.js';
 import { backfillInstrumentNames } from '../../services/instrumentMetadata.js';
 import { runPortfolioScan } from '../../services/portfolioScan.js';
+import { runTopicDiscovery } from '../../services/topicDiscovery.js';
 import { HISTORY_BACKFILL_DAYS, runTopicScan } from '../../services/topicScan.js';
 import { sendDigest } from '../../services/notifications.js';
 import { sweepExpiredProposals } from '../../services/proposals.js';
@@ -50,6 +51,11 @@ const RUN_BUCKET_MINUTES: Record<string, number> = {
   // fixture, and a real one (GDELT) is polite at this rate. Matches the scans so
   // a story collected in one bucket can be read by the scans of the next.
   news_collect: 30,
+  // Discovery reads a week of headlines for themes that last, so a second pass
+  // the same day would read nearly the same week and, with the open-proposal
+  // bound, usually have nowhere to write. Once a day also keeps it to at most
+  // a handful of resolver embeddings a day.
+  topic_discovery: 24 * 60,
   // Daily closes appear once a day, so asking more often fetches the same
   // series and writes nothing. The provider quota is the reason to care.
   backfill: 24 * 60,
@@ -90,6 +96,7 @@ const runSchema = z.object({
     'portfolio_scan',
     'topic_scan',
     'news_collect',
+    'topic_discovery',
     'backfill',
     'proposal_sweep',
     'daily_digest',
@@ -240,6 +247,25 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
         // A provider that failed is news the user did not get, and a run that
         // says 'ok' over it would read as a quiet day.
         const status = (result.provider_failures ?? []).length > 0 ? 'degraded' : 'ok';
+        await finishRun(runId, status, result);
+        return context.json({ kind: parsed.data.kind, runKey, runId, status, result });
+      }
+
+      if (parsed.data.kind === 'topic_discovery') {
+        const result = await runTopicDiscovery(
+          user,
+          context.get('ai'),
+          config.TOPIC_REJECTION_COOLDOWN_DAYS,
+          context.get('requestId'),
+        );
+        // No headlines is 'skipped', not 'ok': the run asked nothing, and the
+        // reason says where to look. A run that examined phrases and proposed
+        // none is 'ok' - every phrase carries its reason in `notProposed`.
+        const status = result.degraded
+          ? 'degraded'
+          : result.headlines === 0
+            ? 'skipped'
+            : 'ok';
         await finishRun(runId, status, result);
         return context.json({ kind: parsed.data.kind, runKey, runId, status, result });
       }

@@ -37,7 +37,13 @@ const { coverageNote, fundShare, heldByText, verdictMessage } = await import(
   '../src/lib/topicPresentation.ts'
 );
 
-const LIMITS = { maxActiveTopics: 10, maxInstrumentsPerTopic: 3, maxLabelLength: 200 };
+const LIMITS = {
+  maxActiveTopics: 10,
+  maxInstrumentsPerTopic: 3,
+  maxLabelLength: 200,
+  maxOpenProposals: 3,
+  rejectionCooldownDays: 90,
+};
 
 function candidate(symbol: string) {
   return {
@@ -221,6 +227,82 @@ describe('the confirm screen', () => {
     composer.setLabel('nuclear fuel');
 
     expect(composer.stale).toBe(true);
+  });
+});
+
+describe('auto-proposals', () => {
+  const PROPOSAL = {
+    id: 'p1',
+    label: 'data centre',
+    status: 'proposed',
+    createdBy: 'auto',
+    evidence: {
+      phrase: 'data centre',
+      articleCount: 4,
+      sourceCount: 3,
+      windowDays: 7,
+      headlines: [],
+      symbols: ['EQIX', 'DLR'],
+    },
+  };
+
+  it('keeps proposals apart from followed topics, and out of the count', async () => {
+    const topics = await loadedStore([PROPOSAL, { id: 't1', label: 'uranium', status: 'active' }]);
+    expect(topics.proposals.map((t) => t.id)).toEqual(['p1']);
+    expect(topics.followed.map((t) => t.id)).toEqual(['t1']);
+    expect(topics.activeCount).toBe(1);
+  });
+
+  it('reviews a proposal with nothing ticked, not even what the resolver suggested', async () => {
+    const topics = await loadedStore([PROPOSAL]);
+    post.mockResolvedValueOnce(resolution(['EQIX', 'DLR']));
+
+    topics.review(PROPOSAL as never);
+    await vi.waitFor(() => expect(topics.composer?.resolution).not.toBeNull());
+
+    expect(topics.composer!.topicId).toBe('p1');
+    expect(topics.composer!.label).toBe('data centre');
+    expect(topics.composer!.selected).toEqual([]);
+  });
+
+  it('accepts a proposal through PUT on its id', async () => {
+    const topics = await loadedStore([PROPOSAL]);
+    post.mockResolvedValueOnce(resolution(['EQIX']));
+    topics.review(PROPOSAL as never);
+    await vi.waitFor(() => expect(topics.composer?.resolution).not.toBeNull());
+    topics.composer!.toggle('EQIX');
+    put.mockResolvedValueOnce({ ...PROPOSAL, status: 'active', instruments: [] });
+    get.mockResolvedValueOnce({ topics: [], limits: LIMITS });
+
+    expect(await topics.composer!.confirm()).toBe(true);
+    expect(put).toHaveBeenCalledWith('/topics/p1', { label: 'data centre', symbols: ['EQIX'] });
+  });
+
+  it('refuses to accept a proposal at the topic cap, since it would add a topic', async () => {
+    const full = Array.from({ length: LIMITS.maxActiveTopics }, (_, i) => ({
+      id: `t${i}`,
+      label: `t${i}`,
+      status: 'active',
+    }));
+    const topics = await loadedStore([...full, PROPOSAL]);
+    post.mockResolvedValueOnce(resolution(['EQIX']));
+    topics.review(PROPOSAL as never);
+    topics.composer!.setAddText('EQIX');
+    topics.composer!.addTickers();
+
+    expect(topics.composer!.blockingIssue).toMatch(/most you can/);
+  });
+
+  it('declines with the reject action, never a delete, and reloads', async () => {
+    const topics = await loadedStore([PROPOSAL]);
+    post.mockResolvedValueOnce(undefined);
+    get.mockResolvedValueOnce({ topics: [], limits: LIMITS });
+
+    expect(await topics.reject('p1')).toBe(true);
+
+    expect(post).toHaveBeenCalledWith('/topics/p1/reject');
+    expect(del).not.toHaveBeenCalled();
+    expect(topics.proposals).toEqual([]);
   });
 });
 

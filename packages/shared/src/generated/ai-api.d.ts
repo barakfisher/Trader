@@ -277,6 +277,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/topics/discover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Discover
+         * @description Recurring phrases in the last `days` of headlines. Reads; stores nothing.
+         *
+         *     No embedding happens here. The orchestrator filters the phrases against the
+         *     user's topics and rejection memory first, and resolves only what survives -
+         *     so a theme the user rejected costs nothing on the day it recurs.
+         */
+        post: operations["discover_topics_discover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/topics/resolve": {
         parameters: {
             query?: never;
@@ -553,6 +577,40 @@ export interface components {
             ord: number;
             /** Text */
             text: string;
+        };
+        /**
+         * DiscoveredHeadline
+         * @description A stored headline, verbatim: the evidence a proposal quotes.
+         */
+        DiscoveredHeadline: {
+            /** Article Id */
+            article_id: string;
+            /** Published At */
+            published_at: string | null;
+            /** Source */
+            source: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * DiscoveredPhrase
+         * @description One recurring phrase and the headlines it recurred in.
+         *
+         *     `phrase` is the spelling the headlines used most; `words` is the folded
+         *     form that identifies it. Neither has been resolved to instruments: that,
+         *     and whether it is proposed at all, is the orchestrator's decision.
+         */
+        DiscoveredPhrase: {
+            /** Article Count */
+            article_count: number;
+            /** Headlines */
+            headlines: components["schemas"]["DiscoveredHeadline"][];
+            /** Phrase */
+            phrase: string;
+            /** Source Count */
+            source_count: number;
+            /** Words */
+            words: string[];
         };
         /** FxRate */
         FxRate: {
@@ -988,6 +1046,53 @@ export interface components {
             size_minor: number | null;
             /** Symbol */
             symbol: string;
+        };
+        /**
+         * TopicDiscoverRequest
+         * @description Find recurring phrases in the window's headlines (FR-11).
+         *
+         *     `instruments` are the ones the user holds or follows - the same list news
+         *     was collected for. Their names are cut out of every headline, because
+         *     "Apple" recurring across Apple's own news is not a theme.
+         */
+        TopicDiscoverRequest: {
+            /**
+             * Days
+             * @default 7
+             */
+            days: number;
+            /** Instruments */
+            instruments?: components["schemas"]["NewsInstrument"][];
+            /**
+             * Limit
+             * @default 20
+             */
+            limit: number;
+        };
+        /**
+         * TopicDiscoverResponse
+         * @description Recurring phrases, and enough counts to tell a quiet window from an empty one.
+         *
+         *     `headlines == 0` means there was nothing to read - usually no news was
+         *     collected (see `GET /runs?kind=news_collect`) - which is not the same
+         *     statement as "headlines were read and nothing recurred".
+         */
+        TopicDiscoverResponse: {
+            /** Days */
+            days: number;
+            /** Headlines */
+            headlines: number;
+            /** Min Articles */
+            min_articles: number;
+            /** Min Sources */
+            min_sources: number;
+            /** Phrases */
+            phrases?: components["schemas"]["DiscoveredPhrase"][];
+            /**
+             * Since
+             * Format: date-time
+             */
+            since: string;
         };
         /**
          * TopicHolder
@@ -1625,6 +1730,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    discover_topics_discover_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TopicDiscoverRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicDiscoverResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

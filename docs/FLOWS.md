@@ -127,7 +127,10 @@ flowchart TD
   J -->|no| K[status=rejected, suppressed from future proposals]
 ```
 Auto-discovery never subscribes on its own (PRD FR-11). A rejected theme is remembered so the
-same proposal doesn't return.
+same proposal doesn't return within `TOPIC_REJECTION_COOLDOWN_DAYS` (default 90). "The same" means
+every word of the rejected label appears in the new one, or at least half of the new proposal's
+instruments were offered with the rejected one. Discovery reads recurring phrases in headlines
+collected for what the user already follows (`topic_discovery` run, daily).
 
 ---
 

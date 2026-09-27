@@ -37,6 +37,7 @@ const TOPIC_ROW = {
   updated_at: CREATED,
   confirmed_at: CREATED,
   instrument_count: 1,
+  evidence: null,
 };
 const INSTRUMENT_ROW = {
   instrument_id: 'i-1',
@@ -57,6 +58,7 @@ const queries = vi.hoisted(() => ({
   listTopicArticles: vi.fn(),
   listTopicSentimentRows: vi.fn(),
   deleteTopic: vi.fn(),
+  rejectProposal: vi.fn(),
 }));
 
 vi.mock('../src/db/queries.js', () => ({
@@ -70,7 +72,10 @@ vi.mock('../src/services/topics.js', async (original) => ({
   confirmTopic,
 }));
 
-const { loadConfig, resetConfigForTests } = await import('../src/config.js');
+const { DEFAULT_REJECTION_COOLDOWN_DAYS, loadConfig, resetConfigForTests } = await import(
+  '../src/config.js'
+);
+const { MAX_OPEN_PROPOSALS } = await import('../src/services/topicDiscovery.js');
 const { createApp } = await import('../src/http/app.js');
 const {
   MAX_ACTIVE_TOPICS,
@@ -230,12 +235,15 @@ describe('topic CRUD', () => {
         updatedAt: CREATED.toISOString(),
         confirmedAt: CREATED.toISOString(),
         instrumentCount: 1,
+        evidence: null,
       },
     ]);
     expect(body.limits).toEqual({
       maxActiveTopics: MAX_ACTIVE_TOPICS,
       maxInstrumentsPerTopic: MAX_INSTRUMENTS_PER_TOPIC,
       maxLabelLength: MAX_TOPIC_LENGTH,
+      maxOpenProposals: MAX_OPEN_PROPOSALS,
+      rejectionCooldownDays: DEFAULT_REJECTION_COOLDOWN_DAYS,
     });
   });
 
@@ -354,6 +362,33 @@ describe('topic CRUD', () => {
     expect((await send('DELETE', `/topics/${TOPIC_ID}`)).status).toBe(204);
     expect((await send('DELETE', `/topics/${TOPIC_ID}`)).status).toBe(404);
     expect(queries.deleteTopic).toHaveBeenCalledWith(USER.id, TOPIC_ID);
+  });
+
+  it('refuses to delete a proposal, which would erase its rejection memory', async () => {
+    queries.deleteTopic.mockResolvedValueOnce(false);
+    queries.getTopic.mockResolvedValueOnce({ ...TOPIC_ROW, status: 'proposed', created_by: 'auto' });
+
+    const response = await send('DELETE', `/topics/${TOPIC_ID}`);
+
+    expect(response.status).toBe(409);
+    expect(((await response.json()) as { error: string }).error).toBe('topic_is_proposal');
+  });
+
+  it('rejects a proposal, and tells a followed topic from a missing one', async () => {
+    queries.rejectProposal
+      .mockResolvedValueOnce('rejected')
+      .mockResolvedValueOnce('not_a_proposal')
+      .mockResolvedValueOnce('not_found');
+
+    expect((await send('POST', `/topics/${TOPIC_ID}/reject`)).status).toBe(204);
+    expect(queries.rejectProposal).toHaveBeenCalledWith(USER.id, TOPIC_ID);
+    expect((await send('POST', `/topics/${TOPIC_ID}/reject`)).status).toBe(409);
+    expect((await send('POST', `/topics/${TOPIC_ID}/reject`)).status).toBe(404);
+  });
+
+  it('answers a reject for a malformed id with 404 without asking the database', async () => {
+    expect((await send('POST', '/topics/not-a-uuid/reject')).status).toBe(404);
+    expect(queries.rejectProposal).not.toHaveBeenCalled();
   });
 
   it('keeps the list behind the session gate', async () => {

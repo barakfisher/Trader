@@ -486,6 +486,83 @@
         "title": "ConceptSection",
         "type": "object"
       },
+      "DiscoveredHeadline": {
+        "description": "A stored headline, verbatim: the evidence a proposal quotes.",
+        "properties": {
+          "article_id": {
+            "title": "Article Id",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "article_id",
+          "title",
+          "source",
+          "published_at"
+        ],
+        "title": "DiscoveredHeadline",
+        "type": "object"
+      },
+      "DiscoveredPhrase": {
+        "description": "One recurring phrase and the headlines it recurred in.\n\n`phrase` is the spelling the headlines used most; `words` is the folded\nform that identifies it. Neither has been resolved to instruments: that,\nand whether it is proposed at all, is the orchestrator's decision.",
+        "properties": {
+          "article_count": {
+            "title": "Article Count",
+            "type": "integer"
+          },
+          "headlines": {
+            "items": {
+              "$ref": "#/components/schemas/DiscoveredHeadline"
+            },
+            "title": "Headlines",
+            "type": "array"
+          },
+          "phrase": {
+            "title": "Phrase",
+            "type": "string"
+          },
+          "source_count": {
+            "title": "Source Count",
+            "type": "integer"
+          },
+          "words": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Words",
+            "type": "array"
+          }
+        },
+        "required": [
+          "phrase",
+          "words",
+          "article_count",
+          "source_count",
+          "headlines"
+        ],
+        "title": "DiscoveredPhrase",
+        "type": "object"
+      },
       "FxRate": {
         "properties": {
           "as_of": {
@@ -1312,6 +1389,77 @@
           "rationale"
         ],
         "title": "TopicCandidateOut",
+        "type": "object"
+      },
+      "TopicDiscoverRequest": {
+        "description": "Find recurring phrases in the window's headlines (FR-11).\n\n`instruments` are the ones the user holds or follows - the same list news\nwas collected for. Their names are cut out of every headline, because\n\"Apple\" recurring across Apple's own news is not a theme.",
+        "properties": {
+          "days": {
+            "default": 7,
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Days",
+            "type": "integer"
+          },
+          "instruments": {
+            "items": {
+              "$ref": "#/components/schemas/NewsInstrument"
+            },
+            "maxItems": 500,
+            "title": "Instruments",
+            "type": "array"
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "TopicDiscoverRequest",
+        "type": "object"
+      },
+      "TopicDiscoverResponse": {
+        "description": "Recurring phrases, and enough counts to tell a quiet window from an empty one.\n\n`headlines == 0` means there was nothing to read - usually no news was\ncollected (see `GET /runs?kind=news_collect`) - which is not the same\nstatement as \"headlines were read and nothing recurred\".",
+        "properties": {
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "headlines": {
+            "title": "Headlines",
+            "type": "integer"
+          },
+          "min_articles": {
+            "title": "Min Articles",
+            "type": "integer"
+          },
+          "min_sources": {
+            "title": "Min Sources",
+            "type": "integer"
+          },
+          "phrases": {
+            "items": {
+              "$ref": "#/components/schemas/DiscoveredPhrase"
+            },
+            "title": "Phrases",
+            "type": "array"
+          },
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          }
+        },
+        "required": [
+          "since",
+          "days",
+          "headlines",
+          "min_articles",
+          "min_sources"
+        ],
+        "title": "TopicDiscoverResponse",
         "type": "object"
       },
       "TopicHolder": {
@@ -2438,6 +2586,66 @@
         "summary": "Readyz",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/topics/discover": {
+      "post": {
+        "description": "Recurring phrases in the last `days` of headlines. Reads; stores nothing.\n\nNo embedding happens here. The orchestrator filters the phrases against the\nuser's topics and rejection memory first, and resolves only what survives -\nso a theme the user rejected costs nothing on the day it recurs.",
+        "operationId": "discover_topics_discover_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TopicDiscoverRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopicDiscoverResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Discover",
+        "tags": [
+          "topics"
         ]
       }
     },

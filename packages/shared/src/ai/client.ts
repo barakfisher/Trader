@@ -29,6 +29,7 @@ import {
   topicScanResponseSchema,
   newsCollectResponseSchema,
   quoteResponseSchema,
+  topicDiscoverResponseSchema,
   topicResolveResponseSchema,
 } from './schemas.js';
 
@@ -59,6 +60,9 @@ export type TopicResolveResponse = components['schemas']['TopicResolveResponse']
 export type TopicCandidate = components['schemas']['TopicCandidateOut'];
 export type TopicInterpretation = components['schemas']['TopicInterpretationOut'];
 export type UniverseCoverage = components['schemas']['UniverseCoverageOut'];
+export type TopicDiscoverRequest = components['schemas']['TopicDiscoverRequest'];
+export type TopicDiscoverResponse = components['schemas']['TopicDiscoverResponse'];
+export type DiscoveredPhrase = components['schemas']['DiscoveredPhrase'];
 
 /**
  * A scan loads history for every holding and may call a model once per finding,
@@ -315,6 +319,19 @@ export class AiClient {
    * The longer timeout, because a cold call embeds the topic at a provider
    * before it searches.
    */
+  /**
+   * Phrases recurring across the window's collected headlines (FR-11). Reads
+   * only; nothing is resolved or stored. Auto-discovery filters these against
+   * the user's topics and rejection memory before resolving any of them.
+   */
+  discoverTopics(payload: TopicDiscoverRequest, requestId?: string): Promise<TopicDiscoverResponse> {
+    return this.request<TopicDiscoverResponse>('/topics/discover', topicDiscoverResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      requestId,
+    });
+  }
+
   resolveTopic(topic: string, requestId?: string): Promise<TopicResolveResponse> {
     return this.request<TopicResolveResponse>('/topics/resolve', topicResolveResponseSchema, {
       method: 'POST',

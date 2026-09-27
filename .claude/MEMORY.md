@@ -21,7 +21,8 @@ slice C, and `news_collect` runs are `degraded` with `provider_failures: ["gdelt
 not an IP block that will lift** (the first handoff guessed that, and was wrong): a follow-up
 investigation on 2026-09-27 showed GDELT shedding load. Details are in the debt table. The
 provider now retries and keeps partial results, which raises the odds that a run gets through
-but cannot make GDELT answer.
+but cannot make GDELT answer. **Auto-discovery (#62) is blocked on the same thing**: it builds
+proposals from headlines, and so far has only ever seen the 20 fixture headlines.
 
 The resolver still finds **14 of 35** expected tickers on the user's held-out batch, and nobody
 changed its thresholds. The add-a-ticker box is how a confirmed set closes that gap (decision 46).
@@ -56,7 +57,7 @@ row and a ledger row marked revoked. What remains unproven is only the *webhook*
 | **M2.5 — Real price history** | ✅ Complete | **unplanned**; PR #23. Finished M1's provider layer, 18 PRs late |
 | **M3 — RAG & educational engine** | ✅ Complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. #45: the paid embedder. #46: `POST /ask`, intent routing, citations, a three-state relevance floor. #47: the 35-case eval set in two CI tiers. **The relevance floor is measured to be in the wrong place — see the debt table** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
-| **M5 — Market discovery & topics** | 🟡 In progress | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** **Not started:** auto-discovery with rejection memory; topic cards in the UI |
+| **M5 — Market discovery & topics** | 🟡 In progress | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). **Not started:** topic cards in the UI |
 | M6 — Frontend completion & polish | Not started | |
 | M7 — Kubernetes & documentation | Not started | |
 
@@ -121,6 +122,8 @@ Useful endpoints (all need the session cookie except `/internal/*`, which needs 
 | `POST /ask` | a question in, a checkable answer out. **A refusal is a 200** with `answered: false` — declining an out-of-index question is an outcome, and a 4xx would make it look like a broken corpus. `answer_source` is `extractive` \| `llm` \| `computed` \| `none`; `computed` is arithmetic over holdings and is *never* a model |
 | `POST /topics/resolve` | `{topic}` → candidates with band, quoted rationale and `held_by`. **`verdict` has four values**; `unavailable` (with `universe.state`) means the universe was *not searched*, and is never the same as `none` (decision 47). Stores nothing |
 | `GET`/`POST /topics`, `GET`/`PUT`/`DELETE /topics/:id` | the user's topics. `POST`/`PUT` take `{label, symbols}` and **re-resolve on the server** to decide which symbols carry reasons (decision 48). 422 `topic_limit_reached` / `unresolved_symbols` (with `details.symbols`), 409 `duplicate_topic` |
+| `POST /topics/:id/reject` | decline an auto-proposal; it becomes rejection memory for `TOPIC_REJECTION_COOLDOWN_DAYS`. `DELETE` on a proposal is a 409 `topic_is_proposal`, because deleting would erase the memory |
+| `GET /runs?kind=topic_discovery` | why nothing was proposed: every phrase examined has a reason in `notProposed` |
 | `GET /concepts/search?q=` | hybrid retrieval: the half of `/ask` that finds things. A diagnostic surface with no relevance floor and no refusal — those are `/ask`'s judgements. Every match reports `vector_rank` and `text_rank`, so *which half found this* is answerable; `vector_is_semantic: false` says the embedder ranks by shared words alone |
 
 ---
@@ -569,9 +572,46 @@ failure they prevent.
     digest, which was the existing rule and is kept - a daily "all quiet" message trains the user
     to mute the channel. The deferred entries' all-or-nothing settlement is unchanged; the topic
     section has nothing to settle.
+
+55. **Auto-discovery proposes from phrases recurring in headlines, filtered before it is resolved.**
+    `app/topics/discovery.py` finds 1-3-word phrases in at least 3 distinct articles from at least 2
+    outlets over 7 days (`POST /topics/discover`, reads only, no embedding). Followed instruments'
+    names are cut out of each headline *before* phrases are built, or "NuScale Power" would count
+    towards "power". The orchestrator (`services/topicDiscovery.ts`, run kind `topic_discovery`,
+    daily) drops phrases matching a known theme **by words first**, then resolves at most 8
+    through the ordinary `/topics/resolve`, proposes only a `confident` verdict with at least 2
+    confident instruments, and checks **instruments** after. Filtering before resolving is not a
+    cost trick only: a rejected theme recurring daily at the top of the list would otherwise hold
+    a resolve slot forever. At most 3 proposals open at once, counted under the topic-cap lock.
+    A proposal is a question, not a subscription: not scanned, no news, not counted against the
+    cap; accepted through `PUT /topics/:id` with nothing pre-ticked. **Limit, stated rather than
+    hidden:** news is collected only for followed instruments (decision 51), so discovery finds
+    themes *next to* the user's interests, never in a corner of the market they never looked at.
+
+56. **Rejection memory: words OR instruments, inside a cooldown - and the instruments are every
+    candidate offered, not the confident few.** Matching is `services/topicMatching.ts`: suppressed
+    if every word of the known label is in the new one (case, plurals, filler ignored; one-way, so
+    "energy" is not blocked by a rejected "nuclear energy"), or if at least half of the new
+    proposal's instruments are in the known set. The same rule decides "already followed" and
+    "already pending", so those can never disagree with "rejected". **Cooldown, not forever**, by
+    the user's decision on 2026-09-27: `TOPIC_REJECTION_COOLDOWN_DAYS` (default 90). This amends
+    MILESTONES' exit criterion; the rejected row is kept after the window (decision 18). The
+    fingerprint is frozen on the row at proposal time (`match_words`, `proposed_instruments`,
+    migration 0019), so a universe change cannot un-reject anything. **Measured on the real
+    resolver before merging:** confident sets are 2-4 instruments and "nuclear fuel" shared *none*
+    with "uranium"; over every offered candidate it shares 57% and "uranium miners" 100%, while
+    "data centre" and "lithium" share 0%. The first version fingerprinted confident candidates only
+    and would have let "nuclear fuel" straight back. "nuclear energy" sits exactly at 50% and is
+    suppressed - the rule errs towards suppressing, because showing a rejected theme again is the
+    failure memory exists to prevent, and a missed suggestion is the cheap one.
 ---
 
 ## Bugs that cost real time, and the lesson from each
+
+**An illustrative number nearly became the design.** The instrument-overlap rule was chosen from an
+example ("nuclear fuel" overlaps "uranium" by 80%) that nobody had measured. Five real resolutions
+showed 0% on the confident sets the first version compared. → **Before building on an example
+number, run the real thing once; the resolver is five embedding calls away.**
 
 These are listed because the lesson generalises, not because the bug was interesting.
 
@@ -998,6 +1038,8 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | No component/DOM tests on the web app | `apps/web/test` | Store and formatting logic covered; rendering is not. Two real UI bugs this session (Discard disabled by its own typo, a deep link that does nothing) were found by *using* the app, not by tests, and neither would have been caught by a DOM test either — but a DOM test would have caught the first |
 | ~~Telegram has no working binding~~ | — | **Resolved 2026-09-24.** A chat is bound. The "receives nothing" mystery was never a Telegram problem: nothing in the repository consumed updates, because M4's polling bridge was a hand-run script that left with its session. Kept as a line so the history of the symptom survives |
 | **Real news needs `NEWS_PROVIDERS=gdelt,fixture` in `.env`** | `.env` | Slice C added the GDELT provider; the code default and `.env.example` stay `fixture` so CI is offline (the same deliberate asymmetry as `MARKET_DATA_PROVIDERS`). Until `.env` names `gdelt`, every live `news_collect` run fetches 0. **Also still unwired:** the narration correlation step - `run_portfolio_scan` is always called with `articles=()`, so no observation cites news yet |
+| **Auto-discovery has never seen a real headline** | `app/topics/discovery.py` | GDELT still answered 429 on 2026-09-27 (every run that day, 0 articles stored), so the phrase thresholds (3 articles, 2 outlets) and the generic-word list were tuned on the 20 fixture headlines only. The matching rule *was* measured on the real resolver (decision 56). Once news arrives, read `GET /runs?kind=topic_discovery` for a week: noisy proposals mean the generic-word list needs words, none at all means the floors are high |
+| **Open proposals never expire** | `services/topicDiscovery.ts` | An unanswered proposal holds one of 3 slots indefinitely, so three ignored proposals stop discovery. Deliberate for now - a proposal that silently disappears is also a proposal the user never answered - but an expiry that records itself (like proposals' `expired`) is the likely fix |
 | **GDELT refuses most requests, and retries cannot fix that** | `app/news/gdelt.py` | Investigated 2026-09-27 (after the first handoff): not an IP block. Scheduler requests 30 min apart were refused; 8 of 9 manual probes spaced 20 s apart were refused whatever the query (one name or eight, with or without `sourcelang`, 24 h or 49 h); the one 200 came back 429 when the same URL was sent again two minutes later; every reply took 11-15 s, 200 or 429. That is GDELT shedding load, and its notice sends heavy users to its ngrams dataset. **Mitigated, not fixed:** two retries with backoff, and partial results kept (decision 52). The first live run of the retrying provider (16:30 UTC that day) was refused on all 3 attempts in 84 s, so retries alone may not be enough. The single live 200 confirmed the `ArtList` field names the parser reads (`url`, `title`, `seendate`, `domain`), so the success path is no longer documentation-only. **How to tell whether it works:** `select stats from runs where kind='news_collect' order by started_at desc` shows a non-zero `fetched` with `gdelt` in `providers_used` (`GET /runs` needs a session cookie). **If runs keep failing:** the backlogged next step is to stop using the DOC API and read GDELT's raw 15-minute files from `data.gdeltproject.org`, which are plain downloads rather than searches (user's decision, 2026-09-27). Writing to the address in the 429 is the other option. **Also:** the fixture provider loads 20 articles and returns 0 to a live run, because they fall outside the 2-day window, so the fallback provides no news either |
 | **Names ending in ", LP" never link to news** | `app/news/entities.py` `core_name` | `core_name` strips "Fund", "Inc" and the like but not a trailing ", LP", so "United States Gasoline Fund, LP" is matched - and searched on GDELT - only by that exact phrase, which prose never writes. **Not fixed on purpose:** 37 instruments in the committed universe have LP names, and `core_name` also shapes the resolver's matching text (`app/universe/matching_text.py`), so the fix moves topic resolution and needs the new held-out batch to measure. Fix both together, or give the news matcher its own rule |
 | **A very large instrument list outruns the collect timeout** | `app/news/gdelt.py` | 8 names per request, 5.5 s apart: 500 instruments (the request cap) is ~63 requests, ~6 min, over the 5-minute `SCAN_TIMEOUT_MS`. Irrelevant at a dozen instruments; the fix when it matters is fewer, wider requests or a per-run instrument budget - **and retries shorten the headroom**: worst case per request is three 30 s timeouts plus 40 s of backoff (~130 s), so even today's dozen instruments (two requests) could need ~260 s of the 300 s budget. That worst case needs GDELT to time out rather than refuse, and refusals so far have taken 11-15 s |
@@ -1159,7 +1201,13 @@ cannot reach any of the SQL. What exists end to end:
 The paid embedder is live in *this* installation's database and costs about a hundredth of a cent
 per full re-embed. A fresh clone and CI use the keyless fixture, on purpose.
 
-### Next session: M5's last item - auto-discovery with rejection memory
+### Next: topic cards, then M5's closing handoff
+
+Auto-discovery with rejection memory is built (decisions 55-56). What remains of M5 is topic cards
+in the UI - topic news and sentiment have APIs and no screen - and the M5 closing handoff. The notes
+below are what this item was planned from, kept for the reasoning.
+
+### (Done) auto-discovery with rejection memory - the plan it was built from
 
 The exit criterion's second half: "a rejected auto-proposal never returns". Two parts, one easy:
 
