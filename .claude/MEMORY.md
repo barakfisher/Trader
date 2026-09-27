@@ -4,18 +4,22 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-27. **M5 is in progress. Topic *resolution* and topic *confirmation* are done;
-topic observations, per-topic sentiment, auto-discovery and the digest section are not.** **This is
-a handoff**, taken at the boundary the user and the previous session agreed: the end of Topic CRUD &
-Confirmation, three merged PRs after the last handoff. That session shipped:
-- #53: `POST /topics/resolve`, and a stack that loads the universe by itself;
-- #54: schema 0017 and the orchestrator's topic CRUD, with confirmation that re-resolves on the
-  server;
-- #55: the Topics screen.
+Updated: 2026-09-27 (second handoff that day). **M5 is in progress. Topic resolution,
+confirmation, topic observations, topic news, per-topic sentiment and the digest's topic section are
+done; auto-discovery with rejection memory is not** - and it is the second half of M5's exit
+criterion. **This is a handoff**, taken at CLAUDE.md's five-merged-PR trigger. This session shipped:
+- #57: topic observations from price moves (`topic_move`, decision 50), and backfill of topic
+  instruments, which had no price history at all;
+- #58: news collection (`news_collect`, `POST /news/collect`) and `GET /topics/:id/news` - the news
+  pipeline had been built in M2 and **never called** (decision 51);
+- #59: GDELT, the first real news provider (decision 52);
+- #60: per-topic sentiment, `GET /topics/:id/sentiment` (decision 53);
+- this PR: the digest's topic section (decision 54), and the first tests `sendDigest` ever had.
 
-A free-text topic now becomes a confirmed instrument set, end to end, in the running app. That is
-the first half of M5's exit criterion. The second half (topic *observations*, and a rejected
-auto-proposal never returning) is the next session's work; see "Where to go next".
+**Real news has not arrived yet.** GDELT has answered HTTP 429 to this machine since the first
+minutes of slice C; every `news_collect` run is `degraded` with `provider_failures: ["gdelt"]`.
+The code handles it as designed. Whether the block lifts on its own is the first thing to check -
+see the debt table.
 
 The resolver still finds **14 of 35** expected tickers on the user's held-out batch, and nobody
 changed its thresholds. The add-a-ticker box is how a confirmed set closes that gap (decision 46).
@@ -50,7 +54,7 @@ row and a ledger row marked revoked. What remains unproven is only the *webhook*
 | **M2.5 — Real price history** | ✅ Complete | **unplanned**; PR #23. Finished M1's provider layer, 18 PRs late |
 | **M3 — RAG & educational engine** | ✅ Complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. #45: the paid embedder. #46: `POST /ask`, intent routing, citations, a three-state relevance floor. #47: the 35-case eval set in two CI tiers. **The relevance floor is measured to be in the wrong place — see the debt table** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
-| **M5 — Market discovery & topics** | 🟡 In progress | #50–#51: eval set, screened universe, resolver, ETF holdings. **Recall on held-out topics: 14/35** (`docs/TOPIC_RESOLUTION.md`). #53: `POST /topics/resolve`, universe loaded by the stack. #54: schema 0017, topic CRUD + confirm. #55: Topics screen. topicScan slice A (price movers, decision 50). **Not started:** news for topics, per-topic sentiment, auto-discovery with rejection memory, digest section |
+| **M5 — Market discovery & topics** | 🟡 In progress | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** **Not started:** auto-discovery with rejection memory; topic cards in the UI |
 | M6 — Frontend completion & polish | Not started | |
 | M7 — Kubernetes & documentation | Not started | |
 
@@ -89,7 +93,7 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts at handoff: **1,275** — 658 Python, 420 orchestrator, 181 web, 16 shared. Plus two
+Test counts at handoff: **1,332** — 685 Python, 449 orchestrator, 182 web, 16 shared. Plus two
 eval sets, which are not test counts: `/ask`'s **35 cases** (16 keyless on every PR, all 35 when
 keyed), and the topic eval's **31 cases** (`scripts/run_topic_eval.py`, keyed only, **not in CI**).
 
@@ -546,6 +550,16 @@ failure they prevent.
     Days bucket in the user's timezone. Computed at read time rather than stored, because a
     stored per-topic score would be per-user derived data that goes stale the moment a late article
     arrives; a sentiment *observation* (a shift worth announcing) is the digest slice's decision.
+
+54. **The digest's topic section quotes headlines, keeps three states apart, and never makes a quiet
+    day loud.** `services/topicDigest.ts`. A topic move is quoted by its stored headline (already
+    evidence-checked), never re-rendered. "No unusual move" is said only of a topic the last
+    `topic_scan` measured; a topic in that run's `stats.skipped` is "not measured (reason)", and one
+    confirmed after the run is "not scanned yet". The section exists only when some topic moved or
+    had an article *today* (user's timezone); a day on which every topic was quiet still sends no
+    digest, which was the existing rule and is kept - a daily "all quiet" message trains the user
+    to mute the channel. The deferred entries' all-or-nothing settlement is unchanged; the topic
+    section has nothing to settle.
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -930,6 +944,19 @@ data**, and it is better met here than in production.
 
 ---
 
+**A layer with no caller is not done, and a green suite cannot say so.** M2 built and tested the
+whole news pipeline; nothing ever called it, so `articles` was empty in every installation for three
+milestones, and M5's plan assumed news existed. The same session found topic instruments had no
+price history, because backfill read holdings only. Both were found in the first ten minutes of
+topicScan by asking "what writes the table this reads?" and grepping for callers.
+→ **Before building on a layer, grep for its callers and look at its table's row count.** "It has
+tests" and "it runs" are different claims.
+
+**Two quick curls got GDELT to throttle this machine for over an hour.** Its 429 notice asks for one
+request per five seconds; two manual requests a few seconds apart, then a polite retry loop, kept
+the counter hot. → **Exercise a rate-limited API through the provider, which spaces its own
+requests, never with ad hoc curl.** Written into decision 52 as well.
+
 ## Current technical debt
 
 | Item | Where | Impact |
@@ -1117,6 +1144,26 @@ cannot reach any of the SQL. What exists end to end:
 The paid embedder is live in *this* installation's database and costs about a hundredth of a cent
 per full re-embed. A fresh clone and CI use the keyless fixture, on purpose.
 
+### Next session: M5's last item - auto-discovery with rejection memory
+
+The exit criterion's second half: "a rejected auto-proposal never returns". Two parts, one easy:
+
+- **Rejection memory** has its foundation already: `topics.status = 'rejected'` rows stay, and the
+  live-label unique index excludes them. Missing: a reject action (`POST /topics/:id/reject`, or a
+  status on `PUT`), and the rule that the proposer never proposes a label matching a rejected one.
+  Decide what "matching" means (case-insensitive label? same resolved instrument set?) before
+  writing it - a proposer that re-proposes "Uranium miners" after "uranium" was rejected breaks the
+  criterion in spirit.
+- **The proposer is a design question, not a coding one.** The news matcher deliberately knows only
+  held and topic instruments (decision 51), so a "recurring entity" in the news is by definition
+  something the user already follows. Discovery needs a different source of themes. The most
+  promising idea so far: recurring phrases across collected headlines → `resolve_topic` → propose
+  only confident resolutions that are not an active or rejected label. **It needs real news to
+  evaluate**, so check GDELT first (debt table). Proposals count against nothing until confirmed
+  (`lockTopicsForWrite` counts `active` only), but bound how many can be open at once.
+- After that: topic cards in the UI (topic news + sentiment have APIs and no screen), and M5's
+  closing handoff.
+
 ### M5 — where it stands
 
 MILESTONES.md: topic CRUD, resolving a free-text topic to candidate instruments with confidence and
@@ -1171,7 +1218,7 @@ and §5 before changing a threshold.
      counts it against the cap.
    - What is missing is the proposer, a reject action, and the rule that a rejected theme is
      never proposed again. Decision 18's ledger argument applies: remember, do not delete.
-4. **The digest's topic section**, then topic cards on the dashboard.
+4. ~~**The digest's topic section**~~ **Done** (decision 54). Topic cards on the dashboard remain.
 
 **Before any resolver change:** a new sealed held-out batch (batch 3), written by the user.
 Batch 2 is spent. The backlog in `docs/TOPIC_RESOLUTION.md` §4 cannot be measured honestly

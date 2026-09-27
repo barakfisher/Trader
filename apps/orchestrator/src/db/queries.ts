@@ -516,6 +516,27 @@ export function listRuns(userId: string, kind?: string, limit = 50): Promise<Run
   );
 }
 
+/**
+ * The last finished run of `kind`, with what it recorded.
+ *
+ * The digest reads a topic scan's `stats.skipped` from here: that map is the only
+ * record of which topics a scan could not measure, and "not measured" must not
+ * be reported as "nothing moved".
+ */
+export function getLatestFinishedRun(
+  userId: string,
+  kind: string,
+): Promise<{ started_at: Date; status: string; stats: unknown } | null> {
+  return queryOne(
+    `SELECT started_at, status, stats
+       FROM runs
+      WHERE user_id = $1 AND kind = $2 AND finished_at IS NOT NULL
+      ORDER BY started_at DESC
+      LIMIT 1`,
+    [userId, kind],
+  );
+}
+
 // --- Observations -------------------------------------------------------------
 
 export interface ObservationToStore {
@@ -1639,6 +1660,23 @@ export function listTopicSentimentRows(
       ORDER BY l.dated_at DESC, l.id, s.model
       LIMIT 2000`,
     [userId, topicId, String(days), timezone],
+  );
+}
+
+/** Topic observations written in the last `hours`, most severe first, for the digest. */
+export function listRecentTopicObservations(
+  userId: string,
+  hours: number,
+): Promise<{ subject_ref: string; severity: string; headline: string; created_at: Date }[]> {
+  return query(
+    `SELECT subject_ref, severity, headline, created_at
+       FROM observations
+      WHERE user_id = $1
+        AND subject_kind = 'topic'
+        AND created_at > now() - ($2 || ' hours')::interval
+      ORDER BY CASE severity WHEN 'high' THEN 0 WHEN 'notable' THEN 1 ELSE 2 END,
+               created_at DESC`,
+    [userId, String(hours)],
   );
 }
 

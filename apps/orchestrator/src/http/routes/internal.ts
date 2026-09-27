@@ -182,7 +182,12 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
         // A digest with nothing in it is not a failure and not a success worth
         // claiming: 'skipped' says the run happened and found nothing to say,
         // which is exactly what GET /runs is read to distinguish.
-        const status = digest.entries === 0 ? 'skipped' : digest.delivered ? 'ok' : 'degraded';
+        const status =
+          digest.entries === 0 && digest.topics === 0
+            ? 'skipped'
+            : digest.delivered
+              ? 'ok'
+              : 'degraded';
         await finishRun(runId, status, digest);
         return context.json({
           kind: parsed.data.kind,
