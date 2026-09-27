@@ -56,6 +56,7 @@ function phrase(text: string, articles = 4): DiscoveredPhrase {
   return {
     phrase: text,
     words: text.split(' '),
+    story_count: articles,
     article_count: articles,
     source_count: 3,
     headlines: [
@@ -110,7 +111,7 @@ function fakeAi(phrases: DiscoveredPhrase[], resolutions: Record<string, TopicRe
       since: '2026-09-20T00:00:00Z',
       days: 7,
       headlines,
-      min_articles: 3,
+      min_stories: 3,
       min_sources: 2,
       phrases,
     })),

@@ -208,22 +208,26 @@ def _article_id(connection: object, url_hash: str) -> str | None:
 
 
 #: The window's headlines for theme discovery (`app/topics/discovery.py`).
-#: Syndicated copies are skipped: one story republished five times is one
-#: signal, which is what `duplicate_of_id` exists to say. Undated articles are
-#: placed by when they were fetched, so a provider that omits dates still counts.
+#: Only articles linked to an instrument: an unlinked article was fetched
+#: because a name appeared somewhere in its body, not because it is about
+#: anything the user follows, and read as a theme it is noise (68 of the first
+#: 77 real GDELT articles, 2026-09-27). Exact copies are skipped
+#: (`duplicate_of_id`); near copies are grouped into stories by the caller.
+#: Undated articles are placed by when they were fetched.
 SQL_WINDOW_HEADLINES = text(
     """
-    SELECT id::text AS id, title, source, published_at
-      FROM articles
-     WHERE duplicate_of_id IS NULL
-       AND coalesce(published_at, fetched_at) >= :since
-     ORDER BY coalesce(published_at, fetched_at) DESC, id
+    SELECT a.id::text AS id, a.title, a.source, a.published_at
+      FROM articles a
+     WHERE a.duplicate_of_id IS NULL
+       AND coalesce(a.published_at, a.fetched_at) >= :since
+       AND EXISTS (SELECT 1 FROM article_entities e WHERE e.article_id = a.id)
+     ORDER BY coalesce(a.published_at, a.fetched_at) DESC, a.id
     """
 )
 
 
 def load_window_headlines(connection: object, *, since: datetime) -> list[Headline]:
-    """Every distinct headline published (or, if undated, fetched) since `since`."""
+    """Every linked, distinct headline published (or, if undated, fetched) since `since`."""
     rows = connection.execute(SQL_WINDOW_HEADLINES, {"since": since})  # type: ignore[attr-defined]
     return [
         Headline(

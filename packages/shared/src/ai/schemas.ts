@@ -181,6 +181,7 @@ const discoveredHeadlineSchema = z.object({
 const discoveredPhraseSchema = z.object({
   phrase: z.string(),
   words: z.array(z.string()),
+  story_count: z.number().int(),
   article_count: z.number().int(),
   source_count: z.number().int(),
   headlines: z.array(discoveredHeadlineSchema),
@@ -190,7 +191,7 @@ export const topicDiscoverResponseSchema = z.object({
   since: z.string(),
   days: z.number().int(),
   headlines: z.number().int(),
-  min_articles: z.number().int(),
+  min_stories: z.number().int(),
   min_sources: z.number().int(),
   phrases: z.array(discoveredPhraseSchema).optional(),
 });

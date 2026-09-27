@@ -46,7 +46,7 @@ from app.models import (
 )
 from app.news.entities import InstrumentRef, name_aliases
 from app.news.queries import load_window_headlines
-from app.topics.discovery import MIN_ARTICLES, MIN_SOURCES, recurring_phrases
+from app.topics.discovery import MIN_SOURCES, MIN_STORIES, recurring_phrases
 from app.topics.resolution import NOTHING_BELOW, STRONG_ABOVE, TopicResolution, resolve_topic
 from app.universe.profiles import UniverseCoverage, coverage
 
@@ -156,12 +156,13 @@ async def discover(
         since=since,
         days=payload.days,
         headlines=len(headlines),
-        min_articles=MIN_ARTICLES,
+        min_stories=MIN_STORIES,
         min_sources=MIN_SOURCES,
         phrases=[
             DiscoveredPhrase(
                 phrase=p.text,
                 words=list(p.key),
+                story_count=p.story_count,
                 article_count=p.article_count,
                 source_count=p.source_count,
                 headlines=[
