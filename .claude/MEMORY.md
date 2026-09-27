@@ -534,6 +534,18 @@ failure they prevent.
     JSON object is a provider failure, so the run is `degraded`, never a quiet-looking empty
     feed. Two quick manual requests got this session's IP throttled for minutes: **test it
     through the provider, which spaces requests 5.5 s apart, not with curl in a loop.**
+
+53. **A topic's sentiment is a magnitude-weighted mean from one model, or a null with a reason.**
+    `GET /topics/:id/sentiment` (FR-12), computed in `services/topicSentiment.ts` from rows the SQL
+    returns unaggregated, so the arithmetic is unit-tested and the article set is exactly
+    `/news`'s. Weighted because a lexicon score is a balance: one "record" scores +1 like an article
+    of nothing but good news, and a headline with no polar words expressed no tone rather than a
+    neutral one, so it gets no weight. **Never a 0 for "unknown"**: `gap` is `no_articles`,
+    `not_scored` or `too_few_polarised` (< 3). Scores from different models are never averaged
+    together (`lexicon-v1` is comparable only with itself); others are named in `otherModels`.
+    Days bucket in the user's timezone. Computed at read time rather than stored, because a
+    stored per-topic score would be per-user derived data that goes stale the moment a late article
+    arrives; a sentiment *observation* (a shift worth announcing) is the digest slice's decision.
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -946,6 +958,7 @@ data**, and it is better met here than in production.
 | ~~Telegram has no working binding~~ | — | **Resolved 2026-09-24.** A chat is bound. The "receives nothing" mystery was never a Telegram problem: nothing in the repository consumed updates, because M4's polling bridge was a hand-run script that left with its session. Kept as a line so the history of the symptom survives |
 | **Real news needs `NEWS_PROVIDERS=gdelt,fixture` in `.env`** | `.env` | Slice C added the GDELT provider; the code default and `.env.example` stay `fixture` so CI is offline (the same deliberate asymmetry as `MARKET_DATA_PROVIDERS`). Until `.env` names `gdelt`, every live `news_collect` run fetches 0. **Also still unwired:** the narration correlation step - `run_portfolio_scan` is always called with `articles=()`, so no observation cites news yet |
 | **GDELT's success path has never been seen live** | `app/news/gdelt.py` | On 2026-09-27 this machine got HTTP 429 from GDELT for over 15 minutes, starting after two quick manual curls, and including a single request through the provider after 10 idle minutes. The *failure* path is therefore verified against the real API (prose 429 → `NewsProviderError` → run `degraded`); the *success* path is verified only against response shapes taken from GDELT's documentation. **First thing to check once GDELT answers:** `GET /runs?kind=news_collect` shows `providers_used: ["gdelt", ...]` and a non-zero `fetched`. If 429 persists for hours, the IP may be blocked, and GDELT's notice names a contact address for that |
+| **Names ending in ", LP" never link to news** | `app/news/entities.py` `core_name` | `core_name` strips "Fund", "Inc" and the like but not a trailing ", LP", so "United States Gasoline Fund, LP" is matched - and searched on GDELT - only by that exact phrase, which prose never writes. **Not fixed on purpose:** 37 instruments in the committed universe have LP names, and `core_name` also shapes the resolver's matching text (`app/universe/matching_text.py`), so the fix moves topic resolution and needs the new held-out batch to measure. Fix both together, or give the news matcher its own rule |
 | **A very large instrument list outruns the collect timeout** | `app/news/gdelt.py` | 8 names per request, 5.5 s apart: 500 instruments (the request cap) is ~63 requests, ~6 min, over the 5-minute `SCAN_TIMEOUT_MS`. Irrelevant at a dozen instruments; the fix when it matters is fewer, wider requests or a per-run instrument budget |
 | Redis cold start refetches everything | `core/cache.py` | The `quotes` table holds usable recent prices; warming from it was deferred |
 | `instruments`, `quotes` and the news tables (and `instrument_profiles`, `etf_holdings`) have no `user_id` | migrations | **Intentional** — shared reference and market data, not user-owned. Documented so an audit does not re-flag it |
@@ -990,6 +1003,12 @@ data**, and it is better met here than in production.
   nothing. `--dry-run` says whether the files and the database agree without writing, and now
   reports embedding coverage as well as text — vectors are a second derived copy with the same
   drift.
+- **As of 2026-09-27 the stack runs `main` at #59 and the database is at `0018_news_collect`**,
+  rebuilt with `bash scripts/dev-docker.sh` (no `--reset`). **`.env` has
+  `NEWS_PROVIDERS=gdelt,fixture`** (set 2026-09-27 at the user's request; `.env.example` keeps
+  `fixture` - a deliberate asymmetry, do not "fix" it). GDELT answered 429 to every request that
+  day, so `news_collect` runs are `degraded` with `provider_failures: ["gdelt"]` until it
+  does - see the debt table.
 - **The stack and the database are in step as of 2026-09-24**: both at `0013_kb_embeddings`,
   images rebuilt from `main` at #47 with `bash scripts/dev-docker.sh` (no `--reset`, so the
   Postgres volume and every holding, quote and observation were kept). Verified rather than
@@ -1130,10 +1149,8 @@ and §5 before changing a threshold.
    backfill covers active topics' instruments (`listAnalysedInstruments`), a confirm backfills its
    instruments at once, and `topic_move` findings land in the feed labelled by topic name. **Two
    layers were missing underneath, and one still is: no news is ever collected** (see the debt
-   table). **Slice B** (`news_collect` run, `GET /topics/:id/news`, decision 51) and **slice C** (GDELT,
-   decision 52) are written on local branches `claude/topicscan-news-slice-b` and
-   `claude/topicscan-gdelt-slice-c`, each on top of the previous, waiting for #57 to merge -
-   CLAUDE.md forbids stacked PRs, so each opens against `main` after the one before it lands. The notes
+   table). **Slice B** (#58: `news_collect`, `GET /topics/:id/news`, decision 51) and **slice C** (#59:
+   GDELT, decision 52) are merged. Per-topic sentiment (FR-12, decision 53) followed. The notes
    below were written for slice B.
    - Scheduled through `POST /internal/runs` like every other run (guideline 8), with a
      `dedupe_key` per observation.
@@ -1145,7 +1162,7 @@ and §5 before changing a threshold.
    - Migration 0004 promised that a later migration backfills `article_entities.topic_id` from
      `topic_ref`. 0017 deliberately passed that on, and it is this work's decision now. The
      table was empty at 0017.
-2. **Per-topic sentiment** over a rolling window, with the articles behind the score (FR-12).
+2. ~~**Per-topic sentiment**~~ **Done** (decision 53): `GET /topics/:id/sentiment`. No UI yet.
 3. **Auto-discovery**: recurring entities become `status = 'proposed'`, `created_by = 'auto'`
    topics.
    - `rejected` rows are its memory. The live-label unique index already excludes them, so a
