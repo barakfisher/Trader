@@ -21,6 +21,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/analysis/topic-scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Topic Scan
+         * @description Measure each confirmed topic as an equal-weighted basket (FLOWS F5).
+         *
+         *     Price movement only, for now: news per topic needs a news run that does not
+         *     exist yet, and this endpoint says nothing about news rather than implying it
+         *     looked.
+         */
+        post: operations["topic_scan_analysis_topic_scan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ask": {
         parameters: {
             query?: never;
@@ -933,6 +957,85 @@ export interface components {
              */
             verdict: "confident" | "weak" | "none" | "unavailable";
         };
+        /** TopicScanInstrument */
+        TopicScanInstrument: {
+            /** Instrument Id */
+            instrument_id: string;
+            /** Symbol */
+            symbol: string;
+        };
+        /** TopicScanRequest */
+        TopicScanRequest: {
+            /**
+             * Known Dedupe Keys
+             * @description As on PortfolioScanRequest: matching findings are counted, not narrated.
+             */
+            known_dedupe_keys?: string[];
+            /** Topics */
+            topics: components["schemas"]["TopicScanTopic"][];
+        };
+        /** TopicScanResponse */
+        TopicScanResponse: {
+            /** Observations */
+            observations: components["schemas"]["ObservationOut"][];
+            stats: components["schemas"]["TopicScanStatsOut"];
+        };
+        /** TopicScanStatsOut */
+        TopicScanStatsOut: {
+            /**
+             * Already Known
+             * @default 0
+             */
+            already_known: number;
+            /**
+             * Findings
+             * @default 0
+             */
+            findings: number;
+            /**
+             * Instruments
+             * @default 0
+             */
+            instruments: number;
+            /**
+             * Narrated By Llm
+             * @default 0
+             */
+            narrated_by_llm: number;
+            /** Narration Fallbacks */
+            narration_fallbacks?: {
+                [key: string]: number;
+            };
+            /**
+             * Skipped
+             * @description Topic label -> why it could not be measured. A quiet topic is not listed.
+             */
+            skipped?: {
+                [key: string]: string;
+            };
+            /**
+             * Topics
+             * @default 0
+             */
+            topics: number;
+            /**
+             * Topics Measured
+             * @default 0
+             */
+            topics_measured: number;
+        };
+        /**
+         * TopicScanTopic
+         * @description One active topic and the instruments the user confirmed for it.
+         */
+        TopicScanTopic: {
+            /** Instruments */
+            instruments: components["schemas"]["TopicScanInstrument"][];
+            /** Label */
+            label: string;
+            /** Topic Id */
+            topic_id: string;
+        };
         /**
          * UniverseCoverageOut
          * @description What the resolver could see: the installation's side of the answer.
@@ -996,6 +1099,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PortfolioScanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    topic_scan_analysis_topic_scan_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TopicScanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicScanResponse"];
                 };
             };
             /** @description Validation Error */

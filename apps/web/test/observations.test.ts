@@ -291,6 +291,12 @@ describe('observation presentation', () => {
     expect(subjectLabel('NVDA')).toBe('NVDA');
   });
 
+  it('names a topic by its label, never by its id', () => {
+    const ref = 'topic:5f0c1d2e-0000-4000-8000-000000000001';
+    expect(subjectLabel(ref, { topic_label: 'uranium' })).toBe('uranium');
+    expect(kindLabel('topic_move')).toBe('Topic move');
+  });
+
   it('turns a concept slug into words', () => {
     expect(conceptLabel('daily-return')).toBe('Daily return');
   });

@@ -88,7 +88,7 @@ const ObservationRow = observer(function ObservationRow({
             {severity.label}
           </span>
           <span className="font-medium text-text-primary">
-            {subjectLabel(observation.subjectRef)}
+            {subjectLabel(observation.subjectRef, observation.evidence)}
           </span>
           <span aria-hidden>·</span>
           <span>{kindLabel(observation.kind)}</span>

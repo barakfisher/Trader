@@ -16,7 +16,7 @@ bands and `severity_for` maps a computed statistic onto them:
     notable <= |statistic| <  high       -> "notable"
     high    <= |statistic|               -> "high"
 
-The same ladder is used by all four rules, so "notable" means the same shape of
+The same ladder is used by every rule, so "notable" means the same shape of
 thing everywhere: the statistic cleared the band the operator configured for it.
 The magnitude is always an absolute value - a 6% fall and a 6% rise are equally
 worth reporting, and the sign lives in the evidence.
@@ -30,7 +30,7 @@ from typing import Literal
 
 Severity = Literal["info", "notable", "high"]
 
-FindingKind = Literal["price_move", "sigma_move", "drawdown", "allocation_drift"]
+FindingKind = Literal["price_move", "sigma_move", "drawdown", "allocation_drift", "topic_move"]
 
 #: Ascending, so callers can compare or sort severities without a lookup table.
 SEVERITY_ORDER: tuple[Severity, ...] = ("info", "notable", "high")

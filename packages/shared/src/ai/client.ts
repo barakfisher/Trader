@@ -26,6 +26,7 @@ import {
   instrumentResolutionSchema,
   narrationConfigSchema,
   portfolioScanResponseSchema,
+  topicScanResponseSchema,
   quoteResponseSchema,
   topicResolveResponseSchema,
 } from './schemas.js';
@@ -39,6 +40,8 @@ export type HealthResponse = components['schemas']['HealthResponse'];
 export type NarrationConfig = components['schemas']['NarrationConfigResponse'];
 export type PortfolioScanRequest = components['schemas']['PortfolioScanRequest'];
 export type PortfolioScanResponse = components['schemas']['PortfolioScanResponse'];
+export type TopicScanRequest = components['schemas']['TopicScanRequest'];
+export type TopicScanResponse = components['schemas']['TopicScanResponse'];
 export type ObservationOut = components['schemas']['ObservationOut'];
 export type BackfillRequest = components['schemas']['BackfillRequest'];
 export type BackfillResponse = components['schemas']['BackfillResponse'];
@@ -174,6 +177,20 @@ export class AiClient {
       portfolioScanResponseSchema,
       { method: 'POST', body: JSON.stringify(payload), requestId, timeoutMs: SCAN_TIMEOUT_MS },
     );
+  }
+
+  /**
+   * Measure each confirmed topic as an equal-weighted basket. Same timeout as a
+   * portfolio scan, for the same reason: history per instrument, a model call
+   * per new finding.
+   */
+  topicScan(payload: TopicScanRequest, requestId?: string): Promise<TopicScanResponse> {
+    return this.request<TopicScanResponse>('/analysis/topic-scan', topicScanResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      requestId,
+      timeoutMs: SCAN_TIMEOUT_MS,
+    });
   }
 
   /**

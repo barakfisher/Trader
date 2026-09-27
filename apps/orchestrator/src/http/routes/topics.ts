@@ -53,6 +53,7 @@ import {
   normaliseSymbols,
   type ConfirmOutcome,
 } from '../../services/topics.js';
+import { backfillConfirmedInstruments } from '../../services/topicScan.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, conflict, notFound, unprocessable, upstreamFailure } from '../errors.js';
 
@@ -174,6 +175,12 @@ async function confirmed(context: Context<AppEnv>, topicIdOrNull: string | null)
     throw error;
   }
   if (!outcome.ok) confirmFailure(outcome);
+  // Without history the topic scan skips the topic until tomorrow's backfill.
+  backfillConfirmedInstruments(
+    context.get('ai'),
+    outcome.instruments.map((row) => ({ instrument_id: row.instrument_id, symbol: row.symbol })),
+    context.get('requestId'),
+  );
   return detail(outcome.topic, outcome.instruments);
 }
 

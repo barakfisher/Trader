@@ -1316,6 +1316,151 @@
         "title": "TopicResolveResponse",
         "type": "object"
       },
+      "TopicScanInstrument": {
+        "properties": {
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "symbol"
+        ],
+        "title": "TopicScanInstrument",
+        "type": "object"
+      },
+      "TopicScanRequest": {
+        "properties": {
+          "known_dedupe_keys": {
+            "description": "As on PortfolioScanRequest: matching findings are counted, not narrated.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5000,
+            "title": "Known Dedupe Keys",
+            "type": "array"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/TopicScanTopic"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Topics",
+            "type": "array"
+          }
+        },
+        "required": [
+          "topics"
+        ],
+        "title": "TopicScanRequest",
+        "type": "object"
+      },
+      "TopicScanResponse": {
+        "properties": {
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/ObservationOut"
+            },
+            "title": "Observations",
+            "type": "array"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/TopicScanStatsOut"
+          }
+        },
+        "required": [
+          "observations",
+          "stats"
+        ],
+        "title": "TopicScanResponse",
+        "type": "object"
+      },
+      "TopicScanStatsOut": {
+        "properties": {
+          "already_known": {
+            "default": 0,
+            "title": "Already Known",
+            "type": "integer"
+          },
+          "findings": {
+            "default": 0,
+            "title": "Findings",
+            "type": "integer"
+          },
+          "instruments": {
+            "default": 0,
+            "title": "Instruments",
+            "type": "integer"
+          },
+          "narrated_by_llm": {
+            "default": 0,
+            "title": "Narrated By Llm",
+            "type": "integer"
+          },
+          "narration_fallbacks": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Narration Fallbacks",
+            "type": "object"
+          },
+          "skipped": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Topic label -> why it could not be measured. A quiet topic is not listed.",
+            "title": "Skipped",
+            "type": "object"
+          },
+          "topics": {
+            "default": 0,
+            "title": "Topics",
+            "type": "integer"
+          },
+          "topics_measured": {
+            "default": 0,
+            "title": "Topics Measured",
+            "type": "integer"
+          }
+        },
+        "title": "TopicScanStatsOut",
+        "type": "object"
+      },
+      "TopicScanTopic": {
+        "description": "One active topic and the instruments the user confirmed for it.",
+        "properties": {
+          "instruments": {
+            "items": {
+              "$ref": "#/components/schemas/TopicScanInstrument"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Instruments",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "topic_id": {
+            "title": "Topic Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic_id",
+          "label",
+          "instruments"
+        ],
+        "title": "TopicScanTopic",
+        "type": "object"
+      },
       "UniverseCoverageOut": {
         "description": "What the resolver could see: the installation's side of the answer.\n\n`state` is `ready`, `partially_embedded` (resolution ran over `embedded` of\n`profiles`), `not_embedded` or `not_loaded`. The last two mean the topic\nwas never looked at, which is why they carry a verdict of their own.",
         "properties": {
@@ -1449,6 +1594,66 @@
           }
         },
         "summary": "Portfolio Scan",
+        "tags": [
+          "analysis"
+        ]
+      }
+    },
+    "/analysis/topic-scan": {
+      "post": {
+        "description": "Measure each confirmed topic as an equal-weighted basket (FLOWS F5).\n\nPrice movement only, for now: news per topic needs a news run that does not\nexist yet, and this endpoint says nothing about news rather than implying it\nlooked.",
+        "operationId": "topic_scan_analysis_topic_scan_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TopicScanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopicScanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Topic Scan",
         "tags": [
           "analysis"
         ]

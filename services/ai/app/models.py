@@ -213,6 +213,47 @@ class PortfolioScanResponse(BaseModel):
     stats: ScanStatsOut
 
 
+class TopicScanInstrument(BaseModel):
+    instrument_id: str
+    symbol: str
+
+
+class TopicScanTopic(BaseModel):
+    """One active topic and the instruments the user confirmed for it."""
+
+    topic_id: str
+    label: str
+    instruments: list[TopicScanInstrument] = Field(min_length=1, max_length=100)
+
+
+class TopicScanRequest(BaseModel):
+    topics: list[TopicScanTopic] = Field(min_length=1, max_length=50)
+    known_dedupe_keys: list[str] = Field(
+        default_factory=list,
+        max_length=5000,
+        description="As on PortfolioScanRequest: matching findings are counted, not narrated.",
+    )
+
+
+class TopicScanStatsOut(BaseModel):
+    topics: int = 0
+    topics_measured: int = 0
+    instruments: int = 0
+    findings: int = 0
+    already_known: int = 0
+    narrated_by_llm: int = 0
+    narration_fallbacks: dict[str, int] = Field(default_factory=dict)
+    skipped: dict[str, str] = Field(
+        default_factory=dict,
+        description="Topic label -> why it could not be measured. A quiet topic is not listed.",
+    )
+
+
+class TopicScanResponse(BaseModel):
+    observations: list[ObservationOut]
+    stats: TopicScanStatsOut
+
+
 class NarrationConfigResponse(BaseModel):
     """How narration is configured, for a UI that must not guess.
 

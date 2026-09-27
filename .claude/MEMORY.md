@@ -50,7 +50,7 @@ row and a ledger row marked revoked. What remains unproven is only the *webhook*
 | **M2.5 — Real price history** | ✅ Complete | **unplanned**; PR #23. Finished M1's provider layer, 18 PRs late |
 | **M3 — RAG & educational engine** | ✅ Complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. #45: the paid embedder. #46: `POST /ask`, intent routing, citations, a three-state relevance floor. #47: the 35-case eval set in two CI tiers. **The relevance floor is measured to be in the wrong place — see the debt table** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
-| **M5 — Market discovery & topics** | 🟡 In progress | #50–#51: eval set, screened universe, resolver, ETF holdings. **Recall on held-out topics: 14/35** (`docs/TOPIC_RESOLUTION.md`). #53: `POST /topics/resolve`, universe loaded by the stack. #54: schema 0017, topic CRUD + confirm. #55: Topics screen. **Not started:** topic observations (`topicScan`), per-topic sentiment, auto-discovery with rejection memory, digest section |
+| **M5 — Market discovery & topics** | 🟡 In progress | #50–#51: eval set, screened universe, resolver, ETF holdings. **Recall on held-out topics: 14/35** (`docs/TOPIC_RESOLUTION.md`). #53: `POST /topics/resolve`, universe loaded by the stack. #54: schema 0017, topic CRUD + confirm. #55: Topics screen. topicScan slice A (price movers, decision 50). **Not started:** news for topics, per-topic sentiment, auto-discovery with rejection memory, digest section |
 | M6 — Frontend completion & polish | Not started | |
 | M7 — Kubernetes & documentation | Not started | |
 
@@ -505,6 +505,17 @@ failure they prevent.
     row**. It was raced live with three simultaneous confirms for one free slot, and exactly one
     won.
 
+
+50. **A topic observation is one finding about the basket, never a list of member findings.**
+    `topic_move` measures the confirmed set as an equal-weighted basket and z-scores its move
+    against the same basket's own recent days, reusing `sigma_move`'s thresholds and guards.
+    Equal weight because a confirmed set has no weights; market-cap weight would make every topic
+    containing a giant a statement about that giant. Two refusals are its own: fewer than
+    `TOPIC_MIN_MEMBERS` priced, or less than `TOPIC_MIN_COVERAGE` of the set priced on the session
+    (the same floor filters which historical days enter the sample). Both are reported by label in
+    `runs.stats.skipped`, and the run is `degraded`. It raises no proposals and carries no news,
+    because none is collected (see the debt table). Replayed over 120 real sessions for
+    UGA+VLO: 9 findings, all `info`, 0 unsourced figures.
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -915,6 +926,7 @@ data**, and it is better met here than in production.
 | **The Topics screen has never been looked at in a browser** | `apps/web/src/pages/TopicsPage.tsx` | #55 is tested at the store level (18 tests) and served by the running stack, but signing in needs the passphrase, which a session does not type. Layout, wrapping at mobile width and the long rationale quotes are unverified. The first person to open it is the first test of its layout |
 | No component/DOM tests on the web app | `apps/web/test` | Store and formatting logic covered; rendering is not. Two real UI bugs this session (Discard disabled by its own typo, a deep link that does nothing) were found by *using* the app, not by tests, and neither would have been caught by a DOM test either — but a DOM test would have caught the first |
 | ~~Telegram has no working binding~~ | — | **Resolved 2026-09-24.** A chat is bound. The "receives nothing" mystery was never a Telegram problem: nothing in the repository consumed updates, because M4's polling bridge was a hand-run script that left with its session. Kept as a line so the history of the symptom survives |
+| **No news is ever collected** | `app/news`, `internal.ts` | The whole news pipeline (fetch, dedupe, entity matching, sentiment, `store_ingested`) is built and tested and **has no caller**: no run kind, no route, no scheduler entry. `articles` is empty in every installation, and the only provider is a 20-article fixture dated 14-16 Sept 2026 (`NEWSAPI_KEY` is empty). Found when starting topicScan, which F5 describes as "news per topic". Topic sentiment (FR-12), auto-discovery (FR-11) and the narration "why" correlation all read this table |
 | Redis cold start refetches everything | `core/cache.py` | The `quotes` table holds usable recent prices; warming from it was deferred |
 | `instruments`, `quotes` and the news tables (and `instrument_profiles`, `etf_holdings`) have no `user_id` | migrations | **Intentional** — shared reference and market data, not user-owned. Documented so an audit does not re-flag it |
 | **Topic resolution finds 14/35 expected tickers on held-out topics** | `app/topics/resolution.py` | Measured on the user's sealed batch; slice 2 did not change it. Causes, measured: one outlier sets the gate; no ETF clears the source floor for cloud/e-commerce/obesity/robot surgery; giants are described too broadly; OTC-only ADRs (LVMUY) are not in the universe. The backlog, ranked, is `docs/TOPIC_RESOLUTION.md` §4 — **and it needs a new held-out batch before any of it can be measured** |
@@ -1094,7 +1106,12 @@ and §5 before changing a threshold.
 
 **Next: the second half of M5**, in the order the exit criterion needs it:
 
-1. **`topicScan`: topic observations.** FLOWS F5 and DESIGN's workflow list name it.
+1. **`topicScan`: topic observations.** **Slice A is done**: `topic_scan` runs every 30 minutes,
+   backfill covers active topics' instruments (`listAnalysedInstruments`), a confirm backfills its
+   instruments at once, and `topic_move` findings land in the feed labelled by topic name. **Two
+   layers were missing underneath, and one still is: no news is ever collected** (see the debt
+   table). Slice B is a news run; slice C a real news provider, which is the user's choice
+   (GDELT keyless vs NewsAPI keyed). The notes below apply to slice B.
    - Scheduled through `POST /internal/runs` like every other run (guideline 8), with a
      `dedupe_key` per observation.
    - The `observations.subject_kind` column already allows `'topic'`
