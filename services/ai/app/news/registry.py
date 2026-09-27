@@ -16,17 +16,28 @@ with it; the fixture provider needs neither (`makes_external_requests = False`).
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from app.config import Settings
 from app.core.logging import get_logger
 from app.news.base import NewsProvider
 from app.news.fixture import FixtureNewsProvider
-from app.news.gdelt import GdeltNewsProvider
+from app.news.gdelt import FeedCursor, GdeltNewsProvider
 
 log = get_logger("news.registry")
 
 
-def build_news_providers(settings: Settings) -> list[NewsProvider]:
-    """Instantiate the configured chain, in the configured order."""
+def build_news_providers(
+    settings: Settings,
+    *,
+    cursor_for: Callable[[str], FeedCursor] | None = None,
+) -> list[NewsProvider]:
+    """Instantiate the configured chain, in the configured order.
+
+    `cursor_for` gives a file-based feed (GDELT) its stored read position. The
+    collection run passes one bound to its own transaction, so the cursor moves
+    only if the articles it read are stored.
+    """
     providers: list[NewsProvider] = []
     for name in settings.news_chain:
         if name == "fixture":
@@ -34,7 +45,7 @@ def build_news_providers(settings: Settings) -> list[NewsProvider]:
         elif name == "gdelt":
             # Keyless, so there is nothing to validate at boot: a GDELT outage is
             # a provider failure on a run, recorded as one.
-            providers.append(GdeltNewsProvider())
+            providers.append(GdeltNewsProvider(cursor=cursor_for(name) if cursor_for else None))
         else:
             # newsapi and the rest plug in here as they are implemented.
             # An unknown name is a configuration mistake worth surfacing: silently

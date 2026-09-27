@@ -37,10 +37,10 @@ class NewsProviderError(RuntimeError):
     """Raised for any provider-side failure. The pipeline catches it and moves on.
 
     `partial` carries what the provider did fetch before it failed. A provider that
-    splits one call into several upstream requests (GDELT) can fail on the second
-    after the first succeeded, and discarding the first answer would turn a partial
-    feed into an empty one. The failure still marks the run degraded; the articles
-    are kept.
+    splits one call into several upstream requests (GDELT reads one file per 15
+    minutes) can fail on the fifth after four succeeded, and discarding those
+    would turn a partial feed into an empty one. The failure still marks the run
+    degraded; the articles are kept.
     """
 
     def __init__(self, provider: str, message: str, *, partial: Sequence[RawArticle] = ()) -> None:
@@ -85,9 +85,9 @@ class NewsProvider(Protocol):
         that is broken.
 
         `names` maps a symbol to the spellings the entity matcher links it by.
-        A per-symbol news API can ignore it; a full-text search (GDELT) cannot
-        work without it, because "NVDA" rarely appears in prose and "Nvidia"
-        does. Added when the first such provider arrived, as an optional keyword
+        A per-symbol news API can ignore it; a provider that filters headlines
+        itself (GDELT) cannot work without it, because "NVDA" rarely appears in
+        prose and "Nvidia" does. Added when the first such provider arrived, as an optional keyword
         so no existing provider changed.
         """
         ...

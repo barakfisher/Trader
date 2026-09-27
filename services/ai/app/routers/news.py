@@ -19,6 +19,7 @@ from app.models import NewsCollectRequest, NewsCollectResponse
 from app.news import LexiconSentimentScorer, build_news_providers
 from app.news.collection import collect_news
 from app.news.entities import InstrumentRef
+from app.news.queries import SqlFeedCursor
 
 router = APIRouter(
     prefix="/news",
@@ -38,10 +39,14 @@ async def collect(payload: NewsCollectRequest, settings: SettingsDep) -> NewsCol
         )
         for item in payload.instruments
     ]
-    # Built per request, like the LLM: a provider that cannot be built must fail
-    # this run and be recorded as failed, not take the service down at boot.
-    providers = build_news_providers(settings)
     with get_engine().begin() as connection:
+        # Built per request, like the LLM: a provider that cannot be built must
+        # fail this run and be recorded as failed, not take the service down at
+        # boot. Built inside the transaction, so a feed's cursor commits or
+        # rolls back with the articles it read.
+        providers = build_news_providers(
+            settings, cursor_for=lambda name: SqlFeedCursor(connection, name)
+        )
         stats = await collect_news(
             connection,
             providers,

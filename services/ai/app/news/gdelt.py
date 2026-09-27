@@ -1,47 +1,57 @@
-"""GDELT DOC 2.0: keyless full-text news search, the first network news provider.
+"""GDELT's raw 15-minute files: keyless news, read as downloads rather than searched.
 
-Chosen over NewsAPI (user, 2026-09-27) because it needs no key and its terms do
-not restrict it to development use. Three properties of the API shape this
-module, and each was checked against a live response rather than the docs:
+**Why files, not the search API** (decision 52, user's decision 2026-09-27). The
+DOC search API at api.gdeltproject.org refused most requests for a whole day
+with HTTP 429 - load-shedding on GDELT's side, not a limit we could stay under -
+and the one batch that got through was mostly noise: it matches a name anywhere
+in an article's body but returns only the headline, so 68 of 77 stored articles
+mentioned nothing followed, and its titles came back re-spaced ("U . S ."). The
+raw files at data.gdeltproject.org are static downloads: the same day they
+answered in 0.6 s while the API refused, and every row of the file checked had
+a clean headline.
 
-  * **It searches text, not tickers.** "NVDA" rarely appears in prose. So the
-    query is built from `names` - the exact spellings `app/news/entities.py` will
-    link an instrument by - and a symbol with no usable name is not searched at
-    all rather than searched uselessly. Fetching by any other spelling would
-    return articles the matcher can never link.
-  * **It returns headlines, not articles.** An `ArtList` row has a url, a title,
-    a domain and the time GDELT first saw it; no body. The headline is used as the
-    body, so the matcher and the sentiment lexicon read the only text there is.
-    This is stated rather than hidden: sentiment from a headline is thinner than
-    sentiment from an article, and `content_hash` then identifies a headline, which
-    collapses syndicated copies of one story - the dedupe working as intended.
-  * **It throttles hard, and says so in plain text.** More than one request per
-    five seconds gets a 429 whose body is an English sentence, not JSON; the same
-    sentence has been seen with other statuses. Anything that is not a JSON object
-    is therefore a `NewsProviderError`, so the run records a provider failure and
-    is `degraded`, never an empty feed that reads as a quiet day. Requests within
-    one fetch are spaced by `min_interval_seconds`.
-  * **Its 429 is mostly load-shedding, not a verdict on us.** Measured on
-    2026-09-27: requests 20 s and 30 min apart were refused alike, one plain query
-    succeeded and the identical URL was refused two minutes later, and every reply
-    took 11-15 s. So a throttled request is retried after `retry_delays_seconds`,
-    and a batch that still fails does not discard the batches before it: they go
-    out on `NewsProviderError.partial`, and the run is degraded rather than empty.
+**What is read.** Every 15 minutes GDELT publishes a Global Knowledge Graph file
+(`YYYYMMDDHHMMSS.gkg.csv.zip`, about 3 MB zipped, several hundred English
+articles). Only four of its 27 tab-separated columns are used:
 
-`published_at` is GDELT's `seendate`: when its crawler first saw the article. It
-is not the publisher's timestamp, and it is used because it is the closest honest
-time available - usually minutes after publication - and a null would drop the
-article from every windowed read.
+    1  DATE                the 15-minute slot the article was seen in
+    3  SourceCommonName    the outlet, e.g. "reuters.com"
+    4  DocumentIdentifier  the article URL
+    26 Extras              XML-ish extras; `<PAGE_TITLE>` holds the headline
+
+**Headline-only matching** (user's decision). A row is kept when its headline
+contains one of the name spellings `app/news/entities.py` links by (`names`).
+GKG also lists the organisations an article's body mentions, and matching on
+those would find more - but the headline shown, quoted and read for themes would
+then not mention the thing it was kept for, which is exactly the noise the
+search API produced. The headline is also the body, as before: sentiment is
+headline sentiment, and it says so.
+
+**Which files a run reads** is a cursor (`FeedCursor`, migration 0020): the
+slots after the last one read, oldest first, at most `MAX_FILES_PER_RUN`. With
+no cursor yet, the last `INITIAL_WINDOW` of slots. A slot is never older than
+the caller's `since`, so a stack that was down for a week does not download a
+week. A file that is not there yet (404 within `PUBLISH_GRACE` of its slot) ends
+the run's reading without moving the cursor, so the next run tries it again; one
+missing for longer is counted and passed over, because GDELT does skip slots.
+
+`published_at` is the slot time: when GDELT saw the article, usually minutes
+after publication. It is not the publisher's timestamp, and it is the closest
+honest time the file has.
 """
 
 from __future__ import annotations
 
-import asyncio
-import math
-import time
-from collections.abc import Awaitable, Callable, Mapping, Sequence
-from datetime import UTC, datetime
-from typing import Any
+import csv
+import html
+import io
+import re
+import sys
+import zipfile
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from typing import Protocol
 
 import httpx
 
@@ -51,63 +61,160 @@ from app.news.base import NewsProviderError
 
 log = get_logger("news.gdelt")
 
-GDELT_DOC_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
+GDELT_FILES_URL = "https://data.gdeltproject.org/gdeltv2"
 
-#: GDELT asks for at most one request every five seconds. Half a second of margin.
-GDELT_MIN_INTERVAL_SECONDS = 5.5
+#: GDELT's publishing interval, and so the spacing of the slots.
+SLOT = timedelta(minutes=15)
 
-#: Names OR'd into one query. Long queries are rejected by the API; eight quoted
-#: names stays well inside what it accepts, and keeps a dozen instruments to two
-#: requests.
-GDELT_TERMS_PER_REQUEST = 8
+#: Files one run may read: four hours of catch-up. Two new files arrive per
+#: 30-minute run, so a gap closes at six extra files a run. About 50 MB at most.
+MAX_FILES_PER_RUN = 16
 
-#: GDELT refuses phrases this short or shorter as "too short".
-GDELT_MIN_TERM_LENGTH = 3
+#: Where a feed with no cursor starts: two hours back, not the caller's 48 -
+#: 192 files would be about 600 MB for news that is mostly already a day old.
+INITIAL_WINDOW = timedelta(hours=2)
 
-#: The API's own ceiling on `maxrecords`.
-GDELT_MAX_RECORDS = 250
-GDELT_DEFAULT_RECORDS = 75
+#: A file not there this soon after its slot is late, not missing.
+PUBLISH_GRACE = timedelta(minutes=45)
 
-GDELT_TIMEOUT_SECONDS = 30.0
+GDELT_TIMEOUT_SECONDS = 60.0
 
-#: Waits before the second and third attempt at a refused request. A refusal has
-#: taken 11-15 s, so a refused request costs about 80 s in all, and a dozen
-#: instruments (two requests) stays inside the orchestrator's collect timeout.
-GDELT_RETRY_DELAYS_SECONDS: tuple[float, ...] = (10.0, 30.0)
+#: Columns of the GKG 2.1 file, zero-based.
+_DATE, _SOURCE, _URL, _EXTRAS = 1, 3, 4, 26
+_COLUMNS = 27
 
-#: The throttle notice, which has also been seen with a 200.
-GDELT_THROTTLE_MARKER = "limit requests"
+_PAGE_TITLE = re.compile(r"<PAGE_TITLE>(.*?)</PAGE_TITLE>", re.DOTALL)
+_SPACES = re.compile(r"\s+")
+
+# A GKG row carries long fields (the extras, the locations); the csv module's
+# default 128 KB field limit is below what the files contain.
+csv.field_size_limit(sys.maxsize)
 
 
-class _Refused(NewsProviderError):
-    """A failure worth retrying: throttled, a server error, or no reply at all."""
+class FeedCursor(Protocol):
+    """Where a file feed has read up to. `app/news/queries.py` stores it."""
+
+    def get(self) -> datetime | None: ...
+
+    def set(self, last_file_at: datetime) -> None: ...
+
+
+class MemoryFeedCursor:
+    """A cursor that lives as long as the object: tests, and a caller with no database."""
+
+    def __init__(self, last_file_at: datetime | None = None) -> None:
+        self.last_file_at = last_file_at
+
+    def get(self) -> datetime | None:
+        return self.last_file_at
+
+    def set(self, last_file_at: datetime) -> None:
+        self.last_file_at = last_file_at
+
+
+@dataclass(slots=True)
+class FeedPass:
+    """What one read of the feed did, logged so a quiet run can be told from a broken one."""
+
+    files_read: int = 0
+    files_missing: int = 0
+    rows: int = 0
+    untitled: int = 0
+    malformed: int = 0
+    matched: int = 0
+    slots: list[str] = field(default_factory=list)
+
+
+def slot_floor(moment: datetime) -> datetime:
+    """The start of the 15-minute slot `moment` falls in, in UTC."""
+    moment = moment.astimezone(UTC)
+    return moment.replace(minute=moment.minute - moment.minute % 15, second=0, microsecond=0)
+
+
+def slot_url(slot: datetime) -> str:
+    return f"{GDELT_FILES_URL}/{slot.strftime('%Y%m%d%H%M%S')}.gkg.csv.zip"
+
+
+def headline_pattern(names: Mapping[str, Sequence[str]]) -> re.Pattern[str] | None:
+    """One case-insensitive, whole-word pattern over every name spelling; None if there are none."""
+    spellings = sorted(
+        {alias.strip() for aliases in names.values() for alias in aliases if alias.strip()},
+        key=len,
+        reverse=True,
+    )
+    if not spellings:
+        return None
+    alternatives = "|".join(re.escape(s) for s in spellings)
+    # Grouped, or the boundaries bind only to the first and last spelling and
+    # "Pineapple" matches "Apple" (caught by the test that says it must not).
+    return re.compile(rf"(?<!\w)(?:{alternatives})(?!\w)", re.IGNORECASE)
+
+
+def read_gkg(content: bytes, keep: Callable[[str], bool], stats: FeedPass) -> list[RawArticle]:
+    """The articles in one zipped GKG file whose headline `keep` accepts."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as archive:
+            member = archive.namelist()[0]
+            text = archive.read(member).decode("utf-8", errors="replace")
+    except (zipfile.BadZipFile, IndexError) as exc:
+        raise ValueError("not a GKG zip") from exc
+
+    articles: list[RawArticle] = []
+    for row in csv.reader(io.StringIO(text), delimiter="\t", quoting=csv.QUOTE_NONE):
+        stats.rows += 1
+        if len(row) < _COLUMNS:
+            stats.malformed += 1
+            continue
+        found = _PAGE_TITLE.search(row[_EXTRAS])
+        title = _SPACES.sub(" ", html.unescape(found.group(1))).strip() if found else ""
+        url = row[_URL].strip()
+        if not title or not url:
+            stats.untitled += 1
+            continue
+        if not keep(title):
+            continue
+        stats.matched += 1
+        articles.append(
+            RawArticle(
+                url=url,
+                source=row[_SOURCE].strip() or "gdelt",
+                title=title,
+                # Headlines only: see the module docstring.
+                body=title,
+                published_at=_slot_time(row[_DATE]),
+            )
+        )
+    return articles
+
+
+def _slot_time(value: str) -> datetime | None:
+    """`20260927141500` -> an aware UTC datetime; anything else -> None."""
+    try:
+        return datetime.strptime(value.strip(), "%Y%m%d%H%M%S").replace(tzinfo=UTC)
+    except ValueError:
+        return None
 
 
 class GdeltNewsProvider:
     name = "gdelt"
     makes_external_requests = True
-    # One request covers up to GDELT_TERMS_PER_REQUEST instruments, not all of
-    # them, so a limiter must charge per request - which is why the spacing
-    # lives here, where the request count is known.
-    batches_requests = False
+    # A run downloads the same files whatever the instruments, so a symbol
+    # list of any length costs the same.
+    batches_requests = True
 
     def __init__(
         self,
         *,
+        cursor: FeedCursor | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
-        min_interval_seconds: float = GDELT_MIN_INTERVAL_SECONDS,
-        retry_delays_seconds: Sequence[float] = GDELT_RETRY_DELAYS_SECONDS,
-        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
-        # Injected by tests as an httpx.MockTransport, which keeps the suite
-        # hermetic: no test of this module reaches the network.
+        # Without a stored cursor every run reads the initial window: correct,
+        # just wasteful. The collection run always passes the stored one.
+        self._cursor = cursor or MemoryFeedCursor()
+        # Injected by tests as an httpx.MockTransport: no test reaches the network.
         self._transport = transport
-        self._min_interval = min_interval_seconds
-        self._retry_delays = tuple(retry_delays_seconds)
-        self._sleep = sleep
         self._clock = clock
-        self._last_request: float | None = None
 
     async def fetch_for_symbols(
         self,
@@ -117,28 +224,13 @@ class GdeltNewsProvider:
         limit: int | None = None,
         names: Mapping[str, Sequence[str]] | None = None,
     ) -> list[RawArticle]:
-        terms = query_terms(symbols, names or {})
-        if not terms:
-            # Nothing searchable is an answer, not a failure: a portfolio of
-            # instruments with no names has no text for GDELT to find.
-            log.info("news.gdelt.no_terms", symbols=len(symbols))
+        pattern = headline_pattern({s: (names or {}).get(s, ()) for s in symbols})
+        if pattern is None:
+            # No spellings, nothing a headline could name: an answer, not a failure.
+            log.info("news.gdelt.no_names", symbols=len(symbols))
             return []
-        articles: list[RawArticle] = []
-        for start in range(0, len(terms), GDELT_TERMS_PER_REQUEST):
-            chunk = terms[start : start + GDELT_TERMS_PER_REQUEST]
-            try:
-                articles.extend(await self._search(_or_query(chunk), since, limit))
-            except NewsProviderError as exc:
-                # Later batches are not attempted: GDELT has just refused three
-                # times, and more requests into a refusing server buy nothing.
-                log.warning(
-                    "news.gdelt.batch_failed",
-                    batch=start // GDELT_TERMS_PER_REQUEST,
-                    kept=len(articles),
-                )
-                exc.partial = articles
-                raise
-        return articles
+        articles = await self._read(since, lambda title: pattern.search(title) is not None)
+        return articles[:limit] if limit else articles
 
     async def fetch_for_query(
         self,
@@ -147,129 +239,86 @@ class GdeltNewsProvider:
         *,
         limit: int | None = None,
     ) -> list[RawArticle]:
-        phrase = query.strip().replace('"', "")
-        if len(phrase) <= GDELT_MIN_TERM_LENGTH:
+        """Headlines containing `query`, from the files the cursor has not yet reached.
+
+        The cursor is not moved: a query is a look, not a collection, and moving
+        it would hide those files from the next collection run.
+        """
+        pattern = headline_pattern({"": [query]})
+        if pattern is None:
             return []
-        return await self._search(_or_query([phrase]), since, limit)
+        articles = await self._read(
+            since, lambda title: pattern.search(title) is not None, advance=False
+        )
+        return articles[:limit] if limit else articles
 
-    async def _search(self, query: str, since: datetime, limit: int | None) -> list[RawArticle]:
+    def _slots(self, since: datetime) -> list[datetime]:
+        newest = slot_floor(self._clock())
+        last = self._cursor.get()
+        first = last + SLOT if last is not None else newest - INITIAL_WINDOW + SLOT
+        first = max(first, slot_floor(since))
+        slots: list[datetime] = []
+        slot = first
+        while slot <= newest and len(slots) < MAX_FILES_PER_RUN:
+            slots.append(slot)
+            slot += SLOT
+        return slots
+
+    async def _read(
+        self, since: datetime, keep: Callable[[str], bool], *, advance: bool = True
+    ) -> list[RawArticle]:
+        stats = FeedPass()
+        articles: list[RawArticle] = []
         now = self._clock().astimezone(UTC)
-        hours = max(1, math.ceil((now - since.astimezone(UTC)).total_seconds() / 3600))
-        params = {
-            "query": f"{query} sourcelang:english",
-            "mode": "ArtList",
-            "format": "json",
-            "sort": "DateDesc",
-            "maxrecords": str(min(limit or GDELT_DEFAULT_RECORDS, GDELT_MAX_RECORDS)),
-            "timespan": f"{hours}h",
-        }
-        for attempt, delay in enumerate(self._retry_delays, start=1):
-            try:
-                return self._articles(await self._request(params), since)
-            except _Refused as exc:
-                log.info("news.gdelt.retry", attempt=attempt, delay=delay, error=str(exc))
-                await self._sleep(delay)
-        # The last attempt: a refusal here is the provider's failure.
-        return self._articles(await self._request(params), since)
-
-    async def _request(self, params: dict[str, str]) -> dict[str, Any]:
-        await self._space_requests()
+        cutoff = since.astimezone(UTC)
         try:
             async with httpx.AsyncClient(
-                transport=self._transport, timeout=GDELT_TIMEOUT_SECONDS
+                transport=self._transport, timeout=GDELT_TIMEOUT_SECONDS, follow_redirects=True
             ) as client:
-                response = await client.get(GDELT_DOC_URL, params=params)
-        except httpx.HTTPError as exc:
-            raise _Refused(self.name, f"request failed: {exc.__class__.__name__}") from exc
-        finally:
-            self._last_request = time.monotonic()
-
-        payload = _json_object(response)
-        if response.status_code != 200 or payload is None:
-            # The throttle notice is prose; quote its start so the log says why.
-            message = f"HTTP {response.status_code}: {response.text[:80].strip()}"
-            retryable = (
-                response.status_code == 429
-                or response.status_code >= 500
-                or GDELT_THROTTLE_MARKER in response.text
-            )
-            # Anything else (a query GDELT calls malformed) fails the same way
-            # every time, so it is not retried.
-            raise (_Refused if retryable else NewsProviderError)(self.name, message)
-        return payload
-
-    def _articles(self, payload: dict[str, Any], since: datetime) -> list[RawArticle]:
-        rows = payload.get("articles") or []
-        articles = [article for row in rows if (article := _to_article(row)) is not None]
-        cutoff = since.astimezone(UTC)
-        return [a for a in articles if a.published_at is None or a.published_at >= cutoff]
-
-    async def _space_requests(self) -> None:
-        if self._last_request is None:
-            return
-        wait = self._min_interval - (time.monotonic() - self._last_request)
-        if wait > 0:
-            await self._sleep(wait)
-
-
-def query_terms(symbols: Sequence[str], names: Mapping[str, Sequence[str]]) -> list[str]:
-    """One search phrase per instrument: its shortest name alias.
-
-    The shortest because a phrase search for "Valero" also finds "Valero Energy",
-    and the matcher accepts either. Deduplicated case-insensitively, in symbol
-    order, so the request split is stable from run to run.
-    """
-    seen: set[str] = set()
-    terms: list[str] = []
-    for symbol in symbols:
-        aliases = [
-            alias.replace('"', "").strip()
-            for alias in names.get(symbol, ())
-            if len(alias.strip()) > GDELT_MIN_TERM_LENGTH
-        ]
-        if not aliases:
-            continue
-        term = min(aliases, key=len)
-        if term.lower() not in seen:
-            seen.add(term.lower())
-            terms.append(term)
-    return terms
+                for slot in self._slots(since):
+                    stamp = slot.strftime("%Y%m%d%H%M%S")
+                    try:
+                        response = await client.get(slot_url(slot))
+                    except httpx.HTTPError as exc:
+                        raise NewsProviderError(
+                            self.name, f"{stamp}: request failed: {exc.__class__.__name__}"
+                        ) from exc
+                    if response.status_code == 404:
+                        if now - slot < PUBLISH_GRACE:
+                            break  # not published yet; the next run tries it again
+                        stats.files_missing += 1
+                    elif response.status_code != 200:
+                        raise NewsProviderError(self.name, f"{stamp}: HTTP {response.status_code}")
+                    else:
+                        try:
+                            batch = read_gkg(response.content, keep, stats)
+                        except ValueError as exc:
+                            raise NewsProviderError(self.name, f"{stamp}: {exc}") from exc
+                        stats.files_read += 1
+                        articles.extend(
+                            a for a in batch if a.published_at is None or a.published_at >= cutoff
+                        )
+                    stats.slots.append(stamp)
+                    if advance:
+                        # Moved file by file, so a failure on the next file keeps
+                        # this one read - its articles leave on `partial`.
+                        self._cursor.set(slot)
+        except NewsProviderError as exc:
+            exc.partial = articles
+            log.warning("news.gdelt.pass_failed", error=str(exc), **_stats(stats))
+            raise
+        log.info("news.gdelt.pass", **_stats(stats))
+        return articles
 
 
-def _or_query(terms: Sequence[str]) -> str:
-    quoted = [f'"{term}"' for term in terms]
-    # GDELT requires OR'd terms in parentheses and rejects parentheses around one.
-    return quoted[0] if len(quoted) == 1 else f"({' OR '.join(quoted)})"
-
-
-def _json_object(response: httpx.Response) -> dict[str, Any] | None:
-    try:
-        payload = response.json()
-    except ValueError:
-        return None
-    return payload if isinstance(payload, dict) else None
-
-
-def _to_article(row: object) -> RawArticle | None:
-    if not isinstance(row, dict):
-        return None
-    url = str(row.get("url") or "").strip()
-    title = str(row.get("title") or "").strip()
-    if not url or not title:
-        return None
-    return RawArticle(
-        url=url,
-        source=str(row.get("domain") or "gdelt"),
-        title=title,
-        # Headlines only: see the module docstring.
-        body=title,
-        published_at=_seen_at(row.get("seendate")),
-    )
-
-
-def _seen_at(value: object) -> datetime | None:
-    """`20260927T101500Z` -> an aware UTC datetime; anything else -> None."""
-    try:
-        return datetime.strptime(str(value), "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
-    except ValueError:
-        return None
+def _stats(stats: FeedPass) -> dict[str, object]:
+    return {
+        "files_read": stats.files_read,
+        "files_missing": stats.files_missing,
+        "rows": stats.rows,
+        "untitled": stats.untitled,
+        "malformed": stats.malformed,
+        "matched": stats.matched,
+        "first_slot": stats.slots[0] if stats.slots else None,
+        "last_slot": stats.slots[-1] if stats.slots else None,
+    }
