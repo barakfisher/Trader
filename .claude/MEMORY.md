@@ -536,22 +536,26 @@ failure they prevent.
     time. `topic_ref` stays unused for GDELT's query-found articles that name no instrument.
     The `news_collect` matcher sees held and topic instruments only, never the universe.
 
-52. **GDELT is queried by the matcher's own name aliases, and returns headlines only.** The
-    provider contract gained an optional `names` keyword (symbol → spellings `entities.py` links
-    by), passed only when a caller has names, so older providers are untouched. Searching any
-    other spelling fetches articles that can never link. GDELT's `ArtList` has no body, so the
-    headline is the body and sentiment is headline sentiment; `published_at` is GDELT's
-    `seendate`. **Its throttle notice is prose, sometimes with a 200**: anything that is not a
-    JSON object is a provider failure, so the run is `degraded`, never a quiet-looking empty
-    feed. **Its 429 is load-shedding, not a per-client counter** (measured, see the debt table),
-    so a refused request is retried twice, after 10 s and then 30 s (`GDELT_RETRY_DELAYS_SECONDS`),
-    and only for refusals: 429, 5xx, a network error, or the throttle sentence with a 200. Any
-    other prose (a query GDELT calls malformed) fails the same way every time and is not
-    retried. A batch that still fails raises with the earlier batches' articles on
-    `NewsProviderError.partial`; ingestion keeps them, and lists the provider in *both*
-    `provider_failures` (so the run is `degraded`) and `providers_used` (it did supply
-    articles). Later batches are not attempted after a failure: more requests into a refusing
-    server buy nothing.
+52. **GDELT is read from its raw 15-minute files, filtered by headline; the search API is gone.**
+    (User's decision, 2026-09-27, after a day of measurements.) The DOC search API refused most
+    requests (load-shedding; no retry schedule got through reliably), and the one batch that got
+    through was mostly noise: it matches a name anywhere in the body but returns only the headline,
+    so 68 of 77 stored articles named nothing followed, and titles came back re-spaced ("U . S .").
+    `app/news/gdelt.py` now downloads each slot's GKG file
+    (`data.gdeltproject.org/gdeltv2/YYYYMMDDHHMMSS.gkg.csv.zip`, ~3 MB, several hundred English
+    articles; answered in 0.6 s while the API refused) and keeps a row only when its
+    `<PAGE_TITLE>` names a followed instrument by the matcher's own spellings (`names`) -
+    **headline-only, by the user's decision**: GKG's organisation list would find more, but the
+    headline shown and read for themes would then not mention what it was kept for. The headline
+    is still the body, and `published_at` is the slot time. **Which files: a cursor**
+    (`news_feed_cursors`, migration 0020), written in the collection's transaction so a file is
+    marked read only if its articles are stored; oldest first, at most 16 files a run, 2 hours
+    back when there is no cursor, never older than the run's `since`. A 404 within 45 minutes of
+    its slot is late (stop, retry next run); later, it is missing (counted, passed over).
+    Rejected: no cursor and re-reading the last hour each run (double the downloads; an outage
+    longer than the overlap loses news silently). A failure partway still raises with the files
+    read so far on `NewsProviderError.partial`. **Deleted with the API:** request spacing, the
+    8-name OR batching, `query_terms`, the 10 s / 30 s retries, the throttle-sentence parsing.
 
 53. **A topic's sentiment is a magnitude-weighted mean from one model, or a null with a reason.**
     `GET /topics/:id/sentiment` (FR-12), computed in `services/topicSentiment.ts` from rows the SQL
@@ -1049,7 +1053,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | **Real news needs `NEWS_PROVIDERS=gdelt,fixture` in `.env`** | `.env` | Slice C added the GDELT provider; the code default and `.env.example` stay `fixture` so CI is offline (the same deliberate asymmetry as `MARKET_DATA_PROVIDERS`). Until `.env` names `gdelt`, every live `news_collect` run fetches 0. **Also still unwired:** the narration correlation step - `run_portfolio_scan` is always called with `articles=()`, so no observation cites news yet |
 | **Auto-discovery has seen real headlines once, and they were the wrong ones** | `app/topics/discovery.py` | The first GDELT batch that got through (14:31 UTC, 2026-09-27, 77 articles) was mostly unlinked noise from the search API, and exposed three faults now fixed (decision 55): syndication counted as recurrence, unlinked headlines read as themes, and everyday words ("now", "here") as themes. On that batch the fixed code finds 9 linked headlines and no phrase, which is correct and proves nothing about whether real themes are found. That needs the raw-file provider's title-matched news. Then read `GET /runs?kind=topic_discovery` for a week: noisy proposals mean the generic-word list needs words, none at all means the floors (3 stories, 2 outlets) are high |
 | **Open proposals never expire** | `services/topicDiscovery.ts` | An unanswered proposal holds one of 3 slots indefinitely, so three ignored proposals stop discovery. Deliberate for now - a proposal that silently disappears is also a proposal the user never answered - but an expiry that records itself (like proposals' `expired`) is the likely fix |
-| **GDELT refuses most requests, and retries cannot fix that** | `app/news/gdelt.py` | Investigated 2026-09-27 (after the first handoff): not an IP block. Scheduler requests 30 min apart were refused; 8 of 9 manual probes spaced 20 s apart were refused whatever the query (one name or eight, with or without `sourcelang`, 24 h or 49 h); the one 200 came back 429 when the same URL was sent again two minutes later; every reply took 11-15 s, 200 or 429. That is GDELT shedding load, and its notice sends heavy users to its ngrams dataset. **Mitigated, not fixed:** two retries with backoff, and partial results kept (decision 52). The first live run of the retrying provider (16:30 UTC that day) was refused on all 3 attempts in 84 s, so retries alone may not be enough. The single live 200 confirmed the `ArtList` field names the parser reads (`url`, `title`, `seendate`, `domain`), so the success path is no longer documentation-only. **How to tell whether it works:** `select stats from runs where kind='news_collect' order by started_at desc` shows a non-zero `fetched` with `gdelt` in `providers_used` (`GET /runs` needs a session cookie). **If runs keep failing:** the backlogged next step is to stop using the DOC API and read GDELT's raw 15-minute files from `data.gdeltproject.org`, which are plain downloads rather than searches (user's decision, 2026-09-27). Writing to the address in the 429 is the other option. **Retrying provider measured live on 2026-09-27 after the stack was rebuilt with #63:** the 14:01 UTC scheduled run was refused on all 3 attempts (14:01:28, 14:01:52, 14:02:34), `fetched: 0` - the retry logic works as designed and GDELT still refuses. **The raw-file fallback was probed the same day** (one request each, by hand): `https://data.gdeltproject.org/gdeltv2/lastupdate.txt` answered **200 in 0.6 s** while the DOC API was refusing (plain `http://` answers 301 to https), and listed files 15 minutes old. One GKG file (`20260927141500.gkg.csv.zip`, 3.1 MB zipped, 9.8 MB unzipped, 27 tab-separated columns) held **743 English articles from 178 sources, every one with a `<PAGE_TITLE>` in column 27 (V2 extras)** - so headlines are available. Titles carry HTML entities (42 of 743 need `html.unescape`) and are occasionally cut with an ellipsis. The `export` and `mentions` files carry URLs but no titles, so GKG is the file to read. In that 15-minute slice (a Sunday), followed names appeared in only a handful of titles (Apple 2, and in V2Organizations Microsoft 3, Nvidia 3): matching must run over every file, about 96 a day and about 300 MB a day downloaded. **Also:** the fixture provider loads 20 articles and returns 0 to a live run, because they fall outside the 2-day window, so the fallback provides no news either |
+| **The raw-file provider has not run against the live feed yet** | `app/news/gdelt.py` | Built and tested hermetically (MockTransport, GKG files built in memory) on 2026-09-27; the file format was checked by hand on one real file the same day (27 columns, `<PAGE_TITLE>` in every row, HTML entities in 42 of 743). **First thing after merge:** rebuild, then `select started_at, stats->>'fetched', stats->>'entity_links', stats->'providers_used' from runs where kind='news_collect' order by started_at desc` - success is `fetched > 0`, `gdelt` in `providers_used`, and `entity_links` close to `stored` (the search API managed 9 of 77). The provider logs `news.gdelt.pass` with files read, missing, rows and matched. **Cost to watch:** about 96 files and 300 MB a day. **History kept:** the search API's 429 was load-shedding, not our rate (the lesson below) |
 | **Names ending in ", LP" never link to news** | `app/news/entities.py` `core_name` | `core_name` strips "Fund", "Inc" and the like but not a trailing ", LP", so "United States Gasoline Fund, LP" is matched - and searched on GDELT - only by that exact phrase, which prose never writes. **Not fixed on purpose:** 37 instruments in the committed universe have LP names, and `core_name` also shapes the resolver's matching text (`app/universe/matching_text.py`), so the fix moves topic resolution and needs the new held-out batch to measure. Fix both together, or give the news matcher its own rule |
 | **A very large instrument list outruns the collect timeout** | `app/news/gdelt.py` | 8 names per request, 5.5 s apart: 500 instruments (the request cap) is ~63 requests, ~6 min, over the 5-minute `SCAN_TIMEOUT_MS`. Irrelevant at a dozen instruments; the fix when it matters is fewer, wider requests or a per-run instrument budget - **and retries shorten the headroom**: worst case per request is three 30 s timeouts plus 40 s of backoff (~130 s), so even today's dozen instruments (two requests) could need ~260 s of the 300 s budget. That worst case needs GDELT to time out rather than refuse, and refusals so far have taken 11-15 s |
 | Redis cold start refetches everything | `core/cache.py` | The `quotes` table holds usable recent prices; warming from it was deferred |
@@ -1098,9 +1102,9 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 - **As of 2026-09-27 the stack runs `main` at #59 and the database is at `0018_news_collect`**,
   rebuilt with `bash scripts/dev-docker.sh` (no `--reset`). **`.env` has
   `NEWS_PROVIDERS=gdelt,fixture`** (set 2026-09-27 at the user's request; `.env.example` keeps
-  `fixture` - a deliberate asymmetry, do not "fix" it). GDELT refuses most requests (load, not
-  a block - see the debt table), so most `news_collect` runs are `degraded` with
-  `provider_failures: ["gdelt"]`. The container and the host share one egress IP, so a probe from
+  `fixture` - a deliberate asymmetry, do not "fix" it). The provider reads GDELT's raw files
+  since decision 52's rewrite; before it, the search API refused most requests and runs were
+  `degraded` with `provider_failures: ["gdelt"]`. The container and the host share one egress IP, so a probe from
   the host is a fair test of what the service sees.
 - **The stack and the database are in step as of 2026-09-24**: both at `0013_kb_embeddings`,
   images rebuilt from `main` at #47 with `bash scripts/dev-docker.sh` (no `--reset`, so the

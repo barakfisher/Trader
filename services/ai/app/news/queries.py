@@ -235,3 +235,45 @@ def load_window_headlines(connection: object, *, since: datetime) -> list[Headli
         )
         for row in rows
     ]
+
+
+#: A file-based feed's read position (migration 0020). Locked for the run, so two
+#: overlapping collections cannot both read the same files and race to advance it.
+SQL_LOCK_FEED_CURSOR = text(
+    """
+    SELECT last_file_at FROM news_feed_cursors WHERE provider = :provider FOR UPDATE
+    """
+)
+
+SQL_SAVE_FEED_CURSOR = text(
+    """
+    INSERT INTO news_feed_cursors (provider, last_file_at, updated_at)
+    VALUES (:provider, :last_file_at, now())
+    ON CONFLICT (provider) DO UPDATE
+       SET last_file_at = EXCLUDED.last_file_at, updated_at = now()
+     WHERE news_feed_cursors.last_file_at < EXCLUDED.last_file_at
+    """
+)
+
+
+class SqlFeedCursor:
+    """A `FeedCursor` over `news_feed_cursors`, inside the caller's transaction.
+
+    The move only ever goes forward (the `WHERE` above), so a slow run that
+    finishes after a faster one cannot rewind the feed.
+    """
+
+    def __init__(self, connection: object, provider: str) -> None:
+        self._connection = connection
+        self._provider = provider
+
+    def get(self) -> datetime | None:
+        row = self._connection.execute(  # type: ignore[attr-defined]
+            SQL_LOCK_FEED_CURSOR, {"provider": self._provider}
+        ).first()
+        return row.last_file_at if row else None
+
+    def set(self, last_file_at: datetime) -> None:
+        self._connection.execute(  # type: ignore[attr-defined]
+            SQL_SAVE_FEED_CURSOR, {"provider": self._provider, "last_file_at": last_file_at}
+        )
