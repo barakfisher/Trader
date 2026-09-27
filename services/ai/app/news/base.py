@@ -34,11 +34,19 @@ from app.news.article import RawArticle
 
 
 class NewsProviderError(RuntimeError):
-    """Raised for any provider-side failure. The pipeline catches it and moves on."""
+    """Raised for any provider-side failure. The pipeline catches it and moves on.
 
-    def __init__(self, provider: str, message: str) -> None:
+    `partial` carries what the provider did fetch before it failed. A provider that
+    splits one call into several upstream requests (GDELT) can fail on the second
+    after the first succeeded, and discarding the first answer would turn a partial
+    feed into an empty one. The failure still marks the run degraded; the articles
+    are kept.
+    """
+
+    def __init__(self, provider: str, message: str, *, partial: Sequence[RawArticle] = ()) -> None:
         super().__init__(f"{provider}: {message}")
         self.provider = provider
+        self.partial: list[RawArticle] = list(partial)
 
 
 @runtime_checkable

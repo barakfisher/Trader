@@ -47,7 +47,8 @@ class StubProvider:
     async def fetch_for_symbols(self, symbols, since, *, limit=None):
         self.calls += 1
         if self._fails:
-            raise NewsProviderError(self.name, "upstream unavailable")
+            # A failing stub's articles are what it fetched before failing.
+            raise NewsProviderError(self.name, "upstream unavailable", partial=self._articles)
         return list(self._articles)
 
     async def fetch_for_query(self, query, since, *, limit=None):
@@ -240,6 +241,16 @@ class TestResilienceAndStats:
         assert len(result.articles) == 1
         assert result.provider_failures == ["bad"]
         assert result.providers_used == ["good"]
+
+    async def test_what_a_provider_fetched_before_failing_is_kept(self, news_instruments):
+        partial = [raw("https://a.example.com/x", "Apple", "Apple Inc.")]
+        result = await build([StubProvider("flaky", partial, fails=True)], news_instruments).ingest(
+            ["AAPL"], SINCE, now=FETCHED_AT
+        )
+        assert len(result.articles) == 1
+        # Degraded, and honest that the degraded provider supplied these articles.
+        assert result.provider_failures == ["flaky"]
+        assert result.providers_used == ["flaky"]
 
     async def test_stats_describe_the_pass(self, news_instruments):
         pipeline = build(
