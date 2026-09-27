@@ -34,12 +34,13 @@
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 
-import type { TopicDetail, TopicSummary, TopicsResponse } from '@traders/shared';
+import type { TopicDetail, TopicNewsResponse, TopicSummary, TopicsResponse } from '@traders/shared';
 import { AiServiceError } from '@traders/shared/ai';
 
 import {
   deleteTopic,
   getTopic,
+  listTopicArticles,
   listTopicInstruments,
   listTopics,
   type TopicInstrumentRow,
@@ -184,6 +185,9 @@ async function confirmed(context: Context<AppEnv>, topicIdOrNull: string | null)
   return detail(outcome.topic, outcome.instruments);
 }
 
+/** How far back a topic's news reaches: a week, the span a topic card summarises. */
+export const TOPIC_NEWS_DAYS = 7;
+
 export function registerTopicsRoutes(app: Hono<AppEnv>): void {
   app.post('/topics/resolve', async (context) => {
     // The universe is shared reference data with no `user_id` (migration 0015),
@@ -231,6 +235,39 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
     const topic = await getTopic(userId, id);
     if (!topic) throw notFound('no such topic');
     return context.json(detail(topic, await listTopicInstruments(userId, id)));
+  });
+
+  /**
+   * The topic's news, newest first. Empty is a real answer - but an empty
+   * `articles` list cannot tell "a quiet week" from "nothing collects news", so
+   * GET /runs?kind=news_collect is where that question is answered.
+   */
+  app.get('/topics/:id/news', async (context) => {
+    const userId = currentUserId(context);
+    const id = parseTopicId(context.req.param('id'));
+    const topic = await getTopic(userId, id);
+    if (!topic) throw notFound('no such topic');
+    const rows = await listTopicArticles(userId, id, TOPIC_NEWS_DAYS);
+    const body: TopicNewsResponse = {
+      topicId: id,
+      days: TOPIC_NEWS_DAYS,
+      articles: rows.map((row) => ({
+        id: row.id,
+        url: row.url,
+        source: row.source,
+        title: row.title,
+        publishedAt: row.published_at ? new Date(row.published_at).toISOString() : null,
+        fetchedAt: new Date(row.fetched_at).toISOString(),
+        instruments: row.instruments.map((link) => ({
+          symbol: link.symbol,
+          matchMethod: link.match_method,
+          matchedText: link.matched_text,
+          salience: link.salience,
+        })),
+        sentiment: row.sentiment,
+      })),
+    };
+    return context.json(body);
   });
 
   app.put('/topics/:id', async (context) =>

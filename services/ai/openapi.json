@@ -715,6 +715,142 @@
         "title": "NarrationConfigResponse",
         "type": "object"
       },
+      "NewsCollectRequest": {
+        "properties": {
+          "instruments": {
+            "items": {
+              "$ref": "#/components/schemas/NewsInstrument"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Instruments",
+            "type": "array"
+          },
+          "lookback_hours": {
+            "default": 48,
+            "maximum": 1440.0,
+            "minimum": 1.0,
+            "title": "Lookback Hours",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "instruments"
+        ],
+        "title": "NewsCollectRequest",
+        "type": "object"
+      },
+      "NewsCollectResponse": {
+        "description": "What one collection pass did. Every counter is here so a quiet run can be told\napart from a broken one after the fact.",
+        "properties": {
+          "duplicate_content": {
+            "default": 0,
+            "title": "Duplicate Content",
+            "type": "integer"
+          },
+          "duplicate_urls": {
+            "default": 0,
+            "title": "Duplicate Urls",
+            "type": "integer"
+          },
+          "empty_bodies": {
+            "default": 0,
+            "title": "Empty Bodies",
+            "type": "integer"
+          },
+          "entity_links": {
+            "default": 0,
+            "title": "Entity Links",
+            "type": "integer"
+          },
+          "fetched": {
+            "default": 0,
+            "title": "Fetched",
+            "type": "integer"
+          },
+          "inserted": {
+            "default": 0,
+            "title": "Inserted",
+            "type": "integer"
+          },
+          "instruments": {
+            "default": 0,
+            "title": "Instruments",
+            "type": "integer"
+          },
+          "linked_symbols": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Linked Symbols",
+            "type": "object"
+          },
+          "provider_failures": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Provider Failures",
+            "type": "array"
+          },
+          "providers_used": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Providers Used",
+            "type": "array"
+          },
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "stored": {
+            "default": 0,
+            "title": "Stored",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "since"
+        ],
+        "title": "NewsCollectResponse",
+        "type": "object"
+      },
+      "NewsInstrument": {
+        "description": "An instrument the matcher may link articles to. The name is what prose uses.",
+        "properties": {
+          "asset_class": {
+            "default": "unknown",
+            "title": "Asset Class",
+            "type": "string"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "symbol"
+        ],
+        "title": "NewsInstrument",
+        "type": "object"
+      },
       "ObservationOut": {
         "description": "A finding, its words, and its identity.\n\n`evidence` carries every figure the headline and explanation rest on; the\nnarration validator rejects any that is not here. `narration_source` says who\nwrote the words, and `fallback_reason` why the model did not, so the\nrejection rate is measurable.",
         "properties": {
@@ -2222,6 +2358,65 @@
         "summary": "Narration Config",
         "tags": [
           "narration"
+        ]
+      }
+    },
+    "/news/collect": {
+      "post": {
+        "operationId": "collect_news_collect_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewsCollectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NewsCollectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Collect",
+        "tags": [
+          "news"
         ]
       }
     },

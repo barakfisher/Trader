@@ -243,6 +243,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/news/collect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Collect */
+        post: operations["collect_news_collect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/readyz": {
         parameters: {
             query?: never;
@@ -651,6 +668,93 @@ export interface components {
              * @enum {string}
              */
             tier: "free" | "paid" | "none";
+        };
+        /** NewsCollectRequest */
+        NewsCollectRequest: {
+            /** Instruments */
+            instruments: components["schemas"]["NewsInstrument"][];
+            /**
+             * Lookback Hours
+             * @default 48
+             */
+            lookback_hours: number;
+        };
+        /**
+         * NewsCollectResponse
+         * @description What one collection pass did. Every counter is here so a quiet run can be told
+         *     apart from a broken one after the fact.
+         */
+        NewsCollectResponse: {
+            /**
+             * Duplicate Content
+             * @default 0
+             */
+            duplicate_content: number;
+            /**
+             * Duplicate Urls
+             * @default 0
+             */
+            duplicate_urls: number;
+            /**
+             * Empty Bodies
+             * @default 0
+             */
+            empty_bodies: number;
+            /**
+             * Entity Links
+             * @default 0
+             */
+            entity_links: number;
+            /**
+             * Fetched
+             * @default 0
+             */
+            fetched: number;
+            /**
+             * Inserted
+             * @default 0
+             */
+            inserted: number;
+            /**
+             * Instruments
+             * @default 0
+             */
+            instruments: number;
+            /** Linked Symbols */
+            linked_symbols?: {
+                [key: string]: number;
+            };
+            /** Provider Failures */
+            provider_failures?: string[];
+            /** Providers Used */
+            providers_used?: string[];
+            /**
+             * Since
+             * Format: date-time
+             */
+            since: string;
+            /**
+             * Stored
+             * @default 0
+             */
+            stored: number;
+        };
+        /**
+         * NewsInstrument
+         * @description An instrument the matcher may link articles to. The name is what prose uses.
+         */
+        NewsInstrument: {
+            /**
+             * Asset Class
+             * @default unknown
+             */
+            asset_class: string;
+            /** Instrument Id */
+            instrument_id: string;
+            /** Name */
+            name?: string | null;
+            /** Symbol */
+            symbol: string;
         };
         /**
          * ObservationOut
@@ -1457,6 +1561,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NarrationConfigResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    collect_news_collect_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewsCollectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsCollectResponse"];
                 };
             };
             /** @description Validation Error */

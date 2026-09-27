@@ -556,6 +556,34 @@ export interface TopicDetail extends TopicSummary {
   instruments: TopicInstrument[];
 }
 
+/**
+ * One article about a topic, with the reason it is about the topic.
+ *
+ * An article reaches a topic only through an instrument the user confirmed for
+ * it: `instruments` says which, and each carries the rule that linked it and the
+ * exact text that matched, because a link is evidence and evidence without its
+ * provenance cannot be checked.
+ */
+export interface TopicArticle {
+  id: string;
+  url: string;
+  source: string;
+  title: string;
+  /** Null when the publisher gave none. Never invented. */
+  publishedAt: string | null;
+  fetchedAt: string;
+  instruments: { symbol: string; matchMethod: string; matchedText: string | null; salience: string }[];
+  /** The lexicon model's opinion, -1..1 as a decimal string; null when unscored. */
+  sentiment: { score: string; magnitude: string; model: string } | null;
+}
+
+export interface TopicNewsResponse {
+  topicId: string;
+  /** The window the articles were published in, in days. */
+  days: number;
+  articles: TopicArticle[];
+}
+
 /** The bounds a topic write is held to, published so the UI can show them. */
 export interface TopicLimits {
   maxActiveTopics: number;

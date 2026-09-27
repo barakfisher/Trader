@@ -516,6 +516,14 @@ failure they prevent.
     `runs.stats.skipped`, and the run is `degraded`. It raises no proposals and carries no news,
     because none is collected (see the debt table). Replayed over 120 real sessions for
     UGA+VLO: 9 findings, all `info`, 0 unsourced figures.
+
+51. **A topic's news is derived through its instruments; no `topic_id` in the news tables**
+    (migration 0018, which also settles 0004's deferred promise). Articles and their links are
+    shared market data with no `user_id`; a topic is one user's choice, so a key from a shared
+    row to a user-owned one would make the corpus per-user by the back door.
+    `GET /topics/:id/news` joins `topic_instruments` → `article_entities` → `articles` at read
+    time. `topic_ref` stays unused for GDELT's query-found articles that name no instrument.
+    The `news_collect` matcher sees held and topic instruments only, never the universe.
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -926,7 +934,7 @@ data**, and it is better met here than in production.
 | **The Topics screen has never been looked at in a browser** | `apps/web/src/pages/TopicsPage.tsx` | #55 is tested at the store level (18 tests) and served by the running stack, but signing in needs the passphrase, which a session does not type. Layout, wrapping at mobile width and the long rationale quotes are unverified. The first person to open it is the first test of its layout |
 | No component/DOM tests on the web app | `apps/web/test` | Store and formatting logic covered; rendering is not. Two real UI bugs this session (Discard disabled by its own typo, a deep link that does nothing) were found by *using* the app, not by tests, and neither would have been caught by a DOM test either — but a DOM test would have caught the first |
 | ~~Telegram has no working binding~~ | — | **Resolved 2026-09-24.** A chat is bound. The "receives nothing" mystery was never a Telegram problem: nothing in the repository consumed updates, because M4's polling bridge was a hand-run script that left with its session. Kept as a line so the history of the symptom survives |
-| **No news is ever collected** | `app/news`, `internal.ts` | The whole news pipeline (fetch, dedupe, entity matching, sentiment, `store_ingested`) is built and tested and **has no caller**: no run kind, no route, no scheduler entry. `articles` is empty in every installation, and the only provider is a 20-article fixture dated 14-16 Sept 2026 (`NEWSAPI_KEY` is empty). Found when starting topicScan, which F5 describes as "news per topic". Topic sentiment (FR-12), auto-discovery (FR-11) and the narration "why" correlation all read this table |
+| **News is collected, but only from a fixture** | `app/news/registry.py` | Slice B gave the pipeline a caller (`news_collect`, every 30 min, 48 h lookback). The only provider is still a 20-article fixture dated 14-16 Sept 2026, so in a live installation every run fetches 0 and `articles` stays empty. GDELT is the chosen real provider (user, 2026-09-27: no dev-only keys) and is slice C. **Also still unwired:** the narration correlation step - `run_portfolio_scan` is always called with `articles=()` |
 | Redis cold start refetches everything | `core/cache.py` | The `quotes` table holds usable recent prices; warming from it was deferred |
 | `instruments`, `quotes` and the news tables (and `instrument_profiles`, `etf_holdings`) have no `user_id` | migrations | **Intentional** — shared reference and market data, not user-owned. Documented so an audit does not re-flag it |
 | **Topic resolution finds 14/35 expected tickers on held-out topics** | `app/topics/resolution.py` | Measured on the user's sealed batch; slice 2 did not change it. Causes, measured: one outlier sets the gate; no ETF clears the source floor for cloud/e-commerce/obesity/robot surgery; giants are described too broadly; OTC-only ADRs (LVMUY) are not in the universe. The backlog, ranked, is `docs/TOPIC_RESOLUTION.md` §4 — **and it needs a new held-out batch before any of it can be measured** |
@@ -1110,8 +1118,9 @@ and §5 before changing a threshold.
    backfill covers active topics' instruments (`listAnalysedInstruments`), a confirm backfills its
    instruments at once, and `topic_move` findings land in the feed labelled by topic name. **Two
    layers were missing underneath, and one still is: no news is ever collected** (see the debt
-   table). Slice B is a news run; slice C a real news provider, which is the user's choice
-   (GDELT keyless vs NewsAPI keyed). The notes below apply to slice B.
+   table). **Slice B is written** (`news_collect` run, `GET /topics/:id/news`, decision 51), on a local
+   branch waiting for #57 to merge. **Slice C is GDELT** (user's choice: keyless). The notes
+   below were written for slice B.
    - Scheduled through `POST /internal/runs` like every other run (guideline 8), with a
      `dedupe_key` per observation.
    - The `observations.subject_kind` column already allows `'topic'`

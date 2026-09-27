@@ -46,6 +46,10 @@ const RUN_BUCKET_MINUTES: Record<string, number> = {
   // Same cadence as the portfolio scan: both read the same daily closes, and a
   // topic that moved should not be announced half an hour after the holding.
   topic_scan: 30,
+  // News moves faster than daily closes, but the only provider today is a
+  // fixture, and a real one (GDELT) is polite at this rate. Matches the scans so
+  // a story collected in one bucket can be read by the scans of the next.
+  news_collect: 30,
   // Daily closes appear once a day, so asking more often fetches the same
   // series and writes nothing. The provider quota is the reason to care.
   backfill: 24 * 60,
@@ -74,11 +78,18 @@ export function runBucket(kind: string, localDate: string, now: Date = new Date(
   return `${localDate}:${String(slot).padStart(2, '0')}`;
 }
 
+/**
+ * How far back each collection asks. Two days, so a run missed overnight is
+ * caught up by the next one; dedupe makes the overlap free.
+ */
+const NEWS_LOOKBACK_HOURS = 48;
+
 const runSchema = z.object({
   kind: z.enum([
     'snapshot',
     'portfolio_scan',
     'topic_scan',
+    'news_collect',
     'backfill',
     'proposal_sweep',
     'daily_digest',
@@ -198,6 +209,34 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
           status: 'ok',
           result: { expired },
         });
+      }
+
+      if (parsed.data.kind === 'news_collect') {
+        // Held and topic instruments only - never the universe. The reason is
+        // in app/news/collection.py: a matcher that knows "Target" and "Block"
+        // links half of every article to something.
+        const instruments = await listAnalysedInstruments(userId);
+        if (instruments.length === 0) {
+          await finishRun(runId, 'skipped', { reason: 'no holdings and no topics' });
+          return context.json({ kind: parsed.data.kind, runKey, runId, status: 'skipped' });
+        }
+        const result = await context.get('ai').collectNews(
+          {
+            instruments: instruments.map((row) => ({
+              instrument_id: row.id,
+              symbol: row.symbol,
+              name: row.name,
+              asset_class: row.asset_class,
+            })),
+            lookback_hours: NEWS_LOOKBACK_HOURS,
+          },
+          context.get('requestId'),
+        );
+        // A provider that failed is news the user did not get, and a run that
+        // says 'ok' over it would read as a quiet day.
+        const status = (result.provider_failures ?? []).length > 0 ? 'degraded' : 'ok';
+        await finishRun(runId, status, result);
+        return context.json({ kind: parsed.data.kind, runKey, runId, status, result });
       }
 
       if (parsed.data.kind === 'topic_scan') {
