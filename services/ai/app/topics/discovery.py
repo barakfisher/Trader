@@ -17,18 +17,33 @@ the market they have never looked at. That is a limit of the source, stated
 rather than hidden.
 
 **What counts as recurring.** A phrase is a run of one to three content words
-inside a headline. It recurs when it appears in at least `MIN_ARTICLES`
-distinct articles from at least `MIN_SOURCES` distinct outlets within the
-window. Articles, not occurrences, because a headline that says "AI" twice is
-one article about AI; outlets, because one publisher's repeated framing is a
-house style, not a theme. Syndicated copies are already folded by the
-ingestion's content hash (`duplicate_of_id`) and are not read.
+inside a headline. It recurs when it appears in at least `MIN_STORIES`
+distinct *stories* from at least `MIN_SOURCES` distinct outlets within the
+window. Stories, not articles, and not occurrences: a headline that says "AI"
+twice is one article about AI, and one wire story republished by five outlets
+is one story however many URLs it has. The ingestion's content hash
+(`duplicate_of_id`) folds exact copies, but syndication usually changes the
+headline a little - a site name appended ("... - Winnipeg Free Press"), a dash
+swapped - so headlines are grouped into stories here as well (`same_story`).
+Measured on the first real GDELT headlines (2026-09-27): counted by article,
+one AI-safety wire story carried by three outlets made every word of its
+headline a "recurring theme" ("alarm", "controlled", "openai sound"); counted
+by story it is one story and none of them recur. Outlets are still counted,
+because one publisher's repeated framing is a house style, not a theme.
+
+**Only headlines linked to something the user follows are read**
+(`load_window_headlines`). A search provider returns articles that merely
+mention a name somewhere in the body; on the same day 68 of 77 stored
+articles linked to nothing, and read as themes they were noise ("fiber" from
+a breakfast-recipe headline).
 
 **What is not a theme.** Generic newsroom and market vocabulary ("shares",
 "record", "rises"), numbers, and the names of the instruments the headlines
 were fetched for: "Apple" recurring across Apple's news says nothing new.
 A shorter phrase is dropped when a longer one containing it was found in
-exactly the same articles, so "data" and "centre" give way to "data centre".
+exactly the same stories, so "data" and "centre" give way to "data centre";
+and of several phrases found in exactly the same stories only one is kept,
+because they are one candidate theme however many words it has.
 """
 
 from __future__ import annotations
@@ -39,10 +54,21 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 
-#: Distinct articles a phrase must appear in. Three, because two headlines
+#: Distinct stories a phrase must appear in. Three, because two stories
 #: sharing a phrase is routine coincidence in a day's financial news, and the
 #: resolver call a phrase earns is not free. A product bound; nothing measured it.
-MIN_ARTICLES = 3
+MIN_STORIES = 3
+
+#: Two headlines are one story when this share of the shorter one's content
+#: words is in the longer one. High, because the cost of merging two real
+#: stories is a missed theme and the cost of splitting one is a false one -
+#: and syndication changes a headline by appending words, not by rewording it.
+STORY_OVERLAP = 0.8
+
+#: Below this many content words, headlines are one story only when their
+#: words are identical: "Apple earnings" and "Apple earnings beat" are not a
+#: republication of each other just because one contains the other.
+MIN_STORY_WORDS = 4
 
 #: Distinct outlets among those articles.
 MIN_SOURCES = 2
@@ -83,6 +109,14 @@ GENERIC_WORDS = frozenset(
         "quarter", "quarters", "q1", "q2", "q3", "q4", "results", "earnings",
         "outlook", "update", "news", "analyst", "analysts", "company", "companies",
         "inc", "corp", "ltd", "plc", "group", "top", "best", "big", "biggest",
+        # added from the first real headlines (2026-09-27): words that recurred
+        # as "themes" because every kind of headline uses them
+        "now", "here", "there", "these", "those", "also", "even", "very", "much",
+        "many", "really", "actually", "need", "needs", "know", "see", "look",
+        "looks", "take", "takes", "go", "goes", "going", "come", "comes", "back",
+        "way", "ways", "thing", "things", "people", "time", "times", "like",
+        "want", "wants", "should", "must", "does", "do", "did", "if", "so",
+        "then", "only", "every", "any", "other", "own",
     }
 )  # fmt: skip
 
@@ -104,12 +138,18 @@ class Phrase:
     text: str
     #: Distinct article ids, in the order first seen.
     article_ids: list[str] = field(default_factory=list)
+    #: The stories (`same_story` groups) those articles belong to.
+    stories: set[int] = field(default_factory=set)
     sources: set[str] = field(default_factory=set)
     headlines: list[Headline] = field(default_factory=list)
 
     @property
     def article_count(self) -> int:
         return len(self.article_ids)
+
+    @property
+    def story_count(self) -> int:
+        return len(self.stories)
 
     @property
     def source_count(self) -> int:
@@ -146,11 +186,6 @@ def _ngrams(run: Sequence[str]) -> Iterable[tuple[int, int]]:
             yield start, start + size
 
 
-def _contains(longer: tuple[str, ...], shorter: tuple[str, ...]) -> bool:
-    n = len(shorter)
-    return any(longer[i : i + n] == shorter for i in range(len(longer) - n + 1))
-
-
 def _without_names(run: list[str], names: set[tuple[str, ...]]) -> Iterable[list[str]]:
     """`run` split around every followed name in it, the name itself removed.
 
@@ -174,6 +209,42 @@ def _without_names(run: list[str], names: set[tuple[str, ...]]) -> Iterable[list
             i += 1
     if start < len(run):
         yield run[start:]
+
+
+def story_words(title: str, names: set[tuple[str, ...]] | None = None) -> frozenset[str]:
+    """The words a headline is compared by when grouping it into a story.
+
+    Followed names are left out: headlines fetched for one company all share
+    its name, and counting it would merge three different NuScale stories into
+    one because each says "NuScale Power".
+    """
+    words = [w for w in tokens(title) if w not in GENERIC_WORDS and not w.isdigit() and len(w) > 1]
+    kept = [w for run in _without_names(words, names or set()) for w in run]
+    return frozenset(fold(w) for w in kept)
+
+
+def same_story(a: frozenset[str], b: frozenset[str]) -> bool:
+    """Are two headlines one story, republished? See `STORY_OVERLAP`."""
+    smaller = min(len(a), len(b))
+    if smaller < MIN_STORY_WORDS:
+        return a == b and smaller > 0
+    return len(a & b) / smaller >= STORY_OVERLAP
+
+
+def group_stories(
+    headlines: Sequence[Headline], names: set[tuple[str, ...]] | None = None
+) -> list[int]:
+    """A story number for each headline, in order. Compared with each story's first headline."""
+    firsts: list[frozenset[str]] = []
+    numbers: list[int] = []
+    for headline in headlines:
+        words = story_words(headline.title, names)
+        number = next((i for i, first in enumerate(firsts) if same_story(words, first)), None)
+        if number is None:
+            number = len(firsts)
+            firsts.append(words)
+        numbers.append(number)
+    return numbers
 
 
 def excluded_keys(names: Iterable[str]) -> tuple[set[tuple[str, ...]], set[str]]:
@@ -201,20 +272,21 @@ def recurring_phrases(
     headlines: Iterable[Headline],
     *,
     exclude_names: Iterable[str] = (),
-    min_articles: int = MIN_ARTICLES,
+    min_stories: int = MIN_STORIES,
     min_sources: int = MIN_SOURCES,
 ) -> list[Phrase]:
     """Phrases recurring across `headlines`, strongest first.
 
-    Ordered by distinct articles, then distinct outlets, then longer phrase
-    first, then alphabetically - so the order is total and a rerun over the
-    same headlines proposes the same things.
+    Ordered by distinct stories, then outlets, then articles, then longer
+    phrase first, then alphabetically - so the order is total and a rerun over
+    the same headlines proposes the same things.
     """
     full_names, leading_words = excluded_keys(exclude_names)
     found: dict[tuple[str, ...], Phrase] = {}
     spellings: dict[tuple[str, ...], Counter[str]] = {}
+    listed = list(headlines)
 
-    for headline in headlines:
+    for headline, story in zip(listed, group_stories(listed, full_names), strict=True):
         seen_here: set[tuple[str, ...]] = set()
         for whole in _runs(tokens(headline.title)):
             for run in _without_names(whole, full_names):
@@ -229,6 +301,7 @@ def recurring_phrases(
                         phrase = found[key] = Phrase(key=key, text="")
                         spellings[key] = Counter()
                     phrase.article_ids.append(headline.article_id)
+                    phrase.stories.add(story)
                     phrase.sources.add(headline.source)
                     if len(phrase.headlines) < EVIDENCE_HEADLINES:
                         phrase.headlines.append(headline)
@@ -240,23 +313,28 @@ def recurring_phrases(
     recurring = {
         key: phrase
         for key, phrase in found.items()
-        if phrase.article_count >= min_articles
+        if phrase.story_count >= min_stories
         and phrase.source_count >= min_sources
         and not is_name(key)
     }
-    # A sub-phrase found in exactly the articles of a longer phrase adds nothing.
-    kept = [
-        phrase
-        for key, phrase in recurring.items()
-        if not any(
-            len(other) > len(key)
-            and _contains(other, key)
-            and set(recurring[other].article_ids) == set(phrase.article_ids)
-            for other in recurring
-        )
-    ]
-    for phrase in kept:
+    for phrase in recurring.values():
         # most_common keeps first-seen order among equals, so this is stable.
         phrase.text = spellings[phrase.key].most_common(1)[0][0]
-    kept.sort(key=lambda p: (-p.article_count, -p.source_count, -len(p.key), p.text))
+    # Phrases found in exactly the same stories are one candidate: keep the
+    # longest (it says most), then the one in most articles, then by text. This
+    # also drops "data" and "centre" in favour of "data centre".
+    best: dict[frozenset[int], Phrase] = {}
+    for phrase in recurring.values():
+        stories = frozenset(phrase.stories)
+        current = best.get(stories)
+        if current is None or _preferred(phrase) < _preferred(current):
+            best[stories] = phrase
+    kept = list(best.values())
+    kept.sort(
+        key=lambda p: (-p.story_count, -p.source_count, -p.article_count, -len(p.key), p.text)
+    )
     return kept
+
+
+def _preferred(phrase: Phrase) -> tuple[int, int, str]:
+    return (-len(phrase.key), -phrase.article_count, phrase.text)

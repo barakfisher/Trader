@@ -609,6 +609,8 @@ export interface components {
             phrase: string;
             /** Source Count */
             source_count: number;
+            /** Story Count */
+            story_count: number;
             /** Words */
             words: string[];
         };
@@ -1082,10 +1084,10 @@ export interface components {
             days: number;
             /** Headlines */
             headlines: number;
-            /** Min Articles */
-            min_articles: number;
             /** Min Sources */
             min_sources: number;
+            /** Min Stories */
+            min_stories: number;
             /** Phrases */
             phrases?: components["schemas"]["DiscoveredPhrase"][];
             /**

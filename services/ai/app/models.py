@@ -588,6 +588,8 @@ class DiscoveredPhrase(BaseModel):
 
     phrase: str
     words: list[str]
+    #: Distinct stories: articles that are republications of one another count once.
+    story_count: int
     article_count: int
     source_count: int
     #: Up to five of the headlines, in the order they were read (newest first).
@@ -605,6 +607,6 @@ class TopicDiscoverResponse(BaseModel):
     since: datetime
     days: int
     headlines: int
-    min_articles: int
+    min_stories: int
     min_sources: int
     phrases: list[DiscoveredPhrase] = Field(default_factory=list)

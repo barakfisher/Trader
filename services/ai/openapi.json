@@ -545,6 +545,10 @@
             "title": "Source Count",
             "type": "integer"
           },
+          "story_count": {
+            "title": "Story Count",
+            "type": "integer"
+          },
           "words": {
             "items": {
               "type": "string"
@@ -556,6 +560,7 @@
         "required": [
           "phrase",
           "words",
+          "story_count",
           "article_count",
           "source_count",
           "headlines"
@@ -1431,12 +1436,12 @@
             "title": "Headlines",
             "type": "integer"
           },
-          "min_articles": {
-            "title": "Min Articles",
-            "type": "integer"
-          },
           "min_sources": {
             "title": "Min Sources",
+            "type": "integer"
+          },
+          "min_stories": {
+            "title": "Min Stories",
             "type": "integer"
           },
           "phrases": {
@@ -1456,7 +1461,7 @@
           "since",
           "days",
           "headlines",
-          "min_articles",
+          "min_stories",
           "min_sources"
         ],
         "title": "TopicDiscoverResponse",
