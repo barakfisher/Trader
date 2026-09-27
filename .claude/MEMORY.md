@@ -4,15 +4,22 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-24. **M5 is in progress: topic *resolution* is done (slices 1–2), topic CRUD,
-confirmation, observations and auto-discovery are not.** Slice 1 is #50 (merged); slice 2 is the
-ETF-holdings PR opened with this handoff. **This is a handoff** — the user asked for one to start
-the next part of M5 (Topic CRUD & Confirmation) with a clean context. The session that wrote this
-built a screened universe of 5,294 instruments, a resolver that turns a free-text topic into
-candidates with a quoted rationale, and an eval the *user* wrote — and it ended with an honest
-negative: on the user's held-out batch the resolver finds **14 of 35** expected tickers, and
-slice 2 did not move that number. `docs/TOPIC_RESOLUTION.md` holds the measurements and the
-backlog; see "Where to go next".
+Updated: 2026-09-27. **M5 is in progress. Topic *resolution* and topic *confirmation* are done;
+topic observations, per-topic sentiment, auto-discovery and the digest section are not.** **This is
+a handoff**, taken at the boundary the user and the previous session agreed: the end of Topic CRUD &
+Confirmation, three merged PRs after the last handoff. That session shipped:
+- #53: `POST /topics/resolve`, and a stack that loads the universe by itself;
+- #54: schema 0017 and the orchestrator's topic CRUD, with confirmation that re-resolves on the
+  server;
+- #55: the Topics screen.
+
+A free-text topic now becomes a confirmed instrument set, end to end, in the running app. That is
+the first half of M5's exit criterion. The second half (topic *observations*, and a rejected
+auto-proposal never returning) is the next session's work; see "Where to go next".
+
+The resolver still finds **14 of 35** expected tickers on the user's held-out batch, and nobody
+changed its thresholds. The add-a-ticker box is how a confirmed set closes that gap (decision 46).
+`docs/TOPIC_RESOLUTION.md` holds the measurements and the backlog.
 
 The M3 closing summary (PRs #42–#47) is kept below in "Where to go next" and the decisions list.
 
@@ -43,7 +50,7 @@ row and a ledger row marked revoked. What remains unproven is only the *webhook*
 | **M2.5 — Real price history** | ✅ Complete | **unplanned**; PR #23. Finished M1's provider layer, 18 PRs late |
 | **M3 — RAG & educational engine** | ✅ Complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. #45: the paid embedder. #46: `POST /ask`, intent routing, citations, a three-state relevance floor. #47: the 35-case eval set in two CI tiers. **The relevance floor is measured to be in the wrong place — see the debt table** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
-| **M5 — Market discovery & topics** | 🟡 In progress | #50: eval set, screened universe, `instrument_profiles`, resolver (gate, size order, meanings, name stripping). Slice 2: ETF holdings as a second signal. **Resolution recall on held-out topics: 14/35 — see `docs/TOPIC_RESOLUTION.md`.** Not started: topic CRUD, confirmation, topic observations, per-topic sentiment, auto-discovery, digest section |
+| **M5 — Market discovery & topics** | 🟡 In progress | #50–#51: eval set, screened universe, resolver, ETF holdings. **Recall on held-out topics: 14/35** (`docs/TOPIC_RESOLUTION.md`). #53: `POST /topics/resolve`, universe loaded by the stack. #54: schema 0017, topic CRUD + confirm. #55: Topics screen. **Not started:** topic observations (`topicScan`), per-topic sentiment, auto-discovery with rejection memory, digest section |
 | M6 — Frontend completion & polish | Not started | |
 | M7 — Kubernetes & documentation | Not started | |
 
@@ -82,7 +89,7 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts at handoff: **1,193** — 638 Python, 376 orchestrator, 163 web, 16 shared. Plus two
+Test counts at handoff: **1,275** — 658 Python, 420 orchestrator, 181 web, 16 shared. Plus two
 eval sets, which are not test counts: `/ask`'s **35 cases** (16 keyless on every PR, all 35 when
 keyed), and the topic eval's **31 cases** (`scripts/run_topic_eval.py`, keyed only, **not in CI**).
 
@@ -106,6 +113,8 @@ Useful endpoints (all need the session cookie except `/internal/*`, which needs 
 | `POST /telegram/bind-token` | mints the signed connect link; `POST /telegram/webhook` is public |
 | `GET /concepts/:slug` | the explanation behind a concept chip (#M3). 404 means the corpus is not ingested, not that the app is broken |
 | `POST /ask` | a question in, a checkable answer out. **A refusal is a 200** with `answered: false` — declining an out-of-index question is an outcome, and a 4xx would make it look like a broken corpus. `answer_source` is `extractive` \| `llm` \| `computed` \| `none`; `computed` is arithmetic over holdings and is *never* a model |
+| `POST /topics/resolve` | `{topic}` → candidates with band, quoted rationale and `held_by`. **`verdict` has four values**; `unavailable` (with `universe.state`) means the universe was *not searched*, and is never the same as `none` (decision 47). Stores nothing |
+| `GET`/`POST /topics`, `GET`/`PUT`/`DELETE /topics/:id` | the user's topics. `POST`/`PUT` take `{label, symbols}` and **re-resolve on the server** to decide which symbols carry reasons (decision 48). 422 `topic_limit_reached` / `unresolved_symbols` (with `details.symbols`), 409 `duplicate_topic` |
 | `GET /concepts/search?q=` | hybrid retrieval: the half of `/ask` that finds things. A diagnostic surface with no relevance floor and no refusal — those are `/ask`'s judgements. Every match reports `vector_rank` and `text_rank`, so *which half found this* is answerable; `vector_is_semantic: false` says the embedder ranks by shared words alone |
 
 ---
@@ -119,17 +128,17 @@ validator; **the concept corpus: structure-aware chunking, hash-compared ingesti
 lookup, and **hybrid retrieval over it: an embedder behind `BaseEmbedder`, a `VectorStore` over
 pgvector, and reciprocal-rank fusion of the vector and full-text halves**; **topic resolution
 (M5): a committed, rule-screened instrument universe (`data/universe/`, `app/universe/`), profiles
-embedded with the company's own name stripped, ETF holdings, and `app/topics/resolution.py`, which
-has no HTTP route yet**; the Alembic schema (16 migrations) that both services share.
+embedded with the company's own name stripped, ETF holdings, and `app/topics/resolution.py`, served as `POST /topics/resolve`**; the Alembic schema (17
+migrations) that both services share.
 
 **`apps/orchestrator`** (Node, Hono) — sessions, holdings CRUD, CSV/JSON import with per-row
 validation, valuation with FX, target weights, the scan workflow, run claims, the observations feed,
 the local scheduler, **the proposal state machine and its audit trail, the notification fan-out, the
-Telegram adapter, and per-user settings**.
+Telegram adapter, per-user settings, and topics with confirmed instruments (`services/topics.ts`)**.
 
 **`apps/web`** (React, MobX, Tailwind, Recharts) — login, portfolio dashboard, import wizard,
-observations feed with an evidence drawer, the approvals inbox, a settings page, **and the concept
-dialog behind the feed's chips**.
+observations feed with an evidence drawer, the approvals inbox, a settings page, the concept
+dialog behind the feed's chips, **and the Topics page with its confirm screen (`TopicsStore`)**.
 
 **`packages/shared`** — wire types, money helpers, and the AI-service client whose zod schemas are
 pinned to the generated OpenAPI types so Python drift becomes a compile error. That mechanism has
@@ -902,6 +911,8 @@ data**, and it is better met here than in production.
 | **The free tier cannot narrate at all, and the reason is not cost** | `.env`, `app/llm` | `LLM_MODEL` is a `:free` route because the OpenRouter workspace has a **lifetime** budget of $0.01 — a cumulative cap, not an allowance, so nothing resets and only an org admin changes it. On the free model narration now reaches the evidence validator and is **rejected every time** (`unsourced_figures`, 3/3 measured) for deriving figures not in the evidence. So free means templates, reliably. Real usage is ~$0.0015 per narration and ~10 findings a day ≈ **$0.45/month**, which is what funding the workspace costs. The badge (#38) states this to the user rather than hiding it |
 | Crypto detection is a symbol-shape heuristic | `core/cache_policy.py` | `-USD` suffix, because the AI service receives bare symbols |
 | Market hours assume US sessions for every symbol | `core/cache_policy.py` | SAP.DE trades on XETRA but is judged against NYSE hours. The same wire change (pass `asset_class` and `exchange` on the quote request) fixes both this and the heuristic above |
+| **Server state is hand-fetched in every MobX store** | `apps/web/src/stores` | Each store repeats `load()`/`loading`/`error`/`runInAction` with no caching, de-duplication, retry or refetch. A page revisited refetches everything, and a store that forgets to reload after a write shows stale data silently. **Scheduled as M6 tech debt (added 2026-09-27 at the user's request):** move reads and writes to TanStack Query, keep MobX for drafts and UI state. The plan and its exit are in `docs/MILESTONES.md` under M6. New stores written before then (the M5 topic cards) will be migrated with the rest, so keep their fetch code thin |
+| **The Topics screen has never been looked at in a browser** | `apps/web/src/pages/TopicsPage.tsx` | #55 is tested at the store level (18 tests) and served by the running stack, but signing in needs the passphrase, which a session does not type. Layout, wrapping at mobile width and the long rationale quotes are unverified. The first person to open it is the first test of its layout |
 | No component/DOM tests on the web app | `apps/web/test` | Store and formatting logic covered; rendering is not. Two real UI bugs this session (Discard disabled by its own typo, a deep link that does nothing) were found by *using* the app, not by tests, and neither would have been caught by a DOM test either — but a DOM test would have caught the first |
 | ~~Telegram has no working binding~~ | — | **Resolved 2026-09-24.** A chat is bound. The "receives nothing" mystery was never a Telegram problem: nothing in the repository consumed updates, because M4's polling bridge was a hand-run script that left with its session. Kept as a line so the history of the symptom survives |
 | Redis cold start refetches everything | `core/cache.py` | The `quotes` table holds usable recent prices; warming from it was deferred |
@@ -999,7 +1010,8 @@ data**, and it is better met here than in production.
 
 - **The universe is loaded in the shared `traders` database** (2026-09-24, #53): the stack's
   `universe` container embedded 5,223 profiles (~$0.016) and loads 16,363 holdings on every start.
-  `traders` is at `0016_etf_holdings` until the topics PR merges and the stack is restarted.
+  `traders` is at `0017_topics` (stack rebuilt from `main` at #55 on 2026-09-27, no `--reset`, so
+  holdings and history kept; it has no topics yet).
   **`traders_m5`** is the scratch copy branches migrate natively. It is at `0017_topics` and
   disposable: point a run at it with
   `DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders_m5`.
@@ -1014,7 +1026,17 @@ data**, and it is better met here than in production.
   (`m3-slice-2-b2e605`, started 2026-09-24 08:41). A new process on 8081 dies on `EADDRINUSE`
   *after* logging that it started, and every request then silently reaches the old code. Check
   `lsof -nP -iTCP:<port> -sTCP:LISTEN` and the listener's `cwd` before trusting a native
-  endpoint. 8083 was free.
+  endpoint. 8083 was free. **As of 2026-09-27 that stray process (pid 85085) was still running**,
+  with the bot token and `DATABASE_URL` pointing at `traders`. Its code predates the poller, so it
+  cannot steal taps, but its scheduler may still run old-code scans. The user was told how to stop
+  it (`kill 85085`); check whether they did.
+- **In zsh, `$S:path` is a history modifier, not a string.** `git show $S:services/...` expanded
+  `:s` as a substitution and failed. Write `git show "${S}:path"` when verifying a commit by
+  content.
+- **Docker Hub can time out from a session's sandbox** (`node:22-slim` metadata,
+  `DeadlineExceeded`) during one isolated build on 2026-09-24. The Python base was cached; the
+  orchestrator's was not. It was transient: two later `dev-docker.sh` runs from the same session
+  built everything. Retry before suspecting the Dockerfile.
 - **Run a topic eval with the main checkout's `.env` sourced** — the worktree has none:
   `set -a && source /Users/a/projects/Traders/.env && set +a`, then override `DATABASE_URL` and set
   `CORPUS_DIR` to the worktree's `data/corpus` (the eval file is found beside it).
@@ -1060,30 +1082,43 @@ fallback for "add what the resolver missed" is the existing `GET /instruments/re
 works, what it scores, why it fails and what to try next: **`docs/TOPIC_RESOLUTION.md`** — read §3
 and §5 before changing a threshold.
 
-**Topic CRUD & Confirmation, in progress.** Done: `POST /topics/resolve` and stack loading (#53).
-In review: schema 0017 and orchestrator CRUD/confirm (decisions 48–49). Next: the web screen.
-The original sketch, kept for its reasoning:
+**Done: Topic CRUD & Confirmation (#53–#55).**
+- **Resolve.** Type a topic in the Topics page and it is resolved through `POST /topics/resolve`.
+- **Confirm.** The user ticks suggestions (nothing is pre-ticked) and adds tickers the resolver
+  missed, then confirms with `{label, symbols}`.
+- **Provenance.** The orchestrator re-resolves the label and stores each symbol as `resolver` (with
+  band, quoted rationale and `held_by`) or `user` (decisions 47–49).
+- **Limits.** 10 active topics, 30 instruments each, enforced under a row lock.
+- **Checked live** against real Postgres, the real universe and the real embedder, including a race
+  for the last topic slot.
 
-1. **Schema (0017)**, per DESIGN.md: `topics(id, user_id, label, status active|proposed|rejected,
-   created_by user|auto, ...)` and `topic_instruments(topic_id, instrument_id, confirmed_by_user,
-   ...)`. Worth storing *why* each instrument is there — `source` (resolver/user), the band, the
-   rationale and `held_by` as offered — so the topic card can show it later without re-resolving.
-   `user_id` on both (guideline 5). Migration 0004's comment promises that a later migration
-   backfills `article_entities.topic_id` from `topic_ref`; decide whether this is that migration.
-2. **An AI-service route** (`POST /topics/resolve`) with pydantic wire models, then
-   `python scripts/export_openapi.py && pnpm gen:api`. **It must decide what an unloaded universe
-   looks like** — the `/concepts/:slug` precedent (decision 27/28) is a named state, not a 500.
-   And the stack must be able to load the universe at all (see the debt table).
-3. **Orchestrator** topic CRUD + a confirm endpoint (all SQL in `queries.ts`); the user keeps a
-   subset of candidates and **adds tickers the resolver missed** through the existing
-   `GET /instruments/resolve`. That add-box is what closes the 14/35 gap (decision 46).
-4. **Web**: type a topic → interpretations → candidates with rationale, `held_by` and band →
-   tick, add, confirm. A topic-count cap (PRD risk table).
+**Next: the second half of M5**, in the order the exit criterion needs it:
 
-After that, M5 still owes: topic observations via `topicScan`, per-topic sentiment, auto-discovery
-as proposals with rejection memory (decision 18's ledger argument applies), and the digest section.
-When the news matcher is wired for topics, pass it held and topic-linked instruments only — never
-the whole 5,294-instrument universe, whose company names ("Target", "Block") would flood it.
+1. **`topicScan`: topic observations.** FLOWS F5 and DESIGN's workflow list name it.
+   - Scheduled through `POST /internal/runs` like every other run (guideline 8), with a
+     `dedupe_key` per observation.
+   - The `observations.subject_kind` column already allows `'topic'`
+     (`ObservationSubjectKind` in shared types).
+   - Its input is each active topic's `topic_instruments`, via the `topic_instruments_instrument`
+     index. **Pass the news matcher held and topic-linked instruments only, never the
+     5,294-instrument universe**: company names like "Target" and "Block" would flood it.
+   - Migration 0004 promised that a later migration backfills `article_entities.topic_id` from
+     `topic_ref`. 0017 deliberately passed that on, and it is this work's decision now. The
+     table was empty at 0017.
+2. **Per-topic sentiment** over a rolling window, with the articles behind the score (FR-12).
+3. **Auto-discovery**: recurring entities become `status = 'proposed'`, `created_by = 'auto'`
+   topics.
+   - `rejected` rows are its memory. The live-label unique index already excludes them, so a
+     rejected theme can be remembered while the user creates a topic of the same name.
+   - Confirming a proposal is `PUT /topics/:id`, which already moves `proposed` to `active` and
+     counts it against the cap.
+   - What is missing is the proposer, a reject action, and the rule that a rejected theme is
+     never proposed again. Decision 18's ledger argument applies: remember, do not delete.
+4. **The digest's topic section**, then topic cards on the dashboard.
+
+**Before any resolver change:** a new sealed held-out batch (batch 3), written by the user.
+Batch 2 is spent. The backlog in `docs/TOPIC_RESOLUTION.md` §4 cannot be measured honestly
+without one.
 
 ### Left unfinished, deliberately
 
