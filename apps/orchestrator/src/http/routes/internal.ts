@@ -16,10 +16,11 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
 
-import { claimRun, finishRun, getUser, listHeldInstruments, listRuns } from '../../db/queries.js';
+import { claimRun, finishRun, getUser, listAnalysedInstruments, listRuns } from '../../db/queries.js';
 import { sweepAndCloseLifecycles } from '../../mastra/proposalLifecycle.js';
 import { backfillInstrumentNames } from '../../services/instrumentMetadata.js';
 import { runPortfolioScan } from '../../services/portfolioScan.js';
+import { HISTORY_BACKFILL_DAYS, runTopicScan } from '../../services/topicScan.js';
 import { sendDigest } from '../../services/notifications.js';
 import { sweepExpiredProposals } from '../../services/proposals.js';
 import { logger } from '../../logger.js';
@@ -42,6 +43,9 @@ import { ApiProblem, badRequest, notFound } from '../errors.js';
 const RUN_BUCKET_MINUTES: Record<string, number> = {
   snapshot: 24 * 60,
   portfolio_scan: 30,
+  // Same cadence as the portfolio scan: both read the same daily closes, and a
+  // topic that moved should not be announced half an hour after the holding.
+  topic_scan: 30,
   // Daily closes appear once a day, so asking more often fetches the same
   // series and writes nothing. The provider quota is the reason to care.
   backfill: 24 * 60,
@@ -74,6 +78,7 @@ const runSchema = z.object({
   kind: z.enum([
     'snapshot',
     'portfolio_scan',
+    'topic_scan',
     'backfill',
     'proposal_sweep',
     'daily_digest',
@@ -123,15 +128,15 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
     const runId = claim.runId as string;
     try {
       if (parsed.data.kind === 'backfill') {
-        const instruments = await listHeldInstruments(userId);
+        const instruments = await listAnalysedInstruments(userId);
         if (instruments.length === 0) {
-          await finishRun(runId, 'skipped', { reason: 'no holdings' });
+          await finishRun(runId, 'skipped', { reason: 'no holdings and no topics' });
           return context.json({ kind: parsed.data.kind, runKey, runId, status: 'skipped' });
         }
         const result = await context.get('ai').backfillHistory(
           {
             instruments: instruments.map((row) => ({ instrument_id: row.id, symbol: row.symbol })),
-            days: 180,
+            days: HISTORY_BACKFILL_DAYS,
           },
           context.get('requestId'),
         );
@@ -193,6 +198,23 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
           status: 'ok',
           result: { expired },
         });
+      }
+
+      if (parsed.data.kind === 'topic_scan') {
+        const scan = await runTopicScan(
+          user,
+          context.get('ai'),
+          context.get('notifier'),
+          runId,
+          context.get('requestId'),
+        );
+        if (scan === null) {
+          await finishRun(runId, 'skipped', { reason: 'no active topics' });
+          return context.json({ kind: parsed.data.kind, runKey, runId, status: 'skipped' });
+        }
+        const status = scan.degraded ? 'degraded' : 'ok';
+        await finishRun(runId, status, scan);
+        return context.json({ kind: parsed.data.kind, runKey, runId, status, result: scan });
       }
 
       if (parsed.data.kind === 'portfolio_scan') {

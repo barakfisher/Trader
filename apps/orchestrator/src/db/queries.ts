@@ -639,13 +639,27 @@ export interface ObservationRow {
  * finding the next scan produces. Sending the whole history would grow the
  * request without changing a single decision.
  */
-/** The instruments a user holds, for backfilling their price history. */
-export function listHeldInstruments(userId: string): Promise<{ id: string; symbol: string }[]> {
+/**
+ * The instruments whose price history this user's analysis reads: what they
+ * hold, and what their active topics are made of.
+ *
+ * Topic instruments are usually *not* held - that is the point of following a
+ * theme - so a backfill of holdings alone left every topic with no series, and
+ * the topic scan with nothing to measure. `proposed` and `rejected` topics are
+ * excluded: nobody chose their instruments.
+ */
+export function listAnalysedInstruments(userId: string): Promise<{ id: string; symbol: string }[]> {
   return query<{ id: string; symbol: string }>(
-    `SELECT DISTINCT i.id, i.symbol
-       FROM holdings h
-       JOIN instruments i ON i.id = h.instrument_id
-      WHERE h.user_id = $1
+    `SELECT i.id, i.symbol
+       FROM instruments i
+      WHERE i.id IN (
+              SELECT h.instrument_id FROM holdings h WHERE h.user_id = $1
+              UNION
+              SELECT ti.instrument_id
+                FROM topic_instruments ti
+                JOIN topics t ON t.id = ti.topic_id
+               WHERE ti.user_id = $1 AND t.status = 'active'
+            )
       ORDER BY i.symbol`,
     [userId],
   );
@@ -1487,6 +1501,30 @@ export async function replaceTopicInstruments(
       ],
     );
   }
+}
+
+export interface ActiveTopicInstrumentRow {
+  topic_id: string;
+  label: string;
+  instrument_id: string;
+  symbol: string;
+}
+
+/**
+ * Every active topic's confirmed instruments, one row per pair, for the topic
+ * scan. Ordered so rows of one topic are adjacent and the scan can group them
+ * without sorting.
+ */
+export function listActiveTopicInstruments(userId: string): Promise<ActiveTopicInstrumentRow[]> {
+  return query<ActiveTopicInstrumentRow>(
+    `SELECT t.id AS topic_id, t.label, i.id AS instrument_id, i.symbol
+       FROM topics t
+       JOIN topic_instruments ti ON ti.topic_id = t.id AND ti.user_id = t.user_id
+       JOIN instruments i ON i.id = ti.instrument_id
+      WHERE t.user_id = $1 AND t.status = 'active'
+      ORDER BY t.created_at, t.id, i.symbol`,
+    [userId],
+  );
 }
 
 /** Delete one of the user's topics and, by cascade, its instruments. */

@@ -13,12 +13,27 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Request
 
-from app.analysis.pipeline import ScanSubject, run_portfolio_scan
+from app.analysis.pipeline import (
+    ScanObservation,
+    ScanSubject,
+    TopicInstrument,
+    TopicSubject,
+    run_portfolio_scan,
+    run_topic_scan,
+)
 from app.analysis.thresholds import AnalysisThresholds
 from app.core.logging import get_logger
 from app.db import get_engine
 from app.deps import SettingsDep, require_internal_key
-from app.models import ObservationOut, PortfolioScanRequest, PortfolioScanResponse, ScanStatsOut
+from app.models import (
+    ObservationOut,
+    PortfolioScanRequest,
+    PortfolioScanResponse,
+    ScanStatsOut,
+    TopicScanRequest,
+    TopicScanResponse,
+    TopicScanStatsOut,
+)
 
 router = APIRouter(
     prefix="/analysis",
@@ -63,21 +78,62 @@ async def portfolio_scan(
         )
 
     return PortfolioScanResponse(
-        observations=[
-            ObservationOut(
-                kind=item.finding.kind,
-                severity=item.finding.severity,
-                subject_ref=item.finding.subject_ref,
-                as_of=item.finding.as_of,
-                headline=item.narration.headline,
-                explanation=item.narration.explanation,
-                evidence=item.narration.evidence,
-                concept_refs=list(item.narration.concepts),
-                dedupe_key=item.dedupe_key,
-                narration_source=item.narration.source,
-                fallback_reason=item.narration.fallback_reason,
-            )
-            for item in observations
-        ],
+        observations=[_observation_out(item) for item in observations],
         stats=ScanStatsOut(**vars(stats)),
+    )
+
+
+@router.post("/topic-scan", response_model=TopicScanResponse)
+async def topic_scan(
+    payload: TopicScanRequest,
+    request: Request,
+    settings: SettingsDep,
+) -> TopicScanResponse:
+    """Measure each confirmed topic as an equal-weighted basket (FLOWS F5).
+
+    Price movement only, for now: news per topic needs a news run that does not
+    exist yet, and this endpoint says nothing about news rather than implying it
+    looked.
+    """
+    topics = [
+        TopicSubject(
+            topic_id=topic.topic_id,
+            label=topic.label,
+            instruments=[
+                TopicInstrument(instrument_id=item.instrument_id, symbol=item.symbol.upper())
+                for item in topic.instruments
+            ],
+        )
+        for topic in payload.topics
+    ]
+    llm = getattr(request.app.state, "llm", None)
+
+    with get_engine().begin() as connection:
+        observations, stats = await run_topic_scan(
+            connection,
+            topics,
+            thresholds=AnalysisThresholds.from_settings(settings),
+            llm=llm,
+            known_dedupe_keys=payload.known_dedupe_keys,
+        )
+
+    return TopicScanResponse(
+        observations=[_observation_out(item) for item in observations],
+        stats=TopicScanStatsOut(**vars(stats)),
+    )
+
+
+def _observation_out(item: ScanObservation) -> ObservationOut:
+    return ObservationOut(
+        kind=item.finding.kind,
+        severity=item.finding.severity,
+        subject_ref=item.finding.subject_ref,
+        as_of=item.finding.as_of,
+        headline=item.narration.headline,
+        explanation=item.narration.explanation,
+        evidence=item.narration.evidence,
+        concept_refs=list(item.narration.concepts),
+        dedupe_key=item.dedupe_key,
+        narration_source=item.narration.source,
+        fallback_reason=item.narration.fallback_reason,
     )

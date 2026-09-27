@@ -137,6 +137,24 @@ export const portfolioScanResponseSchema = z.object({
   stats: scanStatsSchema,
 });
 
+// Same default/default_factory split as `scanStatsSchema`: counters always
+// present, the two maps optional.
+export const topicScanStatsSchema = z.object({
+  topics: z.number().int(),
+  topics_measured: z.number().int(),
+  instruments: z.number().int(),
+  findings: z.number().int(),
+  already_known: z.number().int(),
+  narrated_by_llm: z.number().int(),
+  narration_fallbacks: z.record(z.string(), z.number().int()).optional(),
+  skipped: z.record(z.string(), z.string()).optional(),
+});
+
+export const topicScanResponseSchema = z.object({
+  observations: z.array(observationSchema),
+  stats: topicScanStatsSchema,
+});
+
 export const backfillResponseSchema = z.object({
   written: z.number().int(),
   already_present: z.number().int(),
@@ -180,6 +198,9 @@ export type _AssertBackfill = Expect<
 >;
 export type _AssertPortfolioScan = Expect<
   Equal<z.infer<typeof portfolioScanResponseSchema>, Schemas['PortfolioScanResponse']>
+>;
+export type _AssertTopicScan = Expect<
+  Equal<z.infer<typeof topicScanResponseSchema>, Schemas['TopicScanResponse']>
 >;
 export const narrationConfigSchema = z.object({
   provider: z.string(),

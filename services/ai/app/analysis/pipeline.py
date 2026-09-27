@@ -23,9 +23,11 @@ from app.analysis.dedupe import dedupe_key
 from app.analysis.drawdown import drawdown_findings
 from app.analysis.findings import Finding
 from app.analysis.price_move import price_move_findings
+from app.analysis.price_series import PricePoint
 from app.analysis.quote_history import load_price_series
 from app.analysis.sigma_move import sigma_move_findings
 from app.analysis.thresholds import AnalysisThresholds
+from app.analysis.topic_move import TopicMember, topic_move_findings
 from app.core.logging import get_logger
 from app.llm.base import LLMProvider
 from app.narration import CandidateArticle, correlate, narrate
@@ -162,6 +164,118 @@ async def run_portfolio_scan(
 
     stats.findings = len(findings)
 
+    observations = await _narrate_new(findings, known_dedupe_keys, llm, stats, articles)
+
+    log.info(
+        "analysis.scan_complete",
+        subjects=stats.subjects,
+        findings=stats.findings,
+        already_known=stats.already_known,
+        narrated_by_llm=stats.narrated_by_llm,
+        drift_skipped=bool(stats.drift_skipped_reason),
+    )
+    return observations, stats
+
+
+@dataclass(frozen=True, slots=True)
+class TopicInstrument:
+    instrument_id: str
+    symbol: str
+
+
+@dataclass(frozen=True, slots=True)
+class TopicSubject:
+    """One active topic and its confirmed instruments, as the orchestrator holds them."""
+
+    topic_id: str
+    label: str
+    instruments: Sequence[TopicInstrument]
+
+
+@dataclass
+class TopicScanStats:
+    """What a topic scan did. `skipped` maps a topic label to why it was not measured."""
+
+    topics: int = 0
+    topics_measured: int = 0
+    instruments: int = 0
+    findings: int = 0
+    already_known: int = 0
+    narrated_by_llm: int = 0
+    narration_fallbacks: dict[str, int] = field(default_factory=dict)
+    skipped: dict[str, str] = field(default_factory=dict)
+
+
+async def run_topic_scan(
+    connection: object,
+    topics: Sequence[TopicSubject],
+    *,
+    thresholds: AnalysisThresholds,
+    llm: LLMProvider | None,
+    known_dedupe_keys: Iterable[str] = (),
+    now: datetime | None = None,
+) -> tuple[list[ScanObservation], TopicScanStats]:
+    """Measure each topic's basket, narrate what is new, and report every skip.
+
+    Topics overlap - a uranium topic and a nuclear topic share half their names -
+    so each instrument's history is loaded once for the whole scan rather than once
+    per topic. Identity, narration and the already-known short cut are the same as
+    `run_portfolio_scan`'s, for the same reasons.
+    """
+    moment = now or datetime.now(UTC)
+    since = moment - timedelta(days=HISTORY_DAYS)
+    stats = TopicScanStats(topics=len(topics))
+
+    series: dict[str, list[PricePoint]] = {}
+    for topic in topics:
+        for instrument in topic.instruments:
+            if instrument.instrument_id not in series:
+                series[instrument.instrument_id] = load_price_series(
+                    connection, instrument.instrument_id, since=since
+                )
+    stats.instruments = len(series)
+
+    findings: list[Finding] = []
+    for topic in topics:
+        result = topic_move_findings(
+            topic.topic_id,
+            topic.label,
+            [
+                TopicMember(symbol=item.symbol, points=series[item.instrument_id])
+                for item in topic.instruments
+            ],
+            thresholds,
+        )
+        if result.skipped_reason is not None:
+            # Keyed by label rather than id: this lands in `runs.stats`, which is
+            # read by a person asking why their topic said nothing.
+            stats.skipped[topic.label] = result.skipped_reason
+            continue
+        stats.topics_measured += 1
+        findings.extend(result.findings)
+
+    stats.findings = len(findings)
+    observations = await _narrate_new(findings, known_dedupe_keys, llm, stats)
+
+    log.info(
+        "analysis.topic_scan_complete",
+        topics=stats.topics,
+        measured=stats.topics_measured,
+        findings=stats.findings,
+        already_known=stats.already_known,
+        skipped=len(stats.skipped),
+    )
+    return observations, stats
+
+
+async def _narrate_new(
+    findings: Sequence[Finding],
+    known_dedupe_keys: Iterable[str],
+    llm: LLMProvider | None,
+    stats: ScanStats | TopicScanStats,
+    articles: Sequence[CandidateArticle] = (),
+) -> list[ScanObservation]:
+    """Drop what the caller already holds, and put words to the rest."""
     known = set(known_dedupe_keys)
     observations: list[ScanObservation] = []
     for finding in findings:
@@ -178,13 +292,4 @@ async def run_portfolio_scan(
             reason = narration.fallback_reason
             stats.narration_fallbacks[reason] = stats.narration_fallbacks.get(reason, 0) + 1
         observations.append(ScanObservation(finding=finding, narration=narration, dedupe_key=key))
-
-    log.info(
-        "analysis.scan_complete",
-        subjects=stats.subjects,
-        findings=stats.findings,
-        already_known=stats.already_known,
-        narrated_by_llm=stats.narrated_by_llm,
-        drift_skipped=bool(stats.drift_skipped_reason),
-    )
-    return observations, stats
+    return observations

@@ -49,6 +49,6 @@ describe('runBucket', () => {
 
   it('falls back to a daily bucket for an unknown kind', () => {
     // A new kind should under-run rather than hammer, until someone chooses.
-    expect(runBucket('topic_scan', DATE, at(14, 0))).toBe(DATE);
+    expect(runBucket('not_a_real_kind', DATE, at(14, 0))).toBe(DATE);
   });
 });

@@ -29,12 +29,24 @@ CONCEPTS: dict[str, tuple[str, ...]] = {
     "sigma_move": ("standard-deviation", "z-score", "volatility"),
     "drawdown": ("drawdown", "peak-to-trough"),
     "allocation_drift": ("asset-allocation", "rebalancing", "portfolio-weight"),
+    "topic_move": ("daily-return", "standard-deviation", "z-score"),
 }
 
 
 def _symbol(finding: Finding) -> str:
-    """The subject as a reader would name it: `instrument:NVDA` is "NVDA"."""
+    """The subject as a reader would name it: `instrument:NVDA` is "NVDA".
+
+    A topic is named by its label: its `subject_ref` carries an id, which is
+    stable across a rename and means nothing to a reader.
+    """
+    label = finding.evidence.get("topic_label")
+    if isinstance(label, str) and label:
+        return label
     return finding.subject_ref.rsplit(":", 1)[-1]
+
+
+def _sigma(value: object) -> Decimal:
+    return abs(Decimal(str(value)).quantize(Decimal("0.1")))
 
 
 def _pct(value: object, places: int = 1) -> str:
@@ -81,6 +93,12 @@ def headline_for(finding: Finding) -> str:
         points = abs(drift).quantize(Decimal("0.1"))
         target = _pct(evidence["target_weight"], 1).lstrip("+")
         return f"{symbol} is {points} percentage points {direction} its {target} target"
+
+    if finding.kind == "topic_move":
+        return (
+            f"{symbol} moved {_pct(evidence['basket_change_pct'])} on average, "
+            f"{_sigma(evidence['z_score'])} standard deviations from its recent average"
+        )
 
     # A new rule without a template should be obvious, not silently blank.
     return f"{symbol}: {finding.kind.replace('_', ' ')}"
@@ -131,7 +149,42 @@ def explanation_for(finding: Finding) -> str:
             f"against a target of {_pct(evidence['target_weight'], 1).lstrip('+')}."
         )
 
+    if finding.kind == "topic_move":
+        return _topic_move_explanation(symbol, evidence)
+
     return headline_for(finding)
+
+
+def _topic_move_explanation(label: str, evidence: dict[str, object]) -> str:
+    """Breadth, the names that drove it, then how unusual it was.
+
+    Every count is quoted from the evidence, including the members that were not
+    priced on the session: "5 of 7 rose" is a statement about the set the user
+    confirmed, and dropping the two that were not priced would make it a
+    statement about a smaller set without saying so.
+    """
+    parts = [
+        f"Of the {evidence['members_moved']} {label} instruments priced on "
+        f"{evidence['session']}, {evidence['advancers']} rose and "
+        f"{evidence['decliners']} fell; the average is equal-weighted."
+    ]
+    movers = evidence.get("movers") or []
+    if isinstance(movers, list) and movers:
+        named = ", ".join(f"{item['symbol']} {_pct(item['change_pct'])}" for item in movers)
+        parts.append(f"Largest moves: {named}.")
+    missing = evidence.get("not_priced_on_session") or []
+    if isinstance(missing, list) and missing:
+        parts.append(f"Not priced that day: {', '.join(str(symbol) for symbol in missing)}.")
+    parts.append(
+        f"Measured against the {evidence['sample_size']} most recent daily moves of the "
+        f"same basket, that is {_sigma(evidence['z_score'])} standard deviations from average."
+    )
+    if evidence.get("return_stdev_floor_applied"):
+        parts.append(
+            "The basket has been unusually quiet, so a floor was applied to the volatility "
+            "estimate and this figure is a bound rather than a measurement."
+        )
+    return " ".join(parts)
 
 
 def concepts_for(finding: Finding) -> tuple[str, ...]:
