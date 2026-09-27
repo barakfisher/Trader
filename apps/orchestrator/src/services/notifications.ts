@@ -37,6 +37,7 @@ import {
   type UserRow,
 } from '../db/queries.js';
 import { logger } from '../logger.js';
+import { gatherTopicDigest, renderTopicSection } from './topicDigest.js';
 import type { Notifier, OutboundNotification } from '../notify/notifier.js';
 import {
   notificationDedupeKey,
@@ -202,6 +203,8 @@ export function settingsForNotification(
 export interface DigestResult {
   /** Findings rolled into this digest. Zero is a quiet day, not a failure. */
   entries: number;
+  /** Topics in the digest's topic section; zero when no topic had anything to report. */
+  topics: number;
   delivered: boolean;
   error?: string;
 }
@@ -223,7 +226,15 @@ export interface DigestResult {
  */
 export async function sendDigest(user: UserRow, notifier: Notifier): Promise<DigestResult> {
   const pending = await listPendingDigest(user.id);
-  if (pending.length === 0) return { entries: 0, delivered: false };
+  // The topic section is gathered even when nothing was deferred: a topic that
+  // moved today is worth a digest on its own (FR-13), and a quiet day with no
+  // topic news still sends nothing - see topicDigest.ts.
+  const topicEntries = await gatherTopicDigest(user);
+  const topicSection = renderTopicSection(topicEntries);
+  const topics = topicSection === null ? 0 : topicEntries.length;
+  if (pending.length === 0 && topicSection === null) {
+    return { entries: 0, topics: 0, delivered: false };
+  }
 
   // Read but not enforced here: quiet hours gate *interruptions*, and the
   // digest is the thing a deferred finding was deferred *into*. Applying the
@@ -238,12 +249,15 @@ export async function sendDigest(user: UserRow, notifier: Notifier): Promise<Dig
     : await notifier
         .send({
           userId: user.id,
-          title: `Portfolio digest: ${pending.length} finding${pending.length === 1 ? '' : 's'}`,
+          title: digestTitle(pending.length, topics),
           // The digest names how many findings and of what kind. It does not
           // restate their figures: those were evidence-validated when the
           // observation was written, and re-rendering them here would be a
           // second place for a number to drift from the evidence behind it.
-          body: summariseDigest(pending),
+          // The topic section quotes stored headlines for the same reason.
+          body: [pending.length > 0 ? summariseDigest(pending) : null, topicSection]
+            .filter((part): part is string => part !== null)
+            .join('\n\n'),
           severity: 'info',
         })
         .catch((error: Error) => ({ delivered: false, error: error.message }));
@@ -257,14 +271,22 @@ export async function sendDigest(user: UserRow, notifier: Notifier): Promise<Dig
   }
 
   logger().info(
-    { userId: user.id, entries: pending.length, delivered: delivery.delivered },
+    { userId: user.id, entries: pending.length, topics, delivered: delivery.delivered },
     'notification.digest',
   );
   return {
     entries: pending.length,
+    topics,
     delivered: delivery.delivered,
     ...(delivery.error === undefined ? {} : { error: delivery.error }),
   };
+}
+
+function digestTitle(entries: number, topics: number): string {
+  const parts: string[] = [];
+  if (entries > 0) parts.push(`${entries} finding${entries === 1 ? '' : 's'}`);
+  if (topics > 0) parts.push(`${topics} topic${topics === 1 ? '' : 's'}`);
+  return `Daily digest: ${parts.join(', ')}`;
 }
 
 /** One line per reason, so the digest says why each group was held back. */
