@@ -584,6 +584,52 @@ export interface TopicNewsResponse {
   articles: TopicArticle[];
 }
 
+/** Why a topic's sentiment score is null. Never a zero standing in for "unknown". */
+export type TopicSentimentGap = 'no_articles' | 'not_scored' | 'too_few_polarised';
+
+/** One article's contribution to a topic's sentiment. Ratios are decimal strings. */
+export interface TopicSentimentArticle {
+  id: string;
+  url: string;
+  source: string;
+  title: string;
+  publishedAt: string | null;
+  score: string;
+  magnitude: string;
+  /** This article's share of the total weight, 0..1: how much of the score it is. */
+  weight: string;
+}
+
+export interface TopicSentimentDay {
+  /** `YYYY-MM-DD` in the user's timezone. */
+  day: string;
+  articles: number;
+  /** Null on a day with no polarised article: an unmeasured day, not a neutral one. */
+  score: string | null;
+}
+
+/**
+ * A topic's tone over a rolling window (FR-12), with the articles behind it.
+ *
+ * `score` is the magnitude-weighted mean of the articles' scores, in -1..1, from
+ * one model only: scores from different models are not comparable, so they are
+ * never averaged together. Articles scored only by another model are counted in
+ * `otherModels`, not mixed in.
+ */
+export interface TopicSentimentResponse {
+  topicId: string;
+  days: number;
+  model: string | null;
+  otherModels: string[];
+  score: string | null;
+  gap: TopicSentimentGap | null;
+  /** `unscored` is articles `model` has not read; the three tones cover the rest. */
+  counts: { articles: number; unscored: number; positive: number; negative: number; neutral: number };
+  daily: TopicSentimentDay[];
+  /** Articles with any weight, heaviest first, capped; `counts` covers them all. */
+  behind: TopicSentimentArticle[];
+}
+
 /** The bounds a topic write is held to, published so the UI can show them. */
 export interface TopicLimits {
   maxActiveTopics: number;

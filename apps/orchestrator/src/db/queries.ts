@@ -1589,6 +1589,59 @@ export function listTopicArticles(
   );
 }
 
+export interface TopicSentimentRow {
+  id: string;
+  url: string;
+  source: string;
+  title: string;
+  published_at: Date | null;
+  fetched_at: Date;
+  /** The article's day in the user's timezone, `YYYY-MM-DD`. */
+  local_day: string;
+  /** Null for an article no scorer has read. */
+  model: string | null;
+  score: string | null;
+  magnitude: string | null;
+}
+
+/**
+ * Every opinion on every article in a topic's window, one row per (article, model).
+ *
+ * The same article set as `listTopicArticles` - linked through a confirmed
+ * instrument, syndicated copies excluded - but unlimited within the window,
+ * because an average over the first thirty articles is not the topic's average.
+ * Articles no scorer has read come back with a null model, so the caller can say
+ * how many were left out rather than silently shrinking the denominator. Days are
+ * bucketed in the user's timezone (guideline 10).
+ */
+export function listTopicSentimentRows(
+  userId: string,
+  topicId: string,
+  days: number,
+  timezone: string,
+): Promise<TopicSentimentRow[]> {
+  return query<TopicSentimentRow>(
+    `WITH linked AS (
+       SELECT DISTINCT a.id, a.url, a.source, a.title, a.published_at, a.fetched_at,
+              coalesce(a.published_at, a.fetched_at) AS dated_at
+         FROM topic_instruments ti
+         JOIN article_entities ae ON ae.instrument_id = ti.instrument_id
+         JOIN articles a ON a.id = ae.article_id
+        WHERE ti.user_id = $1 AND ti.topic_id = $2
+          AND a.duplicate_of_id IS NULL
+          AND coalesce(a.published_at, a.fetched_at) > now() - ($3 || ' days')::interval
+     )
+     SELECT l.id, l.url, l.source, l.title, l.published_at, l.fetched_at,
+            to_char((l.dated_at AT TIME ZONE $4)::date, 'YYYY-MM-DD') AS local_day,
+            s.model, s.score::text AS score, s.magnitude::text AS magnitude
+       FROM linked l
+       LEFT JOIN article_sentiment s ON s.article_id = l.id
+      ORDER BY l.dated_at DESC, l.id, s.model
+      LIMIT 2000`,
+    [userId, topicId, String(days), timezone],
+  );
+}
+
 /** Delete one of the user's topics and, by cascade, its instruments. */
 export async function deleteTopic(userId: string, topicId: string): Promise<boolean> {
   const rows = await query<{ id: string }>(

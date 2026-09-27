@@ -55,6 +55,7 @@ const queries = vi.hoisted(() => ({
   getTopic: vi.fn(),
   listTopicInstruments: vi.fn(),
   listTopicArticles: vi.fn(),
+  listTopicSentimentRows: vi.fn(),
   deleteTopic: vi.fn(),
 }));
 
@@ -417,5 +418,41 @@ describe('GET /topics/:id/news', () => {
     queries.getTopic.mockResolvedValueOnce(null);
     expect((await get()).status).toBe(404);
     expect(queries.listTopicArticles).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /topics/:id/sentiment', () => {
+  let app: ReturnType<typeof buildApp>;
+  let cookie: string;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    app = buildApp();
+    cookie = await loginCookie(app);
+  });
+
+  const get = (query = '') =>
+    app.request(`/topics/${TOPIC_ID}/sentiment${query}`, { headers: { cookie } });
+
+  it("buckets days in the user's timezone and defaults to a week", async () => {
+    queries.getTopic.mockResolvedValueOnce(TOPIC_ROW);
+    queries.listTopicSentimentRows.mockResolvedValueOnce([]);
+
+    const response = await get();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(queries.listTopicSentimentRows).toHaveBeenCalledWith(USER.id, TOPIC_ID, 7, USER.timezone);
+    expect(body).toMatchObject({ days: 7, score: null, gap: 'no_articles' });
+  });
+
+  it.each(['0', '31', '2.5', 'week'])('refuses days=%s', async (days) => {
+    expect((await get(`?days=${days}`)).status).toBe(400);
+    expect(queries.listTopicSentimentRows).not.toHaveBeenCalled();
+  });
+
+  it("is a 404 for a topic that is not the user's", async () => {
+    queries.getTopic.mockResolvedValueOnce(null);
+    expect((await get()).status).toBe(404);
   });
 });

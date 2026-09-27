@@ -34,13 +34,21 @@
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 
-import type { TopicDetail, TopicNewsResponse, TopicSummary, TopicsResponse } from '@traders/shared';
+import type {
+  TopicDetail,
+  TopicNewsResponse,
+  TopicSentimentResponse,
+  TopicSummary,
+  TopicsResponse,
+} from '@traders/shared';
 import { AiServiceError } from '@traders/shared/ai';
 
 import {
   deleteTopic,
   getTopic,
+  getUser,
   listTopicArticles,
+  listTopicSentimentRows,
   listTopicInstruments,
   listTopics,
   type TopicInstrumentRow,
@@ -55,6 +63,11 @@ import {
   type ConfirmOutcome,
 } from '../../services/topics.js';
 import { backfillConfirmedInstruments } from '../../services/topicScan.js';
+import {
+  DEFAULT_SENTIMENT_DAYS,
+  MAX_SENTIMENT_DAYS,
+  summariseTopicSentiment,
+} from '../../services/topicSentiment.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, conflict, notFound, unprocessable, upstreamFailure } from '../errors.js';
 
@@ -267,6 +280,25 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
         sentiment: row.sentiment,
       })),
     };
+    return context.json(body);
+  });
+
+  /**
+   * The topic's tone over the last `days` (default 7, at most 30), with the
+   * articles that carry it. A null score comes with the reason it is null.
+   */
+  app.get('/topics/:id/sentiment', async (context) => {
+    const userId = currentUserId(context);
+    const id = parseTopicId(context.req.param('id'));
+    const raw = context.req.query('days');
+    const days = raw === undefined ? DEFAULT_SENTIMENT_DAYS : Number(raw);
+    if (!Number.isInteger(days) || days < 1 || days > MAX_SENTIMENT_DAYS) {
+      throw badRequest('invalid_days', `days must be a whole number from 1 to ${MAX_SENTIMENT_DAYS}`);
+    }
+    const [topic, user] = await Promise.all([getTopic(userId, id), getUser(userId)]);
+    if (!topic || !user) throw notFound('no such topic');
+    const rows = await listTopicSentimentRows(userId, id, days, user.timezone);
+    const body: TopicSentimentResponse = summariseTopicSentiment(id, days, rows);
     return context.json(body);
   });
 
