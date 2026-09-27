@@ -14,6 +14,7 @@ import pytest
 from app.news.base import NewsProviderError
 from app.news.gdelt import (
     GDELT_MIN_INTERVAL_SECONDS,
+    GDELT_RETRY_DELAYS_SECONDS,
     GDELT_TERMS_PER_REQUEST,
     GdeltNewsProvider,
     query_terms,
@@ -89,18 +90,61 @@ async def test_a_headline_becomes_an_article_dated_by_when_gdelt_saw_it():
     assert article.published_at == datetime(2026, 9, 27, 10, 15, tzinfo=UTC)
 
 
+ATTEMPTS = 1 + len(GDELT_RETRY_DELAYS_SECONDS)
+
+
 async def test_the_throttle_notice_is_a_provider_failure_not_an_empty_feed():
-    recorder = Recorder(httpx.Response(429, text=THROTTLED))
+    recorder = Recorder(*[httpx.Response(429, text=THROTTLED)] * ATTEMPTS)
 
     with pytest.raises(NewsProviderError, match="429"):
         await _provider(recorder).fetch_for_symbols(["VLO"], SINCE, names=NAMES)
+    assert len(recorder.requests) == ATTEMPTS
 
 
 async def test_prose_with_a_200_is_still_a_failure():
-    recorder = Recorder(httpx.Response(200, text=THROTTLED))
+    recorder = Recorder(*[httpx.Response(200, text=THROTTLED)] * ATTEMPTS)
 
     with pytest.raises(NewsProviderError):
         await _provider(recorder).fetch_for_symbols(["VLO"], SINCE, names=NAMES)
+
+
+async def test_a_throttled_request_is_retried_after_backing_off():
+    recorder = Recorder(
+        httpx.Response(429, text=THROTTLED),
+        httpx.Response(200, json={"articles": [_article("Valero lifts refinery runs")]}),
+    )
+    sleeps: list[float] = []
+
+    articles = await _provider(recorder, sleeps).fetch_for_symbols(["VLO"], SINCE, names=NAMES)
+
+    assert [article.title for article in articles] == ["Valero lifts refinery runs"]
+    # The fake sleep does not advance the clock, so the request spacing sleeps
+    # too; against a real clock the backoff has already covered it.
+    assert sleeps[0] == GDELT_RETRY_DELAYS_SECONDS[0]
+
+
+async def test_a_rejected_query_is_not_retried():
+    # Prose that is not the throttle notice fails the same way on every attempt.
+    recorder = Recorder(httpx.Response(200, text="Your search contained a phrase too short."))
+
+    with pytest.raises(NewsProviderError):
+        await _provider(recorder).fetch_for_symbols(["VLO"], SINCE, names=NAMES)
+    assert len(recorder.requests) == 1
+
+
+async def test_a_failed_batch_keeps_the_articles_of_the_batches_before_it():
+    symbols = [f"S{index}" for index in range(GDELT_TERMS_PER_REQUEST + 1)]
+    names = {symbol: [f"Company {symbol}"] for symbol in symbols}
+    recorder = Recorder(
+        httpx.Response(200, json={"articles": [_article("Company S0 raises guidance")]}),
+        *[httpx.Response(429, text=THROTTLED)] * ATTEMPTS,
+    )
+
+    with pytest.raises(NewsProviderError) as failure:
+        await _provider(recorder).fetch_for_symbols(symbols, SINCE, names=names)
+
+    assert [article.title for article in failure.value.partial] == ["Company S0 raises guidance"]
+    assert len(recorder.requests) == 1 + ATTEMPTS
 
 
 async def test_an_empty_object_is_no_news_rather_than_an_error():

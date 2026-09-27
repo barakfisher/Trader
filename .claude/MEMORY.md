@@ -16,10 +16,12 @@ criterion. **This is a handoff**, taken at CLAUDE.md's five-merged-PR trigger. T
 - #60: per-topic sentiment, `GET /topics/:id/sentiment` (decision 53);
 - this PR: the digest's topic section (decision 54), and the first tests `sendDigest` ever had.
 
-**Real news has not arrived yet.** GDELT has answered HTTP 429 to this machine since the first
-minutes of slice C; every `news_collect` run is `degraded` with `provider_failures: ["gdelt"]`.
-The code handles it as designed. Whether the block lifts on its own is the first thing to check -
-see the debt table.
+**Real news has not arrived yet.** GDELT has answered HTTP 429 to almost every request since
+slice C, and `news_collect` runs are `degraded` with `provider_failures: ["gdelt"]`. **This is
+not an IP block that will lift** (the first handoff guessed that, and was wrong): a follow-up
+investigation on 2026-09-27 showed GDELT shedding load. Details are in the debt table. The
+provider now retries and keeps partial results, which raises the odds that a run gets through
+but cannot make GDELT answer.
 
 The resolver still finds **14 of 35** expected tickers on the user's held-out batch, and nobody
 changed its thresholds. The add-a-ticker box is how a confirmed set closes that gap (decision 46).
@@ -536,8 +538,15 @@ failure they prevent.
     headline is the body and sentiment is headline sentiment; `published_at` is GDELT's
     `seendate`. **Its throttle notice is prose, sometimes with a 200**: anything that is not a
     JSON object is a provider failure, so the run is `degraded`, never a quiet-looking empty
-    feed. Two quick manual requests got this session's IP throttled for minutes: **test it
-    through the provider, which spaces requests 5.5 s apart, not with curl in a loop.**
+    feed. **Its 429 is load-shedding, not a per-client counter** (measured, see the debt table),
+    so a refused request is retried twice, after 10 s and then 30 s (`GDELT_RETRY_DELAYS_SECONDS`),
+    and only for refusals: 429, 5xx, a network error, or the throttle sentence with a 200. Any
+    other prose (a query GDELT calls malformed) fails the same way every time and is not
+    retried. A batch that still fails raises with the earlier batches' articles on
+    `NewsProviderError.partial`; ingestion keeps them, and lists the provider in *both*
+    `provider_failures` (so the run is `degraded`) and `providers_used` (it did supply
+    articles). Later batches are not attempted after a failure: more requests into a refusing
+    server buy nothing.
 
 53. **A topic's sentiment is a magnitude-weighted mean from one model, or a null with a reason.**
     `GET /topics/:id/sentiment` (FR-12), computed in `services/topicSentiment.ts` from rows the SQL
@@ -952,10 +961,15 @@ topicScan by asking "what writes the table this reads?" and grepping for callers
 → **Before building on a layer, grep for its callers and look at its table's row count.** "It has
 tests" and "it runs" are different claims.
 
-**Two quick curls got GDELT to throttle this machine for over an hour.** Its 429 notice asks for one
-request per five seconds; two manual requests a few seconds apart, then a polite retry loop, kept
-the counter hot. → **Exercise a rate-limited API through the provider, which spaces its own
-requests, never with ad hoc curl.** Written into decision 52 as well.
+**GDELT's 429 was blamed on us for a whole handoff, and it was not ours.** Slice C saw 429s after
+two quick curls and concluded the IP was throttled and would recover. It never recovered, and the
+theory went untested because it was never framed so it could fail. The test took four requests:
+the scheduler's requests were already 30 min apart and still refused; spaced probes 20 s apart
+were refused with or without OR terms, `sourcelang` or a large window; one plain query succeeded
+and the identical URL was refused two minutes later. A limit that depends on neither our rate
+nor our request is the server's load, not our counter. → **Before explaining a failure by our own
+behaviour, vary that behaviour and check that the failure moves with it.** Spacing probes
+beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 
 ## Current technical debt
 
@@ -984,9 +998,9 @@ requests, never with ad hoc curl.** Written into decision 52 as well.
 | No component/DOM tests on the web app | `apps/web/test` | Store and formatting logic covered; rendering is not. Two real UI bugs this session (Discard disabled by its own typo, a deep link that does nothing) were found by *using* the app, not by tests, and neither would have been caught by a DOM test either — but a DOM test would have caught the first |
 | ~~Telegram has no working binding~~ | — | **Resolved 2026-09-24.** A chat is bound. The "receives nothing" mystery was never a Telegram problem: nothing in the repository consumed updates, because M4's polling bridge was a hand-run script that left with its session. Kept as a line so the history of the symptom survives |
 | **Real news needs `NEWS_PROVIDERS=gdelt,fixture` in `.env`** | `.env` | Slice C added the GDELT provider; the code default and `.env.example` stay `fixture` so CI is offline (the same deliberate asymmetry as `MARKET_DATA_PROVIDERS`). Until `.env` names `gdelt`, every live `news_collect` run fetches 0. **Also still unwired:** the narration correlation step - `run_portfolio_scan` is always called with `articles=()`, so no observation cites news yet |
-| **GDELT's success path has never been seen live** | `app/news/gdelt.py` | On 2026-09-27 this machine got HTTP 429 from GDELT for over 15 minutes, starting after two quick manual curls, and including a single request through the provider after 10 idle minutes. The *failure* path is therefore verified against the real API (prose 429 → `NewsProviderError` → run `degraded`); the *success* path is verified only against response shapes taken from GDELT's documentation. **First thing to check once GDELT answers:** `GET /runs?kind=news_collect` shows `providers_used: ["gdelt", ...]` and a non-zero `fetched`. If 429 persists for hours, the IP may be blocked, and GDELT's notice names a contact address for that |
+| **GDELT refuses most requests, and retries cannot fix that** | `app/news/gdelt.py` | Investigated 2026-09-27 (after the first handoff): not an IP block. Scheduler requests 30 min apart were refused; 8 of 9 manual probes spaced 20 s apart were refused whatever the query (one name or eight, with or without `sourcelang`, 24 h or 49 h); the one 200 came back 429 when the same URL was sent again two minutes later; every reply took 11-15 s, 200 or 429. That is GDELT shedding load, and its notice sends heavy users to its ngrams dataset. **Mitigated, not fixed:** two retries with backoff, and partial results kept (decision 52). The first live run of the retrying provider (16:30 UTC that day) was refused on all 3 attempts in 84 s, so retries alone may not be enough. The single live 200 confirmed the `ArtList` field names the parser reads (`url`, `title`, `seendate`, `domain`), so the success path is no longer documentation-only. **How to tell whether it works:** `select stats from runs where kind='news_collect' order by started_at desc` shows a non-zero `fetched` with `gdelt` in `providers_used` (`GET /runs` needs a session cookie). **If runs keep failing:** the backlogged next step is to stop using the DOC API and read GDELT's raw 15-minute files from `data.gdeltproject.org`, which are plain downloads rather than searches (user's decision, 2026-09-27). Writing to the address in the 429 is the other option. **Also:** the fixture provider loads 20 articles and returns 0 to a live run, because they fall outside the 2-day window, so the fallback provides no news either |
 | **Names ending in ", LP" never link to news** | `app/news/entities.py` `core_name` | `core_name` strips "Fund", "Inc" and the like but not a trailing ", LP", so "United States Gasoline Fund, LP" is matched - and searched on GDELT - only by that exact phrase, which prose never writes. **Not fixed on purpose:** 37 instruments in the committed universe have LP names, and `core_name` also shapes the resolver's matching text (`app/universe/matching_text.py`), so the fix moves topic resolution and needs the new held-out batch to measure. Fix both together, or give the news matcher its own rule |
-| **A very large instrument list outruns the collect timeout** | `app/news/gdelt.py` | 8 names per request, 5.5 s apart: 500 instruments (the request cap) is ~63 requests, ~6 min, over the 5-minute `SCAN_TIMEOUT_MS`. Irrelevant at a dozen instruments; the fix when it matters is fewer, wider requests or a per-run instrument budget |
+| **A very large instrument list outruns the collect timeout** | `app/news/gdelt.py` | 8 names per request, 5.5 s apart: 500 instruments (the request cap) is ~63 requests, ~6 min, over the 5-minute `SCAN_TIMEOUT_MS`. Irrelevant at a dozen instruments; the fix when it matters is fewer, wider requests or a per-run instrument budget - **and retries shorten the headroom**: worst case per request is three 30 s timeouts plus 40 s of backoff (~130 s), so even today's dozen instruments (two requests) could need ~260 s of the 300 s budget. That worst case needs GDELT to time out rather than refuse, and refusals so far have taken 11-15 s |
 | Redis cold start refetches everything | `core/cache.py` | The `quotes` table holds usable recent prices; warming from it was deferred |
 | `instruments`, `quotes` and the news tables (and `instrument_profiles`, `etf_holdings`) have no `user_id` | migrations | **Intentional** — shared reference and market data, not user-owned. Documented so an audit does not re-flag it |
 | **Topic resolution finds 14/35 expected tickers on held-out topics** | `app/topics/resolution.py` | Measured on the user's sealed batch; slice 2 did not change it. Causes, measured: one outlier sets the gate; no ETF clears the source floor for cloud/e-commerce/obesity/robot surgery; giants are described too broadly; OTC-only ADRs (LVMUY) are not in the universe. The backlog, ranked, is `docs/TOPIC_RESOLUTION.md` §4 — **and it needs a new held-out batch before any of it can be measured** |
@@ -1033,9 +1047,10 @@ requests, never with ad hoc curl.** Written into decision 52 as well.
 - **As of 2026-09-27 the stack runs `main` at #59 and the database is at `0018_news_collect`**,
   rebuilt with `bash scripts/dev-docker.sh` (no `--reset`). **`.env` has
   `NEWS_PROVIDERS=gdelt,fixture`** (set 2026-09-27 at the user's request; `.env.example` keeps
-  `fixture` - a deliberate asymmetry, do not "fix" it). GDELT answered 429 to every request that
-  day, so `news_collect` runs are `degraded` with `provider_failures: ["gdelt"]` until it
-  does - see the debt table.
+  `fixture` - a deliberate asymmetry, do not "fix" it). GDELT refuses most requests (load, not
+  a block - see the debt table), so most `news_collect` runs are `degraded` with
+  `provider_failures: ["gdelt"]`. The container and the host share one egress IP, so a probe from
+  the host is a fair test of what the service sees.
 - **The stack and the database are in step as of 2026-09-24**: both at `0013_kb_embeddings`,
   images rebuilt from `main` at #47 with `bash scripts/dev-docker.sh` (no `--reset`, so the
   Postgres volume and every holding, quote and observation were kept). Verified rather than
@@ -1159,7 +1174,7 @@ The exit criterion's second half: "a rejected auto-proposal never returns". Two 
   something the user already follows. Discovery needs a different source of themes. The most
   promising idea so far: recurring phrases across collected headlines → `resolve_topic` → propose
   only confident resolutions that are not an active or rejected label. **It needs real news to
-  evaluate**, so check GDELT first (debt table). Proposals count against nothing until confirmed
+  evaluate**, so check whether any GDELT run has stored articles first (debt table). Proposals count against nothing until confirmed
   (`lockTopicsForWrite` counts `active` only), but bound how many can be open at once.
 - After that: topic cards in the UI (topic news + sentiment have APIs and no screen), and M5's
   closing handoff.

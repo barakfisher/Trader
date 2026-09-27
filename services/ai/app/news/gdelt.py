@@ -21,6 +21,12 @@ module, and each was checked against a live response rather than the docs:
     is therefore a `NewsProviderError`, so the run records a provider failure and
     is `degraded`, never an empty feed that reads as a quiet day. Requests within
     one fetch are spaced by `min_interval_seconds`.
+  * **Its 429 is mostly load-shedding, not a verdict on us.** Measured on
+    2026-09-27: requests 20 s and 30 min apart were refused alike, one plain query
+    succeeded and the identical URL was refused two minutes later, and every reply
+    took 11-15 s. So a throttled request is retried after `retry_delays_seconds`,
+    and a batch that still fails does not discard the batches before it: they go
+    out on `NewsProviderError.partial`, and the run is degraded rather than empty.
 
 `published_at` is GDELT's `seendate`: when its crawler first saw the article. It
 is not the publisher's timestamp, and it is used because it is the closest honest
@@ -64,6 +70,18 @@ GDELT_DEFAULT_RECORDS = 75
 
 GDELT_TIMEOUT_SECONDS = 30.0
 
+#: Waits before the second and third attempt at a refused request. A refusal has
+#: taken 11-15 s, so a refused request costs about 80 s in all, and a dozen
+#: instruments (two requests) stays inside the orchestrator's collect timeout.
+GDELT_RETRY_DELAYS_SECONDS: tuple[float, ...] = (10.0, 30.0)
+
+#: The throttle notice, which has also been seen with a 200.
+GDELT_THROTTLE_MARKER = "limit requests"
+
+
+class _Refused(NewsProviderError):
+    """A failure worth retrying: throttled, a server error, or no reply at all."""
+
 
 class GdeltNewsProvider:
     name = "gdelt"
@@ -78,6 +96,7 @@ class GdeltNewsProvider:
         *,
         transport: httpx.AsyncBaseTransport | None = None,
         min_interval_seconds: float = GDELT_MIN_INTERVAL_SECONDS,
+        retry_delays_seconds: Sequence[float] = GDELT_RETRY_DELAYS_SECONDS,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
@@ -85,6 +104,7 @@ class GdeltNewsProvider:
         # hermetic: no test of this module reaches the network.
         self._transport = transport
         self._min_interval = min_interval_seconds
+        self._retry_delays = tuple(retry_delays_seconds)
         self._sleep = sleep
         self._clock = clock
         self._last_request: float | None = None
@@ -106,7 +126,18 @@ class GdeltNewsProvider:
         articles: list[RawArticle] = []
         for start in range(0, len(terms), GDELT_TERMS_PER_REQUEST):
             chunk = terms[start : start + GDELT_TERMS_PER_REQUEST]
-            articles.extend(await self._search(_or_query(chunk), since, limit))
+            try:
+                articles.extend(await self._search(_or_query(chunk), since, limit))
+            except NewsProviderError as exc:
+                # Later batches are not attempted: GDELT has just refused three
+                # times, and more requests into a refusing server buy nothing.
+                log.warning(
+                    "news.gdelt.batch_failed",
+                    batch=start // GDELT_TERMS_PER_REQUEST,
+                    kept=len(articles),
+                )
+                exc.partial = articles
+                raise
         return articles
 
     async def fetch_for_query(
@@ -132,6 +163,16 @@ class GdeltNewsProvider:
             "maxrecords": str(min(limit or GDELT_DEFAULT_RECORDS, GDELT_MAX_RECORDS)),
             "timespan": f"{hours}h",
         }
+        for attempt, delay in enumerate(self._retry_delays, start=1):
+            try:
+                return self._articles(await self._request(params), since)
+            except _Refused as exc:
+                log.info("news.gdelt.retry", attempt=attempt, delay=delay, error=str(exc))
+                await self._sleep(delay)
+        # The last attempt: a refusal here is the provider's failure.
+        return self._articles(await self._request(params), since)
+
+    async def _request(self, params: dict[str, str]) -> dict[str, Any]:
         await self._space_requests()
         try:
             async with httpx.AsyncClient(
@@ -139,16 +180,25 @@ class GdeltNewsProvider:
             ) as client:
                 response = await client.get(GDELT_DOC_URL, params=params)
         except httpx.HTTPError as exc:
-            raise NewsProviderError(self.name, f"request failed: {exc.__class__.__name__}") from exc
+            raise _Refused(self.name, f"request failed: {exc.__class__.__name__}") from exc
         finally:
             self._last_request = time.monotonic()
 
         payload = _json_object(response)
         if response.status_code != 200 or payload is None:
-            # The throttle notice is prose; quote its start so GET /runs says why.
-            raise NewsProviderError(
-                self.name, f"HTTP {response.status_code}: {response.text[:80].strip()}"
+            # The throttle notice is prose; quote its start so the log says why.
+            message = f"HTTP {response.status_code}: {response.text[:80].strip()}"
+            retryable = (
+                response.status_code == 429
+                or response.status_code >= 500
+                or GDELT_THROTTLE_MARKER in response.text
             )
+            # Anything else (a query GDELT calls malformed) fails the same way
+            # every time, so it is not retried.
+            raise (_Refused if retryable else NewsProviderError)(self.name, message)
+        return payload
+
+    def _articles(self, payload: dict[str, Any], since: datetime) -> list[RawArticle]:
         rows = payload.get("articles") or []
         articles = [article for row in rows if (article := _to_article(row)) is not None]
         cutoff = since.astimezone(UTC)

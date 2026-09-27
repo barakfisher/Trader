@@ -177,9 +177,18 @@ class NewsIngestion:
                 # carry news, and a partial feed reported as partial is worth more
                 # than a failed run.
                 log.warning(
-                    "news.ingestion.provider_failed", provider=provider.name, error=str(exc)
+                    "news.ingestion.provider_failed",
+                    provider=provider.name,
+                    error=str(exc),
+                    salvaged=len(exc.partial),
                 )
                 failures.append(provider.name)
+                if exc.partial:
+                    # Failed partway: the run is degraded, and the articles it
+                    # did fetch are still news. Listed as used too, because it
+                    # supplied some of this pass's articles.
+                    used.append(provider.name)
+                    articles.extend(exc.partial)
                 continue
             used.append(provider.name)
             articles.extend(batch)
