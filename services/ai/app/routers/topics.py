@@ -1,4 +1,5 @@
 """`POST /topics/resolve` (FR-10, M5): a theme in, candidate instruments out.
+`POST /topics/discover` (FR-11): recurring phrases in collected headlines.
 
 Thin, like every router here: the resolver is `app/topics/resolution.py` and
 its reasoning is in `docs/TOPIC_RESOLUTION.md`. This checks that there is a
@@ -22,6 +23,8 @@ decides, and that decision is recorded by the orchestrator, not here.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.engine import Engine
 
@@ -30,13 +33,20 @@ from app.corpus.retrieval import _NON_SEMANTIC_MODELS
 from app.db import get_engine
 from app.deps import get_embedder, require_internal_key
 from app.models import (
+    DiscoveredHeadline,
+    DiscoveredPhrase,
     TopicCandidateOut,
+    TopicDiscoverRequest,
+    TopicDiscoverResponse,
     TopicHolder,
     TopicInterpretationOut,
     TopicResolveRequest,
     TopicResolveResponse,
     UniverseCoverageOut,
 )
+from app.news.entities import InstrumentRef, name_aliases
+from app.news.queries import load_window_headlines
+from app.topics.discovery import MIN_ARTICLES, MIN_SOURCES, recurring_phrases
 from app.topics.resolution import NOTHING_BELOW, STRONG_ABOVE, TopicResolution, resolve_topic
 from app.universe.profiles import UniverseCoverage, coverage
 
@@ -112,3 +122,58 @@ async def resolve(
             )
         resolution = await resolve_topic(connection, embedder, topic)
     return _response(resolution, covered)
+
+
+@router.post("/topics/discover", response_model=TopicDiscoverResponse)
+async def discover(
+    payload: TopicDiscoverRequest,
+    engine: Engine = Depends(get_engine),
+) -> TopicDiscoverResponse:
+    """Recurring phrases in the last `days` of headlines. Reads; stores nothing.
+
+    No embedding happens here. The orchestrator filters the phrases against the
+    user's topics and rejection memory first, and resolves only what survives -
+    so a theme the user rejected costs nothing on the day it recurs.
+    """
+    since = datetime.now(UTC) - timedelta(days=payload.days)
+    names: list[str] = []
+    for item in payload.instruments:
+        ref = InstrumentRef(
+            symbol=item.symbol.upper(),
+            name=item.name,
+            asset_class=item.asset_class,
+            instrument_id=item.instrument_id,
+        )
+        # Tickers of two letters are ordinary words too often ("AI" is C3.ai);
+        # cutting those out of every headline would cost real themes.
+        if len(ref.symbol) >= 3:
+            names.append(ref.symbol)
+        names.extend(name_aliases(ref))
+    with engine.connect() as connection:
+        headlines = load_window_headlines(connection, since=since)
+    phrases = recurring_phrases(headlines, exclude_names=names)[: payload.limit]
+    return TopicDiscoverResponse(
+        since=since,
+        days=payload.days,
+        headlines=len(headlines),
+        min_articles=MIN_ARTICLES,
+        min_sources=MIN_SOURCES,
+        phrases=[
+            DiscoveredPhrase(
+                phrase=p.text,
+                words=list(p.key),
+                article_count=p.article_count,
+                source_count=p.source_count,
+                headlines=[
+                    DiscoveredHeadline(
+                        article_id=h.article_id,
+                        title=h.title,
+                        source=h.source,
+                        published_at=h.published_at,
+                    )
+                    for h in p.headlines
+                ],
+            )
+            for p in phrases
+        ],
+    )

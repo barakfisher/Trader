@@ -67,7 +67,10 @@ demoable, with explicit exit criteria.
 - Per-topic sentiment trend, topic cards, digest topic section.
 - Resolution design, measurements and the improvement backlog: [TOPIC_RESOLUTION.md](TOPIC_RESOLUTION.md).
 
-**Exit:** a free-text topic resolves to a sensible confirmed instrument set and produces topic observations; a rejected auto-proposal never returns.
+**Exit:** a free-text topic resolves to a sensible confirmed instrument set and produces topic observations; a rejected auto-proposal does not return within the rejection cooldown (`TOPIC_REJECTION_COOLDOWN_DAYS`, default 90).
+
+*Amended 2026-09-27:* the criterion originally said "never returns". Rejection memory is a cooldown by
+the user's decision, because interests change; the rejected row itself is kept. See MEMORY.md decision 56.
 
 ---
 

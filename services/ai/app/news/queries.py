@@ -27,6 +27,7 @@ from sqlalchemy import text
 from app.core.logging import get_logger
 from app.news.article import IngestedArticle
 from app.news.ingestion import KnownHashes
+from app.topics.discovery import Headline
 
 log = get_logger("news.queries")
 
@@ -204,3 +205,29 @@ def _article_id(connection: object, url_hash: str) -> str | None:
         SQL_ARTICLE_ID_BY_URL_HASH, {"url_hash": url_hash}
     ).first()
     return str(row.id) if row is not None else None
+
+
+#: The window's headlines for theme discovery (`app/topics/discovery.py`).
+#: Syndicated copies are skipped: one story republished five times is one
+#: signal, which is what `duplicate_of_id` exists to say. Undated articles are
+#: placed by when they were fetched, so a provider that omits dates still counts.
+SQL_WINDOW_HEADLINES = text(
+    """
+    SELECT id::text AS id, title, source, published_at
+      FROM articles
+     WHERE duplicate_of_id IS NULL
+       AND coalesce(published_at, fetched_at) >= :since
+     ORDER BY coalesce(published_at, fetched_at) DESC, id
+    """
+)
+
+
+def load_window_headlines(connection: object, *, since: datetime) -> list[Headline]:
+    """Every distinct headline published (or, if undated, fetched) since `since`."""
+    rows = connection.execute(SQL_WINDOW_HEADLINES, {"since": since})  # type: ignore[attr-defined]
+    return [
+        Headline(
+            article_id=row.id, title=row.title, source=row.source, published_at=row.published_at
+        )
+        for row in rows
+    ]

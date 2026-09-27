@@ -528,6 +528,29 @@ export interface TopicSummary {
   /** When the user last confirmed the instrument set; null for an unconfirmed proposal. */
   confirmedAt: string | null;
   instrumentCount: number;
+  /**
+   * Why auto-discovery proposed it (FR-11); null for a topic the user created.
+   * Kept after the proposal is accepted, so the card can still say where it came from.
+   */
+  evidence: TopicEvidence | null;
+}
+
+/**
+ * The reason behind an auto-proposal. Every value is copied from stored data -
+ * the phrase and headlines verbatim, the symbols from the resolver's confident
+ * candidates - so a proposal never says anything the news did not.
+ */
+export interface TopicEvidence {
+  /** The phrase as the headlines spelled it most often. */
+  phrase: string;
+  /** Distinct articles, and distinct outlets, it appeared in within the window. */
+  articleCount: number;
+  sourceCount: number;
+  windowDays: number;
+  /** Up to five of those headlines, verbatim. */
+  headlines: { articleId: string; title: string; source: string; publishedAt: string | null }[];
+  /** What the resolver was confident about when it was proposed. Not a confirmed set. */
+  symbols: string[];
 }
 
 /**
@@ -635,6 +658,10 @@ export interface TopicLimits {
   maxActiveTopics: number;
   maxInstrumentsPerTopic: number;
   maxLabelLength: number;
+  /** Auto-proposals that may be open at once. */
+  maxOpenProposals: number;
+  /** Days a declined proposal's theme is not proposed again. */
+  rejectionCooldownDays: number;
 }
 
 export interface TopicsResponse {
