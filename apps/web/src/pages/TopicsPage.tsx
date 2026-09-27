@@ -8,7 +8,14 @@ import type { TopicCandidate } from '@traders/shared/ai';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Button, Card, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
-import { coverageNote, heldByText, verdictMessage } from '../lib/topicPresentation.ts';
+import { formatAge } from '../lib/relativeTime.ts';
+import {
+  coverageNote,
+  heldByText,
+  newsEmptyMessage,
+  sentimentSummary,
+  verdictMessage,
+} from '../lib/topicPresentation.ts';
 import type { Composer } from '../stores/TopicsStore.ts';
 import { useStore } from '../stores/context.tsx';
 
@@ -255,7 +262,79 @@ const DetailCard = observer(function DetailCard({ topic }: { topic: TopicDetail 
           <ConfirmedRow key={instrument.instrumentId} instrument={instrument} />
         ))}
       </ul>
+      <ToneSection />
+      <NewsSection />
     </Card>
+  );
+});
+
+/** The topic's tone: a score with the counts behind it, or the reason there is none. */
+const ToneSection = observer(function ToneSection() {
+  const { topics } = useStore();
+  return (
+    <section className="mt-5 border-t border-border-subtle pt-4">
+      <h3 className="mb-1 text-sm font-semibold">Tone this week</h3>
+      {topics.sentimentError ? (
+        <p className="text-xs text-text-muted">{topics.sentimentError}</p>
+      ) : topics.sentiment === null ? (
+        <Spinner label="Reading the tone…" />
+      ) : (
+        <ToneLine />
+      )}
+    </section>
+  );
+});
+
+const ToneLine = observer(function ToneLine() {
+  const { topics } = useStore();
+  const summary = sentimentSummary(topics.sentiment!);
+  return (
+    <p className="text-sm">
+      {summary.score !== null && <span className="mr-2 font-semibold tabular-nums">{summary.score}</span>}
+      <span className="text-xs text-text-muted">{summary.text}</span>
+    </p>
+  );
+});
+
+/** The topic's week of news, newest first, each with the instrument that tied it here. */
+const NewsSection = observer(function NewsSection() {
+  const { topics } = useStore();
+  const news = topics.news;
+  return (
+    <section className="mt-5 border-t border-border-subtle pt-4">
+      <h3 className="mb-1 text-sm font-semibold">News this week</h3>
+      {topics.newsError ? (
+        <p className="text-xs text-text-muted">{topics.newsError}</p>
+      ) : news === null ? (
+        <Spinner label="Loading news…" />
+      ) : news.articles.length === 0 ? (
+        <p className="text-xs text-text-muted">
+          {newsEmptyMessage(news.collection, news.days)}
+          {news.collection && ` Last collection ${formatAge(news.collection.lastRunAt)}.`}
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {news.articles.map((article) => (
+            <li key={article.id} className="text-sm">
+              <a
+                href={article.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-accent hover:underline"
+              >
+                {article.title}
+              </a>
+              <p className="text-xs text-text-muted">
+                {article.source} · {formatAge(article.publishedAt ?? article.fetchedAt)}
+                {article.publishedAt === null && ' (found; publish date unknown)'}
+                {article.instruments.length > 0 &&
+                  ` · about ${article.instruments.map((i) => i.symbol).join(', ')}`}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 });
 
