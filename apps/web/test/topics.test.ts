@@ -33,9 +33,15 @@ vi.mock('../src/api/client.ts', () => ({
 
 const { RootStore } = await import('../src/stores/RootStore.ts');
 const { ApiRequestError } = await import('../src/api/client.ts');
-const { coverageNote, fundShare, heldByText, verdictMessage } = await import(
-  '../src/lib/topicPresentation.ts'
-);
+const {
+  coverageNote,
+  fundShare,
+  heldByText,
+  newsEmptyMessage,
+  sentimentSummary,
+  signedScore,
+  verdictMessage,
+} = await import('../src/lib/topicPresentation.ts');
 
 const LIMITS = {
   maxActiveTopics: 10,
@@ -363,4 +369,107 @@ describe('what the screen says', () => {
       ]),
     ).toBe('held by URA 21.9%, NLR 4.0%');
   });
+});
+
+
+describe('the topic card', () => {
+  const COLLECTED = { lastRunAt: '2026-09-27T14:01:12Z', failedProviders: [] as string[] };
+
+  it('never calls a week quiet when the news could not be read', () => {
+    const failing = newsEmptyMessage({ ...COLLECTED, status: 'degraded', failedProviders: ['gdelt'] }, 7);
+    expect(failing).not.toMatch(/No news about/);
+    expect(failing).toMatch(/may not mean a quiet week/);
+    expect(failing).toMatch(/gdelt/);
+    expect(newsEmptyMessage({ ...COLLECTED, status: 'failed' }, 7)).toMatch(/stories may be missing/);
+  });
+
+  it('calls a week quiet only after a clean collection', () => {
+    expect(newsEmptyMessage({ ...COLLECTED, status: 'ok' }, 7)).toBe(
+      'No news about this topic’s instruments in the last 7 days.',
+    );
+  });
+
+  it('says so when news was never collected', () => {
+    expect(newsEmptyMessage(null, 7)).toMatch(/has not been collected yet/);
+  });
+
+  it.each([
+    ['0.4125', '+0.41'],
+    ['-0.4199', '−0.41'],
+    ['1', '+1.00'],
+    ['0.0040', '0.00'],
+    ['-0.0040', '0.00'],
+  ])('shows score %s as %s, truncated and signed', (score, shown) => {
+    expect(signedScore(score)).toBe(shown);
+  });
+
+  const SENTIMENT = {
+    topicId: 't1',
+    days: 7,
+    model: 'lexicon-v1',
+    otherModels: [],
+    daily: [],
+    behind: [],
+  };
+
+  it('never shows a missing tone as zero', () => {
+    const summary = sentimentSummary({
+      ...SENTIMENT,
+      score: null,
+      gap: 'too_few_polarised',
+      counts: { articles: 4, unscored: 0, positive: 1, negative: 0, neutral: 3 },
+    });
+    expect(summary.score).toBeNull();
+    expect(summary.text).toMatch(/too few articles/);
+  });
+
+  it('shows a tone with the counts it rests on', () => {
+    const summary = sentimentSummary({
+      ...SENTIMENT,
+      score: '-0.2500',
+      gap: null,
+      counts: { articles: 5, unscored: 0, positive: 1, negative: 3, neutral: 1 },
+    });
+    expect(summary.score).toBe('−0.25');
+    expect(summary.text).toMatch(/5 articles \(1 positive, 3 negative, 1 neutral\)/);
+  });
+
+  it('loads news and tone with the topic, and keeps one when the other fails', async () => {
+    const topics = await loadedStore();
+    const detail = { id: 't1', label: 'uranium', status: 'active', instruments: [] };
+    const news = { topicId: 't1', days: 7, articles: [], collection: null };
+    get.mockImplementation(async (path: string) => {
+      if (path === '/topics/t1') return detail;
+      if (path === '/topics/t1/news') return news;
+      throw new ApiRequestError('sentiment is down', 502, 'upstream_failure');
+    });
+
+    await topics.open('t1');
+    await vi.waitFor(() => expect(topics.sentimentError).not.toBeNull());
+
+    expect(topics.detail).toEqual(detail);
+    expect(topics.news).toEqual(news);
+    expect(topics.sentiment).toBeNull();
+  });
+
+  it('drops a late answer for a topic that is no longer open', async () => {
+    const topics = await loadedStore();
+    let releaseA: (value: unknown) => void = () => {};
+    get.mockImplementation(async (path: string) => {
+      if (path === '/topics/a/news') return new Promise((resolve) => (releaseA = resolve));
+      if (path.startsWith('/topics/a')) return new Promise(() => {});
+      if (path === '/topics/b') return { id: 'b', label: 'b', status: 'active', instruments: [] };
+      if (path === '/topics/b/news') return { topicId: 'b', days: 7, articles: [], collection: null };
+      return new Promise(() => {});
+    });
+
+    void topics.open('a');
+    await topics.open('b');
+    releaseA({ topicId: 'a', days: 7, articles: [], collection: null });
+    await vi.waitFor(() => expect(topics.news?.topicId).toBe('b'));
+    await Promise.resolve();
+
+    expect(topics.news?.topicId).toBe('b');
+  });
+
 });

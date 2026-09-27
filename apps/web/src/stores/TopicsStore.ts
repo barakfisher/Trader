@@ -1,6 +1,14 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 
-import type { TopicConfirmRequest, TopicDetail, TopicLimits, TopicSummary, TopicsResponse } from '@traders/shared';
+import type {
+  TopicConfirmRequest,
+  TopicDetail,
+  TopicLimits,
+  TopicNewsResponse,
+  TopicSentimentResponse,
+  TopicSummary,
+  TopicsResponse,
+} from '@traders/shared';
 import type { TopicCandidate, TopicResolveResponse } from '@traders/shared/ai';
 
 import { ApiRequestError, api } from '../api/client.ts';
@@ -31,6 +39,18 @@ export class TopicsStore {
   /** The topic whose confirmed instruments are on screen, if any. */
   detail: TopicDetail | null = null;
   detailLoading = false;
+
+  /**
+   * The open topic's card: its week of news and its tone. Each loads on its own
+   * and fails on its own, so a broken sentiment call never hides the news, and
+   * neither hides the instruments.
+   */
+  news: TopicNewsResponse | null = null;
+  newsError: string | null = null;
+  sentiment: TopicSentimentResponse | null = null;
+  sentimentError: string | null = null;
+  /** Which topic `news` and `sentiment` belong to: a late answer for another is dropped. */
+  cardTopicId: string | null = null;
 
   /** The confirm screen. Null while it is closed. */
   composer: Composer | null = null;
@@ -86,6 +106,12 @@ export class TopicsStore {
   async open(topicId: string): Promise<void> {
     this.detailLoading = true;
     this.error = null;
+    this.news = null;
+    this.newsError = null;
+    this.sentiment = null;
+    this.sentimentError = null;
+    this.cardTopicId = topicId;
+    void this.loadCard(topicId);
     try {
       const detail = await api.get<TopicDetail>(`/topics/${topicId}`);
       runInAction(() => {
@@ -102,8 +128,41 @@ export class TopicsStore {
     }
   }
 
+  /** The card's two halves, each recorded only if the same topic is still open. */
+  private async loadCard(topicId: string): Promise<void> {
+    const stillOpen = () => this.cardTopicId === topicId;
+    const loadNews = async () => {
+      try {
+        const news = await api.get<TopicNewsResponse>(`/topics/${topicId}/news`);
+        runInAction(() => {
+          if (stillOpen()) this.news = news;
+        });
+      } catch (error) {
+        runInAction(() => {
+          if (stillOpen()) this.newsError = messageOf(error, 'Could not load this topic’s news.');
+        });
+      }
+    };
+    const loadSentiment = async () => {
+      try {
+        const sentiment = await api.get<TopicSentimentResponse>(`/topics/${topicId}/sentiment`);
+        runInAction(() => {
+          if (stillOpen()) this.sentiment = sentiment;
+        });
+      } catch (error) {
+        runInAction(() => {
+          if (stillOpen()) this.sentimentError = messageOf(error, 'Could not load this topic’s tone.');
+        });
+      }
+    };
+    await Promise.all([loadNews(), loadSentiment()]);
+  }
+
   closeDetail(): void {
     this.detail = null;
+    this.cardTopicId = null;
+    this.news = null;
+    this.sentiment = null;
   }
 
   /** Open an empty confirm screen for a new topic. */
@@ -186,6 +245,13 @@ export class TopicsStore {
   adoptSaved(topic: TopicDetail): void {
     this.composer = null;
     this.detail = topic;
+    // A changed set changes which articles are the topic's, so the card reloads.
+    this.news = null;
+    this.sentiment = null;
+    this.newsError = null;
+    this.sentimentError = null;
+    this.cardTopicId = topic.id;
+    void this.loadCard(topic.id);
     void this.load();
   }
 

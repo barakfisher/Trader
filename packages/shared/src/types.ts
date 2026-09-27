@@ -605,6 +605,19 @@ export interface TopicNewsResponse {
   /** The window the articles were published in, in days. */
   days: number;
   articles: TopicArticle[];
+  /**
+   * The latest finished news collection, so an empty `articles` can say which
+   * empty it is: a quiet week (`ok`) or news the app could not get (`degraded`,
+   * `failed`). Null when news has never been collected.
+   */
+  collection: NewsCollectionState | null;
+}
+
+export interface NewsCollectionState {
+  lastRunAt: string;
+  status: 'ok' | 'degraded' | 'failed' | 'skipped';
+  /** Providers that refused or errored in that run, by name ("gdelt"). */
+  failedProviders: string[];
 }
 
 /** Why a topic's sentiment score is null. Never a zero standing in for "unknown". */

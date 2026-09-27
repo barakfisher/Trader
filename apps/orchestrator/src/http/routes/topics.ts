@@ -37,6 +37,7 @@ import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 
 import type {
+  NewsCollectionState,
   TopicDetail,
   TopicNewsResponse,
   TopicSentimentResponse,
@@ -47,6 +48,7 @@ import { AiServiceError } from '@traders/shared/ai';
 
 import {
   deleteTopic,
+  getLatestFinishedRun,
   getTopic,
   getUser,
   listTopicArticles,
@@ -203,6 +205,16 @@ async function confirmed(context: Context<AppEnv>, topicIdOrNull: string | null)
   return detail(outcome.topic, outcome.instruments);
 }
 
+/** A finished `news_collect` run as the topic card needs it. */
+function collectionState(run: { started_at: Date; status: string; stats: unknown }): NewsCollectionState {
+  const failures = (run.stats as { provider_failures?: unknown } | null)?.provider_failures;
+  return {
+    lastRunAt: run.started_at.toISOString(),
+    status: run.status as NewsCollectionState['status'],
+    failedProviders: Array.isArray(failures) ? failures.filter((f): f is string => typeof f === 'string') : [],
+  };
+}
+
 /** How far back a topic's news reaches: a week, the span a topic card summarises. */
 export const TOPIC_NEWS_DAYS = 7;
 
@@ -260,14 +272,17 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
   /**
    * The topic's news, newest first. Empty is a real answer - but an empty
    * `articles` list cannot tell "a quiet week" from "nothing collects news", so
-   * GET /runs?kind=news_collect is where that question is answered.
+   * the latest collection run travels with it as `collection`.
    */
   app.get('/topics/:id/news', async (context) => {
     const userId = currentUserId(context);
     const id = parseTopicId(context.req.param('id'));
     const topic = await getTopic(userId, id);
     if (!topic) throw notFound('no such topic');
-    const rows = await listTopicArticles(userId, id, TOPIC_NEWS_DAYS);
+    const [rows, lastRun] = await Promise.all([
+      listTopicArticles(userId, id, TOPIC_NEWS_DAYS),
+      getLatestFinishedRun(userId, 'news_collect'),
+    ]);
     const body: TopicNewsResponse = {
       topicId: id,
       days: TOPIC_NEWS_DAYS,
@@ -286,6 +301,7 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
         })),
         sentiment: row.sentiment,
       })),
+      collection: lastRun ? collectionState(lastRun) : null,
     };
     return context.json(body);
   });
