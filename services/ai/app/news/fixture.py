@@ -24,6 +24,7 @@ would make every test that involves a window meaningless.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -62,6 +63,7 @@ class FixtureNewsProvider:
         since: datetime,
         *,
         limit: int | None = None,
+        names: Mapping[str, Sequence[str]] | None = None,
     ) -> list[RawArticle]:
         return self._window(since, limit)
 

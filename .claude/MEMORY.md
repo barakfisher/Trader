@@ -524,6 +524,16 @@ failure they prevent.
     `GET /topics/:id/news` joins `topic_instruments` → `article_entities` → `articles` at read
     time. `topic_ref` stays unused for GDELT's query-found articles that name no instrument.
     The `news_collect` matcher sees held and topic instruments only, never the universe.
+
+52. **GDELT is queried by the matcher's own name aliases, and returns headlines only.** The
+    provider contract gained an optional `names` keyword (symbol → spellings `entities.py` links
+    by), passed only when a caller has names, so older providers are untouched. Searching any
+    other spelling fetches articles that can never link. GDELT's `ArtList` has no body, so the
+    headline is the body and sentiment is headline sentiment; `published_at` is GDELT's
+    `seendate`. **Its throttle notice is prose, sometimes with a 200**: anything that is not a
+    JSON object is a provider failure, so the run is `degraded`, never a quiet-looking empty
+    feed. Two quick manual requests got this session's IP throttled for minutes: **test it
+    through the provider, which spaces requests 5.5 s apart, not with curl in a loop.**
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -934,7 +944,9 @@ data**, and it is better met here than in production.
 | **The Topics screen has never been looked at in a browser** | `apps/web/src/pages/TopicsPage.tsx` | #55 is tested at the store level (18 tests) and served by the running stack, but signing in needs the passphrase, which a session does not type. Layout, wrapping at mobile width and the long rationale quotes are unverified. The first person to open it is the first test of its layout |
 | No component/DOM tests on the web app | `apps/web/test` | Store and formatting logic covered; rendering is not. Two real UI bugs this session (Discard disabled by its own typo, a deep link that does nothing) were found by *using* the app, not by tests, and neither would have been caught by a DOM test either — but a DOM test would have caught the first |
 | ~~Telegram has no working binding~~ | — | **Resolved 2026-09-24.** A chat is bound. The "receives nothing" mystery was never a Telegram problem: nothing in the repository consumed updates, because M4's polling bridge was a hand-run script that left with its session. Kept as a line so the history of the symptom survives |
-| **News is collected, but only from a fixture** | `app/news/registry.py` | Slice B gave the pipeline a caller (`news_collect`, every 30 min, 48 h lookback). The only provider is still a 20-article fixture dated 14-16 Sept 2026, so in a live installation every run fetches 0 and `articles` stays empty. GDELT is the chosen real provider (user, 2026-09-27: no dev-only keys) and is slice C. **Also still unwired:** the narration correlation step - `run_portfolio_scan` is always called with `articles=()` |
+| **Real news needs `NEWS_PROVIDERS=gdelt,fixture` in `.env`** | `.env` | Slice C added the GDELT provider; the code default and `.env.example` stay `fixture` so CI is offline (the same deliberate asymmetry as `MARKET_DATA_PROVIDERS`). Until `.env` names `gdelt`, every live `news_collect` run fetches 0. **Also still unwired:** the narration correlation step - `run_portfolio_scan` is always called with `articles=()`, so no observation cites news yet |
+| **GDELT's success path has never been seen live** | `app/news/gdelt.py` | On 2026-09-27 this machine got HTTP 429 from GDELT for over 15 minutes, starting after two quick manual curls, and including a single request through the provider after 10 idle minutes. The *failure* path is therefore verified against the real API (prose 429 → `NewsProviderError` → run `degraded`); the *success* path is verified only against response shapes taken from GDELT's documentation. **First thing to check once GDELT answers:** `GET /runs?kind=news_collect` shows `providers_used: ["gdelt", ...]` and a non-zero `fetched`. If 429 persists for hours, the IP may be blocked, and GDELT's notice names a contact address for that |
+| **A very large instrument list outruns the collect timeout** | `app/news/gdelt.py` | 8 names per request, 5.5 s apart: 500 instruments (the request cap) is ~63 requests, ~6 min, over the 5-minute `SCAN_TIMEOUT_MS`. Irrelevant at a dozen instruments; the fix when it matters is fewer, wider requests or a per-run instrument budget |
 | Redis cold start refetches everything | `core/cache.py` | The `quotes` table holds usable recent prices; warming from it was deferred |
 | `instruments`, `quotes` and the news tables (and `instrument_profiles`, `etf_holdings`) have no `user_id` | migrations | **Intentional** — shared reference and market data, not user-owned. Documented so an audit does not re-flag it |
 | **Topic resolution finds 14/35 expected tickers on held-out topics** | `app/topics/resolution.py` | Measured on the user's sealed batch; slice 2 did not change it. Causes, measured: one outlier sets the gate; no ETF clears the source floor for cloud/e-commerce/obesity/robot surgery; giants are described too broadly; OTC-only ADRs (LVMUY) are not in the universe. The backlog, ranked, is `docs/TOPIC_RESOLUTION.md` §4 — **and it needs a new held-out batch before any of it can be measured** |
@@ -1118,8 +1130,10 @@ and §5 before changing a threshold.
    backfill covers active topics' instruments (`listAnalysedInstruments`), a confirm backfills its
    instruments at once, and `topic_move` findings land in the feed labelled by topic name. **Two
    layers were missing underneath, and one still is: no news is ever collected** (see the debt
-   table). **Slice B is written** (`news_collect` run, `GET /topics/:id/news`, decision 51), on a local
-   branch waiting for #57 to merge. **Slice C is GDELT** (user's choice: keyless). The notes
+   table). **Slice B** (`news_collect` run, `GET /topics/:id/news`, decision 51) and **slice C** (GDELT,
+   decision 52) are written on local branches `claude/topicscan-news-slice-b` and
+   `claude/topicscan-gdelt-slice-c`, each on top of the previous, waiting for #57 to merge -
+   CLAUDE.md forbids stacked PRs, so each opens against `main` after the one before it lands. The notes
    below were written for slice B.
    - Scheduled through `POST /internal/runs` like every other run (guideline 8), with a
      `dedupe_key` per observation.
