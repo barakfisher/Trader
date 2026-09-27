@@ -25,7 +25,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
 from app.news.base import NewsProvider
-from app.news.entities import EntityMatcher, InstrumentRef
+from app.news.entities import EntityMatcher, InstrumentRef, name_aliases
 from app.news.ingestion import NewsIngestion
 from app.news.queries import load_known_hashes, store_ingested
 from app.news.sentiment import SentimentScorer
@@ -51,6 +51,7 @@ async def collect_news(
         since,
         known=load_known_hashes(connection, since=since),
         limit_per_provider=limit_per_provider,
+        names={instrument.symbol: name_aliases(instrument) for instrument in instruments},
         now=moment,
     )
     inserted = store_ingested(connection, result.articles)

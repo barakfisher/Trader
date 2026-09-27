@@ -350,6 +350,16 @@ def _name_aliases(instrument: InstrumentRef) -> list[str]:
     return aliases
 
 
+def name_aliases(instrument: InstrumentRef) -> list[str]:
+    """The names this module will link `instrument` by, longest first.
+
+    Public so a text-search provider can ask for exactly what the matcher will
+    accept: fetching by any other spelling would bring back articles that can
+    never be linked, and missing one of these would leave linkable news unfetched.
+    """
+    return _name_aliases(instrument)
+
+
 def _core_name(instrument: InstrumentRef) -> str:
     return core_name(instrument.name, asset_class=instrument.asset_class)
 

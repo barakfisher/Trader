@@ -20,6 +20,7 @@ from app.config import Settings
 from app.core.logging import get_logger
 from app.news.base import NewsProvider
 from app.news.fixture import FixtureNewsProvider
+from app.news.gdelt import GdeltNewsProvider
 
 log = get_logger("news.registry")
 
@@ -30,8 +31,12 @@ def build_news_providers(settings: Settings) -> list[NewsProvider]:
     for name in settings.news_chain:
         if name == "fixture":
             providers.append(FixtureNewsProvider(settings.fixtures_dir))
+        elif name == "gdelt":
+            # Keyless, so there is nothing to validate at boot: a GDELT outage is
+            # a provider failure on a run, recorded as one.
+            providers.append(GdeltNewsProvider())
         else:
-            # newsapi, gdelt and the rest plug in here as they are implemented.
+            # newsapi and the rest plug in here as they are implemented.
             # An unknown name is a configuration mistake worth surfacing: silently
             # dropping it would leave a deployment convinced it has news.
             log.warning("news.registry.unknown_provider", provider=name)

@@ -26,6 +26,7 @@ would then be storing as evidence. Every link in this system is made by
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Protocol, runtime_checkable
 
@@ -66,6 +67,7 @@ class NewsProvider(Protocol):
         since: datetime,
         *,
         limit: int | None = None,
+        names: Mapping[str, Sequence[str]] | None = None,
     ) -> list[RawArticle]:
         """Articles plausibly about `symbols`, published at or after `since`.
 
@@ -73,6 +75,12 @@ class NewsProvider(Protocol):
         decides what an article is about. Returning too much is safe, and
         returning nothing is a valid answer - raising is reserved for a provider
         that is broken.
+
+        `names` maps a symbol to the spellings the entity matcher links it by.
+        A per-symbol news API can ignore it; a full-text search (GDELT) cannot
+        work without it, because "NVDA" rarely appears in prose and "Nvidia"
+        does. Added when the first such provider arrived, as an optional keyword
+        so no existing provider changed.
         """
         ...
 

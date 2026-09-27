@@ -27,7 +27,7 @@ table with no pipeline.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -112,6 +112,7 @@ class NewsIngestion:
         *,
         known: KnownHashes | None = None,
         limit_per_provider: int | None = None,
+        names: Mapping[str, Sequence[str]] | None = None,
         now: datetime | None = None,
     ) -> IngestionResult:
         """Run the pass for `symbols` over articles published at or after `since`.
@@ -124,7 +125,7 @@ class NewsIngestion:
         fetched_at = (now or datetime.now(UTC)).astimezone(UTC)
         known = known or KnownHashes()
 
-        raw, used, failures = await self._fetch(symbols, since, limit_per_provider)
+        raw, used, failures = await self._fetch(symbols, since, limit_per_provider, names)
         candidates, counters = self._dedupe(raw, known, fetched_at)
 
         articles: list[IngestedArticle] = []
@@ -160,13 +161,17 @@ class NewsIngestion:
         symbols: list[str],
         since: datetime,
         limit: int | None,
+        names: Mapping[str, Sequence[str]] | None = None,
     ) -> tuple[list[RawArticle], list[str], list[str]]:
         articles: list[RawArticle] = []
         used: list[str] = []
         failures: list[str] = []
         for provider in self._providers:
             try:
-                batch = await provider.fetch_for_symbols(symbols, since, limit=limit)
+                # `names` only when there are any: a provider written before the
+                # keyword existed keeps working for every caller that has none.
+                extra = {"names": names} if names is not None else {}
+                batch = await provider.fetch_for_symbols(symbols, since, limit=limit, **extra)
             except NewsProviderError as exc:
                 # One broken provider must not end the pass: the others still
                 # carry news, and a partial feed reported as partial is worth more
