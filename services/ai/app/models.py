@@ -553,3 +553,58 @@ class TopicResolveResponse(BaseModel):
     universe: UniverseCoverageOut
     embedding_model: str
     vector_is_semantic: bool
+
+
+class TopicDiscoverRequest(BaseModel):
+    """Find recurring phrases in the window's headlines (FR-11).
+
+    `instruments` are the ones the user holds or follows - the same list news
+    was collected for. Their names are cut out of every headline, because
+    "Apple" recurring across Apple's own news is not a theme.
+    """
+
+    instruments: list[NewsInstrument] = Field(default_factory=list, max_length=500)
+    days: int = Field(default=7, ge=1, le=30)
+    #: The most phrases returned, strongest first.
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class DiscoveredHeadline(BaseModel):
+    """A stored headline, verbatim: the evidence a proposal quotes."""
+
+    article_id: str
+    title: str
+    source: str
+    published_at: datetime | None
+
+
+class DiscoveredPhrase(BaseModel):
+    """One recurring phrase and the headlines it recurred in.
+
+    `phrase` is the spelling the headlines used most; `words` is the folded
+    form that identifies it. Neither has been resolved to instruments: that,
+    and whether it is proposed at all, is the orchestrator's decision.
+    """
+
+    phrase: str
+    words: list[str]
+    article_count: int
+    source_count: int
+    #: Up to five of the headlines, in the order they were read (newest first).
+    headlines: list[DiscoveredHeadline]
+
+
+class TopicDiscoverResponse(BaseModel):
+    """Recurring phrases, and enough counts to tell a quiet window from an empty one.
+
+    `headlines == 0` means there was nothing to read - usually no news was
+    collected (see `GET /runs?kind=news_collect`) - which is not the same
+    statement as "headlines were read and nothing recurred".
+    """
+
+    since: datetime
+    days: int
+    headlines: int
+    min_articles: int
+    min_sources: int
+    phrases: list[DiscoveredPhrase] = Field(default_factory=list)

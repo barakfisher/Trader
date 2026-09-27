@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { observer } from 'mobx-react-lite';
-import { ArrowLeft, Plus, Search, Tags, X } from 'lucide-react';
+import { ArrowLeft, Newspaper, Plus, Search, Tags, X } from 'lucide-react';
 
 import { formatMoney } from '@traders/shared';
-import type { TopicDetail, TopicInstrument } from '@traders/shared';
+import type { TopicDetail, TopicInstrument, TopicSummary } from '@traders/shared';
 import type { TopicCandidate } from '@traders/shared/ai';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
@@ -62,6 +62,8 @@ export const TopicsPage = observer(function TopicsPage() {
         <DetailCard topic={topics.detail} />
       ) : null}
 
+      <ProposalList />
+
       <TopicList />
 
       <Disclaimer />
@@ -84,7 +86,7 @@ const TopicList = observer(function TopicList() {
     </Button>
   );
 
-  if (topics.topics.length === 0) {
+  if (topics.followed.length === 0) {
     return topics.composer ? null : (
       <div className="rounded-xl border border-border-subtle bg-surface-raised">
         <EmptyState
@@ -105,7 +107,7 @@ const TopicList = observer(function TopicList() {
         </p>
       )}
       <ul className="divide-y divide-border-subtle">
-        {topics.topics.map((topic) => (
+        {topics.followed.map((topic) => (
           <li key={topic.id}>
             <button
               type="button"
@@ -117,13 +119,93 @@ const TopicList = observer(function TopicList() {
               <span className="font-medium">{topic.label}</span>
               <span className="text-xs text-text-muted">
                 {topic.instrumentCount} instrument{topic.instrumentCount === 1 ? '' : 's'}
-                {topic.status === 'proposed' && ' · proposed, not confirmed'}
+                {topic.createdBy === 'auto' && ' · found in the news'}
               </span>
             </button>
           </li>
         ))}
       </ul>
     </Card>
+  );
+});
+
+/**
+ * Themes the app noticed recurring in the news about what the user follows
+ * (FR-11). Each is a question, never a subscription: it is followed only once
+ * the user confirms instruments for it, exactly as for a topic they typed.
+ * The reason shown is the evidence as stored - the headlines verbatim and the
+ * counts - so a proposal says nothing the news did not.
+ */
+const ProposalList = observer(function ProposalList() {
+  const { topics } = useStore();
+  if (topics.proposals.length === 0) return null;
+  const cooldown = topics.limits?.rejectionCooldownDays;
+
+  return (
+    <Card title="Suggested from the news">
+      <p className="mb-3 text-xs text-text-muted">
+        These themes kept coming up in headlines about what you hold and follow. They are
+        suggestions only: nothing is followed until you choose its instruments.
+        {cooldown !== undefined &&
+          ` If you are not interested, a theme like it is not suggested again for ${cooldown} days.`}
+      </p>
+      <ul className="space-y-4">
+        {topics.proposals.map((topic) => (
+          <ProposalRow key={topic.id} topic={topic} />
+        ))}
+      </ul>
+    </Card>
+  );
+});
+
+const ProposalRow = observer(function ProposalRow({ topic }: { topic: TopicSummary }) {
+  const { topics } = useStore();
+  const evidence = topic.evidence;
+  const reviewing = topics.composer?.topicId === topic.id;
+
+  return (
+    <li className="text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="flex items-center gap-2 font-medium">
+          <Newspaper className="size-4 text-accent" aria-hidden />
+          {topic.label}
+        </span>
+        <span className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => topics.review(topic)}
+            disabled={reviewing || topics.atLimit}
+          >
+            Choose instruments
+          </Button>
+          <Button variant="ghost" onClick={() => void topics.reject(topic.id)}>
+            Not interested
+          </Button>
+        </span>
+      </div>
+      {evidence && (
+        <div className="mt-1 space-y-1">
+          <p className="text-xs text-text-muted">
+            In {evidence.articleCount} headlines from {evidence.sourceCount} outlets over the last{' '}
+            {evidence.windowDays} days
+            {evidence.symbols.length > 0 && ` · the resolver suggested ${evidence.symbols.join(', ')}`}
+          </p>
+          <ul className="space-y-0.5">
+            {evidence.headlines.map((headline) => (
+              <li key={headline.articleId} className="text-xs">
+                <q className="italic text-text-muted">{headline.title}</q>
+                <span className="text-text-muted"> · {headline.source}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {topics.atLimit && (
+        <p className="mt-1 text-xs text-text-muted">
+          You follow the most topics you can; remove one to take this suggestion up.
+        </p>
+      )}
+    </li>
   );
 });
 
@@ -213,7 +295,13 @@ const ComposerCard = observer(function ComposerCard({ composer }: { composer: Co
 
   return (
     <Card
-      title={composer.topicId === null ? 'New topic' : 'Edit topic'}
+      title={
+        composer.topicId === null
+          ? 'New topic'
+          : topics.isProposal(composer.topicId)
+            ? 'Suggested topic'
+            : 'Edit topic'
+      }
       action={
         <Button variant="ghost" onClick={topics.closeComposer}>
           <X className="size-4" aria-label="Close" />

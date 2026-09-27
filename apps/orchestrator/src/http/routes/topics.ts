@@ -21,8 +21,10 @@
  *   GET    /topics        the user's topics and the limits they are held to
  *   POST   /topics        confirm a new topic: { label, symbols }
  *   GET    /topics/:id    one topic, each instrument with the reason it is there
- *   PUT    /topics/:id    re-confirm: the whole set again, and optionally a new label
- *   DELETE /topics/:id
+ *   PUT    /topics/:id    re-confirm: the whole set again, and optionally a new label.
+ *                          On an auto-proposal this is how it is accepted.
+ *   POST   /topics/:id/reject   decline an auto-proposal; it becomes rejection memory
+ *   DELETE /topics/:id    stop following a topic (not a proposal: that is rejected)
  *
  * There is no unconfirmed topic. A user's topic comes into existence when they
  * confirm its instruments, because a draft saved before that would be a row
@@ -51,6 +53,7 @@ import {
   listTopicSentimentRows,
   listTopicInstruments,
   listTopics,
+  rejectProposal,
   type TopicInstrumentRow,
   type TopicRow,
 } from '../../db/queries.js';
@@ -62,6 +65,7 @@ import {
   normaliseSymbols,
   type ConfirmOutcome,
 } from '../../services/topics.js';
+import { MAX_OPEN_PROPOSALS } from '../../services/topicDiscovery.js';
 import { backfillConfirmedInstruments } from '../../services/topicScan.js';
 import {
   DEFAULT_SENTIMENT_DAYS,
@@ -91,6 +95,7 @@ function summary(row: TopicRow): TopicSummary {
     updatedAt: row.updated_at.toISOString(),
     confirmedAt: row.confirmed_at?.toISOString() ?? null,
     instrumentCount: row.instrument_count,
+    evidence: row.evidence,
   };
 }
 
@@ -235,6 +240,8 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
         maxActiveTopics: MAX_ACTIVE_TOPICS,
         maxInstrumentsPerTopic: MAX_INSTRUMENTS_PER_TOPIC,
         maxLabelLength: MAX_TOPIC_LABEL_LENGTH,
+        maxOpenProposals: MAX_OPEN_PROPOSALS,
+        rejectionCooldownDays: context.get('config').TOPIC_REJECTION_COOLDOWN_DAYS,
       },
     };
     return context.json(body);
@@ -308,8 +315,30 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
 
   app.delete('/topics/:id', async (context) => {
     const userId = currentUserId(context);
-    if (!(await deleteTopic(userId, parseTopicId(context.req.param('id'))))) {
+    const id = parseTopicId(context.req.param('id'));
+    if (!(await deleteTopic(userId, id))) {
+      if ((await getTopic(userId, id))?.status === 'proposed') {
+        // Deleting a proposal would erase the memory that keeps it from being
+        // proposed again tomorrow; declining is the only way to say no.
+        throw conflict('topic_is_proposal', 'decline a proposed topic with POST /topics/:id/reject');
+      }
       throw notFound('no such topic');
+    }
+    return context.body(null, 204);
+  });
+
+  /**
+   * Decline an auto-proposal (FR-11). The row stays, as rejection memory: a
+   * proposal matching it is not shown again within the cooldown
+   * (`TOPIC_REJECTION_COOLDOWN_DAYS`). Idempotence is by absence - a rejected
+   * topic is no longer visible, so a second reject is a 404.
+   */
+  app.post('/topics/:id/reject', async (context) => {
+    const userId = currentUserId(context);
+    const outcome = await rejectProposal(userId, parseTopicId(context.req.param('id')));
+    if (outcome === 'not_found') throw notFound('no such topic');
+    if (outcome === 'not_a_proposal') {
+      throw conflict('not_a_proposal', 'only a proposed topic can be rejected; delete a followed one');
     }
     return context.body(null, 204);
   });

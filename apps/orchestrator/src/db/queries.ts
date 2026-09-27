@@ -4,7 +4,9 @@
  */
 
 import type { PoolClient } from 'pg';
-import type { AssetClass } from '@traders/shared';
+import type { AssetClass, TopicEvidence } from '@traders/shared';
+
+export type { TopicEvidence };
 
 import { logger } from '../logger.js';
 import { query, queryOne, transaction } from './pool.js';
@@ -1356,6 +1358,8 @@ export interface TopicRow {
   updated_at: Date;
   confirmed_at: Date | null;
   instrument_count: number;
+  /** Why an auto-discovered topic was proposed; null for a topic the user created. */
+  evidence: TopicEvidence | null;
 }
 
 export interface TopicInstrumentRow {
@@ -1381,7 +1385,7 @@ export interface TopicInstrumentInput {
 }
 
 const TOPIC_COLUMNS = `
-  t.id, t.label, t.status, t.created_by, t.created_at, t.updated_at, t.confirmed_at,
+  t.id, t.label, t.status, t.created_by, t.created_at, t.updated_at, t.confirmed_at, t.evidence,
   (SELECT count(*)::int FROM topic_instruments ti WHERE ti.topic_id = t.id) AS instrument_count`;
 
 /**
@@ -1681,12 +1685,136 @@ export function listRecentTopicObservations(
 }
 
 /** Delete one of the user's topics and, by cascade, its instruments. */
+/**
+ * Delete a topic the user follows. A proposal is not deleted here: forgetting it
+ * would erase the memory that stops it being proposed again, so a proposal is
+ * declined with `rejectProposal` instead, and the route says so.
+ */
 export async function deleteTopic(userId: string, topicId: string): Promise<boolean> {
   const rows = await query<{ id: string }>(
-    `DELETE FROM topics WHERE user_id = $1 AND id = $2 AND status <> 'rejected' RETURNING id`,
+    `DELETE FROM topics WHERE user_id = $1 AND id = $2 AND status = 'active' RETURNING id`,
     [userId, topicId],
   );
   return rows.length > 0;
+}
+
+// --- Auto-discovery and rejection memory (FR-11) ------------------------------
+
+/** A topic discovery compares a new theme against, with its fingerprint. */
+export interface KnownThemeRow {
+  id: string;
+  label: string;
+  status: TopicStatus;
+  /** Stored on auto topics when proposed; null for a topic the user created. */
+  match_words: string[] | null;
+  /** Confirmed instruments of an active topic; the offered set of a proposal. */
+  instrument_ids: string[];
+}
+
+/**
+ * Every theme a new proposal must not repeat: the user's active topics, their
+ * open proposals, and what they rejected within the last `cooldownDays`.
+ *
+ * An active topic is compared by the instruments the user *confirmed*, since
+ * that is what they follow now; a proposal or a rejection by the set it was
+ * offered with, frozen when it was proposed, so a later change to the universe
+ * cannot quietly un-reject it.
+ */
+export function listKnownThemes(userId: string, cooldownDays: number): Promise<KnownThemeRow[]> {
+  return query<KnownThemeRow>(
+    `SELECT t.id, t.label, t.status, t.match_words,
+            CASE WHEN t.status = 'active'
+                 THEN coalesce((SELECT array_agg(ti.instrument_id::text ORDER BY ti.instrument_id)
+                                  FROM topic_instruments ti
+                                 WHERE ti.topic_id = t.id), '{}')
+                 ELSE coalesce(t.proposed_instruments::text[], '{}')
+            END AS instrument_ids
+       FROM topics t
+      WHERE t.user_id = $1
+        AND (t.status <> 'rejected' OR t.rejected_at >= now() - make_interval(days => $2::int))
+      ORDER BY t.created_at, t.id`,
+    [userId, cooldownDays],
+  );
+}
+
+/** Open proposals, counted under the lock `lockTopicsForWrite` takes. */
+export async function countOpenProposals(client: PoolClient, userId: string): Promise<number> {
+  const { rows } = await client.query<{ open: number }>(
+    `SELECT count(*)::int AS open FROM topics WHERE user_id = $1 AND status = 'proposed'`,
+    [userId],
+  );
+  return rows[0]?.open ?? 0;
+}
+
+export interface ProposalInput {
+  userId: string;
+  label: string;
+  matchWords: string[];
+  instrumentIds: string[];
+  evidence: TopicEvidence;
+}
+
+/**
+ * Write one auto-proposal. Returns `duplicate` when the label is already a live
+ * topic of this user; the matching rule should have caught that first, so this
+ * is the index's last word rather than the normal path.
+ */
+export async function insertProposal(
+  client: PoolClient,
+  input: ProposalInput,
+): Promise<{ id: string } | { duplicate: true }> {
+  try {
+    const { rows } = await client.query<{ id: string }>(
+      `INSERT INTO topics
+              (user_id, label, status, created_by, match_words, proposed_instruments, evidence)
+       VALUES ($1, $2, 'proposed', 'auto', $3::text[], $4::uuid[], $5::jsonb)
+       RETURNING id`,
+      [
+        input.userId,
+        input.label,
+        input.matchWords,
+        input.instrumentIds,
+        JSON.stringify(input.evidence),
+      ],
+    );
+    return { id: rows[0]!.id };
+  } catch (error) {
+    if ((error as { code?: string }).code === '23505') return { duplicate: true };
+    throw error;
+  }
+}
+
+/**
+ * Decline a proposal: it becomes rejection memory, and leaves every list.
+ *
+ * `not_a_proposal` when the topic exists but is one the user follows - a
+ * followed topic is deleted, not rejected, and the constraint in migration 0019
+ * would refuse the write anyway.
+ */
+export async function rejectProposal(
+  userId: string,
+  topicId: string,
+): Promise<'rejected' | 'not_found' | 'not_a_proposal'> {
+  const rows = await query<{ status: TopicStatus; rejected: boolean }>(
+    `WITH target AS (
+       SELECT id, status FROM topics
+        WHERE user_id = $1 AND id = $2 AND status <> 'rejected'
+     ),
+     updated AS (
+       UPDATE topics t
+          SET status = 'rejected', rejected_at = now(), updated_at = now()
+         FROM target
+        -- Re-checked on the row itself: a confirm that won the race has
+        -- already made it active, and an active topic is not rejected.
+        WHERE t.id = target.id AND t.status = 'proposed'
+       RETURNING t.id
+     )
+     SELECT target.status, EXISTS (SELECT 1 FROM updated) AS rejected FROM target`,
+    [userId, topicId],
+  );
+  const row = rows[0];
+  if (!row) return 'not_found';
+  return row.rejected ? 'rejected' : 'not_a_proposal';
 }
 
 export { transaction };

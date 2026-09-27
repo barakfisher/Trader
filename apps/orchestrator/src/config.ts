@@ -25,6 +25,9 @@ const optionalSetting = (minLength = 1) =>
     z.string().min(minLength).optional(),
   );
 
+/** Rejection memory's default cooldown; see `TOPIC_REJECTION_COOLDOWN_DAYS`. */
+export const DEFAULT_REJECTION_COOLDOWN_DAYS = 90;
+
 const schema = z.object({
   APP_ENV: z.enum(['development', 'production', 'test']).default('development'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
@@ -98,6 +101,21 @@ const schema = z.object({
   TELEGRAM_UPDATES: z.preprocess(
     (value) => (value === '' ? undefined : value),
     z.enum(['polling', 'webhook', 'off']).default('polling'),
+  ),
+
+  /**
+   * How long a rejected auto-proposal is remembered (FR-11), in days.
+   *
+   * Rejection memory is a cooldown rather than forever, by the user's decision
+   * on 2026-09-27: what a person follows changes, and a theme turned down in
+   * spring may be the one they want in autumn. Inside the window, a proposal
+   * that matches a rejected one is never shown (`topicMatching.ts` defines
+   * "matches"). After it, the rejected row still exists - the history is kept -
+   * but no longer suppresses anything.
+   */
+  TOPIC_REJECTION_COOLDOWN_DAYS: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.coerce.number().int().min(1).max(3650).default(DEFAULT_REJECTION_COOLDOWN_DAYS),
   ),
 });
 
