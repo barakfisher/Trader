@@ -190,9 +190,23 @@ def test_order_is_total_and_strongest_first() -> None:
         *[(f"{_CONTEXTS[i]} cobalt squeeze {_PLACES[i]}", f"y{i}") for i in range(7, 10)],
     ]
     texts = _texts(rows)
-    # Most stories first; ties fall back to outlets, articles, length, then text.
-    assert texts == ["squeeze", "lithium glut", "cobalt squeeze", "copper squeeze"]
+    # Multi-word phrases first, however many stories the single word has; then
+    # most stories, and ties fall back to outlets, articles, length, then text.
+    assert texts == ["lithium glut", "cobalt squeeze", "copper squeeze", "squeeze"]
     assert texts == _texts(list(reversed(rows)))
+
+
+def test_a_strong_single_word_still_follows_the_multi_word_phrases() -> None:
+    rows = [
+        *_stories("tariffs", 8),
+        *[(f"{_CONTEXTS[i]} grid batteries {_PLACES[i]}", f"g{i}") for i in range(8, 11)],
+    ]
+    assert _texts(rows) == ["grid batteries", "tariffs"]
+
+
+@pytest.mark.parametrize("word", ["buy", "pro", "use", "billion", "season", "prediction"])
+def test_the_words_that_spent_the_first_real_budget_are_generic(word: str) -> None:
+    assert _texts(_stories(word, 4)) == []
 
 
 def test_evidence_is_bounded() -> None:
