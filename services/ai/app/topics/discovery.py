@@ -117,6 +117,9 @@ GENERIC_WORDS = frozenset(
         "way", "ways", "thing", "things", "people", "time", "times", "like",
         "want", "wants", "should", "must", "does", "do", "did", "if", "so",
         "then", "only", "every", "any", "other", "own",
+        # added from the first discovery run on title-matched headlines
+        # (2026-09-28): everyday words that spent the resolve budget
+        "buy", "pro", "use", "billion", "season", "prediction",
     }
 )  # fmt: skip
 
@@ -277,8 +280,8 @@ def recurring_phrases(
 ) -> list[Phrase]:
     """Phrases recurring across `headlines`, strongest first.
 
-    Ordered by distinct stories, then outlets, then articles, then longer
-    phrase first, then alphabetically - so the order is total and a rerun over
+    Multi-word phrases first (`_rank` says why), then by distinct stories,
+    outlets, articles, length and text - so the order is total and a rerun over
     the same headlines proposes the same things.
     """
     full_names, leading_words = excluded_keys(exclude_names)
@@ -330,10 +333,28 @@ def recurring_phrases(
         if current is None or _preferred(phrase) < _preferred(current):
             best[stories] = phrase
     kept = list(best.values())
-    kept.sort(
-        key=lambda p: (-p.story_count, -p.source_count, -p.article_count, -len(p.key), p.text)
-    )
+    kept.sort(key=_rank)
     return kept
+
+
+def _rank(phrase: Phrase) -> tuple[bool, int, int, int, int, str]:
+    """Multi-word phrases first, then by stories, outlets, articles, length, text.
+
+    Multi-word first because the orchestrator resolves only the first few, and a
+    single word is a poor resolver query: on 2026-09-28 "ai" resolved to
+    nothing and "chips" to potato-chip makers, while the one two-word phrase
+    ("bytedance alibaba") was the only one pointing at a real theme. Ranked
+    rather than filtered, so a strong single word still gets a turn when the
+    multi-word phrases run out.
+    """
+    return (
+        len(phrase.key) == 1,
+        -phrase.story_count,
+        -phrase.source_count,
+        -phrase.article_count,
+        -len(phrase.key),
+        phrase.text,
+    )
 
 
 def _preferred(phrase: Phrase) -> tuple[int, int, str]:
