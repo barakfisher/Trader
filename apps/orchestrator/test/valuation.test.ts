@@ -128,4 +128,28 @@ describe('valuePortfolio', () => {
     expect(result.summary.unpricedSymbols).toEqual(['AAPL']);
     expect(result.holdings).toHaveLength(1);
   });
+
+  it("sends each holding's asset class and exchange with the quote request", async () => {
+    // Without them the AI service judges SAP.DE by New York hours and spots
+    // crypto only by a `-USD` suffix; the instruments table already knows both.
+    let sent: unknown;
+    const ai = {
+      quotes: async (_symbols: string[], _requestId?: string, markets?: unknown) => {
+        sent = markets;
+        return { quotes: [], missing: [] };
+      },
+      fxRate: async () => ({ base: 'EUR', quote: 'USD', rate: '1.1', as_of: '', source: 'fake' }),
+    } as never;
+    await valuePortfolio(
+      [
+        holding({ symbol: 'sap.de', quantity: '1', exchange: 'XETRA', currency: 'EUR' }),
+        holding({ symbol: 'BTC-USD', quantity: '1', asset_class: 'crypto', exchange: 'CCC' }),
+      ],
+      { baseCurrency: 'USD', ai },
+    );
+    expect(sent).toEqual({
+      'SAP.DE': { asset_class: 'equity', exchange: 'XETRA' },
+      'BTC-USD': { asset_class: 'crypto', exchange: 'CCC' },
+    });
+  });
 });

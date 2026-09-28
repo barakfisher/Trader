@@ -72,6 +72,21 @@ async function loadFxRates(
   return rates;
 }
 
+/**
+ * Each holding's asset class and exchange, by symbol, as the instruments table
+ * records them. Without them the AI service guesses crypto from a `-USD` suffix
+ * and judges every exchange by New York hours - so SAP.DE's quotes were cached
+ * for an hour through its whole Frankfurt morning.
+ */
+export function marketsOf(rows: Pick<HoldingRow, 'symbol' | 'asset_class' | 'exchange'>[]) {
+  return Object.fromEntries(
+    rows.map((row) => [
+      row.symbol.toUpperCase(),
+      { asset_class: row.asset_class, exchange: row.exchange },
+    ]),
+  );
+}
+
 export async function valuePortfolio(
   rows: HoldingRow[],
   context: ValuationContext,
@@ -92,7 +107,7 @@ export async function valuePortfolio(
   let quotes = new Map<string, Quote>();
   let missing: string[] = [];
   try {
-    const response = await context.ai.quotes(symbols, context.requestId);
+    const response = await context.ai.quotes(symbols, context.requestId, marketsOf(rows));
     quotes = new Map(response.quotes.map((quote) => [quote.symbol.toUpperCase(), quote]));
     missing = response.missing ?? [];
   } catch (error) {

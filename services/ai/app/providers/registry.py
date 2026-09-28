@@ -21,12 +21,14 @@ skips the provider and the chain continues.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from app.config import Settings
 from app.core.cache import Cache
 from app.core.cache_policy import quote_ttl
 from app.core.logging import get_logger
 from app.core.ratelimit import RateLimiter
-from app.models import DailyClose, FxRate, InstrumentResolution, Quote
+from app.models import DailyClose, FxRate, InstrumentResolution, Quote, QuoteMarket
 from app.providers.base import MarketDataProvider, ProviderError
 from app.providers.fixture import FixtureProvider
 from app.providers.yfinance_provider import YFinanceProvider
@@ -75,9 +77,16 @@ class MarketDataService:
     def chain(self) -> list[str]:
         return [p.name for p in self._providers]
 
-    async def quotes(self, symbols: list[str]) -> tuple[list[Quote], list[str]]:
-        """Return (quotes, symbols_nobody_could_price)."""
+    async def quotes(
+        self, symbols: list[str], markets: Mapping[str, QuoteMarket] | None = None
+    ) -> tuple[list[Quote], list[str]]:
+        """Return (quotes, symbols_nobody_could_price).
+
+        `markets` is optional context by symbol; it changes only how long each
+        quote is cached, never what is fetched.
+        """
         wanted = _dedupe_upper(symbols)
+        market_of = {symbol.strip().upper(): market for symbol, market in (markets or {}).items()}
         found: dict[str, Quote] = {}
 
         # 1. Cache first.
@@ -104,10 +113,13 @@ class MarketDataService:
                 # The TTL is per quote, not per config: a 15-minute-delayed
                 # equity and a 24/7 crypto pair from the same provider have
                 # different notions of "fresh". See core/cache_policy.py.
+                market = market_of.get(quote.symbol.upper())
                 ttl = quote_ttl(
                     quote.symbol,
                     provider.delay_seconds,
                     minimum_ttl_seconds=self._settings.cache_ttl_quote,
+                    asset_class=market.asset_class if market else None,
+                    exchange=market.exchange if market else None,
                 )
                 await self._cache.set(f"quote:{quote.symbol}", payload, ttl)
                 await self._cache.set(
