@@ -71,11 +71,11 @@ that table already does. One task, one branch off `main`, one PR (no stacked PRs
 
 Ordered by the recommendation made when the queue was written: small correctness first, then the
 unblocked feature, then structure. Numbers are kept when a task leaves, because other text refers to
-them; task 1 (money at the currency's exponent) was done in the currency-exponent PR.
+them; task 1 (money at the currency's exponent) was done in #73, and task 2 (the narration notice,
+decision 58) in the PR that followed it.
 
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
-| 2 | **Telegram notification when narration switches between model and templates** | none (M4 leftover) | small-medium | Designed, never built - see "Left unfinished, deliberately". It was blocked on a bound Telegram chat, which exists since 2026-09-24. Fires on a *transition*, deduped, never every 30 minutes. Seams: `notifications.ref_kind`, `Notifier`. Done: verified with a real message in the bound chat, not only a ledger row (M4's lesson) |
 | 3 | **Look at the Topics page in a browser** | M6 (mobile-width pass, topic management) | small | Never rendered by anyone (debt row). The user signs in in the in-app browser - a session never types the passphrase - and the session reviews layout, mobile width and the long quoted rationales, and fixes what it finds. It is where M5's exit proof will be shown |
 | 4 | **A CI job with a real Postgres** | none (debt) | medium | No test executes a line of SQL (debt row); the lesson has repeated at least four times, most recently #71's downgrade. Changes what "hermetic" means, so **ask the user before building**. Done: CI runs `alembic upgrade head` / `downgrade -1` / `upgrade head` over seeded rows, and the retrieval and topic queries against it |
 | 5 | **Pass `asset_class` and `exchange` on the quote request** | none (debt) | medium | One wire change fixes two debt rows: SAP.DE judged against NYSE hours, and crypto detected by the `-USD` suffix (`core/cache_policy.py`). Needs `export_openapi.py && pnpm gen:api`. Done: both debt rows resolved |
@@ -679,6 +679,23 @@ failure they prevent.
     towards suppressing; its first version failed over a real expired row because the UPDATE ran
     while the new CHECK still existed - the constraint-meets-data lesson again, found by running
     it with a row present.
+58. **Narration's state is a ledger of transitions, judged over the last three explanations, and only
+    the model/template boundary is announced.** `services/narrationWatch.ts`, migration 0022.
+    `GET /narration` recomputes the state per read, which cannot say what *changed*, so
+    `narration_transitions` stores a row only when the state differs from the last one; its newest
+    row is the current state, the first row (`from_state` null) is a baseline and never announced
+    (an upgrade is not a transition), and a lock on the user's row stops a portfolio and a topic
+    scan finishing together from both recording it (raced live: one row). **Judged over
+    `NARRATION_WINDOW` = 3 explanations across scans, not one scan:** replayed over this
+    installation's history 2026-09-17..28, a per-scan rule announced a break fifteen minutes after
+    a recovery, over two refused sentences; the window gives two breaks in five days, both real
+    streaks. **A break is `high` and pushes; a recovery or `off` is `info` and waits for the
+    digest** (the user's decision, 2026-09-28). A move between two template states
+    (`unavailable` -> `rejected`) is recorded and not announced. Delivered through `fanOut` with
+    `ref_kind = 'narration'`, so quiet hours, a mute and the dedupe key apply unchanged; the digest
+    names where explanations ended rather than counting the notice as a finding. The badge and the
+    notice can disagree for a scan: the badge reads the latest scan, the notice the window.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -1248,8 +1265,8 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
   `traders` is at `0021_topic_proposal_expiry` (see the stack bullet above; one active topic, no
   proposals yet).
   **`traders_m5`** is the scratch copy branches migrate natively. It is at
-  `0021_topic_proposal_expiry` (migrated up, down and up again with seeded rows for #71; the rows
-  were deleted) and disposable: point a run at it with
+  `0022_narration_transitions` (migrated up, down and up again with seeded rows for #71 and for
+  the narration notice; the rows were deleted) and disposable: point a run at it with
   `DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders_m5`.
 - **The descriptions file lives at `data/universe/descriptions.local.jsonl` in the main
   checkout** (gitignored, and excluded from images by `.dockerignore`), with a spare copy at
@@ -1432,11 +1449,8 @@ without one.
 
 ### Left unfinished, deliberately
 
-The **notification on narration state change** (working → failing, or back, deduped so it fires on a
-transition rather than every thirty minutes) was designed and not built. It needed a bound Telegram
-chat to be verified against, and there was not one. Building it would have meant verifying only to
-the ledger and calling that done, which is the exact mistake M4's lessons warn about. **A chat has
-been bound since 2026-09-24, so it is unblocked: task 2 of the independent tasks queue.**
+The **notification on narration state change** is now built (independent task 2, decision 58) and was
+verified with a real message in the bound chat on 2026-09-28, not only to the ledger.
 
 Whichever is next, the seams M4 leaves are: `notifications.ref_kind` already anticipates a third
 referent, `Notifier` takes another channel without touching the fan-out, and `PROPOSABLE_KINDS` in

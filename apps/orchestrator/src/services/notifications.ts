@@ -31,12 +31,14 @@
 import {
   claimNotification,
   getOrCreateUserSettings,
+  listNarrationTransitions,
   listPendingDigest,
   settleNotification,
   type NotificationToRecord,
   type UserRow,
 } from '../db/queries.js';
 import { logger } from '../logger.js';
+import { announcementFor } from './narrationNotice.js';
 import { gatherTopicDigest, renderTopicSection } from './topicDigest.js';
 import type { Notifier, OutboundNotification } from '../notify/notifier.js';
 import {
@@ -48,8 +50,11 @@ import {
 
 /** A finding worth considering for delivery. */
 export interface NotifiableFinding {
-  /** 'observation' or 'proposal' - what `ref_id` points at. */
-  refKind: 'observation' | 'proposal';
+  /**
+   * What `ref_id` points at: an observation, a proposal, or a narration
+   * transition (`narrationWatch.ts`).
+   */
+  refKind: 'observation' | 'proposal' | 'narration';
   refId: string;
   severity: string;
   headline: string;
@@ -235,6 +240,15 @@ export async function sendDigest(
   now: Date = new Date(),
 ): Promise<DigestResult> {
   const pending = await listPendingDigest(user.id);
+  // A narration notice is not a finding, and counting it as one would tell the
+  // user something moved in the market. It gets its own line, naming the state.
+  const findings = pending.filter((entry) => entry.ref_kind !== 'narration');
+  const narrationLine = renderNarrationLine(
+    await listNarrationTransitions(
+      user.id,
+      pending.filter((entry) => entry.ref_kind === 'narration').map((entry) => entry.ref_id),
+    ),
+  );
   // The topic section is gathered even when nothing was deferred: a topic that
   // moved today is worth a digest on its own (FR-13), and a quiet day with no
   // topic news still sends nothing - see topicDigest.ts.
@@ -258,13 +272,17 @@ export async function sendDigest(
     : await notifier
         .send({
           userId: user.id,
-          title: digestTitle(pending.length, topics),
+          title: digestTitle(findings.length, topics, narrationLine !== null),
           // The digest names how many findings and of what kind. It does not
           // restate their figures: those were evidence-validated when the
           // observation was written, and re-rendering them here would be a
           // second place for a number to drift from the evidence behind it.
           // The topic section quotes stored headlines for the same reason.
-          body: [pending.length > 0 ? summariseDigest(pending) : null, topicSection]
+          body: [
+            findings.length > 0 ? summariseDigest(findings) : null,
+            narrationLine,
+            topicSection,
+          ]
             .filter((part): part is string => part !== null)
             .join('\n\n'),
           severity: 'info',
@@ -291,11 +309,23 @@ export async function sendDigest(
   };
 }
 
-function digestTitle(entries: number, topics: number): string {
+function digestTitle(entries: number, topics: number, narration: boolean): string {
   const parts: string[] = [];
   if (entries > 0) parts.push(`${entries} finding${entries === 1 ? '' : 's'}`);
   if (topics > 0) parts.push(`${topics} topic${topics === 1 ? '' : 's'}`);
+  if (narration) parts.push('explanations changed');
   return `Daily digest: ${parts.join(', ')}`;
+}
+
+/**
+ * The state explanations are in *now*, as of the last deferred transition. Only
+ * the last one: two held notices that cancel out ("templates", then "model
+ * again") would otherwise read as a history the user has to replay, when the
+ * only thing they can act on is where it ended.
+ */
+export function renderNarrationLine(transitions: { to_state: string }[]): string | null {
+  const last = transitions.at(-1);
+  return last === undefined ? null : announcementFor(last.to_state).headline;
 }
 
 /** One line per reason, so the digest says why each group was held back. */
