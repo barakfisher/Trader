@@ -72,11 +72,11 @@ that table already does. One task, one branch off `main`, one PR (no stacked PRs
 Ordered by the recommendation made when the queue was written: small correctness first, then the
 unblocked feature, then structure. Numbers are kept when a task leaves, because other text refers to
 them; task 1 (money at the currency's exponent) was done in #73, task 2 (the narration notice,
-decision 58) in #74, and task 3 (the Topics page in a browser) in the PR after that.
+decision 58) in #74, task 3 (the Topics page in a browser) in #75, and task 4 (the Postgres CI
+job, approved by the user 2026-09-28) in the PR after that.
 
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
-| 4 | **A CI job with a real Postgres** | none (debt) | medium | No test executes a line of SQL (debt row); the lesson has repeated at least four times, most recently #71's downgrade. Changes what "hermetic" means, so **ask the user before building**. Done: CI runs `alembic upgrade head` / `downgrade -1` / `upgrade head` over seeded rows, and the retrieval and topic queries against it |
 | 5 | **Pass `asset_class` and `exchange` on the quote request** | none (debt) | medium | One wire change fixes two debt rows: SAP.DE judged against NYSE hours, and crypto detected by the `-USD` suffix (`core/cache_policy.py`). Needs `export_openapi.py && pnpm gen:api`. Done: both debt rows resolved |
 | 6 | **A screen for `/ask`** | M6 ("every PRD user-facing FR reachable from the UI") | medium-large | The API is complete and proxied; the response already carries `answered`, `relevance`, `answer_source` and verbatim citations. The weak-match hedge and the three refusals must stay distinguishable on screen (decisions 32, 36) |
 | 7 | **Move server state to TanStack Query** | M6 (tech debt item) | large | The plan and its exit are in `docs/MILESTONES.md` under M6. One store at a time, reads first. Best as its own slice, and it touches every store, so do not run it alongside 3 or 6 |
@@ -146,9 +146,24 @@ Test counts at handoff (2026-09-28): **1,418** — 721 Python, 482 orchestrator,
 eval sets, which are not test counts: `/ask`'s **35 cases** (16 keyless on every PR, all 35 when
 keyed), and the topic eval's **31 cases** (`scripts/run_topic_eval.py`, keyed only, **not in CI**).
 
-**None of them executes a line of retrieval SQL**, and that is structural rather than an oversight:
-the Python suite is hermetic and has no Postgres. Exercise it by hand after touching
-`app/corpus/` — see the two bugs below that a full green gate did not catch.
+**The SQL has its own CI job: `postgres (integration)`** (independent task 4). The ordinary suites
+stay hermetic - the Python suite has no Postgres and the orchestrator's tests substitute
+`db/queries.ts` - and the SQL runs in a job with a real one, opt-in by `TEST_DATABASE_URL`
+(never `.env`), refusing any database whose name does not end in `_ci` or `_test`:
+- `services/ai/tests/integration/test_migrations.py`: every revision round-trips (down, up over
+  what the downgrade left, down) from head to base over `seed_head.sql`, which must hold a row
+  for **every value any CHECK enumerates** - read from `pg_constraint`, so a migration that adds
+  a value fails CI until the seed carries it. Deliberate refusals (0014's) are listed in
+  `KNOWN_REFUSALS` and must keep happening;
+- `test_retrieval_sql.py`: hybrid search, the ORed/ANDed lexical half, the model filter and topic
+  resolution over data loaded by the real ingest scripts;
+- `apps/orchestrator/test/queries.postgres.test.ts`: the narration ledger's lock, notification
+  and observation dedupe.
+Each was shown to fail against the bug it pins (0021's constraint order, 0006-style upgrade over
+rows, the untyped `:model` parameter, a removed row lock). Locally:
+`docker exec traders-postgres-1 psql -U traders -d traders -c 'CREATE DATABASE traders_ci'`,
+then `TEST_DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders_ci` in front of
+pytest (Python first: it migrates) and `vitest run test/queries.postgres.test.ts`.
 
 Useful endpoints (all need the session cookie except `/internal/*`, which needs `x-internal-key`):
 
@@ -702,7 +717,21 @@ failure they prevent.
 **A test that read the clock passed for a day, then failed on `main` and every PR.** `sendDigest`
 called `gatherTopicDigest(user)` with no time, so it used the real clock, while its test pinned
 rows to 2026-09-27. It went red at midnight, and a neighbouring test was one day from the same
-fate. Found because two unrelated PRs failed the same check. → **A test must not read the clock,
+fate. Found because two unrelated PRs failed the same check. → **0019 could not be re-applied after its own downgrade, and nothing had ever tried.** Its downgrade
+keeps proposed and rejected auto topics (deliberately) and drops their fingerprint columns; its
+upgrade then adds a CHECK that every auto topic has a fingerprint. So any rollback below 0019 with a
+proposal present could never roll forward. Found on the Postgres job's first run, by stepping
+each revision down *and back up* over data. Fixed in 0019's upgrade (backfill before the CHECK,
+words by `matchWords`' rule frozen in the migration) - in the file that refuses, as with 0006. →
+**A downgrade that keeps rows must be checked against its own upgrade's constraints**; the
+round-trip test now does that for every revision.
+
+**A race test passed with the lock it tested removed.** Five concurrent calls finished too fast to
+overlap, so the test for `recordNarrationState`'s row lock was green either way. Ten rounds of
+twelve overlap reliably (9-10 rows written without the lock). → **Run a concurrency test once with
+the protection removed**; a race that never happens in the test proves nothing about the lock.
+
+**A test must not read the clock,
 any more than `.env` (CLAUDE.md convention 3): anything that decides "today" takes `now`.** The
 check that proved nothing else did this: run each suite once with `Date` faked a year ahead
 (`vi.useFakeTimers({ now, toFake: ['Date'] })` in a throwaway setup file) and read what breaks.
@@ -1125,7 +1154,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | **Migration 0008 hard-codes a table Mastra owns** | `0008_mastra_workflow_state.py` | The library would create `mastra_workflow_snapshot` itself; Alembic creates it instead (`disableInit: true`), because CLAUDE.md says the AI service owns the schema. An upgrade that changes the shape breaks suspended runs — so `test/mastraSchemaOwnership.test.ts` compares the migration against `WorkflowsPG.getExportDDL()` and fails the build first. Two other things cost time to find: `PostgresStore` creates **43** tables for 24 storage domains unless you route only `workflows`, and `@mastra/core` posts feature-usage telemetry to PostHog unless `MASTRA_TELEMETRY_DISABLED` is set (it is, in `workflowRuntime.ts`, in code rather than `.env`) |
 | ~~Concept chips point nowhere~~ | — | **Resolved in M3 slice 1.** Kept as a line rather than deleted because it stood here from M2 to M4 and its absence would otherwise read as an oversight |
 | ~~Retrieval is exact-match only~~ | — | **Resolved in M3 slice 2.** Hybrid retrieval exists and `GET /concepts/search` serves it. What is still missing is the *answer*: there is no `/ask`, no intent routing, no citations and no relevance floor, so a nonsense query still returns the three least-bad chunks rather than a refusal. That is slice 3 |
-| **No test executes a line of retrieval SQL** | `services/ai/tests` | The Python suite is hermetic and has no Postgres, by design. Both of slice 2's real bugs lived there and both passed a full green gate. The compose `corpus` container covers ingestion only; the search path has no CI coverage at all and is exercised by hand. Closing this means a Postgres-backed test job, which is a real decision about what "hermetic" is worth |
+| ~~No test executes a line of retrieval SQL~~ | — | **Resolved** (independent task 4): the `postgres (integration)` CI job - see "Orientation". It found a real bug on its first run: 0019's upgrade could not follow its own downgrade (below) |
 | ~~OWED: migrate the fixture embedder to a paid OpenRouter embeddings model~~ | — | **Done.** `openai/text-embedding-3-small` through OpenRouter, verified against the live endpoint: 36 chunks, 5,114 tokens, **$0.00010228**, no chunk id moved. Set `EMBEDDINGS_PROVIDER=openrouter` to use it; the code default stays `fixture` so CI and a fresh clone remain keyless. The fixture was **not** deleted — it is the hermetic CI path and slice 4's eval set needs it |
 | **The relevance floor is measured to be in the wrong place** | `app/ask/relevance.py` | `REFUSE_BELOW = 0.23` was fitted to sixteen questions. On the eval's held-out questions the classes separate at **(0.2502, 0.3169]**, so 0.23 sits *outside* the gap — and every keyed CI run prints that verdict. It was deliberately **not** moved: combined with the fitting set the classes overlap (0.2498 vs 0.2502), and a value chosen to make the held-out set pass would make it a training set. The hedged weak answer (decision 36) is what covers the boundary meanwhile. **The honest next step is more questions, written by someone who has not read the corpus**, not a new number |
 | **The keyed eval tier does nothing until a secret exists** | GitHub repo settings | The `eval-keyed` job skips with a notice unless `OPENROUTER_API_KEY` is a repository secret. **Until it is added, nothing automated tests the `not_in_corpus` refusal** — the one M3's exit criterion names — because the floor abstains on the fixture path. Adding the secret is a settings change only a repo admin can make; it was deliberately not done from a session |
@@ -1192,7 +1221,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
   nothing. `--dry-run` says whether the files and the database agree without writing, and now
   reports embedding coverage as well as text — vectors are a second derived copy with the same
   drift.
-- **As of 2026-09-28 ~14:00 UTC the stack runs `main` at #74 (`3062562`) and the database is at
+- **As of 2026-09-28 ~15:00 UTC the stack runs `main` at #75 (`9765784`) and the database is at
   `0022_narration_transitions`**, rebuilt with `bash scripts/dev-docker.sh` (no `--reset`), and checked
   inside the containers rather than assumed. **`.env` has `NEWS_PROVIDERS=gdelt,fixture`** (the
   user's choice; `.env.example` keeps `fixture` - a deliberate asymmetry, do not "fix" it), which

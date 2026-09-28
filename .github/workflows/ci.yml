@@ -63,6 +63,55 @@ jobs:
           git diff --exit-code packages/shared/src/generated \
             || (echo "generated client is stale: run 'pnpm gen:api' and commit" && exit 1)
 
+  # Real Postgres, for the layer every other job is isolated from. The Python
+  # suite is hermetic and the orchestrator's tests substitute `db/queries.ts`,
+  # so before this job no test executed a line of SQL - and every SQL bug that
+  # cost real time passed a full green run: a parameter Postgres could not
+  # type, `plainto_tsquery` ANDing a question into nothing, a downgrade that met
+  # a CHECK over a live row. The compose job starts Postgres too, but migrates
+  # an empty database and only curls the result.
+  #
+  # Here: every migration round-trips over rows covering every enumerated value
+  # (`seed_head.sql`), the retrieval and topic SQL runs over data loaded by the
+  # real scripts, and `queries.ts` runs its locks and dedupe against the database
+  # that enforces them. `INTEGRATION_REQUIRED` turns a missing URL into a failure
+  # rather than a green job of skipped tests.
+  postgres:
+    name: postgres (integration)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: traders
+          POSTGRES_PASSWORD: traders
+          POSTGRES_DB: traders_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U traders -d traders_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      TEST_DATABASE_URL: postgresql://traders:traders@localhost:5432/traders_ci
+      INTEGRATION_REQUIRED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - name: Install Python dependencies
+        working-directory: services/ai
+        run: uv venv --python 3.12 && uv pip install -e '.[dev]'
+      # First, because it leaves the schema at head for the orchestrator's tests.
+      - name: Migrations over data, retrieval and topic SQL
+        working-directory: services/ai
+        run: .venv/bin/pytest -q tests/integration
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Orchestrator queries against Postgres
+        run: pnpm --filter @traders/orchestrator exec vitest run test/queries.postgres.test.ts
+
   compose:
     name: docker compose smoke test
     runs-on: ubuntu-latest
