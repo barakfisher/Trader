@@ -133,6 +133,25 @@ async def test_templates_satisfy_their_own_validator():
         assert is_supported(text, finding.evidence)
 
 
+def test_a_yen_price_is_not_divided_into_cents():
+    finding = Finding(
+        kind="price_move",
+        severity="high",
+        subject_ref="instrument:7203.T",
+        as_of=NOW,
+        evidence={
+            "symbol": "7203.T",
+            "currency": "JPY",
+            "price_minor": 2850,
+            "previous_price_minor": 3000,
+            "change_pct": -0.05,
+        },
+    )
+    assert headline_for(finding) == "7203.T moved -5.0% to 2850 JPY"
+    assert explanation_for(finding).startswith("7203.T went from 3000 JPY to 2850 JPY")
+    assert is_supported(f"{headline_for(finding)} {explanation_for(finding)}", finding.evidence)
+
+
 async def test_article_headlines_join_the_evidence():
     # A figure inside a quoted headline must not read as invention.
     article = CandidateArticle(
@@ -201,14 +220,14 @@ class TestTemplatesAgainstRealRuleOutput:
     that produced the evidence, so the test has to hold both ends.
     """
 
-    def series(self, closes: list[int]) -> list:
+    def series(self, closes: list[int], currency: str = "USD") -> list:
         from datetime import timedelta
 
         from app.analysis.price_series import PricePoint
 
         start = NOW - timedelta(days=len(closes))
         return [
-            PricePoint(as_of=start + timedelta(days=index), price_minor=close, currency="USD")
+            PricePoint(as_of=start + timedelta(days=index), price_minor=close, currency=currency)
             for index, close in enumerate(closes)
         ]
 
@@ -222,23 +241,27 @@ class TestTemplatesAgainstRealRuleOutput:
             results.append(text)
         return results
 
-    async def test_price_and_sigma_templates_match_the_rules(self):
+    # JPY because its minor unit is the yen itself: a template or validator that
+    # assumed cents would pass every USD case and be wrong a hundredfold here.
+    @pytest.mark.parametrize("currency", ["USD", "JPY"])
+    async def test_price_and_sigma_templates_match_the_rules(self, currency):
         from app.analysis import AnalysisThresholds, price_move_findings, sigma_move_findings
 
         thresholds = AnalysisThresholds()
         closes = [10000 + (index % 3) * 20 for index in range(40)] + [9100]
-        points = self.series(closes)
+        points = self.series(closes, currency)
         findings = price_move_findings("TEST", points, thresholds) + sigma_move_findings(
             "TEST", points, thresholds
         )
         assert findings, "the fixture series must actually trigger these rules"
         await self.narrate_all(findings)
 
-    async def test_drawdown_template_matches_the_rule(self):
+    @pytest.mark.parametrize("currency", ["USD", "JPY"])
+    async def test_drawdown_template_matches_the_rule(self, currency):
         from app.analysis import AnalysisThresholds, drawdown_findings
 
         closes = [15000] + [14000 - index * 100 for index in range(20)]
-        findings = drawdown_findings("TEST", self.series(closes), AnalysisThresholds())
+        findings = drawdown_findings("TEST", self.series(closes, currency), AnalysisThresholds())
         assert findings, "the fixture series must actually trigger a drawdown"
         await self.narrate_all(findings)
 

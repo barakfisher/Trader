@@ -65,6 +65,23 @@ def test_minor_units_are_matched_in_major_form():
     assert unsourced_figures("The price is $11845", {"price_minor": 11845}) == []
 
 
+def test_minor_units_follow_the_currency_exponent():
+    # A yen has no cents. Accepting "150.00" for 15000 JPY would approve a figure
+    # understated a hundredfold, which is the one thing this check exists to stop.
+    evidence = {"currency": "JPY", "price_minor": 15000}
+    assert unsourced_figures("It trades at ¥15,000.", evidence) == []
+    assert unsourced_figures("It trades at 150.00 JPY.", evidence) == ["150.00"]
+
+
+def test_a_nested_currency_overrides_the_outer_one():
+    evidence = {
+        "currency": "USD",
+        "positions": [{"currency": "JPY", "value_minor": 15000}, {"value_minor": 11845}],
+    }
+    assert unsourced_figures("15,000 yen and $118.45", evidence) == []
+    assert unsourced_figures("150.00 yen", evidence) == ["150.00"]
+
+
 def test_ratios_are_matched_as_percentages():
     assert unsourced_figures("down 8.5%", {"change_pct": -0.085}) == []
     assert unsourced_figures("down 0.085", {"change_pct": -0.085}) == []
