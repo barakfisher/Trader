@@ -624,7 +624,8 @@ failure they prevent.
 
 57. **An unanswered proposal expires into its own status, not a deletion and not a rejection.**
     Migration 0021, `expireProposals`. Without it, three ignored proposals held every slot and
-    stopped discovery for good. After `TOPIC_PROPOSAL_TTL_DAYS` (default 14, a product bound) the
+    stopped discovery for good. After `TOPIC_PROPOSAL_TTL_DAYS` (default 14; it and the 7-day hold approved by the user
+    on 2026-09-28 as defaults, not measured) the
     row becomes `expired` with `expired_at`: kept for decision 18's reason, and not `rejected`
     because silence is not a "no". An expired theme is held back for **one discovery window**
     (`EXPIRED_HOLD_DAYS`), so it can return, but only on headlines that all postdate the silence -
