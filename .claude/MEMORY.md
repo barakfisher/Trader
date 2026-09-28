@@ -4,19 +4,23 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-27 (second handoff that day). **M5 is in progress. Topic resolution,
-confirmation, topic observations, topic news, per-topic sentiment, the digest's topic section and
-auto-discovery with rejection memory (#62, decisions 55-56) and topic cards (news and tone on the
-topic's card) are done.** Auto-discovery is built but **cannot be shown working until real news arrives** (see below),
-and it is the second half of M5's exit criterion. The paragraph list below is the handoff taken at
-CLAUDE.md's five-merged-PR trigger, before #62 and #63. That session shipped:
-- #57: topic observations from price moves (`topic_move`, decision 50), and backfill of topic
-  instruments, which had no price history at all;
-- #58: news collection (`news_collect`, `POST /news/collect`) and `GET /topics/:id/news` - the news
-  pipeline had been built in M2 and **never called** (decision 51);
-- #59: GDELT, the first real news provider (decision 52);
-- #60: per-topic sentiment, `GET /topics/:id/sentiment` (decision 53);
-- this PR: the digest's topic section (decision 54), and the first tests `sendDigest` ever had.
+Updated: 2026-09-28 (handoff, at CLAUDE.md's five-merged-PR trigger: #62-#66 merged since the
+last one). **M5 is feature-complete and its exit criterion is not yet shown.** Topic resolution,
+confirmation, topic observations, topic news, per-topic sentiment, the digest's topic section,
+auto-discovery with rejection memory (decisions 55-56) and topic cards are all built and live.
+**What is missing is evidence:** auto-discovery has never been seen proposing a real theme, and
+M5's exit criterion needs one. It needs 24-48 hours of title-matched headlines first (the user's
+call, 2026-09-28) - see "Next session" in "Where to go next". This session shipped:
+- #62: auto-discovery with rejection memory - recurring headline phrases become proposals;
+  rejection is a 90-day cooldown by the user's decision, matched by words OR instruments
+  (decisions 55-56);
+- #63 (a parallel session): the search API's 429 diagnosed as load-shedding, retries added;
+- #64: topic cards - a topic's news and tone, and which empty an empty list is;
+- #65: discovery counts stories, not articles, and reads only linked headlines;
+- #66: **GDELT read from its raw 15-minute files**, the search API deleted (decision 52);
+- #67: MEMORY: the raw feed live, debt for everyday-word names;
+- #68: discovery ranks multi-word phrases first; six more everyday words;
+- #69: `sendDigest` takes `now` - its test had started failing on `main` when the date changed.
 
 **Real news arrives, from GDELT's raw files (#66, decision 52), since 2026-09-27 19:35 UTC.** The
 search API it replaced refused most requests and, when it answered, stored mostly unlinked noise
@@ -98,7 +102,7 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts at handoff: **1,332** — 685 Python, 449 orchestrator, 182 web, 16 shared. Plus two
+Test counts at handoff (2026-09-28): **1,418** — 721 Python, 482 orchestrator, 199 web, 16 shared. Plus two
 eval sets, which are not test counts: `/ask`'s **35 cases** (16 keyless on every PR, all 35 when
 keyed), and the topic eval's **31 cases** (`scripts/run_topic_eval.py`, keyed only, **not in CI**).
 
@@ -621,6 +625,20 @@ failure they prevent.
 
 ## Bugs that cost real time, and the lesson from each
 
+**A test that read the clock passed for a day, then failed on `main` and every PR.** `sendDigest`
+called `gatherTopicDigest(user)` with no time, so it used the real clock, while its test pinned
+rows to 2026-09-27. It went red at midnight, and a neighbouring test was one day from the same
+fate. Found because two unrelated PRs failed the same check. → **A test must not read the clock,
+any more than `.env` (CLAUDE.md convention 3): anything that decides "today" takes `now`.** The
+check that proved nothing else did this: run each suite once with `Date` faked a year ahead
+(`vi.useFakeTimers({ now, toFake: ['Date'] })` in a throwaway setup file) and read what breaks.
+
+**The first real headlines broke three assumptions a green suite had passed.** Syndicated copies
+counted as recurrence; unlinked articles read as themes; everyday words spent the resolve budget.
+Every one was invisible on fixture data and obvious on the first real batch. → **Before calling a
+data filter done, run it read-only over real data and read the output.** It took one query each
+time.
+
 **An illustrative number nearly became the design.** The instrument-overlap rule was chosen from an
 example ("nuclear fuel" overlaps "uranium" by 80%) that nobody had measured. Five real resolutions
 showed 0% on the confident sets the first version compared. → **Before building on an example
@@ -1100,13 +1118,23 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
   nothing. `--dry-run` says whether the files and the database agree without writing, and now
   reports embedding coverage as well as text — vectors are a second derived copy with the same
   drift.
-- **As of 2026-09-27 the stack runs `main` at #59 and the database is at `0018_news_collect`**,
-  rebuilt with `bash scripts/dev-docker.sh` (no `--reset`). **`.env` has
-  `NEWS_PROVIDERS=gdelt,fixture`** (set 2026-09-27 at the user's request; `.env.example` keeps
-  `fixture` - a deliberate asymmetry, do not "fix" it). The provider reads GDELT's raw files
-  since decision 52's rewrite; before it, the search API refused most requests and runs were
-  `degraded` with `provider_failures: ["gdelt"]`. The container and the host share one egress IP, so a probe from
-  the host is a fair test of what the service sees.
+- **As of 2026-09-28 ~11:00 UTC the stack runs `main` at #68 and the database is at
+  `0020_news_feed_cursors`**, rebuilt with `bash scripts/dev-docker.sh` (no `--reset`), and checked
+  inside the containers rather than assumed. **`.env` has `NEWS_PROVIDERS=gdelt,fixture`** (the
+  user's choice; `.env.example` keeps `fixture` - a deliberate asymmetry, do not "fix" it), which
+  now means GDELT's raw files: about 96 downloads and **~300 MB a day** from
+  `data.gdeltproject.org`. `articles` holds real, title-matched news from 2026-09-27 17:45 UTC on,
+  plus 77 unlinked articles from the old search API that age out of every 7-day window by
+  2026-10-04 (left in place by the user's decision; discovery ignores unlinked articles).
+- **After a merge, the stack is not updated by itself.** Two steps, both needed: fast-forward the
+  main checkout (`cd /Users/a/projects/Traders && git merge --ff-only origin/main` - compose builds
+  from there, never from a worktree), then `bash scripts/dev-docker.sh`. Confirm by grepping the
+  running container, e.g. `docker exec traders-ai-service-1 grep -c <marker> /app/app/...`; the
+  orchestrator image runs its TypeScript source under `/repo/apps/orchestrator/src`.
+- **Port 8081 is held by another worktree's orchestrator** (`m3-slice-2`, found 2026-09-27), and
+  answers `/healthz` - so a "server is up" check on 8081 passes against the wrong code. Run a
+  branch's orchestrator on 8083, with `SCHEDULER_ENABLED=false TELEGRAM_UPDATES=off` so it cannot
+  double-fire runs or steal the container's Telegram updates.
 - **The stack and the database are in step as of 2026-09-24**: both at `0013_kb_embeddings`,
   images rebuilt from `main` at #47 with `bash scripts/dev-docker.sh` (no `--reset`, so the
   Postgres volume and every holding, quote and observation were kept). Verified rather than
@@ -1215,11 +1243,44 @@ cannot reach any of the SQL. What exists end to end:
 The paid embedder is live in *this* installation's database and costs about a hundredth of a cent
 per full re-embed. A fresh clone and CI use the keyless fixture, on purpose.
 
-### Next: topic cards, then M5's closing handoff
+### Next session: prove M5's exit criterion, then close M5
 
-Auto-discovery with rejection memory is built (decisions 55-56). What remains of M5 is topic cards
-in the UI - topic news and sentiment have APIs and no screen - and the M5 closing handoff. The notes
-below are what this item was planned from, kept for the reasoning.
+**Everything M5 needs is built; what is missing is evidence that auto-discovery finds a real
+theme.** The user chose to let 24-48 hours of title-matched headlines accumulate after #68
+(merged 2026-09-28 ~11:00 UTC) before judging it. In order:
+
+1. **Check the feed is still healthy.** `select started_at, stats->>'fetched',
+   stats->>'entity_links', stats->'providers_used' from runs where kind='news_collect' order by
+   started_at desc limit 20`. Expect `fetched > 0` most runs, `gdelt` in `providers_used`, and
+   `entity_links` close to `stored`. `news_feed_cursors` shows how far it has read.
+2. **Read the discovery runs.** `select started_at, status, stats from runs where
+   kind='topic_discovery' order by started_at desc`. `notProposed` gives a reason for every
+   phrase. Three outcomes, each with a next move:
+   - **A sensible proposal** (e.g. something like "ai agents") - the exit criterion's first half.
+     Look at it on the Topics page ("Suggested from the news"): headlines quoted, symbols listed.
+   - **Only `weak` / `none` verdicts on sensible phrases** - the resolver's bar, not discovery, is
+     in the way. Do not lower `STRONG_ABOVE` to force it: its thresholds are measured
+     (`docs/TOPIC_RESOLUTION.md`) and batch 2 is spent. Bring the phrases to the user.
+   - **Noise reaching the resolver** - add words to `GENERIC_WORDS` from the run's own phrases.
+   The run is daily in the user's timezone, but fires when the laptop is awake (debt table).
+   To run one outside its slot: `POST /internal/runs` with `{kind: "topic_discovery",
+   runKey: "topic_discovery:manual:<something unique>"}` and the `x-internal-key` header.
+3. **Show the second half: rejection.** Decline a proposal ("Not interested"), then run discovery
+   again with a fresh run key: the same theme must be in `notProposed` as "matches rejected topic
+   ... by words/instruments". That, plus step 2, is the exit criterion as amended (cooldown, not
+   forever - MILESTONES.md).
+4. **M5 closing handoff** at the milestone boundary, then **M6** (MILESTONES.md: equity curve,
+   per-holding detail, proposals inbox, topic management, settings; TanStack Query is already
+   scheduled there as debt).
+
+Deferred, with data accumulating for both: **everyday-word company names** ("Apple" the fruit -
+the user wants a dedicated PR after more data) and **proposal expiry** (three ignored proposals
+stop discovery). Both are in the debt table.
+
+### (Done) topic cards
+
+Built in #64: a topic's news and tone on its card, with the last collection's state so an empty
+list is never called a quiet week.
 
 ### (Done) auto-discovery with rejection memory - the plan it was built from
 
