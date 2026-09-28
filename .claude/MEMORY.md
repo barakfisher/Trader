@@ -4,8 +4,13 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-28 (handoff, at CLAUDE.md's five-merged-PR trigger: #62-#66 merged since the
-last one). **M5 is feature-complete and its exit criterion is not yet shown.** Topic resolution,
+Updated: 2026-09-28, second handoff of the day (after #71, at the user's request). **The next
+session starts with the "Independent tasks queue" below**, while real headlines accumulate for
+M5's exit proof. Since the first handoff: #71 made unanswered auto-proposals expire (decision 57),
+and the queue was created (this PR).
+
+Earlier the same day (handoff at CLAUDE.md's five-merged-PR trigger: #62-#66 merged since the
+last one): **M5 is feature-complete and its exit criterion is not yet shown.** Topic resolution,
 confirmation, topic observations, topic news, per-topic sentiment, the digest's topic section,
 auto-discovery with rejection memory (decisions 55-56) and topic cards are all built and live.
 **What is missing is evidence:** auto-discovery has never been seen proposing a real theme, and
@@ -49,6 +54,42 @@ currently written by templates rather than a model, and the app says so on its o
 through `TelegramPoller`, which long-polls `getUpdates` because the webhook still needs M7's public
 HTTPS URL. Verified live: approve → undo → approve → undo from a real chat, each landing as an audit
 row and a ledger row marked revoked. What remains unproven is only the *webhook* transport.
+
+---
+
+## Independent tasks queue
+
+Work that depends on nothing in flight, so it can be taken while M5's exit proof waits on real
+headlines (or at any other time). Created 2026-09-28 at the user's request, from a sweep of the
+debt table and MILESTONES.md.
+
+**The rule, set by the user:** when a task here is completed, **remove it from this queue**, and if
+it is also part of a milestone, **remove it from that milestone's list in `docs/MILESTONES.md`**
+too, in the same PR. The PR number is the record; neither document keeps a struck-through line.
+Where the task also has a row in "Current technical debt", resolve that row in the same PR, as
+that table already does. One task, one branch off `main`, one PR (no stacked PRs).
+
+Ordered by the recommendation made when the queue was written: small correctness first, then the
+unblocked feature, then structure.
+
+| # | Task | Milestone | Size | Where, and what "done" means |
+|---|---|---|---|---|
+| 1 | **Money in explanations assumes two decimal places** | none (debt) | small | `services/ai/app/narration/templates.py` `_money` divides by 100 unconditionally, so JPY/KRW would be off by 100x (guideline 3). Use `core/money.py`'s `from_minor`, as `app/ask/portfolio.py` already does. Done: a test with a zero-decimal currency, and the debt row resolved |
+| 2 | **Telegram notification when narration switches between model and templates** | none (M4 leftover) | small-medium | Designed, never built - see "Left unfinished, deliberately". It was blocked on a bound Telegram chat, which exists since 2026-09-24. Fires on a *transition*, deduped, never every 30 minutes. Seams: `notifications.ref_kind`, `Notifier`. Done: verified with a real message in the bound chat, not only a ledger row (M4's lesson) |
+| 3 | **Look at the Topics page in a browser** | M6 (mobile-width pass, topic management) | small | Never rendered by anyone (debt row). The user signs in in the in-app browser - a session never types the passphrase - and the session reviews layout, mobile width and the long quoted rationales, and fixes what it finds. It is where M5's exit proof will be shown |
+| 4 | **A CI job with a real Postgres** | none (debt) | medium | No test executes a line of SQL (debt row); the lesson has repeated at least four times, most recently #71's downgrade. Changes what "hermetic" means, so **ask the user before building**. Done: CI runs `alembic upgrade head` / `downgrade -1` / `upgrade head` over seeded rows, and the retrieval and topic queries against it |
+| 5 | **Pass `asset_class` and `exchange` on the quote request** | none (debt) | medium | One wire change fixes two debt rows: SAP.DE judged against NYSE hours, and crypto detected by the `-USD` suffix (`core/cache_policy.py`). Needs `export_openapi.py && pnpm gen:api`. Done: both debt rows resolved |
+| 6 | **A screen for `/ask`** | M6 ("every PRD user-facing FR reachable from the UI") | medium-large | The API is complete and proxied; the response already carries `answered`, `relevance`, `answer_source` and verbatim citations. The weak-match hedge and the three refusals must stay distinguishable on screen (decisions 32, 36) |
+| 7 | **Move server state to TanStack Query** | M6 (tech debt item) | large | The plan and its exit are in `docs/MILESTONES.md` under M6. One store at a time, reads first. Best as its own slice, and it touches every store, so do not run it alongside 3 or 6 |
+
+**Not in the queue, and why** - so they are not added back by the next sweep:
+- *Everyday-word company names* ("Apple" the fruit): the user deferred it to a dedicated PR after
+  more data.
+- *Names ending in ", LP"*: fixing it moves topic resolution, which cannot be measured honestly
+  without a new held-out batch (batch 3) written by the user.
+- *Citing news in observations* (`articles=()`): would cite the fruit headlines as evidence; after
+  the everyday-word fix.
+- *Splitting `queries.ts`*: changes CLAUDE.md's "all SQL in one file" rule - the user's decision.
 
 ---
 
@@ -1135,8 +1176,8 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
   nothing. `--dry-run` says whether the files and the database agree without writing, and now
   reports embedding coverage as well as text — vectors are a second derived copy with the same
   drift.
-- **As of 2026-09-28 ~11:00 UTC the stack runs `main` at #68 and the database is at
-  `0020_news_feed_cursors`**, rebuilt with `bash scripts/dev-docker.sh` (no `--reset`), and checked
+- **As of 2026-09-28 ~12:00 UTC the stack runs `main` at #71 (`0f4ede3`) and the database is at
+  `0021_topic_proposal_expiry`**, rebuilt with `bash scripts/dev-docker.sh` (no `--reset`), and checked
   inside the containers rather than assumed. **`.env` has `NEWS_PROVIDERS=gdelt,fixture`** (the
   user's choice; `.env.example` keeps `fixture` - a deliberate asymmetry, do not "fix" it), which
   now means GDELT's raw files: about 96 downloads and **~300 MB a day** from
@@ -1204,10 +1245,11 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 
 - **The universe is loaded in the shared `traders` database** (2026-09-24, #53): the stack's
   `universe` container embedded 5,223 profiles (~$0.016) and loads 16,363 holdings on every start.
-  `traders` is at `0017_topics` (stack rebuilt from `main` at #55 on 2026-09-27, no `--reset`, so
-  holdings and history kept; it has no topics yet).
-  **`traders_m5`** is the scratch copy branches migrate natively. It is at `0017_topics` and
-  disposable: point a run at it with
+  `traders` is at `0021_topic_proposal_expiry` (see the stack bullet above; one active topic, no
+  proposals yet).
+  **`traders_m5`** is the scratch copy branches migrate natively. It is at
+  `0021_topic_proposal_expiry` (migrated up, down and up again with seeded rows for #71; the rows
+  were deleted) and disposable: point a run at it with
   `DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders_m5`.
 - **The descriptions file lives at `data/universe/descriptions.local.jsonl` in the main
   checkout** (gitignored, and excluded from images by `.dockerignore`), with a spare copy at
@@ -1260,7 +1302,17 @@ cannot reach any of the SQL. What exists end to end:
 The paid embedder is live in *this* installation's database and costs about a hundredth of a cent
 per full re-embed. A fresh clone and CI use the keyless fixture, on purpose.
 
-### Next session: prove M5's exit criterion, then close M5
+### Next session: the independent tasks queue, then M5's exit proof
+
+**Start with task 1 of the "Independent tasks queue"** (near the top of this file), then take the
+rest in order, one PR each. Headlines keep accumulating meanwhile; the user wanted 24-48 hours
+after #68 (~11:00 UTC 2026-09-28) before judging discovery, so by 2026-09-30 the steps below are
+due. Check them between tasks rather than leaving them for the end: the discovery run is daily,
+and a `topic_discovery` run with a sensible proposal is the thing M5 is waiting for.
+
+Proposals now expire after 14 days unanswered (decision 57); a run's stats name what it expired.
+
+### M5's exit proof, then close M5
 
 **Everything M5 needs is built; what is missing is evidence that auto-discovery finds a real
 theme.** The user chose to let 24-48 hours of title-matched headlines accumulate after #68
@@ -1381,10 +1433,10 @@ without one.
 ### Left unfinished, deliberately
 
 The **notification on narration state change** (working → failing, or back, deduped so it fires on a
-transition rather than every thirty minutes) was designed and not built. It needs a bound Telegram
-chat to be verified against, and there is not one — see the debt table. Building it would have meant
-verifying only to the ledger and calling that done, which is the exact mistake M4's lessons warn
-about.
+transition rather than every thirty minutes) was designed and not built. It needed a bound Telegram
+chat to be verified against, and there was not one. Building it would have meant verifying only to
+the ledger and calling that done, which is the exact mistake M4's lessons warn about. **A chat has
+been bound since 2026-09-24, so it is unblocked: task 2 of the independent tasks queue.**
 
 Whichever is next, the seams M4 leaves are: `notifications.ref_kind` already anticipates a third
 referent, `Notifier` takes another channel without touching the fan-out, and `PROPOSABLE_KINDS` in
