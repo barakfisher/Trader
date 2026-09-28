@@ -621,6 +621,22 @@ failure they prevent.
     and would have let "nuclear fuel" straight back. "nuclear energy" sits exactly at 50% and is
     suppressed - the rule errs towards suppressing, because showing a rejected theme again is the
     failure memory exists to prevent, and a missed suggestion is the cheap one.
+
+57. **An unanswered proposal expires into its own status, not a deletion and not a rejection.**
+    Migration 0021, `expireProposals`. Without it, three ignored proposals held every slot and
+    stopped discovery for good. After `TOPIC_PROPOSAL_TTL_DAYS` (default 14, a product bound) the
+    row becomes `expired` with `expired_at`: kept for decision 18's reason, and not `rejected`
+    because silence is not a "no". An expired theme is held back for **one discovery window**
+    (`EXPIRED_HOLD_DAYS`), so it can return, but only on headlines that all postdate the silence -
+    never the next morning. **The sweep runs only at the start of a discovery run**, before the
+    no-headlines early return, rather than on every read as proposals' expiry does (decision 16):
+    here a past-deadline proposal that is still visible is harmless (accepting it is the user
+    choosing a topic), and the slot only matters to discovery. Every reader filters on
+    `LIVE_TOPIC` (`status IN ('active','proposed')`) rather than excluding one dead status, so a
+    third cannot leak into a list. The downgrade turns expired rows into rejections, which errs
+    towards suppressing; its first version failed over a real expired row because the UPDATE ran
+    while the new CHECK still existed - the constraint-meets-data lesson again, found by running
+    it with a row present.
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -1070,7 +1086,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | ~~Telegram has no working binding~~ | — | **Resolved 2026-09-24.** A chat is bound. The "receives nothing" mystery was never a Telegram problem: nothing in the repository consumed updates, because M4's polling bridge was a hand-run script that left with its session. Kept as a line so the history of the symptom survives |
 | **Real news needs `NEWS_PROVIDERS=gdelt,fixture` in `.env`** | `.env` | Slice C added the GDELT provider; the code default and `.env.example` stay `fixture` so CI is offline (the same deliberate asymmetry as `MARKET_DATA_PROVIDERS`). Until `.env` names `gdelt`, every live `news_collect` run fetches 0. **Also still unwired:** the narration correlation step - `run_portfolio_scan` is always called with `articles=()`, so no observation cites news yet |
 | **Auto-discovery has run once on real, title-matched headlines and proposed nothing** | `app/topics/discovery.py`, `services/topicDiscovery.ts` | 2026-09-28 10:33 UTC: 123 linked headlines, 20 phrases, 8 resolved, 0 proposed. Every resolved phrase was `none` or `weak` (`ai`, `buy`, `pro`, `prediction` none; `tv`, `crypto`, `iphone`, `remittix` weak). The 12 skipped by the 8-per-run cap were resolved by hand afterwards and none would have qualified either (`chips` resolves to potato-chip makers LW and UTZ; `futures` is `confident` with no confident candidate; `bytedance alibaba` is `weak` over NVDA/TSM/MU). **So 0 proposals was the right answer, and the run exposed two faults:** (1) the resolve budget went to everyday words - `buy`, `pro`, `use`, `billion`, `season`, `prediction` belong in `GENERIC_WORDS`; (2) single words are poor resolver queries (two-letter "ai" resolves to nothing), and the one multi-word phrase was the one with a real signal. Not yet shown: discovery *finding* a theme, which M5's exit criterion needs |
-| **Open proposals never expire** | `services/topicDiscovery.ts` | An unanswered proposal holds one of 3 slots indefinitely, so three ignored proposals stop discovery. Deliberate for now - a proposal that silently disappears is also a proposal the user never answered - but an expiry that records itself (like proposals' `expired`) is the likely fix |
+| ~~Open proposals never expire~~ | — | **Resolved** (decision 57, migration 0021): unanswered for `TOPIC_PROPOSAL_TTL_DAYS`, a proposal becomes `expired`, kept and named in the run's stats. Kept as a line so the history survives |
 | **Company names that are everyday words link falsely** | `app/news/entities.py` | Measured on the first raw-file run (2026-09-27 19:35 UTC): 2 of 18 stored articles were about the fruit - "Apple Cider & Donut Day at the Kinney Pioneer Museum", "Czipar's annual Apple Festival" - and linked to AAPL, because a capitalised "Apple" in a headline matches the company. The same will happen for "Target", "Block", "Visa", "Shell" when followed. Consequences: the fruit lands on the topic card and in sentiment, and discovery reads it ("festival" was a candidate phrase on 2026-09-28). The provider is not at fault; the matcher accepts a bare name as a sole signal. **Deferred by the user to a dedicated PR after more data** - likely shape: for a name that is also a dictionary word, require a second signal (a ticker, "Inc", a product word) before linking, and measure precision over several days of runs, not one |
 | **Laptop sleep leaves gaps in collection** | local scheduler | Overnight 2026-09-27/28 the runs jumped 20:30 -> 23:13 -> 03:21 -> 10:18 UTC. The cursor caught up (16 files a run, never older than 48 h), so no news was lost - but the daily `topic_discovery` meant for local midnight ran at 10:33 UTC. Harmless for news; worth knowing when a "nightly" result appears at breakfast. M7's CronJob removes it |
 | **Names ending in ", LP" never link to news** | `app/news/entities.py` `core_name` | `core_name` strips "Fund", "Inc" and the like but not a trailing ", LP", so "United States Gasoline Fund, LP" is matched - and searched on GDELT - only by that exact phrase, which prose never writes. **Not fixed on purpose:** 37 instruments in the committed universe have LP names, and `core_name` also shapes the resolver's matching text (`app/universe/matching_text.py`), so the fix moves topic resolution and needs the new held-out batch to measure. Fix both together, or give the news matcher its own rule |
@@ -1273,9 +1289,8 @@ theme.** The user chose to let 24-48 hours of title-matched headlines accumulate
    per-holding detail, proposals inbox, topic management, settings; TanStack Query is already
    scheduled there as debt).
 
-Deferred, with data accumulating for both: **everyday-word company names** ("Apple" the fruit -
-the user wants a dedicated PR after more data) and **proposal expiry** (three ignored proposals
-stop discovery). Both are in the debt table.
+Deferred, with data accumulating: **everyday-word company names** ("Apple" the fruit - the user
+wants a dedicated PR after more data), in the debt table. Proposal expiry is built (decision 57).
 
 ### (Done) topic cards
 

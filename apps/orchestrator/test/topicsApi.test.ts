@@ -73,9 +73,8 @@ vi.mock('../src/services/topics.js', async (original) => ({
   confirmTopic,
 }));
 
-const { DEFAULT_REJECTION_COOLDOWN_DAYS, loadConfig, resetConfigForTests } = await import(
-  '../src/config.js'
-);
+const { DEFAULT_PROPOSAL_TTL_DAYS, DEFAULT_REJECTION_COOLDOWN_DAYS, loadConfig, resetConfigForTests } =
+  await import('../src/config.js');
 const { MAX_OPEN_PROPOSALS } = await import('../src/services/topicDiscovery.js');
 const { createApp } = await import('../src/http/app.js');
 const {
@@ -245,6 +244,7 @@ describe('topic CRUD', () => {
       maxLabelLength: MAX_TOPIC_LENGTH,
       maxOpenProposals: MAX_OPEN_PROPOSALS,
       rejectionCooldownDays: DEFAULT_REJECTION_COOLDOWN_DAYS,
+      proposalTtlDays: DEFAULT_PROPOSAL_TTL_DAYS,
     });
   });
 

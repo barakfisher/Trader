@@ -147,6 +147,7 @@ const ProposalList = observer(function ProposalList() {
   const { topics } = useStore();
   if (topics.proposals.length === 0) return null;
   const cooldown = topics.limits?.rejectionCooldownDays;
+  const ttl = topics.limits?.proposalTtlDays;
 
   return (
     <Card title="Suggested from the news">
@@ -155,6 +156,8 @@ const ProposalList = observer(function ProposalList() {
         suggestions only: nothing is followed until you choose its instruments.
         {cooldown !== undefined &&
           ` If you are not interested, a theme like it is not suggested again for ${cooldown} days.`}
+        {ttl !== undefined &&
+          ` A suggestion left unanswered is withdrawn after ${ttl} days, to make room for new ones.`}
       </p>
       <ul className="space-y-4">
         {topics.proposals.map((topic) => (

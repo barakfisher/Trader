@@ -28,6 +28,18 @@
  *    `MAX_OPEN_PROPOSALS` may be open at once, checked under the same user-row
  *    lock that guards the topic cap.
  *
+ * Before any of that, proposals left unanswered for `TOPIC_PROPOSAL_TTL_DAYS`
+ * expire (migration 0021). Without it, `MAX_OPEN_PROPOSALS` ignored proposals
+ * would stop discovery for good. An expired proposal is kept, named in the run's
+ * stats, and held back for one discovery window: silence is not a "no", so it
+ * may be asked again, but only on news that all postdates the silence - never
+ * the next morning on the headlines the user already scrolled past.
+ *
+ * Expiry happens here and nowhere else, so a proposal past its deadline stays
+ * visible and answerable until the next run. That is harmless - accepting it is
+ * the user choosing a topic, declining it is a rejection - and it keeps the
+ * sweep in the one place that needs the slot.
+ *
  * Every phrase the run looked at leaves a reason in the run's stats, so "why was
  * nothing proposed?" is answered by `GET /runs` rather than by guessing.
  */
@@ -37,6 +49,7 @@ import { AiServiceError } from '@traders/shared/ai';
 
 import {
   countOpenProposals,
+  expireProposals,
   insertProposal,
   listAnalysedInstruments,
   listKnownThemes,
@@ -70,17 +83,33 @@ export const MIN_PROPOSAL_INSTRUMENTS = 2;
  */
 export const MAX_OPEN_PROPOSALS = 3;
 
+/**
+ * Days an expired proposal's theme is not proposed again: one discovery window,
+ * so a re-proposal rests only on headlines published after it expired.
+ */
+export const EXPIRED_HOLD_DAYS = DISCOVERY_WINDOW_DAYS;
+
+export interface DiscoveryPolicy {
+  /** `TOPIC_REJECTION_COOLDOWN_DAYS`. */
+  cooldownDays: number;
+  /** `TOPIC_PROPOSAL_TTL_DAYS`. */
+  proposalTtlDays: number;
+}
+
 export interface DiscoveryResult {
   /** Headlines in the window. Zero means there was nothing to read, not nothing to find. */
   headlines: number;
   phrases: number;
   resolved: number;
   proposed: { id: string; label: string; symbols: string[] }[];
+  /** Labels of proposals this run expired, unanswered after `proposalTtlDays`. */
+  expired: string[];
   /** Phrase -> why it was not proposed. Every phrase examined appears here or in `proposed`. */
   notProposed: Record<string, string>;
   openProposals: number;
   maxOpenProposals: number;
   cooldownDays: number;
+  proposalTtlDays: number;
   /** Set when the run could not look properly: a resolve failed, or no universe. */
   degraded: boolean;
   /** Why nothing was examined, when nothing was. */
@@ -108,8 +137,7 @@ function known(row: KnownThemeRow): KnownTheme {
 }
 
 function describe(match: { theme: KnownTheme; reason: string }): string {
-  const what = match.theme.status === 'rejected' ? 'rejected' : match.theme.status;
-  return `matches ${what} topic "${match.theme.label}" by ${match.reason}`;
+  return `matches ${match.theme.status} topic "${match.theme.label}" by ${match.reason}`;
 }
 
 /** Every candidate across every interpretation, first occurrence kept, with its band. */
@@ -150,9 +178,16 @@ function evidenceOf(phrase: DiscoveredPhrase, symbols: string[]): TopicEvidence 
 export async function runTopicDiscovery(
   user: UserRow,
   ai: AiClient,
-  cooldownDays: number,
+  policy: DiscoveryPolicy,
   requestId?: string,
 ): Promise<DiscoveryResult> {
+  // First, and before the early returns: a run with no headlines must still
+  // free the slots of proposals nobody answered.
+  const expired = await transaction(async (client) => {
+    await lockTopicsForWrite(client, user.id);
+    return expireProposals(client, user.id, policy.proposalTtlDays);
+  });
+
   const instruments = await listAnalysedInstruments(user.id);
   const [discovered, rows] = await Promise.all([
     ai.discoverTopics(
@@ -168,7 +203,7 @@ export async function runTopicDiscovery(
       },
       requestId,
     ),
-    listKnownThemes(user.id, cooldownDays),
+    listKnownThemes(user.id, policy.cooldownDays, EXPIRED_HOLD_DAYS),
   ]);
   const themes = rows.map(known);
   const openBefore = rows.filter((row) => row.status === 'proposed').length;
@@ -179,10 +214,12 @@ export async function runTopicDiscovery(
     phrases: phrases.length,
     resolved: 0,
     proposed: [],
+    expired,
     notProposed: {},
     openProposals: openBefore,
     maxOpenProposals: MAX_OPEN_PROPOSALS,
-    cooldownDays,
+    cooldownDays: policy.cooldownDays,
+    proposalTtlDays: policy.proposalTtlDays,
     degraded: false,
   };
   if (discovered.headlines === 0) {

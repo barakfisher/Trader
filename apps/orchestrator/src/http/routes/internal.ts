@@ -255,7 +255,10 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
         const result = await runTopicDiscovery(
           user,
           context.get('ai'),
-          config.TOPIC_REJECTION_COOLDOWN_DAYS,
+          {
+            cooldownDays: config.TOPIC_REJECTION_COOLDOWN_DAYS,
+            proposalTtlDays: config.TOPIC_PROPOSAL_TTL_DAYS,
+          },
           context.get('requestId'),
         );
         // No headlines is 'skipped', not 'ok': the run asked nothing, and the

@@ -90,7 +90,7 @@ function summary(row: TopicRow): TopicSummary {
   return {
     id: row.id,
     label: row.label,
-    // Rejected rows never leave queries.ts; they are auto-discovery's memory.
+    // Rejected and expired rows never leave queries.ts; they are auto-discovery's memory.
     status: row.status as TopicSummary['status'],
     createdBy: row.created_by,
     createdAt: row.created_at.toISOString(),
@@ -254,6 +254,7 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
         maxLabelLength: MAX_TOPIC_LABEL_LENGTH,
         maxOpenProposals: MAX_OPEN_PROPOSALS,
         rejectionCooldownDays: context.get('config').TOPIC_REJECTION_COOLDOWN_DAYS,
+        proposalTtlDays: context.get('config').TOPIC_PROPOSAL_TTL_DAYS,
       },
     };
     return context.json(body);
