@@ -26,6 +26,7 @@ import {
 } from '../db/queries.js';
 import { logger } from '../logger.js';
 import type { Notifier } from '../notify/notifier.js';
+import { watchNarration, type NarrationWatchOutcome } from './narrationWatch.js';
 import { fanOut, settingsForNotification, type NotifiableFinding } from './notifications.js';
 
 /**
@@ -49,6 +50,8 @@ export interface TopicScanResult {
   skipped: Record<string, string>;
   degraded: boolean;
   notified: { pushed: number; deferred: number; duplicate: number; failed: number };
+  /** What this scan learned about who writes the explanations (`narrationWatch.ts`). */
+  narration: NarrationWatchOutcome;
 }
 
 /** Rows of one topic are adjacent (the query orders them), so grouping is one pass. */
@@ -115,6 +118,20 @@ export async function runTopicScan(
     notifier,
   );
 
+  // Only a scan that stored a newly narrated observation has anything to say
+  // about narration. Most scans store nothing new and skip this entirely.
+  const narration: NarrationWatchOutcome =
+    created > 0 && toStore.some((observation) => observation.narrationSource !== null)
+      ? await watchNarration(
+          user.id,
+          ai,
+          notifier,
+          settingsForNotification(settings, user.timezone),
+          runId,
+          requestId,
+        )
+      : 'not_measured';
+
   const skipped = response.stats.skipped ?? {};
   const result: TopicScanResult = {
     topics: response.stats.topics,
@@ -136,6 +153,7 @@ export async function runTopicScan(
       duplicate: notified.duplicate,
       failed: notified.failed,
     },
+    narration,
   };
 
   logger().info({ userId: user.id, ...result }, 'topic scan complete');

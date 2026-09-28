@@ -22,6 +22,7 @@ import {
 import { logger } from '../logger.js';
 import { mayRaiseProposal, startProposalLifecycle } from '../mastra/proposalLifecycle.js';
 import type { Notifier } from '../notify/notifier.js';
+import { watchNarration, type NarrationWatchOutcome } from './narrationWatch.js';
 import { fanOut, settingsForNotification, type NotifiableFinding } from './notifications.js';
 import { valuePortfolio } from './valuation.js';
 
@@ -44,6 +45,8 @@ export interface ScanResult {
   proposalsCreated: number;
   /** Where the new findings went: pushed now, deferred to the digest, or already sent. */
   notified: { pushed: number; deferred: number; duplicate: number; failed: number };
+  /** What this scan learned about who writes the explanations (`narrationWatch.ts`). */
+  narration: NarrationWatchOutcome;
 }
 
 export async function runPortfolioScan(
@@ -69,6 +72,7 @@ export async function runPortfolioScan(
       proposalsSelected: 0,
       proposalsCreated: 0,
       notified: { pushed: 0, deferred: 0, duplicate: 0, failed: 0 },
+      narration: 'not_measured',
     };
   }
 
@@ -235,6 +239,20 @@ export async function runPortfolioScan(
     notifier,
   );
 
+  // Only a scan that stored a newly narrated observation has anything to say
+  // about narration. Most scans store nothing new and skip this entirely.
+  const narration: NarrationWatchOutcome =
+    created > 0 && toStore.some((observation) => observation.narrationSource !== null)
+      ? await watchNarration(
+          user.id,
+          ai,
+          notifier,
+          settingsForNotification(settings, user.timezone),
+          runId,
+          requestId,
+        )
+      : 'not_measured';
+
   const result: ScanResult = {
     holdings: rows.length,
     priced: portfolio.summary.pricedCount,
@@ -257,6 +275,7 @@ export async function runPortfolioScan(
       duplicate: notified.duplicate,
       failed: notified.failed,
     },
+    narration,
   };
 
   logger().info({ userId: user.id, ...result }, 'portfolio scan complete');

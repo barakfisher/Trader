@@ -25,7 +25,8 @@ const db = vi.hoisted(() => ({
   observations: [] as { subject_ref: string; severity: string; headline: string; created_at: Date }[],
   lastScan: null as { started_at: Date; status: string; stats: unknown } | null,
   rows: {} as Record<string, TopicSentimentRow[]>,
-  pending: [] as { id: string; reason: string }[],
+  pending: [] as { id: string; reason: string; ref_kind?: string; ref_id?: string }[],
+  transitions: [] as { id: string; from_state: string | null; to_state: string }[],
   settled: [] as { id: string; status: string }[],
 }));
 
@@ -35,6 +36,9 @@ vi.mock('../src/db/queries.js', () => ({
   getLatestFinishedRun: vi.fn(async () => db.lastScan),
   listTopicSentimentRows: vi.fn(async (_u: string, topicId: string) => db.rows[topicId] ?? []),
   listPendingDigest: vi.fn(async () => db.pending),
+  listNarrationTransitions: vi.fn(async (_u: string, ids: string[]) =>
+    db.transitions.filter((row) => ids.includes(row.id)),
+  ),
   getOrCreateUserSettings: vi.fn(async () => ({ muted_until: null })),
   settleNotification: vi.fn(async (id: string, status: string) => {
     db.settled.push({ id, status });
@@ -88,6 +92,7 @@ beforeEach(() => {
   };
   db.rows = {};
   db.pending = [];
+  db.transitions = [];
   db.settled = [];
 });
 
@@ -191,5 +196,44 @@ describe('sendDigest', () => {
       { id: 'n1', status: 'failed' },
       { id: 'n2', status: 'failed' },
     ]);
+  });
+
+  it('names a deferred narration change instead of counting it as a finding', async () => {
+    // A narration notice held back by quiet hours is not something the market
+    // did, so "1 finding" would misreport it. It names where explanations ended.
+    db.topics = [];
+    db.pending = [
+      { id: 'n1', reason: 'quiet_hours', ref_kind: 'observation', ref_id: 'o1' },
+      { id: 'n2', reason: 'quiet_hours', ref_kind: 'narration', ref_id: 'tr1' },
+      { id: 'n3', reason: 'below_floor', ref_kind: 'narration', ref_id: 'tr2' },
+    ];
+    db.transitions = [
+      { id: 'tr1', from_state: 'narrating', to_state: 'unavailable' },
+      { id: 'tr2', from_state: 'unavailable', to_state: 'narrating' },
+    ];
+    const channel = notifier();
+
+    const result = await sendDigest(USER as never, channel as never, NOW);
+
+    const [message] = channel.send.mock.calls[0]! as unknown as [{ title: string; body: string }];
+    expect(message.title).toBe('Daily digest: 1 finding, explanations changed');
+    // Only where it ended: a break and its recovery in one night is one line.
+    expect(message.body).toBe(
+      '1 held during quiet hours\n\nExplanations are written by the model again',
+    );
+    expect(result).toMatchObject({ entries: 3, delivered: true });
+    expect(db.settled.map((entry) => entry.id)).toEqual(['n1', 'n2', 'n3']);
+  });
+
+  it('sends a digest that holds only a narration change', async () => {
+    db.topics = [];
+    db.pending = [{ id: 'n1', reason: 'below_floor', ref_kind: 'narration', ref_id: 'tr1' }];
+    db.transitions = [{ id: 'tr1', from_state: 'rejected', to_state: 'narrating' }];
+    const channel = notifier();
+
+    await sendDigest(USER as never, channel as never, NOW);
+
+    const [message] = channel.send.mock.calls[0]! as unknown as [{ title: string; body: string }];
+    expect(message.title).toBe('Daily digest: explanations changed');
   });
 });
