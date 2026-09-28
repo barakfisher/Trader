@@ -71,12 +71,11 @@ that table already does. One task, one branch off `main`, one PR (no stacked PRs
 
 Ordered by the recommendation made when the queue was written: small correctness first, then the
 unblocked feature, then structure. Numbers are kept when a task leaves, because other text refers to
-them; task 1 (money at the currency's exponent) was done in #73, and task 2 (the narration notice,
-decision 58) in the PR that followed it.
+them; task 1 (money at the currency's exponent) was done in #73, task 2 (the narration notice,
+decision 58) in #74, and task 3 (the Topics page in a browser) in the PR after that.
 
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
-| 3 | **Look at the Topics page in a browser** | M6 (mobile-width pass, topic management) | small | Never rendered by anyone (debt row). The user signs in in the in-app browser - a session never types the passphrase - and the session reviews layout, mobile width and the long quoted rationales, and fixes what it finds. It is where M5's exit proof will be shown |
 | 4 | **A CI job with a real Postgres** | none (debt) | medium | No test executes a line of SQL (debt row); the lesson has repeated at least four times, most recently #71's downgrade. Changes what "hermetic" means, so **ask the user before building**. Done: CI runs `alembic upgrade head` / `downgrade -1` / `upgrade head` over seeded rows, and the retrieval and topic queries against it |
 | 5 | **Pass `asset_class` and `exchange` on the quote request** | none (debt) | medium | One wire change fixes two debt rows: SAP.DE judged against NYSE hours, and crypto detected by the `-USD` suffix (`core/cache_policy.py`). Needs `export_openapi.py && pnpm gen:api`. Done: both debt rows resolved |
 | 6 | **A screen for `/ask`** | M6 ("every PRD user-facing FR reachable from the UI") | medium-large | The API is complete and proxied; the response already carries `answered`, `relevance`, `answer_source` and verbatim citations. The weak-match hedge and the three refusals must stay distinguishable on screen (decisions 32, 36) |
@@ -1140,7 +1139,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | Crypto detection is a symbol-shape heuristic | `core/cache_policy.py` | `-USD` suffix, because the AI service receives bare symbols |
 | Market hours assume US sessions for every symbol | `core/cache_policy.py` | SAP.DE trades on XETRA but is judged against NYSE hours. The same wire change (pass `asset_class` and `exchange` on the quote request) fixes both this and the heuristic above |
 | **Server state is hand-fetched in every MobX store** | `apps/web/src/stores` | Each store repeats `load()`/`loading`/`error`/`runInAction` with no caching, de-duplication, retry or refetch. A page revisited refetches everything, and a store that forgets to reload after a write shows stale data silently. **Scheduled as M6 tech debt (added 2026-09-27 at the user's request):** move reads and writes to TanStack Query, keep MobX for drafts and UI state. The plan and its exit are in `docs/MILESTONES.md` under M6. New stores written before then (the M5 topic cards) will be migrated with the rest, so keep their fetch code thin |
-| **The Topics screen has never been looked at in a browser** | `apps/web/src/pages/TopicsPage.tsx` | #55 is tested at the store level (18 tests) and served by the running stack, but signing in needs the passphrase, which a session does not type. Layout, wrapping at mobile width and the long rationale quotes are unverified. The first person to open it is the first test of its layout |
+| ~~The Topics screen has never been looked at in a browser~~ | — | **Resolved** (independent task 3, 2026-09-28): reviewed at desktop and 375 px against the live stack - the list, a topic card, and the confirm screen over a real 13-candidate resolution. Two faults found and fixed: the dashboard header did not wrap, so on a phone the page was 721 px wide and a tap on "Topics" landed on "Settings" (the only way to reach the page); and each candidate's checkbox was centred in its row, so on long quotes it sat beside the quote rather than the ticker it ticks. **Still unseen with real data: "Suggested from the news"**, because no proposal has existed yet - it will be seen when M5's exit proof is. Timestamps use the browser locale app-wide (`formatExactTime`); that is M6 polish, not a Topics fault |
 | No component/DOM tests on the web app | `apps/web/test` | Store and formatting logic covered; rendering is not. Two real UI bugs this session (Discard disabled by its own typo, a deep link that does nothing) were found by *using* the app, not by tests, and neither would have been caught by a DOM test either — but a DOM test would have caught the first |
 | ~~Telegram has no working binding~~ | — | **Resolved 2026-09-24.** A chat is bound. The "receives nothing" mystery was never a Telegram problem: nothing in the repository consumed updates, because M4's polling bridge was a hand-run script that left with its session. Kept as a line so the history of the symptom survives |
 | **Real news needs `NEWS_PROVIDERS=gdelt,fixture` in `.env`** | `.env` | Slice C added the GDELT provider; the code default and `.env.example` stay `fixture` so CI is offline (the same deliberate asymmetry as `MARKET_DATA_PROVIDERS`). Until `.env` names `gdelt`, every live `news_collect` run fetches 0. **Also still unwired:** the narration correlation step - `run_portfolio_scan` is always called with `articles=()`, so no observation cites news yet |
@@ -1193,8 +1192,8 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
   nothing. `--dry-run` says whether the files and the database agree without writing, and now
   reports embedding coverage as well as text — vectors are a second derived copy with the same
   drift.
-- **As of 2026-09-28 ~12:00 UTC the stack runs `main` at #71 (`0f4ede3`) and the database is at
-  `0021_topic_proposal_expiry`**, rebuilt with `bash scripts/dev-docker.sh` (no `--reset`), and checked
+- **As of 2026-09-28 ~14:00 UTC the stack runs `main` at #74 (`3062562`) and the database is at
+  `0022_narration_transitions`**, rebuilt with `bash scripts/dev-docker.sh` (no `--reset`), and checked
   inside the containers rather than assumed. **`.env` has `NEWS_PROVIDERS=gdelt,fixture`** (the
   user's choice; `.env.example` keeps `fixture` - a deliberate asymmetry, do not "fix" it), which
   now means GDELT's raw files: about 96 downloads and **~300 MB a day** from
@@ -1318,6 +1317,17 @@ cannot reach any of the SQL. What exists end to end:
 
 The paid embedder is live in *this* installation's database and costs about a hundredth of a cent
 per full re-embed. A fresh clone and CI use the keyless fixture, on purpose.
+
+### Previewing a worktree's web app against the live stack
+
+The stack's orchestrator allows browser requests only from `127.0.0.1:5174`, and its images are built
+from the main checkout, so a worktree's UI change is invisible there. What worked (task 3): a
+native orchestrator on **8083** with `SCHEDULER_ENABLED=false TELEGRAM_UPDATES=off
+TELEGRAM_BOT_TOKEN=`, `ALLOWED_ORIGINS=http://127.0.0.1:5179`, `REDIS_URL=redis://127.0.0.1:6379`
+and `DATABASE_URL`/`AI_SERVICE_URL` pointed at the host ports; and `vite --port 5179` with
+`VITE_API_BASE_URL=http://127.0.0.1:8083`. The session cookie is per host, not per port, so the
+in-app browser's existing sign-in carries over and nobody types the passphrase. A
+`.claude/launch.json` for `preview_start` is **not gitignored** - delete it before committing.
 
 ### Next session: the independent tasks queue, then M5's exit proof
 

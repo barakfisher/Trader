@@ -202,7 +202,7 @@ const ProposalRow = observer(function ProposalRow({ topic }: { topic: TopicSumma
           </p>
           <ul className="space-y-0.5">
             {evidence.headlines.map((headline) => (
-              <li key={headline.articleId} className="text-xs">
+              <li key={headline.articleId} className="break-words text-xs">
                 <q className="italic text-text-muted">{headline.title}</q>
                 <span className="text-text-muted"> · {headline.source}</span>
               </li>
@@ -544,7 +544,7 @@ const CandidateRow = observer(function CandidateRow({
 
   return (
     <li>
-      <label className="flex cursor-pointer gap-3 rounded-lg p-2 text-sm hover:bg-surface-hover">
+      <label className="flex cursor-pointer items-start gap-3 rounded-lg p-2 text-sm hover:bg-surface-hover">
         <input
           type="checkbox"
           checked={checked}
