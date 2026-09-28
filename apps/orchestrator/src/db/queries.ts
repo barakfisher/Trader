@@ -1347,7 +1347,14 @@ export async function muteUntil(userId: string, until: Date | null): Promise<voi
 
 // --- Topics and their confirmed instruments (M5) ------------------------------
 
-export type TopicStatus = 'active' | 'proposed' | 'rejected';
+export type TopicStatus = 'active' | 'proposed' | 'rejected' | 'expired';
+
+/**
+ * The statuses a user sees and can act on. `rejected` and `expired` rows are
+ * auto-discovery's memory and leave every list; each reader filters by this
+ * rather than by excluding one dead status, so a third cannot slip through.
+ */
+const LIVE_TOPIC = `status IN ('active', 'proposed')`;
 
 export interface TopicRow {
   id: string;
@@ -1389,14 +1396,14 @@ const TOPIC_COLUMNS = `
   (SELECT count(*)::int FROM topic_instruments ti WHERE ti.topic_id = t.id) AS instrument_count`;
 
 /**
- * The user's topics, newest first. Rejected proposals are excluded: they exist
- * only as auto-discovery's memory of what not to propose again.
+ * The user's topics, newest first. Rejected and expired proposals are excluded:
+ * they exist only as auto-discovery's memory of what not to propose again.
  */
 export function listTopics(userId: string): Promise<TopicRow[]> {
   return query<TopicRow>(
     `SELECT ${TOPIC_COLUMNS}
        FROM topics t
-      WHERE t.user_id = $1 AND t.status <> 'rejected'
+      WHERE t.user_id = $1 AND t.${LIVE_TOPIC}
       ORDER BY t.created_at DESC, t.id`,
     [userId],
   );
@@ -1406,7 +1413,7 @@ export function getTopic(userId: string, topicId: string): Promise<TopicRow | nu
   return queryOne<TopicRow>(
     `SELECT ${TOPIC_COLUMNS}
        FROM topics t
-      WHERE t.user_id = $1 AND t.id = $2 AND t.status <> 'rejected'`,
+      WHERE t.user_id = $1 AND t.id = $2 AND t.${LIVE_TOPIC}`,
     [userId, topicId],
   );
 }
@@ -1453,7 +1460,7 @@ export async function lockTopic(
 ): Promise<TopicStatus | null> {
   const { rows } = await client.query<{ status: TopicStatus }>(
     `SELECT status FROM topics
-      WHERE user_id = $1 AND id = $2 AND status <> 'rejected'
+      WHERE user_id = $1 AND id = $2 AND ${LIVE_TOPIC}
       FOR UPDATE`,
     [userId, topicId],
   );
@@ -1713,14 +1720,19 @@ export interface KnownThemeRow {
 
 /**
  * Every theme a new proposal must not repeat: the user's active topics, their
- * open proposals, and what they rejected within the last `cooldownDays`.
+ * open proposals, what they rejected within the last `cooldownDays`, and the
+ * proposals that expired unanswered within the last `expiredDays`.
  *
  * An active topic is compared by the instruments the user *confirmed*, since
  * that is what they follow now; a proposal or a rejection by the set it was
  * offered with, frozen when it was proposed, so a later change to the universe
  * cannot quietly un-reject it.
  */
-export function listKnownThemes(userId: string, cooldownDays: number): Promise<KnownThemeRow[]> {
+export function listKnownThemes(
+  userId: string,
+  cooldownDays: number,
+  expiredDays: number,
+): Promise<KnownThemeRow[]> {
   return query<KnownThemeRow>(
     `SELECT t.id, t.label, t.status, t.match_words,
             CASE WHEN t.status = 'active'
@@ -1731,10 +1743,36 @@ export function listKnownThemes(userId: string, cooldownDays: number): Promise<K
             END AS instrument_ids
        FROM topics t
       WHERE t.user_id = $1
-        AND (t.status <> 'rejected' OR t.rejected_at >= now() - make_interval(days => $2::int))
+        AND (t.${LIVE_TOPIC}
+             OR (t.status = 'rejected' AND t.rejected_at >= now() - make_interval(days => $2::int))
+             OR (t.status = 'expired' AND t.expired_at >= now() - make_interval(days => $3::int)))
       ORDER BY t.created_at, t.id`,
-    [userId, cooldownDays],
+    [userId, cooldownDays, expiredDays],
   );
+}
+
+/**
+ * Expire this user's proposals that have waited `ttlDays` or more for an
+ * answer, and return their labels. Run under `lockTopicsForWrite`, so a confirm
+ * or a reject racing it either lands first (and the row is no longer
+ * `proposed`) or waits and finds it expired.
+ *
+ * Measured from `created_at`, since a proposal is never edited while it waits.
+ */
+export async function expireProposals(
+  client: PoolClient,
+  userId: string,
+  ttlDays: number,
+): Promise<string[]> {
+  const { rows } = await client.query<{ label: string }>(
+    `UPDATE topics
+        SET status = 'expired', expired_at = now(), updated_at = now()
+      WHERE user_id = $1 AND status = 'proposed'
+        AND created_at <= now() - make_interval(days => $2::int)
+     RETURNING label`,
+    [userId, ttlDays],
+  );
+  return rows.map((row) => row.label).sort();
 }
 
 /** Open proposals, counted under the lock `lockTopicsForWrite` takes. */
@@ -1798,7 +1836,7 @@ export async function rejectProposal(
   const rows = await query<{ status: TopicStatus; rejected: boolean }>(
     `WITH target AS (
        SELECT id, status FROM topics
-        WHERE user_id = $1 AND id = $2 AND status <> 'rejected'
+        WHERE user_id = $1 AND id = $2 AND ${LIVE_TOPIC}
      ),
      updated AS (
        UPDATE topics t

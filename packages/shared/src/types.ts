@@ -675,6 +675,8 @@ export interface TopicLimits {
   maxOpenProposals: number;
   /** Days a declined proposal's theme is not proposed again. */
   rejectionCooldownDays: number;
+  /** Days a proposal waits for an answer before it expires and frees its slot. */
+  proposalTtlDays: number;
 }
 
 export interface TopicsResponse {

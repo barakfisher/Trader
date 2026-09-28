@@ -49,6 +49,7 @@ const LIMITS = {
   maxLabelLength: 200,
   maxOpenProposals: 3,
   rejectionCooldownDays: 90,
+  proposalTtlDays: 14,
 };
 
 function candidate(symbol: string) {

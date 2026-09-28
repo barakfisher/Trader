@@ -6,8 +6,9 @@
  * second half, as amended to a cooldown: **a theme matching a rejection inside
  * the window is never proposed**, by words (and then it is not even resolved) or
  * by instruments. Around it: only a confident resolution with enough confident
- * instruments is proposed, the open-proposal bound is respected, and every phrase
- * examined leaves a reason.
+ * instruments is proposed, the open-proposal bound is respected, every phrase
+ * examined leaves a reason, and a proposal nobody answers expires and frees its
+ * slot.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,21 +25,35 @@ const USER = {
   timezone: 'Asia/Jerusalem',
 };
 const COOLDOWN = 30;
+const TTL = 11;
+const POLICY = { cooldownDays: COOLDOWN, proposalTtlDays: TTL };
 
 const db = vi.hoisted(() => ({
   known: [] as KnownThemeRow[],
   open: 0,
   inserted: [] as ProposalInput[],
   cooldownAsked: [] as number[],
+  expiredHoldAsked: [] as number[],
+  /** Labels `expireProposals` reports; the TTL it was asked with; call order. */
+  expiring: [] as string[],
+  ttlAsked: [] as number[],
+  calls: [] as string[],
 }));
 
 vi.mock('../src/db/queries.js', () => ({
   listAnalysedInstruments: vi.fn(async () => [
     { id: 'i-nvda', symbol: 'NVDA', name: 'NVIDIA Corporation', asset_class: 'equity' },
   ]),
-  listKnownThemes: vi.fn(async (_userId: string, cooldownDays: number) => {
+  listKnownThemes: vi.fn(async (_userId: string, cooldownDays: number, expiredDays: number) => {
+    db.calls.push('listKnownThemes');
     db.cooldownAsked.push(cooldownDays);
+    db.expiredHoldAsked.push(expiredDays);
     return db.known;
+  }),
+  expireProposals: vi.fn(async (_client: unknown, _userId: string, ttlDays: number) => {
+    db.calls.push('expireProposals');
+    db.ttlAsked.push(ttlDays);
+    return db.expiring;
   }),
   transaction: vi.fn(async (work: (client: unknown) => Promise<unknown>) => work({})),
   lockTopicsForWrite: vi.fn(async () => 0),
@@ -49,8 +64,13 @@ vi.mock('../src/db/queries.js', () => ({
   }),
 }));
 
-const { MAX_OPEN_PROPOSALS, MAX_RESOLVED_PER_RUN, MIN_PROPOSAL_INSTRUMENTS, runTopicDiscovery } =
-  await import('../src/services/topicDiscovery.js');
+const {
+  EXPIRED_HOLD_DAYS,
+  MAX_OPEN_PROPOSALS,
+  MAX_RESOLVED_PER_RUN,
+  MIN_PROPOSAL_INSTRUMENTS,
+  runTopicDiscovery,
+} = await import('../src/services/topicDiscovery.js');
 
 function phrase(text: string, articles = 4): DiscoveredPhrase {
   return {
@@ -134,12 +154,16 @@ beforeEach(() => {
   db.open = 0;
   db.inserted = [];
   db.cooldownAsked = [];
+  db.expiredHoldAsked = [];
+  db.expiring = [];
+  db.ttlAsked = [];
+  db.calls = [];
 });
 
 describe('rejection memory', () => {
   it('asks for rejections inside the configured cooldown', async () => {
     const { ai } = fakeAi([], {});
-    await runTopicDiscovery(USER, ai, COOLDOWN);
+    await runTopicDiscovery(USER, ai, POLICY);
     expect(db.cooldownAsked).toEqual([COOLDOWN]);
   });
 
@@ -149,7 +173,7 @@ describe('rejection memory', () => {
       'uranium miners': resolution('confident', uraniumCandidates),
     });
 
-    const result = await runTopicDiscovery(USER, ai, COOLDOWN);
+    const result = await runTopicDiscovery(USER, ai, POLICY);
 
     expect(resolved).toEqual([]);
     expect(db.inserted).toEqual([]);
@@ -162,7 +186,7 @@ describe('rejection memory', () => {
       'nuclear fuel': resolution('confident', [...uraniumCandidates.slice(0, 3), { id: 'i-leu', symbol: 'LEU' }]),
     });
 
-    const result = await runTopicDiscovery(USER, ai, COOLDOWN);
+    const result = await runTopicDiscovery(USER, ai, POLICY);
 
     expect(resolved).toEqual(['nuclear fuel']);
     expect(db.inserted).toEqual([]);
@@ -175,7 +199,7 @@ describe('rejection memory', () => {
     const { ai } = fakeAi([phrase('uranium miners')], {
       'uranium miners': resolution('confident', uraniumCandidates),
     });
-    const result = await runTopicDiscovery(USER, ai, COOLDOWN);
+    const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(result.proposed.map((p) => p.label)).toEqual(['uranium miners']);
   });
 
@@ -193,7 +217,7 @@ describe('rejection memory', () => {
       ]),
     });
 
-    const result = await runTopicDiscovery(USER, ai, COOLDOWN);
+    const result = await runTopicDiscovery(USER, ai, POLICY);
 
     expect(db.inserted).toEqual([]);
     expect(result.notProposed['nuclear fuel']).toMatch(/rejected topic "uranium" by instruments/);
@@ -205,7 +229,7 @@ describe('rejection memory', () => {
       { id: 't2', label: 'robotics', status: 'proposed', match_words: ['robotic'], instrument_ids: ['i-isrg'] },
     ];
     const { ai, resolved } = fakeAi([phrase('lithium mining'), phrase('robotics')], {});
-    const result = await runTopicDiscovery(USER, ai, COOLDOWN);
+    const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(resolved).toEqual([]);
     expect(result.notProposed['lithium mining']).toMatch(/active topic "Lithium"/);
     expect(result.notProposed['robotics']).toMatch(/proposed topic "robotics"/);
@@ -222,7 +246,7 @@ describe('what may be proposed', () => {
       ]),
     });
 
-    const result = await runTopicDiscovery(USER, ai, COOLDOWN);
+    const result = await runTopicDiscovery(USER, ai, POLICY);
 
     expect(result.proposed).toEqual([{ id: 'p-1', label: 'data centre', symbols: ['EQIX', 'DLR'] }]);
     const [written] = db.inserted;
@@ -243,7 +267,7 @@ describe('what may be proposed', () => {
       vague: resolution('weak', uraniumCandidates),
       nothing: resolution('none'),
     });
-    const result = await runTopicDiscovery(USER, ai, COOLDOWN);
+    const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(db.inserted).toEqual([]);
     expect(result.notProposed.vague).toMatch(/weak, not confident/);
     expect(result.notProposed.nothing).toMatch(/none, not confident/);
@@ -256,7 +280,7 @@ describe('what may be proposed', () => {
         [{ id: 'i-a', symbol: 'A' }].slice(0, MIN_PROPOSAL_INSTRUMENTS - 1),
       ),
     });
-    const result = await runTopicDiscovery(USER, ai, COOLDOWN);
+    const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(db.inserted).toEqual([]);
     expect(result.notProposed['one company']).toMatch(/a proposal needs/);
   });
@@ -266,7 +290,7 @@ describe('what may be proposed', () => {
       'data centre': resolution('confident', uraniumCandidates),
       'server farm': resolution('confident', uraniumCandidates),
     });
-    const result = await runTopicDiscovery(USER, ai, COOLDOWN);
+    const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(result.proposed.map((p) => p.label)).toEqual(['data centre']);
     expect(result.notProposed['server farm']).toMatch(/proposed topic "data centre" by instruments/);
   });
@@ -282,7 +306,7 @@ describe('bounds and states', () => {
       instrument_ids: [],
     }));
     const { ai, resolved } = fakeAi([phrase('data centre')], {});
-    const result = await runTopicDiscovery(USER, ai, COOLDOWN);
+    const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(resolved).toEqual([]);
     expect(result.reason).toMatch(/already open/);
   });
@@ -295,7 +319,7 @@ describe('bounds and states', () => {
       beta: resolution('confident', [{ id: 'b1', symbol: 'B1' }, { id: 'b2', symbol: 'B2' }]),
       gamma: resolution('confident', [{ id: 'g1', symbol: 'G1' }, { id: 'g2', symbol: 'G2' }]),
     });
-    const result = await runTopicDiscovery(USER, ai, COOLDOWN);
+    const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(db.inserted.map((p) => p.label)).toEqual(['alpha']);
     expect(result.openProposals).toBe(MAX_OPEN_PROPOSALS);
   });
@@ -303,14 +327,14 @@ describe('bounds and states', () => {
   it('resolves at most the per-run bound', async () => {
     const phrases = Array.from({ length: MAX_RESOLVED_PER_RUN + 2 }, (_, i) => phrase(`theme${i}`));
     const { ai, resolved } = fakeAi(phrases, {});
-    const result = await runTopicDiscovery(USER, ai, COOLDOWN);
+    const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(resolved).toHaveLength(MAX_RESOLVED_PER_RUN);
     expect(Object.keys(result.notProposed)).toHaveLength(phrases.length);
   });
 
   it('says there was nothing to read rather than nothing to find', async () => {
     const { ai, resolved } = fakeAi([], {}, 0);
-    const result = await runTopicDiscovery(USER, ai, COOLDOWN);
+    const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(resolved).toEqual([]);
     expect(result.headlines).toBe(0);
     expect(result.reason).toMatch(/news_collect/);
@@ -320,7 +344,7 @@ describe('bounds and states', () => {
     const unavailable = { ...resolution('unavailable'), interpretations: [] };
     unavailable.universe = { state: 'not_loaded', profiles: 0, embedded: 0 };
     const { ai, resolved } = fakeAi([phrase('alpha'), phrase('beta')], { alpha: unavailable });
-    const result = await runTopicDiscovery(USER, ai, COOLDOWN);
+    const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(resolved).toEqual(['alpha']);
     expect(result.degraded).toBe(true);
     expect(result.notProposed.alpha).toMatch(/not_loaded/);
@@ -331,9 +355,58 @@ describe('bounds and states', () => {
       alpha: new AiServiceError('boom', 502),
       beta: resolution('confident', [{ id: 'b1', symbol: 'B1' }, { id: 'b2', symbol: 'B2' }]),
     });
-    const result = await runTopicDiscovery(USER, ai, COOLDOWN);
+    const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(result.degraded).toBe(true);
     expect(result.notProposed.alpha).toMatch(/HTTP 502/);
     expect(result.proposed.map((p) => p.label)).toEqual(['beta']);
+  });
+});
+
+describe('proposal expiry', () => {
+  it('expires with the configured TTL before reading what the user already has', async () => {
+    // Order matters: a proposal expired this run must count as expired, not
+    // as open, when the run compares phrases and counts free slots.
+    const { ai } = fakeAi([], {});
+    await runTopicDiscovery(USER, ai, POLICY);
+    expect(db.ttlAsked).toEqual([TTL]);
+    expect(db.calls).toEqual(['expireProposals', 'listKnownThemes']);
+  });
+
+  it('expires even when there are no headlines to read, and names what it expired', async () => {
+    db.expiring = ['robotics', 'uranium'];
+    const { ai } = fakeAi([], {}, 0);
+    const result = await runTopicDiscovery(USER, ai, POLICY);
+    expect(result.headlines).toBe(0);
+    expect(result.expired).toEqual(['robotics', 'uranium']);
+    expect(result.proposalTtlDays).toBe(TTL);
+  });
+
+  it('holds an expired theme back for one discovery window, by words', async () => {
+    db.known = [
+      { id: 'e1', label: 'uranium', status: 'expired', match_words: ['uranium'], instrument_ids: URANIUM },
+    ];
+    const { ai, resolved } = fakeAi([phrase('uranium miners')], {});
+    const result = await runTopicDiscovery(USER, ai, POLICY);
+    expect(db.expiredHoldAsked).toEqual([EXPIRED_HOLD_DAYS]);
+    expect(resolved).toEqual([]);
+    expect(result.notProposed['uranium miners']).toMatch(/expired topic "uranium" by words/);
+  });
+
+  it('does not count an expired proposal as open', async () => {
+    // Every open slot was held by now-expired proposals: they are returned as
+    // `expired`, so the run resolves and proposes rather than stopping.
+    db.known = Array.from({ length: MAX_OPEN_PROPOSALS }, (_, i) => ({
+      id: `e${i}`,
+      label: `theme ${i}`,
+      status: 'expired' as const,
+      match_words: [`theme${i}`],
+      instrument_ids: [],
+    }));
+    const { ai } = fakeAi([phrase('data centre')], {
+      'data centre': resolution('confident', [{ id: 'd1', symbol: 'D1' }, { id: 'd2', symbol: 'D2' }]),
+    });
+    const result = await runTopicDiscovery(USER, ai, POLICY);
+    expect(result.reason).toBeUndefined();
+    expect(result.proposed.map((p) => p.label)).toEqual(['data centre']);
   });
 });

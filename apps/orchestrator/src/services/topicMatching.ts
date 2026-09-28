@@ -24,6 +24,7 @@
  * The same rule decides whether a theme is something the user *already* follows
  * or has pending, so "is this new?" and "was this rejected?" cannot disagree.
  * Rejected topics only count inside the cooldown (`TOPIC_REJECTION_COOLDOWN_DAYS`).
+ * Expired proposals only count for one discovery window after they lapsed.
  */
 
 /**
@@ -69,7 +70,7 @@ export interface ThemeFingerprint {
 export interface KnownTheme extends ThemeFingerprint {
   topicId: string;
   label: string;
-  status: 'active' | 'proposed' | 'rejected';
+  status: 'active' | 'proposed' | 'rejected' | 'expired';
 }
 
 export type MatchReason = 'words' | 'instruments';
