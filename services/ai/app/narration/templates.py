@@ -22,6 +22,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.analysis.findings import Finding
+from app.core.money import minor_unit_exponent
 
 #: Concepts each rule invokes, for the educational layer that lands in M3.
 CONCEPTS: dict[str, tuple[str, ...]] = {
@@ -57,8 +58,12 @@ def _pct(value: object, places: int = 1) -> str:
 
 
 def _money(minor: object, currency: str) -> str:
-    amount = Decimal(str(minor)) / 100
-    return f"{amount.quantize(Decimal('0.01'))} {currency}"
+    """Minor units at the currency's own precision: 11845 USD is "118.45 USD",
+    and 15000 JPY is "15000 JPY" - a yen has no cents, so dividing by 100 would
+    understate it a hundredfold."""
+    places = minor_unit_exponent(currency)
+    amount = Decimal(str(minor)).scaleb(-places)
+    return f"{amount.quantize(Decimal(1).scaleb(-places))} {currency}"
 
 
 def headline_for(finding: Finding) -> str:

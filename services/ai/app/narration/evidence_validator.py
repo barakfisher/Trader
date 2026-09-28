@@ -36,6 +36,7 @@ from collections.abc import Iterable, Mapping
 from decimal import Decimal, InvalidOperation
 
 from app.core.logging import get_logger
+from app.core.money import minor_unit_exponent
 
 log = get_logger("narration.validator")
 
@@ -44,7 +45,8 @@ log = get_logger("narration.validator")
 #: the unit is irrelevant to whether the VALUE is supported.
 _NUMBER_PATTERN = re.compile(r"-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?")
 
-#: Keys whose values are integer minor units, so prose will divide them by 100.
+#: Keys whose values are integer minor units, so prose will divide them by 10 to
+#: the power of the currency's exponent: 100 for USD, 1 for JPY.
 _MINOR_SUFFIX = "_minor"
 
 #: Markers identifying a key whose value is a ratio, so prose will multiply it by
@@ -71,30 +73,44 @@ def _to_decimal(value: object) -> Decimal | None:
     return None
 
 
-def _forms_for(key: str, value: Decimal) -> set[Decimal]:
-    """Every value a writer could legitimately render this evidence entry as."""
+def _forms_for(key: str, value: Decimal, currency: str | None) -> set[Decimal]:
+    """Every value a writer could legitimately render this evidence entry as.
+
+    A minor-unit figure's major form depends on its currency: 15000 JPY is
+    written "15,000", and accepting "150.00" as well would let the validator
+    approve a figure understated a hundredfold. With no currency declared the
+    exponent is 2, the common case.
+    """
     forms = {value}
     if key.endswith(_MINOR_SUFFIX):
-        forms.add(value / 100)
+        forms.add(value.scaleb(-minor_unit_exponent(currency or "")))
     if any(marker in key for marker in _RATIO_MARKERS):
         forms.add(value * 100)
     # A writer may drop the sign: "fell 8.5%" rather than "changed by -8.5%".
     return {form for base in list(forms) for form in (base, -base)}
 
 
-def sourced_values(evidence: Mapping[str, object], _key: str = "") -> set[Decimal]:
+def sourced_values(
+    evidence: Mapping[str, object], _key: str = "", _currency: str | None = None
+) -> set[Decimal]:
     """Collect every figure the evidence supports, in each renderable form.
 
     Walks nested structures, because evidence carries lists of contributing
     positions and nested threshold blocks. Strings are mined for the numbers
     inside them so that a quoted headline or an ISO date does not read as
     invention.
+
+    A mapping's `currency` applies to the minor-unit figures inside it, nested
+    ones included, until a nested mapping declares its own.
     """
     found: set[Decimal] = set()
 
     if isinstance(evidence, Mapping):
+        declared = evidence.get("currency")
+        if isinstance(declared, str) and declared:
+            _currency = declared
         for key, value in evidence.items():
-            found |= sourced_values(value, str(key))  # type: ignore[arg-type]
+            found |= sourced_values(value, str(key), _currency)  # type: ignore[arg-type]
         return found
 
     if isinstance(evidence, str):
@@ -105,7 +121,7 @@ def sourced_values(evidence: Mapping[str, object], _key: str = "") -> set[Decima
         # meaning and leave a correct template failing its own check.
         whole = _parse(evidence.strip())
         if whole is not None:
-            return _forms_for(_key, whole)
+            return _forms_for(_key, whole, _currency)
 
         iso = _ISO_DATE_PREFIX.match(evidence)
         tokens = iso.groups() if iso else _NUMBER_PATTERN.findall(evidence)
@@ -117,12 +133,12 @@ def sourced_values(evidence: Mapping[str, object], _key: str = "") -> set[Decima
 
     if isinstance(evidence, Iterable) and not isinstance(evidence, str | bytes):
         for item in evidence:
-            found |= sourced_values(item, _key)  # type: ignore[arg-type]
+            found |= sourced_values(item, _key, _currency)  # type: ignore[arg-type]
         return found
 
     number = _to_decimal(evidence)
     if number is not None:
-        found |= _forms_for(_key, number)
+        found |= _forms_for(_key, number, _currency)
     return found
 
 
