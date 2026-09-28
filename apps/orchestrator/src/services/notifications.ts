@@ -224,12 +224,21 @@ export interface DigestResult {
  * recoverable, because the next digest would skip exactly the entries nobody
  * ever saw.
  */
-export async function sendDigest(user: UserRow, notifier: Notifier): Promise<DigestResult> {
+/**
+ * `now` decides which day "today" is for the topic section. Injectable so a test
+ * pins it: the first version read the clock here, and its test passed until the
+ * calendar moved past the date its rows were written for.
+ */
+export async function sendDigest(
+  user: UserRow,
+  notifier: Notifier,
+  now: Date = new Date(),
+): Promise<DigestResult> {
   const pending = await listPendingDigest(user.id);
   // The topic section is gathered even when nothing was deferred: a topic that
   // moved today is worth a digest on its own (FR-13), and a quiet day with no
   // topic news still sends nothing - see topicDigest.ts.
-  const topicEntries = await gatherTopicDigest(user);
+  const topicEntries = await gatherTopicDigest(user, now);
   const topicSection = renderTopicSection(topicEntries);
   const topics = topicSection === null ? 0 : topicEntries.length;
   if (pending.length === 0 && topicSection === null) {
