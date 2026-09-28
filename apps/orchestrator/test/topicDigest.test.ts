@@ -151,7 +151,7 @@ describe('sendDigest', () => {
   it('sends nothing on a quiet day, as before', async () => {
     const channel = notifier();
 
-    const result = await sendDigest(USER as never, channel as never);
+    const result = await sendDigest(USER as never, channel as never, NOW);
 
     expect(result).toEqual({ entries: 0, topics: 0, delivered: false });
     expect(channel.send).not.toHaveBeenCalled();
@@ -163,7 +163,7 @@ describe('sendDigest', () => {
     ];
     const channel = notifier();
 
-    const result = await sendDigest(USER as never, channel as never);
+    const result = await sendDigest(USER as never, channel as never, NOW);
 
     expect(result).toMatchObject({ entries: 0, topics: 3, delivered: true });
     const [message] = channel.send.mock.calls[0]! as unknown as [{ title: string; body: string }];
@@ -181,7 +181,7 @@ describe('sendDigest', () => {
     const channel = notifier();
     channel.send.mockResolvedValueOnce({ delivered: false, error: 'telegram down' } as never);
 
-    const result = await sendDigest(USER as never, channel as never);
+    const result = await sendDigest(USER as never, channel as never, NOW);
 
     const [message] = channel.send.mock.calls[0]! as unknown as [{ title: string; body: string }];
     expect(message.title).toBe('Daily digest: 2 findings, 3 topics');
