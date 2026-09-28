@@ -69,6 +69,17 @@ def _replace_run_kind_check(kinds: tuple[str, ...]) -> None:
     )
 
 
+#: `matchWords`' filler list in `topicMatching.ts`, frozen as of this migration: a
+#: later change to the list must not change what this backfill wrote.
+_FILLER_WORDS = (
+    "a", "an", "and", "the", "of", "in", "on", "for", "to", "with", "its", "it", "is",
+    "are", "as", "by", "or", "at", "from", "that", "this",
+    "company", "companies", "inc", "corporation",
+    "stock", "stocks", "share", "shares", "sector", "industry", "theme", "market",
+    "markets", "play", "plays", "etf", "etfs", "fund", "funds",
+)  # fmt: skip
+
+
 def upgrade() -> None:
     _replace_run_kind_check(KINDS)
     op.execute(
@@ -77,7 +88,45 @@ def upgrade() -> None:
             ADD COLUMN rejected_at          timestamptz,
             ADD COLUMN match_words          text[],
             ADD COLUMN proposed_instruments uuid[],
-            ADD COLUMN evidence             jsonb,
+            ADD COLUMN evidence             jsonb
+        """
+    )
+    # Auto topics already present get a fingerprint before the CHECK below
+    # demands one. None exist on a first upgrade; they exist after a rollback
+    # below this revision and forward again, because the downgrade keeps
+    # proposals and rejections and drops only these columns - and without this
+    # backfill that round trip could never be completed. Found by the Postgres
+    # integration job, the first thing ever to try it with a proposal present.
+    #
+    # The words follow `matchWords` (lower-case, filler removed, plurals folded,
+    # distinct, sorted), so a restored rejection still suppresses its theme by
+    # words. Its instruments are unrecoverable - the offer lived only in the
+    # dropped column - so the set is empty, and matching by instruments stops
+    # for that row. The rejection time falls back to the last update.
+    fillers = ", ".join(repr(word) for word in _FILLER_WORDS)
+    op.execute(
+        f"""
+        UPDATE topics AS t
+           SET match_words = coalesce((
+                   SELECT array_agg(DISTINCT folded ORDER BY folded)
+                     FROM (
+                           SELECT CASE WHEN length(w) > 3 AND w LIKE '%s' AND w NOT LIKE '%ss'
+                                       THEN left(w, -1) ELSE w END AS folded
+                             FROM (SELECT m[1] AS w
+                                     FROM regexp_matches(lower(t.label), '([a-z0-9]+)', 'g') AS m
+                                  ) AS words
+                            WHERE w NOT IN ({fillers})
+                          ) AS significant
+               ), '{{}}'),
+               proposed_instruments = '{{}}',
+               evidence = '{{}}'::jsonb,
+               rejected_at = CASE WHEN t.status = 'rejected' THEN t.updated_at END
+         WHERE t.created_by = 'auto'
+        """
+    )
+    op.execute(
+        """
+        ALTER TABLE topics
             -- `rejected` and a rejection time go together, in both directions:
             -- a cooldown measured from a missing time would never end.
             ADD CONSTRAINT topics_rejected_has_time
