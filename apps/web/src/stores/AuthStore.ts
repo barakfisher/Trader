@@ -26,13 +26,12 @@ export class AuthStore {
       runInAction(() => {
         this.user = response.authenticated ? (response.user ?? null) : null;
       });
+      // The portfolio and the feed are fetched by the dashboard's queries when
+      // it mounts, so they are not loaded here.
       if (this.user) {
-        void this.root.portfolio.load();
-        void this.root.observations.load();
         // Alongside the feed, because it describes the feed. One request, not a
         // poll: the state only changes when a scan runs.
         void this.root.narration.load();
-      void this.root.proposals.load();
         // Loaded with the feed, not on arrival at the inbox: the badge in the
         // header is how a user learns a question is waiting, and an approvals
         // inbox nobody knows has items is the PUT /targets mistake again.
@@ -57,9 +56,8 @@ export class AuthStore {
       runInAction(() => {
         this.user = user;
       });
-      await this.root.portfolio.load();
-      void this.root.observations.load();
       void this.root.narration.load();
+      void this.root.proposals.load();
     } catch (error) {
       runInAction(() => {
         this.error =
@@ -78,7 +76,10 @@ export class AuthStore {
     } finally {
       runInAction(() => {
         this.user = null;
-        this.root.portfolio.reset();
+        // Every cached server response is one account's. Cleared, not
+        // invalidated: an invalidated query would refetch - as nobody - and
+        // keep showing the previous account's numbers until it failed.
+        this.root.queryClient.clear();
         this.root.observations.reset();
         // Settings are one account's, so they leave with the session rather
         // than waiting on screen for whoever signs in next.

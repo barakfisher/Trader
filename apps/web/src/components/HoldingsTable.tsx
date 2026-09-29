@@ -1,17 +1,28 @@
 import { useState } from 'react';
-import { observer } from 'mobx-react-lite';
 import { Check, Clock, Pencil, Trash2, X } from 'lucide-react';
 
 import { formatMoney, formatPercent, minorToNumber, type HoldingView } from '@traders/shared';
 
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
-import { useStore } from '../stores/context.tsx';
+import { errorMessage } from '../api/client.ts';
+import { baseCurrencyOf } from '../lib/portfolioView.ts';
+import { usePortfolioQuery, useRemoveHolding, useUpdateQuantity } from '../queries/portfolio.ts';
 import { Card, Delta } from './ui.tsx';
 
-export const HoldingsTable = observer(function HoldingsTable() {
-  const { portfolio } = useStore();
-  const holdings = portfolio.data?.holdings ?? [];
-  const currency = portfolio.baseCurrency;
+type UpdateQuantity = ReturnType<typeof useUpdateQuantity>;
+type RemoveHolding = ReturnType<typeof useRemoveHolding>;
+
+export function HoldingsTable() {
+  const { data: portfolio } = usePortfolioQuery();
+  // Owned by the table, not each row, so a failure is reported once, under the
+  // table, whichever row caused it - as it was before.
+  const updateQuantity = useUpdateQuantity();
+  const removeHolding = useRemoveHolding();
+  const holdings = portfolio?.holdings ?? [];
+  const currency = baseCurrencyOf(portfolio);
+  const failure =
+    (updateQuantity.error && errorMessage(updateQuantity.error, 'Could not update that holding.')) ||
+    (removeHolding.error && errorMessage(removeHolding.error, 'Could not remove that holding.'));
 
   if (holdings.length === 0) return null;
 
@@ -34,33 +45,42 @@ export const HoldingsTable = observer(function HoldingsTable() {
           </thead>
           <tbody>
             {holdings.map((holding) => (
-              <HoldingRow key={holding.id} holding={holding} baseCurrency={currency} />
+              <HoldingRow
+                key={holding.id}
+                holding={holding}
+                baseCurrency={currency}
+                updateQuantity={updateQuantity}
+                removeHolding={removeHolding}
+              />
             ))}
           </tbody>
         </table>
       </div>
-      {portfolio.mutationError && (
-        <p className="mt-3 text-xs text-loss">{portfolio.mutationError}</p>
-      )}
+      {failure && <p className="mt-3 text-xs text-loss">{failure}</p>}
     </Card>
   );
-});
+}
 
-const HoldingRow = observer(function HoldingRow({
+function HoldingRow({
   holding,
   baseCurrency,
+  updateQuantity,
+  removeHolding,
 }: {
   holding: HoldingView;
   baseCurrency: string;
+  updateQuantity: UpdateQuantity;
+  removeHolding: RemoveHolding;
 }) {
-  const { portfolio } = useStore();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(holding.quantity);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  const save = async () => {
-    const ok = await portfolio.updateQuantity(holding.id, draft);
-    if (ok) setEditing(false);
+  const save = () => {
+    updateQuantity.mutate(
+      { holdingId: holding.id, quantity: draft },
+      { onSuccess: () => setEditing(false) },
+    );
   };
 
   return (
@@ -164,7 +184,7 @@ const HoldingRow = observer(function HoldingRow({
           <span className="flex items-center justify-end gap-2 text-xs">
             <button
               type="button"
-              onClick={() => portfolio.removeHolding(holding.id)}
+              onClick={() => removeHolding.mutate(holding.id)}
               className="text-loss underline"
             >
               Remove
@@ -196,7 +216,7 @@ const HoldingRow = observer(function HoldingRow({
       </td>
     </tr>
   );
-});
+}
 
 /** Numeric quantities arrive as exact decimal strings; trim trailing zeros only. */
 function trimQuantity(quantity: string): string {

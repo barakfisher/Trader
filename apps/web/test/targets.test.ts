@@ -38,6 +38,7 @@ vi.mock('../src/api/client.ts', () => ({
 }));
 
 const { RootStore } = await import('../src/stores/RootStore.ts');
+const { queryKeys } = await import('../src/queries/queryKeys.ts');
 const { ApiRequestError } = await import('../src/api/client.ts');
 const {
   DRIFT_BANDS,
@@ -115,8 +116,9 @@ async function loadedStore(
   unpricedSymbols: string[] = [],
 ) {
   const root = new RootStore();
-  get.mockResolvedValueOnce(portfolio(holdings, unpricedSymbols));
-  await root.portfolio.load();
+  // The portfolio arrives through the query cache, as it does when a page's
+  // query fetches it; the form reads that cache, never a copy of its own.
+  root.queryClient.setQueryData(queryKeys.portfolio, portfolio(holdings, unpricedSymbols));
   get.mockResolvedValueOnce(targets);
   await root.targets.load();
   return root;
@@ -238,6 +240,19 @@ describe('TargetsStore', () => {
     // held against a 40% target would be a specific and wrong statement.
     expect(root.targets.rows.every((row) => row.actualUnits === null)).toBe(true);
     expect(root.targets.rows.every((row) => row.driftUnits === null)).toBe(true);
+  });
+
+  it('follows the cached portfolio when it changes, and forgets it at sign-out', async () => {
+    const root = await loadedStore([holding('AAPL', 50), holding('MSFT', 20)]);
+    const aapl = () => root.targets.rows.find((row) => row.symbol === 'AAPL');
+    expect(aapl()?.actualUnits).not.toBeNull();
+
+    // Another screen's refetch lands in the cache; the form sees it unasked.
+    root.queryClient.setQueryData(queryKeys.portfolio, portfolio([holding('MSFT', 20)]));
+    expect(aapl()?.held).toBe(false);
+
+    root.queryClient.clear();
+    expect(root.targets.rows.every((row) => row.actualUnits === null)).toBe(true);
   });
 
   it('is not dirty until an edit actually changes a weight', async () => {

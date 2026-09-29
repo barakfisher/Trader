@@ -1,10 +1,10 @@
 /**
- * The observations feed: what the store says about a load, and what the reader
+ * The observations feed: which drawers the reader opened, and what the reader
  * is shown for a raw evidence mapping. The API client is mocked, so these are
  * fast and need no backend.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { Observation } from '@traders/shared';
 
@@ -28,8 +28,6 @@ vi.mock('../src/api/client.ts', () => ({
 }));
 
 const { RootStore } = await import('../src/stores/RootStore.ts');
-const { ApiRequestError } = await import('../src/api/client.ts');
-const { OBSERVATIONS_PAGE_SIZE } = await import('../src/stores/ObservationsStore.ts');
 const { readEvidence, labelFor, unitFor } = await import('../src/lib/evidence.ts');
 const { kindLabel, severityRank, severityStyle, subjectLabel, conceptLabel } =
   await import('../src/lib/observationPresentation.ts');
@@ -60,82 +58,11 @@ const priceMove: Observation = {
   createdAt: '2026-09-16T14:00:00Z',
 };
 
-const drift: Observation = {
-  ...priceMove,
-  id: 'obs-2',
-  kind: 'allocation_drift',
-  severity: 'notable',
-  subjectKind: 'portfolio',
-  subjectRef: 'portfolio:allocation:AAPL',
-  conceptRefs: [],
-  narrationSource: 'template',
-  fallbackReason: 'provider_error',
-  createdAt: '2026-09-16T13:00:00Z',
-};
-
 describe('ObservationsStore', () => {
-  let store: InstanceType<typeof RootStore>;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    store = new RootStore();
-  });
-
-  it('requests one page of the feed and keeps the API ordering', async () => {
-    get.mockResolvedValue({ observations: [priceMove, drift] });
-    await store.observations.load();
-
-    expect(get).toHaveBeenCalledWith(`/observations?limit=${OBSERVATIONS_PAGE_SIZE}`);
-    expect(store.observations.observations.map((item) => item.id)).toEqual(['obs-1', 'obs-2']);
-    expect(store.observations.latestAt).toBe(priceMove.createdAt);
-    expect(store.observations.topSeverity).toBe('high');
-    expect(store.observations.highCount).toBe(1);
-  });
-
-  it('is not empty before the first load, and is empty only after one succeeds', async () => {
-    // "We have not asked yet" and "the engine found nothing" are different
-    // statements, and the view says something different for each.
-    expect(store.observations.isEmpty).toBe(false);
-
-    get.mockResolvedValue({ observations: [] });
-    await store.observations.load();
-    expect(store.observations.isEmpty).toBe(true);
-    expect(store.observations.error).toBeNull();
-  });
-
-  it('surfaces a failure and never reports it as a quiet day', async () => {
-    get.mockRejectedValue(new ApiRequestError('Cannot reach the server.', 0, 'network_error'));
-    await store.observations.load();
-
-    expect(store.observations.error).toBe('Cannot reach the server.');
-    expect(store.observations.isEmpty).toBe(false);
-    expect(store.observations.loading).toBe(false);
-  });
-
-  it('keeps the previous findings on screen during a silent refresh', async () => {
-    get.mockResolvedValue({ observations: [priceMove] });
-    await store.observations.load();
-
-    let resolveSecond: (value: { observations: Observation[] }) => void = () => {};
-    get.mockReturnValue(
-      new Promise<{ observations: Observation[] }>((resolve) => (resolveSecond = resolve)),
-    );
-    const pending = store.observations.load({ silent: true });
-
-    expect(store.observations.refreshing).toBe(true);
-    expect(store.observations.loading).toBe(false);
-    expect(store.observations.observations).toHaveLength(1);
-
-    resolveSecond({ observations: [priceMove, drift] });
-    await pending;
-    expect(store.observations.refreshing).toBe(false);
-    expect(store.observations.observations).toHaveLength(2);
-  });
-
-  it('tracks which evidence drawers are open, and clears them on reset', async () => {
-    get.mockResolvedValue({ observations: [priceMove] });
-    await store.observations.load();
-
+  // The findings are server state (`queries/observations.ts`, tested with the
+  // feed in feed.test.tsx). What is left here is what the reader did.
+  it('tracks which evidence drawers are open, and clears them on reset', () => {
+    const store = new RootStore();
     expect(store.observations.isExpanded('obs-1')).toBe(false);
     store.observations.toggleEvidence('obs-1');
     expect(store.observations.isExpanded('obs-1')).toBe(true);
@@ -145,23 +72,6 @@ describe('ObservationsStore', () => {
     store.observations.toggleEvidence('obs-1');
     store.observations.reset();
     expect(store.observations.isExpanded('obs-1')).toBe(false);
-    expect(store.observations.lastLoadedAt).toBeNull();
-  });
-
-  it('loads the feed with the session, as the portfolio is', async () => {
-    get.mockImplementation((path: string) =>
-      path.startsWith('/auth/session')
-        ? Promise.resolve({
-            authenticated: true,
-            user: { id: 'u', baseCurrency: 'USD', timezone: 'UTC' },
-          })
-        : Promise.resolve({ observations: [priceMove], holdings: [], allocationByInstrument: [] }),
-    );
-    await store.auth.loadSession();
-    // Fire-and-forget loads are started, not awaited, by the session check.
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(get).toHaveBeenCalledWith(`/observations?limit=${OBSERVATIONS_PAGE_SIZE}`);
   });
 });
 

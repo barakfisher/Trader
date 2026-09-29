@@ -63,3 +63,11 @@ export const api = {
     request<T>(path, { method: 'PATCH', body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 };
+
+/**
+ * The sentence to show for a failed request: the server's own message when it
+ * sent one, or the caller's description of what could not be done.
+ */
+export function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof ApiRequestError ? error.message : fallback;
+}

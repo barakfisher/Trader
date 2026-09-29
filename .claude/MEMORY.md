@@ -858,6 +858,31 @@ failure they prevent.
     A band is judged only after resolving, so the run stops early only when **both** caps are
     full, and a phrase whose band has no room says so ("no open weak proposal slot left").
 
+63. **The validator accepts a `_minor` figure only in its major form** (#89). It used to accept the
+    raw integer too, so "fell to 4016 from a high of 4750" passed for a $40.16 price. Measured
+    over every stored model narration: **4 of 11** carried cents as dollars, all approved. **The
+    4 stored rows were rewritten by the templates** (`narration_source='template'`,
+    `fallback_reason='unsourced_figures'` - what the validator would have done at the time),
+    decided by Claude under the user's M6 delegation: leaving them kept hundredfold-wrong figures
+    on the dashboard, and withdrawing them would have hidden real findings. Notifications already
+    sent with those texts cannot be recalled.
+
+64. **Server state lives in TanStack Query; MobX reads it through `CacheMirror`, never a copy.**
+    `apps/web/src/queries/`: `queryClient.ts` (30 s stale time; retries only a network error or a
+    5xx, at most 2 - a 4xx is an answer), `queryKeys.ts` (every key, once), one module per
+    resource with its `queryOptions` and mutations. A write invalidates the query it changed
+    rather than patching the cached response, because totals, weights and FX are the server's
+    arithmetic. `RootStore` owns the client, so a store can invalidate (`ImportStore`) and
+    sign-out `clear()`s it - cleared, not invalidated, which would refetch as nobody and keep the
+    last account's numbers up until it failed. **`CacheMirror` exists for stores whose client logic
+    is computed from server state** (`TargetsStore.rows` compares the draft with held weights): a
+    MobX-observable, read-only view of one cache entry. It subscribes to the **query cache**, not a
+    `QueryObserver`, because `clear()` removes the query object itself and an observer stays bound
+    to the removed one - it would never see the next account's portfolio
+    (`serverState.test.ts` pins this). A component's hook is still what fetches. Rejected: copying
+    the response into the store (the exact debt being removed), and passing the portfolio into
+    every `TargetsStore` getter (eight getters, and every caller would have to remember to).
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -1323,9 +1348,9 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | **The free tier cannot narrate at all, and the reason is not cost** | `.env`, `app/llm` | `LLM_MODEL` is a `:free` route because the OpenRouter workspace has a **lifetime** budget of $0.01 — a cumulative cap, not an allowance, so nothing resets and only an org admin changes it. On the free model narration now reaches the evidence validator and is **rejected every time** (`unsourced_figures`, 3/3 measured) for deriving figures not in the evidence. So free means templates, reliably. Real usage is ~$0.0015 per narration and ~10 findings a day ≈ **$0.45/month**, which is what funding the workspace costs. The badge (#38) states this to the user rather than hiding it |
 | ~~Crypto detection is a symbol-shape heuristic~~ | — | **Resolved** (independent task 5): the quote request carries each symbol's `asset_class`; the `-USD` suffix is only the fallback for a bare lookup with no class |
 | ~~Market hours assume US sessions for every symbol~~ | — | **Resolved** (independent task 5): `app/core/market_sessions.py` maps exchanges - display names *and* Yahoo codes, both present in `instruments` - to their own session in their own timezone; an unknown exchange keeps New York hours. Holidays, auctions and lunch breaks are still ignored, deliberately |
-| **Server state is hand-fetched in every MobX store** | `apps/web/src/stores` | Each store repeats `load()`/`loading`/`error`/`runInAction` with no caching, de-duplication, retry or refetch. A page revisited refetches everything, and a store that forgets to reload after a write shows stale data silently. **Scheduled as M6 tech debt (added 2026-09-27 at the user's request):** move reads and writes to TanStack Query, keep MobX for drafts and UI state. The plan and its exit are in `docs/MILESTONES.md` under M6. New stores written before then (the M5 topic cards) will be migrated with the rest, so keep their fetch code thin |
+| **Server state is hand-fetched in most MobX stores** | `apps/web/src/stores` | Each such store repeats `load()`/`loading`/`error`/`runInAction` with no caching, de-duplication, retry or refetch, and a store that forgets to reload after a write shows stale data silently. **Being removed in M6** (decision 64): the portfolio and the observations feed moved to TanStack Query in the foundation PR - `PortfolioStore` is gone, `ObservationsStore` keeps only which evidence drawers are open. Still hand-fetched: proposals, narration, Telegram, topics, settings, targets. The exit is in `docs/MILESTONES.md` under M6 |
 | ~~The Topics screen has never been looked at in a browser~~ | — | **Resolved** (independent task 3, 2026-09-28): reviewed at desktop and 375 px against the live stack - the list, a topic card, and the confirm screen over a real 13-candidate resolution. Two faults found and fixed: the dashboard header did not wrap, so on a phone the page was 721 px wide and a tap on "Topics" landed on "Settings" (the only way to reach the page); and each candidate's checkbox was centred in its row, so on long quotes it sat beside the quote rather than the ticker it ticks. "Suggested from the news" was seen with real proposals on 2026-09-29 (#86), including the weak-match toggle; not yet at 375 px. Timestamps use the browser locale app-wide (`formatExactTime`); that is M6 polish, not a Topics fault |
-| No component/DOM tests on the web app | `apps/web/test` | Store and formatting logic covered; rendering is not. Two real UI bugs this session (Discard disabled by its own typo, a deep link that does nothing) were found by *using* the app, not by tests, and neither would have been caught by a DOM test either — but a DOM test would have caught the first |
+| **Few component/DOM tests on the web app** | `apps/web/test` | Started with the TanStack Query foundation: `test/serverStateHarness.tsx` renders with a real query client and root store and only `api` mocked; a `.tsx` test opts into jsdom with `// @vitest-environment jsdom`, so the store tests stay in node. The feed's four states and the holding writes are rendered (`feed.test.tsx`, `holdings.test.tsx`); nothing else is yet. Earlier lesson kept: two UI bugs (Discard disabled by its own typo, a deep link that did nothing) were found by using the app, and a DOM test would have caught the first |
 | ~~Telegram has no working binding~~ | — | **Resolved 2026-09-24.** A chat is bound. The "receives nothing" mystery was never a Telegram problem: nothing in the repository consumed updates, because M4's polling bridge was a hand-run script that left with its session. Kept as a line so the history of the symptom survives |
 | **Real news needs `NEWS_PROVIDERS=gdelt,fixture` in `.env`** | `.env` | Slice C added the GDELT provider; the code default and `.env.example` stay `fixture` so CI is offline (the same deliberate asymmetry as `MARKET_DATA_PROVIDERS`). Until `.env` names `gdelt`, every live `news_collect` run fetches 0. **Also still unwired:** the narration correlation step - `run_portfolio_scan` is always called with `articles=()`, so no observation cites news yet |
 | ~~Auto-discovery has run once on real, title-matched headlines and proposed nothing~~ | — | **Resolved 2026-09-29** by the market feed (decision 60): the first run over it proposed "data center" and "bond yields". The original text follows because its lesson (resolve budget spent on everyday words) still shapes `GENERIC_WORDS` |

@@ -88,7 +88,7 @@ export class TargetsStore {
     // Until the portfolio has loaded there is no weight to compare against, and
     // an absent portfolio must not read as an empty one: every target would
     // otherwise show as 0% held, which is a specific and wrong claim.
-    const portfolio = this.root.portfolio.data;
+    const portfolio = this.root.portfolioCache.data ?? null;
     const holdings = portfolio?.holdings ?? [];
     const bySymbol = new Map(holdings.map((holding) => [holding.instrument.symbol, holding]));
     const symbols = new Set<string>([...bySymbol.keys(), ...(this.saved?.keys() ?? [])]);
@@ -222,7 +222,7 @@ export class TargetsStore {
    * about them deserves to know that is why they will not.
    */
   get driftBlockedBySymbols(): string[] {
-    return this.root.portfolio.data?.summary.unpricedSymbols ?? [];
+    return this.root.portfolioCache.data?.summary.unpricedSymbols ?? [];
   }
 
   async load(): Promise<void> {

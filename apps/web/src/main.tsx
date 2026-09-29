@@ -1,5 +1,6 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { QueryClientProvider } from '@tanstack/react-query';
 
 import { App } from './App.tsx';
 import { RootStore } from './stores/RootStore.ts';
@@ -11,8 +12,10 @@ void store.auth.loadSession();
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <StoreProvider store={store}>
-      <App />
-    </StoreProvider>
+    <QueryClientProvider client={store.queryClient}>
+      <StoreProvider store={store}>
+        <App />
+      </StoreProvider>
+    </QueryClientProvider>
   </React.StrictMode>,
 );

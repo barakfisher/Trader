@@ -3,12 +3,11 @@ import { AlertTriangle } from 'lucide-react';
 
 import { formatMoney, formatPercent } from '@traders/shared';
 
-import { useStore } from '../stores/context.tsx';
+import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { Delta } from './ui.tsx';
 
 export const SummaryCards = observer(function SummaryCards() {
-  const { portfolio } = useStore();
-  const summary = portfolio.data?.summary;
+  const summary = usePortfolioQuery().data?.summary;
   if (!summary) return null;
   const currency = summary.baseCurrency;
 

@@ -4,6 +4,8 @@ import { FileUp, X } from 'lucide-react';
 
 import { formatMoney, type ImportRow, type ImportRowStatus } from '@traders/shared';
 
+import { errorMessage } from '../api/client.ts';
+import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { useStore } from '../stores/context.tsx';
 import { Button, ErrorNote, Spinner } from './ui.tsx';
 
@@ -24,7 +26,10 @@ const STATUS_LABELS: Record<ImportRowStatus, string> = {
 };
 
 export const ImportWizard = observer(function ImportWizard() {
-  const { import: store, portfolio } = useStore();
+  const { import: store } = useStore();
+  // A committed import refetches the portfolio; if that fails, say so here,
+  // where the user is looking, rather than only on the page behind the dialog.
+  const portfolio = usePortfolioQuery();
   const fileInput = useRef<HTMLInputElement>(null);
 
   if (!store.open) return null;
@@ -169,7 +174,9 @@ export const ImportWizard = observer(function ImportWizard() {
             </>
           )}
 
-          {portfolio.error && <ErrorNote message={portfolio.error} />}
+          {portfolio.error && (
+            <ErrorNote message={errorMessage(portfolio.error, 'Could not load your portfolio.')} />
+          )}
         </div>
       </div>
     </div>
