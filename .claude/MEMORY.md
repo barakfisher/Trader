@@ -4,7 +4,24 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-29 ~08:30 UTC (handoff at a natural boundary, at the user's request: three PRs
+Updated: 2026-09-29 ~13:40 UTC - **M5's closing handoff (milestone boundary). M5 is complete;
+the next session starts M6** - see "Next session: M6" in "Where to go next". This session:
+- designed the broader news feed with the user, every one of six decisions measured read-only on
+  raw GDELT files first (three 24 h samples, then all 672 slots of 2026-09-22..29);
+- #83: discovery indexed (69 s -> 2.8 s on a real week, identical output) - it would have timed
+  out at the orchestrator's 30 s on the market feed's first full week;
+- #84: the market feed (decision 60) - same GDELT files, second filter, `articles.feed`;
+- #85: one foreign country's press is local news (decision 61) - `data/outlets`;
+- #86: weak proposals in their own band and cap, behind a toggle (decision 62).
+**M5's exit, shown on live data 2026-09-29:** discovery proposed "data center" (DLR, APLD, CIFR,
+GDS, CORZ, KEEL, BXDC) and "bond yields" from real stored headlines; "canadian imports" was
+rejected in the UI and the next run (`topic_discovery:manual:rejection-check-1790688549`) said
+*matches rejected topic "canadian imports" by words*. The free-text half (resolve -> confirm ->
+topic observations) was shown in #53-#57. The user asked this session's Claude to merge each PR
+once CI was green and rebuild the stack, and it did; **Option B** (Claude rejecting a proposal
+through the UI) was chosen by the user for the rejection check - ask again next time.
+
+Previous handoff, 2026-09-29 ~08:30 UTC (at a natural boundary, at the user's request: three PRs
 merged, #79-#81). **The next session starts with the design of a broader news feed** - see
 "Next session" in "Where to go next". This session worked M5's exit proof and found that the
 feed, not discovery, is what stands between it and a real theme:
@@ -133,8 +150,8 @@ the PR after that.
 | **M2.5 — Real price history** | ✅ Complete | **unplanned**; PR #23. Finished M1's provider layer, 18 PRs late |
 | **M3 — RAG & educational engine** | ✅ Complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. #45: the paid embedder. #46: `POST /ask`, intent routing, citations, a three-state relevance floor. #47: the 35-case eval set in two CI tiers. **The relevance floor is measured to be in the wrong place — see the debt table** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
-| **M5 — Market discovery & topics** | 🟡 In progress | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). **Open:** a broader news feed, since the followed-only feed holds no cross-company theme (designed and measured next session), then weak proposals, the rejection check, and M5's closing handoff |
-| M6 — Frontend completion & polish | Not started | |
+| **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
+| M6 — Frontend completion & polish | **Next** | See "Next session: M6" |
 | M7 — Kubernetes & documentation | Not started | |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
@@ -172,8 +189,8 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts at handoff (2026-09-29, after #81): **1,477** — 750 Python, 512 orchestrator, 199 web, 16 shared - plus
-**11 Postgres integration tests** (7 Python, 4 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
+Test counts at handoff (2026-09-29, after #86): **1,557** — 816 Python, 525 orchestrator, 200 web, 16 shared - plus
+**13 Postgres integration tests** (9 Python, 4 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
 eval sets, which are not test counts: `/ask`'s **35 cases** (16 keyless on every PR, all 35 when
 keyed), and the topic eval's **31 cases** (`scripts/run_topic_eval.py`, keyed only, **not in CI**).
 
@@ -1307,11 +1324,12 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | ~~Crypto detection is a symbol-shape heuristic~~ | — | **Resolved** (independent task 5): the quote request carries each symbol's `asset_class`; the `-USD` suffix is only the fallback for a bare lookup with no class |
 | ~~Market hours assume US sessions for every symbol~~ | — | **Resolved** (independent task 5): `app/core/market_sessions.py` maps exchanges - display names *and* Yahoo codes, both present in `instruments` - to their own session in their own timezone; an unknown exchange keeps New York hours. Holidays, auctions and lunch breaks are still ignored, deliberately |
 | **Server state is hand-fetched in every MobX store** | `apps/web/src/stores` | Each store repeats `load()`/`loading`/`error`/`runInAction` with no caching, de-duplication, retry or refetch. A page revisited refetches everything, and a store that forgets to reload after a write shows stale data silently. **Scheduled as M6 tech debt (added 2026-09-27 at the user's request):** move reads and writes to TanStack Query, keep MobX for drafts and UI state. The plan and its exit are in `docs/MILESTONES.md` under M6. New stores written before then (the M5 topic cards) will be migrated with the rest, so keep their fetch code thin |
-| ~~The Topics screen has never been looked at in a browser~~ | — | **Resolved** (independent task 3, 2026-09-28): reviewed at desktop and 375 px against the live stack - the list, a topic card, and the confirm screen over a real 13-candidate resolution. Two faults found and fixed: the dashboard header did not wrap, so on a phone the page was 721 px wide and a tap on "Topics" landed on "Settings" (the only way to reach the page); and each candidate's checkbox was centred in its row, so on long quotes it sat beside the quote rather than the ticker it ticks. **Still unseen with real data: "Suggested from the news"**, because no proposal has existed yet - it will be seen when M5's exit proof is. Timestamps use the browser locale app-wide (`formatExactTime`); that is M6 polish, not a Topics fault |
+| ~~The Topics screen has never been looked at in a browser~~ | — | **Resolved** (independent task 3, 2026-09-28): reviewed at desktop and 375 px against the live stack - the list, a topic card, and the confirm screen over a real 13-candidate resolution. Two faults found and fixed: the dashboard header did not wrap, so on a phone the page was 721 px wide and a tap on "Topics" landed on "Settings" (the only way to reach the page); and each candidate's checkbox was centred in its row, so on long quotes it sat beside the quote rather than the ticker it ticks. "Suggested from the news" was seen with real proposals on 2026-09-29 (#86), including the weak-match toggle; not yet at 375 px. Timestamps use the browser locale app-wide (`formatExactTime`); that is M6 polish, not a Topics fault |
 | No component/DOM tests on the web app | `apps/web/test` | Store and formatting logic covered; rendering is not. Two real UI bugs this session (Discard disabled by its own typo, a deep link that does nothing) were found by *using* the app, not by tests, and neither would have been caught by a DOM test either — but a DOM test would have caught the first |
 | ~~Telegram has no working binding~~ | — | **Resolved 2026-09-24.** A chat is bound. The "receives nothing" mystery was never a Telegram problem: nothing in the repository consumed updates, because M4's polling bridge was a hand-run script that left with its session. Kept as a line so the history of the symptom survives |
 | **Real news needs `NEWS_PROVIDERS=gdelt,fixture` in `.env`** | `.env` | Slice C added the GDELT provider; the code default and `.env.example` stay `fixture` so CI is offline (the same deliberate asymmetry as `MARKET_DATA_PROVIDERS`). Until `.env` names `gdelt`, every live `news_collect` run fetches 0. **Also still unwired:** the narration correlation step - `run_portfolio_scan` is always called with `articles=()`, so no observation cites news yet |
-| **Auto-discovery has run once on real, title-matched headlines and proposed nothing** | `app/topics/discovery.py`, `services/topicDiscovery.ts` | 2026-09-28 10:33 UTC: 123 linked headlines, 20 phrases, 8 resolved, 0 proposed. Every resolved phrase was `none` or `weak` (`ai`, `buy`, `pro`, `prediction` none; `tv`, `crypto`, `iphone`, `remittix` weak). The 12 skipped by the 8-per-run cap were resolved by hand afterwards and none would have qualified either (`chips` resolves to potato-chip makers LW and UTZ; `futures` is `confident` with no confident candidate; `bytedance alibaba` is `weak` over NVDA/TSM/MU). **So 0 proposals was the right answer, and the run exposed two faults:** (1) the resolve budget went to everyday words - `buy`, `pro`, `use`, `billion`, `season`, `prediction` belong in `GENERIC_WORDS`; (2) single words are poor resolver queries (two-letter "ai" resolves to nothing), and the one multi-word phrase was the one with a real signal. Not yet shown: discovery *finding* a theme, which M5's exit criterion needs |
+| ~~Auto-discovery has run once on real, title-matched headlines and proposed nothing~~ | — | **Resolved 2026-09-29** by the market feed (decision 60): the first run over it proposed "data center" and "bond yields". The original text follows because its lesson (resolve budget spent on everyday words) still shapes `GENERIC_WORDS` |
+| (history) Auto-discovery's first real run | `app/topics/discovery.py`, `services/topicDiscovery.ts` | 2026-09-28 10:33 UTC: 123 linked headlines, 20 phrases, 8 resolved, 0 proposed. Every resolved phrase was `none` or `weak` (`ai`, `buy`, `pro`, `prediction` none; `tv`, `crypto`, `iphone`, `remittix` weak). The 12 skipped by the 8-per-run cap were resolved by hand afterwards and none would have qualified either (`chips` resolves to potato-chip makers LW and UTZ; `futures` is `confident` with no confident candidate; `bytedance alibaba` is `weak` over NVDA/TSM/MU). **So 0 proposals was the right answer, and the run exposed two faults:** (1) the resolve budget went to everyday words - `buy`, `pro`, `use`, `billion`, `season`, `prediction` belong in `GENERIC_WORDS`; (2) single words are poor resolver queries (two-letter "ai" resolves to nothing), and the one multi-word phrase was the one with a real signal. Not yet shown: discovery *finding* a theme, which M5's exit criterion needs |
 | ~~Open proposals never expire~~ | — | **Resolved** (decision 57, migration 0021): unanswered for `TOPIC_PROPOSAL_TTL_DAYS`, a proposal becomes `expired`, kept and named in the run's stats. Kept as a line so the history survives |
 | **Company names that are everyday words link falsely** | `app/news/entities.py` | Measured on the first raw-file run (2026-09-27 19:35 UTC): 2 of 18 stored articles were about the fruit - "Apple Cider & Donut Day at the Kinney Pioneer Museum", "Czipar's annual Apple Festival" - and linked to AAPL, because a capitalised "Apple" in a headline matches the company. The same will happen for "Target", "Block", "Visa", "Shell" when followed. Consequences: the fruit lands on the topic card and in sentiment, and discovery reads it ("festival" was a candidate phrase on 2026-09-28). The provider is not at fault; the matcher accepts a bare name as a sole signal. **Deferred by the user to a dedicated PR after more data** - likely shape: for a name that is also a dictionary word, require a second signal (a ticker, "Inc", a product word) before linking, and measure precision over several days of runs, not one |
 | **Laptop sleep leaves gaps in collection** | local scheduler | Overnight 2026-09-27/28 the runs jumped 20:30 -> 23:13 -> 03:21 -> 10:18 UTC. The cursor caught up (16 files a run, never older than 48 h), so no news was lost - but the daily `topic_discovery` meant for local midnight ran at 10:33 UTC. Harmless for news; worth knowing when a "nightly" result appears at breakfast. M7's CronJob removes it |
@@ -1323,6 +1341,11 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | ~~The universe is not reachable from the running stack~~ | — | **Resolved in M5 slice 3** (`POST /topics/resolve`). The image copies `data/universe` without the descriptions; the compose `universe` container loads it on every start from a read-only mount of the checkout. CI loads hand-written fixture descriptions so the smoke test runs the resolver's SQL. **Still true:** nothing refreshes the snapshot itself, and a machine with no `descriptions.local.jsonl` answers `unavailable`, by design |
 | **A fresh machine needs ~1 h of Yahoo fetching before topics resolve** | `build_instrument_universe.py` | Descriptions are not committed (decision 40). The build is resumable (`--cache`, `--holdings-cache`) and refuses to write a snapshot with holes; rate-limit failures are retried on the next run. Rebuilding also re-screens, so membership near the $1B line moves (LAC sits at $1.05B) |
 | **Disambiguation is built and dormant** | `app/topics/meanings.py` | `MEANINGS_SPLIT_BELOW` was fitted before name stripping; afterwards no fitting topic splits, including "chips" and "mining". The code and its constant say so. Needs genuinely ambiguous fitting topics on current vectors before it is trusted |
+| **Ticker networks still reach discovery through the followed feed** | `app/news/gdelt.py`, `market_feed.py` | `EXCLUDED_OUTLETS` applies to the market filter only (decision 60, deliberately: it did not change what the followed feed collects). But a network headline that names a followed company ("Nvidia (NASDAQ:NVDA) short interest...") is still collected and read by discovery, and on 2026-09-29 it produced a **weak proposal, "short interest"** (IWM, IWR, LQD...). Options: exclude the listed outlets from the followed feed too (changes topic news for the user - ask), or add "short interest"-style template words to `GENERIC_WORDS`. Measure on the stored window first |
+| **The resolver cannot match events about private companies** | `app/topics/resolution.py` | "anthropic ipo" is a real, recurring story; it resolves `weak` to LLY, ABBV, PLTR - nothing to do with it - because Anthropic is not listed. Weak proposals are hidden by default exactly for this (decision 62), but the band does not say *why* the match is weak. A resolver change needs the new held-out batch (batch 3) |
+| **The discovery window only started filling with market news on 2026-09-29** | data | The 7-day window held ~150 market headlines on the first run, ~1,600 the same afternoon. Expect the proposals to change over the first week as it fills - more themes, and stronger counts behind them. Do not tune anything on the first days' runs |
+| **The outlet-country table is from 2018** | `data/outlets` | 98% of the measured week's market articles came from a listed outlet; newer outlets have no country and count against a phrase's lead country (errs towards keeping it). Rebuild instructions are in its README; re-measure the 0.75 bar after replacing it |
+| **The market feed stops when the user follows nothing** | `routes/internal.ts` `news_collect` | The run is skipped with "no holdings and no topics", and the market feed rides on it. Harmless in v1 (there are always holdings); relevant the day an empty account is supported |
 | **The topic eval is not in CI** | `scripts/run_topic_eval.py` | Needs a database holding the universe *and* a semantic embedder; CI has neither. `test_topic_eval_set_contract.py` guards the file on every PR, but no automated run measures resolution
 
 ---
@@ -1497,205 +1520,50 @@ and `DATABASE_URL`/`AI_SERVICE_URL` pointed at the host ports; and `vite --port 
 in-app browser's existing sign-in carries over and nobody types the passphrase. A
 `.claude/launch.json` for `preview_start` is **not gitignored** - delete it before committing.
 
-### Next session: design the broader news feed, measured first
+### M5 is complete, and how it was verified
 
-**Why this is next.** M5's exit proof needs discovery to propose a real theme, and it cannot from
-this feed. News is collected only for followed instruments (decision 51) - 12 of them, and on
-2026-09-29 NVDA, AAPL, BTC-USD and MSFT made up 95% of 656 headlines. After #79-#81, discovery
-does what it should: 82 of the top 100 phrases were dropped as one company's news, and the 8
-resolved were not themes. Weak proposals (step 2 below) built on this feed would propose "short
-interest" and "jim cramer". The user already plans a broader macro/sector feed and a UI split into
-**"Portfolio Impact"** (news about what is held) and **"New Opportunities"** (themes from the
-wider feed); it is also what unblocks M5.
+**Exit:** *a free-text topic resolves to a sensible confirmed instrument set and produces topic
+observations; a rejected auto-proposal does not return within the rejection cooldown.*
+- **Resolve, confirm, observe** - #53-#57, checked live against the real universe and embedder,
+  including a race for the last topic slot; `topic_scan` writes `topic_move` findings.
+- **A real theme proposed** - 2026-09-29, after the market feed (decision 60): "data center" and
+  "bond yields" (confident), then "interest rates", "canadian imports", "anthropic ipo", "short
+  interest" (weak; the last two are the debt table's). Seen on the Topics page, toggle included.
+- **A rejection holds** - "canadian imports" rejected in the UI; the next run with a fresh run
+  key recorded *matches rejected topic "canadian imports" by words* in `runs.stats`.
 
-**Measured, read-only, 2026-09-29** (48 raw GKG files = every other 15-minute slot over 24 h,
-2026-09-28 07:30 - 09-29 07:00 UTC; 55,944 unique titled articles, so ~112k/day in the full
-stream). Each filter's headlines were run through the real `recurring_phrases`:
+What the feed and discovery look like now: GDELT's raw files feed two filters (followed names;
+market tags AND market words, minus named ticker networks and press-release wires); discovery
+reads linked and market headlines over 7 days, drops one company's news (decision 59) and one
+foreign country's press (decision 61), resolves at most 8, and proposes in two bands with two
+caps (decision 62). Every phrase not proposed carries its reason in `runs.stats.notProposed`.
 
-| Filter | Kept/day | What discovery found |
-|---|---|---|
-| Financial-outlet allowlist | ~2,800 | thin and India-heavy; general news ("supreme court", "raf fairford"). **Reuters, Bloomberg, WSJ, FT and MarketWatch are not in GDELT at all** |
-| GDELT `V2Themes` market tags (col 8: `ECON_STOCKMARKET`, `_INTEREST_RATES`, `_INFLATION`, `_CENTRALBANK`, `_OILPRICE`, `_IPO`, ...) | ~11,000 | real themes, but law-firm "class action" press releases top the list |
-| Market vocabulary in the headline | ~12,300 | strongest on AI ("data center" 100 stories/107 outlets, "ai agents" 68/117 - now cross-company), noisy ("MasterChef star shares" matches `shares`) |
-| **Tags AND vocabulary** | **~4,800** | cleanest: interest rates, rate hikes, bond yields, treasury yields, crude oil + Iran, trade war, data centers, ai agents, Anthropic IPO, the Gold Fields/Northern Star takeover |
+**How to reproduce a feed measurement (read-only):** download `https://data.gdeltproject.org/
+gdeltv2/<YYYYMMDDHHMMSS>.gkg.csv.zip` for past slots into a scratch directory (~3 MB each, 96 a
+day); parse as `app/news/gdelt.read_gkg` does (tab-separated, `csv.field_size_limit(sys.maxsize)`,
+title from `<PAGE_TITLE>` in column 26, outlet column 3, URL column 4, themes column 8); keep rows
+with `market_feed.is_market_headline` and not `is_excluded_outlet`; attach
+`outlet_countries.load_outlet_countries(...)` codes to `Headline`s; call `recurring_phrases`, and
+resolve the top phrases through the live `/topics/resolve`, which stores nothing. The scripts
+lived in the session scratchpad and are gone - about 100 lines, all of them glue around those
+functions.
 
-**Progress (2026-09-29, second session of the day):** all six decisions were made with the user
-and recorded as decisions 60-61. #83 indexed discovery (69 s -> 2.8 s on a real week, identical
-output), #84 added the market feed (live: "data center" and "bond yields" proposed on the first
-run), #85 the geography rule (decision 61), and weak proposals followed (decision 62).
-**Next: step 3 below** (the rejection check), then M5's closing handoff. The list that follows is the design brief
-as it was brought to the user.
+### Next session: M6
 
-**Decisions to bring the user before building** (a recommendation is noted, not decided):
-1. **The filter.** Tags AND vocabulary is the measured candidate. The vocabulary list and the tag
-   list were written ad hoc for the sample - freeze them as named constants and re-measure.
-2. **Ticker spam.** 16% of the tags+vocabulary rows came from an auto-generated network
-   (tickerreport.com, themarketsdaily.com, dailypolitical.com, americanbankingnews.com, ...).
-   Needs a blocklist, or detection of one template repeated across many outlets.
-3. **Geography.** Much is Indian (Sensex, "lakh crore", Tata Sons) or Australian (RBA "cash
-   rate"). For a USD portfolio, decide whether to keep it, down-rank it, or filter by
-   `V2Locations`/outlet country.
-4. **What an unlinked article is.** It counts in discovery's denominator (decision 59 was built
-   for that), but must never reach topic news, sentiment or a holding's evidence as if it were
-   about something followed. Decide whether it gets its own `article_entities` kind or none.
-5. **Volume and cost.** ~4,800/day is ~34k headlines in discovery's 7-day window. Storage is
-   small (headline only), but `group_stories` compares each headline with every story's first
-   headline - O(n x stories). 6,144 headlines took 4 s; a week's window is an estimated ~2 min
-   per daily run. Measure it before accepting it, or index stories by word.
-6. **Where the two feeds meet the UI.** Which of "Portfolio Impact" and "New Opportunities" each
-   article, observation and proposal belongs to. Likely M6 for the screen, but the data needs
-   the distinction from the start.
+`docs/MILESTONES.md` M6: equity curve, per-holding detail, proposals inbox, topic management,
+settings (thresholds, quiet hours, base currency); loading/error/empty states everywhere, a
+mobile-width pass, disclaimer surfaces; and **TanStack Query for server state** (independent task
+7, the plan is in MILESTONES). Task 6 (**a screen for `/ask`**) is also M6. Suggested order:
+1. Decide with the user whether TanStack Query goes first (it touches every store, so every later
+   screen is cheaper after it) or last (screens first, one migration at the end). Do not run it
+   alongside another store-touching PR.
+2. Then the screens, one PR each; look at each in the browser at desktop and 375 px (the Topics
+   page's two faults in task 3 were found only that way).
+Before starting, glance at the new debt rows from this session (ticker networks via the followed
+feed, private-company events, the filling window) - none blocks M6, but the first one is small.
 
-**How to reproduce the measurement:** download `https://data.gdeltproject.org/gdeltv2/
-<YYYYMMDDHHMMSS>.gkg.csv.zip` for past slots into a scratch directory; parse the way
-`app/news/gdelt.read_gkg` does (tab-separated, `csv.field_size_limit(sys.maxsize)`, title from
-`<PAGE_TITLE>` in column 26, outlet column 3, URL column 4, themes column 8, organisations column
-14); build `Headline`s and call `recurring_phrases`. Nothing is written. The scripts lived in the
-session scratchpad and are gone - about 80 lines.
-
-**Then, M5's remaining steps, unchanged in substance:**
-2. **Weak proposals are stored, and hidden behind a filter** (the user's option (a) with a
-   filter). A `weak` verdict with enough weak candidates becomes a proposal too, carrying its
-   band; the Topics page shows **only confident proposals by default** and a toggle reveals the
-   weak ones, labelled "weak match". **Decided by the user 2026-09-29:** "enough" is **at least
-   3 weak candidates** (one more than the confident rule's 2, because each weak one is less
-   evidence), and weak proposals have **their own cap** and never take one of
-   `MAX_OPEN_PROPOSALS`' confident slots - a shared cap would let three weak ones block every
-   confident one, the failure decision 57 fixed. Rejection memory and expiry must treat both
-   bands the same.
-3. **The exit check's second half:** once a proposal exists, reject it ("Not interested"), run
-   discovery again with a fresh run key, and confirm its `notProposed` says "matches rejected
-   topic ... by words/instruments" (decision 59 checks rejection *before* the single-company
-   rule, so this reason survives). That plus a sensible proposal closes M5 as amended.
-
-(Step 1 - collapsing near-duplicate phrases - is done: #79, and #80 after it.) To run discovery
-by hand: `POST /internal/runs` `{kind: "topic_discovery", runKey:
-"topic_discovery:manual:<unique>"}` with `x-internal-key`; read the reasons with `select key,
-value from runs, jsonb_each_text(stats->'notProposed') where kind='topic_discovery' order by
-started_at desc`.
-
-Then the queue: task 6 (a screen for `/ask`) and task 7 (TanStack Query). Both are M6 work, and
-7 touches every store, so do not run it alongside 6.
-
-Proposals now expire after 14 days unanswered (decision 57); a run's stats name what it expired.
-
-### M5's exit proof, then close M5
-
-**Everything M5 needs is built; what is missing is evidence that auto-discovery finds a real
-theme.** The user chose to let 24-48 hours of title-matched headlines accumulate after #68
-(merged 2026-09-28 ~11:00 UTC) before judging it. In order:
-
-1. **Check the feed is still healthy.** `select started_at, stats->>'fetched',
-   stats->>'entity_links', stats->'providers_used' from runs where kind='news_collect' order by
-   started_at desc limit 20`. Expect `fetched > 0` most runs, `gdelt` in `providers_used`, and
-   `entity_links` close to `stored`. `news_feed_cursors` shows how far it has read.
-2. **Read the discovery runs.** `select started_at, status, stats from runs where
-   kind='topic_discovery' order by started_at desc`. `notProposed` gives a reason for every
-   phrase. Three outcomes, each with a next move:
-   - **A sensible proposal** (e.g. something like "ai agents") - the exit criterion's first half.
-     Look at it on the Topics page ("Suggested from the news"): headlines quoted, symbols listed.
-   - **Only `weak` / `none` verdicts on sensible phrases** - the resolver's bar, not discovery, is
-     in the way. Do not lower `STRONG_ABOVE` to force it: its thresholds are measured
-     (`docs/TOPIC_RESOLUTION.md`) and batch 2 is spent. Bring the phrases to the user.
-   - **Noise reaching the resolver** - add words to `GENERIC_WORDS` from the run's own phrases.
-   The run is daily in the user's timezone, but fires when the laptop is awake (debt table).
-   To run one outside its slot: `POST /internal/runs` with `{kind: "topic_discovery",
-   runKey: "topic_discovery:manual:<something unique>"}` and the `x-internal-key` header.
-3. **Show the second half: rejection.** Decline a proposal ("Not interested"), then run discovery
-   again with a fresh run key: the same theme must be in `notProposed` as "matches rejected topic
-   ... by words/instruments". That, plus step 2, is the exit criterion as amended (cooldown, not
-   forever - MILESTONES.md).
-4. **M5 closing handoff** at the milestone boundary, then **M6** (MILESTONES.md: equity curve,
-   per-holding detail, proposals inbox, topic management, settings; TanStack Query is already
-   scheduled there as debt).
-
-Deferred, with data accumulating: **everyday-word company names** ("Apple" the fruit - the user
-wants a dedicated PR after more data), in the debt table. Proposal expiry is built (decision 57).
-
-### (Done) topic cards
-
-Built in #64: a topic's news and tone on its card, with the last collection's state so an empty
-list is never called a quiet week.
-
-### (Done) auto-discovery with rejection memory - the plan it was built from
-
-The exit criterion's second half: "a rejected auto-proposal never returns". Two parts, one easy:
-
-- **Rejection memory** has its foundation already: `topics.status = 'rejected'` rows stay, and the
-  live-label unique index excludes them. Missing: a reject action (`POST /topics/:id/reject`, or a
-  status on `PUT`), and the rule that the proposer never proposes a label matching a rejected one.
-  Decide what "matching" means (case-insensitive label? same resolved instrument set?) before
-  writing it - a proposer that re-proposes "Uranium miners" after "uranium" was rejected breaks the
-  criterion in spirit.
-- **The proposer is a design question, not a coding one.** The news matcher deliberately knows only
-  held and topic instruments (decision 51), so a "recurring entity" in the news is by definition
-  something the user already follows. Discovery needs a different source of themes. The most
-  promising idea so far: recurring phrases across collected headlines → `resolve_topic` → propose
-  only confident resolutions that are not an active or rejected label. **It needs real news to
-  evaluate**, so check whether any GDELT run has stored articles first (debt table). Proposals count against nothing until confirmed
-  (`lockTopicsForWrite` counts `active` only), but bound how many can be open at once.
-- After that: topic cards in the UI (topic news + sentiment have APIs and no screen), and M5's
-  closing handoff.
-
-### M5 — where it stands
-
-MILESTONES.md: topic CRUD, resolving a free-text topic to candidate instruments with confidence and
-rationale, user confirmation, auto-discovered themes as proposals only, rejection memory, per-topic
-sentiment. **Exit: a free-text topic resolves to a sensible confirmed instrument set and produces
-topic observations; a rejected auto-proposal never returns.**
-
-**Done — resolution (slices 1–2).** `app/topics/resolution.resolve_topic(connection, embedder,
-topic)` returns a `TopicResolution`: a three-state verdict, and one or more interpretations, each
-up to 15 `TopicCandidate`s with `instrument_id` (what `topic_instruments` stores), symbol,
-similarity, `size_minor` + `size_currency`, `confident`/`weak`, a quoted rationale and `held_by`.
-The contract was checked against what confirmation needs before handoff; the ticker-search
-fallback for "add what the resolver missed" is the existing `GET /instruments/resolve`. Verified against the real database and embedder, not only by the hermetic suite. How it
-works, what it scores, why it fails and what to try next: **`docs/TOPIC_RESOLUTION.md`** — read §3
-and §5 before changing a threshold.
-
-**Done: Topic CRUD & Confirmation (#53–#55).**
-- **Resolve.** Type a topic in the Topics page and it is resolved through `POST /topics/resolve`.
-- **Confirm.** The user ticks suggestions (nothing is pre-ticked) and adds tickers the resolver
-  missed, then confirms with `{label, symbols}`.
-- **Provenance.** The orchestrator re-resolves the label and stores each symbol as `resolver` (with
-  band, quoted rationale and `held_by`) or `user` (decisions 47–49).
-- **Limits.** 10 active topics, 30 instruments each, enforced under a row lock.
-- **Checked live** against real Postgres, the real universe and the real embedder, including a race
-  for the last topic slot.
-
-**Next: the second half of M5**, in the order the exit criterion needs it:
-
-1. **`topicScan`: topic observations.** **Slice A is done**: `topic_scan` runs every 30 minutes,
-   backfill covers active topics' instruments (`listAnalysedInstruments`), a confirm backfills its
-   instruments at once, and `topic_move` findings land in the feed labelled by topic name. **Two
-   layers were missing underneath, and one still is: no news is ever collected** (see the debt
-   table). **Slice B** (#58: `news_collect`, `GET /topics/:id/news`, decision 51) and **slice C** (#59:
-   GDELT, decision 52) are merged. Per-topic sentiment (FR-12, decision 53) followed. The notes
-   below were written for slice B.
-   - Scheduled through `POST /internal/runs` like every other run (guideline 8), with a
-     `dedupe_key` per observation.
-   - The `observations.subject_kind` column already allows `'topic'`
-     (`ObservationSubjectKind` in shared types).
-   - Its input is each active topic's `topic_instruments`, via the `topic_instruments_instrument`
-     index. **Pass the news matcher held and topic-linked instruments only, never the
-     5,294-instrument universe**: company names like "Target" and "Block" would flood it.
-   - Migration 0004 promised that a later migration backfills `article_entities.topic_id` from
-     `topic_ref`. 0017 deliberately passed that on, and it is this work's decision now. The
-     table was empty at 0017.
-2. ~~**Per-topic sentiment**~~ **Done** (decision 53): `GET /topics/:id/sentiment`. No UI yet.
-3. **Auto-discovery**: recurring entities become `status = 'proposed'`, `created_by = 'auto'`
-   topics.
-   - `rejected` rows are its memory. The live-label unique index already excludes them, so a
-     rejected theme can be remembered while the user creates a topic of the same name.
-   - Confirming a proposal is `PUT /topics/:id`, which already moves `proposed` to `active` and
-     counts it against the cap.
-   - What is missing is the proposer, a reject action, and the rule that a rejected theme is
-     never proposed again. Decision 18's ledger argument applies: remember, do not delete.
-4. ~~**The digest's topic section**~~ **Done** (decision 54). Topic cards on the dashboard remain.
-
-**Before any resolver change:** a new sealed held-out batch (batch 3), written by the user.
-Batch 2 is spent. The backlog in `docs/TOPIC_RESOLUTION.md` §4 cannot be measured honestly
-without one.
+Standing permissions do not carry across sessions: ask again about merging, rebuilding, and
+acting in the UI.
 
 ### Left unfinished, deliberately
 
