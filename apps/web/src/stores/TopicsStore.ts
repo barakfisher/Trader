@@ -55,6 +55,13 @@ export class TopicsStore {
   /** The confirm screen. Null while it is closed. */
   composer: Composer | null = null;
 
+  /**
+   * Whether weak suggestions are on screen. Off by default, by the user's
+   * decision (2026-09-29): a weak match is shown only to someone who asked for
+   * it, and never in place of a confident one.
+   */
+  showWeakProposals = false;
+
   constructor(private readonly root: RootStore) {
     makeAutoObservable(this, {}, { autoBind: true });
   }
@@ -71,6 +78,27 @@ export class TopicsStore {
   /** Auto-discovered themes waiting for a yes or a no (FR-11). Never followed until confirmed. */
   get proposals(): TopicSummary[] {
     return (this.topics ?? []).filter((t) => t.status === 'proposed');
+  }
+
+  /** Proposals the resolver was confident about: always shown. */
+  get confidentProposals(): TopicSummary[] {
+    return this.proposals.filter((t) => t.proposalBand !== 'weak');
+  }
+
+  /** Proposals the resolver matched only weakly: shown on request. */
+  get weakProposals(): TopicSummary[] {
+    return this.proposals.filter((t) => t.proposalBand === 'weak');
+  }
+
+  /** The proposals on screen: the confident ones, then the weak ones if asked for. */
+  get shownProposals(): TopicSummary[] {
+    return this.showWeakProposals
+      ? [...this.confidentProposals, ...this.weakProposals]
+      : this.confidentProposals;
+  }
+
+  toggleWeakProposals(): void {
+    this.showWeakProposals = !this.showWeakProposals;
   }
 
   /** True when `topicId` is an open proposal, so confirming it would add a topic. */
@@ -151,7 +179,8 @@ export class TopicsStore {
         });
       } catch (error) {
         runInAction(() => {
-          if (stillOpen()) this.sentimentError = messageOf(error, 'Could not load this topic’s tone.');
+          if (stillOpen())
+            this.sentimentError = messageOf(error, 'Could not load this topic’s tone.');
         });
       }
     };

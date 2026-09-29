@@ -73,9 +73,14 @@ vi.mock('../src/services/topics.js', async (original) => ({
   confirmTopic,
 }));
 
-const { DEFAULT_PROPOSAL_TTL_DAYS, DEFAULT_REJECTION_COOLDOWN_DAYS, loadConfig, resetConfigForTests } =
-  await import('../src/config.js');
-const { MAX_OPEN_PROPOSALS } = await import('../src/services/topicDiscovery.js');
+const {
+  DEFAULT_PROPOSAL_TTL_DAYS,
+  DEFAULT_REJECTION_COOLDOWN_DAYS,
+  loadConfig,
+  resetConfigForTests,
+} = await import('../src/config.js');
+const { MAX_OPEN_PROPOSALS, MAX_OPEN_WEAK_PROPOSALS } =
+  await import('../src/services/topicDiscovery.js');
 const { createApp } = await import('../src/http/app.js');
 const {
   MAX_ACTIVE_TOPICS,
@@ -243,15 +248,23 @@ describe('topic CRUD', () => {
       maxInstrumentsPerTopic: MAX_INSTRUMENTS_PER_TOPIC,
       maxLabelLength: MAX_TOPIC_LENGTH,
       maxOpenProposals: MAX_OPEN_PROPOSALS,
+      maxOpenWeakProposals: MAX_OPEN_WEAK_PROPOSALS,
       rejectionCooldownDays: DEFAULT_REJECTION_COOLDOWN_DAYS,
       proposalTtlDays: DEFAULT_PROPOSAL_TTL_DAYS,
     });
   });
 
   it('confirms a new topic with the normalised symbols, and answers 201 with its reasons', async () => {
-    confirmTopic.mockResolvedValueOnce({ ok: true, topic: TOPIC_ROW, instruments: [INSTRUMENT_ROW] });
+    confirmTopic.mockResolvedValueOnce({
+      ok: true,
+      topic: TOPIC_ROW,
+      instruments: [INSTRUMENT_ROW],
+    });
 
-    const response = await send('POST', '/topics', { label: '  uranium ', symbols: ['ccj', 'CCJ'] });
+    const response = await send('POST', '/topics', {
+      label: '  uranium ',
+      symbols: ['ccj', 'CCJ'],
+    });
 
     expect(response.status).toBe(201);
     expect(confirmTopic).toHaveBeenCalledWith(
@@ -281,7 +294,10 @@ describe('topic CRUD', () => {
     [{ label: 'x'.repeat(MAX_TOPIC_LENGTH + 1), symbols: ['CCJ'] }, 400],
     [{ label: 'uranium', symbols: [' ', ''] }, 422],
     [
-      { label: 'uranium', symbols: Array.from({ length: MAX_INSTRUMENTS_PER_TOPIC + 1 }, (_, i) => `S${i}`) },
+      {
+        label: 'uranium',
+        symbols: Array.from({ length: MAX_INSTRUMENTS_PER_TOPIC + 1 }, (_, i) => `S${i}`),
+      },
       422,
     ],
   ])('refuses %j with %i before confirming anything', async (body, status) => {
@@ -306,11 +322,17 @@ describe('topic CRUD', () => {
   });
 
   it('names the tickers no provider recognises, so the UI can mark them', async () => {
-    confirmTopic.mockResolvedValueOnce({ ok: false, reason: 'unresolved_symbols', symbols: ['NOPE'] });
+    confirmTopic.mockResolvedValueOnce({
+      ok: false,
+      reason: 'unresolved_symbols',
+      symbols: ['NOPE'],
+    });
 
     const response = await send('POST', '/topics', { label: 'uranium', symbols: ['NOPE'] });
 
-    expect(((await response.json()) as { details: unknown }).details).toEqual({ symbols: ['NOPE'] });
+    expect(((await response.json()) as { details: unknown }).details).toEqual({
+      symbols: ['NOPE'],
+    });
   });
 
   it('refuses a confirm when the resolver cannot be asked, instead of storing bare additions', async () => {
@@ -324,7 +346,10 @@ describe('topic CRUD', () => {
   it('re-confirms an existing topic by id', async () => {
     confirmTopic.mockResolvedValueOnce({ ok: true, topic: TOPIC_ROW, instruments: [] });
 
-    const response = await send('PUT', `/topics/${TOPIC_ID}`, { label: 'uranium', symbols: ['CCJ'] });
+    const response = await send('PUT', `/topics/${TOPIC_ID}`, {
+      label: 'uranium',
+      symbols: ['CCJ'],
+    });
 
     expect(response.status).toBe(200);
     expect(confirmTopic.mock.calls[0]![1]).toMatchObject({ topicId: TOPIC_ID });
@@ -341,15 +366,18 @@ describe('topic CRUD', () => {
     expect(((await response.json()) as { instruments: unknown[] }).instruments).toHaveLength(1);
   });
 
-  it.each(['GET', 'PUT', 'DELETE'])('answers %s on a malformed id with 404, never touching SQL', async (method) => {
-    const body = method === 'PUT' ? { label: 'uranium', symbols: ['CCJ'] } : undefined;
-    const response = await send(method, '/topics/not-a-uuid', body);
+  it.each(['GET', 'PUT', 'DELETE'])(
+    'answers %s on a malformed id with 404, never touching SQL',
+    async (method) => {
+      const body = method === 'PUT' ? { label: 'uranium', symbols: ['CCJ'] } : undefined;
+      const response = await send(method, '/topics/not-a-uuid', body);
 
-    expect(response.status).toBe(404);
-    expect(queries.getTopic).not.toHaveBeenCalled();
-    expect(queries.deleteTopic).not.toHaveBeenCalled();
-    expect(confirmTopic).not.toHaveBeenCalled();
-  });
+      expect(response.status).toBe(404);
+      expect(queries.getTopic).not.toHaveBeenCalled();
+      expect(queries.deleteTopic).not.toHaveBeenCalled();
+      expect(confirmTopic).not.toHaveBeenCalled();
+    },
+  );
 
   it('answers a topic that is not the user’s with 404', async () => {
     queries.getTopic.mockResolvedValueOnce(null);
@@ -367,7 +395,11 @@ describe('topic CRUD', () => {
 
   it('refuses to delete a proposal, which would erase its rejection memory', async () => {
     queries.deleteTopic.mockResolvedValueOnce(false);
-    queries.getTopic.mockResolvedValueOnce({ ...TOPIC_ROW, status: 'proposed', created_by: 'auto' });
+    queries.getTopic.mockResolvedValueOnce({
+      ...TOPIC_ROW,
+      status: 'proposed',
+      created_by: 'auto',
+    });
 
     const response = await send('DELETE', `/topics/${TOPIC_ID}`);
 
@@ -398,7 +430,6 @@ describe('topic CRUD', () => {
   });
 });
 
-
 describe('GET /topics/:id/news', () => {
   let app: ReturnType<typeof buildApp>;
   let cookie: string;
@@ -422,7 +453,12 @@ describe('GET /topics/:id/news', () => {
         published_at: null,
         fetched_at: new Date('2026-09-26T08:00:00Z'),
         instruments: [
-          { symbol: 'CCJ', match_method: 'company_name', matched_text: 'Cameco', salience: '0.8000' },
+          {
+            symbol: 'CCJ',
+            match_method: 'company_name',
+            matched_text: 'Cameco',
+            salience: '0.8000',
+          },
         ],
         sentiment: { score: '0.5000', magnitude: '0.2500', model: 'lexicon-v1' },
       },
@@ -450,7 +486,7 @@ describe('GET /topics/:id/news', () => {
     ]);
   });
 
-  it('is a 404 for a topic that is not the user\'s', async () => {
+  it("is a 404 for a topic that is not the user's", async () => {
     queries.getTopic.mockResolvedValueOnce(null);
     expect((await get()).status).toBe(404);
     expect(queries.listTopicArticles).not.toHaveBeenCalled();
@@ -504,7 +540,12 @@ describe('GET /topics/:id/sentiment', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(queries.listTopicSentimentRows).toHaveBeenCalledWith(USER.id, TOPIC_ID, 7, USER.timezone);
+    expect(queries.listTopicSentimentRows).toHaveBeenCalledWith(
+      USER.id,
+      TOPIC_ID,
+      7,
+      USER.timezone,
+    );
     expect(body).toMatchObject({ days: 7, score: null, gap: 'no_articles' });
   });
 
