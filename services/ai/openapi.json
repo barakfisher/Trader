@@ -830,6 +830,19 @@
             "minimum": 1.0,
             "title": "Lookback Hours",
             "type": "integer"
+          },
+          "market_retention_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Retention Days"
           }
         },
         "required": [
@@ -883,6 +896,11 @@
             "title": "Linked Symbols",
             "type": "object"
           },
+          "market_articles": {
+            "default": 0,
+            "title": "Market Articles",
+            "type": "integer"
+          },
           "provider_failures": {
             "items": {
               "type": "string"
@@ -897,6 +915,11 @@
             "title": "Providers Used",
             "type": "array"
           },
+          "pruned": {
+            "default": 0,
+            "title": "Pruned",
+            "type": "integer"
+          },
           "since": {
             "format": "date-time",
             "title": "Since",
@@ -906,6 +929,13 @@
             "default": 0,
             "title": "Stored",
             "type": "integer"
+          },
+          "suspected_networks": {
+            "items": {
+              "$ref": "#/components/schemas/SuspectedNetwork"
+            },
+            "title": "Suspected Networks",
+            "type": "array"
           }
         },
         "required": [
@@ -1340,6 +1370,30 @@
           }
         },
         "title": "ScanStatsOut",
+        "type": "object"
+      },
+      "SuspectedNetwork": {
+        "description": "An outlet in the market feed whose headlines look generated, for a person to judge.",
+        "properties": {
+          "headlines": {
+            "title": "Headlines",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "templated": {
+            "title": "Templated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source",
+          "headlines",
+          "templated"
+        ],
+        "title": "SuspectedNetwork",
         "type": "object"
       },
       "TopicCandidateOut": {

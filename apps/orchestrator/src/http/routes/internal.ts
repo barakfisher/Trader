@@ -20,7 +20,7 @@ import { claimRun, finishRun, getUser, listAnalysedInstruments, listRuns } from 
 import { sweepAndCloseLifecycles } from '../../mastra/proposalLifecycle.js';
 import { backfillInstrumentNames } from '../../services/instrumentMetadata.js';
 import { runPortfolioScan } from '../../services/portfolioScan.js';
-import { runTopicDiscovery } from '../../services/topicDiscovery.js';
+import { marketRetentionDays, runTopicDiscovery } from '../../services/topicDiscovery.js';
 import { HISTORY_BACKFILL_DAYS, runTopicScan } from '../../services/topicScan.js';
 import { sendDigest } from '../../services/notifications.js';
 import { sweepExpiredProposals } from '../../services/proposals.js';
@@ -241,6 +241,7 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
               asset_class: row.asset_class,
             })),
             lookback_hours: NEWS_LOOKBACK_HOURS,
+            market_retention_days: marketRetentionDays(config.TOPIC_PROPOSAL_TTL_DAYS),
           },
           context.get('requestId'),
         );

@@ -68,6 +68,16 @@ import { firstMatch, matchWords, type KnownTheme } from './topicMatching.js';
 export const DISCOVERY_WINDOW_DAYS = 7;
 
 /**
+ * How long the market feed's unlinked articles are kept (decision 60): the
+ * window a proposal was found in plus the time it may stay open, so every
+ * headline behind an open proposal can still be read. Derived, not tuned -
+ * changing either term moves it. Linked articles are never pruned.
+ */
+export function marketRetentionDays(proposalTtlDays: number): number {
+  return DISCOVERY_WINDOW_DAYS + proposalTtlDays;
+}
+
+/**
  * Phrases asked for, strongest first. Far more than are resolved, because most
  * are dropped before resolving - by rejection memory and, above all, as one
  * company's news: on 2026-09-29, 19 of the top 20 were. At 20 that left seven

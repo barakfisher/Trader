@@ -28,6 +28,7 @@ export interface FakeAiOptions {
 
 /** The last scan request the fake received, so a test can assert what was sent. */
 export let lastScanRequest: { known_dedupe_keys?: string[] } | null = null;
+export let lastCollectRequest: Record<string, unknown> | null = null;
 
 export function createFakeAi(options: FakeAiOptions = {}): AiClient {
   lastScanRequest = null;
@@ -137,6 +138,26 @@ export function createFakeAi(options: FakeAiOptions = {}): AiClient {
           insufficient_history: [],
           ...(options.scanStats ?? {}),
         },
+      };
+    },
+
+    async collectNews(payload: Record<string, unknown>) {
+      lastCollectRequest = payload;
+      return {
+        fetched: 0,
+        stored: 0,
+        inserted: 0,
+        duplicate_urls: 0,
+        duplicate_content: 0,
+        empty_bodies: 0,
+        entity_links: 0,
+        instruments: 1,
+        since: '2026-09-14T12:00:00Z',
+        providers_used: ['fake'],
+        provider_failures: [],
+        market_articles: 0,
+        pruned: 0,
+        suspected_networks: [],
       };
     },
 
