@@ -748,8 +748,12 @@ failure they prevent.
     that limit:** articles linked to no followed instrument count in the denominator, so when a
     market/sector feed arrives (planned by the user, with the UI split into "Portfolio Impact" and
     "New Opportunities") a real theme reads as spread and only the headline loader changes.
-    `nasdaq`, `us`, `release(s)` went into `GENERIC_WORDS` in the same PR: they were the next
-    slots once company news was dropped.
+    `nasdaq`, `us`, `release(s)` went into `GENERIC_WORDS` in the same PR. **Found after
+    agreeing on drop, and corrected in the same PR:** the orchestrator asked for only the top 20
+    phrases, and 19 of them were company news - the run would have resolved one phrase and left
+    seven slots unused. `PHRASES_REQUESTED` is now 100 (the service's maximum; asking costs no
+    embedding). The lesson: simulate the whole pipeline, including the caps before a filter, not
+    only the filter.
 
 ---
 

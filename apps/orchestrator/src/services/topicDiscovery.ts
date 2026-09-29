@@ -67,8 +67,14 @@ import { firstMatch, matchWords, type KnownTheme } from './topicMatching.js';
 /** How far back headlines are read. A week: a theme is a story that lasts, not a day's spike. */
 export const DISCOVERY_WINDOW_DAYS = 7;
 
-/** Phrases asked for, strongest first. More than are resolved, so suppressed ones leave room. */
-export const PHRASES_REQUESTED = 20;
+/**
+ * Phrases asked for, strongest first. Far more than are resolved, because most
+ * are dropped before resolving - by rejection memory and, above all, as one
+ * company's news: on 2026-09-29, 19 of the top 20 were. At 20 that left seven
+ * of eight resolve slots unused while phrases further down went unread. Asking
+ * costs no embedding; only resolving does. The AI service's maximum.
+ */
+export const PHRASES_REQUESTED = 100;
 
 /**
  * Resolver calls one run may make. Each costs an embedding; a day's news rarely

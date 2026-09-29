@@ -69,6 +69,7 @@ const {
   MAX_OPEN_PROPOSALS,
   MAX_RESOLVED_PER_RUN,
   MIN_PROPOSAL_INSTRUMENTS,
+  PHRASES_REQUESTED,
   SINGLE_INSTRUMENT_SHARE,
   runTopicDiscovery,
   singleInstrumentReason,
@@ -441,6 +442,16 @@ describe("one company's news", () => {
 
   it('leaves a phrase with no linked instrument alone', () => {
     expect(singleInstrumentReason(phrase('rate cuts'))).toBeNull();
+  });
+
+  it('asks for enough phrases that dropped ones leave the budget something to spend', async () => {
+    const { ai, raw } = fakeAi([], {});
+    await runTopicDiscovery(USER, ai, POLICY);
+    expect(raw.discoverTopics).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: PHRASES_REQUESTED }),
+      undefined,
+    );
+    expect(PHRASES_REQUESTED).toBeGreaterThan(2 * MAX_RESOLVED_PER_RUN);
   });
 
   it('does not spend the resolve budget', async () => {
