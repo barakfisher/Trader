@@ -1,17 +1,20 @@
+import { useState } from 'react';
 import { observer } from 'mobx-react-lite';
+import { RouterProvider } from '@tanstack/react-router';
 
-import { DashboardPage } from './pages/DashboardPage.tsx';
 import { LoginPage } from './pages/LoginPage.tsx';
-import { ProposalsPage } from './pages/ProposalsPage.tsx';
-import { SettingsPage } from './pages/SettingsPage.tsx';
-import { TargetsPage } from './pages/TargetsPage.tsx';
-import { TopicsPage } from './pages/TopicsPage.tsx';
-import { ConceptDialog } from './components/ConceptDialog.tsx';
 import { Spinner } from './components/ui.tsx';
+import { createAppRouter } from './router.tsx';
 import { useStore } from './stores/context.tsx';
 
-export const App = observer(function App() {
-  const { auth, navigation } = useStore();
+export const App = observer(function App({
+  router: given,
+}: {
+  /** Tests pass a router on a memory history; the app makes its own. */
+  router?: ReturnType<typeof createAppRouter>;
+}) {
+  const { auth } = useStore();
+  const [router] = useState(() => given ?? createAppRouter());
 
   // Wait for the first session check so an authenticated reload does not flash
   // the login screen.
@@ -23,28 +26,8 @@ export const App = observer(function App() {
     );
   }
 
+  // The address is left as it is, so signing in lands on the view that was asked for.
   if (!auth.isAuthenticated) return <LoginPage />;
 
-  const page =
-    navigation.view === 'settings' ? (
-      <SettingsPage />
-    ) : navigation.view === 'proposals' ? (
-      <ProposalsPage />
-    ) : navigation.view === 'targets' ? (
-      <TargetsPage />
-    ) : navigation.view === 'topics' ? (
-      <TopicsPage />
-    ) : (
-      <DashboardPage />
-    );
-
-  // Mounted here rather than inside the feed: it is an overlay, and a concept
-  // opened from one view must not be unmounted by navigating to another. It
-  // renders nothing at all while no concept is open.
-  return (
-    <>
-      {page}
-      <ConceptDialog />
-    </>
-  );
+  return <RouterProvider router={router} />;
 });

@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { FileUp, Inbox, LineChart, LogOut, RefreshCw, Settings, Tags, Target } from 'lucide-react';
 
 import { AddHoldingForm } from '../components/AddHoldingForm.tsx';
@@ -9,7 +10,7 @@ import { ImportWizard } from '../components/ImportWizard.tsx';
 import { NarrationBadge } from '../components/NarrationBadge.tsx';
 import { ObservationsFeed } from '../components/ObservationsFeed.tsx';
 import { SummaryCards } from '../components/SummaryCards.tsx';
-import { Button, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
+import { Button, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import { errorMessage } from '../api/client.ts';
 import { hasStaleQuotes, pricesAsOf } from '../lib/portfolioView.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
@@ -23,9 +24,9 @@ export const DashboardPage = observer(function DashboardPage() {
   const {
     auth,
     import: importStore,
-    navigation,
     queryClient,
   } = useStore();
+  const navigate = useNavigate();
   const portfolio = usePortfolioQuery();
   const feed = useObservationsQuery();
   // Read here, not only in the inbox: the badge in the header is how a user
@@ -87,28 +88,23 @@ export const DashboardPage = observer(function DashboardPage() {
               Import
             </span>
           </Button>
-          <Button
-            variant="secondary"
-            // Targets and settings are read by their own pages on arrival: a
-            // dashboard that fetched them on every login would spend requests
-            // nobody asked for.
-            onClick={() => navigation.show('targets')}
-          >
+          {/* Links, not buttons: each view has an address. Targets, topics and
+              settings are read by their own pages on arrival - a dashboard
+              that fetched them on every login would spend requests nobody
+              asked for. */}
+          <Link to="/targets" className={buttonClass('secondary')}>
             <span className="flex items-center gap-1">
               <Target className="size-4" aria-hidden />
               Targets
             </span>
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => navigation.show('topics')}
-          >
+          </Link>
+          <Link to="/topics" className={buttonClass('secondary')}>
             <span className="flex items-center gap-1">
               <Tags className="size-4" aria-hidden />
               Topics
             </span>
-          </Button>
-          <Button variant="secondary" onClick={() => navigation.show('proposals')}>
+          </Link>
+          <Link to="/proposals" className={buttonClass('secondary')}>
             <span className="flex items-center gap-1">
               <Inbox className="size-4" aria-hidden />
               Proposals
@@ -124,17 +120,19 @@ export const DashboardPage = observer(function DashboardPage() {
                 </span>
               )}
             </span>
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => navigation.show('settings')}
-          >
+          </Link>
+          <Link to="/settings" className={buttonClass('secondary')}>
             <span className="flex items-center gap-1">
               <Settings className="size-4" aria-hidden />
               Settings
             </span>
-          </Button>
-          <Button variant="ghost" onClick={() => void auth.logout()}>
+          </Link>
+          <Button
+            variant="ghost"
+            // Back to the top, so the next sign-in starts at the portfolio
+            // rather than wherever this session last was.
+            onClick={() => void auth.logout().then(() => navigate({ to: '/' }))}
+          >
             <span className="flex items-center gap-1">
               <LogOut className="size-4" aria-hidden />
               Sign out

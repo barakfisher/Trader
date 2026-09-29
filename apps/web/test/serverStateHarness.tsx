@@ -10,6 +10,12 @@
 import type { ReactElement } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, type RenderResult } from '@testing-library/react';
+import {
+  RouterProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+} from '@tanstack/react-router';
 
 import { RootStore } from '../src/stores/RootStore.ts';
 import { StoreProvider } from '../src/stores/context.tsx';
@@ -29,4 +35,22 @@ export function renderWithServerState(
     </QueryClientProvider>,
   );
   return { ...result, root };
+}
+
+/**
+ * The same, for a page that links elsewhere: `Link` needs a router around it.
+ * One route, rendering `ui`, on a memory history - the app's own routes are
+ * `routing.test.tsx`'s subject, not this.
+ */
+export function renderPage(
+  ui: ReactElement,
+  root = new RootStore(testQueryClient()),
+): RenderResult & { root: RootStore } {
+  // jsdom has no layout; the router restores scroll on navigation.
+  window.scrollTo = () => {};
+  const router = createRouter({
+    routeTree: createRootRoute({ component: () => ui }),
+    history: createMemoryHistory(),
+  });
+  return renderWithServerState(<RouterProvider router={router} />, root);
 }

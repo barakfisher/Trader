@@ -19,7 +19,7 @@ vi.mock('../src/api/client.ts', async () => {
 
 const { ApiRequestError } = await import('../src/api/client.ts');
 const { TopicsPage } = await import('../src/pages/TopicsPage.tsx');
-const { renderWithServerState } = await import('./serverStateHarness.tsx');
+const { renderPage } = await import('./serverStateHarness.tsx');
 
 const LIMITS = {
   maxActiveTopics: 10,
@@ -65,7 +65,7 @@ describe('the topic card', () => {
       if (path === '/topics/t1/news') return news('t1', 'Uranium prices climb');
       throw new ApiRequestError('sentiment is down', 502, 'upstream_failure');
     });
-    const { root } = renderWithServerState(<TopicsPage />);
+    const { root } = renderPage(<TopicsPage />);
     act(() => root.topics.open('t1'));
 
     expect(await screen.findByText('Uranium prices climb')).toBeTruthy();
@@ -82,7 +82,7 @@ describe('the topic card', () => {
       if (path === '/topics/b/news') return news('b', 'Beta headline');
       return new Promise(() => {});
     });
-    const { root } = renderWithServerState(<TopicsPage />);
+    const { root } = renderPage(<TopicsPage />);
 
     act(() => root.topics.open('a'));
     await screen.findByText('alpha');

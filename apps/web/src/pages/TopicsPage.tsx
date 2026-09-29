@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { observer } from 'mobx-react-lite';
+import { Link } from '@tanstack/react-router';
 import { ArrowLeft, Newspaper, Plus, Search, Tags, X } from 'lucide-react';
 
 import { formatMoney } from '@traders/shared';
@@ -12,7 +13,7 @@ import type {
 import type { TopicCandidate } from '@traders/shared/ai';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
-import { Button, Card, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
+import { Button, Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import { formatAge } from '../lib/relativeTime.ts';
 import {
   coverageNote,
@@ -43,7 +44,7 @@ import { useStore } from '../stores/context.tsx';
  * half of how a topic gets its instruments.
  */
 export const TopicsPage = observer(function TopicsPage() {
-  const { topics, navigation } = useStore();
+  const { topics } = useStore();
   const list = useTopicsQuery();
   const limits = topics.limits;
 
@@ -59,12 +60,12 @@ export const TopicsPage = observer(function TopicsPage() {
             </span>
           )}
         </div>
-        <Button variant="secondary" onClick={() => navigation.show('portfolio')}>
+        <Link to="/" className={buttonClass('secondary')}>
           <span className="flex items-center gap-1">
             <ArrowLeft className="size-4" aria-hidden />
             Back to portfolio
           </span>
-        </Button>
+        </Link>
       </header>
 
       <p className="max-w-3xl text-sm text-text-muted">
