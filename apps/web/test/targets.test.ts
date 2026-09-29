@@ -39,6 +39,12 @@ vi.mock('../src/api/client.ts', () => ({
 
 const { RootStore } = await import('../src/stores/RootStore.ts');
 const { queryKeys } = await import('../src/queries/queryKeys.ts');
+const { targetsQuery } = await import('../src/queries/targets.ts');
+
+/** What the targets page's query does on arrival. A failure stays in the query. */
+async function readTargets(root: InstanceType<typeof RootStore>) {
+  await root.queryClient.fetchQuery(targetsQuery).catch(() => undefined);
+}
 const { ApiRequestError } = await import('../src/api/client.ts');
 const {
   DRIFT_BANDS,
@@ -120,7 +126,7 @@ async function loadedStore(
   // query fetches it; the form reads that cache, never a copy of its own.
   root.queryClient.setQueryData(queryKeys.portfolio, portfolio(holdings, unpricedSymbols));
   get.mockResolvedValueOnce(targets);
-  await root.targets.load();
+  await readTargets(root);
   return root;
 }
 
@@ -188,13 +194,29 @@ describe('TargetsStore', () => {
     vi.clearAllMocks();
   });
 
-  it('holds nothing until a load succeeds, and says so', async () => {
+  it('holds nothing until a read succeeds, and a failed read says so', async () => {
     const root = new RootStore();
-    expect(root.targets.isEmpty).toBe(true);
-    get.mockRejectedValueOnce(new ApiRequestError('Cannot reach the server.', 0, 'network_error'));
-    await root.targets.load();
-    expect(root.targets.error).toBe('Cannot reach the server.');
-    expect(root.targets.isEmpty).toBe(true);
+    expect(root.targets.saved).toBeNull();
+    get.mockRejectedValue(new ApiRequestError('Cannot reach the server.', 0, 'network_error'));
+    await readTargets(root);
+    expect(root.queryClient.getQueryState(queryKeys.targets)?.error?.message).toBe(
+      'Cannot reach the server.',
+    );
+    expect(root.targets.saved).toBeNull();
+    expect(root.targets.error).toBeNull();
+  });
+
+  it('keeps a box being typed in when the stored targets are re-read', async () => {
+    const root = await loadedStore();
+    root.targets.setTarget('AAPL', '45');
+    root.queryClient.setQueryData(queryKeys.targets, [
+      { symbol: 'AAPL', name: 'Apple Inc.', weight: '0.3000' },
+      { symbol: 'MSFT', name: 'Microsoft Corp.', weight: '0.1000' },
+    ]);
+    const text = (symbol: string) => root.targets.rows.find((row) => row.symbol === symbol)?.targetText;
+    expect(text('AAPL')).toBe('45');
+    // An untouched box follows the server.
+    expect(text('MSFT')).toBe('10');
   });
 
   it('gives every holding a row, whether or not it has a target', async () => {
@@ -235,7 +257,7 @@ describe('TargetsStore', () => {
   it('does not read an unloaded portfolio as an empty one', async () => {
     const root = new RootStore();
     get.mockResolvedValueOnce(STORED);
-    await root.targets.load();
+    await readTargets(root);
     // Without the portfolio the current weights are unknown, and claiming 0%
     // held against a 40% target would be a specific and wrong statement.
     expect(root.targets.rows.every((row) => row.actualUnits === null)).toBe(true);
@@ -369,6 +391,11 @@ describe('TargetsStore', () => {
     expect(root.targets.isDirty).toBe(false);
     expect(root.targets.saved?.get('AAPL')).toBe(3500);
     expect(root.targets.savedAt).not.toBeNull();
+    // The response carries no names; the ones already known survive it.
+    const cached = root.queryClient.getQueryData<{ symbol: string; name: string | null }[]>(
+      queryKeys.targets,
+    );
+    expect(cached?.find((target) => target.symbol === 'AAPL')?.name).toBe('Apple Inc.');
   });
 
   it('discards edits back to the stored set, including rows that were added', async () => {

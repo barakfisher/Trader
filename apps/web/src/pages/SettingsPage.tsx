@@ -4,7 +4,7 @@ import { ArrowLeft, BellOff, Settings as SettingsIcon } from 'lucide-react';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { TelegramConnect } from '../components/TelegramConnect.tsx';
-import { Button, Card, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
+import { Button, Card, ErrorNote, Spinner } from '../components/ui.tsx';
 import {
   MUTE_PRESET_HOURS,
   describeMute,
@@ -17,6 +17,8 @@ import {
   MAX_PROPOSAL_TTL_HOURS,
   MIN_PROPOSAL_TTL_HOURS,
 } from '../stores/SettingsStore.ts';
+import { errorMessage } from '../api/client.ts';
+import { useSettingsQuery } from '../queries/settings.ts';
 import { useStore } from '../stores/context.tsx';
 
 /**
@@ -35,6 +37,8 @@ import { useStore } from '../stores/context.tsx';
  */
 export const SettingsPage = observer(function SettingsPage() {
   const { settings, navigation } = useStore();
+  // Read on arrival, not at sign-in: settings are read when someone goes looking.
+  const stored = useSettingsQuery();
   const draft = settings.draft;
 
   return (
@@ -57,24 +61,20 @@ export const SettingsPage = observer(function SettingsPage() {
         </Button>
       </header>
 
-      {settings.loading && draft === null && <Spinner label="Loading your settings…" />}
+      {stored.isPending && <Spinner label="Loading your settings…" />}
 
-      {settings.error && (
-        <ErrorNote message={settings.error} onRetry={() => void settings.load()} />
+      {/* A failed read with nothing to show: the page has no settings, rather
+          than a settings object that happens to be empty. A failed re-read
+          after a good one keeps the form - and any edits in it. */}
+      {stored.error && draft === null && (
+        <ErrorNote
+          message={errorMessage(stored.error, 'Could not load your settings.')}
+          onRetry={() => void stored.refetch()}
+        />
       )}
 
-      {/* Nothing to edit and nothing in flight: the page has no settings rather
-          than a settings object that happens to be empty, so it offers the one
-          action that can change that. */}
-      {settings.isEmpty && !settings.error && (
-        <div className="rounded-xl border border-border-subtle bg-surface-raised">
-          <EmptyState
-            title="Settings not loaded"
-            body="Your preferences live on the server, and this page has not read them yet."
-            action={<Button onClick={() => void settings.load()}>Load settings</Button>}
-          />
-        </div>
-      )}
+      {/* A failed save leaves the form and the typing in it; Save is the retry. */}
+      {settings.error && <ErrorNote message={settings.error} />}
 
       {draft !== null && (
         <>

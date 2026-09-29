@@ -24,8 +24,6 @@ export const DashboardPage = observer(function DashboardPage() {
     auth,
     import: importStore,
     navigation,
-    settings,
-    targets,
     topics,
     queryClient,
   } = useStore();
@@ -92,13 +90,10 @@ export const DashboardPage = observer(function DashboardPage() {
           </Button>
           <Button
             variant="secondary"
-            onClick={() => {
-              navigation.show('targets');
-              // Read on arrival, like settings: a dashboard that fetches targets
-              // on every login spends a request nobody asked for. The page needs
-              // the portfolio too, and the dashboard has already loaded it.
-              void targets.load();
-            }}
+            // Targets and settings are read by their own pages on arrival: a
+            // dashboard that fetched them on every login would spend requests
+            // nobody asked for.
+            onClick={() => navigation.show('targets')}
           >
             <span className="flex items-center gap-1">
               <Target className="size-4" aria-hidden />
@@ -137,13 +132,7 @@ export const DashboardPage = observer(function DashboardPage() {
           </Button>
           <Button
             variant="secondary"
-            onClick={() => {
-              navigation.show('settings');
-              // Loaded on arrival rather than at sign-in: settings are read when
-              // someone goes looking for them, and a dashboard that fetches
-              // them on every login spends a request nobody asked for.
-              void settings.load();
-            }}
+            onClick={() => navigation.show('settings')}
           >
             <span className="flex items-center gap-1">
               <Settings className="size-4" aria-hidden />

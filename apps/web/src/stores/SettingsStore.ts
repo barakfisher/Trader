@@ -4,6 +4,7 @@ import type { ObservationSeverity, UserSettings, UserSettingsResponse } from '@t
 
 import { ApiRequestError, api } from '../api/client.ts';
 import { muteEndingIn } from '../lib/notificationSchedule.ts';
+import { queryKeys } from '../queries/queryKeys.ts';
 import type { RootStore } from './RootStore.ts';
 
 /**
@@ -18,23 +19,24 @@ export const MIN_PROPOSAL_TTL_HOURS = 1;
 export const MAX_PROPOSAL_TTL_HOURS = 168;
 
 /**
- * The settings form: the saved object, the edits made against it, and which of
- * the two the page is looking at.
+ * The settings form: the edits made against what the server holds.
  *
- * `draft` is kept separate from `saved` rather than editing in place, for two
- * reasons that both bite the user. It makes "unsaved changes" a fact the page
- * can state instead of a guess, and it means a failed save leaves their typing
- * on screen - re-rendering from the server on a failure would silently discard
- * what they had just written, which is the expensive direction to fail in.
+ * What is saved is server state, read from the query cache (`saved`); this
+ * store holds only `edits`, and the form shows `draft` - the edits, or the saved
+ * settings while there are none. Kept apart rather than editing in place, for
+ * two reasons that both bite the user. It makes "unsaved changes" a fact the
+ * page can state instead of a guess, and it means a failed save leaves their
+ * typing on screen - re-rendering from the server on a failure would silently
+ * discard what they had just written, which is the expensive direction to fail
+ * in. It also means a background re-read of the settings never overwrites a
+ * form someone is halfway through.
  */
 export class SettingsStore {
-  /** What the server last told us it holds, or null before the first load. */
-  saved: UserSettings | null = null;
-  /** The edited copy the form binds to. Null exactly when `saved` is. */
-  draft: UserSettings | null = null;
+  /** The form's changes since the last save or discard. Null while there are none. */
+  edits: UserSettings | null = null;
 
-  loading = false;
   saving = false;
+  /** Why the last save failed. A failed *load* is the query's to report. */
   error: string | null = null;
   /** When the last successful save landed, so the page can confirm it happened. */
   savedAt: Date | null = null;
@@ -43,15 +45,14 @@ export class SettingsStore {
     makeAutoObservable(this, {}, { autoBind: true });
   }
 
-  /**
-   * True only once a load has failed with nothing on screen to fall back to.
-   *
-   * Distinct from `error` alone: a failed *save* leaves a perfectly usable form,
-   * and treating the two the same would replace the user's edits with an error
-   * page.
-   */
-  get isEmpty(): boolean {
-    return !this.loading && this.draft === null;
+  /** What the server last told us it holds, or null before the first read. */
+  get saved(): UserSettings | null {
+    return this.root.settingsCache.data ?? null;
+  }
+
+  /** What the form shows. Null exactly when nothing has been read yet. */
+  get draft(): UserSettings | null {
+    return this.edits ?? this.saved;
   }
 
   get isDirty(): boolean {
@@ -101,41 +102,17 @@ export class SettingsStore {
     return this.isDirty && !this.saving && this.blockingIssue === null;
   }
 
-  async load(): Promise<void> {
-    this.loading = true;
-    this.error = null;
-    try {
-      const response = await api.get<UserSettingsResponse>('/settings');
-      runInAction(() => {
-        this.saved = response.settings;
-        // A reload discards edits in progress. That is the honest behaviour for
-        // a button the user pressed to see what is stored.
-        this.draft = { ...response.settings };
-      });
-    } catch (error) {
-      runInAction(() => {
-        this.error =
-          error instanceof ApiRequestError ? error.message : 'Could not load your settings.';
-      });
-    } finally {
-      runInAction(() => {
-        this.loading = false;
-      });
-    }
-  }
-
   async save(): Promise<void> {
     if (this.draft === null || this.saving) return;
     this.saving = true;
     this.error = null;
     try {
       const response = await api.put<UserSettingsResponse>('/settings', this.draft);
+      // From the response: the server returns the stored row, so the form shows
+      // what was written rather than what was typed.
+      this.root.queryClient.setQueryData(queryKeys.settings, response.settings);
       runInAction(() => {
-        // Both from the response: the server returns the stored row, so the form
-        // shows what was written rather than what was typed, and `isDirty` goes
-        // false against the same object the next save will be compared to.
-        this.saved = response.settings;
-        this.draft = { ...response.settings };
+        this.edits = null;
         this.savedAt = new Date();
       });
     } catch (error) {
@@ -151,8 +128,9 @@ export class SettingsStore {
   }
 
   update(patch: Partial<UserSettings>): void {
-    if (this.draft === null) return;
-    this.draft = { ...this.draft, ...patch };
+    const base = this.draft;
+    if (base === null) return;
+    this.edits = { ...base, ...patch };
   }
 
   setProposalSeverity(severity: ObservationSeverity): void {
@@ -196,14 +174,12 @@ export class SettingsStore {
 
   /** Throw the edits away and go back to what the server holds. */
   discard(): void {
-    if (this.saved === null) return;
-    this.draft = { ...this.saved };
+    this.edits = null;
     this.error = null;
   }
 
   reset(): void {
-    this.saved = null;
-    this.draft = null;
+    this.edits = null;
     this.error = null;
     this.savedAt = null;
   }

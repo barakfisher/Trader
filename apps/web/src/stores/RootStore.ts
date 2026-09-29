@@ -9,7 +9,7 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 
-import type { PortfolioResponse } from '@traders/shared';
+import type { PortfolioResponse, TargetWeight, UserSettings } from '@traders/shared';
 
 import { CacheMirror } from '../queries/cacheMirror.ts';
 import { createQueryClient } from '../queries/queryClient.ts';
@@ -29,9 +29,14 @@ import { TopicsStore } from './TopicsStore.ts';
 export class RootStore {
   /** The cached portfolio, for stores whose logic is computed from it. Read-only. */
   readonly portfolioCache: CacheMirror<PortfolioResponse>;
+  /** The stored settings and targets, which their forms' edits are compared against. */
+  readonly settingsCache: CacheMirror<UserSettings>;
+  readonly targetsCache: CacheMirror<TargetWeight[]>;
 
   constructor(readonly queryClient: QueryClient = createQueryClient()) {
     this.portfolioCache = new CacheMirror(queryClient, queryKeys.portfolio);
+    this.settingsCache = new CacheMirror(queryClient, queryKeys.settings);
+    this.targetsCache = new CacheMirror(queryClient, queryKeys.targets);
   }
 
   readonly auth = new AuthStore(this);
