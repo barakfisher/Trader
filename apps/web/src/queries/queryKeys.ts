@@ -10,4 +10,7 @@
 export const queryKeys = {
   portfolio: ['portfolio'] as const,
   observations: ['observations'] as const,
+  proposals: ['proposals'] as const,
+  narration: ['narration'] as const,
+  telegramBinding: ['telegram', 'binding'] as const,
 };

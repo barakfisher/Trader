@@ -1,55 +1,31 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 
-import type { TelegramBindingResponse, TelegramConnectLink } from '@traders/shared';
+import type { TelegramConnectLink } from '@traders/shared';
 
 import { ApiRequestError, api } from '../api/client.ts';
 import type { RootStore } from './RootStore.ts';
 
 /**
- * Whether a Telegram chat can act for this account, and how to connect one.
+ * How to connect a Telegram chat. Whether one is connected is server state,
+ * in the query cache (`queries/telegram.ts`).
  *
- * The connect link is held in memory only and never persisted. It is a bearer
- * credential - whoever opens it binds their own chat to this account - so it
- * should not outlive the page that asked for it, and a link left in
- * localStorage would outlive the session that minted it.
+ * The connect link is held in memory only and never persisted - not in
+ * localStorage, and not in the query cache. It is a bearer credential - whoever
+ * opens it binds their own chat to this account - so it should not outlive the
+ * page that asked for it.
  */
 export class TelegramStore {
-  binding: TelegramBindingResponse | null = null;
   /** The last link minted, until the page is left. Null before one is asked for. */
   link: TelegramConnectLink | null = null;
 
-  loading = false;
   minting = false;
+  /** Why the last link could not be minted. */
   error: string | null = null;
   /** True when this installation has no bot configured at all. */
   unavailable = false;
 
   constructor(private readonly root: RootStore) {
     makeAutoObservable(this, {}, { autoBind: true });
-  }
-
-  get connected(): boolean {
-    return this.binding?.connected === true;
-  }
-
-  async load(): Promise<void> {
-    this.loading = true;
-    this.error = null;
-    try {
-      const binding = await api.get<TelegramBindingResponse>('/telegram/binding');
-      runInAction(() => {
-        this.binding = binding;
-      });
-    } catch (error) {
-      runInAction(() => {
-        this.error =
-          error instanceof ApiRequestError ? error.message : 'Could not check your Telegram link.';
-      });
-    } finally {
-      runInAction(() => {
-        this.loading = false;
-      });
-    }
   }
 
   /**
@@ -92,7 +68,6 @@ export class TelegramStore {
   }
 
   reset(): void {
-    this.binding = null;
     this.link = null;
     this.error = null;
     this.unavailable = false;

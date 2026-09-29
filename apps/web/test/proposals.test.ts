@@ -1,12 +1,18 @@
 /**
- * The approvals inbox store, and the deadline arithmetic behind each card.
+ * The approvals inbox, and the deadline arithmetic behind each card.
  *
- * The store tests are about not lying to the user: a decision is applied to the
- * server before anything on screen changes, and a refusal reloads rather than
+ * The inbox tests are about not lying to the user: a decision is applied to the
+ * server before anything on screen changes, and a refusal re-reads rather than
  * leaving a stale row beside a message explaining it is stale.
+ *
+ * The list lives in a real query cache here, read by an active observer - what
+ * the mounted inbox page is - so invalidation refetches as it does in the app.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryObserver } from '@tanstack/react-query';
+
+import type { Proposal } from '@traders/shared';
 
 vi.mock('../src/api/client.ts', async () => {
   const actual = await vi.importActual<typeof import('../src/api/client.ts')>(
@@ -16,7 +22,16 @@ vi.mock('../src/api/client.ts', async () => {
 });
 
 const { ApiRequestError, api } = await import('../src/api/client.ts');
-const { ProposalsStore, SNOOZE_HOURS } = await import('../src/stores/ProposalsStore.ts');
+const { SNOOZE_HOURS } = await import('../src/stores/ProposalsStore.ts');
+const { RootStore } = await import('../src/stores/RootStore.ts');
+const { queryKeys } = await import('../src/queries/queryKeys.ts');
+const {
+  REFRESH_INTERVAL_MS,
+  inboxRefetchInterval,
+  openProposals,
+  proposalsQuery,
+  recentlyApproved,
+} = await import('../src/queries/proposals.ts');
 const { isUrgent, snoozeDescription, timeLeft } = await import(
   '../src/lib/proposalCountdown.ts'
 );
@@ -48,11 +63,25 @@ function proposal(overrides: Record<string, unknown> = {}) {
   };
 }
 
-const store = () => new ProposalsStore({} as never);
+/** A root store whose inbox is open: the proposals query has an active reader. */
+async function openInbox() {
+  const root = new RootStore(new QueryClient({ defaultOptions: { queries: { retry: false } } }));
+  new QueryObserver(root.queryClient, proposalsQuery).subscribe(() => {});
+  await root.queryClient.fetchQuery(proposalsQuery);
+  const list = () => root.queryClient.getQueryData<Proposal[]>(queryKeys.proposals) ?? [];
+  return { root, inbox: root.proposals, list };
+}
+
+/** Route both reads: the open questions, and the recent approvals. */
+function serve(open: unknown[], approved: unknown[] = []) {
+  vi.mocked(api.get).mockImplementation(async (url: string) =>
+    (url.includes('state=approved') ? { proposals: approved } : { proposals: open }) as never,
+  );
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(api.get).mockResolvedValue({ proposals: [] } as never);
+  serve([]);
   vi.mocked(api.post).mockResolvedValue({
     outcome: 'applied',
     state: 'approved',
@@ -60,67 +89,72 @@ beforeEach(() => {
   } as never);
 });
 
-describe('loading the inbox', () => {
+describe('reading the inbox', () => {
   it('counts only proposals that are still open', async () => {
     // The badge is what tells a user a question is waiting, so it must not
     // count questions that are already answered or dead.
-    vi.mocked(api.get).mockResolvedValueOnce({
-      proposals: [
-        proposal({ id: 'a' }),
-        proposal({ id: 'b', state: 'snoozed', snoozedUntil: at(30) }),
-        proposal({ id: 'c', state: 'expired' }),
-        proposal({ id: 'd', state: 'approved' }),
-      ],
-    } as never);
-
-    const inbox = store();
-    await inbox.load();
-    expect(inbox.openCount).toBe(2);
-    expect(inbox.open.map((p) => p.id)).toEqual(['a', 'b']);
+    serve([
+      proposal({ id: 'a' }),
+      proposal({ id: 'b', state: 'snoozed', snoozedUntil: at(30) }),
+      proposal({ id: 'c', state: 'expired' }),
+      proposal({ id: 'd', state: 'approved' }),
+    ]);
+    const { list } = await openInbox();
+    expect(openProposals(list()).map((p) => p.id)).toEqual(['a', 'b']);
   });
 
-  it('reports a load failure instead of showing an empty inbox', async () => {
-    // "Nothing waiting on you" and "we could not ask" must not look the same:
-    // one of them means a deadline may be passing unseen.
-    vi.mocked(api.get).mockRejectedValueOnce(new ApiRequestError('offline', 0, 'network_error'));
-    const inbox = store();
-    await inbox.load();
-    expect(inbox.error).toBe('offline');
+  it('keeps recent approvals in reach, apart from the open questions', async () => {
+    serve([proposal()], [proposal({ id: 'p-2', state: 'approved', storedState: 'approved' })]);
+    const { list } = await openInbox();
+    expect(openProposals(list()).map((p) => p.id)).toEqual(['proposal-1']);
+    expect(recentlyApproved(list()).map((p) => p.id)).toEqual(['p-2']);
+  });
+
+  it('lists a proposal once even when both reads return it', async () => {
+    serve([proposal()], [proposal()]);
+    const { list } = await openInbox();
+    expect(list()).toHaveLength(1);
   });
 });
 
 describe('deciding', () => {
-  it('applies the state the server reports, not the one that was asked for', async () => {
+  it('applies the state the server reports, and fetches its undo window at once', async () => {
     // No optimistic rendering: an approval is a ledger row, and a screen that
     // claims one happened when the server refused is the most expensive wrong
     // answer this product can give.
-    vi.mocked(api.get).mockResolvedValueOnce({ proposals: [proposal()] } as never);
-    const inbox = store();
-    await inbox.load();
+    serve([proposal()]);
+    const { inbox, list } = await openInbox();
 
     // The re-read an approval triggers, carrying the server's undo window.
-    vi.mocked(api.get).mockImplementation(async (url: string) =>
-      url.includes('state=approved')
-        ? ({
-            proposals: [
-              proposal({ state: 'approved', storedState: 'approved', undoableUntil: at(1) }),
-            ],
-          } as never)
-        : ({ proposals: [] } as never),
-    );
+    serve([], [proposal({ state: 'approved', storedState: 'approved', undoableUntil: at(1) })]);
     await inbox.decide('proposal-1', 'approve');
     expect(api.post).toHaveBeenCalledWith('/proposals/proposal-1/decision', { action: 'approve' });
-    expect(inbox.proposals[0]!.state).toBe('approved');
+    expect(list()[0]!.state).toBe('approved');
     // Fetched straight away, not on the next background tick.
-    expect(inbox.proposals[0]!.undoableUntil).toBe(at(1));
+    expect(list()[0]!.undoableUntil).toBe(at(1));
+  });
+
+  it('shows the answer the server gave before the re-read lands', async () => {
+    serve([proposal()]);
+    const { root, inbox, list } = await openInbox();
+    // The re-read hangs: what is on screen meanwhile is the server's answer to
+    // the POST, never the state the button asked for.
+    vi.mocked(api.get).mockReturnValue(new Promise(() => {}) as never);
+    vi.mocked(api.post).mockResolvedValueOnce({
+      outcome: 'applied',
+      state: 'rejected',
+      intentId: null,
+    } as never);
+    void inbox.decide('proposal-1', 'approve');
+    await vi.waitFor(() => expect(list()[0]!.state).toBe('rejected'));
+    root.queryClient.cancelQueries();
   });
 
   it('sends a snooze as an absolute instant, not a duration', async () => {
     // The server compares it against a deadline it wrote; a duration would be
     // resolved against a different clock from the one the user is reading.
-    vi.mocked(api.get).mockResolvedValueOnce({ proposals: [proposal()] } as never);
-    const inbox = store();
-    await inbox.load();
+    serve([proposal()]);
+    const { inbox } = await openInbox();
     vi.mocked(api.post).mockResolvedValueOnce({
       outcome: 'applied',
       state: 'snoozed',
@@ -138,64 +172,72 @@ describe('deciding', () => {
   it('treats an unchanged result as a success', async () => {
     // Somebody already answered - possibly this user, on their phone. Showing
     // an error would punish them for a decision that was in fact made.
-    vi.mocked(api.get).mockResolvedValueOnce({ proposals: [proposal()] } as never);
-    const inbox = store();
-    await inbox.load();
+    serve([proposal()]);
+    const { inbox, list } = await openInbox();
     vi.mocked(api.post).mockResolvedValueOnce({
       outcome: 'unchanged',
       state: 'approved',
       intentId: null,
     } as never);
+    serve([], [proposal({ state: 'approved', storedState: 'approved' })]);
 
     await inbox.decide('proposal-1', 'approve');
-    expect(inbox.error).toBeNull();
-    expect(inbox.proposals[0]!.state).toBe('approved');
+    expect(inbox.decisionError).toBeNull();
+    expect(list()[0]!.state).toBe('approved');
   });
 
-  it('reloads after a refusal, so the screen stops describing a stale world', async () => {
-    vi.mocked(api.get).mockResolvedValueOnce({ proposals: [proposal()] } as never);
-    const inbox = store();
-    await inbox.load();
+  it('re-reads after a refusal, so the screen stops describing a stale world', async () => {
+    serve([proposal()]);
+    const { inbox, list } = await openInbox();
 
     vi.mocked(api.post).mockRejectedValueOnce(
       new ApiRequestError('this proposal has expired', 422, 'expired', { state: 'expired' }),
     );
-    vi.mocked(api.get).mockResolvedValueOnce({ proposals: [] } as never);
+    serve([]);
 
     await inbox.decide('proposal-1', 'approve');
     expect(inbox.refusal).toEqual({
       proposalId: 'proposal-1',
       message: 'this proposal has expired',
     });
-    // Reloaded: the refused proposal is gone rather than sitting there beside a
+    // Re-read: the refused proposal is gone rather than sitting there beside a
     // message explaining that it is gone.
     const openReads = vi
       .mocked(api.get)
       .mock.calls.filter(([url]) => url === '/proposals?state=open');
     expect(openReads).toHaveLength(2);
-    expect(inbox.proposals).toHaveLength(0);
+    expect(list()).toHaveLength(0);
   });
 
   it('does not treat a refusal as a page-level error', async () => {
-    // A refusal concerns one card. Setting `error` would replace a usable inbox
-    // with an error state over a single expired row.
-    vi.mocked(api.get).mockResolvedValue({ proposals: [proposal()] } as never);
-    const inbox = store();
-    await inbox.load();
+    // A refusal concerns one card. A page-level error would replace a usable
+    // inbox with an error state over a single expired row.
+    serve([proposal()]);
+    const { inbox } = await openInbox();
     vi.mocked(api.post).mockRejectedValueOnce(
       new ApiRequestError('already decided', 422, 'already_decided'),
     );
 
     await inbox.decide('proposal-1', 'approve');
-    expect(inbox.error).toBeNull();
+    expect(inbox.decisionError).toBeNull();
+    expect(inbox.refusal?.message).toBe('already decided');
+  });
+
+  it('reports a failure that is not a refusal', async () => {
+    serve([proposal()]);
+    const { inbox, list } = await openInbox();
+    vi.mocked(api.post).mockRejectedValueOnce(new ApiRequestError('offline', 0, 'network_error'));
+
+    await inbox.decide('proposal-1', 'approve');
+    expect(inbox.decisionError).toBe('offline');
+    expect(list()[0]!.state).toBe('pending');
   });
 
   it('ignores a second click while a decision is in flight', async () => {
     // Otherwise a double click sends two decisions; the server is idempotent,
     // but spending a round trip to be told so is avoidable here.
-    vi.mocked(api.get).mockResolvedValueOnce({ proposals: [proposal()] } as never);
-    const inbox = store();
-    await inbox.load();
+    serve([proposal()]);
+    const { inbox } = await openInbox();
 
     let release: (value: unknown) => void = () => {};
     vi.mocked(api.post).mockReturnValueOnce(
@@ -207,7 +249,7 @@ describe('deciding', () => {
     const first = inbox.decide('proposal-1', 'approve');
     expect(inbox.isDeciding('proposal-1')).toBe(true);
     await inbox.decide('proposal-1', 'approve');
-    expect(api.post).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
 
     release({ outcome: 'applied', state: 'approved', intentId: 'i' });
     await first;
@@ -219,9 +261,8 @@ describe('which button was clicked', () => {
   it('records the action in flight, not merely that one is', async () => {
     // So the clicked button can say "Rejecting…" while its siblings only
     // disable - the user sees which choice registered.
-    vi.mocked(api.get).mockResolvedValueOnce({ proposals: [proposal()] } as never);
-    const inbox = store();
-    await inbox.load();
+    serve([proposal()]);
+    const { inbox } = await openInbox();
 
     let release: (value: unknown) => void = () => {};
     vi.mocked(api.post).mockReturnValueOnce(
@@ -234,7 +275,7 @@ describe('which button was clicked', () => {
 
     // A different button on the same card is ignored too, not just a repeat.
     await inbox.decide('proposal-1', 'approve');
-    expect(api.post).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
 
     release({ outcome: 'applied', state: 'rejected', intentId: null });
     await pending;
@@ -243,100 +284,61 @@ describe('which button was clicked', () => {
 });
 
 describe('undo', () => {
-  it('keeps recent approvals in reach, apart from the open questions', async () => {
-    vi.mocked(api.get).mockImplementation(async (url: string) =>
-      url.includes('state=approved')
-        ? ({ proposals: [proposal({ id: 'p-2', state: 'approved', storedState: 'approved' })] } as never)
-        : ({ proposals: [proposal()] } as never),
-    );
-    const inbox = store();
-    await inbox.load();
-    expect(inbox.open.map((p) => p.id)).toEqual(['proposal-1']);
-    expect(inbox.recentlyApproved.map((p) => p.id)).toEqual(['p-2']);
-    expect(inbox.openCount).toBe(1);
-  });
-
   it('moves an approval back to the open questions when it is undone', async () => {
-    vi.mocked(api.get).mockImplementation(async (url: string) =>
-      url.includes('state=approved')
-        ? ({ proposals: [proposal({ state: 'approved', storedState: 'approved' })] } as never)
-        : ({ proposals: [] } as never),
-    );
-    const inbox = store();
-    await inbox.load();
+    serve([], [proposal({ state: 'approved', storedState: 'approved' })]);
+    const { inbox, list } = await openInbox();
     vi.mocked(api.post).mockResolvedValueOnce({
       outcome: 'applied',
       state: 'pending',
       intentId: null,
     } as never);
+    serve([proposal()]);
 
     await inbox.decide('proposal-1', 'undo');
     expect(api.post).toHaveBeenCalledWith('/proposals/proposal-1/decision', { action: 'undo' });
-    expect(inbox.recentlyApproved).toHaveLength(0);
-    expect(inbox.open.map((p) => p.id)).toEqual(['proposal-1']);
-  });
-
-  it('is not an empty inbox just because approvals are listed', async () => {
-    vi.mocked(api.get).mockImplementation(async (url: string) =>
-      url.includes('state=approved')
-        ? ({ proposals: [proposal({ state: 'approved', storedState: 'approved' })] } as never)
-        : ({ proposals: [] } as never),
-    );
-    const inbox = store();
-    await inbox.load();
-    expect(inbox.isEmpty).toBe(true);
+    expect(recentlyApproved(list())).toHaveLength(0);
+    expect(openProposals(list()).map((p) => p.id)).toEqual(['proposal-1']);
   });
 });
 
 describe('refreshing in the background', () => {
   it('picks up a decision made elsewhere, such as a Telegram tap', async () => {
-    vi.mocked(api.get).mockResolvedValue({ proposals: [proposal()] } as never);
-    const inbox = store();
-    await inbox.load();
-    expect(inbox.openCount).toBe(1);
+    serve([proposal()]);
+    const { root, list } = await openInbox();
+    expect(openProposals(list())).toHaveLength(1);
 
-    vi.mocked(api.get).mockImplementation(async (url: string) =>
-      url.includes('state=approved')
-        ? ({ proposals: [proposal({ state: 'approved', storedState: 'approved' })] } as never)
-        : ({ proposals: [] } as never),
-    );
-    await inbox.refresh();
-    expect(inbox.openCount).toBe(0);
-    expect(inbox.recentlyApproved).toHaveLength(1);
+    serve([], [proposal({ state: 'approved', storedState: 'approved' })]);
+    await root.queryClient.refetchQueries({ queryKey: queryKeys.proposals });
+    expect(openProposals(list())).toHaveLength(0);
+    expect(recentlyApproved(list())).toHaveLength(1);
   });
 
-  it('stays out of the way of a decision in flight', async () => {
-    vi.mocked(api.get).mockResolvedValue({ proposals: [proposal()] } as never);
-    const inbox = store();
-    await inbox.load();
-    vi.mocked(api.post).mockReturnValueOnce(new Promise(() => {}) as never);
-    void inbox.decide('proposal-1', 'approve');
-    vi.mocked(api.get).mockClear();
-
-    await inbox.refresh();
-    expect(api.get).not.toHaveBeenCalled();
+  it('stays out of the way of a decision in flight', () => {
+    expect(inboxRefetchInterval(0)).toBe(REFRESH_INTERVAL_MS);
+    expect(inboxRefetchInterval(1)).toBe(false);
   });
 
   it('keeps the last good view when a background read fails', async () => {
-    vi.mocked(api.get).mockResolvedValue({ proposals: [proposal()] } as never);
-    const inbox = store();
-    await inbox.load();
+    serve([proposal()]);
+    const { root, list } = await openInbox();
     vi.mocked(api.get).mockRejectedValue(new Error('offline'));
 
-    await inbox.refresh();
-    expect(inbox.error).toBeNull();
-    expect(inbox.openCount).toBe(1);
+    await root.queryClient.refetchQueries({ queryKey: queryKeys.proposals });
+    expect(openProposals(list())).toHaveLength(1);
   });
 });
 
-describe('reset', () => {
-  it('clears one account’s questions so the next sign-in does not see them', async () => {
-    vi.mocked(api.get).mockResolvedValueOnce({ proposals: [proposal()] } as never);
-    const inbox = store();
-    await inbox.load();
-    inbox.reset();
-    expect(inbox.proposals).toHaveLength(0);
-    expect(inbox.openCount).toBe(0);
+describe('sign-out', () => {
+  it('clears one account’s questions and refusals so the next sign-in does not see them', async () => {
+    serve([proposal()]);
+    const { root, inbox, list } = await openInbox();
+    vi.mocked(api.post).mockRejectedValueOnce(new ApiRequestError('expired', 422, 'expired'));
+    await inbox.decide('proposal-1', 'approve');
+
+    vi.mocked(api.post).mockResolvedValueOnce(undefined as never);
+    await root.auth.logout();
+    expect(list()).toHaveLength(0);
+    expect(inbox.refusal).toBeNull();
   });
 });
 

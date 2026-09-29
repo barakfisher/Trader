@@ -7,7 +7,9 @@ import type { Proposal, ProposalAction } from '@traders/shared';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Button, Card, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
 import { isUrgent, snoozeDescription, timeLeft } from '../lib/proposalCountdown.ts';
+import { errorMessage } from '../api/client.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
+import { openProposals, recentlyApproved, useProposalsQuery } from '../queries/proposals.ts';
 import { undoSecondsLeft } from '../lib/undoWindow.ts';
 import { SNOOZE_HOURS } from '../stores/ProposalsStore.ts';
 import { useStore } from '../stores/context.tsx';
@@ -37,12 +39,16 @@ import { useStore } from '../stores/context.tsx';
  */
 export const ProposalsPage = observer(function ProposalsPage() {
   const { proposals, navigation } = useStore();
-
-  useEffect(() => {
-    void proposals.load();
-    // A decision can arrive from Telegram while this page is open; see the store.
-    return proposals.startAutoRefresh();
-  }, [proposals]);
+  // Live: re-read on an interval and on focus while this page is open, because
+  // a decision can arrive from Telegram at any moment (`REFRESH_INTERVAL_MS`).
+  const inbox = useProposalsQuery({ live: true });
+  const open = openProposals(inbox.data);
+  const approved = recentlyApproved(inbox.data);
+  // Nothing waiting. Recent approvals do not count: they are answers, not
+  // questions. And only after a read succeeded: "nothing waiting on you" and
+  // "we could not ask" must not look the same, because one of them means a
+  // deadline may be passing unseen.
+  const isEmpty = inbox.status === 'success' && open.length === 0;
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
@@ -50,9 +56,9 @@ export const ProposalsPage = observer(function ProposalsPage() {
         <div className="flex items-center gap-2">
           <Inbox className="size-5 text-accent" aria-hidden />
           <h1 className="text-base font-semibold">Proposals</h1>
-          {proposals.openCount > 0 && (
+          {open.length > 0 && (
             <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent">
-              {proposals.openCount} open
+              {open.length} open
             </span>
           )}
         </div>
@@ -80,15 +86,20 @@ export const ProposalsPage = observer(function ProposalsPage() {
         </p>
       </Card>
 
-      {proposals.loading && proposals.proposals.length === 0 && (
-        <Spinner label="Loading proposals…" />
+      {inbox.isPending && <Spinner label="Loading proposals…" />}
+
+      {/* A failed background read after a good one keeps the cards and says
+          nothing: the last good view stays up and the next tick tries again. */}
+      {inbox.error && inbox.data === undefined && (
+        <ErrorNote
+          message={errorMessage(inbox.error, 'Could not load your proposals.')}
+          onRetry={() => void inbox.refetch()}
+        />
       )}
 
-      {proposals.error !== null && (
-        <ErrorNote message={proposals.error} onRetry={() => void proposals.load()} />
-      )}
+      {proposals.decisionError !== null && <ErrorNote message={proposals.decisionError} />}
 
-      {proposals.isEmpty && proposals.error === null && (
+      {isEmpty && (
         <EmptyState
           title="Nothing waiting on you"
           body="When a finding needs a decision, it appears here. You can change what qualifies in Settings."
@@ -101,15 +112,15 @@ export const ProposalsPage = observer(function ProposalsPage() {
       )}
 
       <div className="space-y-3">
-        {proposals.open.map((proposal) => (
+        {open.map((proposal) => (
           <ProposalCard key={proposal.id} proposal={proposal} />
         ))}
       </div>
 
-      {proposals.recentlyApproved.length > 0 && (
+      {approved.length > 0 && (
         <section className="space-y-2">
           <h2 className="text-sm font-semibold text-text-muted">Recently approved</h2>
-          {proposals.recentlyApproved.map((proposal) => (
+          {approved.map((proposal) => (
             <ApprovedCard key={proposal.id} proposal={proposal} />
           ))}
         </section>
