@@ -1378,14 +1378,42 @@ in-app browser's existing sign-in carries over and nobody types the passphrase. 
 
 ### Next session: M5's exit proof first, then queue tasks 6 and 7
 
-**The exit proof is due now.** The user's 24-48 hours after #68 (~11:00 UTC 2026-09-28) ran out
-during this handoff. State at 2026-09-29 05:25 UTC, read from `runs`:
-- **the feed is healthy**: the 05:20 `news_collect` caught up after the laptop slept 18:12-05:20
-  UTC - 224 fetched, 224 stored, 105 entity links;
-- **discovery has not run since 2026-09-28 10:33 UTC** (the run that proposed nothing, debt
-  table). The 2026-09-29 run had not fired yet because of the same sleep; with the machine awake
-  it fires on the next 15-minute scheduler tick. Read it first - the steps below say how - and if
-  it has still not run, trigger one by hand with a fresh run key.
+**The exit proof's evidence is in, and it settled the question (2026-09-29 05:22 UTC run).** The
+user's 24-48 hours after #68 have passed; do not wait for more headlines. That run read 531
+linked headlines (the feed is healthy: 224 articles in the 05:20 collection after a laptop
+sleep) and proposed nothing, for two reasons:
+
+1. **Discovery now finds real themes, and the resolver grades them `weak`.** Yesterday's candidates
+   were everyday words (`buy`, `pro`, `use`); today's are `ai agents`, `ai safety`, `ai security`,
+   `ai boom`, `hugging face`, `jensen huang`, `rogue ai`. Every one resolved was `weak` (`stop ai`
+   was `none`), and proposing needs `confident`. Per this file's rule the thresholds were *not*
+   lowered - they are measured and batch 2 is spent.
+2. **One story spent most of the 8-per-run resolve budget.** `agent safety`, `agent safety
+   platform`, `open agent`, `open agent safety`, `safety platform`, `stop ai agents`,
+   `unveils security platform` are variants of one launch; distinct themes (`ai boom`, `hugging
+   face`, `jensen huang`, `consumer lawsuit`) were never resolved ("at most 8 per run").
+   Read it again with `select key, value from runs, jsonb_each_text(stats->'notProposed')
+   where kind='topic_discovery' order by started_at desc`.
+
+**The user's decisions (2026-09-29), in order, one PR each - this is the next session's work:**
+
+1. **Collapse near-duplicate phrases before resolving** (`app/topics/discovery.py`). A phrase
+   contained in another candidate and found in mostly the same stories is one candidate, so the
+   budget reaches distinct themes. Discovery-side only; no resolver threshold moves. Measure it
+   read-only against the stored headlines before calling it done (the bugs section's lesson), then
+   run discovery by hand: `POST /internal/runs` `{kind: "topic_discovery", runKey:
+   "topic_discovery:manual:<unique>"}` with `x-internal-key`.
+2. **Weak proposals are stored, and hidden behind a filter** (the user's option (a) with a
+   filter). A `weak` verdict with enough weak candidates becomes a proposal too, carrying its
+   band; the Topics page shows **only confident proposals by default** and a toggle reveals the
+   weak ones, labelled "weak match". Decide explicitly, and write down, what "enough" means (the
+   confident rule is at least 2 confident instruments) and whether weak proposals count against
+   `MAX_OPEN_PROPOSALS` - if they do, three weak ones can block every confident one, which is the
+   failure decision 57 fixed. Rejection memory and expiry must treat both bands the same.
+3. **Then the exit check's second half:** once a proposal exists, reject it ("Not interested"),
+   run discovery again with a fresh run key, and confirm its `notProposed` says "matches rejected
+   topic ... by words/instruments". That plus a sensible proposal closes M5 as amended (cooldown,
+   not forever).
 
 Then the queue: task 6 (a screen for `/ask`) and task 7 (TanStack Query). Both are M6 work, and
 7 touches every store, so do not run it alongside 6.
