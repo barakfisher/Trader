@@ -38,18 +38,6 @@ const LINK = { url: 'https://t.me/bot?start=tok', expiresAt: '2026-09-17T18:00:0
 describe('TelegramStore', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('reports a chat that is connected, and one that is not', async () => {
-    const root = new RootStore();
-    get.mockResolvedValueOnce({ connected: true, username: 'someone', boundAt: '2026-09-17T10:00:00Z' });
-    await root.telegram.load();
-    expect(root.telegram.connected).toBe(true);
-
-    const other = new RootStore();
-    get.mockResolvedValueOnce({ connected: false, username: null, boundAt: null });
-    await other.telegram.load();
-    expect(other.telegram.connected).toBe(false);
-  });
-
   it('mints a fresh link every time rather than reusing one', async () => {
     // The token carries its own expiry. A cached link stops verifying silently,
     // which is a worse experience than paying for a signature again.
@@ -65,6 +53,8 @@ describe('TelegramStore', () => {
     post.mockResolvedValueOnce(LINK);
     await root.telegram.connect();
     expect(root.telegram.link).toEqual(LINK);
+    // Not in the query cache, where it could be read by anything that asks.
+    expect(root.queryClient.getQueryCache().getAll()).toHaveLength(0);
     // Signing out must not leave a credential behind for whoever is next.
     root.telegram.reset();
     expect(root.telegram.link).toBeNull();

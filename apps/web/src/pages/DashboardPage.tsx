@@ -15,6 +15,8 @@ import { hasStaleQuotes, pricesAsOf } from '../lib/portfolioView.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { useObservationsQuery } from '../queries/observations.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
+import { openProposals, useProposalsQuery } from '../queries/proposals.ts';
+import { queryKeys } from '../queries/queryKeys.ts';
 import { useStore } from '../stores/context.tsx';
 
 export const DashboardPage = observer(function DashboardPage() {
@@ -22,15 +24,17 @@ export const DashboardPage = observer(function DashboardPage() {
     auth,
     import: importStore,
     navigation,
-    proposals,
     settings,
     targets,
     topics,
-    narration,
-    telegram,
+    queryClient,
   } = useStore();
   const portfolio = usePortfolioQuery();
   const feed = useObservationsQuery();
+  // Read here, not only in the inbox: the badge in the header is how a user
+  // learns a question is waiting, and an inbox nobody knows has items is the
+  // PUT /targets mistake again.
+  const openCount = openProposals(useProposalsQuery().data).length;
   const pricesFrom = pricesAsOf(portfolio.data);
   // A refresh keeps the current numbers on screen; only the first load spins.
   const refreshing = portfolio.isFetching && !portfolio.isPending;
@@ -71,8 +75,8 @@ export const DashboardPage = observer(function DashboardPage() {
             onClick={() => {
               void portfolio.refetch();
               void feed.refetch();
-              void proposals.load();
-              void narration.load();
+              void queryClient.invalidateQueries({ queryKey: queryKeys.proposals });
+              void queryClient.invalidateQueries({ queryKey: queryKeys.narration });
             }}
           >
             <span className="flex items-center gap-1">
@@ -124,9 +128,9 @@ export const DashboardPage = observer(function DashboardPage() {
                 whole milestone exists to prevent, and a nav item with no badge
                 is indistinguishable from one with nothing behind it.
               */}
-              {proposals.openCount > 0 && (
+              {openCount > 0 && (
                 <span className="ml-1 rounded-full bg-accent px-1.5 text-xs font-semibold text-surface">
-                  {proposals.openCount}
+                  {openCount}
                 </span>
               )}
             </span>
@@ -139,10 +143,6 @@ export const DashboardPage = observer(function DashboardPage() {
               // someone goes looking for them, and a dashboard that fetches
               // them on every login spends a request nobody asked for.
               void settings.load();
-              // Alongside the settings, because the Telegram section lives on
-              // that page and a card that has to be prodded to say whether you
-              // are connected is a card that will be misread.
-              void telegram.load();
             }}
           >
             <span className="flex items-center gap-1">

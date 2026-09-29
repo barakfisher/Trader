@@ -13,7 +13,7 @@
  * something this page can promise.
  */
 
-import type { NarrationState, NarrationTier } from '@traders/shared';
+import type { NarrationHealthResponse, NarrationState, NarrationTier } from '@traders/shared';
 
 export interface NarrationCopy {
   /** Two or three words, for the badge itself. */
@@ -95,4 +95,16 @@ export function narrationOptions(tier: NarrationTier): readonly [NarrationOption
         'Fixed phrasing over the same checked figures. Nothing is ever wrong and nothing is ever invented; what is lost is prose that can describe an unusual finding in its own words rather than in a sentence written in advance.',
     },
   ] as const;
+}
+
+/**
+ * Whether the badge is worth showing at all.
+ *
+ * `narrating` on a paid model is the expected state and says nothing a reader
+ * needs - a badge that is always present stops being read. Every other state
+ * is either a cost the reader is paying in quality, or a fact about the bill.
+ */
+export function isNoteworthy(health: NarrationHealthResponse | undefined): boolean {
+  if (health === undefined) return false;
+  return health.state !== 'narrating' || health.tier !== 'paid';
 }

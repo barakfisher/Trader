@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Check, Link2, Send } from 'lucide-react';
 
+import { errorMessage } from '../api/client.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
+import { useTelegramBindingQuery } from '../queries/telegram.ts';
 import { useStore } from '../stores/context.tsx';
 import { Button, ErrorNote } from './ui.tsx';
 
@@ -22,6 +24,9 @@ import { Button, ErrorNote } from './ui.tsx';
  */
 export const TelegramConnect = observer(function TelegramConnect() {
   const { telegram } = useStore();
+  const bindingQuery = useTelegramBindingQuery();
+  const binding = bindingQuery.data;
+  const connected = binding?.connected === true;
   const [copied, setCopied] = useState(false);
   const link = telegram.link;
   const startCommand = link === null ? null : startCommandFor(link.url);
@@ -40,7 +45,13 @@ export const TelegramConnect = observer(function TelegramConnect() {
 
   return (
     <div className="space-y-3">
-      {telegram.error && <ErrorNote message={telegram.error} onRetry={() => void telegram.load()} />}
+      {bindingQuery.error && (
+        <ErrorNote
+          message={errorMessage(bindingQuery.error, 'Could not check your Telegram link.')}
+          onRetry={() => void bindingQuery.refetch()}
+        />
+      )}
+      {telegram.error && <ErrorNote message={telegram.error} onRetry={() => void telegram.connect()} />}
 
       {telegram.unavailable && (
         <p className="text-sm text-text-muted">
@@ -49,14 +60,14 @@ export const TelegramConnect = observer(function TelegramConnect() {
         </p>
       )}
 
-      {telegram.connected ? (
+      {connected ? (
         <div className="space-y-1">
           <p className="flex items-center gap-2 text-sm text-gain">
             <Check className="size-4" aria-hidden />
-            Connected{telegram.binding?.username && ` as @${telegram.binding.username}`}
+            Connected{binding?.username && ` as @${binding.username}`}
           </p>
           <p className="text-xs text-text-muted">
-            {telegram.binding?.boundAt && `Linked ${formatExactTime(telegram.binding.boundAt)}. `}
+            {binding?.boundAt && `Linked ${formatExactTime(binding.boundAt)}. `}
             Proposals arrive with Approve, Reject and Snooze buttons, and answering one there is the
             same act as answering it here.
           </p>
@@ -66,7 +77,10 @@ export const TelegramConnect = observer(function TelegramConnect() {
             this app.
           </p>
         </div>
-      ) : (
+      ) : binding === undefined ? null : (
+        // Only once the server has said "not connected": before that - or after
+        // a failed check - offering to connect could re-bind a chat that is
+        // connected, which the reader has no way to tell from this card.
         <div className="space-y-2">
           <p className="text-sm text-text-muted">
             Not connected. Without a chat linked, notifications are still recorded — you can see
@@ -95,7 +109,7 @@ export const TelegramConnect = observer(function TelegramConnect() {
                   <Link2 className="size-4" aria-hidden />
                   Open in Telegram
                 </a>
-                <Button variant="ghost" onClick={() => void telegram.load()}>
+                <Button variant="ghost" onClick={() => void bindingQuery.refetch()}>
                   I have pressed Start
                 </Button>
               </div>

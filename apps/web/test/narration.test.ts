@@ -8,24 +8,19 @@
  * would be the most misleading thing on the page.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { NarrationHealthResponse } from '@traders/shared';
 
-const get = vi.fn();
-const post = vi.fn();
-const postForm = vi.fn();
-const patch = vi.fn();
-const put = vi.fn();
-const del = vi.fn();
-
 vi.mock('../src/api/client.ts', () => ({
-  api: { get, post, postForm, patch, put, delete: del },
+  api: { get: vi.fn() },
   ApiRequestError: class ApiRequestError extends Error {},
 }));
 
-const { RootStore } = await import('../src/stores/RootStore.ts');
-const { describeNarration, narrationOptions } = await import('../src/lib/narrationStatus.ts');
+const { describeNarration, isNoteworthy, narrationOptions } = await import(
+  '../src/lib/narrationStatus.ts'
+);
+const { narrationQuery } = await import('../src/queries/narration.ts');
 
 const health = (over: Partial<NarrationHealthResponse> = {}): NarrationHealthResponse => ({
   state: 'rejected',
@@ -36,31 +31,21 @@ const health = (over: Partial<NarrationHealthResponse> = {}): NarrationHealthRes
   ...over,
 });
 
-describe('NarrationStore', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('says nothing when a paid model is narrating normally', async () => {
-    const root = new RootStore();
-    get.mockResolvedValueOnce(health({ state: 'narrating', tier: 'paid' }));
-    await root.narration.load();
-    expect(root.narration.isNoteworthy).toBe(false);
+describe('when the badge speaks', () => {
+  it('says nothing when a paid model is narrating normally', () => {
+    expect(isNoteworthy(health({ state: 'narrating', tier: 'paid' }))).toBe(false);
   });
 
-  it('speaks up on a free tier even when the model is narrating', async () => {
+  it('speaks up on a free tier even when the model is narrating', () => {
     // "This is costing you nothing" is itself worth saying, and it is the
     // state the user asked to be able to see at a glance.
-    const root = new RootStore();
-    get.mockResolvedValueOnce(health({ state: 'narrating', tier: 'free' }));
-    await root.narration.load();
-    expect(root.narration.isNoteworthy).toBe(true);
+    expect(isNoteworthy(health({ state: 'narrating', tier: 'free' }))).toBe(true);
   });
 
-  it('stays silent when it cannot reach its own subject', async () => {
-    const root = new RootStore();
-    get.mockRejectedValueOnce(new Error('ai service unreachable'));
-    await root.narration.load();
-    expect(root.narration.health).toBeNull();
-    expect(root.narration.isNoteworthy).toBe(false);
+  it('stays silent when it cannot reach its own subject', () => {
+    // A failed read leaves no data, and is not retried into a spinner.
+    expect(isNoteworthy(undefined)).toBe(false);
+    expect(narrationQuery.retry).toBe(false);
   });
 });
 

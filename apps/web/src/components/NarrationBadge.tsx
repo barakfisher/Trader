@@ -1,8 +1,7 @@
-import { observer } from 'mobx-react-lite';
 import { Sparkles } from 'lucide-react';
 
-import { describeNarration, narrationOptions } from '../lib/narrationStatus.ts';
-import { useStore } from '../stores/context.tsx';
+import { describeNarration, isNoteworthy, narrationOptions } from '../lib/narrationStatus.ts';
+import { useNarrationQuery } from '../queries/narration.ts';
 
 /**
  * A header badge saying who wrote the explanations in the feed, and what it
@@ -17,11 +16,10 @@ import { useStore } from '../stores/context.tsx';
  * already looking at something else, and it must never be in the way of the
  * portfolio.
  */
-export const NarrationBadge = observer(function NarrationBadge() {
-  const { narration } = useStore();
-  const health = narration.health;
+export function NarrationBadge() {
+  const health = useNarrationQuery().data;
 
-  if (health === null || !narration.isNoteworthy) return null;
+  if (health === undefined || !isNoteworthy(health)) return null;
 
   const copy = describeNarration(health.state);
   const options = narrationOptions(health.tier);
@@ -68,4 +66,4 @@ export const NarrationBadge = observer(function NarrationBadge() {
       </div>
     </div>
   );
-});
+}
