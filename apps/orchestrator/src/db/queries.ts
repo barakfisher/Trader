@@ -53,7 +53,14 @@ export interface RunRow {
 }
 
 export interface SnapshotRow {
-  as_of: Date;
+  /**
+   * The calendar date as Postgres stores it, YYYY-MM-DD. Selected as text on
+   * purpose: node-postgres turns a DATE into a JS Date at *local* midnight, and
+   * formatting that with toISOString() gave the previous day on any server east
+   * of UTC - the equity curve was a day early on this machine (UTC+3) and right
+   * in the container (UTC), so nothing in CI could see it.
+   */
+  as_of: string;
   total_minor: string;
   cost_minor: string;
   currency: string;
@@ -424,7 +431,7 @@ export async function upsertSnapshot(input: SnapshotInput): Promise<void> {
 
 export function listSnapshots(userId: string, limit = 365): Promise<SnapshotRow[]> {
   return query<SnapshotRow>(
-    `SELECT as_of, total_minor::text AS total_minor, cost_minor::text AS cost_minor, currency,
+    `SELECT as_of::text AS as_of, total_minor::text AS total_minor, cost_minor::text AS cost_minor, currency,
             holdings_count, priced_count, degraded
        FROM portfolio_snapshots
       WHERE user_id = $1

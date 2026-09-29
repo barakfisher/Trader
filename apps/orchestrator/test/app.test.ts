@@ -186,7 +186,7 @@ describe('API', () => {
     const { listSnapshots } = await import('../src/db/queries.js');
     vi.mocked(listSnapshots).mockResolvedValueOnce([
       {
-        as_of: new Date('2026-09-14T00:00:00Z'),
+        as_of: '2026-09-14',
         total_minor: '6785800',
         cost_minor: '5000000',
         currency: 'USD',

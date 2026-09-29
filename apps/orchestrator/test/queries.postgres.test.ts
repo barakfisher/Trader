@@ -47,6 +47,33 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     await getPool().end();
   });
 
+  describe('listSnapshots', () => {
+    it('returns the calendar date that was stored, whatever the process timezone', async () => {
+      // East of UTC is where a DATE parsed to local midnight and printed in UTC
+      // became the day before. Set here, so the test does not depend on the
+      // machine it runs on.
+      const zone = process.env.TZ;
+      process.env.TZ = 'Asia/Jerusalem';
+      try {
+        await queries.upsertSnapshot({
+          userId: USER,
+          asOf: '2026-09-14',
+          totalMinor: 7259674,
+          costMinor: 5881582,
+          currency: 'USD',
+          breakdown: {},
+          holdingsCount: 10,
+          pricedCount: 10,
+          degraded: false,
+        });
+        const [row] = await queries.listSnapshots(USER, 1);
+        expect(row?.as_of).toBe('2026-09-14');
+      } finally {
+        process.env.TZ = zone;
+      }
+    });
+  });
+
   describe('recordNarrationState', () => {
     it('records a baseline, ignores a repeat, and records a change', async () => {
       const baseline = await queries.recordNarrationState(USER, 'narrating', null, null);

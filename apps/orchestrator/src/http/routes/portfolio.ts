@@ -128,7 +128,7 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
     const response: SnapshotsResponse = {
       snapshots: rows
         .map((row) => ({
-          asOf: row.as_of instanceof Date ? row.as_of.toISOString().slice(0, 10) : String(row.as_of),
+          asOf: row.as_of,
           totalMinor: Number(row.total_minor),
           costMinor: Number(row.cost_minor),
           currency: row.currency,
