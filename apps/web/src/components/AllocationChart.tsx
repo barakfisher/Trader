@@ -4,21 +4,22 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 
 import { formatMoney, minorToNumber } from '@traders/shared';
 
-import { useStore } from '../stores/context.tsx';
+import { baseCurrencyOf } from '../lib/portfolioView.ts';
+import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { Card } from './ui.tsx';
 
 /** Categorical palette: distinguishable, and never reusing the gain/loss colours. */
 const PALETTE = ['#6d8bff', '#59c2e8', '#9a7bf0', '#4fb9a5', '#e5a13c', '#e2736f', '#7f8bb0', '#c2d24b'];
 
 export const AllocationChart = observer(function AllocationChart() {
-  const { portfolio } = useStore();
+  const { data: portfolio } = usePortfolioQuery();
   const [groupBy, setGroupBy] = useState<'assetClass' | 'instrument'>('assetClass');
 
   const slices =
     groupBy === 'assetClass'
-      ? portfolio.data?.allocationByAssetClass
-      : portfolio.data?.allocationByInstrument;
-  const currency = portfolio.baseCurrency;
+      ? portfolio?.allocationByAssetClass
+      : portfolio?.allocationByInstrument;
+  const currency = baseCurrencyOf(portfolio);
 
   if (!slices || slices.length === 0) return null;
 

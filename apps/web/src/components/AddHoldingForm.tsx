@@ -1,31 +1,37 @@
 import { useState } from 'react';
-import { observer } from 'mobx-react-lite';
 import { Plus } from 'lucide-react';
 
-import { useStore } from '../stores/context.tsx';
+import { errorMessage } from '../api/client.ts';
+import { useAddHolding } from '../queries/portfolio.ts';
 import { Button, Card } from './ui.tsx';
 
-export const AddHoldingForm = observer(function AddHoldingForm() {
-  const { portfolio } = useStore();
+export function AddHoldingForm() {
+  // Pending until the portfolio has refetched, so the new row is on screen by
+  // the time the button stops saying "Adding…".
+  const addHolding = useAddHolding();
   const [symbol, setSymbol] = useState('');
   const [quantity, setQuantity] = useState('');
   const [costBasis, setCostBasis] = useState('');
   const [openedAt, setOpenedAt] = useState('');
 
-  const submit = async (event: React.FormEvent) => {
+  const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    const added = await portfolio.addHolding({
-      symbol: symbol.trim(),
-      quantity: quantity.trim(),
-      costBasis: costBasis.trim() || null,
-      openedAt: openedAt || null,
-    });
-    if (added) {
-      setSymbol('');
-      setQuantity('');
-      setCostBasis('');
-      setOpenedAt('');
-    }
+    addHolding.mutate(
+      {
+        symbol: symbol.trim(),
+        quantity: quantity.trim(),
+        costBasis: costBasis.trim() || null,
+        openedAt: openedAt || null,
+      },
+      {
+        onSuccess: () => {
+          setSymbol('');
+          setQuantity('');
+          setCostBasis('');
+          setOpenedAt('');
+        },
+      },
+    );
   };
 
   return (
@@ -70,18 +76,20 @@ export const AddHoldingForm = observer(function AddHoldingForm() {
           />
         </Field>
 
-        {portfolio.mutationError && <p className="text-xs text-loss">{portfolio.mutationError}</p>}
+        {addHolding.error && (
+          <p className="text-xs text-loss">{errorMessage(addHolding.error, 'Could not add that holding.')}</p>
+        )}
 
-        <Button type="submit" disabled={portfolio.mutating || !symbol || !quantity}>
+        <Button type="submit" disabled={addHolding.isPending || !symbol || !quantity}>
           <span className="flex items-center gap-1">
             <Plus className="size-4" aria-hidden />
-            {portfolio.mutating ? 'Adding…' : 'Add holding'}
+            {addHolding.isPending ? 'Adding…' : 'Add holding'}
           </span>
         </Button>
       </form>
     </Card>
   );
-});
+}
 
 function Field({
   label,

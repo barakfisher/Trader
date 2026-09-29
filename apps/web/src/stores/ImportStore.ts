@@ -3,6 +3,7 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import type { ImportCommitResult, ImportMode, ImportPreview, ImportRowStatus } from '@traders/shared';
 
 import { ApiRequestError, api } from '../api/client.ts';
+import { queryKeys } from '../queries/queryKeys.ts';
 import type { RootStore } from './RootStore.ts';
 
 /** Rows in these states can be imported; the rest need the user's attention. */
@@ -124,7 +125,9 @@ export class ImportStore {
         this.result = result;
         this.preview = null;
       });
-      await this.root.portfolio.load({ silent: true });
+      // Not awaited: the import has succeeded, and the refetch is the
+      // dashboard's to show, not a reason to hold the wizard open.
+      void this.root.queryClient.invalidateQueries({ queryKey: queryKeys.portfolio });
     } catch (error) {
       runInAction(() => {
         this.error = error instanceof ApiRequestError ? error.message : 'Import failed.';

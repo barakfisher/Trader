@@ -10,14 +10,16 @@ import { NarrationBadge } from '../components/NarrationBadge.tsx';
 import { ObservationsFeed } from '../components/ObservationsFeed.tsx';
 import { SummaryCards } from '../components/SummaryCards.tsx';
 import { Button, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
+import { errorMessage } from '../api/client.ts';
+import { hasStaleQuotes, pricesAsOf } from '../lib/portfolioView.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
+import { useObservationsQuery } from '../queries/observations.ts';
+import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { useStore } from '../stores/context.tsx';
 
 export const DashboardPage = observer(function DashboardPage() {
   const {
     auth,
-    portfolio,
-    observations,
     import: importStore,
     navigation,
     proposals,
@@ -27,6 +29,11 @@ export const DashboardPage = observer(function DashboardPage() {
     narration,
     telegram,
   } = useStore();
+  const portfolio = usePortfolioQuery();
+  const feed = useObservationsQuery();
+  const pricesFrom = pricesAsOf(portfolio.data);
+  // A refresh keeps the current numbers on screen; only the first load spins.
+  const refreshing = portfolio.isFetching && !portfolio.isPending;
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6">
@@ -39,16 +46,16 @@ export const DashboardPage = observer(function DashboardPage() {
           <LineChart className="size-5 text-accent" aria-hidden />
           <h1 className="text-base font-semibold">Portfolio</h1>
           <NarrationBadge />
-          {portfolio.pricesAsOf && (
+          {pricesFrom && (
             <span
               className="text-xs text-text-muted"
-              title={`Prices observed ${formatExactTime(portfolio.pricesAsOf)}. Fetched ${
-                portfolio.lastLoadedAt?.toLocaleTimeString() ?? 'unknown'
-              }.`}
+              title={`Prices observed ${formatExactTime(pricesFrom)}. Fetched ${new Date(
+                portfolio.dataUpdatedAt,
+              ).toLocaleTimeString()}.`}
             >
-              prices from {formatAge(portfolio.pricesAsOf)}
-              {portfolio.hasStaleQuotes && ' · some cached'}
-              {portfolio.refreshing && ' · refreshing…'}
+              prices from {formatAge(pricesFrom)}
+              {hasStaleQuotes(portfolio.data) && ' · some cached'}
+              {refreshing && ' · refreshing…'}
             </span>
           )}
         </div>
@@ -62,14 +69,14 @@ export const DashboardPage = observer(function DashboardPage() {
           <Button
             variant="secondary"
             onClick={() => {
-              void portfolio.load({ silent: true });
-              void observations.load({ silent: true });
+              void portfolio.refetch();
+              void feed.refetch();
               void proposals.load();
               void narration.load();
             }}
           >
             <span className="flex items-center gap-1">
-              <RefreshCw className={`size-4 ${portfolio.refreshing ? 'animate-spin' : ''}`} aria-hidden />
+              <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden />
               Refresh
             </span>
           </Button>
@@ -152,12 +159,15 @@ export const DashboardPage = observer(function DashboardPage() {
         </div>
       </header>
 
-      {portfolio.loading && !portfolio.data && <Spinner label="Loading your portfolio…" />}
+      {portfolio.isPending && <Spinner label="Loading your portfolio…" />}
       {portfolio.error && (
-        <ErrorNote message={portfolio.error} onRetry={() => void portfolio.load()} />
+        <ErrorNote
+          message={errorMessage(portfolio.error, 'Could not load your portfolio.')}
+          onRetry={() => void portfolio.refetch()}
+        />
       )}
 
-      {portfolio.isEmpty ? (
+      {portfolio.data?.holdings.length === 0 ? (
         <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
           <div className="rounded-xl border border-border-subtle bg-surface-raised">
             <EmptyState

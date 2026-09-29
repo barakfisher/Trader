@@ -10,41 +10,54 @@ import {
   subjectLabel,
 } from '../lib/observationPresentation.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
+import { errorMessage } from '../api/client.ts';
+import { baseCurrencyOf } from '../lib/portfolioView.ts';
+import { useObservationsQuery } from '../queries/observations.ts';
+import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { useStore } from '../stores/context.tsx';
 import { Card, EmptyState, ErrorNote, Spinner } from './ui.tsx';
 import { EvidenceDrawer } from './EvidenceDrawer.tsx';
 
 export const ObservationsFeed = observer(function ObservationsFeed() {
-  const { observations, portfolio } = useStore();
-  const items = observations.observations;
+  const feed = useObservationsQuery();
+  const baseCurrency = baseCurrencyOf(usePortfolioQuery().data);
+  // A failed refresh keeps the previous findings on screen: it must not read as
+  // "nothing to report", which is a materially different statement.
+  const items = feed.data ?? [];
+  const latestAt = items[0]?.createdAt ?? null;
+  // True only once a load has succeeded and returned nothing. An empty feed is
+  // the normal state of a quiet day, so the view must be able to tell "the
+  // engine found nothing" apart from "we have not asked yet" and from "the
+  // request failed" - `status` is 'success' only when the last fetch was.
+  const isEmpty = feed.status === 'success' && items.length === 0;
 
   return (
     <Card
       title="Observations"
       action={
         <span className="text-xs text-text-muted">
-          {observations.refreshing
+          {feed.isFetching && !feed.isPending
             ? 'refreshing…'
-            : observations.latestAt
-              ? `latest ${formatAge(observations.latestAt)}`
+            : latestAt
+              ? `latest ${formatAge(latestAt)}`
               : null}
         </span>
       }
     >
-      {observations.loading && items.length === 0 && <Spinner label="Loading observations…" />}
+      {feed.isPending && <Spinner label="Loading observations…" />}
 
-      {observations.error && (
+      {feed.error && (
         <div className="mb-3">
           <ErrorNote
-            message={observations.error}
-            onRetry={() => void observations.load({ silent: items.length > 0 })}
+            message={errorMessage(feed.error, 'Could not load your observations.')}
+            onRetry={() => void feed.refetch()}
           />
         </div>
       )}
 
       {/* A quiet day is the normal result, so the empty state states a finding
           rather than apologising for one. */}
-      {observations.isEmpty && (
+      {isEmpty && (
         <EmptyState
           title="Nothing to report"
           body="The last scan found no price move, unusual move, drawdown or allocation drift above your thresholds. That is the ordinary outcome on a calm day, not a missing result."
@@ -55,7 +68,7 @@ export const ObservationsFeed = observer(function ObservationsFeed() {
         <ul className="space-y-3">
           {items.map((observation) => (
             <li key={observation.id}>
-              <ObservationRow observation={observation} baseCurrency={portfolio.baseCurrency} />
+              <ObservationRow observation={observation} baseCurrency={baseCurrency} />
             </li>
           ))}
         </ul>

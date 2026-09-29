@@ -9,6 +9,7 @@ import {
   unitsToPercent,
 } from '../lib/targetWeights.ts';
 import type { TargetRow } from '../stores/TargetsStore.ts';
+import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { useStore } from '../stores/context.tsx';
 
 /**
@@ -26,7 +27,10 @@ import { useStore } from '../stores/context.tsx';
  * showing a number the engine would refuse to produce.
  */
 export const TargetsPage = observer(function TargetsPage() {
-  const { targets, portfolio, navigation } = useStore();
+  const { targets, navigation } = useStore();
+  // Read here, not only on the dashboard: `targets.rows` computes from the
+  // cached portfolio, and this page can be the first to need it.
+  const portfolio = usePortfolioQuery();
   const rows = targets.rows;
   const unpriced = targets.driftBlockedBySymbols;
 
@@ -168,7 +172,7 @@ export const TargetsPage = observer(function TargetsPage() {
         </>
       )}
 
-      {portfolio.data === null && !portfolio.loading && (
+      {portfolio.isError && !portfolio.data && (
         <p className="text-xs text-text-muted">
           The portfolio has not loaded, so the current weights are unknown and no drift is
           shown. The targets themselves are unaffected.
