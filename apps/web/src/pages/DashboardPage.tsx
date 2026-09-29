@@ -4,6 +4,7 @@ import { FileUp, Inbox, LineChart, LogOut, RefreshCw, Settings, Tags, Target } f
 
 import { AddHoldingForm } from '../components/AddHoldingForm.tsx';
 import { AllocationChart } from '../components/AllocationChart.tsx';
+import { EquityCurve } from '../components/EquityCurve.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { HoldingsTable } from '../components/HoldingsTable.tsx';
 import { ImportWizard } from '../components/ImportWizard.tsx';
@@ -163,6 +164,7 @@ export const DashboardPage = observer(function DashboardPage() {
       ) : (
         <>
           <SummaryCards />
+          <EquityCurve />
           <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
             <HoldingsTable />
             <div className="space-y-4">

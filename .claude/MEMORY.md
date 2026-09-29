@@ -919,9 +919,32 @@ failure they prevent.
     `WEB_BASE_URL` that puts the link in messages once M7 gives a public address. Tests render
     pages with `renderPage()` (a one-route router) because a page with a `Link` needs one.
 
+66. **The equity curve draws stored snapshots only** (the user's decision, 2026-09-29):
+    `lib/equityCurve.ts` makes one point per calendar day between the first and last snapshot,
+    and a day with none is a gap, never interpolated or synthesised from quotes (which would be
+    "today's holdings, backdated", not the account's history). A degraded snapshot is drawn hollow
+    and named in the caption and tooltip, not hidden. Two series on one money axis: value in the
+    accent `#6d8bff`, cost basis in olive `#8f9b2f` *and* dashed - the pair passed every check of
+    the dataviz palette validator against the card surface `#131a2e`, where the app's grey failed
+    (reads as no data) and its green/red are reserved for gain/loss. Every point has a dot,
+    because a day between two gaps is otherwise a zero-length line. A table view carries the same
+    figures. The data as of 2026-09-29: 9 snapshots over 16 days; the 14 Sep one is degraded
+    (0 of 0 priced, yet a total), and value jumps 30% on 16 Sep, most likely real prices arriving
+    (M2.5) - drawn as stored.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
+
+**The equity curve was a day early on this machine and right in the container.** node-postgres
+parses a `DATE` into a JS `Date` at *local* midnight; the snapshots route printed it with
+`toISOString()`, which is UTC, so at UTC+3 `2026-09-14` became `2026-09-13`. The container runs in
+UTC, so CI and the compose stack were right, and the route's own test mocked the row as
+`new Date('2026-09-14T00:00:00Z')` - UTC midnight, the one input where the bug cannot show. Found
+only because the chart's first tick said 13 Sep while the first snapshot was the 14th. Fixed by
+selecting `as_of::text` (M6 equity-curve PR), pinned by an integration test that sets
+`TZ=Asia/Jerusalem`. → **A calendar date must never become a `Date`.** Select it as text, and when
+a test mocks a driver's value, mock what the *driver* returns, not what is convenient to write.
 
 **A test that read the clock passed for a day, then failed on `main` and every PR.** `sendDigest`
 called `gatherTopicDigest(user)` with no time, so it used the real clock, while its test pinned

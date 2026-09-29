@@ -9,6 +9,7 @@
 
 export const queryKeys = {
   portfolio: ['portfolio'] as const,
+  snapshots: ['portfolio', 'snapshots'] as const,
   observations: ['observations'] as const,
   proposals: ['proposals'] as const,
   narration: ['narration'] as const,
