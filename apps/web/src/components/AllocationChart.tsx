@@ -49,10 +49,21 @@ export const AllocationChart = observer(function AllocationChart() {
         </div>
       }
     >
+      {/* No entry animation: when the dashboard is remounted with the portfolio
+          already loaded - coming back from any other view - the animated Pie
+          drew zero sectors and the card stayed blank until a full reload. */}
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <Pie data={data} dataKey="value" nameKey="name" innerRadius="55%" outerRadius="85%" paddingAngle={2}>
+            <Pie
+              data={data}
+              dataKey="value"
+              nameKey="name"
+              innerRadius="55%"
+              outerRadius="85%"
+              paddingAngle={2}
+              isAnimationActive={false}
+            >
               {data.map((entry, index) => (
                 <Cell key={entry.name} fill={PALETTE[index % PALETTE.length]} stroke="transparent" />
               ))}

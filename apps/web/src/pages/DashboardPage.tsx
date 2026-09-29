@@ -30,7 +30,11 @@ export const DashboardPage = observer(function DashboardPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      {/* Sticky, because the feed below makes this a very long page and the
+          header is the only way to reach every other view. The negative margin
+          lets its background span the page padding, so rows scrolling under it
+          do not show through at the edges. */}
+      <header className="sticky top-0 z-20 -mx-4 flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle bg-surface/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
         <div className="flex flex-wrap items-center gap-2">
           <LineChart className="size-5 text-accent" aria-hidden />
           <h1 className="text-base font-semibold">Portfolio</h1>
@@ -49,10 +53,12 @@ export const DashboardPage = observer(function DashboardPage() {
           )}
         </div>
 
-        {/* Wraps rather than overflows: at phone width seven buttons are wider than
-            the screen, and an unwrapped row made the whole page scroll sideways and
-            put a tap on "Topics" onto "Settings". */}
-        <div className="flex flex-wrap items-center gap-2">
+        {/* At phone width seven buttons are wider than the screen. Wrapped, they
+            took three rows - a third of the screen once the header is sticky - so
+            below `sm` they form one row that scrolls sideways inside its own box.
+            The box, not the page, scrolls: an unconstrained row once made the
+            whole page 721 px wide and put a tap on "Topics" onto "Settings". */}
+        <div className="-mx-4 flex w-[calc(100%+2rem)] items-center gap-2 overflow-x-auto px-4 *:shrink-0 sm:mx-0 sm:w-auto sm:flex-wrap sm:overflow-visible sm:px-0">
           <Button
             variant="secondary"
             onClick={() => {

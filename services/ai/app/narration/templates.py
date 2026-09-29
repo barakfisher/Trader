@@ -140,9 +140,11 @@ def explanation_for(finding: Finding) -> str:
         return " ".join(parts)
 
     if finding.kind == "drawdown":
+        # Unsigned: "below" already says which way, and the signed form read
+        # "-15.5% below", a double negative. The validator accepts either sign.
         return (
             f"{symbol} last traded at {_money(evidence['price_minor'], currency)}, "
-            f"{_pct(evidence['drawdown_pct'])} below its recent high of "
+            f"{_pct(evidence['drawdown_pct']).lstrip('+-')} below its recent high of "
             f"{_money(evidence['high_price_minor'], currency)}."
         )
 
