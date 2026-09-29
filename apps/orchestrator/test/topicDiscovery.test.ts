@@ -31,6 +31,7 @@ const POLICY = { cooldownDays: COOLDOWN, proposalTtlDays: TTL };
 const db = vi.hoisted(() => ({
   known: [] as KnownThemeRow[],
   open: 0,
+  openWeak: 0,
   inserted: [] as ProposalInput[],
   cooldownAsked: [] as number[],
   expiredHoldAsked: [] as number[],
@@ -57,7 +58,7 @@ vi.mock('../src/db/queries.js', () => ({
   }),
   transaction: vi.fn(async (work: (client: unknown) => Promise<unknown>) => work({})),
   lockTopicsForWrite: vi.fn(async () => 0),
-  countOpenProposals: vi.fn(async () => db.open),
+  countOpenProposals: vi.fn(async () => ({ confident: db.open, weak: db.openWeak })),
   insertProposal: vi.fn(async (_client: unknown, input: ProposalInput) => {
     db.inserted.push(input);
     return { id: `p-${db.inserted.length}` };
@@ -67,8 +68,10 @@ vi.mock('../src/db/queries.js', () => ({
 const {
   EXPIRED_HOLD_DAYS,
   MAX_OPEN_PROPOSALS,
+  MAX_OPEN_WEAK_PROPOSALS,
   MAX_RESOLVED_PER_RUN,
   MIN_PROPOSAL_INSTRUMENTS,
+  MIN_WEAK_PROPOSAL_INSTRUMENTS,
   PHRASES_REQUESTED,
   HOME_COUNTRY,
   SINGLE_COUNTRY_SHARE,
@@ -91,7 +94,12 @@ function phrase(text: string, articles = 4): DiscoveredPhrase {
     lead_country_name: null,
     lead_country_articles: 0,
     headlines: [
-      { article_id: `a-${text}`, title: `Headline about ${text}`, source: 'example.com', published_at: null },
+      {
+        article_id: `a-${text}`,
+        title: `Headline about ${text}`,
+        source: 'example.com',
+        published_at: null,
+      },
     ],
   };
 }
@@ -135,7 +143,11 @@ function resolution(
 const URANIUM = ['i-ccj', 'i-ura', 'i-nxe', 'i-uec'];
 const uraniumCandidates = URANIUM.map((id) => ({ id, symbol: id.slice(2).toUpperCase() }));
 
-function fakeAi(phrases: DiscoveredPhrase[], resolutions: Record<string, TopicResolveResponse | Error>, headlines = 12) {
+function fakeAi(
+  phrases: DiscoveredPhrase[],
+  resolutions: Record<string, TopicResolveResponse | Error>,
+  headlines = 12,
+) {
   const resolved: string[] = [];
   const ai = {
     discoverTopics: vi.fn(async () => ({
@@ -157,12 +169,20 @@ function fakeAi(phrases: DiscoveredPhrase[], resolutions: Record<string, TopicRe
 }
 
 function rejected(label: string, words: string[], instrumentIds: string[]): KnownThemeRow {
-  return { id: `r-${label}`, label, status: 'rejected', match_words: words, instrument_ids: instrumentIds };
+  return {
+    id: `r-${label}`,
+    label,
+    status: 'rejected',
+    proposal_band: 'confident',
+    match_words: words,
+    instrument_ids: instrumentIds,
+  };
 }
 
 beforeEach(() => {
   db.known = [];
   db.open = 0;
+  db.openWeak = 0;
   db.inserted = [];
   db.cooldownAsked = [];
   db.expiredHoldAsked = [];
@@ -194,7 +214,10 @@ describe('rejection memory', () => {
   it('drops a re-wording that names mostly the rejected instruments', async () => {
     db.known = [rejected('uranium', ['uranium'], URANIUM)];
     const { ai, resolved } = fakeAi([phrase('nuclear fuel')], {
-      'nuclear fuel': resolution('confident', [...uraniumCandidates.slice(0, 3), { id: 'i-leu', symbol: 'LEU' }]),
+      'nuclear fuel': resolution('confident', [
+        ...uraniumCandidates.slice(0, 3),
+        { id: 'i-leu', symbol: 'LEU' },
+      ]),
     });
 
     const result = await runTopicDiscovery(USER, ai, POLICY);
@@ -217,7 +240,9 @@ describe('rejection memory', () => {
   it('counts weak candidates towards the overlap, as the real resolver needs', async () => {
     // The shape measured live: confident sets that share nothing, over
     // offered sets that mostly coincide.
-    db.known = [rejected('uranium', ['uranium'], ['i-nlr', 'i-urnj', 'i-xe', 'i-leu', 'i-nukz', 'i-ccj'])];
+    db.known = [
+      rejected('uranium', ['uranium'], ['i-nlr', 'i-urnj', 'i-xe', 'i-leu', 'i-nukz', 'i-ccj']),
+    ];
     const { ai } = fakeAi([phrase('nuclear fuel')], {
       'nuclear fuel': resolution('confident', [
         { id: 'i-stdn', symbol: 'STDN' },
@@ -236,8 +261,22 @@ describe('rejection memory', () => {
 
   it('treats an active topic and an open proposal the same way', async () => {
     db.known = [
-      { id: 't1', label: 'Lithium', status: 'active', match_words: null, instrument_ids: ['i-alb'] },
-      { id: 't2', label: 'robotics', status: 'proposed', match_words: ['robotic'], instrument_ids: ['i-isrg'] },
+      {
+        id: 't1',
+        label: 'Lithium',
+        status: 'active',
+        proposal_band: null,
+        match_words: null,
+        instrument_ids: ['i-alb'],
+      },
+      {
+        id: 't2',
+        label: 'robotics',
+        status: 'proposed',
+        proposal_band: 'confident',
+        match_words: ['robotic'],
+        instrument_ids: ['i-isrg'],
+      },
     ];
     const { ai, resolved } = fakeAi([phrase('lithium mining'), phrase('robotics')], {});
     const result = await runTopicDiscovery(USER, ai, POLICY);
@@ -259,7 +298,10 @@ describe('what may be proposed', () => {
 
     const result = await runTopicDiscovery(USER, ai, POLICY);
 
-    expect(result.proposed).toEqual([{ id: 'p-1', label: 'data centre', symbols: ['EQIX', 'DLR'] }]);
+    expect(result.proposed).toEqual([
+      { id: 'p-1', label: 'data centre', band: 'confident', symbols: ['EQIX', 'DLR'] },
+    ]);
+    expect(db.inserted[0]!.band).toBe('confident');
     const [written] = db.inserted;
     expect(written!.matchWords).toEqual(['centre', 'data']);
     // The fingerprint is everything offered; the evidence names the confident ones.
@@ -268,20 +310,18 @@ describe('what may be proposed', () => {
       phrase: 'data centre',
       articleCount: 5,
       sourceCount: 3,
-      headlines: [{ articleId: 'a-data centre', title: 'Headline about data centre', source: 'example.com' }],
+      headlines: [
+        { articleId: 'a-data centre', title: 'Headline about data centre', source: 'example.com' },
+      ],
       symbols: ['EQIX', 'DLR'],
     });
   });
 
-  it('never proposes a weak or empty resolution', async () => {
-    const { ai } = fakeAi([phrase('vague'), phrase('nothing')], {
-      vague: resolution('weak', uraniumCandidates),
-      nothing: resolution('none'),
-    });
+  it('never proposes an empty resolution', async () => {
+    const { ai } = fakeAi([phrase('nothing')], { nothing: resolution('none') });
     const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(db.inserted).toEqual([]);
-    expect(result.notProposed.vague).toMatch(/weak, not confident/);
-    expect(result.notProposed.nothing).toMatch(/none, not confident/);
+    expect(result.notProposed.nothing).toBe('resolver verdict is none');
   });
 
   it('needs enough confident instruments to be a theme', async () => {
@@ -303,19 +343,24 @@ describe('what may be proposed', () => {
     });
     const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(result.proposed.map((p) => p.label)).toEqual(['data centre']);
-    expect(result.notProposed['server farm']).toMatch(/proposed topic "data centre" by instruments/);
+    expect(result.notProposed['server farm']).toMatch(
+      /proposed topic "data centre" by instruments/,
+    );
   });
 });
 
 describe('bounds and states', () => {
-  it('resolves nothing when the open proposals are already at the bound', async () => {
-    db.known = Array.from({ length: MAX_OPEN_PROPOSALS }, (_, i) => ({
-      id: `p${i}`,
-      label: `theme ${i}`,
-      status: 'proposed' as const,
-      match_words: [`theme${i}`],
-      instrument_ids: [],
-    }));
+  it('resolves nothing when both kinds of proposal are already at their bounds', async () => {
+    const open = (band: 'confident' | 'weak', count: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        id: `${band}${i}`,
+        label: `${band} theme ${i}`,
+        status: 'proposed' as const,
+        proposal_band: band,
+        match_words: [`${band}${i}`],
+        instrument_ids: [],
+      }));
+    db.known = [...open('confident', MAX_OPEN_PROPOSALS), ...open('weak', MAX_OPEN_WEAK_PROPOSALS)];
     const { ai, resolved } = fakeAi([phrase('data centre')], {});
     const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(resolved).toEqual([]);
@@ -326,9 +371,18 @@ describe('bounds and states', () => {
     db.open = MAX_OPEN_PROPOSALS - 1;
     const phrases = ['alpha', 'beta', 'gamma'].map((p) => phrase(p));
     const { ai } = fakeAi(phrases, {
-      alpha: resolution('confident', [{ id: 'a1', symbol: 'A1' }, { id: 'a2', symbol: 'A2' }]),
-      beta: resolution('confident', [{ id: 'b1', symbol: 'B1' }, { id: 'b2', symbol: 'B2' }]),
-      gamma: resolution('confident', [{ id: 'g1', symbol: 'G1' }, { id: 'g2', symbol: 'G2' }]),
+      alpha: resolution('confident', [
+        { id: 'a1', symbol: 'A1' },
+        { id: 'a2', symbol: 'A2' },
+      ]),
+      beta: resolution('confident', [
+        { id: 'b1', symbol: 'B1' },
+        { id: 'b2', symbol: 'B2' },
+      ]),
+      gamma: resolution('confident', [
+        { id: 'g1', symbol: 'G1' },
+        { id: 'g2', symbol: 'G2' },
+      ]),
     });
     const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(db.inserted.map((p) => p.label)).toEqual(['alpha']);
@@ -364,7 +418,10 @@ describe('bounds and states', () => {
   it('degrades but carries on past a failed resolve', async () => {
     const { ai } = fakeAi([phrase('alpha'), phrase('beta')], {
       alpha: new AiServiceError('boom', 502),
-      beta: resolution('confident', [{ id: 'b1', symbol: 'B1' }, { id: 'b2', symbol: 'B2' }]),
+      beta: resolution('confident', [
+        { id: 'b1', symbol: 'B1' },
+        { id: 'b2', symbol: 'B2' },
+      ]),
     });
     const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(result.degraded).toBe(true);
@@ -394,7 +451,14 @@ describe('proposal expiry', () => {
 
   it('holds an expired theme back for one discovery window, by words', async () => {
     db.known = [
-      { id: 'e1', label: 'uranium', status: 'expired', match_words: ['uranium'], instrument_ids: URANIUM },
+      {
+        id: 'e1',
+        label: 'uranium',
+        status: 'expired',
+        proposal_band: 'confident',
+        match_words: ['uranium'],
+        instrument_ids: URANIUM,
+      },
     ];
     const { ai, resolved } = fakeAi([phrase('uranium miners')], {});
     const result = await runTopicDiscovery(USER, ai, POLICY);
@@ -410,11 +474,15 @@ describe('proposal expiry', () => {
       id: `e${i}`,
       label: `theme ${i}`,
       status: 'expired' as const,
+      proposal_band: 'confident' as const,
       match_words: [`theme${i}`],
       instrument_ids: [],
     }));
     const { ai } = fakeAi([phrase('data centre')], {
-      'data centre': resolution('confident', [{ id: 'd1', symbol: 'D1' }, { id: 'd2', symbol: 'D2' }]),
+      'data centre': resolution('confident', [
+        { id: 'd1', symbol: 'D1' },
+        { id: 'd2', symbol: 'D2' },
+      ]),
     });
     const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(result.reason).toBeUndefined();
@@ -521,5 +589,109 @@ describe("one company's news", () => {
     const { ai } = fakeAi([led('rogue ai', 'NVDA', 20)], {});
     const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(result.notProposed['rogue ai']).toMatch(/rejected topic "rogue ai" by words/);
+  });
+});
+
+describe('weak proposals', () => {
+  /** `count` weak candidates. */
+  const weakCandidates = (count: number) =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `w${i}`,
+      symbol: `W${i}`,
+      confidence: 'weak' as const,
+    }));
+  const proposed = (band: 'confident' | 'weak', count: number) =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `${band}${i}`,
+      label: `${band} theme ${i}`,
+      status: 'proposed' as const,
+      proposal_band: band,
+      match_words: [`${band}${i}`],
+      instrument_ids: [],
+    }));
+
+  it('proposes a weak verdict with enough candidates, in its own band, showing all of them', async () => {
+    const { ai } = fakeAi([phrase('interest rates')], {
+      'interest rates': resolution('weak', weakCandidates(MIN_WEAK_PROPOSAL_INSTRUMENTS)),
+    });
+    const result = await runTopicDiscovery(USER, ai, POLICY);
+    expect(result.proposed).toEqual([
+      { id: 'p-1', label: 'interest rates', band: 'weak', symbols: ['W0', 'W1', 'W2'] },
+    ]);
+    expect(db.inserted[0]!.band).toBe('weak');
+    expect(result.openWeakProposals).toBe(1);
+    expect(result.openProposals).toBe(0);
+  });
+
+  it('needs one candidate more than a confident proposal needs', async () => {
+    expect(MIN_WEAK_PROPOSAL_INSTRUMENTS).toBe(MIN_PROPOSAL_INSTRUMENTS + 1);
+    const { ai } = fakeAi([phrase('vague')], {
+      vague: resolution('weak', weakCandidates(MIN_WEAK_PROPOSAL_INSTRUMENTS - 1)),
+    });
+    const result = await runTopicDiscovery(USER, ai, POLICY);
+    expect(db.inserted).toEqual([]);
+    expect(result.notProposed.vague).toMatch(/weak proposal needs/);
+  });
+
+  it('makes a confident verdict resting on one confident instrument a weak proposal', async () => {
+    const { ai } = fakeAi([phrase('treasury yields')], {
+      'treasury yields': resolution('confident', [
+        { id: 'i-govi', symbol: 'GOVI' },
+        ...weakCandidates(MIN_WEAK_PROPOSAL_INSTRUMENTS - 1),
+      ]),
+    });
+    const result = await runTopicDiscovery(USER, ai, POLICY);
+    expect(result.proposed).toEqual([
+      { id: 'p-1', label: 'treasury yields', band: 'weak', symbols: ['GOVI', 'W0', 'W1'] },
+    ]);
+  });
+
+  it('never takes a confident proposal slot', async () => {
+    db.known = proposed('confident', MAX_OPEN_PROPOSALS);
+    const { ai } = fakeAi([phrase('data centre'), phrase('interest rates')], {
+      'data centre': resolution('confident', uraniumCandidates),
+      'interest rates': resolution('weak', weakCandidates(MIN_WEAK_PROPOSAL_INSTRUMENTS)),
+    });
+    const result = await runTopicDiscovery(USER, ai, POLICY);
+    expect(result.notProposed['data centre']).toBe('no open confident proposal slot left this run');
+    expect(result.proposed.map((p) => [p.label, p.band])).toEqual([['interest rates', 'weak']]);
+  });
+
+  it('cannot crowd out a confident proposal', async () => {
+    db.known = proposed('weak', MAX_OPEN_WEAK_PROPOSALS);
+    const { ai } = fakeAi([phrase('interest rates'), phrase('data centre')], {
+      'interest rates': resolution('weak', weakCandidates(MIN_WEAK_PROPOSAL_INSTRUMENTS)),
+      'data centre': resolution('confident', uraniumCandidates),
+    });
+    const result = await runTopicDiscovery(USER, ai, POLICY);
+    expect(result.notProposed['interest rates']).toBe('no open weak proposal slot left this run');
+    expect(result.proposed.map((p) => [p.label, p.band])).toEqual([['data centre', 'confident']]);
+  });
+
+  it('counts each band against its own cap under the lock', async () => {
+    db.openWeak = MAX_OPEN_WEAK_PROPOSALS - 1;
+    const phrases = ['alpha', 'beta'].map((p) => phrase(p));
+    const { ai } = fakeAi(phrases, {
+      alpha: resolution('weak', weakCandidates(MIN_WEAK_PROPOSAL_INSTRUMENTS)),
+      beta: resolution('weak', [
+        { id: 'b0', symbol: 'B0', confidence: 'weak' },
+        { id: 'b1', symbol: 'B1', confidence: 'weak' },
+        { id: 'b2', symbol: 'B2', confidence: 'weak' },
+      ]),
+    });
+    const result = await runTopicDiscovery(USER, ai, POLICY);
+    expect(db.inserted.map((p) => p.label)).toEqual(['alpha']);
+    expect(result.notProposed.beta).toBe('no open weak proposal slot left this run');
+    expect(result.openWeakProposals).toBe(MAX_OPEN_WEAK_PROPOSALS);
+  });
+
+  it('is remembered when rejected exactly as a confident one is', async () => {
+    db.known = [{ ...rejected('interest rates', ['interest', 'rate'], []), proposal_band: 'weak' }];
+    const { ai, resolved } = fakeAi([phrase('interest rates')], {});
+    const result = await runTopicDiscovery(USER, ai, POLICY);
+    expect(resolved).toEqual([]);
+    expect(result.notProposed['interest rates']).toMatch(
+      /rejected topic "interest rates" by words/,
+    );
   });
 });

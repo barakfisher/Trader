@@ -23,10 +23,13 @@
  *    mostly by one foreign country's press (`SINGLE_COUNTRY_SHARE`): that
  *    country's local news.
  * 3. Survivors are resolved through the same `/topics/resolve` the Topics page
- *    uses, at most `MAX_RESOLVED_PER_RUN` of them. Only a `confident` verdict with
- *    at least `MIN_PROPOSAL_INSTRUMENTS` confident candidates can be proposed: a
- *    proposal nobody asked for has to clear a higher bar than an answer to a
- *    question someone typed.
+ *    uses, at most `MAX_RESOLVED_PER_RUN` of them. A `confident` verdict with
+ *    at least `MIN_PROPOSAL_INSTRUMENTS` confident candidates is a confident
+ *    proposal: one nobody asked for has to clear a higher bar than an answer to
+ *    a question someone typed. Short of that, a verdict with at least
+ *    `MIN_WEAK_PROPOSAL_INSTRUMENTS` candidates is a **weak** proposal, shown
+ *    only when the user asks for weak matches and capped on its own
+ *    (`MAX_OPEN_WEAK_PROPOSALS`), so it can never take a confident one's place.
  * 4. Each is compared again, now by **instruments** as well (`topicMatching.ts`),
  *    using every candidate it would show - see the measurement in the loop.
  * 5. What remains is written, strongest first, while slots remain: at most
@@ -51,6 +54,7 @@
 
 import type { AiClient, DiscoveredPhrase, TopicResolveResponse } from '@traders/shared/ai';
 import { AiServiceError } from '@traders/shared/ai';
+import type { ProposalBand } from '@traders/shared';
 
 import {
   countOpenProposals,
@@ -157,6 +161,69 @@ export function singleCountryReason(phrase: DiscoveredPhrase): string | null {
 export const MAX_OPEN_PROPOSALS = 3;
 
 /**
+ * Weak proposals that may be open at once: their own cap, by the user's
+ * decision (2026-09-29). A shared cap would let three weak proposals block
+ * every confident one - the failure decision 57 fixed for unanswered ones.
+ * Mirrors the confident cap; a product bound, not a measurement.
+ */
+export const MAX_OPEN_WEAK_PROPOSALS = 3;
+
+/**
+ * Candidates a weak proposal needs: one more than a confident proposal's
+ * `MIN_PROPOSAL_INSTRUMENTS`, because each weak one is less evidence (the
+ * user's decision, 2026-09-29).
+ */
+export const MIN_WEAK_PROPOSAL_INSTRUMENTS = 3;
+
+/** What a resolution can be proposed as, with the symbols it would show. */
+export type ProposalVerdict =
+  { band: ProposalBand; symbols: { id: string; symbol: string }[] } | { reason: string };
+
+/**
+ * Whether a resolution becomes a proposal, and in which band.
+ *
+ * Confident: a `confident` verdict with `MIN_PROPOSAL_INSTRUMENTS` confident
+ * candidates, showing those. Weak: any other `confident` or `weak` verdict with
+ * `MIN_WEAK_PROPOSAL_INSTRUMENTS` candidates offered, showing all of them - a
+ * confident verdict resting on one confident instrument ("treasury yields":
+ * GOVI, then six weak) is a weak match in substance, and this is where the
+ * user sees it. `none` is never proposed.
+ */
+export function proposalVerdict(
+  verdict: TopicResolveResponse['verdict'],
+  offered: { id: string; symbol: string; confident: boolean }[],
+): ProposalVerdict {
+  const confident = offered.filter((c) => c.confident);
+  if (verdict === 'confident' && confident.length >= MIN_PROPOSAL_INSTRUMENTS) {
+    return { band: 'confident', symbols: confident };
+  }
+  if (
+    (verdict === 'confident' || verdict === 'weak') &&
+    offered.length >= MIN_WEAK_PROPOSAL_INSTRUMENTS
+  ) {
+    return { band: 'weak', symbols: offered };
+  }
+  if (verdict === 'confident') {
+    return {
+      reason:
+        `${confident.length} confident instrument(s) of ${offered.length} offered; a proposal ` +
+        `needs ${MIN_PROPOSAL_INSTRUMENTS} confident, or ${MIN_WEAK_PROPOSAL_INSTRUMENTS} in all for a weak one`,
+    };
+  }
+  if (verdict === 'weak') {
+    return {
+      reason: `resolver verdict is weak with ${offered.length} candidate(s); a weak proposal needs ${MIN_WEAK_PROPOSAL_INSTRUMENTS}`,
+    };
+  }
+  return { reason: `resolver verdict is ${verdict}` };
+}
+
+/** The cap on open proposals of `band`. */
+export function proposalCap(band: ProposalBand): number {
+  return band === 'confident' ? MAX_OPEN_PROPOSALS : MAX_OPEN_WEAK_PROPOSALS;
+}
+
+/**
  * Days an expired proposal's theme is not proposed again: one discovery window,
  * so a re-proposal rests only on headlines published after it expired.
  */
@@ -174,13 +241,17 @@ export interface DiscoveryResult {
   headlines: number;
   phrases: number;
   resolved: number;
-  proposed: { id: string; label: string; symbols: string[] }[];
+  proposed: { id: string; label: string; band: ProposalBand; symbols: string[] }[];
   /** Labels of proposals this run expired, unanswered after `proposalTtlDays`. */
   expired: string[];
   /** Phrase -> why it was not proposed. Every phrase examined appears here or in `proposed`. */
   notProposed: Record<string, string>;
+  /** Open confident proposals, and their cap. */
   openProposals: number;
   maxOpenProposals: number;
+  /** Open weak proposals, and their own cap. */
+  openWeakProposals: number;
+  maxOpenWeakProposals: number;
   cooldownDays: number;
   proposalTtlDays: number;
   /** Set when the run could not look properly: a resolve failed, or no universe. */
@@ -194,6 +265,7 @@ interface Accepted {
   words: string[];
   instrumentIds: string[];
   evidence: TopicEvidence;
+  band: ProposalBand;
 }
 
 function known(row: KnownThemeRow): KnownTheme {
@@ -204,7 +276,8 @@ function known(row: KnownThemeRow): KnownTheme {
     // A followed topic is compared by what it is called now, since a relabel
     // is the user saying what the theme is; a proposal or rejection by the
     // words frozen when it was proposed.
-    words: row.status === 'active' || row.match_words === null ? matchWords(row.label) : row.match_words,
+    words:
+      row.status === 'active' || row.match_words === null ? matchWords(row.label) : row.match_words,
     instrumentIds: row.instrument_ids,
   };
 }
@@ -279,7 +352,10 @@ export async function runTopicDiscovery(
     listKnownThemes(user.id, policy.cooldownDays, EXPIRED_HOLD_DAYS),
   ]);
   const themes = rows.map(known);
-  const openBefore = rows.filter((row) => row.status === 'proposed').length;
+  const openBefore: Record<ProposalBand, number> = { confident: 0, weak: 0 };
+  for (const row of rows) {
+    if (row.status === 'proposed' && row.proposal_band) openBefore[row.proposal_band] += 1;
+  }
   const phrases = discovered.phrases ?? [];
 
   const result: DiscoveryResult = {
@@ -289,8 +365,10 @@ export async function runTopicDiscovery(
     proposed: [],
     expired,
     notProposed: {},
-    openProposals: openBefore,
+    openProposals: openBefore.confident,
     maxOpenProposals: MAX_OPEN_PROPOSALS,
+    openWeakProposals: openBefore.weak,
+    maxOpenWeakProposals: MAX_OPEN_WEAK_PROPOSALS,
     cooldownDays: policy.cooldownDays,
     proposalTtlDays: policy.proposalTtlDays,
     degraded: false,
@@ -299,17 +377,23 @@ export async function runTopicDiscovery(
     result.reason = 'no headlines in the window; see GET /runs?kind=news_collect';
     return result;
   }
-  const slots = MAX_OPEN_PROPOSALS - openBefore;
-  if (slots <= 0) {
+  const slots: Record<ProposalBand, number> = {
+    confident: MAX_OPEN_PROPOSALS - openBefore.confident,
+    weak: MAX_OPEN_WEAK_PROPOSALS - openBefore.weak,
+  };
+  if (slots.confident <= 0 && slots.weak <= 0) {
     // Nothing is resolved when nothing could be written: an embedding bought
     // for a proposal that has nowhere to go is money spent to learn nothing.
-    result.reason = `${openBefore} proposals are already open (at most ${MAX_OPEN_PROPOSALS})`;
+    result.reason =
+      `${openBefore.confident} confident and ${openBefore.weak} weak proposals are already open ` +
+      `(at most ${MAX_OPEN_PROPOSALS} and ${MAX_OPEN_WEAK_PROPOSALS})`;
     return result;
   }
 
   const accepted: Accepted[] = [];
+  const taken = (band: ProposalBand) => accepted.filter((a) => a.band === band).length;
   for (const phrase of phrases) {
-    if (accepted.length >= slots) {
+    if (taken('confident') >= slots.confident && taken('weak') >= slots.weak) {
       result.notProposed[phrase.phrase] = 'no open proposal slot left this run';
       continue;
     }
@@ -357,15 +441,14 @@ export async function runTopicDiscovery(
       result.reason = 'no searchable universe';
       break;
     }
-    if (resolution.verdict !== 'confident') {
-      result.notProposed[phrase.phrase] = `resolver verdict is ${resolution.verdict}, not confident`;
+    const offered = offeredCandidates(resolution);
+    const verdict = proposalVerdict(resolution.verdict, offered);
+    if ('reason' in verdict) {
+      result.notProposed[phrase.phrase] = verdict.reason;
       continue;
     }
-    const offered = offeredCandidates(resolution);
-    const confident = offered.filter((c) => c.confident);
-    if (confident.length < MIN_PROPOSAL_INSTRUMENTS) {
-      result.notProposed[phrase.phrase] =
-        `${confident.length} confident instrument(s); a proposal needs ${MIN_PROPOSAL_INSTRUMENTS}`;
+    if (taken(verdict.band) >= slots[verdict.band]) {
+      result.notProposed[phrase.phrase] = `no open ${verdict.band} proposal slot left this run`;
       continue;
     }
     // The fingerprint is everything the proposal would show, weak candidates
@@ -381,12 +464,13 @@ export async function runTopicDiscovery(
       continue;
     }
 
-    const symbols = confident.map((c) => c.symbol);
+    const symbols = verdict.symbols.map((c) => c.symbol);
     accepted.push({
       label: phrase.phrase,
       words,
       instrumentIds: fingerprint.instrumentIds,
       evidence: evidenceOf(phrase, symbols),
+      band: verdict.band,
     });
     // A later phrase in the same run is compared against this one too, so
     // "data centre" and "data centre power" cannot both be proposed.
@@ -400,11 +484,11 @@ export async function runTopicDiscovery(
     // Counted again under the lock: a proposal written by a concurrent run
     // since the first count takes a slot.
     const open = await countOpenProposals(client, user.id);
-    const room = Math.max(0, MAX_OPEN_PROPOSALS - open);
-    const ids: { id: string; label: string; symbols: string[] }[] = [];
+    const ids: { id: string; label: string; band: ProposalBand; symbols: string[] }[] = [];
     for (const proposal of accepted) {
-      if (ids.length >= room) {
-        result.notProposed[proposal.label] = 'no open proposal slot left this run';
+      const written = ids.filter((row) => row.band === proposal.band).length;
+      if (open[proposal.band] + written >= proposalCap(proposal.band)) {
+        result.notProposed[proposal.label] = `no open ${proposal.band} proposal slot left this run`;
         continue;
       }
       const row = await insertProposal(client, {
@@ -413,17 +497,26 @@ export async function runTopicDiscovery(
         matchWords: proposal.words,
         instrumentIds: proposal.instrumentIds,
         evidence: proposal.evidence,
+        band: proposal.band,
       });
       if ('duplicate' in row) {
         result.notProposed[proposal.label] = 'a live topic already has this label';
         continue;
       }
-      ids.push({ id: row.id, label: proposal.label, symbols: proposal.evidence.symbols });
+      ids.push({
+        id: row.id,
+        label: proposal.label,
+        band: proposal.band,
+        symbols: proposal.evidence.symbols,
+      });
     }
-    return { ids, open: open + ids.length };
+    const count = (band: ProposalBand) =>
+      open[band] + ids.filter((row) => row.band === band).length;
+    return { ids, open: { confident: count('confident'), weak: count('weak') } };
   });
 
   result.proposed = written.ids;
-  result.openProposals = written.open;
+  result.openProposals = written.open.confident;
+  result.openWeakProposals = written.open.weak;
   return result;
 }

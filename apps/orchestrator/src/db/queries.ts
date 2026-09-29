@@ -4,7 +4,7 @@
  */
 
 import type { PoolClient } from 'pg';
-import type { AssetClass, TopicEvidence } from '@traders/shared';
+import type { AssetClass, ProposalBand, TopicEvidence } from '@traders/shared';
 
 export type { TopicEvidence };
 
@@ -63,10 +63,9 @@ export interface SnapshotRow {
 }
 
 export function getUser(userId: string): Promise<UserRow | null> {
-  return queryOne<UserRow>(
-    'SELECT id, email, base_currency, timezone FROM users WHERE id = $1',
-    [userId],
-  );
+  return queryOne<UserRow>('SELECT id, email, base_currency, timezone FROM users WHERE id = $1', [
+    userId,
+  ]);
 }
 
 export interface UpsertInstrumentInput {
@@ -175,9 +174,7 @@ export function upsertHolding(
     input.notes,
   ];
   if (client) {
-    return client
-      .query<{ id: string; inserted: boolean }>(sql, params)
-      .then((r) => r.rows[0]!);
+    return client.query<{ id: string; inserted: boolean }>(sql, params).then((r) => r.rows[0]!);
   }
   return queryOne<{ id: string; inserted: boolean }>(sql, params).then((row) => {
     if (!row) throw new Error('failed to upsert holding');
@@ -369,7 +366,9 @@ export async function recordQuotes(quotes: QuoteToStore[]): Promise<void> {
       quote.source,
       quote.delaySeconds,
     );
-    values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6})`);
+    values.push(
+      `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6})`,
+    );
   });
   await query(
     `INSERT INTO quotes (instrument_id, as_of, price_minor, currency, source, delay_seconds)
@@ -500,10 +499,11 @@ export async function finishRun(
   status: 'ok' | 'degraded' | 'failed' | 'skipped',
   stats: unknown = {},
 ): Promise<void> {
-  await query(
-    `UPDATE runs SET status = $2, finished_at = now(), stats = $3::jsonb WHERE id = $1`,
-    [runId, status, JSON.stringify(stats)],
-  );
+  await query(`UPDATE runs SET status = $2, finished_at = now(), stats = $3::jsonb WHERE id = $1`, [
+    runId,
+    status,
+    JSON.stringify(stats),
+  ]);
 }
 
 /** Most recent runs, newest first. Backs the "did anything run today?" check. */
@@ -887,9 +887,7 @@ export async function createProposals(proposals: ProposalToCreate[]): Promise<st
       JSON.stringify(proposal.payload ?? {}),
       proposal.expiresAt,
     );
-    values.push(
-      `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}::jsonb, $${base + 5})`,
-    );
+    values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}::jsonb, $${base + 5})`);
   });
 
   const inserted = await query<{ id: string }>(
@@ -1011,9 +1009,7 @@ export interface TransitionResult {
  * repository. An undo revokes that row in the same transaction, so the ledger
  * and the proposal can never disagree about whether assent stands.
  */
-export function applyProposalTransition(
-  transition: TransitionToApply,
-): Promise<TransitionResult> {
+export function applyProposalTransition(transition: TransitionToApply): Promise<TransitionResult> {
   return transaction(async (client) => {
     const updated = await client.query(
       `UPDATE proposals
@@ -1441,6 +1437,7 @@ export interface TopicRow {
   label: string;
   status: TopicStatus;
   created_by: 'user' | 'auto';
+  proposal_band: ProposalBand | null;
   created_at: Date;
   updated_at: Date;
   confirmed_at: Date | null;
@@ -1472,7 +1469,8 @@ export interface TopicInstrumentInput {
 }
 
 const TOPIC_COLUMNS = `
-  t.id, t.label, t.status, t.created_by, t.created_at, t.updated_at, t.confirmed_at, t.evidence,
+  t.id, t.label, t.status, t.created_by, t.proposal_band, t.created_at, t.updated_at,
+  t.confirmed_at, t.evidence,
   (SELECT count(*)::int FROM topic_instruments ti WHERE ti.topic_id = t.id) AS instrument_count`;
 
 /**
@@ -1499,7 +1497,10 @@ export function getTopic(userId: string, topicId: string): Promise<TopicRow | nu
 }
 
 /** A topic's confirmed instruments: resolver picks first, then additions, by symbol. */
-export function listTopicInstruments(userId: string, topicId: string): Promise<TopicInstrumentRow[]> {
+export function listTopicInstruments(
+  userId: string,
+  topicId: string,
+): Promise<TopicInstrumentRow[]> {
   return query<TopicInstrumentRow>(
     `SELECT ti.instrument_id, i.symbol, i.name, i.asset_class, ti.source, ti.confidence,
             ti.rationale, ti.held_by, ti.added_at
@@ -1561,20 +1562,21 @@ export async function writeConfirmedTopic(
   input: { userId: string; topicId: string | null; label: string },
 ): Promise<{ id: string } | { duplicate: true }> {
   try {
-    const { rows } = input.topicId === null
-      ? await client.query<{ id: string }>(
-          `INSERT INTO topics (user_id, label, status, created_by, confirmed_at)
+    const { rows } =
+      input.topicId === null
+        ? await client.query<{ id: string }>(
+            `INSERT INTO topics (user_id, label, status, created_by, confirmed_at)
            VALUES ($1, $2, 'active', 'user', now())
            RETURNING id`,
-          [input.userId, input.label],
-        )
-      : await client.query<{ id: string }>(
-          `UPDATE topics
+            [input.userId, input.label],
+          )
+        : await client.query<{ id: string }>(
+            `UPDATE topics
               SET label = $3, status = 'active', confirmed_at = now(), updated_at = now()
             WHERE user_id = $1 AND id = $2
            RETURNING id`,
-          [input.userId, input.topicId, input.label],
-        );
+            [input.userId, input.topicId, input.label],
+          );
     return { id: rows[0]!.id };
   } catch (error) {
     if ((error as { code?: string }).code === '23505') return { duplicate: true };
@@ -1654,7 +1656,12 @@ export interface TopicArticleRow {
   title: string;
   published_at: Date | null;
   fetched_at: Date;
-  instruments: { symbol: string; match_method: string; matched_text: string | null; salience: string }[];
+  instruments: {
+    symbol: string;
+    match_method: string;
+    matched_text: string | null;
+    salience: string;
+  }[];
   sentiment: { score: string; magnitude: string; model: string } | null;
 }
 
@@ -1792,6 +1799,8 @@ export interface KnownThemeRow {
   id: string;
   label: string;
   status: TopicStatus;
+  /** An auto-proposal's band; null for a topic the user created. */
+  proposal_band: ProposalBand | null;
   /** Stored on auto topics when proposed; null for a topic the user created. */
   match_words: string[] | null;
   /** Confirmed instruments of an active topic; the offered set of a proposal. */
@@ -1814,7 +1823,7 @@ export function listKnownThemes(
   expiredDays: number,
 ): Promise<KnownThemeRow[]> {
   return query<KnownThemeRow>(
-    `SELECT t.id, t.label, t.status, t.match_words,
+    `SELECT t.id, t.label, t.status, t.proposal_band, t.match_words,
             CASE WHEN t.status = 'active'
                  THEN coalesce((SELECT array_agg(ti.instrument_id::text ORDER BY ti.instrument_id)
                                   FROM topic_instruments ti
@@ -1855,13 +1864,24 @@ export async function expireProposals(
   return rows.map((row) => row.label).sort();
 }
 
-/** Open proposals, counted under the lock `lockTopicsForWrite` takes. */
-export async function countOpenProposals(client: PoolClient, userId: string): Promise<number> {
-  const { rows } = await client.query<{ open: number }>(
-    `SELECT count(*)::int AS open FROM topics WHERE user_id = $1 AND status = 'proposed'`,
+/**
+ * Open proposals by band, counted under the lock `lockTopicsForWrite` takes.
+ * Each band has its own cap, so they are never summed.
+ */
+export async function countOpenProposals(
+  client: PoolClient,
+  userId: string,
+): Promise<Record<ProposalBand, number>> {
+  const { rows } = await client.query<{ band: ProposalBand; open: number }>(
+    `SELECT proposal_band AS band, count(*)::int AS open
+       FROM topics
+      WHERE user_id = $1 AND status = 'proposed'
+      GROUP BY proposal_band`,
     [userId],
   );
-  return rows[0]?.open ?? 0;
+  const open: Record<ProposalBand, number> = { confident: 0, weak: 0 };
+  for (const row of rows) open[row.band] = row.open;
+  return open;
 }
 
 export interface ProposalInput {
@@ -1870,6 +1890,7 @@ export interface ProposalInput {
   matchWords: string[];
   instrumentIds: string[];
   evidence: TopicEvidence;
+  band: ProposalBand;
 }
 
 /**
@@ -1884,8 +1905,9 @@ export async function insertProposal(
   try {
     const { rows } = await client.query<{ id: string }>(
       `INSERT INTO topics
-              (user_id, label, status, created_by, match_words, proposed_instruments, evidence)
-       VALUES ($1, $2, 'proposed', 'auto', $3::text[], $4::uuid[], $5::jsonb)
+              (user_id, label, status, created_by, match_words, proposed_instruments, evidence,
+               proposal_band)
+       VALUES ($1, $2, 'proposed', 'auto', $3::text[], $4::uuid[], $5::jsonb, $6)
        RETURNING id`,
       [
         input.userId,
@@ -1893,6 +1915,7 @@ export async function insertProposal(
         input.matchWords,
         input.instrumentIds,
         JSON.stringify(input.evidence),
+        input.band,
       ],
     );
     return { id: rows[0]!.id };

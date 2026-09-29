@@ -116,14 +116,16 @@ INSERT INTO etf_holdings (etf_instrument_id, position, symbol, weight, as_of, ho
   ('10000000-0000-0000-0000-000000000002', 2, 'MYST', '0.2', '2026-09-01T00:00:00Z', '10000000-0000-0000-0000-000000000006', 'name'),
   ('10000000-0000-0000-0000-000000000002', 3, 'CASH', '0.1', '2026-09-01T00:00:00Z', NULL, NULL);
 
-INSERT INTO topics (id, user_id, label, status, created_by, confirmed_at, rejected_at, expired_at, match_words, proposed_instruments, evidence) VALUES
-  ('40000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'uranium', 'active', 'user', '2026-09-01T00:00:00Z', NULL, NULL, NULL, NULL, NULL),
+INSERT INTO topics (id, user_id, label, status, created_by, confirmed_at, rejected_at, expired_at, match_words, proposed_instruments, evidence, proposal_band) VALUES
+  ('40000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'uranium', 'active', 'user', '2026-09-01T00:00:00Z', NULL, NULL, NULL, NULL, NULL, NULL),
   ('40000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000a', 'ai agents', 'proposed', 'auto', NULL, NULL, NULL,
-   ARRAY['ai','agents'], ARRAY['10000000-0000-0000-0000-000000000001']::uuid[], '{}'::jsonb),
+   ARRAY['ai','agents'], ARRAY['10000000-0000-0000-0000-000000000001']::uuid[], '{}'::jsonb, 'confident'),
   ('40000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-00000000000a', 'festival', 'rejected', 'auto', NULL, '2026-09-01T00:00:00Z', NULL,
-   ARRAY['festival'], ARRAY[]::uuid[], '{}'::jsonb),
+   ARRAY['festival'], ARRAY[]::uuid[], '{}'::jsonb, 'weak'),
   ('40000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-00000000000a', 'lithium', 'expired', 'auto', NULL, NULL, '2026-09-01T00:00:00Z',
-   ARRAY['lithium'], ARRAY[]::uuid[], '{}'::jsonb);
+   ARRAY['lithium'], ARRAY[]::uuid[], '{}'::jsonb, 'confident'),
+  ('40000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-00000000000a', 'interest rates', 'proposed', 'auto', NULL, NULL, NULL,
+   ARRAY['interest','rates'], ARRAY['10000000-0000-0000-0000-000000000002']::uuid[], '{}'::jsonb, 'weak');
 INSERT INTO topic_instruments (topic_id, user_id, instrument_id, source, confidence, rationale, held_by) VALUES
   ('40000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000001', 'resolver', 'confident', 'It mines uranium.', '[]'::jsonb),
   ('40000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000002', 'resolver', 'weak', 'A fund.', '[]'::jsonb),

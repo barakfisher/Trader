@@ -56,9 +56,9 @@ export const TopicsPage = observer(function TopicsPage() {
 
       <p className="max-w-3xl text-sm text-text-muted">
         A topic is a theme you want to follow, in your own words: “uranium”, “robot surgery”. Type
-        one and the app suggests instruments whose business descriptions are about it, each with
-        the sentence that matched. Suggestions are never ticked for you, and you can add any ticker
-        they missed. Following a topic buys nothing; it decides what the app watches.
+        one and the app suggests instruments whose business descriptions are about it, each with the
+        sentence that matched. Suggestions are never ticked for you, and you can add any ticker they
+        missed. Following a topic buys nothing; it decides what the app watches.
       </p>
 
       {topics.error && <ErrorNote message={topics.error} onRetry={() => void topics.load()} />}
@@ -148,6 +148,7 @@ const ProposalList = observer(function ProposalList() {
   if (topics.proposals.length === 0) return null;
   const cooldown = topics.limits?.rejectionCooldownDays;
   const ttl = topics.limits?.proposalTtlDays;
+  const weak = topics.weakProposals.length;
 
   return (
     <Card title="Suggested from the news">
@@ -159,11 +160,24 @@ const ProposalList = observer(function ProposalList() {
         {ttl !== undefined &&
           ` A suggestion left unanswered is withdrawn after ${ttl} days, to make room for new ones.`}
       </p>
-      <ul className="space-y-4">
-        {topics.proposals.map((topic) => (
-          <ProposalRow key={topic.id} topic={topic} />
-        ))}
-      </ul>
+      {topics.shownProposals.length > 0 && (
+        <ul className="space-y-4">
+          {topics.shownProposals.map((topic) => (
+            <ProposalRow key={topic.id} topic={topic} />
+          ))}
+        </ul>
+      )}
+      {weak > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+          <Button variant="ghost" onClick={topics.toggleWeakProposals}>
+            {topics.showWeakProposals
+              ? 'Hide weak matches'
+              : `Show ${weak} weak match${weak === 1 ? '' : 'es'}`}
+          </Button>
+          {!topics.showWeakProposals &&
+            'Themes the news kept mentioning, where the instruments found fit only loosely.'}
+        </div>
+      )}
     </Card>
   );
 });
@@ -179,6 +193,11 @@ const ProposalRow = observer(function ProposalRow({ topic }: { topic: TopicSumma
         <span className="flex items-center gap-2 font-medium">
           <Newspaper className="size-4 text-accent" aria-hidden />
           {topic.label}
+          {topic.proposalBand === 'weak' && (
+            <span className="rounded border border-border-subtle px-1.5 py-0.5 text-xs font-normal text-text-muted">
+              weak match
+            </span>
+          )}
         </span>
         <span className="flex items-center gap-2">
           <Button
@@ -198,7 +217,10 @@ const ProposalRow = observer(function ProposalRow({ topic }: { topic: TopicSumma
           <p className="text-xs text-text-muted">
             In {evidence.articleCount} headlines from {evidence.sourceCount} outlets over the last{' '}
             {evidence.windowDays} days
-            {evidence.symbols.length > 0 && ` · the resolver suggested ${evidence.symbols.join(', ')}`}
+            {evidence.symbols.length > 0 &&
+              (topic.proposalBand === 'weak'
+                ? ` · loose matches: ${evidence.symbols.join(', ')}`
+                : ` · the resolver suggested ${evidence.symbols.join(', ')}`)}
           </p>
           <ul className="space-y-0.5">
             {evidence.headlines.map((headline) => (
@@ -293,7 +315,9 @@ const ToneLine = observer(function ToneLine() {
   const summary = sentimentSummary(topics.sentiment!);
   return (
     <p className="text-sm">
-      {summary.score !== null && <span className="mr-2 font-semibold tabular-nums">{summary.score}</span>}
+      {summary.score !== null && (
+        <span className="mr-2 font-semibold tabular-nums">{summary.score}</span>
+      )}
       <span className="text-xs text-text-muted">{summary.text}</span>
     </p>
   );
@@ -400,7 +424,11 @@ const ComposerCard = observer(function ComposerCard({ composer }: { composer: Co
             maxLength={composer.maxLabelLength}
             className="min-w-60 flex-1 rounded-lg border border-border-subtle bg-surface px-3 py-1.5 text-sm"
           />
-          <Button type="submit" variant="secondary" disabled={!composer.label.trim() || composer.resolving}>
+          <Button
+            type="submit"
+            variant="secondary"
+            disabled={!composer.label.trim() || composer.resolving}
+          >
             <span className="flex items-center gap-1">
               <Search className="size-4" aria-hidden />
               Find instruments
@@ -450,7 +478,11 @@ const ComposerCard = observer(function ComposerCard({ composer }: { composer: Co
             </div>
             <ul className="space-y-2">
               {interpretation.candidates.map((candidate) => (
-                <CandidateRow key={candidate.instrument_id} composer={composer} candidate={candidate} />
+                <CandidateRow
+                  key={candidate.instrument_id}
+                  composer={composer}
+                  candidate={candidate}
+                />
               ))}
             </ul>
           </section>

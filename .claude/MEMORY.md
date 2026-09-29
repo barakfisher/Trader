@@ -825,6 +825,22 @@ failure they prevent.
     US-only filter at ingestion (loses "crude oil"), and per-article country (above). Unlisted
     outlets count against the lead, which errs towards keeping a phrase.
 
+62. **Weak proposals: their own band, their own cap, hidden until asked for.** Migration 0024
+    (`topics.proposal_band`, required on every auto-proposal, kept after it is answered),
+    `proposalVerdict` in `services/topicDiscovery.ts`, the "Show N weak matches" toggle on the
+    Topics page. Decided by the user 2026-09-29: a weak proposal needs
+    `MIN_WEAK_PROPOSAL_INSTRUMENTS` = 3 candidates (one more than a confident one's 2, because
+    each is less evidence), and `MAX_OPEN_WEAK_PROPOSALS` (3) is separate from
+    `MAX_OPEN_PROPOSALS` - a shared cap would let three weak ones block every confident one,
+    the failure decision 57 fixed. **Also weak, by Claude's recommendation when the user said
+    to continue without answering:** a `confident` verdict with fewer than 2 confident
+    instruments but 3+ offered ("treasury yields": GOVI, then six weak) - otherwise it fell
+    between the rules and was proposed nowhere. A weak proposal shows every candidate offered;
+    a confident one only the confident. Rejection memory, expiry and the words/instruments
+    match ignore the band, so a rejected weak theme is remembered exactly as a confident one.
+    A band is judged only after resolving, so the run stops early only when **both** caps are
+    full, and a phrase whose band has no room says so ("no open weak proposal slot left").
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -1506,8 +1522,8 @@ stream). Each filter's headlines were run through the real `recurring_phrases`:
 **Progress (2026-09-29, second session of the day):** all six decisions were made with the user
 and recorded as decisions 60-61. #83 indexed discovery (69 s -> 2.8 s on a real week, identical
 output), #84 added the market feed (live: "data center" and "bond yields" proposed on the first
-run), and the geography rule followed (decision 61). **Next: steps 2-3 below** (weak proposals,
-then the rejection check), then M5's closing handoff. The list that follows is the design brief
+run), #85 the geography rule (decision 61), and weak proposals followed (decision 62).
+**Next: step 3 below** (the rejection check), then M5's closing handoff. The list that follows is the design brief
 as it was brought to the user.
 
 **Decisions to bring the user before building** (a recommendation is noted, not decided):

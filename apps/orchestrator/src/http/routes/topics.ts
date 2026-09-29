@@ -67,7 +67,7 @@ import {
   normaliseSymbols,
   type ConfirmOutcome,
 } from '../../services/topics.js';
-import { MAX_OPEN_PROPOSALS } from '../../services/topicDiscovery.js';
+import { MAX_OPEN_PROPOSALS, MAX_OPEN_WEAK_PROPOSALS } from '../../services/topicDiscovery.js';
 import { backfillConfirmedInstruments } from '../../services/topicScan.js';
 import {
   DEFAULT_SENTIMENT_DAYS,
@@ -93,6 +93,7 @@ function summary(row: TopicRow): TopicSummary {
     // Rejected and expired rows never leave queries.ts; they are auto-discovery's memory.
     status: row.status as TopicSummary['status'],
     createdBy: row.created_by,
+    proposalBand: row.proposal_band,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
     confirmedAt: row.confirmed_at?.toISOString() ?? null,
@@ -129,12 +130,19 @@ function parseTopicId(raw: string): string {
 async function readConfirm(body: unknown): Promise<{ label: string; symbols: string[] }> {
   const parsed = confirmSchema.safeParse(body);
   if (!parsed.success) {
-    throw badRequest('invalid_body', 'send { label: string, symbols: string[] }', parsed.error.issues);
+    throw badRequest(
+      'invalid_body',
+      'send { label: string, symbols: string[] }',
+      parsed.error.issues,
+    );
   }
   const label = parsed.data.label.trim();
   if (!label) throw badRequest('missing_topic', 'a topic needs a label');
   if (label.length > MAX_TOPIC_LABEL_LENGTH) {
-    throw badRequest('topic_too_long', `a topic may be at most ${MAX_TOPIC_LABEL_LENGTH} characters`);
+    throw badRequest(
+      'topic_too_long',
+      `a topic may be at most ${MAX_TOPIC_LABEL_LENGTH} characters`,
+    );
   }
   const symbols = normaliseSymbols(parsed.data.symbols);
   if (symbols.length === 0) {
@@ -176,7 +184,10 @@ function confirmFailure(outcome: Exclude<ConfirmOutcome, { ok: true }>): never {
   }
 }
 
-async function confirmed(context: Context<AppEnv>, topicIdOrNull: string | null): Promise<TopicDetail> {
+async function confirmed(
+  context: Context<AppEnv>,
+  topicIdOrNull: string | null,
+): Promise<TopicDetail> {
   const userId = currentUserId(context);
   const { label, symbols } = await readConfirm(await context.req.json().catch(() => null));
   let outcome: ConfirmOutcome;
@@ -206,12 +217,18 @@ async function confirmed(context: Context<AppEnv>, topicIdOrNull: string | null)
 }
 
 /** A finished `news_collect` run as the topic card needs it. */
-function collectionState(run: { started_at: Date; status: string; stats: unknown }): NewsCollectionState {
+function collectionState(run: {
+  started_at: Date;
+  status: string;
+  stats: unknown;
+}): NewsCollectionState {
   const failures = (run.stats as { provider_failures?: unknown } | null)?.provider_failures;
   return {
     lastRunAt: run.started_at.toISOString(),
     status: run.status as NewsCollectionState['status'],
-    failedProviders: Array.isArray(failures) ? failures.filter((f): f is string => typeof f === 'string') : [],
+    failedProviders: Array.isArray(failures)
+      ? failures.filter((f): f is string => typeof f === 'string')
+      : [],
   };
 }
 
@@ -231,7 +248,10 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
       throw badRequest('missing_topic', 'a topic is required: send { topic: string }');
     }
     if (topic.length > MAX_TOPIC_LABEL_LENGTH) {
-      throw badRequest('topic_too_long', `a topic may be at most ${MAX_TOPIC_LABEL_LENGTH} characters`);
+      throw badRequest(
+        'topic_too_long',
+        `a topic may be at most ${MAX_TOPIC_LABEL_LENGTH} characters`,
+      );
     }
 
     try {
@@ -253,6 +273,7 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
         maxInstrumentsPerTopic: MAX_INSTRUMENTS_PER_TOPIC,
         maxLabelLength: MAX_TOPIC_LABEL_LENGTH,
         maxOpenProposals: MAX_OPEN_PROPOSALS,
+        maxOpenWeakProposals: MAX_OPEN_WEAK_PROPOSALS,
         rejectionCooldownDays: context.get('config').TOPIC_REJECTION_COOLDOWN_DAYS,
         proposalTtlDays: context.get('config').TOPIC_PROPOSAL_TTL_DAYS,
       },
@@ -317,7 +338,10 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
     const raw = context.req.query('days');
     const days = raw === undefined ? DEFAULT_SENTIMENT_DAYS : Number(raw);
     if (!Number.isInteger(days) || days < 1 || days > MAX_SENTIMENT_DAYS) {
-      throw badRequest('invalid_days', `days must be a whole number from 1 to ${MAX_SENTIMENT_DAYS}`);
+      throw badRequest(
+        'invalid_days',
+        `days must be a whole number from 1 to ${MAX_SENTIMENT_DAYS}`,
+      );
     }
     const [topic, user] = await Promise.all([getTopic(userId, id), getUser(userId)]);
     if (!topic || !user) throw notFound('no such topic');
@@ -337,7 +361,10 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
       if ((await getTopic(userId, id))?.status === 'proposed') {
         // Deleting a proposal would erase the memory that keeps it from being
         // proposed again tomorrow; declining is the only way to say no.
-        throw conflict('topic_is_proposal', 'decline a proposed topic with POST /topics/:id/reject');
+        throw conflict(
+          'topic_is_proposal',
+          'decline a proposed topic with POST /topics/:id/reject',
+        );
       }
       throw notFound('no such topic');
     }
@@ -355,7 +382,10 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
     const outcome = await rejectProposal(userId, parseTopicId(context.req.param('id')));
     if (outcome === 'not_found') throw notFound('no such topic');
     if (outcome === 'not_a_proposal') {
-      throw conflict('not_a_proposal', 'only a proposed topic can be rejected; delete a followed one');
+      throw conflict(
+        'not_a_proposal',
+        'only a proposed topic can be rejected; delete a followed one',
+      );
     }
     return context.body(null, 204);
   });

@@ -516,6 +516,13 @@ export interface TelegramConnectLink {
 
 export type TopicStatus = 'active' | 'proposed';
 
+/**
+ * How strong the resolver's match was when auto-discovery proposed a topic.
+ * `weak` proposals are shown only when the user asks for them, and never take
+ * a confident proposal's place (migration 0024).
+ */
+export type ProposalBand = 'confident' | 'weak';
+
 /** One of the user's topics, without its instruments. */
 export interface TopicSummary {
   id: string;
@@ -523,6 +530,8 @@ export interface TopicSummary {
   label: string;
   status: TopicStatus;
   createdBy: 'user' | 'auto';
+  /** Set on every auto-proposal, kept after it is accepted; null for a topic the user created. */
+  proposalBand: ProposalBand | null;
   createdAt: string;
   updatedAt: string;
   /** When the user last confirmed the instrument set; null for an unconfirmed proposal. */
@@ -537,8 +546,9 @@ export interface TopicSummary {
 
 /**
  * The reason behind an auto-proposal. Every value is copied from stored data -
- * the phrase and headlines verbatim, the symbols from the resolver's confident
- * candidates - so a proposal never says anything the news did not.
+ * the phrase and headlines verbatim, the symbols from the resolver's candidates
+ * (the confident ones for a confident proposal, every one offered for a weak
+ * one) - so a proposal never says anything the news did not.
  */
 export interface TopicEvidence {
   /** The phrase as the headlines spelled it most often. */
@@ -549,7 +559,7 @@ export interface TopicEvidence {
   windowDays: number;
   /** Up to five of those headlines, verbatim. */
   headlines: { articleId: string; title: string; source: string; publishedAt: string | null }[];
-  /** What the resolver was confident about when it was proposed. Not a confirmed set. */
+  /** What the resolver suggested when it was proposed, per `proposalBand`. Not a confirmed set. */
   symbols: string[];
 }
 
@@ -671,8 +681,10 @@ export interface TopicLimits {
   maxActiveTopics: number;
   maxInstrumentsPerTopic: number;
   maxLabelLength: number;
-  /** Auto-proposals that may be open at once. */
+  /** Confident auto-proposals that may be open at once. */
   maxOpenProposals: number;
+  /** Weak auto-proposals that may be open at once: a cap of their own. */
+  maxOpenWeakProposals: number;
   /** Days a declined proposal's theme is not proposed again. */
   rejectionCooldownDays: number;
   /** Days a proposal waits for an answer before it expires and frees its slot. */

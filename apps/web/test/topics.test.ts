@@ -76,7 +76,9 @@ function resolution(symbols: string[], verdict = 'confident') {
     best_similarity: 0.5,
     refuse_below: 0.32,
     confident_above: 0.45,
-    interpretations: symbols.length ? [{ label: 'Uranium', candidates: symbols.map(candidate) }] : [],
+    interpretations: symbols.length
+      ? [{ label: 'Uranium', candidates: symbols.map(candidate) }]
+      : [],
     ambiguous: false,
     universe: { state: 'ready', profiles: 10, embedded: 10 },
     embedding_model: 'm',
@@ -253,6 +255,19 @@ describe('auto-proposals', () => {
     },
   };
 
+  it('shows confident suggestions and keeps weak ones until asked for', async () => {
+    const weak = { ...PROPOSAL, id: 'w1', label: 'interest rates', proposalBand: 'weak' };
+    const topics = await loadedStore([{ ...PROPOSAL, proposalBand: 'confident' }, weak]);
+    expect(topics.shownProposals.map((t) => t.id)).toEqual(['p1']);
+    expect(topics.weakProposals.map((t) => t.id)).toEqual(['w1']);
+    // Hidden is not gone: it is still a proposal the confirm screen treats as one.
+    expect(topics.isProposal('w1')).toBe(true);
+    topics.toggleWeakProposals();
+    expect(topics.shownProposals.map((t) => t.id)).toEqual(['p1', 'w1']);
+    topics.toggleWeakProposals();
+    expect(topics.shownProposals.map((t) => t.id)).toEqual(['p1']);
+  });
+
   it('keeps proposals apart from followed topics, and out of the count', async () => {
     const topics = await loadedStore([PROPOSAL, { id: 't1', label: 'uranium', status: 'active' }]);
     expect(topics.proposals.map((t) => t.id)).toEqual(['p1']);
@@ -372,16 +387,20 @@ describe('what the screen says', () => {
   });
 });
 
-
 describe('the topic card', () => {
   const COLLECTED = { lastRunAt: '2026-09-27T14:01:12Z', failedProviders: [] as string[] };
 
   it('never calls a week quiet when the news could not be read', () => {
-    const failing = newsEmptyMessage({ ...COLLECTED, status: 'degraded', failedProviders: ['gdelt'] }, 7);
+    const failing = newsEmptyMessage(
+      { ...COLLECTED, status: 'degraded', failedProviders: ['gdelt'] },
+      7,
+    );
     expect(failing).not.toMatch(/No news about/);
     expect(failing).toMatch(/may not mean a quiet week/);
     expect(failing).toMatch(/gdelt/);
-    expect(newsEmptyMessage({ ...COLLECTED, status: 'failed' }, 7)).toMatch(/stories may be missing/);
+    expect(newsEmptyMessage({ ...COLLECTED, status: 'failed' }, 7)).toMatch(
+      /stories may be missing/,
+    );
   });
 
   it('calls a week quiet only after a clean collection', () => {
@@ -460,7 +479,8 @@ describe('the topic card', () => {
       if (path === '/topics/a/news') return new Promise((resolve) => (releaseA = resolve));
       if (path.startsWith('/topics/a')) return new Promise(() => {});
       if (path === '/topics/b') return { id: 'b', label: 'b', status: 'active', instruments: [] };
-      if (path === '/topics/b/news') return { topicId: 'b', days: 7, articles: [], collection: null };
+      if (path === '/topics/b/news')
+        return { topicId: 'b', days: 7, articles: [], collection: null };
       return new Promise(() => {});
     });
 
@@ -472,5 +492,4 @@ describe('the topic card', () => {
 
     expect(topics.news?.topicId).toBe('b');
   });
-
 });
