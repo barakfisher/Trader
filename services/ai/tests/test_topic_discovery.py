@@ -250,6 +250,11 @@ def test_the_words_that_followed_one_companys_news_are_generic(word: str) -> Non
     assert _texts(_stories(word, 4)) == []
 
 
+def test_wall_street_is_generic_market_vocabulary() -> None:
+    """Sixth in each of the market feed's three measured samples, naming no theme."""
+    assert _texts(_stories("Wall Street", 4)) == []
+
+
 def _linked(rows: list[tuple[str, str]], *symbols: tuple[str, ...]) -> list[Headline]:
     return [
         Headline(f"a{i}", title, source, None, links)

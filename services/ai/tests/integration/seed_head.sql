@@ -99,6 +99,8 @@ INSERT INTO kb_chunks (document_id, ord, text) VALUES
 
 INSERT INTO articles (id, url_hash, url, source, title, raw_text, content_hash)
 VALUES ('80000000-0000-0000-0000-000000000001', 'seed-url', 'https://example.com/a', 'example.com', 'EQTY rises', 'EQTY rises', 'seed-content');
+INSERT INTO articles (id, url_hash, url, source, title, raw_text, content_hash, feed)
+VALUES ('80000000-0000-0000-0000-000000000002', 'seed-market-url', 'https://example.com/m', 'example.com', 'Bond yields rise', 'Bond yields rise', 'seed-market-content', 'market');
 INSERT INTO article_entities (article_id, entity_kind, instrument_id, topic_ref, match_method, salience) VALUES
   ('80000000-0000-0000-0000-000000000001', 'instrument', '10000000-0000-0000-0000-000000000001', NULL, 'cashtag', 0.9),
   ('80000000-0000-0000-0000-000000000001', 'instrument', '10000000-0000-0000-0000-000000000002', NULL, 'exchange_prefix', 0.5),

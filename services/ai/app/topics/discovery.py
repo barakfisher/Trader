@@ -8,13 +8,13 @@ proposes only the confident ones. Keeping the match rule on one side means it
 is written once (`topicMatching.ts`), and resolving after filtering means a
 theme the user rejected is not re-embedded every day.
 
-**Why headlines, and what that limits.** News is collected for the instruments
-the user holds or follows, never the universe (decision 51), so every headline
-here was fetched because it named something the user already cares about. A
-phrase that recurs across them is a theme *next to* the user's interests - the
-"data centres" in stories about Nvidia and a utility - not one from a corner of
-the market they have never looked at. That is a limit of the source, stated
-rather than hidden.
+**Why headlines, and from which feeds.** Two feeds reach this module. The
+followed feed holds headlines that name something the user holds or follows
+(decision 51); on its own it gave only themes *next to* the user's interests,
+and on 2026-09-29 four companies were 95% of it. The market feed (decision 60,
+`app/news/market_feed.py`) holds headlines about markets in general, mostly
+linked to nothing followed, which is where a cross-company theme ("data
+center", "bond yields") shows up as spread.
 
 **What counts as recurring.** A phrase is a run of one to three content words
 inside a headline. It recurs when it appears in at least `MIN_STORIES`
@@ -31,11 +31,11 @@ headline a "recurring theme" ("alarm", "controlled", "openai sound"); counted
 by story it is one story and none of them recur. Outlets are still counted,
 because one publisher's repeated framing is a house style, not a theme.
 
-**Only headlines linked to something the user follows are read**
-(`load_window_headlines`). A search provider returns articles that merely
-mention a name somewhere in the body; on the same day 68 of 77 stored
-articles linked to nothing, and read as themes they were noise ("fiber" from
-a breakfast-recipe headline).
+**Only linked headlines and the market feed's are read**
+(`load_window_headlines`). Other unlinked articles came from a search provider
+that matched a name somewhere in the body; on 2026-09-27 68 of 77 stored
+articles were those, and read as themes they were noise ("fiber" from a
+breakfast-recipe headline).
 
 **What is not a theme.** Generic newsroom and market vocabulary ("shares",
 "record", "rises"), numbers, and the names of the instruments the headlines
@@ -140,6 +140,9 @@ GENERIC_WORDS = frozenset(
         # the run after that (pr80, 2026-09-29): single words that resolved to
         # nothing and filled three of the eight slots
         "face", "ceo", "keep",
+        # the market feed's first measurement (2026-09-29): "wall street" was
+        # sixth in each of three 24-hour samples and names no theme
+        "wall", "street",
     }
 )  # fmt: skip
 
@@ -150,9 +153,8 @@ class Headline:
     title: str
     source: str
     published_at: datetime | None
-    #: Symbols of the instruments this headline is linked to. Empty for a headline
-    #: linked to none - which today's loader never returns, and a feed of market
-    #: and sector news would.
+    #: Symbols of the instruments this headline is linked to. Empty for a market-feed
+    #: headline linked to none, which counts against every phrase's lead instrument.
     instruments: tuple[str, ...] = ()
 
 

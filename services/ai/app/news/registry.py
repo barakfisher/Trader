@@ -44,8 +44,11 @@ def build_news_providers(
             providers.append(FixtureNewsProvider(settings.fixtures_dir))
         elif name == "gdelt":
             # Keyless, so there is nothing to validate at boot: a GDELT outage is
-            # a provider failure on a run, recorded as one.
-            providers.append(GdeltNewsProvider(cursor=cursor_for(name) if cursor_for else None))
+            # a provider failure on a run, recorded as one. The market feed
+            # (decision 60) reads the same files, so it rides on this provider.
+            providers.append(
+                GdeltNewsProvider(cursor=cursor_for(name) if cursor_for else None, market_feed=True)
+            )
         else:
             # newsapi and the rest plug in here as they are implemented.
             # An unknown name is a configuration mistake worth surfacing: silently

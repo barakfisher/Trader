@@ -745,6 +745,8 @@ export interface components {
              * @default 48
              */
             lookback_hours: number;
+            /** Market Retention Days */
+            market_retention_days?: number | null;
         };
         /**
          * NewsCollectResponse
@@ -791,10 +793,20 @@ export interface components {
             linked_symbols?: {
                 [key: string]: number;
             };
+            /**
+             * Market Articles
+             * @default 0
+             */
+            market_articles: number;
             /** Provider Failures */
             provider_failures?: string[];
             /** Providers Used */
             providers_used?: string[];
+            /**
+             * Pruned
+             * @default 0
+             */
+            pruned: number;
             /**
              * Since
              * Format: date-time
@@ -805,6 +817,8 @@ export interface components {
              * @default 0
              */
             stored: number;
+            /** Suspected Networks */
+            suspected_networks?: components["schemas"]["SuspectedNetwork"][];
         };
         /**
          * NewsInstrument
@@ -1038,6 +1052,18 @@ export interface components {
              * @default 0
              */
             subjects_with_history: number;
+        };
+        /**
+         * SuspectedNetwork
+         * @description An outlet in the market feed whose headlines look generated, for a person to judge.
+         */
+        SuspectedNetwork: {
+            /** Headlines */
+            headlines: number;
+            /** Source */
+            source: string;
+            /** Templated */
+            templated: number;
         };
         /**
          * TopicCandidateOut

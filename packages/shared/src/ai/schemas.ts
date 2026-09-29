@@ -169,6 +169,17 @@ export const newsCollectResponseSchema = z.object({
   providers_used: z.array(z.string()).optional(),
   provider_failures: z.array(z.string()).optional(),
   linked_symbols: z.record(z.string(), z.number().int()).optional(),
+  market_articles: z.number().int(),
+  pruned: z.number().int(),
+  suspected_networks: z
+    .array(
+      z.object({
+        source: z.string(),
+        headlines: z.number().int(),
+        templated: z.number().int(),
+      }),
+    )
+    .optional(),
 });
 
 const discoveredHeadlineSchema = z.object({

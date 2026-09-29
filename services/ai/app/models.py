@@ -243,6 +243,19 @@ class NewsInstrument(BaseModel):
 class NewsCollectRequest(BaseModel):
     instruments: list[NewsInstrument] = Field(min_length=1, max_length=500)
     lookback_hours: int = Field(default=48, ge=1, le=24 * 60)
+    #: How long unlinked market-feed articles are kept (decision 60). The
+    #: orchestrator sends discovery's window plus a proposal's lifetime; absent,
+    #: nothing is pruned.
+    market_retention_days: int | None = Field(default=None, ge=1, le=365)
+
+
+class SuspectedNetwork(BaseModel):
+    """An outlet in the market feed whose headlines look generated, for a person to judge."""
+
+    source: str
+    headlines: int
+    #: How many of them carry a ticker in parentheses.
+    templated: int
 
 
 class NewsCollectResponse(BaseModel):
@@ -261,6 +274,13 @@ class NewsCollectResponse(BaseModel):
     providers_used: list[str] = Field(default_factory=list)
     provider_failures: list[str] = Field(default_factory=list)
     linked_symbols: dict[str, int] = Field(default_factory=dict)
+    #: Stored articles the market feed kept (linked or not).
+    market_articles: int = 0
+    #: Unlinked market-feed articles deleted as older than the retention.
+    pruned: int = 0
+    #: Outlets not yet excluded that look like a ticker network. Empty is the
+    #: expected answer; a name here is a candidate for `TICKER_NETWORKS`.
+    suspected_networks: list[SuspectedNetwork] = Field(default_factory=list)
 
 
 class TopicScanInstrument(BaseModel):

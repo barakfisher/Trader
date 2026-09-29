@@ -53,5 +53,10 @@ async def collect(payload: NewsCollectRequest, settings: SettingsDep) -> NewsCol
             LexiconSentimentScorer(),
             instruments,
             lookback=timedelta(hours=payload.lookback_hours),
+            market_retention=(
+                timedelta(days=payload.market_retention_days)
+                if payload.market_retention_days is not None
+                else None
+            ),
         )
     return NewsCollectResponse(**stats)

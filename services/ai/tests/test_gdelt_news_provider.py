@@ -245,3 +245,85 @@ async def test_a_network_error_is_a_provider_failure() -> None:
     )
     with pytest.raises(NewsProviderError, match="request failed"):
         await _fetch(provider)
+
+
+# --- the market feed (decision 60) --------------------------------------------
+
+_MARKET_THEMES = "ECON_STOCKMARKET,12;TAX_FNCACT_INVESTOR,40"
+
+
+def _tagged_gkg(slot: datetime, *rows: tuple[str, str, str]) -> bytes:
+    """A file of `(title, source, themes)` rows; themes in column 8 as GDELT writes them."""
+    lines = []
+    for i, (title, source, themes) in enumerate(rows):
+        columns = _row(title, url=f"https://{source}/{i}", slot=slot, source=source).split("\t")
+        columns[8] = themes
+        lines.append("\t".join(columns))
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(f"{slot:%Y%m%d%H%M%S}.gkg.csv", "\n".join(lines))
+    return buffer.getvalue()
+
+
+def _market_provider(feed: Feed, *, market_feed: bool = True) -> GdeltNewsProvider:
+    return GdeltNewsProvider(
+        cursor=MemoryFeedCursor(NEWEST - SLOT),
+        transport=httpx.MockTransport(feed),
+        clock=lambda: NOW,
+        market_feed=market_feed,
+    )
+
+
+_ROWS = (
+    ("Bond yields spike as rate hike bets grow", "news.example", _MARKET_THEMES),
+    ("Nvidia unveils a new chip", "tech.example", ""),
+    ("Nvidia shares climb on data center demand", "markets.example", _MARKET_THEMES),
+    ("Acme Corp (NYSE:ACME) shares gap up", "tickerreport.com", _MARKET_THEMES),
+    ("Law firm announces class action against Acme", "prnewswire.com", _MARKET_THEMES),
+    ("Mortgage rates top 7%", "homes.example", "WB_1406_DISEASES,3"),
+)
+
+
+async def test_the_market_feed_keeps_market_news_and_marks_it() -> None:
+    feed = Feed({NEWEST: _tagged_gkg(NEWEST, *_ROWS)})
+    articles = await _fetch(_market_provider(feed))
+    assert [(a.title, a.market) for a in articles] == [
+        ("Bond yields spike as rate hike bets grow", True),
+        ("Nvidia unveils a new chip", False),  # followed name only
+        ("Nvidia shares climb on data center demand", True),  # both doors
+    ]
+
+
+async def test_an_excluded_outlet_is_not_market_news_but_a_followed_name_still_counts() -> None:
+    rows = (("Nvidia (NASDAQ:NVDA) shares gap up", "tickerreport.com", _MARKET_THEMES),)
+    feed = Feed({NEWEST: _tagged_gkg(NEWEST, *rows)})
+    articles = await _fetch(_market_provider(feed))
+    # The followed feed is unchanged by the market feed's lists.
+    assert [(a.title, a.market) for a in articles] == [
+        ("Nvidia (NASDAQ:NVDA) shares gap up", False)
+    ]
+
+
+async def test_without_the_market_feed_only_followed_names_are_kept() -> None:
+    feed = Feed({NEWEST: _tagged_gkg(NEWEST, *_ROWS)})
+    articles = await _fetch(_market_provider(feed, market_feed=False))
+    assert [a.title for a in articles] == [
+        "Nvidia unveils a new chip",
+        "Nvidia shares climb on data center demand",
+    ]
+    assert not any(a.market for a in articles)
+
+
+async def test_the_market_feed_reads_even_with_no_names() -> None:
+    feed = Feed({NEWEST: _tagged_gkg(NEWEST, *_ROWS)})
+    articles = await _market_provider(feed).fetch_for_symbols(["NVDA"], SINCE, names={})
+    assert [a.title for a in articles] == [
+        "Bond yields spike as rate hike bets grow",
+        "Nvidia shares climb on data center demand",
+    ]
+
+
+async def test_a_query_is_never_widened_by_the_market_feed() -> None:
+    feed = Feed({NEWEST: _tagged_gkg(NEWEST, *_ROWS)})
+    articles = await _market_provider(feed).fetch_for_query("mortgage", SINCE)
+    assert [(a.title, a.market) for a in articles] == [("Mortgage rates top 7%", False)]

@@ -50,11 +50,11 @@ SQL_INSERT_ARTICLE = text(
     """
     INSERT INTO articles (
         url_hash, url, source, published_at, title, raw_text, content_hash,
-        duplicate_of_id, fetched_at
+        duplicate_of_id, fetched_at, feed
     )
     VALUES (
         :url_hash, :url, :source, :published_at, :title, :raw_text, :content_hash,
-        :duplicate_of_id, :fetched_at
+        :duplicate_of_id, :fetched_at, :feed
     )
     ON CONFLICT (url_hash) DO NOTHING
     RETURNING id
@@ -152,6 +152,7 @@ def store_ingested(connection: object, articles: list[IngestedArticle]) -> int:
                 "content_hash": record.content_hash,
                 "duplicate_of_id": duplicate_of_id,
                 "fetched_at": record.fetched_at,
+                "feed": "market" if record.article.market else "followed",
             },
         )
         row = result.first()
@@ -208,12 +209,12 @@ def _article_id(connection: object, url_hash: str) -> str | None:
 
 
 #: The window's headlines for theme discovery (`app/topics/discovery.py`).
-#: Only articles linked to an instrument: an unlinked article was fetched
-#: because a name appeared somewhere in its body, not because it is about
-#: anything the user follows, and read as a theme it is noise (68 of the first
-#: 77 real GDELT articles, 2026-09-27). Exact copies are skipped
-#: (`duplicate_of_id`); near copies are grouped into stories by the caller.
-#: Undated articles are placed by when they were fetched.
+#: Articles linked to an instrument, and articles the market feed kept (decision
+#: 60). Not other unlinked articles: those were fetched because a name appeared
+#: somewhere in a body, not because they are about anything, and read as themes
+#: they are noise (68 of the first 77 real GDELT articles, 2026-09-27). Exact
+#: copies are skipped (`duplicate_of_id`); near copies are grouped into stories
+#: by the caller. Undated articles are placed by when they were fetched.
 SQL_WINDOW_HEADLINES = text(
     """
     SELECT a.id::text AS id, a.title, a.source, a.published_at,
@@ -227,15 +228,16 @@ SQL_WINDOW_HEADLINES = text(
       FROM articles a
      WHERE a.duplicate_of_id IS NULL
        AND coalesce(a.published_at, a.fetched_at) >= :since
-       AND EXISTS (SELECT 1 FROM article_entities e WHERE e.article_id = a.id)
+       AND (a.feed = 'market'
+            OR EXISTS (SELECT 1 FROM article_entities e WHERE e.article_id = a.id))
      ORDER BY coalesce(a.published_at, a.fetched_at) DESC, a.id
     """
 )
 
 
 def load_window_headlines(connection: object, *, since: datetime) -> list[Headline]:
-    """Every linked, distinct headline published (or, if undated, fetched) since `since`,
-    with the symbols of the instruments it is linked to."""
+    """Every distinct headline, linked or from the market feed, published (or, if
+    undated, fetched) since `since`, with the symbols of the instruments it is linked to."""
     rows = connection.execute(SQL_WINDOW_HEADLINES, {"since": since})  # type: ignore[attr-defined]
     return [
         Headline(
@@ -247,6 +249,42 @@ def load_window_headlines(connection: object, *, since: datetime) -> list[Headli
         )
         for row in rows
     ]
+
+
+#: Market-feed articles nothing followed is linked to, older than `:before`.
+#: Linked ones stay: topic news and sentiment read them, whichever feed brought
+#: them. Sentiment rows and entity links go with the article (ON DELETE CASCADE);
+#: a copy pointing at a pruned original keeps its row (SET NULL).
+SQL_PRUNE_MARKET_ARTICLES = text(
+    """
+    DELETE FROM articles a
+     WHERE a.feed = 'market'
+       AND coalesce(a.published_at, a.fetched_at) < :before
+       AND NOT EXISTS (SELECT 1 FROM article_entities e WHERE e.article_id = a.id)
+    """
+)
+
+#: The market feed's recent headlines by outlet, for `suspected_networks`.
+SQL_MARKET_HEADLINES = text(
+    """
+    SELECT source, title
+      FROM articles
+     WHERE feed = 'market'
+       AND coalesce(published_at, fetched_at) >= :since
+    """
+)
+
+
+def prune_market_articles(connection: object, *, before: datetime) -> int:
+    """Delete unlinked market-feed articles from before `before`. Returns how many."""
+    result = connection.execute(SQL_PRUNE_MARKET_ARTICLES, {"before": before})  # type: ignore[attr-defined]
+    return int(result.rowcount or 0)
+
+
+def load_market_headlines(connection: object, *, since: datetime) -> list[tuple[str, str]]:
+    """`(source, title)` for every market-feed article since `since`."""
+    rows = connection.execute(SQL_MARKET_HEADLINES, {"since": since})  # type: ignore[attr-defined]
+    return [(row.source, row.title) for row in rows]
 
 
 #: A file-based feed's read position (migration 0020). Locked for the run, so two

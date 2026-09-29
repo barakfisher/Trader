@@ -768,6 +768,43 @@ failure they prevent.
     embedding). The lesson: simulate the whole pipeline, including the caps before a filter, not
     only the filter.
 
+60. **A market feed rides on the same GDELT files, for discovery only.** `app/news/market_feed.py`,
+    migration 0023 (`articles.feed` = `followed` | `market`). A row is market news when GDELT
+    tagged it with a market theme (`MARKET_TAGS`, column 8) **and** its headline uses market
+    vocabulary (`MARKET_WORDS`/`MARKET_PHRASES`); either alone was too wide (law-firm releases;
+    "MasterChef star shares"). Decided with the user 2026-09-29, each measured read-only on raw
+    GKG files first (three 24 h samples, then every slot of 2026-09-22..29):
+    - **Volume:** ~4,000/day averaged over a week (5,400-5,600 on weekdays, 1,600-2,000 on
+      weekend days) of GDELT's ~112k; one download serves both filters, so the cursor stays one.
+    - **Outlets named, not detected:** `TICKER_NETWORKS` (88-95% of headlines carry "(TICK)";
+      the next real newsroom, seekingalpha, is 0.63-0.77 - too thin a gap to automate) and
+      `PRESS_RELEASE_WIRES` (their "class action" releases topped the list once the networks were
+      out). Constants, not a table: a change is a reviewed PR with a measurement, like
+      `GENERIC_WORDS`. Each `news_collect` run reports `suspected_networks` (unlisted outlet, 20+
+      market headlines in a day, 0.85+ templated); it found `financialcontent.com` on its first
+      data, which was then listed. The exclusion applies to the market filter only: a followed
+      name in a network headline is still collected, as before.
+    - **An unlinked market article reaches discovery and nothing else**, by construction: topic
+      news, sentiment and evidence all join through `article_entities`. `feed` exists because 553
+      old unlinked rows (the search API's noise, decision 55) must stay out of discovery.
+    - **Retention = discovery window + proposal lifetime** (21 days), derived in
+      `marketRetentionDays` and sent by the orchestrator, so every headline behind an open
+      proposal is still readable. Only unlinked market rows are pruned. Size was not the reason
+      (~110 MB at 30 days is nothing to Postgres here).
+    - **Window stays 7 days.** 1-, 3- and 7-day windows found the same core themes; a 1-day
+      Saturday run put "crore ipo" and "files draft papers" in its top 8. 7 days cost 69 s until
+      #83 indexed discovery (2.8 s, identical output) - it would have timed out at the
+      orchestrator's 30 s.
+    - **No US-only filter at ingestion:** it lost "crude oil" (mostly non-US outlets) from the top
+      8. Local news is left to a discovery-side rule (next PR: one non-US country's outlets at
+      0.75+ of a phrase's articles is that country's news, mirroring decision 59).
+    - **Portfolio Impact vs New Opportunities is derived at read time** (an article is Portfolio
+      Impact for a user when linked to what they follow), so `feed` is the only stored
+      distinction. The screen is M6.
+    Result on the committed filter: the resolver returns `confident` for "data center" (DLR,
+    APLD, CIFR...), "bond yields", "mortgage rates" and "crude oil". **Limit:** `news_collect`
+    still skips when the user follows nothing, so the market feed stops with it.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -1445,6 +1482,13 @@ stream). Each filter's headlines were run through the real `recurring_phrases`:
 | GDELT `V2Themes` market tags (col 8: `ECON_STOCKMARKET`, `_INTEREST_RATES`, `_INFLATION`, `_CENTRALBANK`, `_OILPRICE`, `_IPO`, ...) | ~11,000 | real themes, but law-firm "class action" press releases top the list |
 | Market vocabulary in the headline | ~12,300 | strongest on AI ("data center" 100 stories/107 outlets, "ai agents" 68/117 - now cross-company), noisy ("MasterChef star shares" matches `shares`) |
 | **Tags AND vocabulary** | **~4,800** | cleanest: interest rates, rate hikes, bond yields, treasury yields, crude oil + Iran, trade war, data centers, ai agents, Anthropic IPO, the Gold Fields/Northern Star takeover |
+
+**Progress (2026-09-29, second session of the day):** all six decisions were made with the user
+and recorded as decision 60. #83 indexed discovery (69 s -> 2.8 s on a real week, identical
+output); the market feed PR followed it. **Next: the geography rule** (a phrase whose articles are
+0.75+ from one non-US country's outlets is that country's news; outlet country from GDELT's
+`MASTER-GDELTDOMAINSBYCOUNTRY-MAY2018.TXT`, ~1.2 MB gzipped, 98% coverage of feed rows), then
+steps 2-3 below. The list that follows is the design brief as it was brought to the user.
 
 **Decisions to bring the user before building** (a recommendation is noted, not decided):
 1. **The filter.** Tags AND vocabulary is the measured candidate. The vocabulary list and the tag

@@ -12,11 +12,12 @@ a clean headline.
 
 **What is read.** Every 15 minutes GDELT publishes a Global Knowledge Graph file
 (`YYYYMMDDHHMMSS.gkg.csv.zip`, about 3 MB zipped, several hundred English
-articles). Only four of its 27 tab-separated columns are used:
+articles). Only five of its 27 tab-separated columns are used:
 
     1  DATE                the 15-minute slot the article was seen in
     3  SourceCommonName    the outlet, e.g. "reuters.com"
     4  DocumentIdentifier  the article URL
+    8  V2Themes            GDELT's theme tags, read by the market feed only
     26 Extras              XML-ish extras; `<PAGE_TITLE>` holds the headline
 
 **Headline-only matching** (user's decision). A row is kept when its headline
@@ -26,6 +27,13 @@ those would find more - but the headline shown, quoted and read for themes would
 then not mention the thing it was kept for, which is exactly the noise the
 search API produced. The headline is also the body, as before: sentiment is
 headline sentiment, and it says so.
+
+**Two filters, one read** (decision 60). With `market_feed` on, a row is also
+kept when `app/news/market_feed.py` calls it market news, and is marked
+`market`. Both filters see every row of the same download, so the feed costs no
+extra file and the cursor stays one cursor. A market article is still matched
+against the followed names like any other, so a market headline that names a
+held company is linked to it.
 
 **Which files a run reads** is a cursor (`FeedCursor`, migration 0020): the
 slots after the last one read, oldest first, at most `MAX_FILES_PER_RUN`. With
@@ -48,6 +56,7 @@ import io
 import re
 import sys
 import zipfile
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -58,6 +67,7 @@ import httpx
 from app.core.logging import get_logger
 from app.news.article import RawArticle
 from app.news.base import NewsProviderError
+from app.news.market_feed import is_excluded_outlet, is_market_headline, outlet
 
 log = get_logger("news.gdelt")
 
@@ -80,7 +90,7 @@ PUBLISH_GRACE = timedelta(minutes=45)
 GDELT_TIMEOUT_SECONDS = 60.0
 
 #: Columns of the GKG 2.1 file, zero-based.
-_DATE, _SOURCE, _URL, _EXTRAS = 1, 3, 4, 26
+_DATE, _SOURCE, _URL, _THEMES, _EXTRAS = 1, 3, 4, 8, 26
 _COLUMNS = 27
 
 _PAGE_TITLE = re.compile(r"<PAGE_TITLE>(.*?)</PAGE_TITLE>", re.DOTALL)
@@ -122,6 +132,10 @@ class FeedPass:
     untitled: int = 0
     malformed: int = 0
     matched: int = 0
+    #: Kept by the market filter (and possibly by a followed name too).
+    market: int = 0
+    #: Market news from an outlet in `EXCLUDED_OUTLETS`, by outlet.
+    excluded: Counter[str] = field(default_factory=Counter)
     slots: list[str] = field(default_factory=list)
 
 
@@ -150,8 +164,11 @@ def headline_pattern(names: Mapping[str, Sequence[str]]) -> re.Pattern[str] | No
     return re.compile(rf"(?<!\w)(?:{alternatives})(?!\w)", re.IGNORECASE)
 
 
-def read_gkg(content: bytes, keep: Callable[[str], bool], stats: FeedPass) -> list[RawArticle]:
-    """The articles in one zipped GKG file whose headline `keep` accepts."""
+def read_gkg(
+    content: bytes, keep: Callable[[str], bool], stats: FeedPass, *, market: bool = False
+) -> list[RawArticle]:
+    """The articles in one zipped GKG file whose headline `keep` accepts, and with
+    `market`, those the market feed's filter accepts too."""
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
             member = archive.namelist()[0]
@@ -171,20 +188,34 @@ def read_gkg(content: bytes, keep: Callable[[str], bool], stats: FeedPass) -> li
         if not title or not url:
             stats.untitled += 1
             continue
-        if not keep(title):
+        source = row[_SOURCE].strip() or "gdelt"
+        is_market = False
+        if market and is_market_headline(title, _themes(row[_THEMES])):
+            if is_excluded_outlet(source):
+                stats.excluded[outlet(source)] += 1
+            else:
+                is_market = True
+        if not is_market and not keep(title):
             continue
         stats.matched += 1
+        stats.market += is_market
         articles.append(
             RawArticle(
                 url=url,
-                source=row[_SOURCE].strip() or "gdelt",
+                source=source,
                 title=title,
                 # Headlines only: see the module docstring.
                 body=title,
                 published_at=_slot_time(row[_DATE]),
+                market=is_market,
             )
         )
     return articles
+
+
+def _themes(value: str) -> set[str]:
+    """`ECON_IPO,120;TAX_FNCACT_INVESTOR,57` -> the theme names; offsets dropped."""
+    return {entry.split(",", 1)[0] for entry in value.split(";") if entry}
 
 
 def _slot_time(value: str) -> datetime | None:
@@ -208,6 +239,7 @@ class GdeltNewsProvider:
         cursor: FeedCursor | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        market_feed: bool = False,
     ) -> None:
         # Without a stored cursor every run reads the initial window: correct,
         # just wasteful. The collection run always passes the stored one.
@@ -215,6 +247,9 @@ class GdeltNewsProvider:
         # Injected by tests as an httpx.MockTransport: no test reaches the network.
         self._transport = transport
         self._clock = clock
+        # Off unless asked for, so a test about followed names reads only those.
+        # The registry turns it on for the collection run.
+        self._market_feed = market_feed
 
     async def fetch_for_symbols(
         self,
@@ -225,11 +260,15 @@ class GdeltNewsProvider:
         names: Mapping[str, Sequence[str]] | None = None,
     ) -> list[RawArticle]:
         pattern = headline_pattern({s: (names or {}).get(s, ()) for s in symbols})
-        if pattern is None:
+        if pattern is None and not self._market_feed:
             # No spellings, nothing a headline could name: an answer, not a failure.
             log.info("news.gdelt.no_names", symbols=len(symbols))
             return []
-        articles = await self._read(since, lambda title: pattern.search(title) is not None)
+        articles = await self._read(
+            since,
+            lambda title: pattern is not None and pattern.search(title) is not None,
+            market=self._market_feed,
+        )
         return articles[:limit] if limit else articles
 
     async def fetch_for_query(
@@ -265,7 +304,12 @@ class GdeltNewsProvider:
         return slots
 
     async def _read(
-        self, since: datetime, keep: Callable[[str], bool], *, advance: bool = True
+        self,
+        since: datetime,
+        keep: Callable[[str], bool],
+        *,
+        advance: bool = True,
+        market: bool = False,
     ) -> list[RawArticle]:
         stats = FeedPass()
         articles: list[RawArticle] = []
@@ -291,7 +335,7 @@ class GdeltNewsProvider:
                         raise NewsProviderError(self.name, f"{stamp}: HTTP {response.status_code}")
                     else:
                         try:
-                            batch = read_gkg(response.content, keep, stats)
+                            batch = read_gkg(response.content, keep, stats, market=market)
                         except ValueError as exc:
                             raise NewsProviderError(self.name, f"{stamp}: {exc}") from exc
                         stats.files_read += 1
@@ -319,6 +363,8 @@ def _stats(stats: FeedPass) -> dict[str, object]:
         "untitled": stats.untitled,
         "malformed": stats.malformed,
         "matched": stats.matched,
+        "market": stats.market,
+        "excluded_outlets": dict(stats.excluded.most_common()),
         "first_slot": stats.slots[0] if stats.slots else None,
         "last_slot": stats.slots[-1] if stats.slots else None,
     }

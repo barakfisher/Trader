@@ -70,6 +70,9 @@ vi.mock('../src/db/queries.js', () => ({
   listTargetWeights: vi.fn(async () => []),
   findInstrumentsBySymbols: vi.fn(async () => []),
   listInstrumentsWithoutName: vi.fn(async () => []),
+  listAnalysedInstruments: vi.fn(async () => [
+    { id: 'instrument-1', symbol: 'AAPL', name: 'Apple Inc.', asset_class: 'equity' },
+  ]),
   setInstrumentName: vi.fn(async () => true),
   replaceTargetWeights: vi.fn(async () => 0),
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
@@ -78,7 +81,9 @@ vi.mock('../src/db/queries.js', () => ({
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
 const { createApp } = await import('../src/http/app.js');
 
-const { createFakeAi } = await import('./fakeAi.js');
+const fakeAi = await import('./fakeAi.js');
+const { createFakeAi } = fakeAi;
+const { DISCOVERY_WINDOW_DAYS } = await import('../src/services/topicDiscovery.js');
 const queries = await import('../src/db/queries.js');
 
 /** One claim succeeds, every later claim of the same key is refused - which is
@@ -326,6 +331,18 @@ describe('API', () => {
     const second = (await (await app.request('/internal/runs', init)).json()) as { status: string };
     expect(first.status).toBe('ok');
     expect(second.status).toBe('skipped');
+  });
+
+  it('keeps market-feed articles for the discovery window plus a proposal lifetime', async () => {
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'news_collect' }),
+    });
+    expect(response.status).toBe(200);
+    expect(fakeAi.lastCollectRequest).toMatchObject({
+      market_retention_days: DISCOVERY_WINDOW_DAYS + loadConfig(ENV).TOPIC_PROPOSAL_TTL_DAYS,
+    });
   });
 
   it('names instruments that are missing one and reports the ones still unnamed', async () => {

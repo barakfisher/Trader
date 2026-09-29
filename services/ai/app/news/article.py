@@ -40,6 +40,10 @@ class RawArticle:
     title: str
     body: str
     published_at: datetime | None = None
+    #: Kept by the market feed's filter (`app/news/market_feed.py`), not only by
+    #: naming something followed. Stored as `articles.feed`; it is which door the
+    #: article came in by, not what it is about - that is still the matcher's call.
+    market: bool = False
 
 
 @dataclass(frozen=True, slots=True)
