@@ -28,6 +28,24 @@ export function Card({
   );
 }
 
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+
+const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
+  primary: 'bg-accent text-surface hover:brightness-110',
+  secondary: 'border border-border-subtle bg-surface-hover text-text-primary hover:brightness-110',
+  ghost: 'text-text-muted hover:text-text-primary',
+  danger: 'border border-loss/40 text-loss hover:bg-loss/10',
+};
+
+/**
+ * The classes a button of this variant wears. Exported for links that go
+ * somewhere - "Topics", "Back to portfolio" - which look like buttons but are
+ * anchors with real addresses, so they open in a new tab and read as links.
+ */
+export function buttonClass(variant: ButtonVariant = 'primary', className = ''): string {
+  return `inline-block rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${BUTTON_VARIANTS[variant]} ${className}`;
+}
+
 export function Button({
   children,
   onClick,
@@ -38,24 +56,13 @@ export function Button({
 }: {
   children: ReactNode;
   onClick?: () => void;
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  variant?: ButtonVariant;
   disabled?: boolean;
   type?: 'button' | 'submit';
   className?: string;
 }) {
-  const variants = {
-    primary: 'bg-accent text-surface hover:brightness-110',
-    secondary: 'border border-border-subtle bg-surface-hover text-text-primary hover:brightness-110',
-    ghost: 'text-text-muted hover:text-text-primary',
-    danger: 'border border-loss/40 text-loss hover:bg-loss/10',
-  };
   return (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled}
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className}`}
-    >
+    <button type={type} onClick={onClick} disabled={disabled} className={buttonClass(variant, className)}>
       {children}
     </button>
   );

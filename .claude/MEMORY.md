@@ -905,6 +905,20 @@ failure they prevent.
     `staleTime: Infinity` (a definition does not move with the market) that resolves a 404 as
     `null` - "not ingested here" is a state, never retried, never an error.
 
+65. **Every view has an address: TanStack Router, routes in code** (`apps/web/src/router.tsx`). The
+    user chose TanStack Router or React Router, Claude's pick (2026-09-29): TanStack Router, because
+    it sits beside TanStack Query and is typed end to end. **Code-based routes, not file-based**: six
+    routes do not need the Vite plugin's build step, and one file shows them all. `NavigationStore`
+    is gone - the URL is the navigation state. The router renders only once the session is known,
+    so a signed-out visit to `/settings` shows sign-in *at* `/settings` and lands there after. An
+    unknown path renders the portfolio. Header and "Back" controls are `<Link>`s styled by
+    `buttonClass()`, so they are real anchors (new tab, read as links). Both web servers already
+    fall back to `index.html` - Vite in dev, nginx `try_files` in the prod image - so a reload deep
+    in the app is served. **Still owed for FR-21:** Telegram messages carry no link into the app,
+    because Telegram refuses a `127.0.0.1` URL button; PR 9 adds `/proposals/:id` and an optional
+    `WEB_BASE_URL` that puts the link in messages once M7 gives a public address. Tests render
+    pages with `renderPage()` (a one-route router) because a page with a `Link` needs one.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each

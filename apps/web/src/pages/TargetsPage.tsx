@@ -1,8 +1,9 @@
 import { observer } from 'mobx-react-lite';
+import { Link } from '@tanstack/react-router';
 import { ArrowLeft, Target } from 'lucide-react';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
-import { Button, Card, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
+import { Button, Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import {
   DRIFT_BANDS,
   formatDriftPoints,
@@ -29,7 +30,7 @@ import { useStore } from '../stores/context.tsx';
  * showing a number the engine would refuse to produce.
  */
 export const TargetsPage = observer(function TargetsPage() {
-  const { targets, navigation } = useStore();
+  const { targets } = useStore();
   // Read here, not only on the dashboard: `targets.rows` computes from the
   // cached portfolio, and this page can be the first to need it.
   const portfolio = usePortfolioQuery();
@@ -50,12 +51,12 @@ export const TargetsPage = observer(function TargetsPage() {
             </span>
           )}
         </div>
-        <Button variant="secondary" onClick={() => navigation.show('portfolio')}>
+        <Link to="/" className={buttonClass('secondary')}>
           <span className="flex items-center gap-1">
             <ArrowLeft className="size-4" aria-hidden />
             Back to portfolio
           </span>
-        </Button>
+        </Link>
       </header>
 
       <p className="max-w-3xl text-sm text-text-muted">
@@ -83,7 +84,11 @@ export const TargetsPage = observer(function TargetsPage() {
           <EmptyState
             title="Nothing to set a target on"
             body="A target names an instrument this portfolio already knows. Add a holding or import a file first, and every symbol in it becomes a row here."
-            action={<Button onClick={() => navigation.show('portfolio')}>Back to portfolio</Button>}
+            action={
+              <Link to="/" className={buttonClass()}>
+                Back to portfolio
+              </Link>
+            }
           />
         </div>
       )}

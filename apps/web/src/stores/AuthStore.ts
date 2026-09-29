@@ -83,7 +83,6 @@ export class AuthStore {
         // anyway so that signing out cannot leave a dialog open over the login
         // screen, and so this list stays exhaustive rather than selective.
         this.root.concepts.reset();
-        this.root.navigation.reset();
       });
     }
   }

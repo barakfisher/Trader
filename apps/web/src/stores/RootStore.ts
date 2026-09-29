@@ -18,7 +18,6 @@ import { queryKeys } from '../queries/queryKeys.ts';
 import { AuthStore } from './AuthStore.ts';
 import { ConceptStore } from './ConceptStore.ts';
 import { ImportStore } from './ImportStore.ts';
-import { NavigationStore } from './NavigationStore.ts';
 import { ObservationsStore } from './ObservationsStore.ts';
 import { ProposalsStore } from './ProposalsStore.ts';
 import { SettingsStore } from './SettingsStore.ts';
@@ -51,5 +50,4 @@ export class RootStore {
   readonly topics = new TopicsStore(this);
   readonly telegram = new TelegramStore(this);
   readonly concepts = new ConceptStore(this);
-  readonly navigation = new NavigationStore(this);
 }

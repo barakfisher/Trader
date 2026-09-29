@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
 import { observer } from 'mobx-react-lite';
+import { Link } from '@tanstack/react-router';
 import { ArrowLeft, BellOff, Settings as SettingsIcon } from 'lucide-react';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { TelegramConnect } from '../components/TelegramConnect.tsx';
-import { Button, Card, ErrorNote, Spinner } from '../components/ui.tsx';
+import { Button, Card, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import {
   MUTE_PRESET_HOURS,
   describeMute,
@@ -36,7 +37,7 @@ import { useStore } from '../stores/context.tsx';
  * force.
  */
 export const SettingsPage = observer(function SettingsPage() {
-  const { settings, navigation } = useStore();
+  const { settings } = useStore();
   // Read on arrival, not at sign-in: settings are read when someone goes looking.
   const stored = useSettingsQuery();
   const draft = settings.draft;
@@ -53,12 +54,12 @@ export const SettingsPage = observer(function SettingsPage() {
             </span>
           )}
         </div>
-        <Button variant="secondary" onClick={() => navigation.show('portfolio')}>
+        <Link to="/" className={buttonClass('secondary')}>
           <span className="flex items-center gap-1">
             <ArrowLeft className="size-4" aria-hidden />
             Back to portfolio
           </span>
-        </Button>
+        </Link>
       </header>
 
       {stored.isPending && <Spinner label="Loading your settings…" />}

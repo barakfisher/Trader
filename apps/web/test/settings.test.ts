@@ -225,17 +225,6 @@ describe('SettingsStore', () => {
   });
 });
 
-describe('NavigationStore', () => {
-  it('starts on the portfolio and returns there when the session ends', () => {
-    const root = new RootStore();
-    expect(root.navigation.view).toBe('portfolio');
-    root.navigation.show('settings');
-    expect(root.navigation.view).toBe('settings');
-    root.navigation.reset();
-    expect(root.navigation.view).toBe('portfolio');
-  });
-});
-
 describe('notification schedule', () => {
   const now = new Date('2026-09-17T10:00:00.000Z');
 

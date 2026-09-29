@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
+import { Link } from '@tanstack/react-router';
 import { ArrowLeft, Inbox, ShieldCheck, Undo2 } from 'lucide-react';
 
 import type { Proposal, ProposalAction } from '@traders/shared';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
-import { Button, Card, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
+import { Button, Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import { isUrgent, snoozeDescription, timeLeft } from '../lib/proposalCountdown.ts';
 import { errorMessage } from '../api/client.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
@@ -38,7 +39,7 @@ import { useStore } from '../stores/context.tsx';
  * refused is the most expensive kind of wrong this product can be.
  */
 export const ProposalsPage = observer(function ProposalsPage() {
-  const { proposals, navigation } = useStore();
+  const { proposals } = useStore();
   // Live: re-read on an interval and on focus while this page is open, because
   // a decision can arrive from Telegram at any moment (`REFRESH_INTERVAL_MS`).
   const inbox = useProposalsQuery({ live: true });
@@ -62,12 +63,12 @@ export const ProposalsPage = observer(function ProposalsPage() {
             </span>
           )}
         </div>
-        <Button variant="ghost" onClick={() => navigation.show('portfolio')}>
+        <Link to="/" className={buttonClass('ghost')}>
           <span className="flex items-center gap-1.5">
             <ArrowLeft className="size-4" aria-hidden />
             Back to portfolio
           </span>
-        </Button>
+        </Link>
       </header>
 
       {/*
@@ -104,9 +105,9 @@ export const ProposalsPage = observer(function ProposalsPage() {
           title="Nothing waiting on you"
           body="When a finding needs a decision, it appears here. You can change what qualifies in Settings."
           action={
-            <Button variant="secondary" onClick={() => navigation.show('settings')}>
+            <Link to="/settings" className={buttonClass('secondary')}>
               Open settings
-            </Button>
+            </Link>
           }
         />
       )}
