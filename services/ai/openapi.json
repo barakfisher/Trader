@@ -1140,8 +1140,48 @@
         "title": "Quote",
         "type": "object"
       },
+      "QuoteMarket": {
+        "description": "Where an instrument trades, as the caller's instruments table records it.",
+        "properties": {
+          "asset_class": {
+            "default": "unknown",
+            "enum": [
+              "equity",
+              "etf",
+              "crypto",
+              "fx",
+              "index",
+              "unknown"
+            ],
+            "title": "Asset Class",
+            "type": "string"
+          },
+          "exchange": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exchange name or code, e.g. 'XETRA', 'NASDAQ', 'NMS'.",
+            "title": "Exchange"
+          }
+        },
+        "title": "QuoteMarket",
+        "type": "object"
+      },
       "QuoteRequest": {
         "properties": {
+          "markets": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/QuoteMarket"
+            },
+            "description": "Optional, by symbol: the instrument's asset class and exchange. They decide how long a quote is cached - crypto never closes, and an exchange's session is judged in its own timezone. A symbol without an entry is judged by its shape and by US market hours.",
+            "title": "Markets",
+            "type": "object"
+          },
           "symbols": {
             "items": {
               "type": "string"

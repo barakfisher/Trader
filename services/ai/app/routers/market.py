@@ -27,7 +27,7 @@ log = get_logger("market")
 
 @router.post("/quotes", response_model=QuoteResponse)
 async def get_quotes(payload: QuoteRequest, market: MarketDataDep) -> QuoteResponse:
-    quotes, missing = await market.quotes(payload.symbols)
+    quotes, missing = await market.quotes(payload.symbols, payload.markets)
     log.info(
         "market.quotes", requested=len(payload.symbols), returned=len(quotes), missing=len(missing)
     )

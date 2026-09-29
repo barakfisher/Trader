@@ -35,6 +35,7 @@ import {
 
 export type Quote = components['schemas']['Quote'];
 export type QuoteResponse = components['schemas']['QuoteResponse'];
+export type QuoteMarket = components['schemas']['QuoteMarket'];
 export type InstrumentResolution = components['schemas']['InstrumentResolution'];
 export type AiInstrument = components['schemas']['Instrument'];
 export type FxRate = components['schemas']['FxRate'];
@@ -155,10 +156,18 @@ export class AiClient {
     return this.request('/readyz', healthResponseSchema, { method: 'GET', requestId });
   }
 
-  quotes(symbols: string[], requestId?: string): Promise<QuoteResponse> {
+  /**
+   * `markets` is optional context by symbol - the instrument's asset class and
+   * exchange - which decides only how long the AI service caches each quote.
+   */
+  quotes(
+    symbols: string[],
+    requestId?: string,
+    markets?: Record<string, QuoteMarket>,
+  ): Promise<QuoteResponse> {
     return this.request('/market/quotes', quoteResponseSchema, {
       method: 'POST',
-      body: JSON.stringify({ symbols }),
+      body: JSON.stringify(markets === undefined ? { symbols } : { symbols, markets }),
       requestId,
     });
   }

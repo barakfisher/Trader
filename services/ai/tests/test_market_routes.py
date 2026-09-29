@@ -56,6 +56,26 @@ async def test_quotes_endpoint_rejects_an_empty_symbol_list(client):
     assert response.status_code == 422
 
 
+async def test_quotes_accept_each_symbols_market(client):
+    # The orchestrator sends asset class and exchange by symbol; they change only
+    # how long a quote is cached, so the answer is the same as without them.
+    async with client:
+        response = await client.post(
+            "/market/quotes",
+            json={
+                "symbols": ["AAPL"],
+                "markets": {"AAPL": {"asset_class": "equity", "exchange": "NASDAQ"}},
+            },
+        )
+        refused = await client.post(
+            "/market/quotes",
+            json={"symbols": ["AAPL"], "markets": {"AAPL": {"asset_class": "bond"}}},
+        )
+    assert response.status_code == 200
+    assert response.json()["quotes"][0]["price_minor"] == 23214
+    assert refused.status_code == 422  # an asset class the service does not know
+
+
 async def test_resolve_endpoint(client):
     async with client:
         resolved = await client.get("/market/instruments/resolve", params={"query": "BTC-USD"})

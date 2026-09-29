@@ -85,8 +85,26 @@ class BackfillResponse(BaseModel):
     )
 
 
+class QuoteMarket(BaseModel):
+    """Where an instrument trades, as the caller's instruments table records it."""
+
+    asset_class: AssetClass = "unknown"
+    exchange: str | None = Field(
+        default=None, description="Exchange name or code, e.g. 'XETRA', 'NASDAQ', 'NMS'."
+    )
+
+
 class QuoteRequest(BaseModel):
     symbols: list[str] = Field(min_length=1, max_length=200)
+    markets: dict[str, QuoteMarket] = Field(
+        default_factory=dict,
+        description=(
+            "Optional, by symbol: the instrument's asset class and exchange. They decide "
+            "how long a quote is cached - crypto never closes, and an exchange's session "
+            "is judged in its own timezone. A symbol without an entry is judged by its "
+            "shape and by US market hours."
+        ),
+    )
 
 
 class QuoteResponse(BaseModel):

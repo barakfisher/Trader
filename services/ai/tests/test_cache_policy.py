@@ -69,6 +69,66 @@ def test_non_utc_input_is_normalised():
     assert is_us_market_open(jerusalem) is True
 
 
+# -- the instrument's own market ----------------------------------------------
+
+
+class TestTheInstrumentsOwnMarket:
+    """SAP.DE trades 09:00-17:30 in Frankfurt; judged by New York it was wrong
+    in both directions every weekday."""
+
+    def test_a_frankfurt_morning_is_open_on_xetra_and_closed_in_new_york(self):
+        # 08:00 UTC in September is 10:00 in Frankfurt and 04:00 in New York.
+        moment = weekday(8, 0)
+        assert quote_ttl("SAP.DE", YFINANCE_DELAY, moment, exchange="XETRA") == YFINANCE_DELAY
+        assert quote_ttl("SAP.DE", YFINANCE_DELAY, moment) == CLOSED_TTL_SECONDS
+
+    def test_after_the_frankfurt_close_xetra_is_closed_while_new_york_trades(self):
+        # 16:00 UTC is 18:00 in Frankfurt (closed at 17:30) and 12:00 in New York.
+        moment = weekday(16, 0)
+        assert quote_ttl("SAP.DE", YFINANCE_DELAY, moment, exchange="XETRA") == CLOSED_TTL_SECONDS
+        assert quote_ttl("SAP.DE", YFINANCE_DELAY, moment) == YFINANCE_DELAY
+
+    @pytest.mark.parametrize("pair", [("NASDAQ", "NMS"), ("NYSE", "NYQ"), ("NYSEARCA", "PCX"),
+                                      ("XETRA", "GER")])  # fmt: skip
+    def test_display_names_and_yahoo_codes_are_the_same_session(self, pair):
+        from app.core.market_sessions import session_for
+
+        assert session_for(pair[0]) == session_for(pair[1])
+
+    def test_an_unknown_exchange_keeps_new_york_hours(self):
+        from app.core.market_sessions import US, session_for
+
+        assert session_for("SOMEWHERE") == US
+        assert session_for(None) == US
+        assert quote_ttl("X", YFINANCE_DELAY, weekday(15, 0), exchange="SOMEWHERE") == (
+            YFINANCE_DELAY
+        )
+
+    def test_the_asset_class_decides_crypto_when_it_is_known(self):
+        closed = weekday(3, 0)
+        # No pair suffix, but the instruments table says crypto.
+        assert quote_ttl("BTC", YFINANCE_DELAY, closed, asset_class="crypto") == CRYPTO_TTL_SECONDS
+        # A pair-shaped symbol the table says is an equity is judged as one.
+        assert quote_ttl("ABC-USD", YFINANCE_DELAY, closed, asset_class="equity") == (
+            CLOSED_TTL_SECONDS
+        )
+        # `unknown` knows nothing, so the shape decides, as before.
+        assert quote_ttl("BTC-USD", YFINANCE_DELAY, closed, asset_class="unknown") == (
+            CRYPTO_TTL_SECONDS
+        )
+
+    def test_frankfurt_and_new_york_change_clocks_on_different_weekends(self):
+        from app.core.cache_policy import is_session_open
+        from app.core.market_sessions import FRANKFURT
+
+        # 2026-03-09 (Mon): New York is on summer time, Frankfurt is not until
+        # 2026-03-29. 08:30 UTC is 09:30 in Frankfurt - open - whichever
+        # weekend New York moved.
+        assert is_session_open(datetime(2026, 3, 9, 8, 30, tzinfo=UTC), FRANKFURT) is True
+        # 16:45 UTC that day is 17:45 in Frankfurt: closed.
+        assert is_session_open(datetime(2026, 3, 9, 16, 45, tzinfo=UTC), FRANKFURT) is False
+
+
 # -- ttl ----------------------------------------------------------------------
 
 
@@ -185,8 +245,10 @@ async def test_registry_caches_a_quote_for_the_policy_ttl(settings, monkeypatch)
 async def test_registry_passes_the_configured_floor_to_the_policy(settings, monkeypatch):
     seen: list[tuple] = []
 
-    def fake_policy(symbol, provider_delay_seconds, now=None, *, minimum_ttl_seconds):
-        seen.append((symbol, provider_delay_seconds, minimum_ttl_seconds))
+    def fake_policy(
+        symbol, provider_delay_seconds, now=None, *, minimum_ttl_seconds, asset_class, exchange
+    ):
+        seen.append((symbol, provider_delay_seconds, minimum_ttl_seconds, asset_class, exchange))
         return 4242
 
     monkeypatch.setattr("app.providers.registry.quote_ttl", fake_policy)
@@ -194,8 +256,28 @@ async def test_registry_passes_the_configured_floor_to_the_policy(settings, monk
 
     await service.quotes(["AAPL"])
 
-    assert seen == [("AAPL", 900, settings.cache_ttl_quote)]
+    assert seen == [("AAPL", 900, settings.cache_ttl_quote, None, None)]
     assert recorded["quote:AAPL"] == 4242
+
+
+async def test_registry_passes_each_symbols_market_to_the_policy(settings, monkeypatch):
+    from app.models import QuoteMarket
+
+    seen: dict[str, tuple] = {}
+
+    def fake_policy(symbol, _delay, now=None, *, minimum_ttl_seconds, asset_class, exchange):
+        seen[symbol] = (asset_class, exchange)
+        return 60
+
+    monkeypatch.setattr("app.providers.registry.quote_ttl", fake_policy)
+    service, _ = _service_with_recording_cache(settings)
+
+    # Keys are matched case-insensitively, like the symbols themselves.
+    await service.quotes(
+        ["SAP.DE", "AAPL"], {"sap.de": QuoteMarket(asset_class="equity", exchange="XETRA")}
+    )
+
+    assert seen == {"SAP.DE": ("equity", "XETRA"), "AAPL": (None, None)}
 
 
 class TestDaylightSaving:

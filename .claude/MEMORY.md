@@ -73,11 +73,11 @@ Ordered by the recommendation made when the queue was written: small correctness
 unblocked feature, then structure. Numbers are kept when a task leaves, because other text refers to
 them; task 1 (money at the currency's exponent) was done in #73, task 2 (the narration notice,
 decision 58) in #74, task 3 (the Topics page in a browser) in #75, and task 4 (the Postgres CI
-job, approved by the user 2026-09-28) in the PR after that.
+job, approved by the user 2026-09-28) in #76, and task 5 (quotes carry asset class and exchange) in
+the PR after that.
 
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
-| 5 | **Pass `asset_class` and `exchange` on the quote request** | none (debt) | medium | One wire change fixes two debt rows: SAP.DE judged against NYSE hours, and crypto detected by the `-USD` suffix (`core/cache_policy.py`). Needs `export_openapi.py && pnpm gen:api`. Done: both debt rows resolved |
 | 6 | **A screen for `/ask`** | M6 ("every PRD user-facing FR reachable from the UI") | medium-large | The API is complete and proxied; the response already carries `answered`, `relevance`, `answer_source` and verbatim citations. The weak-match hedge and the three refusals must stay distinguishable on screen (decisions 32, 36) |
 | 7 | **Move server state to TanStack Query** | M6 (tech debt item) | large | The plan and its exit are in `docs/MILESTONES.md` under M6. One store at a time, reads first. Best as its own slice, and it touches every store, so do not run it alongside 3 or 6 |
 
@@ -1165,8 +1165,8 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | **Import previews live in process memory** | `services/previewStore.ts` | Forces `replicas: 1` in Kubernetes. The only remaining in-memory state — run keys moved to the `runs` table in M2 |
 | **Templates are the deliberate steady state until deployment** (decided 2026-09-23) — funding narration was considered and **declined for now**, to be revisited when the product is deployed for real. So a future session should *not* treat template-only explanations as a defect to fix: the cost is known ($0.45/month), the fix is known (raise the OpenRouter workspace cap, point `LLM_MODEL` at a capable model), and the decision is to wait. | `.env` | Explanations are fixed phrasing over checked figures, and the dashboard badge says so |
 | **The free tier cannot narrate at all, and the reason is not cost** | `.env`, `app/llm` | `LLM_MODEL` is a `:free` route because the OpenRouter workspace has a **lifetime** budget of $0.01 — a cumulative cap, not an allowance, so nothing resets and only an org admin changes it. On the free model narration now reaches the evidence validator and is **rejected every time** (`unsourced_figures`, 3/3 measured) for deriving figures not in the evidence. So free means templates, reliably. Real usage is ~$0.0015 per narration and ~10 findings a day ≈ **$0.45/month**, which is what funding the workspace costs. The badge (#38) states this to the user rather than hiding it |
-| Crypto detection is a symbol-shape heuristic | `core/cache_policy.py` | `-USD` suffix, because the AI service receives bare symbols |
-| Market hours assume US sessions for every symbol | `core/cache_policy.py` | SAP.DE trades on XETRA but is judged against NYSE hours. The same wire change (pass `asset_class` and `exchange` on the quote request) fixes both this and the heuristic above |
+| ~~Crypto detection is a symbol-shape heuristic~~ | — | **Resolved** (independent task 5): the quote request carries each symbol's `asset_class`; the `-USD` suffix is only the fallback for a bare lookup with no class |
+| ~~Market hours assume US sessions for every symbol~~ | — | **Resolved** (independent task 5): `app/core/market_sessions.py` maps exchanges - display names *and* Yahoo codes, both present in `instruments` - to their own session in their own timezone; an unknown exchange keeps New York hours. Holidays, auctions and lunch breaks are still ignored, deliberately |
 | **Server state is hand-fetched in every MobX store** | `apps/web/src/stores` | Each store repeats `load()`/`loading`/`error`/`runInAction` with no caching, de-duplication, retry or refetch. A page revisited refetches everything, and a store that forgets to reload after a write shows stale data silently. **Scheduled as M6 tech debt (added 2026-09-27 at the user's request):** move reads and writes to TanStack Query, keep MobX for drafts and UI state. The plan and its exit are in `docs/MILESTONES.md` under M6. New stores written before then (the M5 topic cards) will be migrated with the rest, so keep their fetch code thin |
 | ~~The Topics screen has never been looked at in a browser~~ | — | **Resolved** (independent task 3, 2026-09-28): reviewed at desktop and 375 px against the live stack - the list, a topic card, and the confirm screen over a real 13-candidate resolution. Two faults found and fixed: the dashboard header did not wrap, so on a phone the page was 721 px wide and a tap on "Topics" landed on "Settings" (the only way to reach the page); and each candidate's checkbox was centred in its row, so on long quotes it sat beside the quote rather than the ticker it ticks. **Still unseen with real data: "Suggested from the news"**, because no proposal has existed yet - it will be seen when M5's exit proof is. Timestamps use the browser locale app-wide (`formatExactTime`); that is M6 polish, not a Topics fault |
 | No component/DOM tests on the web app | `apps/web/test` | Store and formatting logic covered; rendering is not. Two real UI bugs this session (Discard disabled by its own typo, a deep link that does nothing) were found by *using* the app, not by tests, and neither would have been caught by a DOM test either — but a DOM test would have caught the first |
@@ -1221,7 +1221,8 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
   nothing. `--dry-run` says whether the files and the database agree without writing, and now
   reports embedding coverage as well as text — vectors are a second derived copy with the same
   drift.
-- **As of 2026-09-28 ~15:00 UTC the stack runs `main` at #75 (`9765784`) and the database is at
+- **As of 2026-09-28 ~15:00 UTC the stack runs `main` at #75 (`9765784`); #76 changed no running
+  code, so it was not rebuilt for it, and the database is at
   `0022_narration_transitions`**, rebuilt with `bash scripts/dev-docker.sh` (no `--reset`), and checked
   inside the containers rather than assumed. **`.env` has `NEWS_PROVIDERS=gdelt,fixture`** (the
   user's choice; `.env.example` keeps `fixture` - a deliberate asymmetry, do not "fix" it), which

@@ -930,8 +930,32 @@ export interface components {
             /** Symbol */
             symbol: string;
         };
+        /**
+         * QuoteMarket
+         * @description Where an instrument trades, as the caller's instruments table records it.
+         */
+        QuoteMarket: {
+            /**
+             * Asset Class
+             * @default unknown
+             * @enum {string}
+             */
+            asset_class: "equity" | "etf" | "crypto" | "fx" | "index" | "unknown";
+            /**
+             * Exchange
+             * @description Exchange name or code, e.g. 'XETRA', 'NASDAQ', 'NMS'.
+             */
+            exchange?: string | null;
+        };
         /** QuoteRequest */
         QuoteRequest: {
+            /**
+             * Markets
+             * @description Optional, by symbol: the instrument's asset class and exchange. They decide how long a quote is cached - crypto never closes, and an exchange's session is judged in its own timezone. A symbol without an entry is judged by its shape and by US market hours.
+             */
+            markets?: {
+                [key: string]: components["schemas"]["QuoteMarket"];
+            };
             /** Symbols */
             symbols: string[];
         };
