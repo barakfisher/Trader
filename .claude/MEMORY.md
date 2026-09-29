@@ -665,7 +665,11 @@ failure they prevent.
     77 stored articles linked to nothing (the search API matches body text) and read as themes
     they were noise ("fiber" from a recipe). Headlines are one story when 80% of the shorter one's
     words, followed names excluded, are in the longer one; phrases found in exactly the same
-    stories are one candidate. Followed instruments'
+    stories are one candidate, and so are wordings nested in each other when the longer is in at
+    least `VARIANT_SHARE` (0.75) of the shorter's stories - transitively, so "open agent safety"
+    and "agent safety platform" join through "agent safety". 0.75 sits in a measured gap
+    (2026-09-29 headlines: rewordings of one story at 0.75-0.92, a word with a life of its own at
+    0.71 and below); before it, one Nvidia launch took 7 of the 8 resolve slots. Followed instruments'
     names are cut out of each headline *before* phrases are built, or "NuScale Power" would count
     towards "power". The orchestrator (`services/topicDiscovery.ts`, run kind `topic_discovery`,
     daily) drops phrases matching a known theme **by words first**, then resolves at most 8
@@ -1405,12 +1409,16 @@ sleep) and proposed nothing, for two reasons:
 
 **The user's decisions (2026-09-29), in order, one PR each - this is the next session's work:**
 
-1. **Collapse near-duplicate phrases before resolving** (`app/topics/discovery.py`). A phrase
-   contained in another candidate and found in mostly the same stories is one candidate, so the
-   budget reaches distinct themes. Discovery-side only; no resolver threshold moves. Measure it
-   read-only against the stored headlines before calling it done (the bugs section's lesson), then
-   run discovery by hand: `POST /internal/runs` `{kind: "topic_discovery", runKey:
-   "topic_discovery:manual:<unique>"}` with `x-internal-key`.
+1. **Done (this PR): near-duplicate phrases collapse before resolving** (decision 55,
+   `VARIANT_SHARE`). Measured read-only over the 05:22 window: the launch went from 7 of 8 resolve
+   slots to 5, and `jensen huang`, `ai safety` and `iphone duo` reached the budget. **What it
+   cannot fix, found while measuring:** the other four are *rewordings* of the same Nvidia launch
+   ("rogue ai", "stop ai"), not nested variants, and no containment rule sees them. And **nearly
+   every top phrase is one company's news**: 96-100% of `ai agents`, `safety platform`, `rogue ai`,
+   `jensen huang`, `hugging face`... link to NVDA alone (`iphone duo` 88% AAPL). A phrase whose
+   headlines are all one followed company is that company's story, not a theme across companies -
+   which may be why the resolver grades them `weak`. Brought to the user as a candidate rule; not
+   built.
 2. **Weak proposals are stored, and hidden behind a filter** (the user's option (a) with a
    filter). A `weak` verdict with enough weak candidates becomes a proposal too, carrying its
    band; the Topics page shows **only confident proposals by default** and a toggle reveals the

@@ -43,7 +43,10 @@ were fetched for: "Apple" recurring across Apple's news says nothing new.
 A shorter phrase is dropped when a longer one containing it was found in
 exactly the same stories, so "data" and "centre" give way to "data centre";
 and of several phrases found in exactly the same stories only one is kept,
-because they are one candidate theme however many words it has.
+because they are one candidate theme however many words it has. Past that,
+a phrase inside a longer one found in most of the same stories is another
+wording of it (`VARIANT_SHARE`): "agent safety", "safety platform" and "open
+agent safety" are one launch, and one resolver call.
 """
 
 from __future__ import annotations
@@ -69,6 +72,15 @@ STORY_OVERLAP = 0.8
 #: words are identical: "Apple earnings" and "Apple earnings beat" are not a
 #: republication of each other just because one contains the other.
 MIN_STORY_WORDS = 4
+
+#: A phrase is a wording of a longer phrase containing it, and one candidate
+#: with it, when the longer one is in at least this share of its stories. On
+#: the stored headlines of 2026-09-29 the contained pairs split at a gap: 0.75
+#: and above were one story reworded ("agent safety" in "agent safety
+#: platform", 0.92; "safety platform", 0.75), 0.71 and below a word with a life
+#: of its own ("stop" in "stop ai"; "rogue ai" in "rogue ai agents", 0.54).
+#: Without it, one product launch took seven of the eight resolve slots.
+VARIANT_SHARE = 0.75
 
 #: Distinct outlets among those articles.
 MIN_SOURCES = 2
@@ -323,18 +335,73 @@ def recurring_phrases(
     for phrase in recurring.values():
         # most_common keeps first-seen order among equals, so this is stable.
         phrase.text = spellings[phrase.key].most_common(1)[0][0]
-    # Phrases found in exactly the same stories are one candidate: keep the
-    # longest (it says most), then the one in most articles, then by text. This
-    # also drops "data" and "centre" in favour of "data centre".
-    best: dict[frozenset[int], Phrase] = {}
-    for phrase in recurring.values():
-        stories = frozenset(phrase.stories)
-        current = best.get(stories)
-        if current is None or _preferred(phrase) < _preferred(current):
-            best[stories] = phrase
-    kept = list(best.values())
+    kept = _one_per_theme(list(recurring.values()))
     kept.sort(key=_rank)
     return kept
+
+
+def _contains(longer: tuple[str, ...], shorter: tuple[str, ...]) -> bool:
+    """Is `shorter` a contiguous run of words inside `longer`?"""
+    size = len(shorter)
+    return len(longer) > size and any(
+        longer[i : i + size] == shorter for i in range(len(longer) - size + 1)
+    )
+
+
+def _one_per_theme(phrases: list[Phrase]) -> list[Phrase]:
+    """One phrase per group of wordings of the same theme.
+
+    Two phrases are joined when they were found in exactly the same stories
+    ("data" and "centre" with "data centre"), or when one contains the other and
+    the longer one is in at least `VARIANT_SHARE` of the shorter one's stories.
+    Joining is transitive, so "open agent safety" and "agent safety platform" -
+    neither inside the other - meet through the "agent safety" both contain.
+    Both rules run in one pass because the first would otherwise delete the
+    phrase the second joins through.
+    """
+    parent = list(range(len(phrases)))
+
+    def root(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    by_stories: dict[frozenset[int], int] = {}
+    for i, phrase in enumerate(phrases):
+        first = by_stories.setdefault(frozenset(phrase.stories), i)
+        parent[root(i)] = root(first)
+    for i, shorter in enumerate(phrases):
+        for j, longer in enumerate(phrases):
+            # Every headline holding the longer phrase holds the shorter one, so
+            # the longer phrase's stories are a subset and this is their share.
+            if _contains(longer.key, shorter.key) and len(longer.stories) >= VARIANT_SHARE * len(
+                shorter.stories
+            ):
+                parent[root(i)] = root(j)
+    groups: dict[int, Phrase] = {}
+    for i, phrase in enumerate(phrases):
+        current = groups.get(root(i))
+        if current is None or _representative(phrase) < _representative(current):
+            groups[root(i)] = phrase
+    return list(groups.values())
+
+
+def _representative(phrase: Phrase) -> tuple[bool, int, int, int, str]:
+    """Which wording speaks for its group.
+
+    The one in most stories, which is the wording the headlines agree on and
+    puts the group where its reach says it belongs in the resolve budget; among
+    equals the longest, because it says most. A single word only when nothing
+    longer is in the group, for `_rank`'s reason.
+    """
+    return (
+        len(phrase.key) == 1,
+        -phrase.story_count,
+        -len(phrase.key),
+        -phrase.article_count,
+        phrase.text,
+    )
 
 
 def _rank(phrase: Phrase) -> tuple[bool, int, int, int, int, str]:
@@ -355,7 +422,3 @@ def _rank(phrase: Phrase) -> tuple[bool, int, int, int, int, str]:
         -len(phrase.key),
         phrase.text,
     )
-
-
-def _preferred(phrase: Phrase) -> tuple[int, int, str]:
-    return (-len(phrase.key), -phrase.article_count, phrase.text)
