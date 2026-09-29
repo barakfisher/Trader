@@ -4,8 +4,21 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-29 05:30 UTC (handoff at CLAUDE.md's five-merged-PR trigger: #73-#77). **The next
-session starts with M5's exit proof, which is now due** - see "Next session" in "Where to go
+Updated: 2026-09-29 ~08:30 UTC (handoff at a natural boundary, at the user's request: three PRs
+merged, #79-#81). **The next session starts with the design of a broader news feed** - see
+"Next session" in "Where to go next". This session worked M5's exit proof and found that the
+feed, not discovery, is what stands between it and a real theme:
+- #79: wordings of one story are one candidate (`VARIANT_SHARE`, decision 55) - one Nvidia
+  launch had spent 7 of 8 resolve slots;
+- #80: one company's news is not a theme (decision 59): a phrase at 0.75+ of one followed
+  instrument's headlines is dropped with its reason; `PHRASES_REQUESTED` 20 -> 100;
+- #81: `face`, `ceo`, `keep` are generic words.
+The manual run after #80 dropped 82 of 100 phrases as one company's news and resolved 8 that
+were not themes ("short interest", "jim cramer"...). Every PR was measured read-only against the
+stored headlines before it was built, at the user's request - keep doing that.
+
+Previous handoff, 2026-09-29 05:30 UTC (at CLAUDE.md's five-merged-PR trigger: #73-#77): **the
+next session starts with M5's exit proof, which is now due** - see "Next session" in "Where to go
 next" - and then the two queue tasks left (6 and 7, both M6-sized). This session took tasks 1-5
 of the "Independent tasks queue", one PR each, all merged and the stack rebuilt:
 - #73: money at the currency's exponent - in the templates *and* the evidence validator, which
@@ -120,7 +133,7 @@ the PR after that.
 | **M2.5 — Real price history** | ✅ Complete | **unplanned**; PR #23. Finished M1's provider layer, 18 PRs late |
 | **M3 — RAG & educational engine** | ✅ Complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. #45: the paid embedder. #46: `POST /ask`, intent routing, citations, a three-state relevance floor. #47: the 35-case eval set in two CI tiers. **The relevance floor is measured to be in the wrong place — see the debt table** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
-| **M5 — Market discovery & topics** | 🟡 In progress | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. **Open:** real news (see the debt table), then M5's closing handoff |
+| **M5 — Market discovery & topics** | 🟡 In progress | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). **Open:** a broader news feed, since the followed-only feed holds no cross-company theme (designed and measured next session), then weak proposals, the rejection check, and M5's closing handoff |
 | M6 — Frontend completion & polish | Not started | |
 | M7 — Kubernetes & documentation | Not started | |
 
@@ -159,8 +172,8 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts at handoff (2026-09-29): **1,458** — 737 Python, 506 orchestrator, 199 web, 16 shared - plus
-**10 Postgres integration tests** (6 Python, 4 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
+Test counts at handoff (2026-09-29, after #81): **1,477** — 750 Python, 512 orchestrator, 199 web, 16 shared - plus
+**11 Postgres integration tests** (7 Python, 4 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
 eval sets, which are not test counts: `/ask`'s **35 cases** (16 keyless on every PR, all 35 when
 keyed), and the topic eval's **31 cases** (`scripts/run_topic_eval.py`, keyed only, **not in CI**).
 
@@ -1411,40 +1424,56 @@ and `DATABASE_URL`/`AI_SERVICE_URL` pointed at the host ports; and `vite --port 
 in-app browser's existing sign-in carries over and nobody types the passphrase. A
 `.claude/launch.json` for `preview_start` is **not gitignored** - delete it before committing.
 
-### Next session: M5's exit proof first, then queue tasks 6 and 7
+### Next session: design the broader news feed, measured first
 
-**The exit proof's evidence is in, and it settled the question (2026-09-29 05:22 UTC run).** The
-user's 24-48 hours after #68 have passed; do not wait for more headlines. That run read 531
-linked headlines (the feed is healthy: 224 articles in the 05:20 collection after a laptop
-sleep) and proposed nothing, for two reasons:
+**Why this is next.** M5's exit proof needs discovery to propose a real theme, and it cannot from
+this feed. News is collected only for followed instruments (decision 51) - 12 of them, and on
+2026-09-29 NVDA, AAPL, BTC-USD and MSFT made up 95% of 656 headlines. After #79-#81, discovery
+does what it should: 82 of the top 100 phrases were dropped as one company's news, and the 8
+resolved were not themes. Weak proposals (step 2 below) built on this feed would propose "short
+interest" and "jim cramer". The user already plans a broader macro/sector feed and a UI split into
+**"Portfolio Impact"** (news about what is held) and **"New Opportunities"** (themes from the
+wider feed); it is also what unblocks M5.
 
-1. **Discovery now finds real themes, and the resolver grades them `weak`.** Yesterday's candidates
-   were everyday words (`buy`, `pro`, `use`); today's are `ai agents`, `ai safety`, `ai security`,
-   `ai boom`, `hugging face`, `jensen huang`, `rogue ai`. Every one resolved was `weak` (`stop ai`
-   was `none`), and proposing needs `confident`. Per this file's rule the thresholds were *not*
-   lowered - they are measured and batch 2 is spent.
-2. **One story spent most of the 8-per-run resolve budget.** `agent safety`, `agent safety
-   platform`, `open agent`, `open agent safety`, `safety platform`, `stop ai agents`,
-   `unveils security platform` are variants of one launch; distinct themes (`ai boom`, `hugging
-   face`, `jensen huang`, `consumer lawsuit`) were never resolved ("at most 8 per run").
-   Read it again with `select key, value from runs, jsonb_each_text(stats->'notProposed')
-   where kind='topic_discovery' order by started_at desc`.
+**Measured, read-only, 2026-09-29** (48 raw GKG files = every other 15-minute slot over 24 h,
+2026-09-28 07:30 - 09-29 07:00 UTC; 55,944 unique titled articles, so ~112k/day in the full
+stream). Each filter's headlines were run through the real `recurring_phrases`:
 
-**The user's decisions (2026-09-29), in order, one PR each - this is the next session's work:**
+| Filter | Kept/day | What discovery found |
+|---|---|---|
+| Financial-outlet allowlist | ~2,800 | thin and India-heavy; general news ("supreme court", "raf fairford"). **Reuters, Bloomberg, WSJ, FT and MarketWatch are not in GDELT at all** |
+| GDELT `V2Themes` market tags (col 8: `ECON_STOCKMARKET`, `_INTEREST_RATES`, `_INFLATION`, `_CENTRALBANK`, `_OILPRICE`, `_IPO`, ...) | ~11,000 | real themes, but law-firm "class action" press releases top the list |
+| Market vocabulary in the headline | ~12,300 | strongest on AI ("data center" 100 stories/107 outlets, "ai agents" 68/117 - now cross-company), noisy ("MasterChef star shares" matches `shares`) |
+| **Tags AND vocabulary** | **~4,800** | cleanest: interest rates, rate hikes, bond yields, treasury yields, crude oil + Iran, trade war, data centers, ai agents, Anthropic IPO, the Gold Fields/Northern Star takeover |
 
-1. **Done (this PR): near-duplicate phrases collapse before resolving** (decision 55,
-   `VARIANT_SHARE`). Measured read-only over the 05:22 window: the launch went from 7 of 8 resolve
-   slots to 5, and `jensen huang`, `ai safety` and `iphone duo` reached the budget. **What it
-   cannot fix, found while measuring:** the other four are *rewordings* of the same Nvidia launch
-   ("rogue ai", "stop ai"), not nested variants, and no containment rule sees them. And **nearly
-   every top phrase is one company's news**: 96-100% of `ai agents`, `safety platform`, `rogue ai`,
-   `jensen huang`, `hugging face`... link to NVDA alone (`iphone duo` 88% AAPL). A phrase whose
-   headlines are all one followed company is that company's story, not a theme across companies -
-   which may be why the resolver grades them `weak`. Brought to the user as a candidate rule; not
-   built.
-   **Then, by the user's decision: the single-company rule (decision 59), built in the PR after
-   #79**, before step 2, because weak proposals would otherwise be mostly "Nvidia news" under
-   another name.
+**Decisions to bring the user before building** (a recommendation is noted, not decided):
+1. **The filter.** Tags AND vocabulary is the measured candidate. The vocabulary list and the tag
+   list were written ad hoc for the sample - freeze them as named constants and re-measure.
+2. **Ticker spam.** 16% of the tags+vocabulary rows came from an auto-generated network
+   (tickerreport.com, themarketsdaily.com, dailypolitical.com, americanbankingnews.com, ...).
+   Needs a blocklist, or detection of one template repeated across many outlets.
+3. **Geography.** Much is Indian (Sensex, "lakh crore", Tata Sons) or Australian (RBA "cash
+   rate"). For a USD portfolio, decide whether to keep it, down-rank it, or filter by
+   `V2Locations`/outlet country.
+4. **What an unlinked article is.** It counts in discovery's denominator (decision 59 was built
+   for that), but must never reach topic news, sentiment or a holding's evidence as if it were
+   about something followed. Decide whether it gets its own `article_entities` kind or none.
+5. **Volume and cost.** ~4,800/day is ~34k headlines in discovery's 7-day window. Storage is
+   small (headline only), but `group_stories` compares each headline with every story's first
+   headline - O(n x stories). 6,144 headlines took 4 s; a week's window is an estimated ~2 min
+   per daily run. Measure it before accepting it, or index stories by word.
+6. **Where the two feeds meet the UI.** Which of "Portfolio Impact" and "New Opportunities" each
+   article, observation and proposal belongs to. Likely M6 for the screen, but the data needs
+   the distinction from the start.
+
+**How to reproduce the measurement:** download `https://data.gdeltproject.org/gdeltv2/
+<YYYYMMDDHHMMSS>.gkg.csv.zip` for past slots into a scratch directory; parse the way
+`app/news/gdelt.read_gkg` does (tab-separated, `csv.field_size_limit(sys.maxsize)`, title from
+`<PAGE_TITLE>` in column 26, outlet column 3, URL column 4, themes column 8, organisations column
+14); build `Headline`s and call `recurring_phrases`. Nothing is written. The scripts lived in the
+session scratchpad and are gone - about 80 lines.
+
+**Then, M5's remaining steps, unchanged in substance:**
 2. **Weak proposals are stored, and hidden behind a filter** (the user's option (a) with a
    filter). A `weak` verdict with enough weak candidates becomes a proposal too, carrying its
    band; the Topics page shows **only confident proposals by default** and a toggle reveals the
@@ -1454,10 +1483,16 @@ sleep) and proposed nothing, for two reasons:
    `MAX_OPEN_PROPOSALS`' confident slots - a shared cap would let three weak ones block every
    confident one, the failure decision 57 fixed. Rejection memory and expiry must treat both
    bands the same.
-3. **Then the exit check's second half:** once a proposal exists, reject it ("Not interested"),
-   run discovery again with a fresh run key, and confirm its `notProposed` says "matches rejected
-   topic ... by words/instruments". That plus a sensible proposal closes M5 as amended (cooldown,
-   not forever).
+3. **The exit check's second half:** once a proposal exists, reject it ("Not interested"), run
+   discovery again with a fresh run key, and confirm its `notProposed` says "matches rejected
+   topic ... by words/instruments" (decision 59 checks rejection *before* the single-company
+   rule, so this reason survives). That plus a sensible proposal closes M5 as amended.
+
+(Step 1 - collapsing near-duplicate phrases - is done: #79, and #80 after it.) To run discovery
+by hand: `POST /internal/runs` `{kind: "topic_discovery", runKey:
+"topic_discovery:manual:<unique>"}` with `x-internal-key`; read the reasons with `select key,
+value from runs, jsonb_each_text(stats->'notProposed') where kind='topic_discovery' order by
+started_at desc`.
 
 Then the queue: task 6 (a screen for `/ask`) and task 7 (TanStack Query). Both are M6 work, and
 7 touches every store, so do not run it alongside 6.
