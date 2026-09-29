@@ -3,7 +3,12 @@ import { observer } from 'mobx-react-lite';
 import { ArrowLeft, Newspaper, Plus, Search, Tags, X } from 'lucide-react';
 
 import { formatMoney } from '@traders/shared';
-import type { TopicDetail, TopicInstrument, TopicSummary } from '@traders/shared';
+import type {
+  TopicDetail,
+  TopicInstrument,
+  TopicSentimentResponse,
+  TopicSummary,
+} from '@traders/shared';
 import type { TopicCandidate } from '@traders/shared/ai';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
@@ -17,6 +22,13 @@ import {
   verdictMessage,
 } from '../lib/topicPresentation.ts';
 import type { Composer } from '../stores/TopicsStore.ts';
+import { errorMessage } from '../api/client.ts';
+import {
+  useTopicNewsQuery,
+  useTopicQuery,
+  useTopicSentimentQuery,
+  useTopicsQuery,
+} from '../queries/topics.ts';
 import { useStore } from '../stores/context.tsx';
 
 /**
@@ -32,6 +44,7 @@ import { useStore } from '../stores/context.tsx';
  */
 export const TopicsPage = observer(function TopicsPage() {
   const { topics, navigation } = useStore();
+  const list = useTopicsQuery();
   const limits = topics.limits;
 
   return (
@@ -61,12 +74,19 @@ export const TopicsPage = observer(function TopicsPage() {
         missed. Following a topic buys nothing; it decides what the app watches.
       </p>
 
-      {topics.error && <ErrorNote message={topics.error} onRetry={() => void topics.load()} />}
+      {/* A failed read with nothing to show; a failed re-read keeps the list. */}
+      {list.error && topics.topics === null && (
+        <ErrorNote
+          message={errorMessage(list.error, 'Could not load your topics.')}
+          onRetry={() => void list.refetch()}
+        />
+      )}
+      {topics.error && <ErrorNote message={topics.error} />}
 
       {topics.composer ? (
         <ComposerCard composer={topics.composer} />
-      ) : topics.detail ? (
-        <DetailCard topic={topics.detail} />
+      ) : topics.openTopicId ? (
+        <OpenTopic topicId={topics.openTopicId} />
       ) : null}
 
       <ProposalList />
@@ -80,8 +100,9 @@ export const TopicsPage = observer(function TopicsPage() {
 
 const TopicList = observer(function TopicList() {
   const { topics } = useStore();
+  const list = useTopicsQuery();
 
-  if (topics.loading && topics.topics === null) return <Spinner label="Loading your topics…" />;
+  if (list.isPending) return <Spinner label="Loading your topics…" />;
   if (topics.topics === null) return null;
 
   const newButton = (
@@ -120,7 +141,7 @@ const TopicList = observer(function TopicList() {
               type="button"
               onClick={() => void topics.open(topic.id)}
               className={`flex w-full items-center justify-between gap-3 py-2 text-left text-sm hover:text-accent ${
-                topics.detail?.id === topic.id ? 'text-accent' : ''
+                topics.openTopicId === topic.id ? 'text-accent' : ''
               }`}
             >
               <span className="font-medium">{topic.label}</span>
@@ -241,6 +262,21 @@ const ProposalRow = observer(function ProposalRow({ topic }: { topic: TopicSumma
   );
 });
 
+/** The open topic: its confirmed instruments, then its tone and news, each read on its own. */
+function OpenTopic({ topicId }: { topicId: string }) {
+  const detail = useTopicQuery(topicId);
+  if (detail.isPending) return <Spinner label="Loading that topic…" />;
+  if (detail.error) {
+    return (
+      <ErrorNote
+        message={errorMessage(detail.error, 'Could not load that topic.')}
+        onRetry={() => void detail.refetch()}
+      />
+    );
+  }
+  return <DetailCard topic={detail.data} />;
+}
+
 const DetailCard = observer(function DetailCard({ topic }: { topic: TopicDetail }) {
   const { topics } = useStore();
   const [confirmingRemove, setConfirmingRemove] = useState(false);
@@ -287,32 +323,33 @@ const DetailCard = observer(function DetailCard({ topic }: { topic: TopicDetail 
           <ConfirmedRow key={instrument.instrumentId} instrument={instrument} />
         ))}
       </ul>
-      <ToneSection />
-      <NewsSection />
+      <ToneSection topicId={topic.id} />
+      <NewsSection topicId={topic.id} />
     </Card>
   );
 });
 
 /** The topic's tone: a score with the counts behind it, or the reason there is none. */
-const ToneSection = observer(function ToneSection() {
-  const { topics } = useStore();
+function ToneSection({ topicId }: { topicId: string }) {
+  const tone = useTopicSentimentQuery(topicId);
   return (
     <section className="mt-5 border-t border-border-subtle pt-4">
       <h3 className="mb-1 text-sm font-semibold">Tone this week</h3>
-      {topics.sentimentError ? (
-        <p className="text-xs text-text-muted">{topics.sentimentError}</p>
-      ) : topics.sentiment === null ? (
+      {tone.error ? (
+        <p className="text-xs text-text-muted">
+          {errorMessage(tone.error, 'Could not load this topic’s tone.')}
+        </p>
+      ) : tone.data === undefined ? (
         <Spinner label="Reading the tone…" />
       ) : (
-        <ToneLine />
+        <ToneLine sentiment={tone.data} />
       )}
     </section>
   );
-});
+}
 
-const ToneLine = observer(function ToneLine() {
-  const { topics } = useStore();
-  const summary = sentimentSummary(topics.sentiment!);
+function ToneLine({ sentiment }: { sentiment: TopicSentimentResponse }) {
+  const summary = sentimentSummary(sentiment);
   return (
     <p className="text-sm">
       {summary.score !== null && (
@@ -321,18 +358,20 @@ const ToneLine = observer(function ToneLine() {
       <span className="text-xs text-text-muted">{summary.text}</span>
     </p>
   );
-});
+}
 
 /** The topic's week of news, newest first, each with the instrument that tied it here. */
-const NewsSection = observer(function NewsSection() {
-  const { topics } = useStore();
-  const news = topics.news;
+function NewsSection({ topicId }: { topicId: string }) {
+  const query = useTopicNewsQuery(topicId);
+  const news = query.data;
   return (
     <section className="mt-5 border-t border-border-subtle pt-4">
       <h3 className="mb-1 text-sm font-semibold">News this week</h3>
-      {topics.newsError ? (
-        <p className="text-xs text-text-muted">{topics.newsError}</p>
-      ) : news === null ? (
+      {query.error ? (
+        <p className="text-xs text-text-muted">
+          {errorMessage(query.error, 'Could not load this topic’s news.')}
+        </p>
+      ) : news === undefined ? (
         <Spinner label="Loading news…" />
       ) : news.articles.length === 0 ? (
         <p className="text-xs text-text-muted">
@@ -363,7 +402,7 @@ const NewsSection = observer(function NewsSection() {
       )}
     </section>
   );
-});
+}
 
 function ConfirmedRow({ instrument }: { instrument: TopicInstrument }) {
   const held = heldByText(instrument.heldBy);

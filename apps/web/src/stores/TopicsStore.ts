@@ -1,21 +1,19 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 
-import type {
-  TopicConfirmRequest,
-  TopicDetail,
-  TopicLimits,
-  TopicNewsResponse,
-  TopicSentimentResponse,
-  TopicSummary,
-  TopicsResponse,
-} from '@traders/shared';
+import type { TopicConfirmRequest, TopicDetail, TopicLimits, TopicSummary } from '@traders/shared';
 import type { TopicCandidate, TopicResolveResponse } from '@traders/shared/ai';
 
 import { ApiRequestError, api } from '../api/client.ts';
+import { queryKeys } from '../queries/queryKeys.ts';
 import type { RootStore } from './RootStore.ts';
 
 /**
- * Topics: the list, one topic's confirmed instruments, and the confirm screen.
+ * Topics: which topic is open, the confirm screen, and the writes.
+ *
+ * The list and each topic's detail, news and tone are server state, in the
+ * query cache (`queries/topics.ts`); the list is read here through
+ * `root.topicsCache` because the confirm screen's rules depend on the limits
+ * and on what is already followed.
  *
  * **Nothing is ticked for the user.** The resolver's candidates arrive
  * unticked, and a topic's instruments are only what the user chose. The same
@@ -31,26 +29,11 @@ import type { RootStore } from './RootStore.ts';
  * and it has no way to.
  */
 export class TopicsStore {
-  topics: TopicSummary[] | null = null;
-  limits: TopicLimits | null = null;
-  loading = false;
+  /** Why the last reject or remove failed. A failed read is the query's to report. */
   error: string | null = null;
 
-  /** The topic whose confirmed instruments are on screen, if any. */
-  detail: TopicDetail | null = null;
-  detailLoading = false;
-
-  /**
-   * The open topic's card: its week of news and its tone. Each loads on its own
-   * and fails on its own, so a broken sentiment call never hides the news, and
-   * neither hides the instruments.
-   */
-  news: TopicNewsResponse | null = null;
-  newsError: string | null = null;
-  sentiment: TopicSentimentResponse | null = null;
-  sentimentError: string | null = null;
-  /** Which topic `news` and `sentiment` belong to: a late answer for another is dropped. */
-  cardTopicId: string | null = null;
+  /** The topic whose card is open, if any. Its contents are queries keyed by this id. */
+  openTopicId: string | null = null;
 
   /** The confirm screen. Null while it is closed. */
   composer: Composer | null = null;
@@ -64,6 +47,15 @@ export class TopicsStore {
 
   constructor(private readonly root: RootStore) {
     makeAutoObservable(this, {}, { autoBind: true });
+  }
+
+  /** Every topic, followed or proposed. Null before the first read. */
+  get topics(): TopicSummary[] | null {
+    return this.root.topicsCache.data?.topics ?? null;
+  }
+
+  get limits(): TopicLimits | null {
+    return this.root.topicsCache.data?.limits ?? null;
   }
 
   get activeCount(): number {
@@ -111,92 +103,19 @@ export class TopicsStore {
     return this.limits !== null && this.activeCount >= this.limits.maxActiveTopics;
   }
 
-  async load(): Promise<void> {
-    this.loading = true;
+  /** Show one topic's card. */
+  open(topicId: string): void {
+    this.openTopicId = topicId;
     this.error = null;
-    try {
-      const response = await api.get<TopicsResponse>('/topics');
-      runInAction(() => {
-        this.topics = response.topics;
-        this.limits = response.limits;
-      });
-    } catch (error) {
-      runInAction(() => {
-        this.error = messageOf(error, 'Could not load your topics.');
-      });
-    } finally {
-      runInAction(() => {
-        this.loading = false;
-      });
-    }
-  }
-
-  async open(topicId: string): Promise<void> {
-    this.detailLoading = true;
-    this.error = null;
-    this.news = null;
-    this.newsError = null;
-    this.sentiment = null;
-    this.sentimentError = null;
-    this.cardTopicId = topicId;
-    void this.loadCard(topicId);
-    try {
-      const detail = await api.get<TopicDetail>(`/topics/${topicId}`);
-      runInAction(() => {
-        this.detail = detail;
-      });
-    } catch (error) {
-      runInAction(() => {
-        this.error = messageOf(error, 'Could not load that topic.');
-      });
-    } finally {
-      runInAction(() => {
-        this.detailLoading = false;
-      });
-    }
-  }
-
-  /** The card's two halves, each recorded only if the same topic is still open. */
-  private async loadCard(topicId: string): Promise<void> {
-    const stillOpen = () => this.cardTopicId === topicId;
-    const loadNews = async () => {
-      try {
-        const news = await api.get<TopicNewsResponse>(`/topics/${topicId}/news`);
-        runInAction(() => {
-          if (stillOpen()) this.news = news;
-        });
-      } catch (error) {
-        runInAction(() => {
-          if (stillOpen()) this.newsError = messageOf(error, 'Could not load this topic’s news.');
-        });
-      }
-    };
-    const loadSentiment = async () => {
-      try {
-        const sentiment = await api.get<TopicSentimentResponse>(`/topics/${topicId}/sentiment`);
-        runInAction(() => {
-          if (stillOpen()) this.sentiment = sentiment;
-        });
-      } catch (error) {
-        runInAction(() => {
-          if (stillOpen())
-            this.sentimentError = messageOf(error, 'Could not load this topic’s tone.');
-        });
-      }
-    };
-    await Promise.all([loadNews(), loadSentiment()]);
   }
 
   closeDetail(): void {
-    this.detail = null;
-    this.cardTopicId = null;
-    this.news = null;
-    this.sentiment = null;
+    this.openTopicId = null;
   }
 
   /** Open an empty confirm screen for a new topic. */
   startNew(): void {
-    this.detail = null;
+    this.openTopicId = null;
     this.composer = new Composer(this, null, '', []);
   }
 
@@ -222,7 +141,7 @@ export class TopicsStore {
    * Confirming is `PUT /topics/:id`, which makes the proposal a followed topic.
    */
   review(topic: TopicSummary): void {
-    this.detail = null;
+    this.openTopicId = null;
     this.composer = new Composer(this, topic.id, topic.label, []);
     void this.composer.resolve();
   }
@@ -238,7 +157,7 @@ export class TopicsStore {
       runInAction(() => {
         if (this.composer?.topicId === topicId) this.composer = null;
       });
-      await this.load();
+      await this.root.queryClient.invalidateQueries({ queryKey: queryKeys.topics, exact: true });
       return true;
     } catch (error) {
       runInAction(() => {
@@ -257,10 +176,12 @@ export class TopicsStore {
     try {
       await api.delete(`/topics/${topicId}`);
       runInAction(() => {
-        if (this.detail?.id === topicId) this.detail = null;
+        if (this.openTopicId === topicId) this.openTopicId = null;
         if (this.composer?.topicId === topicId) this.composer = null;
       });
-      await this.load();
+      // The topic, its news and its tone no longer exist; the list changed.
+      this.root.queryClient.removeQueries({ queryKey: queryKeys.topic(topicId) });
+      await this.root.queryClient.invalidateQueries({ queryKey: queryKeys.topics, exact: true });
       return true;
     } catch (error) {
       runInAction(() => {
@@ -273,21 +194,18 @@ export class TopicsStore {
   /** Called by a composer that saved: show what the server stored. */
   adoptSaved(topic: TopicDetail): void {
     this.composer = null;
-    this.detail = topic;
-    // A changed set changes which articles are the topic's, so the card reloads.
-    this.news = null;
-    this.sentiment = null;
-    this.newsError = null;
-    this.sentimentError = null;
-    this.cardTopicId = topic.id;
-    void this.loadCard(topic.id);
-    void this.load();
+    this.openTopicId = topic.id;
+    const client = this.root.queryClient;
+    client.setQueryData(queryKeys.topic(topic.id), topic);
+    // A changed set changes which articles are the topic's, so its news and
+    // tone are re-read; so is the list, where a proposal may now be followed.
+    void client.invalidateQueries({ queryKey: queryKeys.topicNews(topic.id) });
+    void client.invalidateQueries({ queryKey: queryKeys.topicSentiment(topic.id) });
+    void client.invalidateQueries({ queryKey: queryKeys.topics, exact: true });
   }
 
   reset(): void {
-    this.topics = null;
-    this.limits = null;
-    this.detail = null;
+    this.openTopicId = null;
     this.composer = null;
     this.error = null;
   }

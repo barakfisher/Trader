@@ -77,24 +77,6 @@ the user's decision, because interests change; the rejected row itself is kept. 
 ## M6 — Frontend completion & polish *(2–3 days)*
 - Equity curve, per-holding detail view, proposals inbox, topic management, settings (thresholds, quiet hours, base currency).
 - MobX store structure finalised, loading/error/empty states everywhere, mobile-width pass, disclaimer surfaces.
-- **Tech debt, added 2026-09-27: move server state to TanStack Query.** Today every store
-  hand-writes the same `load()` / `loading` / `error` / `runInAction` block around `api.get`, and
-  none of them caches, de-duplicates, retries or refetches. A page navigated back to fetches
-  everything again. A store that forgets to reload after a write shows stale data, and nothing
-  reports it. The split:
-  - TanStack Query owns **server state**: `useQuery` for reads, `useMutation` with query
-    invalidation for writes.
-  - MobX keeps **client state**: drafts and in-progress forms (`TargetsStore.draft`, the topic
-    `Composer`), navigation, dialogs.
-  - `api/client.ts` stays the single fetch path and becomes the query function.
-  - Sign-out calls `queryClient.clear()` next to the store resets, so one account's data never
-    appears under another.
-
-  Migrate one store at a time, reads first (portfolio, observations, proposals count, topics).
-  No big-bang rewrite. Tests move from mocking `api` inside stores to rendering with a
-  `QueryClientProvider`. **Exit for this item:** no store holds a copy of a server response it
-  has to remember to refresh.
-
 **Exit:** every PRD user-facing FR reachable from the UI; no dead ends or unhandled error states.
 
 ---
