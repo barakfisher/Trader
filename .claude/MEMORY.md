@@ -4,10 +4,27 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-28, second handoff of the day (after #71, at the user's request). **The next
-session starts with the "Independent tasks queue" below**, while real headlines accumulate for
-M5's exit proof. Since the first handoff: #71 made unanswered auto-proposals expire (decision 57),
-and the queue was created (this PR).
+Updated: 2026-09-29 05:30 UTC (handoff at CLAUDE.md's five-merged-PR trigger: #73-#77). **The next
+session starts with M5's exit proof, which is now due** - see "Next session" in "Where to go
+next" - and then the two queue tasks left (6 and 7, both M6-sized). This session took tasks 1-5
+of the "Independent tasks queue", one PR each, all merged and the stack rebuilt:
+- #73: money at the currency's exponent - in the templates *and* the evidence validator, which
+  had approved the same hundredfold-wrong yen figure;
+- #74: a Telegram notice when explanations switch between the model and templates (decision 58),
+  verified with a real message the user received;
+- #75: the Topics page looked at in a browser; two phone-width faults fixed (the dashboard header
+  made the page 721 px wide and sent a tap on "Topics" to Settings);
+- #76: **the `postgres (integration)` CI job** - migrations round-tripped over data covering every
+  enumerated value, retrieval/topic SQL, `queries.ts`. Its first run found that 0019 could not
+  follow its own downgrade (fixed in 0019);
+- #77: quotes carry each instrument's asset class and exchange (`market_sessions.py`).
+
+Merging: the user asked this session's Claude to merge its PRs once CI was green, and it did.
+Replies pasted as quoted text were confirmed with the user before being acted on, at their
+choice each time ("just this once") - keep asking.
+
+Second handoff of 2026-09-28 (after #71): #71 made unanswered auto-proposals expire (decision
+57), and #72 created the queue.
 
 Earlier the same day (handoff at CLAUDE.md's five-merged-PR trigger: #62-#66 merged since the
 last one): **M5 is feature-complete and its exit criterion is not yet shown.** Topic resolution,
@@ -142,7 +159,8 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts at handoff (2026-09-28): **1,418** — 721 Python, 482 orchestrator, 199 web, 16 shared. Plus two
+Test counts at handoff (2026-09-29): **1,458** — 737 Python, 506 orchestrator, 199 web, 16 shared - plus
+**10 Postgres integration tests** (6 Python, 4 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
 eval sets, which are not test counts: `/ask`'s **35 cases** (16 keyless on every PR, all 35 when
 keyed), and the topic eval's **31 cases** (`scripts/run_topic_eval.py`, keyed only, **not in CI**).
 
@@ -717,7 +735,15 @@ failure they prevent.
 **A test that read the clock passed for a day, then failed on `main` and every PR.** `sendDigest`
 called `gatherTopicDigest(user)` with no time, so it used the real clock, while its test pinned
 rows to 2026-09-27. It went red at midnight, and a neighbouring test was one day from the same
-fate. Found because two unrelated PRs failed the same check. → **0019 could not be re-applied after its own downgrade, and nothing had ever tried.** Its downgrade
+fate. Found because two unrelated PRs failed the same check. → **A monkeypatch stopped patching anything, and the test started reading the clock.** A registry
+test forced "market open" by patching `is_us_market_open`; #77 routed `quote_ttl` through a new
+`is_session_open`, so the patch hit a function nobody called any more. #77's CI ran during US
+hours and passed; the next run, overnight, failed on `main` for every PR. Found on a MEMORY-only
+PR, which is what made it obviously not that PR's fault. → **After a refactor that reroutes a
+call, grep the tests for `monkeypatch.setattr` on the old name.** And the clock lesson again, from
+a new direction: a test that *forces* a condition is only as good as its hook into the code.
+
+**0019 could not be re-applied after its own downgrade, and nothing had ever tried.** Its downgrade
 keeps proposed and rejected auto topics (deliberately) and drops their fingerprint columns; its
 upgrade then adds a CHECK that every auto topic has a fingerprint. So any rollback below 0019 with a
 proposal present could never roll forward. Found on the Postgres job's first run, by stepping
@@ -1221,8 +1247,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
   nothing. `--dry-run` says whether the files and the database agree without writing, and now
   reports embedding coverage as well as text — vectors are a second derived copy with the same
   drift.
-- **As of 2026-09-28 ~15:00 UTC the stack runs `main` at #75 (`9765784`); #76 changed no running
-  code, so it was not rebuilt for it, and the database is at
+- **As of 2026-09-29 05:25 UTC the stack runs `main` at #77 (`7752018`) and the database is at
   `0022_narration_transitions`**, rebuilt with `bash scripts/dev-docker.sh` (no `--reset`), and checked
   inside the containers rather than assumed. **`.env` has `NEWS_PROVIDERS=gdelt,fixture`** (the
   user's choice; `.env.example` keeps `fixture` - a deliberate asymmetry, do not "fix" it), which
@@ -1359,13 +1384,47 @@ and `DATABASE_URL`/`AI_SERVICE_URL` pointed at the host ports; and `vite --port 
 in-app browser's existing sign-in carries over and nobody types the passphrase. A
 `.claude/launch.json` for `preview_start` is **not gitignored** - delete it before committing.
 
-### Next session: the independent tasks queue, then M5's exit proof
+### Next session: M5's exit proof first, then queue tasks 6 and 7
 
-**Start with the first remaining task of the "Independent tasks queue"** (near the top of this file), then take the
-rest in order, one PR each. Headlines keep accumulating meanwhile; the user wanted 24-48 hours
-after #68 (~11:00 UTC 2026-09-28) before judging discovery, so by 2026-09-30 the steps below are
-due. Check them between tasks rather than leaving them for the end: the discovery run is daily,
-and a `topic_discovery` run with a sensible proposal is the thing M5 is waiting for.
+**The exit proof's evidence is in, and it settled the question (2026-09-29 05:22 UTC run).** The
+user's 24-48 hours after #68 have passed; do not wait for more headlines. That run read 531
+linked headlines (the feed is healthy: 224 articles in the 05:20 collection after a laptop
+sleep) and proposed nothing, for two reasons:
+
+1. **Discovery now finds real themes, and the resolver grades them `weak`.** Yesterday's candidates
+   were everyday words (`buy`, `pro`, `use`); today's are `ai agents`, `ai safety`, `ai security`,
+   `ai boom`, `hugging face`, `jensen huang`, `rogue ai`. Every one resolved was `weak` (`stop ai`
+   was `none`), and proposing needs `confident`. Per this file's rule the thresholds were *not*
+   lowered - they are measured and batch 2 is spent.
+2. **One story spent most of the 8-per-run resolve budget.** `agent safety`, `agent safety
+   platform`, `open agent`, `open agent safety`, `safety platform`, `stop ai agents`,
+   `unveils security platform` are variants of one launch; distinct themes (`ai boom`, `hugging
+   face`, `jensen huang`, `consumer lawsuit`) were never resolved ("at most 8 per run").
+   Read it again with `select key, value from runs, jsonb_each_text(stats->'notProposed')
+   where kind='topic_discovery' order by started_at desc`.
+
+**The user's decisions (2026-09-29), in order, one PR each - this is the next session's work:**
+
+1. **Collapse near-duplicate phrases before resolving** (`app/topics/discovery.py`). A phrase
+   contained in another candidate and found in mostly the same stories is one candidate, so the
+   budget reaches distinct themes. Discovery-side only; no resolver threshold moves. Measure it
+   read-only against the stored headlines before calling it done (the bugs section's lesson), then
+   run discovery by hand: `POST /internal/runs` `{kind: "topic_discovery", runKey:
+   "topic_discovery:manual:<unique>"}` with `x-internal-key`.
+2. **Weak proposals are stored, and hidden behind a filter** (the user's option (a) with a
+   filter). A `weak` verdict with enough weak candidates becomes a proposal too, carrying its
+   band; the Topics page shows **only confident proposals by default** and a toggle reveals the
+   weak ones, labelled "weak match". Decide explicitly, and write down, what "enough" means (the
+   confident rule is at least 2 confident instruments) and whether weak proposals count against
+   `MAX_OPEN_PROPOSALS` - if they do, three weak ones can block every confident one, which is the
+   failure decision 57 fixed. Rejection memory and expiry must treat both bands the same.
+3. **Then the exit check's second half:** once a proposal exists, reject it ("Not interested"),
+   run discovery again with a fresh run key, and confirm its `notProposed` says "matches rejected
+   topic ... by words/instruments". That plus a sensible proposal closes M5 as amended (cooldown,
+   not forever).
+
+Then the queue: task 6 (a screen for `/ask`) and task 7 (TanStack Query). Both are M6 work, and
+7 touches every store, so do not run it alongside 6.
 
 Proposals now expire after 14 days unanswered (decision 57); a run's stats name what it expired.
 
