@@ -135,6 +135,9 @@ GENERIC_WORDS = frozenset(
         # added from the 2026-09-29 run: the next resolve slots once one
         # company's news was dropped went to these
         "nasdaq", "us", "release", "releases",
+        # the run after that (pr80, 2026-09-29): single words that resolved to
+        # nothing and filled three of the eight slots
+        "face", "ceo", "keep",
     }
 )  # fmt: skip
 
