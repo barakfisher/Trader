@@ -10,6 +10,8 @@ import {
 } from '../lib/targetWeights.ts';
 import type { TargetRow } from '../stores/TargetsStore.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
+import { errorMessage } from '../api/client.ts';
+import { useTargetsQuery } from '../queries/targets.ts';
 import { useStore } from '../stores/context.tsx';
 
 /**
@@ -31,6 +33,8 @@ export const TargetsPage = observer(function TargetsPage() {
   // Read here, not only on the dashboard: `targets.rows` computes from the
   // cached portfolio, and this page can be the first to need it.
   const portfolio = usePortfolioQuery();
+  // Read on arrival, not at sign-in: targets are read when someone goes looking.
+  const stored = useTargetsQuery();
   const rows = targets.rows;
   const unpriced = targets.driftBlockedBySymbols;
 
@@ -62,19 +66,17 @@ export const TargetsPage = observer(function TargetsPage() {
         is a normal thing to do, and the rest is simply not spoken for.
       </p>
 
-      {targets.loading && targets.saved === null && <Spinner label="Loading your targets…" />}
+      {stored.isPending && <Spinner label="Loading your targets…" />}
 
-      {targets.error && <ErrorNote message={targets.error} onRetry={() => void targets.load()} />}
-
-      {targets.isEmpty && !targets.error && (
-        <div className="rounded-xl border border-border-subtle bg-surface-raised">
-          <EmptyState
-            title="Targets not loaded"
-            body="Your targets live on the server, and this page has not read them yet."
-            action={<Button onClick={() => void targets.load()}>Load targets</Button>}
-          />
-        </div>
+      {stored.error && targets.saved === null && (
+        <ErrorNote
+          message={errorMessage(stored.error, 'Could not load your targets.')}
+          onRetry={() => void stored.refetch()}
+        />
       )}
+
+      {/* A failed save leaves the boxes as typed; Save is the retry. */}
+      {targets.error && <ErrorNote message={targets.error} />}
 
       {targets.saved !== null && rows.length === 0 && (
         <div className="rounded-xl border border-border-subtle bg-surface-raised">

@@ -1,10 +1,6 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 
-import type {
-  ObservationSeverity,
-  TargetsResponse,
-  TargetsUpdateResponse,
-} from '@traders/shared';
+import type { ObservationSeverity, TargetWeight, TargetsUpdateResponse } from '@traders/shared';
 
 import { ApiRequestError, api } from '../api/client.ts';
 import {
@@ -16,6 +12,7 @@ import {
   unitsToWeight,
   weightToUnits,
 } from '../lib/targetWeights.ts';
+import { queryKeys } from '../queries/queryKeys.ts';
 import type { RootStore } from './RootStore.ts';
 
 /** One line of the form: what is held, what was meant to be, and the gap. */
@@ -45,12 +42,14 @@ export interface TargetRow {
 /**
  * The target-weights form.
  *
- * `saved` is what the server holds; `draft` is what is in the boxes. They are
- * kept apart for the reasons `SettingsStore` keeps them apart — "unsaved
- * changes" becomes a fact the page can state, and a failed save leaves the
- * user's typing on screen instead of silently reverting it.
+ * `saved` is what the server holds, read from the query cache; `edits` is what
+ * has been typed since, and a box shows its edit or else the saved weight. They
+ * are kept apart for the reasons `SettingsStore` keeps them apart — "unsaved
+ * changes" becomes a fact the page can state, a failed save leaves the user's
+ * typing on screen instead of silently reverting it, and a background re-read
+ * never overwrites a box someone is typing in.
  *
- * The draft holds **text**, not numbers. Halfway through typing `25.5` the box
+ * The edits hold **text**, not numbers. Halfway through typing `25.5` the box
  * contains `25.`, which is not a number, and a store that insisted on numbers
  * would either fight the cursor or invent a zero. The text is parsed where it
  * is read, and the empty box is a state in its own right: it means *no target
@@ -58,20 +57,36 @@ export interface TargetRow {
  * and produces a different set of findings. See `targetWeights.ts`.
  */
 export class TargetsStore {
-  /** Symbol -> stored weight in integer units. Null before the first load. */
-  saved: Map<string, number> | null = null;
-  /** Symbol -> the text in that row's box. Empty string means no target. */
-  draft = new Map<string, string>();
-  /** Names for symbols that arrive from `/targets` rather than from a holding. */
-  private names = new Map<string, string | null>();
+  /** Symbol -> the text typed into that row's box. Empty string means no target. */
+  edits = new Map<string, string>();
 
-  loading = false;
   saving = false;
+  /** Why the last save failed. A failed *load* is the query's to report. */
   error: string | null = null;
   savedAt: Date | null = null;
 
   constructor(private readonly root: RootStore) {
     makeAutoObservable(this, {}, { autoBind: true });
+  }
+
+  /** Symbol -> stored weight in integer units. Null before the first read. */
+  get saved(): Map<string, number> | null {
+    const stored = this.root.targetsCache.data;
+    if (stored === undefined) return null;
+    return new Map(stored.map((target) => [target.symbol, weightToUnits(target.weight)]));
+  }
+
+  /** Names for symbols that arrive from `/targets` rather than from a holding. */
+  private get names(): Map<string, string | null> {
+    return new Map((this.root.targetsCache.data ?? []).map((t) => [t.symbol, t.name]));
+  }
+
+  /** What one row's box shows: what was typed, or else the stored weight. */
+  textFor(symbol: string): string {
+    const typed = this.edits.get(symbol);
+    if (typed !== undefined) return typed;
+    const units = this.saved?.get(symbol);
+    return units === undefined ? '' : unitsToPercent(units);
   }
 
   /**
@@ -96,7 +111,7 @@ export class TargetsStore {
     return [...symbols]
       .map((symbol): TargetRow => {
         const holding = bySymbol.get(symbol);
-        const targetText = this.draft.get(symbol) ?? '';
+        const targetText = this.textFor(symbol);
         const targetUnits = percentToUnits(targetText);
         const actualUnits =
           portfolio === null
@@ -139,11 +154,6 @@ export class TargetsStore {
    */
   get unallocatedUnits(): number {
     return WEIGHT_UNITS_PER_PORTFOLIO - this.totalUnits;
-  }
-
-  /** True only once a load has failed with nothing on screen to fall back to. */
-  get isEmpty(): boolean {
-    return !this.loading && this.saved === null;
   }
 
   /**
@@ -225,26 +235,6 @@ export class TargetsStore {
     return this.root.portfolioCache.data?.summary.unpricedSymbols ?? [];
   }
 
-  async load(): Promise<void> {
-    this.loading = true;
-    this.error = null;
-    try {
-      const response = await api.get<TargetsResponse>('/targets');
-      runInAction(() => {
-        this.adopt(response.targets);
-      });
-    } catch (error) {
-      runInAction(() => {
-        this.error =
-          error instanceof ApiRequestError ? error.message : 'Could not load your targets.';
-      });
-    } finally {
-      runInAction(() => {
-        this.loading = false;
-      });
-    }
-  }
-
   async save(): Promise<boolean> {
     if (this.saving || this.saved === null) return false;
     this.saving = true;
@@ -257,10 +247,19 @@ export class TargetsStore {
           .sort(([left], [right]) => left.localeCompare(right))
           .map(([symbol, units]) => ({ symbol, weight: unitsToWeight(units) })),
       });
+      // From the response, so the form shows what was stored rather than what
+      // was typed. The response carries no names, so a name already known is
+      // kept rather than replaced by nothing.
+      this.root.queryClient.setQueryData<TargetWeight[]>(queryKeys.targets, (previous) => {
+        const known = new Map((previous ?? []).map((t) => [t.symbol, t.name]));
+        return response.targets.map((target) => ({
+          symbol: target.symbol,
+          weight: target.weight,
+          name: known.get(target.symbol) ?? null,
+        }));
+      });
       runInAction(() => {
-        // From the response, so the form shows what was stored rather than what
-        // was typed, and the next `isDirty` compares against the same object.
-        this.adopt(response.targets.map((target) => ({ ...target, name: null })));
+        this.edits = new Map();
         this.savedAt = new Date();
       });
       return true;
@@ -279,12 +278,12 @@ export class TargetsStore {
 
   /** Type into one row. The text is kept exactly as written; parsing happens on read. */
   setTarget(symbol: string, text: string): void {
-    this.draft.set(symbol, text);
+    this.edits.set(symbol, text);
   }
 
   /** Clear one row: no target, which is not the same as a target of zero. */
   clearTarget(symbol: string): void {
-    this.draft.set(symbol, '');
+    this.edits.set(symbol, '');
   }
 
   /**
@@ -299,45 +298,19 @@ export class TargetsStore {
     const held = this.rows.filter((row) => row.held);
     if (held.length === 0) return;
     const each = Math.floor(WEIGHT_UNITS_PER_PORTFOLIO / held.length);
-    held.forEach((row) => this.draft.set(row.symbol, unitsToPercent(each)));
+    held.forEach((row) => this.edits.set(row.symbol, unitsToPercent(each)));
   }
 
   /** Throw the edits away and go back to what the server holds. */
   discard(): void {
-    if (this.saved === null) return;
-    this.adopt(
-      [...this.saved.entries()].map(([symbol, units]) => ({
-        symbol,
-        name: this.names.get(symbol) ?? null,
-        weight: unitsToWeight(units),
-      })),
-    );
+    this.edits = new Map();
     this.error = null;
   }
 
   reset(): void {
-    this.saved = null;
-    this.draft = new Map();
-    this.names = new Map();
+    this.edits = new Map();
     this.error = null;
     this.savedAt = null;
-  }
-
-  /** Take a server-shaped set as both the stored truth and the fresh draft. */
-  private adopt(targets: { symbol: string; name?: string | null; weight: string }[]): void {
-    const saved = new Map<string, number>();
-    const draft = new Map<string, string>();
-    targets.forEach((target) => {
-      const units = weightToUnits(target.weight);
-      saved.set(target.symbol, units);
-      draft.set(target.symbol, unitsToPercent(units));
-      // A name already known survives a response that does not carry one.
-      if (target.name != null || !this.names.has(target.symbol)) {
-        this.names.set(target.symbol, target.name ?? null);
-      }
-    });
-    this.saved = saved;
-    this.draft = draft;
   }
 }
 

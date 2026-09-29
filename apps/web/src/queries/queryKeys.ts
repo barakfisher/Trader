@@ -13,4 +13,6 @@ export const queryKeys = {
   proposals: ['proposals'] as const,
   narration: ['narration'] as const,
   telegramBinding: ['telegram', 'binding'] as const,
+  settings: ['settings'] as const,
+  targets: ['targets'] as const,
 };

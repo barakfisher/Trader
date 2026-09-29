@@ -36,6 +36,13 @@ const { MAX_PROPOSAL_TTL_HOURS, MIN_PROPOSAL_TTL_HOURS } = await import(
   '../src/stores/SettingsStore.ts'
 );
 const { ApiRequestError } = await import('../src/api/client.ts');
+const { settingsQuery } = await import('../src/queries/settings.ts');
+const { queryKeys } = await import('../src/queries/queryKeys.ts');
+
+/** What the settings page's query does on arrival. A failure stays in the query. */
+async function readSettings(root: InstanceType<typeof RootStore>) {
+  await root.queryClient.fetchQuery(settingsQuery).catch(() => undefined);
+}
 const {
   MUTE_PRESET_HOURS,
   describeMute,
@@ -69,25 +76,40 @@ describe('SettingsStore', () => {
     vi.clearAllMocks();
   });
 
-  it('holds nothing until a load succeeds, and says so', async () => {
+  it('holds nothing until a read succeeds, then shows what is stored', async () => {
     const root = storeWithSettings();
-    expect(root.settings.isEmpty).toBe(true);
-    await root.settings.load();
-    expect(root.settings.isEmpty).toBe(false);
+    expect(root.settings.draft).toBeNull();
+    await readSettings(root);
     expect(root.settings.draft).toEqual(STORED);
   });
 
-  it('keeps a failed load distinguishable from an empty result', async () => {
-    get.mockRejectedValueOnce(new ApiRequestError('Cannot reach the server.', 0, 'network_error'));
+  it('keeps a failed read distinguishable from an empty result', async () => {
+    get.mockRejectedValue(new ApiRequestError('Cannot reach the server.', 0, 'network_error'));
     const root = new RootStore();
-    await root.settings.load();
-    expect(root.settings.error).toBe('Cannot reach the server.');
+    await readSettings(root);
+    expect(root.queryClient.getQueryState(queryKeys.settings)?.error?.message).toBe(
+      'Cannot reach the server.',
+    );
     expect(root.settings.draft).toBeNull();
+    // A failed read is the query's to report; the store's error is for saves.
+    expect(root.settings.error).toBeNull();
+  });
+
+  it('keeps edits in progress when the stored settings are re-read', async () => {
+    const root = storeWithSettings();
+    await readSettings(root);
+    root.settings.setProposalTtlHours(48);
+
+    // Another tab saved a different mute; this form's edit survives the re-read.
+    root.queryClient.setQueryData(queryKeys.settings, { ...STORED, mutedUntil: '2026-09-30T00:00:00Z' });
+    expect(root.settings.draft?.proposalTtlHours).toBe(48);
+    expect(root.settings.saved?.mutedUntil).toBe('2026-09-30T00:00:00Z');
+    expect(root.settings.isDirty).toBe(true);
   });
 
   it('is not dirty until an edit actually changes a value', async () => {
     const root = storeWithSettings();
-    await root.settings.load();
+    await readSettings(root);
     expect(root.settings.isDirty).toBe(false);
     root.settings.setNotifySeverity('high');
     expect(root.settings.isDirty).toBe(false);
@@ -97,7 +119,7 @@ describe('SettingsStore', () => {
 
   it('sends the whole object, because the endpoint replaces the whole object', async () => {
     const root = storeWithSettings();
-    await root.settings.load();
+    await readSettings(root);
     root.settings.setProposalSeverity('notable');
     put.mockResolvedValueOnce({ settings: { ...STORED, proposalSeverity: 'notable' } });
 
@@ -109,7 +131,7 @@ describe('SettingsStore', () => {
 
   it('re-renders from the saved response rather than from what was typed', async () => {
     const root = storeWithSettings();
-    await root.settings.load();
+    await readSettings(root);
     root.settings.setProposalTtlHours(48);
     // The server is the authority on what was stored; if it normalised the
     // value, the form has to show that and not the user's version of it.
@@ -122,7 +144,7 @@ describe('SettingsStore', () => {
 
   it('keeps the edits on screen when a save fails', async () => {
     const root = storeWithSettings();
-    await root.settings.load();
+    await readSettings(root);
     root.settings.setProposalTtlHours(48);
     put.mockRejectedValueOnce(new ApiRequestError('Settings rejected.', 422, 'invalid_body'));
 
@@ -136,7 +158,7 @@ describe('SettingsStore', () => {
 
   it('discards edits back to the stored object', async () => {
     const root = storeWithSettings();
-    await root.settings.load();
+    await readSettings(root);
     root.settings.setProposalTtlHours(48);
     root.settings.discard();
     expect(root.settings.draft).toEqual(STORED);
@@ -145,7 +167,7 @@ describe('SettingsStore', () => {
 
   it('refuses to send a TTL outside the range the server enforces', async () => {
     const root = storeWithSettings();
-    await root.settings.load();
+    await readSettings(root);
 
     root.settings.setProposalTtlHours(MAX_PROPOSAL_TTL_HOURS + 1);
     expect(root.settings.blockingIssue).not.toBeNull();
@@ -158,14 +180,14 @@ describe('SettingsStore', () => {
 
   it('refuses to send an empty quiet-hours window', async () => {
     const root = storeWithSettings();
-    await root.settings.load();
+    await readSettings(root);
     root.settings.setQuietHours('22:00', '22:00');
     expect(root.settings.canSave).toBe(false);
   });
 
   it('moves both ends of the quiet-hours window together', async () => {
     const root = storeWithSettings();
-    await root.settings.load();
+    await readSettings(root);
 
     // The half-set window the database refuses must not be reachable from the
     // form at all, so the toggle writes both ends or neither.
@@ -181,7 +203,7 @@ describe('SettingsStore', () => {
 
   it('resolves a one-tap mute to a wall-clock end the API can store', async () => {
     const root = storeWithSettings();
-    await root.settings.load();
+    await readSettings(root);
     const now = new Date('2026-09-17T10:00:00.000Z');
 
     root.settings.muteFor(MUTE_PRESET_HOURS[0]!, now);
@@ -193,11 +215,13 @@ describe('SettingsStore', () => {
 
   it('forgets everything when the session ends', async () => {
     const root = storeWithSettings();
-    await root.settings.load();
-    root.settings.reset();
+    await readSettings(root);
+    root.settings.setProposalTtlHours(48);
+    post.mockResolvedValueOnce(undefined);
+    await root.auth.logout();
     expect(root.settings.draft).toBeNull();
     expect(root.settings.saved).toBeNull();
-    expect(root.settings.isEmpty).toBe(true);
+    expect(root.settings.edits).toBeNull();
   });
 });
 
