@@ -4,6 +4,8 @@ import { X } from 'lucide-react';
 
 import { parseConceptText, type TextSpan } from '../lib/conceptText.ts';
 import { conceptLabel } from '../lib/observationPresentation.ts';
+import { errorMessage } from '../api/client.ts';
+import { useConceptQuery } from '../queries/concepts.ts';
 import { useStore } from '../stores/context.tsx';
 import { ErrorNote, Spinner } from './ui.tsx';
 
@@ -46,6 +48,7 @@ export const ConceptDialog = observer(function ConceptDialog() {
   const { concepts } = useStore();
   const closeRef = useRef<HTMLButtonElement>(null);
   const slug = concepts.openSlug;
+  const concept = useConceptQuery(slug);
 
   // Escape closes, from anywhere. Registered only while open so the handler is
   // not sitting on the document for the whole session.
@@ -66,7 +69,7 @@ export const ConceptDialog = observer(function ConceptDialog() {
 
   if (slug === null) return null;
 
-  const document_ = concepts.current;
+  const document_ = concept.data ?? null;
   const title = document_?.title ?? conceptLabel(slug);
 
   return (
@@ -104,20 +107,23 @@ export const ConceptDialog = observer(function ConceptDialog() {
         </div>
 
         <div className="px-5 py-4">
-          {concepts.loading && <Spinner label="Loading the explanation…" />}
+          {concept.isPending && <Spinner label="Loading the explanation…" />}
 
-          {!concepts.loading && concepts.notFound && (
+          {concept.data === null && (
             <p className="text-sm text-text-muted">
               No explanation is available for “{conceptLabel(slug)}” yet. The concept corpus may not
               have been ingested in this environment.
             </p>
           )}
 
-          {!concepts.loading && concepts.error !== null && (
-            <ErrorNote message={concepts.error} onRetry={concepts.retry} />
+          {concept.error && (
+            <ErrorNote
+              message={errorMessage(concept.error, 'The explanation could not be loaded.')}
+              onRetry={() => void concept.refetch()}
+            />
           )}
 
-          {!concepts.loading && document_ !== null && (
+          {document_ !== null && (
             <article className="space-y-5">
               {document_.sections.map((section) => (
                 <section key={section.id}>

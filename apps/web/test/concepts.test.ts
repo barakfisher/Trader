@@ -16,6 +16,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient } from '@tanstack/react-query';
 
 import type { ConceptDocument } from '@traders/shared';
 
@@ -41,6 +42,7 @@ vi.mock('../src/api/client.ts', () => ({
 }));
 
 const { RootStore } = await import('../src/stores/RootStore.ts');
+const { conceptQuery } = await import('../src/queries/concepts.ts');
 const { parseConceptText, parseSpans } = await import('../src/lib/conceptText.ts');
 
 const document_ = (over: Partial<ConceptDocument> = {}): ConceptDocument => ({
@@ -53,87 +55,54 @@ const document_ = (over: Partial<ConceptDocument> = {}): ConceptDocument => ({
   ...over,
 });
 
-describe('ConceptStore', () => {
+describe('concept documents', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('fetches a concept and exposes it', async () => {
-    const root = new RootStore();
+  /** No retries, so a mocked failure is reported at once rather than after backoff. */
+  const fresh = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+  it('fetches a concept by its slug', async () => {
+    const client = fresh();
     get.mockResolvedValueOnce(document_());
-
-    await root.concepts.open('drawdown');
-
+    expect(await client.fetchQuery(conceptQuery('drawdown'))).toEqual(document_());
     expect(get).toHaveBeenCalledWith('/concepts/drawdown');
-    expect(root.concepts.current?.title).toBe('Drawdown');
-    expect(root.concepts.loading).toBe(false);
   });
 
-  it('serves a second open of the same concept from cache', async () => {
-    const root = new RootStore();
-    get.mockResolvedValueOnce(document_());
-
-    await root.concepts.open('drawdown');
-    root.concepts.close();
-    await root.concepts.open('drawdown');
-
+  it('serves every later open of the same concept from the cache', async () => {
+    const client = fresh();
+    get.mockResolvedValue(document_());
+    await client.fetchQuery(conceptQuery('drawdown'));
+    await client.fetchQuery(conceptQuery('drawdown'));
     expect(get).toHaveBeenCalledTimes(1);
-    expect(root.concepts.current?.title).toBe('Drawdown');
   });
 
   it('treats a concept the corpus does not hold as absent, not broken', async () => {
-    const root = new RootStore();
+    const client = fresh();
     get.mockRejectedValueOnce(new FakeApiRequestError('not found', 404));
-
-    await root.concepts.open('nonexistent');
-
-    expect(root.concepts.notFound).toBe(true);
-    expect(root.concepts.error).toBeNull();
+    expect(await client.fetchQuery(conceptQuery('nope'))).toBeNull();
+    expect(client.getQueryState(conceptQuery('nope').queryKey)?.status).toBe('success');
   });
 
-  it('reports a real failure as an error', async () => {
-    const root = new RootStore();
-    get.mockRejectedValueOnce(new FakeApiRequestError('upstream exploded', 502));
-
-    await root.concepts.open('drawdown');
-
-    expect(root.concepts.notFound).toBe(false);
-    expect(root.concepts.error).toContain('upstream exploded');
-  });
-
-  it('retries with a real request rather than re-reading a cached failure', async () => {
-    const root = new RootStore();
-    get.mockRejectedValueOnce(new FakeApiRequestError('transient', 503));
-    await root.concepts.open('drawdown');
+  it('reports a real failure as an error, and retries with a real request', async () => {
+    const client = fresh();
+    get.mockRejectedValueOnce(new FakeApiRequestError('boom', 500));
+    await expect(client.fetchQuery(conceptQuery('drawdown'))).rejects.toThrow('boom');
 
     get.mockResolvedValueOnce(document_());
-    await root.concepts.retry();
-
+    expect(await client.fetchQuery(conceptQuery('drawdown'))).toEqual(document_());
     expect(get).toHaveBeenCalledTimes(2);
-    expect(root.concepts.current?.title).toBe('Drawdown');
-    expect(root.concepts.error).toBeNull();
   });
 
-  it('clears the error state when a different concept is opened', async () => {
-    const root = new RootStore();
-    get.mockRejectedValueOnce(new FakeApiRequestError('not found', 404));
-    await root.concepts.open('nonexistent');
-
-    get.mockResolvedValueOnce(document_());
-    await root.concepts.open('drawdown');
-
-    expect(root.concepts.notFound).toBe(false);
-    expect(root.concepts.error).toBeNull();
-  });
-
-  it('closes and forgets nothing it has already paid for', async () => {
-    const root = new RootStore();
-    get.mockResolvedValueOnce(document_());
-    await root.concepts.open('drawdown');
-
+  it('remembers which concept is open, and closes without forgetting what was read', async () => {
+    const root = new RootStore(fresh());
+    get.mockResolvedValue(document_());
+    root.concepts.open('drawdown');
+    await root.queryClient.fetchQuery(conceptQuery('drawdown'));
     root.concepts.close();
     expect(root.concepts.openSlug).toBeNull();
-    expect(root.concepts.current).toBeNull();
 
-    await root.concepts.open('drawdown');
+    root.concepts.open('drawdown');
+    await root.queryClient.fetchQuery(conceptQuery('drawdown'));
     expect(get).toHaveBeenCalledTimes(1);
   });
 });

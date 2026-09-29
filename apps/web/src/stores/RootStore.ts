@@ -9,7 +9,7 @@
 
 import type { QueryClient } from '@tanstack/react-query';
 
-import type { PortfolioResponse, TargetWeight, UserSettings } from '@traders/shared';
+import type { PortfolioResponse, TargetWeight, TopicsResponse, UserSettings } from '@traders/shared';
 
 import { CacheMirror } from '../queries/cacheMirror.ts';
 import { createQueryClient } from '../queries/queryClient.ts';
@@ -32,11 +32,14 @@ export class RootStore {
   /** The stored settings and targets, which their forms' edits are compared against. */
   readonly settingsCache: CacheMirror<UserSettings>;
   readonly targetsCache: CacheMirror<TargetWeight[]>;
+  /** The topics and their limits, which the confirm screen's rules read. */
+  readonly topicsCache: CacheMirror<TopicsResponse>;
 
   constructor(readonly queryClient: QueryClient = createQueryClient()) {
     this.portfolioCache = new CacheMirror(queryClient, queryKeys.portfolio);
     this.settingsCache = new CacheMirror(queryClient, queryKeys.settings);
     this.targetsCache = new CacheMirror(queryClient, queryKeys.targets);
+    this.topicsCache = new CacheMirror(queryClient, queryKeys.topics);
   }
 
   readonly auth = new AuthStore(this);

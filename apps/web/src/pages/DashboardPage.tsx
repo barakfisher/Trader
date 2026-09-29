@@ -24,7 +24,6 @@ export const DashboardPage = observer(function DashboardPage() {
     auth,
     import: importStore,
     navigation,
-    topics,
     queryClient,
   } = useStore();
   const portfolio = usePortfolioQuery();
@@ -102,11 +101,7 @@ export const DashboardPage = observer(function DashboardPage() {
           </Button>
           <Button
             variant="secondary"
-            onClick={() => {
-              navigation.show('topics');
-              // Read on arrival, like targets.
-              void topics.load();
-            }}
+            onClick={() => navigation.show('topics')}
           >
             <span className="flex items-center gap-1">
               <Tags className="size-4" aria-hidden />

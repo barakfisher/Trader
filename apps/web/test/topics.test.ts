@@ -11,6 +11,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient, QueryObserver } from '@tanstack/react-query';
 
 const get = vi.fn();
 const post = vi.fn();
@@ -32,6 +33,7 @@ vi.mock('../src/api/client.ts', () => ({
 }));
 
 const { RootStore } = await import('../src/stores/RootStore.ts');
+const { topicsQuery } = await import('../src/queries/topics.ts');
 const { ApiRequestError } = await import('../src/api/client.ts');
 const {
   coverageNote,
@@ -86,10 +88,13 @@ function resolution(symbols: string[], verdict = 'confident') {
   };
 }
 
+/** A Topics page that has read its list: the query has an active reader, so a write's re-read happens. */
 async function loadedStore(topics: unknown[] = []) {
-  const root = new RootStore();
+  const root = new RootStore(new QueryClient({ defaultOptions: { queries: { retry: false } } }));
+  // Mocked before the observer subscribes, because subscribing is what fetches.
   get.mockResolvedValueOnce({ topics, limits: LIMITS });
-  await root.topics.load();
+  new QueryObserver(root.queryClient, topicsQuery).subscribe(() => {});
+  await root.queryClient.fetchQuery(topicsQuery);
   return root.topics;
 }
 
@@ -452,44 +457,5 @@ describe('the topic card', () => {
     });
     expect(summary.score).toBe('−0.25');
     expect(summary.text).toMatch(/5 articles \(1 positive, 3 negative, 1 neutral\)/);
-  });
-
-  it('loads news and tone with the topic, and keeps one when the other fails', async () => {
-    const topics = await loadedStore();
-    const detail = { id: 't1', label: 'uranium', status: 'active', instruments: [] };
-    const news = { topicId: 't1', days: 7, articles: [], collection: null };
-    get.mockImplementation(async (path: string) => {
-      if (path === '/topics/t1') return detail;
-      if (path === '/topics/t1/news') return news;
-      throw new ApiRequestError('sentiment is down', 502, 'upstream_failure');
-    });
-
-    await topics.open('t1');
-    await vi.waitFor(() => expect(topics.sentimentError).not.toBeNull());
-
-    expect(topics.detail).toEqual(detail);
-    expect(topics.news).toEqual(news);
-    expect(topics.sentiment).toBeNull();
-  });
-
-  it('drops a late answer for a topic that is no longer open', async () => {
-    const topics = await loadedStore();
-    let releaseA: (value: unknown) => void = () => {};
-    get.mockImplementation(async (path: string) => {
-      if (path === '/topics/a/news') return new Promise((resolve) => (releaseA = resolve));
-      if (path.startsWith('/topics/a')) return new Promise(() => {});
-      if (path === '/topics/b') return { id: 'b', label: 'b', status: 'active', instruments: [] };
-      if (path === '/topics/b/news')
-        return { topicId: 'b', days: 7, articles: [], collection: null };
-      return new Promise(() => {});
-    });
-
-    void topics.open('a');
-    await topics.open('b');
-    releaseA({ topicId: 'a', days: 7, articles: [], collection: null });
-    await vi.waitFor(() => expect(topics.news?.topicId).toBe('b'));
-    await Promise.resolve();
-
-    expect(topics.news?.topicId).toBe('b');
   });
 });

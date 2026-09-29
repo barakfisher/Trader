@@ -15,4 +15,10 @@ export const queryKeys = {
   telegramBinding: ['telegram', 'binding'] as const,
   settings: ['settings'] as const,
   targets: ['targets'] as const,
+  /** The list, and - under it, so invalidating the list prefix reaches them - each topic. */
+  topics: ['topics'] as const,
+  topic: (topicId: string) => ['topics', topicId] as const,
+  topicNews: (topicId: string) => ['topics', topicId, 'news'] as const,
+  topicSentiment: (topicId: string) => ['topics', topicId, 'sentiment'] as const,
+  concept: (slug: string) => ['concepts', slug] as const,
 };
