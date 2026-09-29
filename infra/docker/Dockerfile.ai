@@ -42,6 +42,9 @@ COPY data/eval /app/data/eval
 # the thing that gets pushed to a registry. `.dockerignore` excludes them, and
 # compose mounts the checkout's copy into the one container that loads them.
 COPY data/universe /app/data/universe
+# Each news outlet's home country (decision 61), for telling a theme from one
+# country's local news. `outlets_dir` resolves to this path inside the image.
+COPY data/outlets /app/data/outlets
 
 RUN pip install --no-cache-dir --no-deps -e .
 

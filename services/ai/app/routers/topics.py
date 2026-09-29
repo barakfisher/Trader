@@ -23,6 +23,7 @@ decides, and that decision is recorded by the orchestrator, not here.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends
@@ -31,7 +32,7 @@ from sqlalchemy.engine import Engine
 from app.corpus.embeddings import BaseEmbedder
 from app.corpus.retrieval import _NON_SEMANTIC_MODELS
 from app.db import get_engine
-from app.deps import get_embedder, require_internal_key
+from app.deps import SettingsDep, get_embedder, require_internal_key
 from app.models import (
     DiscoveredHeadline,
     DiscoveredPhrase,
@@ -45,6 +46,7 @@ from app.models import (
     UniverseCoverageOut,
 )
 from app.news.entities import InstrumentRef, name_aliases
+from app.news.outlet_countries import load_outlet_countries
 from app.news.queries import load_window_headlines
 from app.topics.discovery import MIN_SOURCES, MIN_STORIES, recurring_phrases
 from app.topics.resolution import NOTHING_BELOW, STRONG_ABOVE, TopicResolution, resolve_topic
@@ -127,6 +129,7 @@ async def resolve(
 @router.post("/topics/discover", response_model=TopicDiscoverResponse)
 async def discover(
     payload: TopicDiscoverRequest,
+    settings: SettingsDep,
     engine: Engine = Depends(get_engine),
 ) -> TopicDiscoverResponse:
     """Recurring phrases in the last `days` of headlines. Reads; stores nothing.
@@ -151,6 +154,13 @@ async def discover(
         names.extend(name_aliases(ref))
     with engine.connect() as connection:
         headlines = load_window_headlines(connection, since=since)
+    # Each headline carries its outlet's home country, so a phrase can report
+    # whose press carried it (decision 61). Read once per process.
+    countries = load_outlet_countries(settings.outlets_dir)
+    headlines = [
+        replace(h, country=country.code if (country := countries.country(h.source)) else None)
+        for h in headlines
+    ]
     phrases = recurring_phrases(headlines, exclude_names=names)[: payload.limit]
     return TopicDiscoverResponse(
         since=since,
@@ -167,6 +177,9 @@ async def discover(
                 source_count=p.source_count,
                 lead_instrument=p.lead_instrument[0],
                 lead_instrument_articles=p.lead_instrument[1],
+                lead_country=p.lead_country[0],
+                lead_country_name=countries.name(p.lead_country[0]) if p.lead_country[0] else None,
+                lead_country_articles=p.lead_country[1],
                 headlines=[
                     DiscoveredHeadline(
                         article_id=h.article_id,

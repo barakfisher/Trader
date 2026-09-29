@@ -19,7 +19,9 @@
  *    new theme lower in the list needed.
  *    Then a phrase whose headlines are mostly one followed instrument's
  *    (`SINGLE_INSTRUMENT_SHARE`) is dropped: it is that company's news, not a
- *    theme, and it would spend a resolve learning so.
+ *    theme, and it would spend a resolve learning so. So is a phrase carried
+ *    mostly by one foreign country's press (`SINGLE_COUNTRY_SHARE`): that
+ *    country's local news.
  * 3. Survivors are resolved through the same `/topics/resolve` the Topics page
  *    uses, at most `MAX_RESOLVED_PER_RUN` of them. Only a `confident` verdict with
  *    at least `MIN_PROPOSAL_INSTRUMENTS` confident candidates can be proposed: a
@@ -115,6 +117,36 @@ export function singleInstrumentReason(phrase: DiscoveredPhrase): string | null 
   if (articles < SINGLE_INSTRUMENT_SHARE * phrase.article_count) return null;
   const percent = Math.round((100 * articles) / phrase.article_count);
   return `${percent}% of its headlines are ${lead} news: one company, not a theme`;
+}
+
+/**
+ * The market the user trades: US listings, priced in USD. A phrase carried
+ * mostly by US outlets is never "local news" to this user, because it is the
+ * market their holdings are in. A FIPS 10-4 code, as GDELT writes it.
+ */
+export const HOME_COUNTRY = 'US';
+
+/**
+ * A phrase whose articles are at least this share from one other country's
+ * outlets is that country's local news (decision 61), and is not resolved.
+ * Measured over the market feed's week (2026-09-22..29), top 100 phrases: the
+ * local ones ran 0.78 and up (India's IPO calendar, "sensex nifty" 0.97; the
+ * Reserve Bank of Australia's "cash rate" 0.95), the next was 0.67 ("class
+ * action"), and global commodities sat far below ("brent crude" 0.52, "gold
+ * silver" 0.51, mostly Indian outlets but not only). 0.75 sits in that gap -
+ * the same number as the one-company rule, arrived at separately.
+ */
+export const SINGLE_COUNTRY_SHARE = 0.75;
+
+/** Why `phrase` is one foreign country's local news, or null when it is not. */
+export function singleCountryReason(phrase: DiscoveredPhrase): string | null {
+  const lead = phrase.lead_country;
+  const articles = phrase.lead_country_articles ?? 0;
+  if (!lead || lead === HOME_COUNTRY || phrase.article_count === 0) return null;
+  if (articles < SINGLE_COUNTRY_SHARE * phrase.article_count) return null;
+  const percent = Math.round((100 * articles) / phrase.article_count);
+  const where = phrase.lead_country_name ?? lead;
+  return `${percent}% of its headlines are from ${where}'s press: one country's news, not a theme`;
 }
 
 /**
@@ -296,6 +328,11 @@ export async function runTopicDiscovery(
     const oneCompany = singleInstrumentReason(phrase);
     if (oneCompany) {
       result.notProposed[phrase.phrase] = oneCompany;
+      continue;
+    }
+    const oneCountry = singleCountryReason(phrase);
+    if (oneCountry) {
+      result.notProposed[phrase.phrase] = oneCountry;
       continue;
     }
     if (result.resolved >= MAX_RESOLVED_PER_RUN) {

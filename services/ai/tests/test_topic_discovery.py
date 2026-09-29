@@ -250,6 +250,39 @@ def test_the_words_that_followed_one_companys_news_are_generic(word: str) -> Non
     assert _texts(_stories(word, 4)) == []
 
 
+@pytest.mark.parametrize("word", ["launch", "launches", "unveil", "unveils"])
+def test_newsroom_verbs_from_the_first_market_feed_run_are_generic(word: str) -> None:
+    assert _texts(_stories(f"{word} robots", 4)) == ["robots"]
+
+
+def _from(rows: list[tuple[str, str]], *countries: str | None) -> list[Headline]:
+    return [
+        Headline(f"a{i}", title, source, None, (), country)
+        for i, ((title, source), country) in enumerate(zip(rows, countries, strict=True))
+    ]
+
+
+def test_a_phrase_reports_the_country_whose_press_carried_most_of_it() -> None:
+    (top,) = recurring_phrases(_from(_stories("cash rate", 4), "AS", "AS", "AS", "US"))
+    assert top.lead_country == ("AS", 3)
+
+
+def test_outlets_of_no_known_country_count_against_the_lead() -> None:
+    (top,) = recurring_phrases(_from(_stories("brent crude", 4), "IN", None, None, "US"))
+    assert top.article_count == 4
+    assert top.lead_country == ("IN", 1)
+
+
+def test_a_tie_for_the_lead_country_goes_to_the_first_code() -> None:
+    (top,) = recurring_phrases(_from(_stories("gold silver", 4), "UK", "IN", "UK", "IN"))
+    assert top.lead_country == ("IN", 2)
+
+
+def test_a_phrase_from_unlisted_outlets_has_no_lead_country() -> None:
+    (top,) = recurring_phrases(_headlines(*_stories("rate cuts", 3)))
+    assert top.lead_country == (None, 0)
+
+
 def test_wall_street_is_generic_market_vocabulary() -> None:
     """Sixth in each of the market feed's three measured samples, naming no theme."""
     assert _texts(_stories("Wall Street", 4)) == []
@@ -514,6 +547,32 @@ def test_discover_returns_phrases_with_their_headlines(
     assert top["headlines"][0]["article_id"] == "id-0"
     assert top["headlines"][0]["title"] == stored[0].title
     assert (top["lead_instrument"], top["lead_instrument_articles"]) == ("NVDA", 3)
+    # Outlets "o0".."o2" are in no table: no country, and none invented.
+    assert (top["lead_country"], top["lead_country_articles"]) == (None, 0)
+
+
+def test_discover_names_the_country_whose_press_carried_a_phrase(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Through the committed outlet table (`data/outlets`), not a stand-in."""
+    sources = ["abc.net.au", "www.abc.net.au", "cnn.com"]
+    stored = [
+        Headline(f"id-{i}", f"{_CONTEXTS[i]} cash rate {_PLACES[i]}", sources[i], None)
+        for i in range(3)
+    ]
+    monkeypatch.setattr("app.routers.topics.load_window_headlines", lambda _c, *, since: stored)
+    response = client.post(
+        "/topics/discover",
+        json={"instruments": [{"instrument_id": "i1", "symbol": "NVDA"}], "days": 7},
+        headers={"x-internal-key": INTERNAL_KEY},
+    )
+    assert response.status_code == 200
+    (top,) = [p for p in response.json()["phrases"] if p["phrase"] == "cash rate"]
+    assert (top["lead_country"], top["lead_country_name"], top["lead_country_articles"]) == (
+        "AS",
+        "Australia",
+        2,
+    )
 
 
 def test_discover_with_no_headlines_says_so(

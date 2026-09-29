@@ -804,6 +804,26 @@ failure they prevent.
     Result on the committed filter: the resolver returns `confident` for "data center" (DLR,
     APLD, CIFR...), "bond yields", "mortgage rates" and "crude oil". **Limit:** `news_collect`
     still skips when the user follows nothing, so the market feed stops with it.
+    **Live after #84 (2026-09-29):** the first collection stored 151 market articles (none from an
+    excluded outlet), and the first discovery run over them proposed **"data center"** (DLR,
+    APLD, CIFR, GDS, CORZ, KEEL, BXDC) and **"bond yields"** - M5's exit criterion, first half -
+    and one false "launches ai" (one Nvidia launch plus one other company's; newsroom verbs went
+    into `GENERIC_WORDS` in the next PR). The false proposal was left for the user to answer.
+
+61. **One foreign country's press is local news, not a theme.** The AI service reports each
+    phrase's `lead_country` (the outlet's home country, from GDELT's own table committed as
+    `data/outlets/countries.tsv.gz`, 2018, 98% coverage of feed rows) and judges nothing; the
+    orchestrator drops a phrase at `SINGLE_COUNTRY_SHARE` (0.75) unless the country is
+    `HOME_COUNTRY` ('US': the user trades US listings only, stated 2026-09-29), after the
+    one-company rule and before the resolve budget. **The outlet's country, not the article's:**
+    GDELT's per-article locations name places a story mentions, so oil-and-Iran stories are
+    "Iran" wherever published. **Measured** over the week's top 100 phrases: local ones 0.78 and
+    up (Indian IPOs, "sensex nifty" 0.97, RBA "cash rate" 0.95), then 0.67, and global
+    commodities far below ("brent crude" 0.52, "gold silver" 0.51) - so crude and gold stay even
+    though Indian outlets carry most of them. It frees 17 of the week's top 100; on the live
+    window it drops exactly "cash rate", "reserve bank rate" and "fourth hike". **Rejected:** a
+    US-only filter at ingestion (loses "crude oil"), and per-article country (above). Unlisted
+    outlets count against the lead, which errs towards keeping a phrase.
 
 ---
 
@@ -1484,11 +1504,11 @@ stream). Each filter's headlines were run through the real `recurring_phrases`:
 | **Tags AND vocabulary** | **~4,800** | cleanest: interest rates, rate hikes, bond yields, treasury yields, crude oil + Iran, trade war, data centers, ai agents, Anthropic IPO, the Gold Fields/Northern Star takeover |
 
 **Progress (2026-09-29, second session of the day):** all six decisions were made with the user
-and recorded as decision 60. #83 indexed discovery (69 s -> 2.8 s on a real week, identical
-output); the market feed PR followed it. **Next: the geography rule** (a phrase whose articles are
-0.75+ from one non-US country's outlets is that country's news; outlet country from GDELT's
-`MASTER-GDELTDOMAINSBYCOUNTRY-MAY2018.TXT`, ~1.2 MB gzipped, 98% coverage of feed rows), then
-steps 2-3 below. The list that follows is the design brief as it was brought to the user.
+and recorded as decisions 60-61. #83 indexed discovery (69 s -> 2.8 s on a real week, identical
+output), #84 added the market feed (live: "data center" and "bond yields" proposed on the first
+run), and the geography rule followed (decision 61). **Next: steps 2-3 below** (weak proposals,
+then the rejection check), then M5's closing handoff. The list that follows is the design brief
+as it was brought to the user.
 
 **Decisions to bring the user before building** (a recommendation is noted, not decided):
 1. **The filter.** Tags AND vocabulary is the measured candidate. The vocabulary list and the tag
