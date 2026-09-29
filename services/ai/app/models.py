@@ -635,6 +635,13 @@ class DiscoveredPhrase(BaseModel):
     #: phrase is one company's news rather than a theme; this service does not.
     lead_instrument: str | None = None
     lead_instrument_articles: int = 0
+    #: The country whose outlets carried most of the phrase's articles (FIPS code,
+    #: "AS" = Australia), its name, and how many of `article_count` it carried.
+    #: The orchestrator judges from these whether the phrase is one country's
+    #: local news (decision 61); this service does not.
+    lead_country: str | None = None
+    lead_country_name: str | None = None
+    lead_country_articles: int = 0
     #: Up to five of the headlines, in the order they were read (newest first).
     headlines: list[DiscoveredHeadline]
 

@@ -537,6 +537,33 @@
             "title": "Headlines",
             "type": "array"
           },
+          "lead_country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Country"
+          },
+          "lead_country_articles": {
+            "default": 0,
+            "title": "Lead Country Articles",
+            "type": "integer"
+          },
+          "lead_country_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Country Name"
+          },
           "lead_instrument": {
             "anyOf": [
               {

@@ -197,6 +197,9 @@ const discoveredPhraseSchema = z.object({
   source_count: z.number().int(),
   lead_instrument: z.string().nullable().optional(),
   lead_instrument_articles: z.number().int(),
+  lead_country: z.string().nullable().optional(),
+  lead_country_name: z.string().nullable().optional(),
+  lead_country_articles: z.number().int(),
   headlines: z.array(discoveredHeadlineSchema),
 });
 

@@ -143,6 +143,10 @@ GENERIC_WORDS = frozenset(
         # the market feed's first measurement (2026-09-29): "wall street" was
         # sixth in each of three 24-hour samples and names no theme
         "wall", "street",
+        # the first discovery run over the market feed (2026-09-29): "launches ai"
+        # was proposed from one Nvidia launch plus one other company's, and
+        # "unveils security" reached the list the same way - newsroom verbs
+        "launch", "launches", "unveil", "unveils",
     }
 )  # fmt: skip
 
@@ -156,6 +160,9 @@ class Headline:
     #: Symbols of the instruments this headline is linked to. Empty for a market-feed
     #: headline linked to none, which counts against every phrase's lead instrument.
     instruments: tuple[str, ...] = ()
+    #: The outlet's home country code (`app/news/outlet_countries.py`), or None
+    #: for an outlet the table does not list - which counts against the lead country.
+    country: str | None = None
 
 
 @dataclass(slots=True)
@@ -173,6 +180,8 @@ class Phrase:
     headlines: list[Headline] = field(default_factory=list)
     #: Articles linked to each instrument, by symbol.
     instruments: Counter[str] = field(default_factory=Counter)
+    #: Articles by their outlet's home country code; unlisted outlets not counted.
+    countries: Counter[str] = field(default_factory=Counter)
 
     @property
     def article_count(self) -> int:
@@ -196,10 +205,25 @@ class Phrase:
         spread however its few linked articles fall. Ties go to the first
         symbol alphabetically, so a rerun reports the same one.
         """
-        if not self.instruments:
-            return None, 0
-        symbol, count = min(self.instruments.items(), key=lambda item: (-item[1], item[0]))
-        return symbol, count
+        return _lead(self.instruments)
+
+    @property
+    def lead_country(self) -> tuple[str | None, int]:
+        """The country whose outlets carried most of this phrase's articles, and how many.
+
+        Reported, not judged, as `lead_instrument` is: whether a phrase is one
+        country's local news is the orchestrator's policy. The denominator is
+        `article_count`, so articles from unlisted outlets count against the lead.
+        """
+        return _lead(self.countries)
+
+
+def _lead(counts: Counter[str]) -> tuple[str | None, int]:
+    """The most common key and its count; ties to the first alphabetically, so reruns agree."""
+    if not counts:
+        return None, 0
+    key, count = min(counts.items(), key=lambda item: (-item[1], item[0]))
+    return key, count
 
 
 def fold(word: str) -> str:
@@ -392,6 +416,8 @@ def recurring_phrases(
                         spellings[key] = Counter()
                     phrase.article_ids.append(headline.article_id)
                     phrase.instruments.update(set(headline.instruments))
+                    if headline.country is not None:
+                        phrase.countries[headline.country] += 1
                     phrase.stories.add(story)
                     phrase.sources.add(headline.source)
                     if len(phrase.headlines) < EVIDENCE_HEADLINES:

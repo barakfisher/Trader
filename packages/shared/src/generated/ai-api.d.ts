@@ -605,6 +605,15 @@ export interface components {
             article_count: number;
             /** Headlines */
             headlines: components["schemas"]["DiscoveredHeadline"][];
+            /** Lead Country */
+            lead_country?: string | null;
+            /**
+             * Lead Country Articles
+             * @default 0
+             */
+            lead_country_articles: number;
+            /** Lead Country Name */
+            lead_country_name?: string | null;
             /** Lead Instrument */
             lead_instrument?: string | null;
             /**

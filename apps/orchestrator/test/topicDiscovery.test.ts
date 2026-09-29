@@ -70,8 +70,11 @@ const {
   MAX_RESOLVED_PER_RUN,
   MIN_PROPOSAL_INSTRUMENTS,
   PHRASES_REQUESTED,
+  HOME_COUNTRY,
+  SINGLE_COUNTRY_SHARE,
   SINGLE_INSTRUMENT_SHARE,
   runTopicDiscovery,
+  singleCountryReason,
   singleInstrumentReason,
 } = await import('../src/services/topicDiscovery.js');
 
@@ -84,6 +87,9 @@ function phrase(text: string, articles = 4): DiscoveredPhrase {
     source_count: 3,
     lead_instrument: null,
     lead_instrument_articles: 0,
+    lead_country: null,
+    lead_country_name: null,
+    lead_country_articles: 0,
     headlines: [
       { article_id: `a-${text}`, title: `Headline about ${text}`, source: 'example.com', published_at: null },
     ],
@@ -413,6 +419,51 @@ describe('proposal expiry', () => {
     const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(result.reason).toBeUndefined();
     expect(result.proposed.map((p) => p.label)).toEqual(['data centre']);
+  });
+});
+
+describe("one country's news", () => {
+  /** A phrase whose `lead` articles of `articles` came from `code`'s outlets. */
+  function carried(text: string, code: string, lead: number, articles = 20): DiscoveredPhrase {
+    const name = code === 'AS' ? 'Australia' : code === HOME_COUNTRY ? 'United States' : code;
+    return {
+      ...phrase(text, articles),
+      lead_country: code,
+      lead_country_name: name,
+      lead_country_articles: lead,
+    };
+  }
+  const atBar = Math.ceil(SINGLE_COUNTRY_SHARE * 20);
+
+  it('is dropped with its share and country, before it is resolved', async () => {
+    const { ai, resolved } = fakeAi([carried('cash rate', 'AS', 19), phrase('uranium')], {
+      uranium: resolution('confident', uraniumCandidates),
+    });
+    const result = await runTopicDiscovery(USER, ai, POLICY);
+    expect(resolved).toEqual(['uranium']);
+    expect(result.notProposed['cash rate']).toBe(
+      "95% of its headlines are from Australia's press: one country's news, not a theme",
+    );
+  });
+
+  it('starts at the bar and not below it', () => {
+    expect(singleCountryReason(carried('cash rate', 'AS', atBar))).toContain('Australia');
+    expect(singleCountryReason(carried('cash rate', 'AS', atBar - 1))).toBeNull();
+  });
+
+  it('never calls the home market local news', () => {
+    expect(singleCountryReason(carried('mortgage rates', HOME_COUNTRY, 20))).toBeNull();
+  });
+
+  it('leaves a phrase from outlets of no known country alone', () => {
+    expect(singleCountryReason(phrase('rate cuts'))).toBeNull();
+  });
+
+  it('still says a rejected theme was rejected', async () => {
+    db.known = [rejected('cash rate', ['cash', 'rate'], [])];
+    const { ai } = fakeAi([carried('cash rate', 'AS', 20)], {});
+    const result = await runTopicDiscovery(USER, ai, POLICY);
+    expect(result.notProposed['cash rate']).toMatch(/rejected/);
   });
 });
 
