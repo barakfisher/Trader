@@ -239,7 +239,7 @@ def test_the_words_that_spent_the_first_real_budget_are_generic(word: str) -> No
     assert _texts(_stories(word, 4)) == []
 
 
-@pytest.mark.parametrize("word", ["nasdaq", "us", "release", "releases"])
+@pytest.mark.parametrize("word", ["nasdaq", "us", "release", "releases", "face", "ceo", "keep"])
 def test_the_words_that_followed_one_companys_news_are_generic(word: str) -> None:
     assert _texts(_stories(word, 4)) == []
 
