@@ -13,6 +13,7 @@ the wire and that the followed instruments' names reach the extractor.
 
 from __future__ import annotations
 
+import random
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -23,12 +24,17 @@ from fastapi.testclient import TestClient
 from app.config import Settings, get_settings
 from app.db import get_engine
 from app.main import app
+from app.topics import discovery
 from app.topics.discovery import (
     EVIDENCE_HEADLINES,
     MIN_SOURCES,
     MIN_STORIES,
+    VARIANT_SHARE,
     Headline,
+    Phrase,
+    _representative,
     fold,
+    group_stories,
     recurring_phrases,
     same_story,
     story_words,
@@ -290,6 +296,150 @@ def test_evidence_is_bounded() -> None:
 )
 def test_plural_folding(word: str, folded: str) -> None:
     assert fold(word) == folded
+
+
+# --- the indexes: the same answers as comparing everything -------------------
+#
+# A week of the market feed is ~28,000 headlines and ~7,000 recurring phrases,
+# and comparing every pair took 69 s against the orchestrator's 30 s
+# timeout. Both comparisons now go through an index. The references below are
+# the pairwise versions they replaced, kept only to prove the answers did not move.
+
+
+def _every_story(headlines: list[Headline], names: set[tuple[str, ...]] | None = None) -> list[int]:
+    firsts: list[frozenset[str]] = []
+    numbers: list[int] = []
+    for headline in headlines:
+        words = story_words(headline.title, names)
+        number = next((i for i, first in enumerate(firsts) if same_story(words, first)), None)
+        if number is None:
+            number = len(firsts)
+            firsts.append(words)
+        numbers.append(number)
+    return numbers
+
+
+def _every_pair(phrases: list[Phrase]) -> list[Phrase]:
+    def inside(longer: tuple[str, ...], shorter: tuple[str, ...]) -> bool:
+        size = len(shorter)
+        return len(longer) > size and any(
+            longer[i : i + size] == shorter for i in range(len(longer) - size + 1)
+        )
+
+    parent = list(range(len(phrases)))
+
+    def root(i: int) -> int:
+        while parent[i] != i:
+            i = parent[i]
+        return i
+
+    by_stories: dict[frozenset[int], int] = {}
+    for i, phrase in enumerate(phrases):
+        parent[root(i)] = root(by_stories.setdefault(frozenset(phrase.stories), i))
+    for i, shorter in enumerate(phrases):
+        for j, longer in enumerate(phrases):
+            if inside(longer.key, shorter.key) and len(longer.stories) >= VARIANT_SHARE * len(
+                shorter.stories
+            ):
+                parent[root(i)] = root(j)
+    groups: dict[int, Phrase] = {}
+    for i, phrase in enumerate(phrases):
+        current = groups.get(root(i))
+        if current is None or _representative(phrase) < _representative(current):
+            groups[root(i)] = phrase
+    return list(groups.values())
+
+
+def _varied_headlines(seed: int) -> list[Headline]:
+    """Headlines built to exercise every branch: common words shared by most of them,
+    republications with words appended, exact copies, short headlines, nested wordings."""
+    rng = random.Random(seed)
+    common = ["ai", "rate", "oil", "data", "center", "bond", "yield"]
+    rare = [f"w{i}" for i in range(120)]
+    rows: list[tuple[str, str]] = []
+    for n in range(700):
+        size = rng.choice([1, 2, 3, 3, 4, 5, 6, 8])
+        words = rng.sample(common, rng.randint(0, 3)) + rng.sample(rare, size)
+        rng.shuffle(words)
+        title = " ".join(words)
+        rows.append((title, f"outlet-{rng.randint(0, 9)}"))
+        if rng.random() < 0.3:
+            rows.append((f"{title} {rng.choice(rare)}", f"outlet-{rng.randint(0, 9)}"))
+        if rng.random() < 0.1:
+            rows.append((title, f"outlet-{rng.randint(0, 9)}"))
+        if n % 50 == 0:
+            rows.append(("Nvidia data center ai agents w1 w2", "outlet-1"))
+    # Nested wordings on each side of VARIANT_SHARE: a three-word phrase in 4 of
+    # its two-word core's 5 stories joins it (0.8), in 3 of 5 does not (0.6).
+    # The core's words also appear apart, so no single word joins the two for it.
+    for theme, inside in enumerate([4, 3, 4, 3]):
+        core = f"t{theme}a t{theme}b"
+        for story in range(5):
+            context = " ".join(rng.sample(rare, 4))
+            wording = f"{core} t{theme}c" if story < inside else core
+            rows.append((f"{context} {wording}", f"outlet-{story}"))
+        for story in range(3):
+            first, second = rng.sample(rare, 2)
+            rows.append((f"t{theme}a {first} t{theme}b {second}", f"outlet-{story}"))
+    return _headlines(*rows)
+
+
+def _described(phrases: list[Phrase]) -> list[tuple[object, ...]]:
+    return [(p.key, p.text, sorted(p.stories), sorted(p.sources), p.article_ids) for p in phrases]
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_the_story_index_groups_exactly_as_comparing_every_story(seed: int) -> None:
+    headlines = _varied_headlines(seed)
+    names = {("nvidia",)}
+    assert group_stories(headlines, names) == _every_story(headlines, names)
+    assert len(set(group_stories(headlines, names))) < len(headlines)  # some did group
+
+
+@pytest.mark.parametrize("seed", [1, 2, 3])
+def test_the_phrase_index_finds_exactly_the_candidates_comparing_every_pair_did(
+    seed: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    headlines = _varied_headlines(seed)
+    indexed = recurring_phrases(headlines, exclude_names=["Nvidia"], min_sources=1)
+    monkeypatch.setattr(discovery, "group_stories", _every_story)
+    monkeypatch.setattr(discovery, "_one_per_theme", _every_pair)
+    compared = recurring_phrases(headlines, exclude_names=["Nvidia"], min_sources=1)
+    assert _described(indexed) == _described(compared)
+    assert len(indexed) > 20
+
+
+def test_a_word_every_headline_shares_costs_no_comparison(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The case that made the index necessary: "ai" or "rate" in thousands of headlines.
+
+    A common word alone can never make two headlines one story, so it must not
+    make them candidates to be compared either.
+    """
+    calls = 0
+    judge = discovery._one_story
+
+    def counted(*args: int) -> bool:
+        nonlocal calls
+        calls += 1
+        return judge(*args)
+
+    monkeypatch.setattr(discovery, "_one_story", counted)
+    rows = [(f"ai u{i}a u{i}b u{i}c u{i}d", f"outlet-{i}") for i in range(500)]
+    assert len(set(group_stories(_headlines(*rows)))) == 500
+    assert calls == 0
+
+
+@pytest.mark.parametrize("size", range(1, 13))
+def test_the_shared_word_floor_is_the_least_any_pairing_needs(size: int) -> None:
+    fewest = min(
+        shared
+        for other in range(1, 40)
+        for shared in range(min(size, other) + 1)
+        if discovery._one_story(shared, size, other)
+    )
+    assert discovery._fewest_shared(size) == fewest
 
 
 # --- the endpoint -------------------------------------------------------------

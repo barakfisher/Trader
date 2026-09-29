@@ -51,11 +51,13 @@ agent safety" are one launch, and one resolver call.
 
 from __future__ import annotations
 
+import math
 import re
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from itertools import chain
 
 #: Distinct stories a phrase must appear in. Three, because two stories
 #: sharing a phrase is routine coincidence in a day's financial news, and the
@@ -267,24 +269,68 @@ def story_words(title: str, names: set[tuple[str, ...]] | None = None) -> frozen
 
 def same_story(a: frozenset[str], b: frozenset[str]) -> bool:
     """Are two headlines one story, republished? See `STORY_OVERLAP`."""
-    smaller = min(len(a), len(b))
+    return _one_story(len(a & b), len(a), len(b))
+
+
+def _one_story(shared: int, size_a: int, size_b: int) -> bool:
+    """`same_story` from the sizes alone: `shared` words in common, of `size_a` and `size_b`.
+
+    Identical sets are the ones whose shared words are all of both.
+    """
+    smaller = min(size_a, size_b)
     if smaller < MIN_STORY_WORDS:
-        return a == b and smaller > 0
-    return len(a & b) / smaller >= STORY_OVERLAP
+        return shared == size_a == size_b and smaller > 0
+    return shared / smaller >= STORY_OVERLAP
+
+
+def _fewest_shared(size: int) -> int:
+    """The fewest shared words that can make a headline of `size` words one story with any other.
+
+    Below `MIN_STORY_WORDS` only an identical headline, so all of them; at or
+    above it the other headline has at least as many words (a shorter one would
+    have to be identical), so the overlap share of the smallest such headline.
+    A cheap test that rules out the stories sharing only a common word or two.
+    """
+    if size < MIN_STORY_WORDS:
+        return size
+    return math.ceil(STORY_OVERLAP * MIN_STORY_WORDS)
 
 
 def group_stories(
     headlines: Sequence[Headline], names: set[tuple[str, ...]] | None = None
 ) -> list[int]:
-    """A story number for each headline, in order. Compared with each story's first headline."""
-    firsts: list[frozenset[str]] = []
+    """A story number for each headline, in order. Compared with each story's first headline.
+
+    Only stories whose first headline shares a word with this one are compared,
+    and the words they share are counted from an index of word to story rather
+    than by intersecting sets. `same_story` is never true for two headlines with
+    no word in common, so the first match - the lowest story number - is the one
+    a scan of every story would find. Measured on a week of the market feed
+    (28,191 headlines, 2026-09-22..29), the whole of `recurring_phrases` took
+    69 s comparing everything and 2.8 s through both indexes, with identical
+    output; the orchestrator gives up on the AI service after 30 s.
+    """
+    sizes: list[int] = []
+    by_word: dict[str, list[int]] = {}
     numbers: list[int] = []
     for headline in headlines:
         words = story_words(headline.title, names)
-        number = next((i for i, first in enumerate(firsts) if same_story(words, first)), None)
+        # Counted in C: common words ("ai", "rate") list thousands of stories.
+        shared = Counter(chain.from_iterable(by_word.get(word, ()) for word in words))
+        floor = _fewest_shared(len(words))
+        number = min(
+            (
+                i
+                for i, count in shared.items()
+                if count >= floor and _one_story(count, len(words), sizes[i])
+            ),
+            default=None,
+        )
         if number is None:
-            number = len(firsts)
-            firsts.append(words)
+            number = len(sizes)
+            sizes.append(len(words))
+            for word in words:
+                by_word.setdefault(word, []).append(number)
         numbers.append(number)
     return numbers
 
@@ -368,14 +414,6 @@ def recurring_phrases(
     return kept
 
 
-def _contains(longer: tuple[str, ...], shorter: tuple[str, ...]) -> bool:
-    """Is `shorter` a contiguous run of words inside `longer`?"""
-    size = len(shorter)
-    return len(longer) > size and any(
-        longer[i : i + size] == shorter for i in range(len(longer) - size + 1)
-    )
-
-
 def _one_per_theme(phrases: list[Phrase]) -> list[Phrase]:
     """One phrase per group of wordings of the same theme.
 
@@ -386,6 +424,12 @@ def _one_per_theme(phrases: list[Phrase]) -> list[Phrase]:
     neither inside the other - meet through the "agent safety" both contain.
     Both rules run in one pass because the first would otherwise delete the
     phrase the second joins through.
+
+    The phrases containing a given one are found through an index of every
+    phrase's shorter runs of words (at most `MAX_PHRASE_WORDS` - 1 lengths, so a
+    handful per phrase) rather than by comparing every pair: a week of the
+    market feed has over 7,000 recurring phrases. The groups do not depend on the
+    order the joins are made in, so the result is the same as the pairwise scan.
     """
     parent = list(range(len(phrases)))
 
@@ -399,13 +443,20 @@ def _one_per_theme(phrases: list[Phrase]) -> list[Phrase]:
     for i, phrase in enumerate(phrases):
         first = by_stories.setdefault(frozenset(phrase.stories), i)
         parent[root(i)] = root(first)
+    containing: dict[tuple[str, ...], list[int]] = {}
+    for j, longer in enumerate(phrases):
+        runs = {
+            longer.key[start : start + size]
+            for size in range(1, len(longer.key))
+            for start in range(len(longer.key) - size + 1)
+        }
+        for run in runs:
+            containing.setdefault(run, []).append(j)
     for i, shorter in enumerate(phrases):
-        for j, longer in enumerate(phrases):
+        for j in containing.get(shorter.key, ()):
             # Every headline holding the longer phrase holds the shorter one, so
             # the longer phrase's stories are a subset and this is their share.
-            if _contains(longer.key, shorter.key) and len(longer.stories) >= VARIANT_SHARE * len(
-                shorter.stories
-            ):
+            if len(phrases[j].stories) >= VARIANT_SHARE * len(shorter.stories):
                 parent[root(i)] = root(j)
     groups: dict[int, Phrase] = {}
     for i, phrase in enumerate(phrases):
