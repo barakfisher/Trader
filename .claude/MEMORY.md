@@ -4,10 +4,27 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-28, second handoff of the day (after #71, at the user's request). **The next
-session starts with the "Independent tasks queue" below**, while real headlines accumulate for
-M5's exit proof. Since the first handoff: #71 made unanswered auto-proposals expire (decision 57),
-and the queue was created (this PR).
+Updated: 2026-09-29 05:30 UTC (handoff at CLAUDE.md's five-merged-PR trigger: #73-#77). **The next
+session starts with M5's exit proof, which is now due** - see "Next session" in "Where to go
+next" - and then the two queue tasks left (6 and 7, both M6-sized). This session took tasks 1-5
+of the "Independent tasks queue", one PR each, all merged and the stack rebuilt:
+- #73: money at the currency's exponent - in the templates *and* the evidence validator, which
+  had approved the same hundredfold-wrong yen figure;
+- #74: a Telegram notice when explanations switch between the model and templates (decision 58),
+  verified with a real message the user received;
+- #75: the Topics page looked at in a browser; two phone-width faults fixed (the dashboard header
+  made the page 721 px wide and sent a tap on "Topics" to Settings);
+- #76: **the `postgres (integration)` CI job** - migrations round-tripped over data covering every
+  enumerated value, retrieval/topic SQL, `queries.ts`. Its first run found that 0019 could not
+  follow its own downgrade (fixed in 0019);
+- #77: quotes carry each instrument's asset class and exchange (`market_sessions.py`).
+
+Merging: the user asked this session's Claude to merge its PRs once CI was green, and it did.
+Replies pasted as quoted text were confirmed with the user before being acted on, at their
+choice each time ("just this once") - keep asking.
+
+Second handoff of 2026-09-28 (after #71): #71 made unanswered auto-proposals expire (decision
+57), and #72 created the queue.
 
 Earlier the same day (handoff at CLAUDE.md's five-merged-PR trigger: #62-#66 merged since the
 last one): **M5 is feature-complete and its exit criterion is not yet shown.** Topic resolution,
@@ -142,7 +159,8 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts at handoff (2026-09-28): **1,418** — 721 Python, 482 orchestrator, 199 web, 16 shared. Plus two
+Test counts at handoff (2026-09-29): **1,458** — 737 Python, 506 orchestrator, 199 web, 16 shared - plus
+**10 Postgres integration tests** (6 Python, 4 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
 eval sets, which are not test counts: `/ask`'s **35 cases** (16 keyless on every PR, all 35 when
 keyed), and the topic eval's **31 cases** (`scripts/run_topic_eval.py`, keyed only, **not in CI**).
 
@@ -1221,8 +1239,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
   nothing. `--dry-run` says whether the files and the database agree without writing, and now
   reports embedding coverage as well as text — vectors are a second derived copy with the same
   drift.
-- **As of 2026-09-28 ~15:00 UTC the stack runs `main` at #75 (`9765784`); #76 changed no running
-  code, so it was not rebuilt for it, and the database is at
+- **As of 2026-09-29 05:25 UTC the stack runs `main` at #77 (`7752018`) and the database is at
   `0022_narration_transitions`**, rebuilt with `bash scripts/dev-docker.sh` (no `--reset`), and checked
   inside the containers rather than assumed. **`.env` has `NEWS_PROVIDERS=gdelt,fixture`** (the
   user's choice; `.env.example` keeps `fixture` - a deliberate asymmetry, do not "fix" it), which
@@ -1359,13 +1376,19 @@ and `DATABASE_URL`/`AI_SERVICE_URL` pointed at the host ports; and `vite --port 
 in-app browser's existing sign-in carries over and nobody types the passphrase. A
 `.claude/launch.json` for `preview_start` is **not gitignored** - delete it before committing.
 
-### Next session: the independent tasks queue, then M5's exit proof
+### Next session: M5's exit proof first, then queue tasks 6 and 7
 
-**Start with the first remaining task of the "Independent tasks queue"** (near the top of this file), then take the
-rest in order, one PR each. Headlines keep accumulating meanwhile; the user wanted 24-48 hours
-after #68 (~11:00 UTC 2026-09-28) before judging discovery, so by 2026-09-30 the steps below are
-due. Check them between tasks rather than leaving them for the end: the discovery run is daily,
-and a `topic_discovery` run with a sensible proposal is the thing M5 is waiting for.
+**The exit proof is due now.** The user's 24-48 hours after #68 (~11:00 UTC 2026-09-28) ran out
+during this handoff. State at 2026-09-29 05:25 UTC, read from `runs`:
+- **the feed is healthy**: the 05:20 `news_collect` caught up after the laptop slept 18:12-05:20
+  UTC - 224 fetched, 224 stored, 105 entity links;
+- **discovery has not run since 2026-09-28 10:33 UTC** (the run that proposed nothing, debt
+  table). The 2026-09-29 run had not fired yet because of the same sleep; with the machine awake
+  it fires on the next 15-minute scheduler tick. Read it first - the steps below say how - and if
+  it has still not run, trigger one by hand with a fresh run key.
+
+Then the queue: task 6 (a screen for `/ask`) and task 7 (TanStack Query). Both are M6 work, and
+7 touches every store, so do not run it alongside 6.
 
 Proposals now expire after 14 days unanswered (decision 57); a run's stats name what it expired.
 
