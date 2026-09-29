@@ -62,7 +62,16 @@ def test_a_single_bad_figure_condemns_the_whole_narration():
 
 def test_minor_units_are_matched_in_major_form():
     assert unsourced_figures("The price is $118.45", {"price_minor": 11845}) == []
-    assert unsourced_figures("The price is $11845", {"price_minor": 11845}) == []
+
+
+def test_minor_units_written_raw_are_a_hundredfold_overstatement():
+    # Seen live (2026-09-29): a model wrote "fell to 4016 from a high of 4750"
+    # for URA at $40.16, and the validator approved it because the digits were
+    # in the evidence. They were cents.
+    evidence = {"currency": "USD", "price_minor": 4016, "high_price_minor": 4750}
+    assert unsourced_figures("fell to 4016 from a high of 4750", evidence) == ["4016", "4750"]
+    assert unsourced_figures("fell to $40.16 from a high of $47.50", evidence) == []
+    assert unsourced_figures("The price is $11845", {"price_minor": 11845}) == ["11845"]
 
 
 def test_minor_units_follow_the_currency_exponent():

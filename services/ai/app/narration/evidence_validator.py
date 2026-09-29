@@ -17,7 +17,8 @@ Matching has to tolerate how a number is *written* without tolerating a
 different number:
 
   * minor units in evidence, major units in prose - `price_minor: 11845` is
-    written "$118.45";
+    written "$118.45", and ONLY that: "$11845" is the same digits a hundred
+    times too large, and a model reading raw evidence writes exactly that;
   * ratios in evidence, percentages in prose - `change_pct: -0.085` is written
     "-8.5%" or "8.5%";
   * rounding - a value is accepted if it rounds to the written figure at the
@@ -80,10 +81,16 @@ def _forms_for(key: str, value: Decimal, currency: str | None) -> set[Decimal]:
     written "15,000", and accepting "150.00" as well would let the validator
     approve a figure understated a hundredfold. With no currency declared the
     exponent is 2, the common case.
+
+    The raw minor figure is *not* a form. Accepting it approved "fell to 4016
+    from a high of 4750" for a $40.16 price - a hundredfold overstatement that
+    read as sourced because the digits were in the evidence. For a currency
+    with no minor unit (JPY) the two forms coincide, so nothing is lost there.
     """
-    forms = {value}
     if key.endswith(_MINOR_SUFFIX):
-        forms.add(value.scaleb(-minor_unit_exponent(currency or "")))
+        forms = {value.scaleb(-minor_unit_exponent(currency or ""))}
+    else:
+        forms = {value}
     if any(marker in key for marker in _RATIO_MARKERS):
         forms.add(value * 100)
     # A writer may drop the sign: "fell 8.5%" rather than "changed by -8.5%".
