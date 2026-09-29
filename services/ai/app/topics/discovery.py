@@ -132,6 +132,9 @@ GENERIC_WORDS = frozenset(
         # added from the first discovery run on title-matched headlines
         # (2026-09-28): everyday words that spent the resolve budget
         "buy", "pro", "use", "billion", "season", "prediction",
+        # added from the 2026-09-29 run: the next resolve slots once one
+        # company's news was dropped went to these
+        "nasdaq", "us", "release", "releases",
     }
 )  # fmt: skip
 
@@ -142,6 +145,10 @@ class Headline:
     title: str
     source: str
     published_at: datetime | None
+    #: Symbols of the instruments this headline is linked to. Empty for a headline
+    #: linked to none - which today's loader never returns, and a feed of market
+    #: and sector news would.
+    instruments: tuple[str, ...] = ()
 
 
 @dataclass(slots=True)
@@ -157,6 +164,8 @@ class Phrase:
     stories: set[int] = field(default_factory=set)
     sources: set[str] = field(default_factory=set)
     headlines: list[Headline] = field(default_factory=list)
+    #: Articles linked to each instrument, by symbol.
+    instruments: Counter[str] = field(default_factory=Counter)
 
     @property
     def article_count(self) -> int:
@@ -169,6 +178,21 @@ class Phrase:
     @property
     def source_count(self) -> int:
         return len(self.sources)
+
+    @property
+    def lead_instrument(self) -> tuple[str | None, int]:
+        """The instrument most of this phrase's articles are linked to, and how many.
+
+        Reported, not judged: whether a phrase is one company's news is the
+        orchestrator's policy. The denominator is `article_count`, which counts
+        articles linked to nothing, so a theme from a broader feed reads as
+        spread however its few linked articles fall. Ties go to the first
+        symbol alphabetically, so a rerun reports the same one.
+        """
+        if not self.instruments:
+            return None, 0
+        symbol, count = min(self.instruments.items(), key=lambda item: (-item[1], item[0]))
+        return symbol, count
 
 
 def fold(word: str) -> str:
@@ -316,6 +340,7 @@ def recurring_phrases(
                         phrase = found[key] = Phrase(key=key, text="")
                         spellings[key] = Counter()
                     phrase.article_ids.append(headline.article_id)
+                    phrase.instruments.update(set(headline.instruments))
                     phrase.stories.add(story)
                     phrase.sources.add(headline.source)
                     if len(phrase.headlines) < EVIDENCE_HEADLINES:

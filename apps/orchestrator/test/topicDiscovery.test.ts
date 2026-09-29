@@ -69,7 +69,9 @@ const {
   MAX_OPEN_PROPOSALS,
   MAX_RESOLVED_PER_RUN,
   MIN_PROPOSAL_INSTRUMENTS,
+  SINGLE_INSTRUMENT_SHARE,
   runTopicDiscovery,
+  singleInstrumentReason,
 } = await import('../src/services/topicDiscovery.js');
 
 function phrase(text: string, articles = 4): DiscoveredPhrase {
@@ -79,6 +81,8 @@ function phrase(text: string, articles = 4): DiscoveredPhrase {
     story_count: articles,
     article_count: articles,
     source_count: 3,
+    lead_instrument: null,
+    lead_instrument_articles: 0,
     headlines: [
       { article_id: `a-${text}`, title: `Headline about ${text}`, source: 'example.com', published_at: null },
     ],
@@ -408,5 +412,52 @@ describe('proposal expiry', () => {
     const result = await runTopicDiscovery(USER, ai, POLICY);
     expect(result.reason).toBeUndefined();
     expect(result.proposed.map((p) => p.label)).toEqual(['data centre']);
+  });
+});
+
+describe("one company's news", () => {
+  /** A phrase whose `lead` articles of `articles` are about `symbol`. */
+  function led(text: string, symbol: string, lead: number, articles = 20): DiscoveredPhrase {
+    return { ...phrase(text, articles), lead_instrument: symbol, lead_instrument_articles: lead };
+  }
+  const atBar = Math.ceil(SINGLE_INSTRUMENT_SHARE * 20);
+
+  it('is dropped with its share and symbol, before it is resolved', async () => {
+    const { ai, resolved } = fakeAi([led('rogue ai', 'NVDA', 20), phrase('uranium')], {
+      uranium: resolution('confident', uraniumCandidates),
+    });
+    const result = await runTopicDiscovery(USER, ai, POLICY);
+    expect(resolved).toEqual(['uranium']);
+    expect(result.notProposed['rogue ai']).toBe(
+      '100% of its headlines are NVDA news: one company, not a theme',
+    );
+    expect(result.proposed.map((p) => p.label)).toEqual(['uranium']);
+  });
+
+  it('starts at the bar and not below it', () => {
+    expect(singleInstrumentReason(led('ai agents', 'NVDA', atBar))).toContain('NVDA');
+    expect(singleInstrumentReason(led('ai agents', 'NVDA', atBar - 1))).toBeNull();
+  });
+
+  it('leaves a phrase with no linked instrument alone', () => {
+    expect(singleInstrumentReason(phrase('rate cuts'))).toBeNull();
+  });
+
+  it('does not spend the resolve budget', async () => {
+    const crowd = Array.from({ length: MAX_RESOLVED_PER_RUN }, (_, i) =>
+      led(`nvda thing ${i}`, 'NVDA', 20),
+    );
+    const { ai, resolved } = fakeAi([...crowd, phrase('uranium')], {
+      uranium: resolution('confident', uraniumCandidates),
+    });
+    await runTopicDiscovery(USER, ai, POLICY);
+    expect(resolved).toEqual(['uranium']);
+  });
+
+  it('still says a rejected theme was rejected', async () => {
+    db.known = [rejected('rogue ai', ['rogue', 'ai'], [])];
+    const { ai } = fakeAi([led('rogue ai', 'NVDA', 20)], {});
+    const result = await runTopicDiscovery(USER, ai, POLICY);
+    expect(result.notProposed['rogue ai']).toMatch(/rejected topic "rogue ai" by words/);
   });
 });

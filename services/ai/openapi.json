@@ -537,6 +537,22 @@
             "title": "Headlines",
             "type": "array"
           },
+          "lead_instrument": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead Instrument"
+          },
+          "lead_instrument_articles": {
+            "default": 0,
+            "title": "Lead Instrument Articles",
+            "type": "integer"
+          },
           "phrase": {
             "title": "Phrase",
             "type": "string"

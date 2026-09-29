@@ -165,6 +165,8 @@ async def discover(
                 story_count=p.story_count,
                 article_count=p.article_count,
                 source_count=p.source_count,
+                lead_instrument=p.lead_instrument[0],
+                lead_instrument_articles=p.lead_instrument[1],
                 headlines=[
                     DiscoveredHeadline(
                         article_id=h.article_id,
