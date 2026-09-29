@@ -3,8 +3,9 @@
 What is pinned: a theme recurs across *distinct stories from several outlets*,
 never within one headline, one publisher, or one story republished under
 slightly different headlines; the names of what the headlines were fetched for
-are cut out before phrases are built; phrases found in exactly the same stories
-are one candidate; and the order is total, so a rerun over the same headlines
+are cut out before phrases are built; phrases found in exactly the same stories,
+and wordings nested in each other found in mostly the same stories, are one
+candidate; and the order is total, so a rerun over the same headlines
 proposes the same things. The syndication case is taken from the first real
 GDELT headlines (2026-09-27). The endpoint test pins
 the wire and that the followed instruments' names reach the extractor.
@@ -147,6 +148,35 @@ def test_a_sub_phrase_with_stories_of_its_own_is_kept() -> None:
     by_text = {p.text: p for p in recurring_phrases(_headlines(*rows))}
     assert by_text["reactors"].story_count == 6
     assert "small modular reactors" in by_text
+
+
+def _each_story(phrases: list[str], start: int) -> list[tuple[str, str]]:
+    """One story per phrase, each with its own framing and outlet."""
+    return [
+        (f"{_CONTEXTS[start + i]} {phrase} {_PLACES[start + i]}", f"o{start + i}")
+        for i, phrase in enumerate(phrases)
+    ]
+
+
+#: One launch, worded the ways 2026-09-29's headlines worded it: most carry the
+#: product's full name, some a part of it. Counted phrase by phrase, it spent
+#: seven of that run's eight resolve slots.
+_LAUNCH = ["open agent safety platform"] * 3 + ["open agent safety", "agent safety platform"]
+
+
+def test_wordings_of_one_launch_are_one_candidate() -> None:
+    # "open agent safety" and "agent safety platform" are not inside each other;
+    # they join through the "agent safety" inside both, found in their stories.
+    phrases = recurring_phrases(_headlines(*_each_story(_LAUNCH, 0)))
+    # The wording in most stories speaks for the group, over longer ones in fewer.
+    assert [(p.text, p.story_count) for p in phrases] == [("agent safety", 5)]
+
+
+def test_a_longer_phrase_in_few_of_a_wider_themes_stories_stays_its_own() -> None:
+    # "ai agents" is in eight stories and "rogue ai agents" in three of them: the
+    # narrower phrase is a theme of its own, and the wider one is not absorbed.
+    rows = _each_story(["ai agents"] * 5 + ["rogue ai agents"] * 3, 0)
+    assert _texts(rows) == ["ai agents", "rogue ai agents"]
 
 
 def test_generic_words_and_numbers_never_form_a_theme() -> None:
