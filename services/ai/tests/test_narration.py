@@ -263,7 +263,9 @@ class TestTemplatesAgainstRealRuleOutput:
         closes = [15000] + [14000 - index * 100 for index in range(20)]
         findings = drawdown_findings("TEST", self.series(closes, currency), AnalysisThresholds())
         assert findings, "the fixture series must actually trigger a drawdown"
-        await self.narrate_all(findings)
+        for text in await self.narrate_all(findings):
+            # "below" carries the direction; a signed figure made it "-15.5% below".
+            assert "-" not in text.split(" below ")[0].rsplit(",", 1)[-1], text
 
     async def test_allocation_drift_template_matches_the_rule(self):
         from decimal import Decimal
