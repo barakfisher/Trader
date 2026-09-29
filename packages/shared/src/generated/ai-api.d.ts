@@ -605,6 +605,13 @@ export interface components {
             article_count: number;
             /** Headlines */
             headlines: components["schemas"]["DiscoveredHeadline"][];
+            /** Lead Instrument */
+            lead_instrument?: string | null;
+            /**
+             * Lead Instrument Articles
+             * @default 0
+             */
+            lead_instrument_articles: number;
             /** Phrase */
             phrase: string;
             /** Source Count */

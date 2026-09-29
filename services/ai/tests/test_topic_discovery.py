@@ -239,6 +239,46 @@ def test_the_words_that_spent_the_first_real_budget_are_generic(word: str) -> No
     assert _texts(_stories(word, 4)) == []
 
 
+@pytest.mark.parametrize("word", ["nasdaq", "us", "release", "releases"])
+def test_the_words_that_followed_one_companys_news_are_generic(word: str) -> None:
+    assert _texts(_stories(word, 4)) == []
+
+
+def _linked(rows: list[tuple[str, str]], *symbols: tuple[str, ...]) -> list[Headline]:
+    return [
+        Headline(f"a{i}", title, source, None, links)
+        for i, ((title, source), links) in enumerate(zip(rows, symbols, strict=True))
+    ]
+
+
+def test_a_phrase_reports_the_instrument_most_of_its_articles_are_about() -> None:
+    headlines = _linked(
+        _stories("agent safety", 4), ("NVDA",), ("NVDA", "MSFT"), ("NVDA",), ("AAPL",)
+    )
+    [phrase] = recurring_phrases(headlines)
+    assert phrase.lead_instrument == ("NVDA", 3)
+    assert phrase.article_count == 4
+
+
+def test_articles_linked_to_nothing_count_against_the_lead() -> None:
+    # A broader feed's market news links to no followed instrument; it still
+    # counts in the denominator, so such a theme reads as spread.
+    headlines = _linked(_stories("rate cuts", 4), ("NVDA",), (), (), ())
+    [phrase] = recurring_phrases(headlines)
+    assert phrase.lead_instrument == ("NVDA", 1)
+
+
+def test_a_tie_for_the_lead_goes_to_the_first_symbol() -> None:
+    headlines = _linked(_stories("chip export", 4), ("NVDA",), ("AMD",), ("NVDA",), ("AMD",))
+    [phrase] = recurring_phrases(headlines)
+    assert phrase.lead_instrument == ("AMD", 2)
+
+
+def test_a_phrase_in_unlinked_headlines_has_no_lead() -> None:
+    [phrase] = recurring_phrases(_headlines(*_stories("rate cuts", 3)))
+    assert phrase.lead_instrument == (None, 0)
+
+
 def test_evidence_is_bounded() -> None:
     (top, *_) = recurring_phrases(_headlines(*_stories("rare earths", EVIDENCE_HEADLINES + 3)))
     assert top.story_count == EVIDENCE_HEADLINES + 3
@@ -281,6 +321,7 @@ def test_discover_returns_phrases_with_their_headlines(
             f"Nvidia and {_CONTEXTS[i]} data centre power {_PLACES[i]}",
             f"o{i}",
             published,
+            ("NVDA",) if i < 2 else ("MSFT", "NVDA"),
         )
         for i in range(3)
     ]
@@ -317,6 +358,7 @@ def test_discover_returns_phrases_with_their_headlines(
     assert top["story_count"] == 3
     assert top["headlines"][0]["article_id"] == "id-0"
     assert top["headlines"][0]["title"] == stored[0].title
+    assert (top["lead_instrument"], top["lead_instrument_articles"]) == ("NVDA", 3)
 
 
 def test_discover_with_no_headlines_says_so(

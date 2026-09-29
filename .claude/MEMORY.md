@@ -732,6 +732,29 @@ failure they prevent.
     names where explanations ended rather than counting the notice as a finding. The badge and the
     notice can disagree for a scan: the badge reads the latest scan, the notice the window.
 
+59. **A phrase that is one company's news is not a theme, and is not resolved.** The AI service
+    reports each phrase's lead instrument and how many of its articles link to it
+    (`lead_instrument`, `lead_instrument_articles` on `/topics/discover`) and judges nothing; the
+    orchestrator drops a phrase at `SINGLE_INSTRUMENT_SHARE` (0.75) or more, *after* rejection
+    memory (so a rejected theme still says "rejected", which the exit check reads) and *before*
+    the resolve budget. The reason names it: "100% of its headlines are NVDA news". **Measured
+    before building** (2026-09-29, 648 headlines, 12 followed instruments; the feed was NVDA 35%,
+    AAPL 34%, BTC-USD 14%, MSFT 12%): multi-word phrases' lead shares ran 0.60, 0.67 (x4), then
+    0.80 and up, 49 of 58 at 1.0, and all ten top-ranked phrases were NVDA or AAPL news. The gap is
+    real but thin - everything under it had 3-5 articles, one about another company. **Drop, not
+    rank-last, by the user's decision:** on that data both spent the budget identically (170
+    single words sit below the bar), and only drop records the true reason. Nothing that survived
+    was a real theme, which is the source's limit (decision 51), not the rule's. **Built to outlive
+    that limit:** articles linked to no followed instrument count in the denominator, so when a
+    market/sector feed arrives (planned by the user, with the UI split into "Portfolio Impact" and
+    "New Opportunities") a real theme reads as spread and only the headline loader changes.
+    `nasdaq`, `us`, `release(s)` went into `GENERIC_WORDS` in the same PR. **Found after
+    agreeing on drop, and corrected in the same PR:** the orchestrator asked for only the top 20
+    phrases, and 19 of them were company news - the run would have resolved one phrase and left
+    seven slots unused. `PHRASES_REQUESTED` is now 100 (the service's maximum; asking costs no
+    embedding). The lesson: simulate the whole pipeline, including the caps before a filter, not
+    only the filter.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -1419,13 +1442,18 @@ sleep) and proposed nothing, for two reasons:
    headlines are all one followed company is that company's story, not a theme across companies -
    which may be why the resolver grades them `weak`. Brought to the user as a candidate rule; not
    built.
+   **Then, by the user's decision: the single-company rule (decision 59), built in the PR after
+   #79**, before step 2, because weak proposals would otherwise be mostly "Nvidia news" under
+   another name.
 2. **Weak proposals are stored, and hidden behind a filter** (the user's option (a) with a
    filter). A `weak` verdict with enough weak candidates becomes a proposal too, carrying its
    band; the Topics page shows **only confident proposals by default** and a toggle reveals the
-   weak ones, labelled "weak match". Decide explicitly, and write down, what "enough" means (the
-   confident rule is at least 2 confident instruments) and whether weak proposals count against
-   `MAX_OPEN_PROPOSALS` - if they do, three weak ones can block every confident one, which is the
-   failure decision 57 fixed. Rejection memory and expiry must treat both bands the same.
+   weak ones, labelled "weak match". **Decided by the user 2026-09-29:** "enough" is **at least
+   3 weak candidates** (one more than the confident rule's 2, because each weak one is less
+   evidence), and weak proposals have **their own cap** and never take one of
+   `MAX_OPEN_PROPOSALS`' confident slots - a shared cap would let three weak ones block every
+   confident one, the failure decision 57 fixed. Rejection memory and expiry must treat both
+   bands the same.
 3. **Then the exit check's second half:** once a proposal exists, reject it ("Not interested"),
    run discovery again with a fresh run key, and confirm its `notProposed` says "matches rejected
    topic ... by words/instruments". That plus a sensible proposal closes M5 as amended (cooldown,

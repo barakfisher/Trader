@@ -216,7 +216,14 @@ def _article_id(connection: object, url_hash: str) -> str | None:
 #: Undated articles are placed by when they were fetched.
 SQL_WINDOW_HEADLINES = text(
     """
-    SELECT a.id::text AS id, a.title, a.source, a.published_at
+    SELECT a.id::text AS id, a.title, a.source, a.published_at,
+           ARRAY(
+               SELECT DISTINCT i.symbol
+                 FROM article_entities e
+                 JOIN instruments i ON i.id = e.instrument_id
+                WHERE e.article_id = a.id
+                ORDER BY i.symbol
+           ) AS instruments
       FROM articles a
      WHERE a.duplicate_of_id IS NULL
        AND coalesce(a.published_at, a.fetched_at) >= :since
@@ -227,11 +234,16 @@ SQL_WINDOW_HEADLINES = text(
 
 
 def load_window_headlines(connection: object, *, since: datetime) -> list[Headline]:
-    """Every linked, distinct headline published (or, if undated, fetched) since `since`."""
+    """Every linked, distinct headline published (or, if undated, fetched) since `since`,
+    with the symbols of the instruments it is linked to."""
     rows = connection.execute(SQL_WINDOW_HEADLINES, {"since": since})  # type: ignore[attr-defined]
     return [
         Headline(
-            article_id=row.id, title=row.title, source=row.source, published_at=row.published_at
+            article_id=row.id,
+            title=row.title,
+            source=row.source,
+            published_at=row.published_at,
+            instruments=tuple(row.instruments or ()),
         )
         for row in rows
     ]

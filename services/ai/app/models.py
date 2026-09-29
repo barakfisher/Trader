@@ -610,6 +610,11 @@ class DiscoveredPhrase(BaseModel):
     story_count: int
     article_count: int
     source_count: int
+    #: The instrument most of the phrase's articles are linked to, and how many
+    #: of `article_count` are. The orchestrator judges from these whether the
+    #: phrase is one company's news rather than a theme; this service does not.
+    lead_instrument: str | None = None
+    lead_instrument_articles: int = 0
     #: Up to five of the headlines, in the order they were read (newest first).
     headlines: list[DiscoveredHeadline]
 

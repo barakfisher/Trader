@@ -17,6 +17,9 @@
  *    is dropped here, before any resolver call, so a rejected theme that recurs
  *    every day costs nothing every day - and cannot hold a resolve slot that a
  *    new theme lower in the list needed.
+ *    Then a phrase whose headlines are mostly one followed instrument's
+ *    (`SINGLE_INSTRUMENT_SHARE`) is dropped: it is that company's news, not a
+ *    theme, and it would spend a resolve learning so.
  * 3. Survivors are resolved through the same `/topics/resolve` the Topics page
  *    uses, at most `MAX_RESOLVED_PER_RUN` of them. Only a `confident` verdict with
  *    at least `MIN_PROPOSAL_INSTRUMENTS` confident candidates can be proposed: a
@@ -64,8 +67,14 @@ import { firstMatch, matchWords, type KnownTheme } from './topicMatching.js';
 /** How far back headlines are read. A week: a theme is a story that lasts, not a day's spike. */
 export const DISCOVERY_WINDOW_DAYS = 7;
 
-/** Phrases asked for, strongest first. More than are resolved, so suppressed ones leave room. */
-export const PHRASES_REQUESTED = 20;
+/**
+ * Phrases asked for, strongest first. Far more than are resolved, because most
+ * are dropped before resolving - by rejection memory and, above all, as one
+ * company's news: on 2026-09-29, 19 of the top 20 were. At 20 that left seven
+ * of eight resolve slots unused while phrases further down went unread. Asking
+ * costs no embedding; only resolving does. The AI service's maximum.
+ */
+export const PHRASES_REQUESTED = 100;
 
 /**
  * Resolver calls one run may make. Each costs an embedding; a day's news rarely
@@ -75,6 +84,28 @@ export const MAX_RESOLVED_PER_RUN = 8;
 
 /** Confident candidates a proposal needs. One instrument is a company, not a theme. */
 export const MIN_PROPOSAL_INSTRUMENTS = 2;
+
+/**
+ * A phrase whose headlines are at least this share about one followed
+ * instrument is that company's news, not a theme across companies, and is not
+ * resolved. Measured on the stored headlines of 2026-09-29: multi-word phrases'
+ * lead shares ran 0.60, 0.67 (x4), then 0.80 and up, 49 of 58 at 1.0 - every
+ * one of the top ten NVDA or AAPL news ("ai agents" 96% NVDA, "rogue ai" 100%).
+ * 0.75 sits in that gap. Articles linked to no followed instrument count
+ * against the lead (the AI service's denominator), so market or sector news
+ * from a broader feed reads as spread without this rule changing.
+ */
+export const SINGLE_INSTRUMENT_SHARE = 0.75;
+
+/** Why `phrase` is one instrument's news, or null when it is spread across several. */
+export function singleInstrumentReason(phrase: DiscoveredPhrase): string | null {
+  const lead = phrase.lead_instrument;
+  const articles = phrase.lead_instrument_articles ?? 0;
+  if (!lead || phrase.article_count === 0) return null;
+  if (articles < SINGLE_INSTRUMENT_SHARE * phrase.article_count) return null;
+  const percent = Math.round((100 * articles) / phrase.article_count);
+  return `${percent}% of its headlines are ${lead} news: one company, not a theme`;
+}
 
 /**
  * Proposals that may be open at once. Few, because each is a question the user
@@ -248,6 +279,13 @@ export async function runTopicDiscovery(
     const byWords = firstMatch({ words, instrumentIds: [] }, themes);
     if (byWords) {
       result.notProposed[phrase.phrase] = describe(byWords);
+      continue;
+    }
+    // After rejection memory, so a rejected theme still says it was rejected;
+    // before the budget, so one company's news never spends a resolve.
+    const oneCompany = singleInstrumentReason(phrase);
+    if (oneCompany) {
+      result.notProposed[phrase.phrase] = oneCompany;
       continue;
     }
     if (result.resolved >= MAX_RESOLVED_PER_RUN) {
