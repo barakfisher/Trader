@@ -735,7 +735,15 @@ failure they prevent.
 **A test that read the clock passed for a day, then failed on `main` and every PR.** `sendDigest`
 called `gatherTopicDigest(user)` with no time, so it used the real clock, while its test pinned
 rows to 2026-09-27. It went red at midnight, and a neighbouring test was one day from the same
-fate. Found because two unrelated PRs failed the same check. → **0019 could not be re-applied after its own downgrade, and nothing had ever tried.** Its downgrade
+fate. Found because two unrelated PRs failed the same check. → **A monkeypatch stopped patching anything, and the test started reading the clock.** A registry
+test forced "market open" by patching `is_us_market_open`; #77 routed `quote_ttl` through a new
+`is_session_open`, so the patch hit a function nobody called any more. #77's CI ran during US
+hours and passed; the next run, overnight, failed on `main` for every PR. Found on a MEMORY-only
+PR, which is what made it obviously not that PR's fault. → **After a refactor that reroutes a
+call, grep the tests for `monkeypatch.setattr` on the old name.** And the clock lesson again, from
+a new direction: a test that *forces* a condition is only as good as its hook into the code.
+
+**0019 could not be re-applied after its own downgrade, and nothing had ever tried.** Its downgrade
 keeps proposed and rejected auto topics (deliberately) and drops their fingerprint columns; its
 upgrade then adds a CHECK that every auto topic has a fingerprint. So any rollback below 0019 with a
 proposal present could never roll forward. Found on the Postgres job's first run, by stepping

@@ -226,10 +226,13 @@ def _service_with_recording_cache(settings):
 
 async def test_registry_caches_a_quote_for_the_policy_ttl(settings, monkeypatch):
     # Force the market open so the assertion does not depend on whether the
-    # suite happens to run during US trading hours.
+    # suite happens to run during trading hours. Patch the function `quote_ttl`
+    # calls: this patched `is_us_market_open` until #77 routed the check through
+    # `is_session_open`, after which the test quietly read the real clock and
+    # failed on `main` the first time CI ran outside US hours.
     import app.core.cache_policy as policy
 
-    monkeypatch.setattr(policy, "is_us_market_open", lambda _now: True)
+    monkeypatch.setattr(policy, "is_session_open", lambda _now, _session: True)
     service, recorded = _service_with_recording_cache(settings)
 
     await service.quotes(["AAPL", "BTC-USD"])
