@@ -13,7 +13,7 @@ import {
   isMuted,
 } from '../lib/notificationSchedule.ts';
 import { SEVERITY_BANDS, SEVERITY_CHOICES, describeSeverityFloor } from '../lib/severityScale.ts';
-import { formatExactTime } from '../lib/relativeTime.ts';
+import { formatClockTime, formatExactTime, getDisplayTimeZone } from '../lib/relativeTime.ts';
 import {
   MAX_PROPOSAL_TTL_HOURS,
   MIN_PROPOSAL_TTL_HOURS,
@@ -50,7 +50,7 @@ export const SettingsPage = observer(function SettingsPage() {
           <h1 className="text-base font-semibold">Settings</h1>
           {settings.savedAt && !settings.isDirty && (
             <span className="text-xs text-text-muted">
-              saved {settings.savedAt.toLocaleTimeString()}
+              saved {formatClockTime(settings.savedAt)}
             </span>
           )}
         </div>
@@ -229,11 +229,13 @@ export const SettingsPage = observer(function SettingsPage() {
             <TelegramConnect />
           </Card>
 
+          <AccountCard />
+
           <Card title="What the severity levels mean">
             <p className="mb-3 text-sm text-text-muted">
               Severity is derived from the size of the finding, never chosen by a narrator. These
-              are the bands this installation is currently tuned to; an operator can change them,
-              and the feed always shows the figure a finding was judged on.
+              are the default bands; an operator can retune them, and the feed always shows the
+              figure a finding was judged on.
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -303,3 +305,34 @@ function Field({
     </div>
   );
 }
+
+/**
+ * What this installation fixes rather than asks: shown, so a reader knows what
+ * every figure and time is in, and not offered as a choice (the user's decision,
+ * 2026-09-29 - no schema or backend change in M6).
+ */
+const AccountCard = observer(function AccountCard() {
+  const { auth } = useStore();
+  const zone = getDisplayTimeZone();
+  return (
+    <Card title="Account">
+      <dl className="grid gap-3 text-sm sm:grid-cols-2">
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-text-muted">Base currency</dt>
+          <dd className="font-medium">{auth.user?.baseCurrency ?? 'USD'}</dd>
+          <dd className="text-xs text-text-muted">
+            Every total, P&amp;L and weight is converted into it. Fixed in this version.
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs uppercase tracking-wide text-text-muted">Timezone</dt>
+          <dd className="font-medium">{zone}</dd>
+          <dd className="text-xs text-text-muted">
+            Every time on screen is shown in it, and &ldquo;today&rdquo; - quiet hours, the daily
+            summary, the daily snapshot - begins at midnight here.
+          </dd>
+        </div>
+      </dl>
+    </Card>
+  );
+});

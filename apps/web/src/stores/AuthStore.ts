@@ -1,8 +1,9 @@
-import { makeAutoObservable, runInAction } from 'mobx';
+import { makeAutoObservable, reaction, runInAction } from 'mobx';
 
 import type { SessionUser } from '@traders/shared';
 
 import { ApiRequestError, api } from '../api/client.ts';
+import { setDisplayTimeZone } from '../lib/relativeTime.ts';
 import type { RootStore } from './RootStore.ts';
 
 export class AuthStore {
@@ -14,6 +15,15 @@ export class AuthStore {
 
   constructor(private readonly root: RootStore) {
     makeAutoObservable(this, {}, { autoBind: true });
+    // Every time on screen is shown in the signed-in user's timezone. Followed
+    // by reaction rather than set in `login` and `loadSession`, so however the
+    // user changes - a sign-in, a reload, a sign-out - the zone follows it
+    // before anything renders with the old one.
+    reaction(
+      () => this.user?.timezone ?? null,
+      (zone) => setDisplayTimeZone(zone),
+      { fireImmediately: true },
+    );
   }
 
   get isAuthenticated(): boolean {

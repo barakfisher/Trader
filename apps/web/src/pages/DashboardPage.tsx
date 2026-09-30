@@ -24,7 +24,7 @@ import { SummaryCards } from '../components/SummaryCards.tsx';
 import { Button, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import { errorMessage } from '../api/client.ts';
 import { hasStaleQuotes, pricesAsOf } from '../lib/portfolioView.ts';
-import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
+import { formatAge, formatClockTime, formatExactTime } from '../lib/relativeTime.ts';
 import { feedFiltersFrom } from '../lib/feedFilters.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { openProposals, useProposalsQuery } from '../queries/proposals.ts';
@@ -65,9 +65,9 @@ export const DashboardPage = observer(function DashboardPage() {
           {pricesFrom && (
             <span
               className="text-xs text-text-muted"
-              title={`Prices observed ${formatExactTime(pricesFrom)}. Fetched ${new Date(
+              title={`Prices observed ${formatExactTime(pricesFrom)}. Fetched ${formatClockTime(
                 portfolio.dataUpdatedAt,
-              ).toLocaleTimeString()}.`}
+              )}.`}
             >
               prices from {formatAge(pricesFrom)}
               {hasStaleQuotes(portfolio.data) && ' · some cached'}
