@@ -111,6 +111,12 @@ spec:
 # - Target 70% of the request: busy enough to be worth a copy, with headroom
 #   for the burst while a new pod starts (its init container checks the schema,
 #   then the startup probe waits for /healthz).
+# - Scale up only on load that lasts: a copy is added only when CPU has stayed
+#   above target for a full minute. Measured on the cluster: a 4-second
+#   portfolio scan pushed one 15 s reading over target and the autoscaler added
+#   a copy - which needs 15-20 s to start, so it arrived after the scan had
+#   finished, then idled for five minutes, every half hour. Real traffic (the
+#   load test, many users) lasts; a single scan's burst does not.
 # - Scale down slowly: a copy is removed only after five minutes below target,
 #   so the pods do not flap during a scan that pauses between holdings.
 apiVersion: autoscaling/v2
@@ -132,5 +138,10 @@ spec:
           type: Utilization
           averageUtilization: 70
   behavior:
+    # The autoscaler takes the lowest recommendation seen in this window, so a
+    # short burst never adds a copy; only load above target for the whole
+    # minute does.
+    scaleUp:
+      stabilizationWindowSeconds: 60
     scaleDown:
       stabilizationWindowSeconds: 300
