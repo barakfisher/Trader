@@ -1211,7 +1211,10 @@ failure they prevent.
     there is re-applied by every deploy and resets what the autoscaler added. 70% of the `100m`
     request leaves headroom for the ~15-20 s a new copy spends in its schema check and startup
     probe; scale-down waits five minutes so a scan pausing between holdings does not flap the
-    count. metrics-server is used as released (pinned v0.9.0, referenced by URL from a
+    count. **Scale-up waits a minute** (added after PR 6, measured): a 4-second scheduled
+    portfolio scan pushed one 15 s reading over target and added a copy that started after the
+    scan had ended, then idled five minutes - every half hour. A burst from one batch job is not
+    load a second copy can take. metrics-server is used as released (pinned v0.9.0, referenced by URL from a
     kustomization), because nothing in it needed trimming - unlike Traefik (decision 80); the one
     change is `--kubelet-insecure-tls`, needed only because kind's kubelets self-sign. Checked
     before scaling: the AI service's only per-process state is read-only (settings, engine,
