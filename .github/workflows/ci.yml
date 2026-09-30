@@ -163,6 +163,16 @@ jobs:
           exit 1
       - name: Smoke test the vertical slice
         run: bash scripts/smoke-test.sh
+      # The production web image (M7), the one a cluster runs: the built bundle
+      # behind nginx, which forwards /api/* to the orchestrator on the page's
+      # own origin. The compose stack above runs the Vite dev server instead,
+      # so without this step nothing would build or exercise it. The AI service
+      # and orchestrator need no extra step: their production images are the
+      # ones compose just built from the same Dockerfiles.
+      - name: Production web image serves the page and proxies /api
+        run: |
+          docker build --file infra/docker/Dockerfile.web --target prod --tag traders/web:ci .
+          bash scripts/check-web-image.sh traders/web:ci traders_default 8090
       # The /ask eval set, keyless tier (M3 slice 4). Runs inside the image
       # against the corpus the `corpus` container just ingested, on the fixture
       # embedder - so it proves routing, the deterministic refusals, portfolio

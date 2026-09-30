@@ -18,3 +18,17 @@ Two things to carry over when writing these:
    that for normal operation hides real duplicate-trigger bugs.
 2. Keep `replicas: 1` for the orchestrator until import previews move from memory to Redis
    (see `apps/orchestrator/src/services/previewStore.ts`).
+
+## Images
+
+A cluster runs the production images, built by `bash scripts/build-images.sh` and tagged with the
+short commit hash (`-dirty` when the tree has uncommitted changes):
+
+- `traders/ai-service` - the AI service; the same image runs the migration and loader Jobs with a
+  different command;
+- `traders/orchestrator`;
+- `traders/web` - the built bundle behind nginx. The bundle calls `/api`, and nginx forwards
+  `/api/*` to the Service named `orchestrator` with the prefix removed, so the browser only ever
+  talks to one origin. nginx looks that name up once, at start, and exits if it does not exist yet.
+
+CI builds the web image and checks the proxy (`scripts/check-web-image.sh`) on every PR.
