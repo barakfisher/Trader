@@ -1,6 +1,7 @@
 # Frontend. Two targets:
 #   dev  - Vite dev server with hot reload (used by docker-compose)
-#   prod - static bundle served by nginx
+#   prod - static bundle served by nginx, which also forwards /api/* to the
+#          orchestrator (nginx.conf); built by scripts/build-images.sh
 FROM node:22-slim AS deps
 
 ENV PNPM_HOME=/pnpm \
@@ -27,7 +28,10 @@ CMD ["pnpm", "dev", "--host", "0.0.0.0"]
 # --- production --------------------------------------------------------------
 FROM deps AS build
 WORKDIR /repo/apps/web
-ARG VITE_API_BASE_URL=http://localhost:8080
+# Vite writes this into the bundle at build time; a running container cannot
+# change it. `/api` is relative, so the one image works at any address - nginx
+# (nginx.conf) forwards /api/* to the orchestrator on the page's own origin.
+ARG VITE_API_BASE_URL=/api
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 RUN pnpm build
 
