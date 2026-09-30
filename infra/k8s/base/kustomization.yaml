@@ -19,6 +19,9 @@ resources:
   - postgres.yaml
   - redis.yaml
   - jobs.yaml
+  - ai-service.yaml
+  - orchestrator.yaml
+  - web.yaml
 
 # The non-secret settings, from a committed env file. Kustomize appends a hash
 # of the contents to the name (traders-config-7h2k...), and rewrites every
@@ -37,3 +40,19 @@ configMapGenerator:
 # `traders-secrets` while the Secret was called `traders-secrets-<hash>`.
 secretGenerator:
   - name: traders-secrets
+
+# Every pod gets `enableServiceLinks: false`, set here once rather than in each
+# file. By default Kubernetes injects variables for every Service in the
+# namespace into every pod, in an old Docker-links format: the Service
+# `ai-service` becomes AI_SERVICE_PORT=tcp://10.96.x.x:8000 - which collides
+# with the AI service's own AI_SERVICE_PORT setting and stopped the migration
+# Job at startup (`ai_service_port: unable to parse 'tcp://...' as an integer`).
+# `orchestrator` would do the same to ORCHESTRATOR_PORT. Nothing here needs
+# them: services find each other by DNS name (`ai-service`, `postgres`).
+patches:
+  - target:
+      kind: (Deployment|StatefulSet|Job)
+    patch: |-
+      - op: add
+        path: /spec/template/spec/enableServiceLinks
+        value: false

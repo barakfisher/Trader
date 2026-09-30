@@ -9,6 +9,7 @@
 # a check rather than a comment:
 #   - a page address that is also an API route (/holdings/x) gets the page;
 #   - /api/* reaches the orchestrator with the prefix removed;
+#   - /api/internal/* (the service-to-service routes) is not exposed;
 #   - a 1.5 MB upload reaches the orchestrator instead of nginx's 1 MB 413;
 #   - the bundle calls /api, not a baked-in localhost:8080.
 #
@@ -58,6 +59,9 @@ check "/api/readyz reaches the orchestrator" '"service":"orchestrator"' \
   "$(curl -s "$BASE/api/readyz")"
 check "the /api prefix is removed on the way" "no route for GET /nope" \
   "$(curl -s "$BASE/api/nope")"
+
+check "/api/internal/* is not reachable through the web entrance" "404" \
+  "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/internal/runs")"
 
 head -c 1100000 /dev/zero | tr '\0' 'a' > "$SCRATCH/upload.csv"
 check "a file over nginx's default 1 MB reaches the orchestrator" "401" \

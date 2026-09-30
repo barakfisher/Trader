@@ -15,9 +15,11 @@
 #                                forwards /api/* to the orchestrator
 #
 # The tag is the short commit hash, so a running pod can always be traced to
-# the exact source it came from. Uncommitted changes add "-dirty": such an
-# image is not reproducible from any commit, and the tag says so rather than
-# borrowing a hash that does not describe it. Set IMAGE_TAG to override.
+# the exact source it came from. Uncommitted changes add "-dirty-<hash>": such
+# an image is not reproducible from any commit, and the tag says so rather than
+# borrowing a hash that does not describe it; the second hash changes with the
+# edits, so a redeploy picks them up (image_tag in lib/dev-common.sh). Set
+# IMAGE_TAG to override.
 #
 # Builds from the checkout this script lives in - a worktree builds its own
 # code, unlike docker compose, whose context is fixed to the main checkout.
@@ -35,12 +37,7 @@ source "$REPO_ROOT/scripts/lib/dev-common.sh"
 require_command docker "Docker Desktop: https://www.docker.com/products/docker-desktop/"
 docker info > /dev/null 2>&1 || fail "Docker is installed but not running. Start Docker Desktop and try again."
 
-if [ -z "${IMAGE_TAG:-}" ]; then
-  IMAGE_TAG="$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
-  if [ -n "$(git -C "$REPO_ROOT" status --porcelain)" ]; then
-    IMAGE_TAG="$IMAGE_TAG-dirty"
-  fi
-fi
+IMAGE_TAG="${IMAGE_TAG:-$(image_tag)}"
 
 build() {
   local name="$1" dockerfile="$2"

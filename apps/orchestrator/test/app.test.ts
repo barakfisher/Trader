@@ -86,6 +86,7 @@ const fakeAi = await import('./fakeAi.js');
 const { createFakeAi } = fakeAi;
 const { DISCOVERY_WINDOW_DAYS } = await import('../src/services/topicDiscovery.js');
 const queries = await import('../src/db/queries.js');
+const pool = await import('../src/db/pool.js');
 
 /** One claim succeeds, every later claim of the same key is refused - which is
  *  what the runs table does, without needing a database in this suite. */
@@ -146,6 +147,27 @@ describe('API', () => {
     const response = await app.request('/healthz');
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ status: 'ok', service: 'orchestrator' });
+  });
+
+  it('stays ready when only the AI service is down, and says so in the body', async () => {
+    const ai = createFakeAi();
+    ai.health = async () => {
+      throw new Error('connect ECONNREFUSED');
+    };
+    resetConfigForTests();
+    const response = await createApp(loadConfig(ENV), ai).request('/readyz');
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      status: 'degraded',
+      checks: { postgres: 'ok', aiService: 'error: connect ECONNREFUSED' },
+    });
+  });
+
+  it('is not ready without its database', async () => {
+    vi.mocked(pool.queryOne).mockRejectedValueOnce(new Error('connection refused'));
+    const response = await app.request('/readyz');
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ status: 'degraded' });
   });
 
   it('rejects an unauthenticated portfolio read', async () => {

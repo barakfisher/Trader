@@ -1,0 +1,53 @@
+# The web app: the built bundle behind nginx, which also forwards /api/* to the
+# orchestrator Service (infra/docker/nginx.conf). The only thing the browser
+# talks to; the Ingress (a later PR) will send the site's address here.
+#
+# Stateless, so the default rolling update is right: the new pod is ready
+# before the old one stops, and a deploy costs no downtime. nginx looks up the
+# name `orchestrator` once, at start, and exits if it cannot - the Service
+# object is applied with this one, so the name exists before the pod starts.
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector:
+    app: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: web
+          image: traders/web
+          ports:
+            - name: http
+              containerPort: 80
+          # Serving files needs nothing else, so one check covers both: a page
+          # that loads means alive and ready. It does not ask the API - an API
+          # outage should show the app's own error state, not a dead site.
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 128Mi }

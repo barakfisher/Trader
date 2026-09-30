@@ -113,9 +113,27 @@ async def test_market_routes_reject_a_wrong_internal_key(configured_app):
 async def test_readyz_reports_the_provider_chain(client):
     async with client:
         response = await client.get("/readyz")
+    assert response.status_code == 200
     body = response.json()
     assert body["checks"]["redis"] == "ok"
     assert body["checks"]["providers"] == "fixture"
+
+
+async def test_readyz_answers_503_when_redis_is_unreachable(configured_app):
+    # A readiness probe reads the status code only; "degraded" in a 200 body
+    # would keep a pod that cannot serve a quote in rotation.
+    class DownRedis:
+        async def ping(self):
+            raise ConnectionError("redis down")
+
+    configured_app.state.redis = DownRedis()
+    transport = httpx.ASGITransport(app=configured_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/readyz")
+    assert response.status_code == 503
+    body = response.json()
+    assert body["status"] == "degraded"
+    assert body["checks"]["redis"].startswith("error")
 
 
 async def test_request_id_is_echoed_for_cross_service_tracing(client):
