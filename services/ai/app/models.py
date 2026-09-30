@@ -72,7 +72,7 @@ class BackfillRequest(BaseModel):
 
 
 class BackfillResponse(BaseModel):
-    written: int = 0
+    written: int = Field(0, description="Closes inserted, or corrected from an earlier run.")
     already_present: int = 0
     per_symbol: dict[str, int] = Field(default_factory=dict)
     without_history: list[str] = Field(
@@ -81,6 +81,13 @@ class BackfillResponse(BaseModel):
             "Symbols no provider could supply a series for. Reported rather than "
             "omitted: a holding the engine cannot analyse is something the user "
             "should be able to discover."
+        ),
+    )
+    not_final: int = Field(
+        0,
+        description=(
+            "Candles not stored because their session had not ended: a provider "
+            "returns the day still trading, dated to its close."
         ),
     )
 

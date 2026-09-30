@@ -149,6 +149,31 @@ class TestBackfill:
         assert response.written == 0
         assert response.already_present == len(first.rows)
 
+    async def test_a_day_still_trading_is_not_stored(self, market_data):
+        # A provider returns today's candle during the session, dated to 20:00
+        # UTC. Stored at 06:45 UTC it was a price observed in the future, and
+        # the price at run time became the day's close.
+        from app.analysis.backfill import backfill_history
+
+        full = StubConnection()
+        await backfill_history(
+            full, market_data, [BackfillInstrument(instrument_id="i1", symbol="NVDA")], days=120
+        )
+        last_close = max(row["as_of"] for row in full.rows)
+        before_it_closed = last_close - timedelta(hours=13)
+
+        early = StubConnection()
+        response = await backfill_history(
+            early,
+            market_data,
+            [BackfillInstrument(instrument_id="i1", symbol="NVDA")],
+            days=120,
+            now=before_it_closed,
+        )
+        assert all(row["as_of"] <= before_it_closed for row in early.rows)
+        assert response.not_final == 1
+        assert len(early.rows) == len(full.rows) - 1
+
 
 @pytest.mark.parametrize("days", [2, 3650])
 async def test_window_bounds_are_accepted(fixture_provider, days):
