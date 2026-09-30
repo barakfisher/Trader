@@ -11,6 +11,7 @@ import { queryOptions, useQuery } from '@tanstack/react-query';
 import type {
   AdminAuditResponse,
   AdminRunsResponse,
+  LlmPanelResponse,
   UniverseGapsResponse,
   UniverseStatusResponse,
 } from '@traders/shared';
@@ -52,4 +53,15 @@ export const adminUniverseQuery = queryOptions({
 
 export function useAdminUniverseQuery() {
   return useQuery(adminUniverseQuery);
+}
+
+export function adminLlmQuery(days: number) {
+  return queryOptions({
+    queryKey: queryKeys.adminLlm(days),
+    queryFn: () => api.get<LlmPanelResponse>(`/admin/llm?days=${days}`),
+  });
+}
+
+export function useAdminLlmQuery(days: number) {
+  return useQuery(adminLlmQuery(days));
 }

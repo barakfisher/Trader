@@ -256,7 +256,7 @@ kept so the next sweep has somewhere to add to.
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
-| M8 — Admin operations & observability | **In progress** | #120-#124: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded ✅ (the panel is PR 6); missing ticker as a gap event ✅ (the background *profile* fetch is PR 7); rescreen button = CronJob run - PRs 8-9. See "Next session: M8, continued" |
+| M8 — Admin operations & observability | **In progress** | #120-#124, #126: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event ✅ (the background *profile* fetch is PR 7); rescreen button = CronJob run - PRs 8-9. See "Next session: M8, continued" |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
 not anticipate, found by running the thing rather than by reading it. M1.5 came from auditing the
@@ -1330,6 +1330,20 @@ failure they prevent.
     more CronJob and scheduler entry for a delete that is only due when a row is written.
     Recording never fails a call: a failed write is logged and the completion is returned as is.
     `test_llm_call_log.py` checks the migration's CHECK lists equal the code's Literals.
+88. **The LLM panel reconciles narration's explanations against its calls, and shows both records**
+    (M8 PR 6). `GET /admin/llm?days=` (1-30, the retention; default 7) counts `llm_calls` per agent -
+    outcomes, verdicts, p50/p95 over calls that *reached a provider* (a refused call's 0 ms would
+    flatter the model), tokens, micro-USD - and `observations.fallback_reason` beside it. Narration
+    asks exactly once per stored explanation (`_narrate_new` drops a known finding *before*
+    narrating), so from the first recorded call each fallback reason has a matching count of calls,
+    shown reason by reason and flagged only when they disagree - the same "name it or flag it"
+    shape as decision 86, rather than trusting one record. The older observation counts stay as
+    their own list because `llm_calls` began on 2026-09-30 and is pruned at 30 days. Prompts and
+    completions never go on the wire (portfolio data); an error is cut to 300 characters. "Free
+    route" is decided by the `:free` suffix per model (what `pricing.py` already trusts), not by
+    the current config's tier, so a call made under an earlier model is labelled by its own id.
+    TTFT and semantic-cache hit rate are *said* to be unmeasured on the card (no streaming, no
+    cache), never shown as zero.
 
 ---
 
@@ -1859,7 +1873,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | Item | Where | Impact |
 |---|---|---|
 | **The topic gate refused a nonsense phrase by 0.007** | `app/ask/relevance.py` (`refuse_below` 0.32) | Measured on compose 2026-09-30: "zzqx flibbertigibbet" scored 0.313, "medieval tapestry restoration" 0.245, "quantum computing" 0.584. The gate held, but a nonsense string sits 0.007 below it. `universe_gap_low_confidence` events now record every `none` with its score; **look at their distribution before moving the gate**, not at one example |
-| **Model cost reads $0 on this installation** | `.env` `LLM_MODEL` (a `:free` OpenRouter route) | Every recorded call is priced 0 because the configured route is free - true, and PR 6's panel must say "free route" rather than show $0.00 as if it were a price. The cost column has not yet been seen non-zero on real data |
+| **Model cost reads $0 on this installation** | `.env` `LLM_MODEL` (a `:free` OpenRouter route) | Every recorded call is priced 0 because the configured route is free - true, and the panel (#126, decision 88) says "free route" rather than $0. "Free" is read from the `:free` suffix alone: a free route OpenRouter names differently would show as "$0", a price. The cost column has not yet been seen non-zero on real data |
 | **A low-confidence topic cannot be produced in the kind cluster** | fixture embedder, `app/ask/relevance.judge` | Keyless by decision 79: on a non-semantic embedder the judge abstains, so every topic is `weak`, never `none`. Show that event on compose |
 | **The app connects to Postgres as a superuser that owns every table** | compose, kind, CI `DATABASE_URL`s | Every service uses `traders`, the only role, a superuser. So grants protect nothing: `admin_audit` is append-only only because of its triggers (decision 84), and a superuser can still `DISABLE TRIGGER`. Any SQL-injection bug would run with full rights. Fix: an owner role for Alembic and a plain application role with `INSERT, SELECT` on `admin_audit` - it touches every connection string in three environments, which is why it was not done in M8 PR 2. `test_the_app_role_is_a_superuser...` fails when it lands, as a reminder to delete this row |
 | **Telegram's inbound delivery is unproven** | deployment | Still true after M7, deliberately: the cluster runs with Telegram off (decision 79). **The user decided (2026-09-30) to prove the webhook in a real cloud deployment with HTTPS**, not through a tunnel from the laptop; `setWebhook` on the real bot stops the compose stack's polling, so it waits for that deployment. Everything else was exercised against a real bot, but `setWebhook` needs a public HTTPS URL. The handler has only ever been driven by replaying genuine payloads at it locally. **The first real deployment is the first real test of that leg** — check `getWebhookInfo` for `last_error_message` immediately after |
@@ -2246,7 +2260,14 @@ within one background fetch"; (7) universe status against the loader's own count
 (8) `llm_calls` via a factory wrapper - done, #124.
 
 **Next, in order, one branch off `main` each:**
-- **PR 6 - the LLM panel.** `GET /admin/llm` + a card: per agent - calls, p50/p95 latency, tokens,
+- ~~PR 6 - the LLM panel~~ **Done, #126 (decision 88).** Measured first on compose (30 Sep
+  22:21 UTC): `llm_calls` held **one** row (the #124 `/ask` demo) - narration only calls on a
+  *new* finding, ~45 a week - and 45 observations carried a reason (17 unsourced, 16
+  provider_error, 10 model-written, 2 malformed; 28 older ones none). Shown on compose data
+  through a native preview: the ask row as "free route", 14.3 s, and the 30-day history equal to
+  the measurement. **The reconciliation had no narration call to show yet** - the first scan
+  that narrates a new finding is the one to look at (`/admin`, "Model calls"). The original plan
+  for the PR: `GET /admin/llm` + a card: per agent - calls, p50/p95 latency, tokens,
   cost (say "free route" when the model id ends `:free`, debt row), outcomes and verdicts;
   fallback reasons for narration from `observations.fallback_reason` beside `llm_calls.verdict`
   (the milestone asks for that query, not a new log). Say plainly that TTFT and semantic-cache

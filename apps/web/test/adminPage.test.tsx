@@ -30,6 +30,72 @@ const { duration } = await import('../src/pages/AdminPage.tsx');
 const ADMIN = { id: 'u', baseCurrency: 'USD', timezone: 'Asia/Jerusalem', role: 'admin' };
 const USER = { ...ADMIN, role: 'user' };
 
+const FREE = 'nvidia/nemotron-3.5-lightning:free';
+const zeroOutcomes = { ok: 0, provider_error: 0, budget_exhausted: 0, no_provider: 0 };
+const zeroVerdicts = {
+  accepted: 0,
+  malformed: 0,
+  unsourced_figures: 0,
+  empty_completion: 0,
+  degenerate_completion: 0,
+  not_judged: 0,
+};
+/** The shape measured on compose on 2026-09-30, plus one narration call. */
+const LLM_PANEL = {
+  window: { days: 7, since: '2026-09-24T00:00:00Z' },
+  firstCallAt: '2026-09-30T22:18:16Z',
+  agents: [
+    {
+      agent: 'narration',
+      calls: 2,
+      outcomes: { ...zeroOutcomes, ok: 1, provider_error: 1 },
+      verdicts: { ...zeroVerdicts, accepted: 1 },
+      latency: { sample: 2, p50Ms: 850, p95Ms: 30000 },
+      promptTokens: 400,
+      completionTokens: 90,
+      costMicroUsd: 0,
+      models: [{ model: FREE, calls: 2, free: true }],
+    },
+    {
+      agent: 'ask',
+      calls: 0,
+      outcomes: zeroOutcomes,
+      verdicts: zeroVerdicts,
+      latency: null,
+      promptTokens: 0,
+      completionTokens: 0,
+      costMicroUsd: 0,
+      models: [],
+    },
+  ],
+  narrationFallbacks: [
+    { reason: 'unsourced_figures', count: 17 },
+    { reason: 'none', count: 10 },
+  ],
+  reconciliation: {
+    since: '2026-09-30T22:18:16Z',
+    rows: [
+      { reason: 'none', explanations: 1, calls: 1 },
+      { reason: 'provider_error', explanations: 2, calls: 1 },
+    ],
+  },
+  recent: [
+    {
+      id: 'c1',
+      agent: 'narration',
+      model: FREE,
+      outcome: 'provider_error',
+      verdict: null,
+      error: 'HTTP 429 from openrouter',
+      latencyMs: 30000,
+      promptTokens: 0,
+      completionTokens: 0,
+      costMicroUsd: 0,
+      startedAt: '2026-10-01T06:00:00Z',
+    },
+  ],
+};
+
 function renderAt(path: string, user: typeof ADMIN) {
   const router = createAppRouter(createMemoryHistory({ initialEntries: [path] }));
   const result = renderWithServerState(<App router={router} />);
@@ -106,7 +172,9 @@ describe('the admin page', () => {
                 },
               ],
             })
-          : new Promise(() => {}),
+          : path.startsWith('/admin/llm')
+            ? Promise.resolve(LLM_PANEL)
+            : new Promise(() => {}),
     );
     window.scrollTo = () => {};
   });
@@ -150,6 +218,25 @@ describe('the admin page', () => {
     expect(screen.getByText(/from 10\.0\.0\.7/)).toBeTruthy();
   });
 
+  it('shows model calls per agent, a free route as such, and what is not measured', async () => {
+    renderAt('/admin', ADMIN);
+    expect(await screen.findByText('free route')).toBeTruthy();
+    expect(screen.getByText('850 ms / 30.0 s')).toBeTruthy();
+    expect(screen.getByText('1 answered, 1 provider error')).toBeTruthy();
+    expect(screen.getByText('HTTP 429 from openrouter')).toBeTruthy();
+    expect(screen.getByText(/Not measured: time to first token/)).toBeTruthy();
+    expect(get).toHaveBeenCalledWith('/admin/llm?days=7');
+  });
+
+  it('counts explanations against calls and flags only a disagreement', async () => {
+    renderAt('/admin', ADMIN);
+    const agreed = await screen.findByText(/written by the model: 1 stored, 1 call$/);
+    expect(agreed.className).not.toContain('text-warn');
+    const disagreed = screen.getByText(/provider error: 2 stored, 1 call - these should agree/);
+    expect(disagreed.className).toContain('text-warn');
+    expect(screen.getByText('refused: figures not in the evidence: 17 of 27')).toBeTruthy();
+  });
+
   it('asks the server for nothing when the account is not an admin', async () => {
     renderAt('/admin', USER);
     expect(await screen.findByText('Administrators only')).toBeTruthy();
@@ -157,6 +244,7 @@ describe('the admin page', () => {
     expect(get).not.toHaveBeenCalledWith('/admin/audit');
     expect(get).not.toHaveBeenCalledWith('/admin/gaps');
     expect(get).not.toHaveBeenCalledWith('/admin/universe');
+    expect(get).not.toHaveBeenCalledWith('/admin/llm?days=7');
   });
 
   it('says a run is still going rather than giving it a duration', () => {

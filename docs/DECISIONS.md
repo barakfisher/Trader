@@ -98,3 +98,4 @@ while this file is out of date.
 | 85 | A universe gap is decided by the AI service and recorded by the orchestrator, and only where a user named something |
 | 86 | The universe status reconciles against the loader's own account, stored per load |
 | 87 | Every model call is recorded by a wrapper the factory builds; call sites only add a verdict |
+| 88 | The LLM panel reconciles narration's explanations against its calls, and shows both records |

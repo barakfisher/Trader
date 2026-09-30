@@ -120,6 +120,77 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('the LLM panel', () => {
+    // Dated a day ahead so a window starting tomorrow sees only these rows,
+    // whatever else the database holds.
+    const TOMORROW = new Date(Date.now() + 12 * 60 * 60 * 1000);
+    // Their own user: a future-dated observation would be USER's "latest" in every later test.
+    const LLM_USER = randomUUID();
+
+    beforeAll(async () => {
+      await getPool().query('INSERT INTO users (id) VALUES ($1)', [LLM_USER]);
+      await getPool().query(
+        `INSERT INTO llm_calls (user_id, agent, provider, model, outcome, verdict, latency_ms,
+                                prompt_tokens, completion_tokens, cost_micro_usd, prompt, completion,
+                                started_at)
+         VALUES ($1, 'narration', 'openrouter', 'm:free', 'ok', 'accepted', 100, 10, 20, 0, 'p', 'c',
+                 now() + interval '1 day'),
+                ($1, 'narration', 'openrouter', 'm:free', 'ok', 'accepted', 300, 10, 20, 0, 'p', 'c',
+                 now() + interval '1 day'),
+                ($1, 'narration', 'openrouter', 'm:free', 'provider_error', NULL, 900, 0, 0, 0, 'p',
+                 NULL, now() + interval '1 day'),
+                ($1, 'narration', 'none', NULL, 'no_provider', NULL, 0, 0, 0, 0, 'p', NULL,
+                 now() + interval '1 day'),
+                ($1, 'ask', 'openrouter', 'paid', 'ok', NULL, 50, 5, 5, 3000000000, 'p', 'c',
+                 now() + interval '1 day')`,
+        [LLM_USER],
+      );
+      await getPool().query(
+        `INSERT INTO observations (user_id, kind, subject_ref, headline, dedupe_key,
+                                   narration_source, fallback_reason, created_at)
+         VALUES ($1, 'price_move', 'X', 'h', $2, 'llm', 'none', now() + interval '1 day'),
+                ($1, 'price_move', 'X', 'h', $3, 'template', 'provider_error', now() + interval '1 day')`,
+        [LLM_USER, `llm-panel-1-${LLM_USER}`, `llm-panel-2-${LLM_USER}`],
+      );
+    });
+
+    afterAll(async () => {
+      await getPool().query('DELETE FROM users WHERE id = $1', [LLM_USER]);
+    });
+
+    it('groups calls with sums that survive past 32 bits', async () => {
+      const groups = await queries.groupLlmCalls(TOMORROW);
+      expect(groups.find((row) => row.agent === 'ask')).toMatchObject({
+        calls: 1,
+        cost_micro_usd: '3000000000',
+      });
+      const accepted = groups.find((row) => row.verdict === 'accepted');
+      expect(accepted).toMatchObject({ calls: 2, prompt_tokens: '20', completion_tokens: '40' });
+    });
+
+    it('takes latency percentiles over calls that reached a provider only', async () => {
+      const narration = (await queries.llmLatencies(TOMORROW)).find((row) => row.agent === 'narration');
+      // 100, 300, 900 - the no_provider call's 0 is not among them.
+      expect(narration).toEqual({ agent: 'narration', sample: 3, p50_ms: 300, p95_ms: 900 });
+    });
+
+    it('lists calls without their prompt or completion, and counts fallbacks', async () => {
+      const recent = (await queries.listLlmCalls(20)).filter((row) => row.model === 'm:free');
+      expect(recent.length).toBeGreaterThanOrEqual(3);
+      expect(Object.keys(recent[0]!)).not.toContain('prompt');
+      expect(Object.keys(recent[0]!)).not.toContain('completion');
+      expect(await queries.firstLlmCallAt()).toBeInstanceOf(Date);
+
+      const fallbacks = await queries.countNarrationFallbacks(TOMORROW);
+      expect(fallbacks).toEqual(
+        expect.arrayContaining([
+          { fallback_reason: 'none', count: 1 },
+          { fallback_reason: 'provider_error', count: 1 },
+        ]),
+      );
+    });
+  });
+
   describe('listSnapshots', () => {
     it('returns the calendar date that was stored, whatever the process timezone', async () => {
       // East of UTC is where a DATE parsed to local midnight and printed in UTC
