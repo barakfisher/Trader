@@ -98,6 +98,7 @@ async def run_portfolio_scan(
     thresholds: AnalysisThresholds,
     llm: LLMProvider | None,
     articles: Sequence[CandidateArticle] = (),
+    excluded_sources: Sequence[str] = (),
     known_dedupe_keys: Iterable[str] = (),
     now: datetime | None = None,
 ) -> tuple[list[ScanObservation], ScanStats]:
@@ -120,7 +121,9 @@ async def run_portfolio_scan(
     findings: list[Finding] = []
 
     for subject in subjects:
-        points = load_price_series(connection, subject.instrument_id, since=since)
+        points = load_price_series(
+            connection, subject.instrument_id, since=since, excluded_sources=excluded_sources
+        )
         if len(points) < 2:
             # Not an error: a holding added today has no history to analyse yet.
             stats.insufficient_history.append(subject.symbol)
@@ -212,6 +215,7 @@ async def run_topic_scan(
     *,
     thresholds: AnalysisThresholds,
     llm: LLMProvider | None,
+    excluded_sources: Sequence[str] = (),
     known_dedupe_keys: Iterable[str] = (),
     now: datetime | None = None,
 ) -> tuple[list[ScanObservation], TopicScanStats]:
@@ -231,7 +235,10 @@ async def run_topic_scan(
         for instrument in topic.instruments:
             if instrument.instrument_id not in series:
                 series[instrument.instrument_id] = load_price_series(
-                    connection, instrument.instrument_id, since=since
+                    connection,
+                    instrument.instrument_id,
+                    since=since,
+                    excluded_sources=excluded_sources,
                 )
     stats.instruments = len(series)
 

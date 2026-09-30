@@ -17,6 +17,7 @@ instead of one per symbol, and a test can hand in whatever it likes.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
@@ -32,6 +33,7 @@ SQL_PRICE_SERIES = text(
       FROM quotes
      WHERE instrument_id = :instrument_id
        AND as_of >= :since
+       AND NOT (source = ANY(:excluded_sources))
      ORDER BY as_of
     """
 )
@@ -47,6 +49,7 @@ SQL_PRICE_SERIES_UNTIL = text(
      WHERE instrument_id = :instrument_id
        AND as_of >= :since
        AND as_of <= :until
+       AND NOT (source = ANY(:excluded_sources))
      ORDER BY as_of
     """
 )
@@ -71,6 +74,7 @@ def load_price_series(
     *,
     since: datetime,
     until: datetime | None = None,
+    excluded_sources: Sequence[str] = (),
 ) -> list[PricePoint]:
     """Price history for one instrument, oldest first.
 
@@ -83,7 +87,13 @@ def load_price_series(
     thing required of it is `execute(statement, parameters)`.
     """
     statement = SQL_PRICE_SERIES if until is None else SQL_PRICE_SERIES_UNTIL
-    parameters: dict[str, object] = {"instrument_id": str(instrument_id), "since": since}
+    # `excluded_sources` is how a real installation ignores fixture prices that
+    # an earlier fallback stored (see providers/price_provenance.py).
+    parameters: dict[str, object] = {
+        "instrument_id": str(instrument_id),
+        "since": since,
+        "excluded_sources": list(excluded_sources),
+    }
     if until is not None:
         parameters["until"] = until
     rows = connection.execute(statement, parameters)  # type: ignore[attr-defined]

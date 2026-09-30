@@ -34,6 +34,7 @@ from app.models import (
     TopicScanResponse,
     TopicScanStatsOut,
 )
+from app.providers.price_provenance import excluded_price_sources
 
 router = APIRouter(
     prefix="/analysis",
@@ -75,6 +76,7 @@ async def portfolio_scan(
             thresholds=AnalysisThresholds.from_settings(settings),
             llm=llm,
             known_dedupe_keys=payload.known_dedupe_keys,
+            excluded_sources=excluded_price_sources(settings.market_data_chain),
         )
 
     return PortfolioScanResponse(
@@ -115,6 +117,7 @@ async def topic_scan(
             thresholds=AnalysisThresholds.from_settings(settings),
             llm=llm,
             known_dedupe_keys=payload.known_dedupe_keys,
+            excluded_sources=excluded_price_sources(settings.market_data_chain),
         )
 
     return TopicScanResponse(

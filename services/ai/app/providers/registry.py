@@ -31,6 +31,7 @@ from app.core.ratelimit import RateLimiter
 from app.models import DailyClose, FxRate, InstrumentResolution, Quote, QuoteMarket
 from app.providers.base import MarketDataProvider, ProviderError
 from app.providers.fixture import FixtureProvider
+from app.providers.price_provenance import admissible_chain
 from app.providers.yfinance_provider import YFinanceProvider
 
 log = get_logger("providers")
@@ -41,7 +42,16 @@ _LAST_KNOWN_TTL_SECONDS = 7 * 24 * 3600
 def build_providers(settings: Settings) -> list[MarketDataProvider]:
     """Instantiate the configured chain, skipping providers that lack credentials."""
     providers: list[MarketDataProvider] = []
-    for name in settings.market_data_chain:
+    chain = admissible_chain(settings.market_data_chain)
+    if len(chain) < len(settings.market_data_chain):
+        # Said at startup, once: a fixture behind a real provider would invent
+        # a price whenever the real one failed. See price_provenance.py.
+        log.warning(
+            "providers.fixture_fallback_dropped",
+            configured=settings.market_data_chain,
+            chain=chain,
+        )
+    for name in chain:
         key = name.strip().lower()
         if key == "fixture":
             providers.append(FixtureProvider(settings.fixtures_dir))

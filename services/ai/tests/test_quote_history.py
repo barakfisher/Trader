@@ -64,7 +64,15 @@ def test_the_bounds_travel_as_parameters():
     load_price_series(connection, INSTRUMENT, since=SINCE)
     statement, parameters = connection.calls[0]
     assert statement is SQL_PRICE_SERIES
-    assert parameters == {"instrument_id": str(INSTRUMENT), "since": SINCE}
+    assert parameters == {"instrument_id": str(INSTRUMENT), "since": SINCE, "excluded_sources": []}
+
+
+def test_excluded_sources_travel_as_a_parameter():
+    # How a real installation skips fixture prices an earlier fallback stored.
+    connection = RecordingConnection()
+    load_price_series(connection, INSTRUMENT, since=SINCE, excluded_sources=("fixture",))
+    _, parameters = connection.calls[0]
+    assert parameters["excluded_sources"] == ["fixture"]
 
 
 def test_an_upper_bound_selects_the_bounded_statement():
@@ -74,7 +82,12 @@ def test_an_upper_bound_selects_the_bounded_statement():
     load_price_series(connection, INSTRUMENT, since=SINCE, until=UNTIL)
     statement, parameters = connection.calls[0]
     assert statement is SQL_PRICE_SERIES_UNTIL
-    assert parameters == {"instrument_id": str(INSTRUMENT), "since": SINCE, "until": UNTIL}
+    assert parameters == {
+        "instrument_id": str(INSTRUMENT),
+        "since": SINCE,
+        "until": UNTIL,
+        "excluded_sources": [],
+    }
 
 
 def test_an_instrument_with_no_quotes_yields_an_empty_series():
