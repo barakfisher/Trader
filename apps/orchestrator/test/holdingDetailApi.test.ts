@@ -46,6 +46,7 @@ const queries = vi.hoisted(() => ({
   getHolding: vi.fn(),
   listHoldingArticles: vi.fn(async (): Promise<unknown[]> => []),
   listObservations: vi.fn(async (): Promise<unknown[]> => []),
+  countObservations: vi.fn(async () => 0),
   getLatestFinishedRun: vi.fn(async (): Promise<unknown> => null),
 }));
 
@@ -217,14 +218,65 @@ describe('GET /holdings/:id/news', () => {
 describe('GET /observations?symbol=', () => {
   it('asks for both subject formats a finding about the symbol is stored under', async () => {
     await get('/observations?symbol=nvda');
-    expect(queries.listObservations).toHaveBeenCalledWith(USER.id, 50, [
-      'instrument:NVDA',
-      'portfolio:allocation:NVDA',
-    ]);
+    expect(queries.listObservations).toHaveBeenCalledWith(
+      USER.id,
+      51,
+      { subjectRefs: ['instrument:NVDA', 'portfolio:allocation:NVDA'], minRank: null },
+      null,
+    );
   });
 
   it('without a symbol, is the whole feed', async () => {
     await get('/observations');
-    expect(queries.listObservations).toHaveBeenCalledWith(USER.id, 50, null);
+    expect(queries.listObservations).toHaveBeenCalledWith(
+      USER.id,
+      51,
+      { subjectRefs: null, minRank: null },
+      null,
+    );
+  });
+
+  it('keeps findings at least as severe as asked, and continues after a cursor', async () => {
+    await get('/observations?severity=notable&before=2d7c7f7e-8a55-4d5e-9d1a-3b1f0e9c6a11&limit=10');
+    expect(queries.listObservations).toHaveBeenCalledWith(
+      USER.id,
+      11,
+      { subjectRefs: null, minRank: 1 },
+      '2d7c7f7e-8a55-4d5e-9d1a-3b1f0e9c6a11',
+    );
+    expect(queries.countObservations).toHaveBeenCalledWith(USER.id, { subjectRefs: null, minRank: 1 });
+  });
+
+  it.each(['severity=urgent', 'before=not-an-id'])('refuses %s', async (query) => {
+    expect((await get(`/observations?${query}`)).status).toBe(400);
+    expect(queries.listObservations).not.toHaveBeenCalled();
+  });
+
+  it('says whether another page exists, from one row more than it shows', async () => {
+    const row = (id: string) => ({
+      id,
+      kind: 'drawdown',
+      severity: 'high',
+      subject_kind: 'instrument',
+      subject_ref: 'instrument:SMR',
+      headline: 'h',
+      explanation: null,
+      evidence: {},
+      concept_refs: [],
+      narration_source: null,
+      fallback_reason: null,
+      created_at: new Date('2026-09-30T07:00:00Z'),
+    });
+    queries.listObservations.mockResolvedValueOnce([row('a'), row('b'), row('c')]);
+    queries.countObservations.mockResolvedValueOnce(72);
+
+    const body = await (await get('/observations?limit=2')).json();
+
+    expect(body.observations.map((o: { id: string }) => o.id)).toEqual(['a', 'b']);
+    expect(body.nextCursor).toBe('b');
+    expect(body.total).toBe(72);
+
+    queries.listObservations.mockResolvedValueOnce([row('a')]);
+    expect((await (await get('/observations?limit=2')).json()).nextCursor).toBeNull();
   });
 });

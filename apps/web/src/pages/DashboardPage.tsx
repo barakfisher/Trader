@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import {
   FileUp,
   Inbox,
@@ -25,7 +25,7 @@ import { Button, EmptyState, ErrorNote, Spinner, buttonClass } from '../componen
 import { errorMessage } from '../api/client.ts';
 import { hasStaleQuotes, pricesAsOf } from '../lib/portfolioView.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
-import { useObservationsQuery } from '../queries/observations.ts';
+import { feedFiltersFrom } from '../lib/feedFilters.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { openProposals, useProposalsQuery } from '../queries/proposals.ts';
 import { queryKeys } from '../queries/queryKeys.ts';
@@ -39,7 +39,10 @@ export const DashboardPage = observer(function DashboardPage() {
   } = useStore();
   const navigate = useNavigate();
   const portfolio = usePortfolioQuery();
-  const feed = useObservationsQuery();
+  // The feed's filters live in the address (`/?severity=high&symbol=NVDA`), so
+  // a filtered view survives a reload and can be sent. Read loosely: this page
+  // also renders for unknown addresses, where the '/' route is not matched.
+  const feedFilters = feedFiltersFrom(useSearch({ strict: false }));
   // Read here, not only in the inbox: the badge in the header is how a user
   // learns a question is waiting, and an inbox nobody knows has items is the
   // PUT /targets mistake again.
@@ -83,7 +86,8 @@ export const DashboardPage = observer(function DashboardPage() {
             variant="secondary"
             onClick={() => {
               void portfolio.refetch();
-              void feed.refetch();
+              // Every filtered view of the feed, not only the one on screen.
+              void queryClient.invalidateQueries({ queryKey: queryKeys.observations });
               void queryClient.invalidateQueries({ queryKey: queryKeys.proposals });
               void queryClient.invalidateQueries({ queryKey: queryKeys.narration });
             }}
@@ -191,7 +195,17 @@ export const DashboardPage = observer(function DashboardPage() {
           {/* The feed sits below the portfolio rather than above it: an empty
               feed is the normal result of a quiet day, and it should not take
               the top of the page to say so. */}
-          <ObservationsFeed />
+          <ObservationsFeed
+            filters={feedFilters}
+            onFiltersChange={(next) =>
+              void navigate({
+                to: '/',
+                search: { severity: next.severity, symbol: next.symbol },
+                // A filter is a view of this page, not a place: Back leaves the page.
+                replace: true,
+              })
+            }
+          />
         </>
       )}
 

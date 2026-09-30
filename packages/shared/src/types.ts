@@ -292,8 +292,12 @@ export interface Observation {
 export type NarrationSource = 'llm' | 'template';
 
 export interface ObservationsResponse {
-  /** Newest first, as returned. */
+  /** Newest first, and within one scan the most severe first, as returned. */
   observations: Observation[];
+  /** How many findings the filter matches in all, so a page can say it is one. */
+  total: number;
+  /** The id to pass as `before` for the next page; null when there is none. */
+  nextCursor: string | null;
 }
 
 // --- Per-user settings (migration 0006) --------------------------------------

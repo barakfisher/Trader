@@ -11,6 +11,9 @@ export const queryKeys = {
   portfolio: ['portfolio'] as const,
   snapshots: ['portfolio', 'snapshots'] as const,
   observations: ['observations'] as const,
+  /** The dashboard's feed, per filter. Under `observations`, so a refresh of the feed reaches it. */
+  feed: (severity: string | null, symbol: string | null) =>
+    ['observations', 'feed', { severity, symbol }] as const,
   /** Under the feed, so anything that invalidates the feed refreshes a holding's findings too. */
   symbolObservations: (symbol: string) => ['observations', 'symbol', symbol] as const,
   proposals: ['proposals'] as const,

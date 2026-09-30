@@ -826,25 +826,71 @@ export async function listRecentDedupeKeys(userId: string, days = 2): Promise<st
 }
 
 /**
- * The feed, newest first. `subjectRefs`, when given, keeps only findings about
- * those subjects - a holding page passes the refs its symbol can appear under
- * (`instrument:NVDA`, `portfolio:allocation:NVDA`).
+ * Severity as a rank, most severe highest - the scale of `SEVERITY_RANK` in
+ * `notificationPolicy.ts`. `severity` is text, and sorts alphabetically.
+ */
+const SEVERITY_RANK_SQL = `CASE severity WHEN 'high' THEN 2 WHEN 'notable' THEN 1 ELSE 0 END`;
+
+export interface ObservationFilter {
+  /** Only findings about these subjects (a holding page passes `instrument:X`, `portfolio:allocation:X`). */
+  subjectRefs?: string[] | null;
+  /** Only findings at least this severe, on `SEVERITY_RANK`'s scale: 0 info, 1 notable, 2 high. */
+  minRank?: number | null;
+}
+
+function observationWhere(filter: ObservationFilter, first: number): { sql: string; params: unknown[] } {
+  return {
+    sql: `AND ($${first}::text[] IS NULL OR subject_ref = ANY($${first}::text[]))
+          AND (${SEVERITY_RANK_SQL}) >= coalesce($${first + 1}::int, 0)`,
+    params: [filter.subjectRefs ?? null, filter.minRank ?? null],
+  };
+}
+
+/**
+ * The feed: newest first, and within one scan's findings the most severe first.
+ *
+ * Until M6 PR 11 the tie-break was `severity DESC` on the text, which put every
+ * scan's high finding *last* ("notable" > "info" > "high"). A scan inserts its
+ * findings with one `now()`, so ties are the normal case, not an edge.
+ *
+ * `before` is the id of the last finding the reader has, and the page continues
+ * after it by the same ordering key - looked up from that row rather than sent
+ * as a timestamp, because `created_at` carries microseconds a JavaScript `Date`
+ * drops, and one scan's findings differ only there.
  */
 export function listObservations(
   userId: string,
   limit = 50,
-  subjectRefs: string[] | null = null,
+  filter: ObservationFilter = {},
+  before: string | null = null,
 ): Promise<ObservationRow[]> {
+  const where = observationWhere(filter, 4);
   return query<ObservationRow>(
     `SELECT id, kind, severity, subject_kind, subject_ref, headline, explanation,
             evidence, concept_refs, narration_source, fallback_reason, created_at
        FROM observations
       WHERE user_id = $1
-        AND ($3::text[] IS NULL OR subject_ref = ANY($3::text[]))
-      ORDER BY created_at DESC, severity DESC
+        ${where.sql}
+        AND ($3::uuid IS NULL OR (created_at, ${SEVERITY_RANK_SQL}, id) < (
+              SELECT a.created_at,
+                     CASE a.severity WHEN 'high' THEN 2 WHEN 'notable' THEN 1 ELSE 0 END,
+                     a.id
+                FROM observations a
+               WHERE a.id = $3 AND a.user_id = $1))
+      ORDER BY created_at DESC, ${SEVERITY_RANK_SQL} DESC, id DESC
       LIMIT $2`,
-    [userId, limit, subjectRefs],
+    [userId, limit, before, ...where.params],
   );
+}
+
+/** How many findings the filter matches in all, so a page can say it is one. */
+export async function countObservations(userId: string, filter: ObservationFilter = {}): Promise<number> {
+  const where = observationWhere(filter, 2);
+  const row = await queryOne<{ count: string }>(
+    `SELECT count(*)::text AS count FROM observations WHERE user_id = $1 ${where.sql}`,
+    [userId, ...where.params],
+  );
+  return Number(row?.count ?? 0);
 }
 
 // --- Proposals, their audit trail, and the paper ledger -------------------------

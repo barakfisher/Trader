@@ -66,6 +66,7 @@ vi.mock('../src/db/queries.js', () => ({
   })),
   createProposals: vi.fn(async () => []),
   listObservations: vi.fn(async () => []),
+  countObservations: vi.fn(async () => 0),
   listRecentDedupeKeys: vi.fn(async () => []),
   listTargetWeights: vi.fn(async () => []),
   findInstrumentsBySymbols: vi.fn(async () => []),
