@@ -101,6 +101,7 @@ async def run_portfolio_scan(
     excluded_sources: Sequence[str] = (),
     known_dedupe_keys: Iterable[str] = (),
     now: datetime | None = None,
+    user_id: str | None = None,
 ) -> tuple[list[ScanObservation], ScanStats]:
     """Run every rule over `subjects`, narrate what is new, and report the rest.
 
@@ -167,7 +168,9 @@ async def run_portfolio_scan(
 
     stats.findings = len(findings)
 
-    observations = await _narrate_new(findings, known_dedupe_keys, llm, stats, articles)
+    observations = await _narrate_new(
+        findings, known_dedupe_keys, llm, stats, articles, user_id=user_id
+    )
 
     log.info(
         "analysis.scan_complete",
@@ -218,6 +221,7 @@ async def run_topic_scan(
     excluded_sources: Sequence[str] = (),
     known_dedupe_keys: Iterable[str] = (),
     now: datetime | None = None,
+    user_id: str | None = None,
 ) -> tuple[list[ScanObservation], TopicScanStats]:
     """Measure each topic's basket, narrate what is new, and report every skip.
 
@@ -262,7 +266,7 @@ async def run_topic_scan(
         findings.extend(result.findings)
 
     stats.findings = len(findings)
-    observations = await _narrate_new(findings, known_dedupe_keys, llm, stats)
+    observations = await _narrate_new(findings, known_dedupe_keys, llm, stats, user_id=user_id)
 
     log.info(
         "analysis.topic_scan_complete",
@@ -281,6 +285,7 @@ async def _narrate_new(
     llm: LLMProvider | None,
     stats: ScanStats | TopicScanStats,
     articles: Sequence[CandidateArticle] = (),
+    user_id: str | None = None,
 ) -> list[ScanObservation]:
     """Drop what the caller already holds, and put words to the rest."""
     known = set(known_dedupe_keys)
@@ -292,7 +297,9 @@ async def _narrate_new(
             # says this. Nothing new to write and nothing to pay for.
             stats.already_known += 1
             continue
-        narration = await narrate(finding, list(correlate(finding, list(articles))), llm)
+        narration = await narrate(
+            finding, list(correlate(finding, list(articles))), llm, user_id=user_id
+        )
         if narration.source == "llm":
             stats.narrated_by_llm += 1
         else:

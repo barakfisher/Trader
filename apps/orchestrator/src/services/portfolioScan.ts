@@ -91,6 +91,8 @@ export async function runPortfolioScan(
 
   const response = await ai.portfolioScan(
     {
+      // Recorded on every model call the scan makes (llm_calls, decision 87).
+      user_id: user.id,
       base_currency: portfolio.summary.baseCurrency,
       holdings: portfolio.holdings.map((holding) => ({
         instrument_id: holding.instrument.id,

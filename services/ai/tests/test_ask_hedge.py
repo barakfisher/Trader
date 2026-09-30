@@ -14,6 +14,7 @@ uncertainty must not depend on how a model chose to phrase it.
 from __future__ import annotations
 
 import asyncio
+import typing
 
 import pytest
 
@@ -21,6 +22,7 @@ from app.ask import service
 from app.ask.relevance import CONFIDENT_ABOVE, REFUSE_BELOW
 from app.ask.service import WEAK_MATCH_PREFIX, answer_concept_question
 from app.corpus.retrieval import HybridResult, ScoredChunk
+from app.llm.base import Caller
 
 CHUNK = ScoredChunk(
     chunk_id="c1",
@@ -83,8 +85,12 @@ def test_a_model_written_weak_answer_is_hedged_too(monkeypatch: pytest.MonkeyPat
         async def complete(self, **_kwargs: object) -> object:
             class Completion:
                 text = "A drawdown compares the latest price with a recent high."
+                call_id = None
 
             return Completion()
+
+        async def record_verdict(self, *_args: object) -> None:
+            return None
 
     result = _run(monkeypatch, (REFUSE_BELOW + CONFIDENT_ABOVE) / 2, llm=Model())
 
@@ -103,13 +109,23 @@ def test_a_looping_model_answer_falls_back_to_the_passages(monkeypatch: pytest.M
     """A loop can quote a sourced figure and pass the evidence check; it is still not text."""
 
     class Model:
-        async def complete(self, **_kwargs: object) -> object:
+        verdicts: typing.ClassVar[list[tuple[object, ...]]] = []
+
+        async def complete(self, **kwargs: object) -> object:
+            assert kwargs["caller"] == Caller(agent="ask", user_id=None)
+
             class Completion:
                 text = LOOP
+                call_id = 9
 
             return Completion()
 
+        async def record_verdict(self, *args: object) -> None:
+            self.verdicts.append(args)
+
     result = _run(monkeypatch, CONFIDENT_ABOVE + 0.1, llm=Model())
+    # Named and judged: the loop is on record as why the passages were used.
+    assert Model.verdicts == [(9, "degenerate_completion")]
 
     assert result.answer_source == "extractive"  # type: ignore[attr-defined]
     assert result.fallback_reason == "degenerate_completion"  # type: ignore[attr-defined]

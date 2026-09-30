@@ -43,7 +43,7 @@ from app.core.logging import get_logger
 from app.corpus.embeddings import BaseEmbedder
 from app.corpus.retrieval import ScoredChunk, hybrid_search
 from app.corpus.vector_store import VectorStore
-from app.llm.base import LLMError, LLMProvider
+from app.llm.base import Caller, LLMError, LLMProvider
 from app.llm.degenerate_text import is_degenerate, repeated_run
 from app.narration.evidence_validator import unsourced_figures
 
@@ -147,7 +147,10 @@ def _extractive(question: str, chunks: tuple[ScoredChunk, ...]) -> str:
 
 
 async def _generated(
-    llm: LLMProvider, question: str, chunks: tuple[ScoredChunk, ...]
+    llm: LLMProvider,
+    question: str,
+    chunks: tuple[ScoredChunk, ...],
+    user_id: str | None = None,
 ) -> tuple[str | None, str]:
     """Ask a model to connect the passages. Returns (text, fallback_reason).
 
@@ -166,16 +169,19 @@ async def _generated(
             system=_SYSTEM_PROMPT,
             user=f"Passages:\n\n{passages}\n\nQuestion: {question}",
             reasoning_effort=None,
+            caller=Caller(agent="ask", user_id=user_id),
         )
     except LLMError as error:
         return None, type(error).__name__
 
     text = completion.text.strip()
     if not text:
+        await llm.record_verdict(completion.call_id, "empty_completion")
         return None, "empty_completion"
     # Before the figures: a loop can carry a sourced number and pass that check.
     if is_degenerate(text):
         log.warning("ask.degenerate_completion", run=(repeated_run(text) or "")[:40])
+        await llm.record_verdict(completion.call_id, "degenerate_completion")
         return None, "degenerate_completion"
 
     # The same check narration applies, with the passages standing in for a
@@ -192,8 +198,10 @@ async def _generated(
     unsourced = unsourced_figures(text, sourced)
     if unsourced:
         log.warning("ask.unsourced_figures", figures=unsourced[:5], question=question[:80])
+        await llm.record_verdict(completion.call_id, "unsourced_figures")
         return None, "unsourced_figures"
 
+    await llm.record_verdict(completion.call_id, "accepted")
     return text, "none"
 
 
@@ -205,6 +213,7 @@ async def answer_concept_question(
     question: str,
     llm: LLMProvider | None = None,
     passages: int = DEFAULT_PASSAGES,
+    user_id: str | None = None,
 ) -> Answer:
     """Retrieve, judge, and either answer from the corpus or refuse."""
     result = await hybrid_search(connection, store, embedder, query=question, limit=passages)
@@ -236,7 +245,7 @@ async def answer_concept_question(
     source, reason = "extractive", "no_llm_configured" if llm is None else "none"
 
     if llm is not None:
-        generated, reason = await _generated(llm, question, result.chunks)
+        generated, reason = await _generated(llm, question, result.chunks, user_id)
         if generated is not None:
             text, source = generated, "llm"
 
@@ -439,6 +448,7 @@ async def answer(
     targets: dict[str, str] | None = None,
     llm: LLMProvider | None = None,
     passages: int = DEFAULT_PASSAGES,
+    user_id: str | None = None,
 ) -> Answer:
     """Route one question and answer it. The entry point the router calls."""
     positions = positions or []
@@ -450,5 +460,11 @@ async def answer(
         )
 
     return await answer_concept_question(
-        connection, store, embedder, question=question, llm=llm, passages=passages
+        connection,
+        store,
+        embedder,
+        question=question,
+        llm=llm,
+        passages=passages,
+        user_id=user_id,
     )

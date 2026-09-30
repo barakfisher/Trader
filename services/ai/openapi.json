@@ -94,6 +94,18 @@
             },
             "title": "Target Weights",
             "type": "object"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
           }
         },
         "required": [
@@ -1193,6 +1205,18 @@
             "description": "symbol -> target weight as a decimal string, e.g. {'VOO': '0.25'}.",
             "title": "Target Weights",
             "type": "object"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
           }
         },
         "required": [
@@ -1885,6 +1909,18 @@
             "minItems": 1,
             "title": "Topics",
             "type": "array"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
           }
         },
         "required": [

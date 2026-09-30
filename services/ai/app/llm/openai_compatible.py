@@ -47,10 +47,12 @@ import httpx
 
 from app.core.logging import get_logger
 from app.llm.base import (
+    Caller,
     LLMCompletion,
     LLMRequestError,
     LLMTimeoutError,
     TokenUsage,
+    Verdict,
 )
 from app.llm.pricing import (
     DEFAULT_UNKNOWN_MODEL_PRICE_USD_PER_MTOK,
@@ -128,6 +130,7 @@ class OpenAICompatibleProvider:
         max_output_tokens: int | None = None,
         temperature: float | None = None,
         reasoning_effort: str | None = None,
+        caller: Caller | None = None,
     ) -> LLMCompletion:
         payload = self._build_payload(
             system=system,
@@ -196,6 +199,9 @@ class OpenAICompatibleProvider:
             payload["reasoning"] = {"effort": effort}
 
         return payload
+
+    async def record_verdict(self, call_id: int | None, verdict: Verdict) -> None:
+        """Nothing is recorded here; see `call_log.RecordingProvider`."""
 
     async def _post_with_one_retry(self, payload: dict[str, Any]) -> httpx.Response:
         url = f"{self._base_url}/chat/completions"

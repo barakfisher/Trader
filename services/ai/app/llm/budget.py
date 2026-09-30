@@ -42,10 +42,12 @@ from redis.asyncio import Redis
 from app.core.logging import get_logger
 from app.llm.base import (
     MICRO_USD_PER_USD,
+    Caller,
     LLMBudgetExceededError,
     LLMCompletion,
     LLMError,
     LLMProvider,
+    Verdict,
 )
 
 log = get_logger("llm.budget")
@@ -156,6 +158,7 @@ class BudgetedProvider:
         max_output_tokens: int | None = None,
         temperature: float | None = None,
         reasoning_effort: str | None = None,
+        caller: Caller | None = None,
     ) -> LLMCompletion:
         if not self.charges_per_token:
             return await self._inner.complete(
@@ -164,6 +167,7 @@ class BudgetedProvider:
                 max_output_tokens=max_output_tokens,
                 temperature=temperature,
                 reasoning_effort=reasoning_effort,
+                caller=caller,
             )
 
         await self._guard.ensure_within_budget()
@@ -174,6 +178,7 @@ class BudgetedProvider:
                 max_output_tokens=max_output_tokens,
                 temperature=temperature,
                 reasoning_effort=reasoning_effort,
+                caller=caller,
             )
         except LLMError as exc:
             if exc.metered_micro_usd > 0:
@@ -202,3 +207,6 @@ class BudgetedProvider:
             cap_micro_usd=self._guard.cap_micro_usd,
         )
         return completion
+
+    async def record_verdict(self, call_id: int | None, verdict: Verdict) -> None:
+        await self._inner.record_verdict(call_id, verdict)

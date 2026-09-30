@@ -57,6 +57,7 @@ async def ask(
             # dependency. NullProvider raises LLMUnavailableError on call, which
             # the service records as a fallback reason like any other.
             llm=getattr(request.app.state, "llm", None),
+            user_id=str(payload.user_id) if payload.user_id else None,
         )
 
     return AskResponse(

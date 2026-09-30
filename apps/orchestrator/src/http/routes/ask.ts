@@ -87,6 +87,7 @@ export function registerAskRoutes(app: Hono<AppEnv>): void {
         await ai.ask(
           {
             question,
+            user_id: userId,
             base_currency: user.base_currency,
             holdings,
             // Symbol -> decimal string, exactly as stored. A weight never

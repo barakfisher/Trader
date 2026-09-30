@@ -77,6 +77,7 @@ async def portfolio_scan(
             llm=llm,
             known_dedupe_keys=payload.known_dedupe_keys,
             excluded_sources=excluded_price_sources(settings.market_data_chain),
+            user_id=str(payload.user_id) if payload.user_id else None,
         )
 
     return PortfolioScanResponse(
@@ -118,6 +119,7 @@ async def topic_scan(
             llm=llm,
             known_dedupe_keys=payload.known_dedupe_keys,
             excluded_sources=excluded_price_sources(settings.market_data_chain),
+            user_id=str(payload.user_id) if payload.user_id else None,
         )
 
     return TopicScanResponse(

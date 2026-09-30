@@ -241,6 +241,11 @@ class Settings(BaseSettings):
     # "unlimited" is the worst way for this setting to fail.
     llm_daily_budget_usd: Decimal = Decimal("5")
 
+    # How long a recorded model call (prompt and completion included, which
+    # hold portfolio data) is kept in `llm_calls` before the next insert
+    # deletes it (decision 87).
+    llm_call_retention_days: int = Field(default=30, ge=1)
+
     # Per-call limits. A narration is a headline plus a short explanation, so the
     # output cap is small on purpose: it bounds both the latency of a scheduled
     # run and the cost of a model that decides to be expansive.

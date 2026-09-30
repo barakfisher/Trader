@@ -395,6 +395,8 @@ export interface components {
             target_weights?: {
                 [key: string]: string;
             };
+            /** User Id */
+            user_id?: string | null;
         };
         /**
          * AskResponse
@@ -990,6 +992,8 @@ export interface components {
             target_weights?: {
                 [key: string]: string;
             };
+            /** User Id */
+            user_id?: string | null;
         };
         /** PortfolioScanResponse */
         PortfolioScanResponse: {
@@ -1343,6 +1347,8 @@ export interface components {
             known_dedupe_keys?: string[];
             /** Topics */
             topics: components["schemas"]["TopicScanTopic"][];
+            /** User Id */
+            user_id?: string | null;
         };
         /** TopicScanResponse */
         TopicScanResponse: {
