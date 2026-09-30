@@ -13,14 +13,21 @@
 # the holdings themselves are gone. Point it at a stack you are willing to reset.
 #
 # Usage: bash scripts/smoke-test.sh [orchestrator_url]
+#
+# SMOKE_ENV_FILE names the file holding APP_PASSPHRASE and INTERNAL_API_KEY
+# (default: the repository's .env), and SMOKE_ORIGIN the Origin the requests
+# claim (default: the compose web app's). Against the kind cluster:
+#   SMOKE_ENV_FILE=infra/k8s/overlays/kind/secrets.env \
+#   SMOKE_ORIGIN=http://traders.localhost bash scripts/smoke-test.sh http://127.0.0.1:8089
 set -euo pipefail
 
 BASE_URL="${1:-http://localhost:8080}"
+ORIGIN="${SMOKE_ORIGIN:-http://localhost:5173}"
 COOKIE_JAR="$(mktemp)"
 trap 'rm -f "$COOKIE_JAR"' EXIT
 
-# shellcheck disable=SC1091
-set -a; source "$(dirname "$0")/../.env"; set +a
+# shellcheck disable=SC1090,SC1091
+set -a; source "${SMOKE_ENV_FILE:-$(dirname "$0")/../.env}"; set +a
 
 say() { printf '\n=== %s\n' "$1"; }
 fail() { printf 'FAIL: %s\n' "$1" >&2; exit 1; }
@@ -31,18 +38,18 @@ curl -fsS "$BASE_URL/readyz" | tee /dev/stderr | grep -q '"status"' || fail "orc
 say "login"
 curl -fsS -c "$COOKIE_JAR" -X POST "$BASE_URL/auth/login" \
   -H 'content-type: application/json' \
-  -H 'origin: http://localhost:5173' \
+  -H "origin: $ORIGIN" \
   -d "{\"passphrase\":\"${APP_PASSPHRASE}\"}" > /dev/null || fail "login rejected"
 
 say "login with a wrong passphrase is rejected"
 status=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE_URL/auth/login" \
-  -H 'content-type: application/json' -H 'origin: http://localhost:5173' \
+  -H 'content-type: application/json' -H "origin: $ORIGIN" \
   -d '{"passphrase":"definitely-not-it"}')
 [ "$status" = "401" ] || fail "expected 401 for a wrong passphrase, got $status"
 
 say "import preview"
 preview=$(curl -fsS -b "$COOKIE_JAR" -X POST "$BASE_URL/imports/preview" \
-  -H 'origin: http://localhost:5173' \
+  -H "origin: $ORIGIN" \
   -F "file=@$(dirname "$0")/../data/fixtures/demo-portfolio.csv")
 preview_id=$(printf '%s' "$preview" | python3 -c 'import json,sys; print(json.load(sys.stdin)["previewId"])')
 lines=$(printf '%s' "$preview" | python3 -c 'import json,sys; rows=json.load(sys.stdin)["rows"]; print(json.dumps([r["line"] for r in rows if r["status"]=="ok"]))')
@@ -50,7 +57,7 @@ printf 'preview %s, importable lines: %s\n' "$preview_id" "$lines"
 
 say "import commit"
 curl -fsS -b "$COOKIE_JAR" -X POST "$BASE_URL/imports/commit" \
-  -H 'content-type: application/json' -H 'origin: http://localhost:5173' \
+  -H 'content-type: application/json' -H "origin: $ORIGIN" \
   -d "{\"previewId\":\"$preview_id\",\"mode\":\"replace\",\"lines\":$lines}" | tee /dev/stderr
 
 say "valued portfolio"
@@ -185,7 +192,7 @@ status=$(curl -s -o /dev/null -w '%{http_code}' -b "$COOKIE_JAR" -X POST "$BASE_
 
 say "a topic resolves to candidates, each with a quoted reason"
 curl -fsS -b "$COOKIE_JAR" -X POST "$BASE_URL/topics/resolve" \
-  -H 'content-type: application/json' -H 'origin: http://localhost:5173' \
+  -H 'content-type: application/json' -H "origin: $ORIGIN" \
   -d '{"topic":"uranium mining"}' \
   | python3 -c '
 import json, sys
@@ -208,7 +215,7 @@ print(f"  {verdict}, {profiles} profiles ({state}), semantic={semantic}: {top}")
 
 say "an empty topic is refused before it reaches the AI service"
 status=$(curl -s -o /dev/null -w '%{http_code}' -b "$COOKIE_JAR" -X POST "$BASE_URL/topics/resolve" \
-  -H 'content-type: application/json' -H 'origin: http://localhost:5173' -d '{"topic":"  "}')
+  -H 'content-type: application/json' -H "origin: $ORIGIN" -d '{"topic":"  "}')
 [ "$status" = "400" ] || fail "expected 400 for an empty topic, got $status"
 
 printf '\nAll smoke checks passed.\n'

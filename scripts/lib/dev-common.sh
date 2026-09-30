@@ -120,3 +120,24 @@ print_urls() {
   printf '%s              use 127.0.0.1, not localhost%s\n' "$C_DIM" "$C_RESET"
   echo
 }
+
+# The tag for images built from this checkout: the short commit hash, plus
+# "-dirty-<hash of the uncommitted changes>" when the tree has any. The second
+# hash is what makes a redeploy notice an edit: with a bare "-dirty", every
+# build from an edited tree got the same tag, Kubernetes saw an unchanged
+# Deployment, and the pod kept running the previous image. Same uncommitted
+# content, same tag - so an unchanged tree does not roll the pods for nothing.
+image_tag() {
+  local commit dirty
+  commit="$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
+  if [ -z "$(git -C "$REPO_ROOT" status --porcelain)" ]; then
+    echo "$commit"
+    return
+  fi
+  dirty="$(
+    cd "$REPO_ROOT"
+    git diff HEAD
+    git ls-files --others --exclude-standard -z | xargs -0 -I{} sh -c 'echo "{}"; cat "{}"'
+  )"
+  echo "$commit-dirty-$(printf '%s' "$dirty" | shasum | cut -c1-8)"
+}

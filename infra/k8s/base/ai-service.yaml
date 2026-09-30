@@ -1,0 +1,91 @@
+# The AI service (FastAPI): market data, analysis, narration, retrieval.
+#
+# A Deployment keeps a number of identical pods running from one image. If a pod
+# dies it starts another; when the image tag changes it replaces the pods - by
+# default a rolling update, starting a new pod before stopping an old one, so
+# there is no gap. This service keeps no state of its own (its cache, budget and
+# rate limits live in Redis), so any number of copies can run side by side; the
+# autoscaler in a later PR relies on that.
+#
+# The Service `ai-service:8000` is how the orchestrator reaches it
+# (AI_SERVICE_URL); with several pods it spreads requests across the ready ones.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-service
+spec:
+  selector:
+    app: ai-service
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-service
+  template:
+    metadata:
+      labels:
+        app: ai-service
+    spec:
+      # Kubernetes has no depends_on: wait until the migration Job has brought
+      # the schema to this image's head (scripts/wait_for_schema.py). Runs on
+      # every start, so a pod restarted long after the deploy is still guarded.
+      initContainers:
+        - name: wait-for-schema
+          image: traders/ai-service
+          command: ['python', 'scripts/wait_for_schema.py']
+          envFrom:
+            - configMapRef: { name: traders-config }
+            - secretRef: { name: traders-secrets }
+          resources:
+            requests: { cpu: 10m, memory: 64Mi }
+            limits: { memory: 256Mi }
+      containers:
+        - name: ai-service
+          image: traders/ai-service
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef: { name: traders-config }
+            - secretRef: { name: traders-secrets }
+          # Three questions the node keeps asking the container:
+          # - startup: has it finished starting? Until it has, the other two
+          #   are not asked, so a slow start is not mistaken for a hang
+          #   (here: up to 30 x 2 s).
+          # - liveness: is the process alive? Three failures in a row and the
+          #   container is restarted. /healthz depends on nothing, so a
+          #   restart is never a response to Redis being down - restarting
+          #   would not fix that.
+          # - readiness: should the Service send it requests? /readyz answers
+          #   503 when Redis is unreachable; the pod is taken out of rotation
+          #   until it recovers, and not restarted.
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          # requests: what the scheduler reserves for the pod, and the
+          # baseline the autoscaler measures CPU against. limits.memory: past
+          # this the container is stopped rather than starving its neighbours.
+          # No CPU limit, deliberately: a limit throttles even an idle machine.
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }

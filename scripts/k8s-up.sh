@@ -8,12 +8,14 @@
 #      and copies them into the cluster - kind's node is a separate container
 #      with its own image store, and cannot see the images on your Mac.
 #   3. Writes infra/k8s/overlays/kind/secrets.env on first run: fresh random
-#      secrets, and the sign-in passphrase copied from your .env. Kept after
-#      that - the database password in particular is fixed when Postgres first
-#      creates its data directory.
+#      secrets, including the cluster's own sign-in passphrase, printed once
+#      (read it again with: grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.env).
+#      The cluster needs no .env. Kept after that - the database password in
+#      particular is fixed when Postgres first creates its data directory.
 #   4. Applies the manifests for the commit being deployed, re-running the
 #      migrate / corpus / universe Jobs.
-#   5. Waits for Postgres, Redis and the migration, then reports the loaders.
+#   5. Waits for Postgres, Redis and the migration, reports the loaders, then
+#      waits for the three services to be ready.
 #
 # Every kubectl call names the context `kind-traders`, so this script cannot
 # touch any other cluster your kubeconfig knows about.
@@ -46,7 +48,6 @@ require_command docker "Docker Desktop: https://www.docker.com/products/docker-d
 require_command kind "brew install kind  (https://kind.sigs.k8s.io)"
 require_command kubectl "brew install kubectl"
 docker info > /dev/null 2>&1 || fail "Docker is installed but not running. Start Docker Desktop and try again."
-require_env_file
 
 # --- 1. the cluster ----------------------------------------------------------
 if kind get clusters 2> /dev/null | grep -qx "$CLUSTER"; then
@@ -65,10 +66,7 @@ else
 fi
 
 # --- 2. images ---------------------------------------------------------------
-if [ -z "${IMAGE_TAG:-}" ]; then
-  IMAGE_TAG="$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
-  [ -z "$(git -C "$REPO_ROOT" status --porcelain)" ] || IMAGE_TAG="$IMAGE_TAG-dirty"
-fi
+IMAGE_TAG="${IMAGE_TAG:-$(image_tag)}"
 export IMAGE_TAG
 bash "$REPO_ROOT/scripts/build-images.sh"
 say "Loading images into the cluster"
@@ -81,8 +79,7 @@ if [ -f "$SECRETS_FILE" ]; then
   ok "using existing $(basename "$SECRETS_FILE")"
 else
   say "Generating $(basename "$SECRETS_FILE") (git-ignored; kept from now on)"
-  passphrase="$(grep -E '^APP_PASSPHRASE=' "$REPO_ROOT/.env" | head -1 | cut -d= -f2-)"
-  [ -n "$passphrase" ] || fail "APP_PASSPHRASE is empty in .env"
+  passphrase="cluster-$(openssl rand -hex 6)"
   db_password="$(openssl rand -hex 16)"
   umask 077
   cat > "$SECRETS_FILE" << EOF
@@ -92,6 +89,7 @@ INTERNAL_API_KEY=$(openssl rand -hex 16)
 POSTGRES_PASSWORD=$db_password
 DATABASE_URL=postgresql://traders:$db_password@postgres:5432/traders
 EOF
+  printf '     %sSign-in passphrase for the cluster: %s%s%s\n' "$C_DIM" "$C_BOLD" "$passphrase" "$C_RESET"
 fi
 
 # --- 4. apply ----------------------------------------------------------------
@@ -156,5 +154,16 @@ for job in corpus universe; do
   fi
 done
 
+say "Waiting for the services"
+# `rollout status` returns once the Deployment's new pods pass their readiness
+# probes - the same signal the Service uses to send them traffic.
+for deployment in ai-service orchestrator web; do
+  kc rollout status "deployment/$deployment" --timeout=300s
+done
+
 say "Cluster state"
 kc get pods
+echo
+ok "Traders is running in the cluster. Until the Ingress exists, reach it with:"
+echo "     kubectl --context $CONTEXT -n $NAMESPACE port-forward service/web 8088:80"
+echo "     then open http://127.0.0.1:8088"

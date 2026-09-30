@@ -2,11 +2,17 @@
 
 `/healthz` answers as long as the process is up. `/readyz` actually touches Redis
 and reports the provider chain, because "ready" means "can serve a quote".
+
+A degraded `/readyz` answers 503, not 200 with "degraded" in the body: a
+Kubernetes readiness probe reads only the status code, so a 200 would keep a
+pod that cannot reach Redis - every quote, cache and budget call fails without
+it - in rotation. Redis is this service's own store; no other service is
+consulted, so one service's outage cannot take this one out of rotation.
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 
 from app.models import HealthResponse
 
@@ -21,7 +27,7 @@ async def healthz() -> HealthResponse:
 
 
 @router.get("/readyz", response_model=HealthResponse)
-async def readyz(request: Request) -> HealthResponse:
+async def readyz(request: Request, response: Response) -> HealthResponse:
     checks: dict[str, str] = {}
 
     redis = getattr(request.app.state, "redis", None)
@@ -40,4 +46,6 @@ async def readyz(request: Request) -> HealthResponse:
     degraded = any(
         value.startswith("error") or value == "not initialised" for value in checks.values()
     )
+    if degraded:
+        response.status_code = 503
     return HealthResponse(status="degraded" if degraded else "ok", version=VERSION, checks=checks)

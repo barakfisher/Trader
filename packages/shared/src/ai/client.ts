@@ -75,6 +75,16 @@ export type DiscoveredPhrase = components['schemas']['DiscoveredPhrase'];
  */
 const SCAN_TIMEOUT_MS = 5 * 60_000;
 
+/**
+ * A health check is itself read by a Kubernetes readiness probe (the
+ * orchestrator's /readyz asks the AI service's), so it must answer well inside
+ * the probe's own timeout. With the default 30 s, a hung AI service would make
+ * the orchestrator's probe time out too, and take it out of rotation - the
+ * cascade /readyz is written to avoid. A health answer slower than this is a
+ * failed one.
+ */
+export const HEALTH_TIMEOUT_MS = 2_000;
+
 export class AiServiceError extends Error {
   constructor(
     message: string,
@@ -155,7 +165,11 @@ export class AiClient {
   }
 
   health(requestId?: string): Promise<HealthResponse> {
-    return this.request('/readyz', healthResponseSchema, { method: 'GET', requestId });
+    return this.request('/readyz', healthResponseSchema, {
+      method: 'GET',
+      requestId,
+      timeoutMs: HEALTH_TIMEOUT_MS,
+    });
   }
 
   /**

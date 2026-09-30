@@ -1,0 +1,88 @@
+# The orchestrator (Hono, TypeScript): the browser-facing API, the runs
+# endpoint CronJobs will call, and the proposal workflows.
+#
+# See ai-service.yaml for what a Deployment, a Service and the three probes are.
+# Two things differ here, both for the same reason: this process holds state in
+# memory - import previews (services/previewStore.ts) - so there must never be
+# two of it.
+#
+# - replicas: 1, and no autoscaler.
+# - strategy: Recreate. The default rolling update starts the new pod before
+#   stopping the old one, so for a few seconds two would run, each with its own
+#   previews: an import previewed on one and confirmed on the other would find
+#   nothing. Recreate stops the old pod first - a few seconds with no API during
+#   a deploy, the honest cost of single-copy state until previews move to Redis.
+#
+# SCHEDULER_ENABLED=false (config.env): CronJobs trigger runs here, not the
+# in-process timer.
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrator
+spec:
+  selector:
+    app: orchestrator
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: orchestrator
+  template:
+    metadata:
+      labels:
+        app: orchestrator
+    spec:
+      # The orchestrator's image has no Alembic, so the schema check borrows
+      # the AI service's image - an init container may use any image.
+      initContainers:
+        - name: wait-for-schema
+          image: traders/ai-service
+          command: ['python', 'scripts/wait_for_schema.py']
+          envFrom:
+            - configMapRef: { name: traders-config }
+            - secretRef: { name: traders-secrets }
+          resources:
+            requests: { cpu: 10m, memory: 64Mi }
+            limits: { memory: 256Mi }
+      containers:
+        - name: orchestrator
+          image: traders/orchestrator
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef: { name: traders-config }
+            - secretRef: { name: traders-secrets }
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # /readyz answers 503 only when Postgres is unreachable. It also
+          # reports the AI service, in the body only: an AI outage must not take
+          # this pod out of rotation, or sign-in and every stored page would go
+          # with it. Its AI check gives up after HEALTH_TIMEOUT_MS (2 s,
+          # packages/shared/src/ai/client.ts), inside this probe's timeout.
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 2
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }

@@ -10,7 +10,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AiClient, AiServiceError } from '../src/ai/client.js';
+import { AiClient, AiServiceError, HEALTH_TIMEOUT_MS } from '../src/ai/client.js';
 
 const OPTIONS = { baseUrl: 'http://ai.test', internalApiKey: 'test-key' };
 
@@ -108,6 +108,34 @@ describe('AiClient valid responses', () => {
     const health = await new AiClient(OPTIONS).health();
     expect(health.status).toBe('degraded');
     expect(health.checks).toEqual({ db: 'ok' });
+  });
+});
+
+describe('AiClient health', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('gives up on a hung service after HEALTH_TIMEOUT_MS, not the client default', async () => {
+    vi.useFakeTimers();
+    // A service that accepts the connection and never answers.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () =>
+              reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+            );
+          }),
+      ),
+    );
+    const pending = captureError(new AiClient({ ...OPTIONS, timeoutMs: 60_000 }).health());
+    await vi.advanceTimersByTimeAsync(HEALTH_TIMEOUT_MS);
+    const error = await pending;
+    expect(error.status).toBe(504);
+    expect(error.message).toContain(`${HEALTH_TIMEOUT_MS}ms`);
   });
 });
 
