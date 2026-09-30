@@ -2,13 +2,23 @@ import { observer } from 'mobx-react-lite';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft, ShieldCheck } from 'lucide-react';
 
-import type { AdminAuditEntry, AdminRun, UniverseGap } from '@traders/shared';
+import type {
+  AdminAuditEntry,
+  AdminRun,
+  UniverseGap,
+  UniverseReconciliation,
+} from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
 import { Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { gapExplanation, gapSubject, isRealGap } from '../lib/universeGaps.ts';
-import { useAdminAuditQuery, useAdminGapsQuery, useAdminRunsQuery } from '../queries/admin.ts';
+import {
+  useAdminAuditQuery,
+  useAdminGapsQuery,
+  useAdminRunsQuery,
+  useAdminUniverseQuery,
+} from '../queries/admin.ts';
 import { useStore } from '../stores/context.tsx';
 
 const STATUS_TONE: Record<string, string> = {
@@ -49,6 +59,7 @@ export const AdminPage = observer(function AdminPage() {
 
       {isAdmin ? (
         <>
+          <UniverseCard />
           <GapsCard />
           <RunsCard />
           <AuditCard />
@@ -115,6 +126,82 @@ function RunRow({ run }: { run: AdminRun }) {
       <td className="py-2 pr-3">{run.trigger}</td>
       <td className="py-2 break-all font-mono text-xs text-text-muted">{run.runKey}</td>
     </tr>
+  );
+}
+
+const RECONCILED: Record<UniverseReconciliation['what'], string> = {
+  members: 'Members',
+  etf_holdings: 'ETF holdings',
+};
+
+const count = new Intl.NumberFormat('en-US');
+
+/**
+ * The universe: the snapshot the loader last read, what the database holds,
+ * and each difference named by the loader. Only a remainder nobody explained
+ * is shown as a problem.
+ */
+function UniverseCard() {
+  const universe = useAdminUniverseQuery();
+  const data = universe.data;
+
+  return (
+    <Card title="Universe">
+      {universe.isPending && <Spinner label="Loading the universe…" />}
+      {universe.error && (
+        <ErrorNote
+          message={errorMessage(universe.error, 'Could not load the universe status.')}
+          onRetry={() => void universe.refetch()}
+        />
+      )}
+      {data && (
+        <div className="space-y-3 text-sm">
+          <p>
+            {count.format(data.database.profiles)} profiled ({count.format(data.database.equities)}{' '}
+            equities, {count.format(data.database.etfs)} ETFs), {count.format(data.database.embedded)}{' '}
+            embedded, {count.format(data.database.etfHoldings)} ETF holdings.
+          </p>
+          {data.lastLoad ? (
+            <p className="text-text-muted">
+              Snapshot of {formatExactTime(data.lastLoad.snapshotAsOf)}, last loaded{' '}
+              {formatAge(data.lastLoad.loadedAt)}.
+            </p>
+          ) : (
+            <p className="text-warn">
+              No load has been recorded, so there is nothing to compare the database against. The
+              universe loader records one every time it runs.
+            </p>
+          )}
+          {data.reconciliation.map((row) => (
+            <ReconciliationRow key={row.what} row={row} />
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ReconciliationRow({ row }: { row: UniverseReconciliation }) {
+  return (
+    <div>
+      <p className="font-medium">
+        {RECONCILED[row.what]}: {count.format(row.inSnapshot)} in the snapshot,{' '}
+        {count.format(row.inDatabase)} in the database
+      </p>
+      <ul className="ml-4 list-disc text-text-muted">
+        {row.explained.map((difference) => (
+          <li key={difference.reason}>
+            {count.format(difference.count)}: {difference.reason}
+          </li>
+        ))}
+        {row.unexplained !== 0 && (
+          <li className="text-warn">
+            {count.format(Math.abs(row.unexplained))}{' '}
+            {row.unexplained > 0 ? 'missing from' : 'more in'} the database, unexplained
+          </li>
+        )}
+      </ul>
+    </div>
   );
 }
 

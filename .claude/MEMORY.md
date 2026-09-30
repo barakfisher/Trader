@@ -1277,6 +1277,18 @@ failure they prevent.
     `unavailable` an installation fault). Not from the metadata run or discovery - the system's
     own searches would bury the users'. One row per thing per user per local day, **counted**
     (`occurrences`, `last_seen_at`), and a failed write is logged, never passed to the user's flow.
+86. **The universe status reconciles against the loader's own account, stored per load** (M8 PR
+    4). `scripts/ingest_universe.py` writes a `universe_loads` row each run: the manifest it read
+    and its counts - members, profiled, undescribed, no currency; holding rows, stored,
+    implausible, **of an unprofiled fund**. The page checks `members = profiled + reasons` and
+    `holding_rows = stored + reasons` against *live* database counts and flags only the
+    remainder. Rejected: comparing the database to the manifest directly - that shows 71 and 33
+    "missing" on day one, and a panel that is always red is ignored. **Measuring it found a silent
+    drop:** 14 holding rows (BULZ 10, GDXD 2, GDXU 2 - funds with no description) were skipped by
+    `load_holdings` without being counted, so 14 of the 33 had no explanation anywhere; the
+    loader now counts them. A negative remainder (the database holds *more*) is expected after an
+    on-demand profile (M8 PR 7) and is shown as such. The orchestrator reads only the database:
+    the manifest is a file inside the AI image, so the loader copies it into the row.
 
 ---
 

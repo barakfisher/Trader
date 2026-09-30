@@ -99,6 +99,27 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('the universe status', () => {
+    it('counts profiles by asset class and reads the latest load back as JSON', async () => {
+      const counts = await queries.countUniverse();
+      for (const value of Object.values(counts)) expect(typeof value).toBe('number');
+      expect(counts.equities + counts.etfs).toBeLessThanOrEqual(counts.profiles);
+
+      await getPool().query(
+        `INSERT INTO universe_loads (snapshot_as_of, source, manifest, report, loaded_at)
+         VALUES ('2026-09-24T12:04:35Z', 'test', '{"counts": {"kept": 3}}', '{"members": 3}',
+                 now() + interval '1 day')`,
+      );
+      try {
+        const load = await queries.getLatestUniverseLoad();
+        expect(load).toMatchObject({ source: 'test', report: { members: 3 } });
+        expect(load?.manifest).toEqual({ counts: { kept: 3 } });
+      } finally {
+        await getPool().query(`DELETE FROM universe_loads WHERE source = 'test'`);
+      }
+    });
+  });
+
   describe('listSnapshots', () => {
     it('returns the calendar date that was stored, whatever the process timezone', async () => {
       // East of UTC is where a DATE parsed to local midnight and printed in UTC

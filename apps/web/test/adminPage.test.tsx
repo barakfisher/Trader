@@ -59,6 +59,25 @@ describe('the admin page', () => {
               },
             ],
           })
+        : path === '/admin/universe'
+          ? Promise.resolve({
+              lastLoad: {
+                loadedAt: '2026-09-30T21:47:00Z',
+                snapshotAsOf: '2026-09-24T12:04:35Z',
+                source: 'yahoo',
+                manifestCounts: { kept: 5294 },
+              },
+              database: { profiles: 5223, equities: 2534, etfs: 2689, embedded: 5223, etfHoldings: 16363 },
+              reconciliation: [
+                {
+                  what: 'etf_holdings',
+                  inSnapshot: 16396,
+                  inDatabase: 16360,
+                  explained: [{ reason: 'weight is not a fraction of the fund', count: 19 }],
+                  unexplained: 17,
+                },
+              ],
+            })
         : path === '/admin/gaps'
           ? Promise.resolve({
               gaps: [
@@ -111,6 +130,13 @@ describe('the admin page', () => {
     expect(screen.getByText('12 s')).toBeTruthy();
   });
 
+  it('names each difference in the universe and flags only what is unexplained', async () => {
+    renderAt('/admin', ADMIN);
+    expect(await screen.findByText(/ETF holdings: 16,396 in the snapshot, 16,360 in the database/)).toBeTruthy();
+    expect(screen.getByText('19: weight is not a fraction of the fund')).toBeTruthy();
+    expect(screen.getByText('17 missing from the database, unexplained')).toBeTruthy();
+  });
+
   it('shows a universe gap, counted, with why it is one', async () => {
     renderAt('/admin', ADMIN);
     expect(await screen.findByText('TINY')).toBeTruthy();
@@ -130,6 +156,7 @@ describe('the admin page', () => {
     expect(get).not.toHaveBeenCalledWith('/admin/runs');
     expect(get).not.toHaveBeenCalledWith('/admin/audit');
     expect(get).not.toHaveBeenCalledWith('/admin/gaps');
+    expect(get).not.toHaveBeenCalledWith('/admin/universe');
   });
 
   it('says a run is still going rather than giving it a duration', () => {
