@@ -130,3 +130,7 @@ INSERT INTO topic_instruments (topic_id, user_id, instrument_id, source, confide
   ('40000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000001', 'resolver', 'confident', 'It mines uranium.', '[]'::jsonb),
   ('40000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000002', 'resolver', 'weak', 'A fund.', '[]'::jsonb),
   ('40000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000006', 'user', NULL, NULL, '[]'::jsonb);
+
+-- An audit row, so the round trip meets 0026's refusal to discard the audit.
+INSERT INTO admin_audit (admin_user_id, action, detail, ip_address) VALUES
+  ('00000000-0000-0000-0000-00000000000a', 'POST /admin/example', '{"body": {}}', '10.0.0.1');

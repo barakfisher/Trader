@@ -59,7 +59,21 @@ describe('the admin page', () => {
               },
             ],
           })
-        : new Promise(() => {}),
+        : path === '/admin/audit'
+          ? Promise.resolve({
+              entries: [
+                {
+                  id: '1',
+                  adminUserId: 'u',
+                  action: 'POST /admin/universe/rescreen',
+                  detail: {},
+                  ipAddress: '10.0.0.7',
+                  requestId: 'r',
+                  occurredAt: '2026-10-01T06:00:00Z',
+                },
+              ],
+            })
+          : new Promise(() => {}),
     );
     window.scrollTo = () => {};
   });
@@ -83,10 +97,17 @@ describe('the admin page', () => {
     expect(screen.getByText('12 s')).toBeTruthy();
   });
 
+  it('shows what administrators have done, and from where', async () => {
+    renderAt('/admin', ADMIN);
+    expect(await screen.findByText('POST /admin/universe/rescreen')).toBeTruthy();
+    expect(screen.getByText(/from 10\.0\.0\.7/)).toBeTruthy();
+  });
+
   it('asks the server for nothing when the account is not an admin', async () => {
     renderAt('/admin', USER);
     expect(await screen.findByText('Administrators only')).toBeTruthy();
     expect(get).not.toHaveBeenCalledWith('/admin/runs');
+    expect(get).not.toHaveBeenCalledWith('/admin/audit');
   });
 
   it('says a run is still going rather than giving it a duration', () => {

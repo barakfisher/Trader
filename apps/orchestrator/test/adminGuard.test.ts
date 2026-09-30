@@ -30,6 +30,8 @@ vi.mock('../src/db/pool.js', () => ({
 vi.mock('../src/db/queries.js', () => ({
   getUser: vi.fn(async () => ADMIN),
   listAllRuns: vi.fn(async () => []),
+  listAdminAudit: vi.fn(async () => []),
+  insertAdminAudit: vi.fn(async () => undefined),
 }));
 
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');

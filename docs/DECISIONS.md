@@ -94,3 +94,4 @@ while this file is out of date.
 | 81 | CronJobs "ask often" and let the run key decide, exactly like `scheduler.ts` |
 | 82 | The AI service autoscales 1-3 copies on CPU; the orchestrator never does |
 | 83 | The admin role is read from `users` on every `/admin/*` request, never carried in the cookie |
+| 84 | `admin_audit` is append-only by trigger, and each row is written *before* its action runs |

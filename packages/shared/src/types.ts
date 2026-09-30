@@ -237,6 +237,23 @@ export interface AdminRunsResponse {
   runs: AdminRun[];
 }
 
+/** One admin action, as recorded before it ran. The table is append-only. */
+export interface AdminAuditEntry {
+  id: string;
+  adminUserId: string;
+  /** `METHOD /path`, e.g. `POST /admin/universe/rescreen`. */
+  action: string;
+  detail: unknown;
+  /** The address the nearest proxy saw, or null when there was none to trust. */
+  ipAddress: string | null;
+  requestId: string | null;
+  occurredAt: string;
+}
+
+export interface AdminAuditResponse {
+  entries: AdminAuditEntry[];
+}
+
 export interface ApiError {
   error: string;
   message: string;

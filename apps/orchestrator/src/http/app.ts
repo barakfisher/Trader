@@ -19,7 +19,8 @@ import type { Notifier } from '../notify/notifier.js';
 import type { Config } from '../config.js';
 import { logger } from '../logger.js';
 import { SESSION_COOKIE, verifySessionToken } from './auth.js';
-import { getUser } from '../db/queries.js';
+import { getUser, insertAdminAudit } from '../db/queries.js';
+import { auditEntry } from './adminAudit.js';
 import { forbidden, toErrorResponse, unauthorized, ApiProblem } from './errors.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerAuthRoutes } from './routes/auth.js';
@@ -203,6 +204,20 @@ export function createApp(
     if (!userId) throw unauthorized();
     const user = await getUser(userId);
     if (user?.role !== 'admin') throw forbidden('this account is not an administrator');
+    // Every admin request that can change something is recorded before it
+    // runs, and does not run if the record cannot be written (decision 84).
+    // Here rather than in each route for the same reason as the role check:
+    // a new admin action is audited by being an admin route.
+    if (!SAFE_METHODS.has(context.req.method)) {
+      const entry = await auditEntry(context);
+      await insertAdminAudit({
+        adminUserId: userId,
+        action: entry.action,
+        detail: entry.detail,
+        ipAddress: entry.ipAddress,
+        requestId: context.get('requestId'),
+      });
+    }
     return next();
   });
 

@@ -37,6 +37,12 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "intents holds revoked rows; downgrading would discard them",
         "DELETE FROM intents WHERE revoked_at IS NOT NULL",
     ),
+    # The admin audit cannot be deleted while its triggers stand, so clearing
+    # it takes the deliberate DDL act the error names (decision 84).
+    "0026_admin_audit": (
+        "admin_audit holds rows; downgrading would discard the audit",
+        "ALTER TABLE admin_audit DISABLE TRIGGER USER; DELETE FROM admin_audit",
+    ),
 }
 
 #: `col = ANY (ARRAY['a'::text, 'b'::text])` as `pg_get_constraintdef` prints it.

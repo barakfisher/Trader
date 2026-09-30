@@ -2,12 +2,12 @@ import { observer } from 'mobx-react-lite';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft, ShieldCheck } from 'lucide-react';
 
-import type { AdminRun } from '@traders/shared';
+import type { AdminAuditEntry, AdminRun } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
 import { Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
-import { useAdminRunsQuery } from '../queries/admin.ts';
+import { useAdminAuditQuery, useAdminRunsQuery } from '../queries/admin.ts';
 import { useStore } from '../stores/context.tsx';
 
 const STATUS_TONE: Record<string, string> = {
@@ -47,7 +47,10 @@ export const AdminPage = observer(function AdminPage() {
       </header>
 
       {isAdmin ? (
-        <RunsCard />
+        <>
+          <RunsCard />
+          <AuditCard />
+        </>
       ) : (
         <EmptyState
           title="Administrators only"
@@ -110,6 +113,49 @@ function RunRow({ run }: { run: AdminRun }) {
       <td className="py-2 pr-3">{run.trigger}</td>
       <td className="py-2 break-all font-mono text-xs text-text-muted">{run.runKey}</td>
     </tr>
+  );
+}
+
+/**
+ * What administrators have done here. Written before each action ran, and
+ * append-only in the database, so this is a record nobody - including an
+ * admin - can edit from the application.
+ */
+function AuditCard() {
+  const audit = useAdminAuditQuery();
+
+  return (
+    <Card title="Admin actions">
+      {audit.isPending && <Spinner label="Loading admin actions…" />}
+      {audit.error && (
+        <ErrorNote
+          message={errorMessage(audit.error, 'Could not load the admin actions.')}
+          onRetry={() => void audit.refetch()}
+        />
+      )}
+      {audit.data && audit.data.entries.length === 0 && (
+        <p className="text-sm text-text-muted">No admin action has been taken yet.</p>
+      )}
+      {audit.data && audit.data.entries.length > 0 && (
+        <ul className="divide-y divide-border-subtle text-sm">
+          {audit.data.entries.map((entry) => (
+            <AuditItem key={entry.id} entry={entry} />
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function AuditItem({ entry }: { entry: AdminAuditEntry }) {
+  return (
+    <li className="flex flex-wrap items-baseline justify-between gap-2 py-2">
+      <span className="font-mono text-xs">{entry.action}</span>
+      <span className="text-xs text-text-muted" title={formatExactTime(entry.occurredAt)}>
+        {formatAge(entry.occurredAt)}
+        {entry.ipAddress ? ` from ${entry.ipAddress}` : ''}
+      </span>
+    </li>
   );
 }
 

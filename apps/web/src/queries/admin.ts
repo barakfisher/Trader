@@ -8,7 +8,7 @@
 
 import { queryOptions, useQuery } from '@tanstack/react-query';
 
-import type { AdminRunsResponse } from '@traders/shared';
+import type { AdminAuditResponse, AdminRunsResponse } from '@traders/shared';
 
 import { api } from '../api/client.ts';
 import { queryKeys } from './queryKeys.ts';
@@ -20,4 +20,13 @@ export const adminRunsQuery = queryOptions({
 
 export function useAdminRunsQuery() {
   return useQuery(adminRunsQuery);
+}
+
+export const adminAuditQuery = queryOptions({
+  queryKey: queryKeys.adminAudit,
+  queryFn: () => api.get<AdminAuditResponse>('/admin/audit'),
+});
+
+export function useAdminAuditQuery() {
+  return useQuery(adminAuditQuery);
 }
