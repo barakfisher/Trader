@@ -23,6 +23,7 @@ resources:
   - orchestrator.yaml
   - web.yaml
   - ingress.yaml
+  - cronjobs.yaml
 
 # The non-secret settings, from a committed env file. Kustomize appends a hash
 # of the contents to the name (traders-config-7h2k...), and rewrites every
@@ -56,4 +57,11 @@ patches:
     patch: |-
       - op: add
         path: /spec/template/spec/enableServiceLinks
+        value: false
+  # A CronJob holds its pod spec one level deeper, inside the Job it creates.
+  - target:
+      kind: CronJob
+    patch: |-
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/enableServiceLinks
         value: false

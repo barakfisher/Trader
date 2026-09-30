@@ -26,6 +26,7 @@ infra/k8s/
     config.env                 non-secret settings (keyless defaults)
     namespace.yaml, postgres.yaml, redis.yaml, jobs.yaml
     ai-service.yaml, orchestrator.yaml, web.yaml, ingress.yaml
+    cronjobs.yaml              one CronJob per run kind
   overlays/kind/             what only this machine has
     kustomization.yaml         the Secret, from secrets.env (git-ignored, generated)
     universe-descriptions.yaml mounts this machine's licensed descriptions into one Job
@@ -56,6 +57,7 @@ so `kubectl kustomize infra/k8s/.deploy` prints exactly what gets applied.
 | IngressClass `traefik` | names a controller; marked as the cluster default | the app's Ingress names no controller, so it is portable |
 | ServiceAccount + ClusterRole + binding (RBAC) | an identity for a pod, and what it may ask the Kubernetes API | Traefik must read Ingresses and Services; the API refuses anything not granted |
 | Service type NodePort | opens a port on the node itself | how traffic from outside the cluster gets in at all |
+| CronJob `run-<kind>` (9) | creates a Job on a timetable | scheduled runs: each Job POSTs one run kind to `/internal/runs`, replacing the in-process timer |
 
 **Ordering without `depends_on`.** Everything starts the moment it is applied. `migrate` waits for
 Postgres (`pg_isready`); the loaders wait until the schema is at their image's migration head
@@ -101,16 +103,42 @@ share no database, no Telegram bot and no GDELT downloads.
 
 ## Rules the remaining manifests must keep
 
-1. `SCHEDULER_ENABLED=false` on the orchestrator (already in `config.env`). The in-process timer
-   and a CronJob both firing would double-trigger runs; the run key deduplicates them, but relying
-   on that for normal operation hides real duplicate-trigger bugs.
-2. `replicas: 1` for the orchestrator, with no autoscaler, while import previews live in memory
+1. `SCHEDULER_ENABLED=false` on the orchestrator (in `config.env`). The CronJobs trigger runs;
+   the in-process timer and a CronJob both firing would double-trigger them - the run key
+   deduplicates, but relying on that for normal operation hides real duplicate-trigger bugs.
+2. **Every run kind the local timer offers has a CronJob at the same rhythm.**
+   `apps/orchestrator/test/cronJobContract.test.ts` fails the build otherwise - a kind added to
+   `scheduler.ts` alone would run on every laptop and never in a cluster.
+3. `replicas: 1` for the orchestrator, with no autoscaler, while import previews live in memory
    (`apps/orchestrator/src/services/previewStore.ts`) and the Telegram poller runs per process.
-3. `ALLOWED_ORIGINS` must name the addresses the browser uses (`http://traders.localhost`), and
+4. `ALLOWED_ORIGINS` must name the addresses the browser uses (`http://traders.localhost`), and
    `APP_ENV` must not be `production` while the cluster serves plain http - production marks the
    session cookie `Secure`.
 
-Still to come in M7: CronJobs for every run kind (PR 5), the AI service's autoscaler (PR 6).
+Still to come in M7: the AI service's autoscaler (PR 6).
+
+## Scheduled runs
+
+Nine CronJobs, one per run kind, each creating a small Job that POSTs `{kind, trigger: "cronjob"}`
+to the orchestrator's `/internal/runs` inside the cluster - the same endpoint the local timer
+calls. The schedules copy the timer's rhythm (every 15 minutes or every hour, backfill first and
+the digest last), and the run key decides whether a trigger does work: a second trigger in the
+same bucket is answered `skipped`, which is a success. Why "ask often" rather than "once a day at
+a set time": a trigger that fires once per period is silently lost if the cluster was down at that
+minute; an hourly ask of a daily bucket catches up by itself. The reasoning per field is in the
+header of `base/cronjobs.yaml`.
+
+```bash
+kubectl --context kind-traders -n traders get cronjobs            # schedules, last run
+kubectl --context kind-traders -n traders get jobs -l app=run-trigger
+kubectl --context kind-traders -n traders logs job/<job-name>     # the orchestrator's answer
+# Run one now, outside its schedule (the run key still applies):
+kubectl --context kind-traders -n traders create job --from=cronjob/run-backfill backfill-now
+# Pause one, or resume it:
+kubectl --context kind-traders -n traders patch cronjob run-news-collect -p '{"spec":{"suspend":true}}'
+```
+
+Every run is recorded in the `runs` table with `trigger = 'cronjob'`.
 
 ## Images
 
