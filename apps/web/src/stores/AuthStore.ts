@@ -83,6 +83,8 @@ export class AuthStore {
         // anyway so that signing out cannot leave a dialog open over the login
         // screen, and so this list stays exhaustive rather than selective.
         this.root.concepts.reset();
+        // Questions about one account's holdings are that account's.
+        this.root.ask.reset();
       });
     }
   }

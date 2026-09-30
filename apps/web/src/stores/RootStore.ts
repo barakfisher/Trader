@@ -15,6 +15,7 @@ import { CacheMirror } from '../queries/cacheMirror.ts';
 import { createQueryClient } from '../queries/queryClient.ts';
 import { queryKeys } from '../queries/queryKeys.ts';
 
+import { AskStore } from './AskStore.ts';
 import { AuthStore } from './AuthStore.ts';
 import { ConceptStore } from './ConceptStore.ts';
 import { ImportStore } from './ImportStore.ts';
@@ -50,4 +51,5 @@ export class RootStore {
   readonly topics = new TopicsStore(this);
   readonly telegram = new TelegramStore(this);
   readonly concepts = new ConceptStore(this);
+  readonly ask = new AskStore(this);
 }

@@ -2,36 +2,12 @@ import { useEffect, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { X } from 'lucide-react';
 
-import { parseConceptText, type TextSpan } from '../lib/conceptText.ts';
+import { ConceptText } from './ConceptText.tsx';
 import { conceptLabel } from '../lib/observationPresentation.ts';
 import { errorMessage } from '../api/client.ts';
 import { useConceptQuery } from '../queries/concepts.ts';
 import { useStore } from '../stores/context.tsx';
 import { ErrorNote, Spinner } from './ui.tsx';
-
-function Spans({ spans }: { spans: TextSpan[] }) {
-  return (
-    <>
-      {spans.map((span, index) => {
-        if (span.style === 'bold') {
-          return (
-            <strong key={index} className="font-medium text-text-primary">
-              {span.text}
-            </strong>
-          );
-        }
-        if (span.style === 'italic') {
-          return (
-            <em key={index} className="italic">
-              {span.text}
-            </em>
-          );
-        }
-        return <span key={index}>{span.text}</span>;
-      })}
-    </>
-  );
-}
 
 /**
  * The explanation behind a concept chip.
@@ -130,21 +106,8 @@ export const ConceptDialog = observer(function ConceptDialog() {
                   {section.heading !== null && (
                     <h3 className="text-sm font-medium text-text-primary">{section.heading}</h3>
                   )}
-                  <div className="mt-1 space-y-2">
-                    {parseConceptText(section.text).map((block, index) =>
-                      block.kind === 'code' ? (
-                        <pre
-                          key={index}
-                          className="overflow-x-auto rounded bg-surface-hover px-3 py-2 text-xs text-text-primary"
-                        >
-                          {block.text}
-                        </pre>
-                      ) : (
-                        <p key={index} className="text-sm leading-relaxed text-text-muted">
-                          <Spans spans={block.spans} />
-                        </p>
-                      ),
-                    )}
+                  <div className="mt-1">
+                    <ConceptText text={section.text} />
                   </div>
                 </section>
               ))}

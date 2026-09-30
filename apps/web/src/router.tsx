@@ -3,7 +3,7 @@
  *
  * Until M6 the app had one URL: a reload landed on the portfolio, a view could
  * not be bookmarked or sent, and the browser's back button left the app. The
- * routes are declared in code rather than generated from files: eight routes do
+ * routes are declared in code rather than generated from files: nine routes do
  * not need a build step, and code keeps them in one place a reader can see.
  *
  * The router only renders once the session is known (`App.tsx`), so a signed-out
@@ -20,6 +20,7 @@ import {
 } from '@tanstack/react-router';
 
 import { ConceptDialog } from './components/ConceptDialog.tsx';
+import { AskPage } from './pages/AskPage.tsx';
 import { DashboardPage } from './pages/DashboardPage.tsx';
 import { HoldingPage } from './pages/HoldingPage.tsx';
 import { ProposalPage } from './pages/ProposalPage.tsx';
@@ -50,6 +51,7 @@ const routeTree = rootRoute.addChildren([
     path: '/holdings/$holdingId',
     component: HoldingPage,
   }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/ask', component: AskPage }),
   createRoute({ getParentRoute: () => rootRoute, path: '/proposals', component: ProposalsPage }),
   createRoute({
     getParentRoute: () => rootRoute,

@@ -140,11 +140,11 @@ them; task 1 (money at the currency's exponent) was done in #73, task 2 (the nar
 decision 58) in #74, task 3 (the Topics page in a browser) in #75, and task 4 (the Postgres CI
 job, approved by the user 2026-09-28) in #76, and task 5 (quotes carry asset class and exchange) in
 the PR after that. Task 7 (server state in TanStack Query) was done across #90-#92 and the topics PR
-that closed it.
+that closed it, and task 6 (a screen for `/ask`) in M6 PR 10. **The queue is empty**; the table is
+kept so the next sweep has somewhere to add to.
 
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
-| 6 | **A screen for `/ask`** | M6 ("every PRD user-facing FR reachable from the UI") | medium-large | The API is complete and proxied; the response already carries `answered`, `relevance`, `answer_source` and verbatim citations. The weak-match hedge and the three refusals must stay distinguishable on screen (decisions 32, 36) |
 
 **Not in the queue, and why** - so they are not added back by the next sweep:
 - *Everyday-word company names* ("Apple" the fruit): the user deferred it to a dedicated PR after
@@ -169,7 +169,7 @@ that closed it.
 | **M3 — RAG & educational engine** | ✅ Complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. #45: the paid embedder. #46: `POST /ask`, intent routing, citations, a three-state relevance floor. #47: the 35-case eval set in two CI tiers. **The relevance floor is measured to be in the wrong place — see the debt table** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
-| M6 — Frontend completion & polish | **In progress** | #88-#96 merged: fixes from the browser review, the validator's cents bug, TanStack Query everywhere (task 7 closed), page addresses, the equity curve, fixture prices kept out of a real installation. #98: the backfill's still-trading closes. PR 8: the holding page (decision 68). PR 9: the proposals inbox and pages (decision 69). Left: `/ask`, feed filters, mobile pass, times/disclaimers - see "Next session: M6, continued" |
+| M6 — Frontend completion & polish | **In progress** | #88-#96 merged: fixes from the browser review, the validator's cents bug, TanStack Query everywhere (task 7 closed), page addresses, the equity curve, fixture prices kept out of a real installation. #98: the backfill's still-trading closes. PR 8: the holding page (decision 68). PR 9: the proposals inbox and pages (decision 69). #101: looping model text rejected. PR 10: the `/ask` screen (decision 70). Left: feed filters, mobile pass, times/disclaimers - see "Next session: M6, continued" |
 | M7 — Kubernetes & documentation | Not started | |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
@@ -207,7 +207,7 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts (2026-09-30, after PR 9): **1,644** — 827 Python, 549 orchestrator, 252 web, 16 shared - plus
+Test counts (2026-09-30, after PR 10): **1,679** — 840 Python, 549 orchestrator, 274 web, 16 shared - plus
 **21 Postgres integration tests** (13 Python, 8 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
 eval sets, which are not test counts: `/ask`'s **35 cases** (16 keyless on every PR, all 35 when
 keyed), and the topic eval's **31 cases** (`scripts/run_topic_eval.py`, keyed only, **not in CI**).
@@ -1004,6 +1004,25 @@ failure they prevent.
     refuses the *whole message* over an `http://` or private-host URL button, so a bad value is
     dropped with one startup warning rather than failing every alert. Unset here until M7.
 
+70. **`/ask` has a screen, and every kind of reply looks different** (PR 10, queue task 6).
+    `/ask`: a question box (Enter sends), three example questions that fill it but never send, and
+    this session's questions newest first in `AskStore` - a reply is a one-off action's answer
+    (decision 64's exception), not a resource to re-read, and re-asking can cost a minute. One
+    question at a time. Kept apart on screen (decisions 32, 36): an answer; **a weak match**, with
+    a page-level banner and the relevance score as well as the service's own hedge in the text; a
+    computed answer with its figures (`EvidenceDrawer`); and **four refusals, each titled** -
+    "Not in the reference corpus" (with the closest score), "No holdings to compute from" (with a
+    way to add them), "No personal investment advice", "Not something I can compute" (with what
+    can be) - and an unknown reason named as unknown, never folded into one of those. A failure to
+    get any reply is an error with a retry, never a refusal. Every answer says who wrote it:
+    quoted passages, a model's paragraph checked against them, or arithmetic no model touched -
+    and, when a model's draft was set aside, why (`askPresentation.ts`). The "matched on shared
+    words" note shows only for a concept answer on the fixture embedder; a portfolio answer
+    searched nothing. Passages are shown verbatim through `ConceptText` (the corpus's markdown
+    subset parsed into elements, now shared with the concept dialog). **The wait is part of the
+    design:** the free route takes 18-69 s, so the waiting line counts seconds and says a model
+    may take a minute or more. `readEvidence` reads a bare `weight` key as a share.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -1497,7 +1516,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | ~~OWED: migrate the fixture embedder to a paid OpenRouter embeddings model~~ | — | **Done.** `openai/text-embedding-3-small` through OpenRouter, verified against the live endpoint: 36 chunks, 5,114 tokens, **$0.00010228**, no chunk id moved. Set `EMBEDDINGS_PROVIDER=openrouter` to use it; the code default stays `fixture` so CI and a fresh clone remain keyless. The fixture was **not** deleted — it is the hermetic CI path and slice 4's eval set needs it |
 | **The relevance floor is measured to be in the wrong place** | `app/ask/relevance.py` | `REFUSE_BELOW = 0.23` was fitted to sixteen questions. On the eval's held-out questions the classes separate at **(0.2502, 0.3169]**, so 0.23 sits *outside* the gap — and every keyed CI run prints that verdict. It was deliberately **not** moved: combined with the fitting set the classes overlap (0.2498 vs 0.2502), and a value chosen to make the held-out set pass would make it a training set. The hedged weak answer (decision 36) is what covers the boundary meanwhile. **The honest next step is more questions, written by someone who has not read the corpus**, not a new number |
 | **The keyed eval tier does nothing until a secret exists** | GitHub repo settings | The `eval-keyed` job skips with a notice unless `OPENROUTER_API_KEY` is a repository secret. **Until it is added, nothing automated tests the `not_in_corpus` refusal** — the one M3's exit criterion names — because the floor abstains on the fixture path. Adding the secret is a settings change only a repo admin can make; it was deliberately not done from a session |
-| **`/ask` has no user interface** | `apps/web` | It is complete on the AI service and proxied by the orchestrator, and nothing in the web app calls it. A reader can only reach it through the API. The response already carries everything a UI needs to be honest — `answered`, `relevance`, `answer_source`, verbatim citations — so this is M6's to build, not a missing contract |
+| ~~`/ask` has no user interface~~ | — | **Resolved in M6 PR 10** (decision 70): `/ask` in the web app, linked from the dashboard header. Kept as a line because it stood here from M3 to M6 |
 | ~~`narration/templates.py` divides money by 100 unconditionally~~ | — | **Resolved** (independent task 1): templates render minor units at the currency's exponent (`minor_unit_exponent`), and **the evidence validator had the same assumption** - it divided every `_minor` figure by 100, so it would have *approved* "150.00" for 15000 JPY. It now reads the `currency` declared by each evidence mapping. The old template and old validator agreed on the wrong number, which is why no test saw it; the rule-output tests now run in JPY as well as USD |
 | **The corpus is a derived copy that three separate mechanisms keep in step** | `data/corpus`, compose, `.claude` | The files are the source of truth and `kb_documents`/`kb_chunks` are what the API serves. A hook covers Claude's edits, the `corpus` container covers every stack start, CI covers the image. None of the three covers a hand edit on a machine with no stack running — that reader sees stale text with nothing reporting the disagreement. `--dry-run` answers "are they in step?" and nobody is obliged to run it |
 | **The ingest hook does not apply to a session started before it existed** | `.claude/settings.json` | The settings watcher only watches directories that had a settings file when the session began, and `.claude/` had none. Any session started after that commit picks it up; the session that wrote it did not, and confirmed so with a sentinel rather than assuming |
@@ -1763,7 +1782,7 @@ The remaining PRs, in order, one branch off `main` each:
 |---|---|---|
 | ~~8~~ | ~~Per-holding detail~~ | **Done** (decision 68), after #98 (a correctness bug found while measuring for it: the backfill stored a day still trading as its close). Seen at 1280 and 375 px against live data |
 | ~~9~~ | ~~Proposals inbox~~ | **Done** (decision 69). Seen at 1280 and 375 px against live data; no decision was clicked - a decision's request is pinned by `proposalPages.test.tsx` |
-| 10 | **A screen for `/ask`** (queue task 6) | The weak-match hedge and the three refusals must stay distinguishable on screen (decisions 32, 36); the response already carries `answered`, `relevance`, `answer_source`, verbatim citations |
+| ~~10~~ | ~~A screen for `/ask`~~ | **Done** (decision 70), after #101 (a looping model answer had passed the evidence validator). Seen at 1280 and 375 px with real questions: a weak match, a refusal, a computed answer, an advice refusal |
 | 11 | **Observations feed** | Severity and symbol filters, and paging: the feed is 50 items and makes the dashboard ~9,000 px tall at desktop, ~13,700 at 375 px |
 | 12 | **Mobile pass** | Holdings as cards below `sm` (the table is 880 px inside a 341 px box: only symbol, quantity and half the price show); summary cards 2x2; every page at 375 px |
 | 13 | **Times, disclaimers, settings copy** | Timestamps in `APP_TIMEZONE` rather than the browser locale (`formatExactTime`, `toLocaleString` in 6 places); base currency shown as fixed USD in Settings; the disclaimer on every page |
