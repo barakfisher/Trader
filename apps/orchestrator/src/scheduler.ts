@@ -21,7 +21,9 @@ import { logger } from './logger.js';
  * exactly once per period is that a restart at the wrong moment skips it
  * silently, and a silently skipped run looks exactly like a quiet market.
  */
-const INTERVALS_MS: Record<string, number> = {
+// Exported for test/cronJobContract.test.ts: in a cluster the CronJobs in
+// infra/k8s/base/cronjobs.yaml replace this timer, and must ask at this rhythm.
+export const INTERVALS_MS: Record<string, number> = {
   snapshot: 60 * 60 * 1000,
   portfolio_scan: 15 * 60 * 1000,
   topic_scan: 15 * 60 * 1000,

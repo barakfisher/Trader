@@ -1,0 +1,358 @@
+# Scheduled runs: one CronJob per run kind, replacing the orchestrator's
+# in-process timer (SCHEDULER_ENABLED=false in config.env) in a cluster.
+#
+# A CronJob is a Job factory on a timetable. At each time in `schedule` -
+# cron syntax, "minute hour day-of-month month day-of-week" - it creates a Job,
+# which runs one pod to completion. Here that pod is a tiny curl container that
+# POSTs {kind, trigger: "cronjob"} to the orchestrator's /internal/runs with the
+# internal key: the same single trigger path the local timer uses (DESIGN.md
+# section 2). It calls the orchestrator Service inside the cluster; the front
+# door does not expose /internal/*.
+#
+# The endpoint, not the timetable, decides whether a trigger does work. Each
+# kind's run key falls in a bucket (RUN_BUCKET_MINUTES, routes/internal.ts) -
+# a day in the user's timezone, or a 15/30-minute window - and a second trigger
+# in the same bucket is answered "skipped". So these schedules copy the local
+# timer's "ask often" rhythm (INTERVALS_MS, scheduler.ts): every 15 minutes or
+# every hour, never "once a day at 00:05", because a trigger that fires exactly
+# once per period is silently lost if the cluster is down at that minute. A
+# missed hourly ask of a daily bucket is caught up by the next one.
+# test/cronJobContract.test.ts fails if a kind is missing here or asks at a
+# different rhythm than the local timer.
+#
+# Minute offsets keep the local timer's start order - backfill first, digest
+# last - and are only minutes past the hour, so no timezone is needed: which
+# *day* a run belongs to is decided by the orchestrator in the user's timezone.
+#
+# Per CronJob:
+# - concurrencyPolicy: Forbid - if the previous trigger is still waiting on a
+#   long scan, skip this one rather than stack a second request behind it.
+# - startingDeadlineSeconds: 300 - after a laptop sleeps, the controller would
+#   otherwise try to make up every missed tick; a trigger more than 5 minutes
+#   late is dropped, and the next one (with the run key) catches up instead.
+# - backoffLimit: 1 - one retry if the orchestrator was briefly unreachable.
+# - activeDeadlineSeconds: 420 - the request waits for the run to finish, which
+#   can take up to SCAN_TIMEOUT_MS (5 minutes); curl gives up at 360 s.
+# - --fail-with-body: a 4xx/5xx fails the Job (visible in `kubectl get jobs`)
+#   and its log keeps the orchestrator's error message. "skipped" is a 200.
+# First: a scan that runs before the history exists finds nothing.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: run-backfill
+spec:
+  schedule: '1 * * * *'
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 420
+      template:
+        metadata:
+          labels:
+            app: run-trigger
+            run-kind: backfill
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.22.0
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              env:
+                - name: RUN_KIND
+                  value: backfill
+                - name: INTERNAL_API_KEY
+                  valueFrom:
+                    secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { memory: 64Mi }
+---
+# After backfill, before the scans: naming instruments changes nothing they read.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: run-instrument-metadata
+spec:
+  schedule: '3 * * * *'
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 420
+      template:
+        metadata:
+          labels:
+            app: run-trigger
+            run-kind: instrument-metadata
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.22.0
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              env:
+                - name: RUN_KIND
+                  value: instrument_metadata
+                - name: INTERNAL_API_KEY
+                  valueFrom:
+                    secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { memory: 64Mi }
+---
+# The day's closing value; the daily run key keeps one per day.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: run-snapshot
+spec:
+  schedule: '5 * * * *'
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 420
+      template:
+        metadata:
+          labels:
+            app: run-trigger
+            run-kind: snapshot
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.22.0
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              env:
+                - name: RUN_KIND
+                  value: snapshot
+                - name: INTERNAL_API_KEY
+                  valueFrom:
+                    secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { memory: 64Mi }
+---
+# Before the scans, which read what it stores.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: run-news-collect
+spec:
+  schedule: '6,21,36,51 * * * *'
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 420
+      template:
+        metadata:
+          labels:
+            app: run-trigger
+            run-kind: news-collect
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.22.0
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              env:
+                - name: RUN_KIND
+                  value: news_collect
+                - name: INTERNAL_API_KEY
+                  valueFrom:
+                    secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { memory: 64Mi }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: run-portfolio-scan
+spec:
+  schedule: '8,23,38,53 * * * *'
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 420
+      template:
+        metadata:
+          labels:
+            app: run-trigger
+            run-kind: portfolio-scan
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.22.0
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              env:
+                - name: RUN_KIND
+                  value: portfolio_scan
+                - name: INTERNAL_API_KEY
+                  valueFrom:
+                    secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { memory: 64Mi }
+---
+# After the portfolio scan, so the two do not load the same histories at once.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: run-topic-scan
+spec:
+  schedule: '10,25,40,55 * * * *'
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 420
+      template:
+        metadata:
+          labels:
+            app: run-trigger
+            run-kind: topic-scan
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.22.0
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              env:
+                - name: RUN_KIND
+                  value: topic_scan
+                - name: INTERNAL_API_KEY
+                  valueFrom:
+                    secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { memory: 64Mi }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: run-proposal-sweep
+spec:
+  schedule: '12,27,42,57 * * * *'
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 420
+      template:
+        metadata:
+          labels:
+            app: run-trigger
+            run-kind: proposal-sweep
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.22.0
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              env:
+                - name: RUN_KIND
+                  value: proposal_sweep
+                - name: INTERNAL_API_KEY
+                  valueFrom:
+                    secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { memory: 64Mi }
+---
+# After news collection, which it reads.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: run-topic-discovery
+spec:
+  schedule: '14 * * * *'
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 420
+      template:
+        metadata:
+          labels:
+            app: run-trigger
+            run-kind: topic-discovery
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.22.0
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              env:
+                - name: RUN_KIND
+                  value: topic_discovery
+                - name: INTERNAL_API_KEY
+                  valueFrom:
+                    secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { memory: 64Mi }
+---
+# Last: it reports on what the scans and the sweep just did.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: run-daily-digest
+spec:
+  schedule: '16 * * * *'
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 420
+      template:
+        metadata:
+          labels:
+            app: run-trigger
+            run-kind: daily-digest
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.22.0
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              env:
+                - name: RUN_KIND
+                  value: daily_digest
+                - name: INTERNAL_API_KEY
+                  valueFrom:
+                    secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { memory: 64Mi }
