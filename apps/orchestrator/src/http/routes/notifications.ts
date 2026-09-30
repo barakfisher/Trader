@@ -13,8 +13,14 @@
  */
 
 import type { Hono } from 'hono';
+import type { DigestEntry, DigestReason, DigestResponse, ObservationSeverity } from '@traders/shared';
 
-import { listNotifications } from '../../db/queries.js';
+import {
+  listLastDigestEntries,
+  listNotifications,
+  listPendingDigestEntries,
+  type DigestEntryRow,
+} from '../../db/queries.js';
 import { currentUserId, type AppEnv } from '../app.js';
 
 /** A ceiling on one page, matching the observations feed and the run history. */
@@ -44,6 +50,41 @@ export function registerNotificationsRoutes(app: Hono<AppEnv>): void {
         createdAt: row.created_at.toISOString(),
       })),
     });
+  });
+}
+
+function digestEntry(row: DigestEntryRow): DigestEntry {
+  return {
+    observationId: row.observation_id,
+    headline: row.headline,
+    severity: row.severity as ObservationSeverity | null,
+    subjectRef: row.subject_ref,
+    reason: row.reason as DigestReason,
+    createdAt: row.created_at.toISOString(),
+  };
+}
+
+export function registerDigestRoute(app: Hono<AppEnv>): void {
+  /**
+   * The digest, for the dashboard: the entries waiting for the next one, and
+   * the last one delivered. A digest is a batch of notification rows, never a
+   * stored message, so this reads the rows (see `listLastDigestEntries`).
+   */
+  app.get('/notifications/digest', async (context) => {
+    const userId = currentUserId(context);
+    const [pending, last] = await Promise.all([
+      listPendingDigestEntries(userId),
+      listLastDigestEntries(userId),
+    ]);
+    const sentAt = last.reduce<Date | null>(
+      (latest, row) => (row.sent_at && (!latest || row.sent_at > latest) ? row.sent_at : latest),
+      null,
+    );
+    const body: DigestResponse = {
+      next: { entries: pending.map(digestEntry) },
+      last: sentAt === null ? null : { sentAt: sentAt.toISOString(), entries: last.map(digestEntry) },
+    };
+    return context.json(body);
   });
 }
 

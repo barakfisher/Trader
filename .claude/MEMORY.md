@@ -185,7 +185,7 @@ kept so the next sweep has somewhere to add to.
 | **M3 — RAG & educational engine** | ✅ Complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. #45: the paid embedder. #46: `POST /ask`, intent routing, citations, a three-state relevance floor. #47: the 35-case eval set in two CI tiers. **The relevance floor is measured to be in the wrong place — see the debt table** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
-| M6 — Frontend completion & polish | **In progress** | #88-#96 merged: fixes from the browser review, the validator's cents bug, TanStack Query everywhere (task 7 closed), page addresses, the equity curve, fixture prices kept out of a real installation. #98: the backfill's still-trading closes. PR 8: the holding page (decision 68). PR 9: the proposals inbox and pages (decision 69). #101: looping model text rejected. PR 10: the `/ask` screen (decision 70). PR 11: the feed, paged and filtered (decision 71). PR 12: the mobile pass (decision 72). PR 13: times in the user's zone, the Account card (decision 73). Left: PR 14, the closing check of the exit - see "Next session: M6, continued" |
+| M6 — Frontend completion & polish | **In progress** | #88-#96 merged: fixes from the browser review, the validator's cents bug, TanStack Query everywhere (task 7 closed), page addresses, the equity curve, fixture prices kept out of a real installation. #98: the backfill's still-trading closes. PR 8: the holding page (decision 68). PR 9: the proposals inbox and pages (decision 69). #101: looping model text rejected. PR 10: the `/ask` screen (decision 70). PR 11: the feed, paged and filtered (decision 71). PR 12: the mobile pass (decision 72). PR 13: times in the user's zone, the Account card (decision 73). The digest in the UI, found by the exit check (decision 74). Left: PR 14, the closing check of the exit - see "Next session: M6, continued" |
 | M7 — Kubernetes & documentation | Not started | |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
@@ -223,8 +223,8 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts (2026-09-30, after PR 13): **1,696** — 840 Python, 553 orchestrator, 287 web, 16 shared - plus
-**22 Postgres integration tests** (13 Python, 9 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
+Test counts (2026-09-30, after the digest PR): **1,703** — 840 Python, 557 orchestrator, 290 web, 16 shared - plus
+**23 Postgres integration tests** (13 Python, 10 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
 eval sets, which are not test counts: `/ask`'s **35 cases** (16 keyless on every PR, all 35 when
 keyed), and the topic eval's **31 cases** (`scripts/run_topic_eval.py`, keyed only, **not in CI**).
 
@@ -1087,6 +1087,19 @@ failure they prevent.
     service's defaults and cannot see an operator's retuning (checked equal to `config.py`, and
     this `.env` overrides none). **The disclaimer was already on all nine pages** - that part of
     the planned PR needed nothing.
+
+74. **The daily digest has a place in the UI** (found by M6's exit check, 2026-09-30). FR-13
+    says the digest goes "to UI and Telegram"; only Telegram had it. **Rejected: counting the
+    dashboard and Topics page as the digest** - they show its content, but not what was *held
+    back* from an interruption and why, which is the digest's point. A digest is not stored as a
+    message: it is the `notifications` rows (`channel = 'digest'`) one daily run settles as
+    `sent`, measured to land within 0.06 s of each other - so `GET /notifications/digest`
+    returns the pending rows (the next digest) and the rows sent within a minute of the latest
+    `sent_at` (the last one), each joined to its finding. `DigestCard` on the dashboard says
+    "Next digest: 2 findings - 1 held during quiet hours, 1 below your alert threshold", lists up
+    to five, and folds the last delivered digest under its time. Reason wording is the Telegram
+    digest's own (`summariseDigest`), so both surfaces say it the same way. A narration notice
+    rides in a digest but is not counted as a finding (as in Telegram).
 
 ---
 

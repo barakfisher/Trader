@@ -19,6 +19,7 @@ import { Disclaimer } from '../components/Disclaimer.tsx';
 import { HoldingsTable } from '../components/HoldingsTable.tsx';
 import { ImportWizard } from '../components/ImportWizard.tsx';
 import { NarrationBadge } from '../components/NarrationBadge.tsx';
+import { DigestCard } from '../components/DigestCard.tsx';
 import { ObservationsFeed } from '../components/ObservationsFeed.tsx';
 import { SummaryCards } from '../components/SummaryCards.tsx';
 import { Button, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
@@ -90,6 +91,7 @@ export const DashboardPage = observer(function DashboardPage() {
               void queryClient.invalidateQueries({ queryKey: queryKeys.observations });
               void queryClient.invalidateQueries({ queryKey: queryKeys.proposals });
               void queryClient.invalidateQueries({ queryKey: queryKeys.narration });
+              void queryClient.invalidateQueries({ queryKey: queryKeys.digest });
             }}
           >
             <span className="flex items-center gap-1">
@@ -192,6 +194,7 @@ export const DashboardPage = observer(function DashboardPage() {
               <AddHoldingForm />
             </div>
           </div>
+          <DigestCard />
           {/* The feed sits below the portfolio rather than above it: an empty
               feed is the normal result of a quiet day, and it should not take
               the top of the page to say so. */}

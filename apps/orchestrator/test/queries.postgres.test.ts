@@ -288,4 +288,39 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       }
     });
   });
+  describe('the digest', () => {
+    it('reads the pending entries, and the last delivered batch alone', async () => {
+      const pool = getPool();
+      const user = randomUUID();
+      await pool.query('INSERT INTO users (id) VALUES ($1)', [user]);
+      try {
+        const finding = async (headline: string) =>
+          (
+            await pool.query(
+              `INSERT INTO observations (user_id, kind, subject_ref, headline, dedupe_key)
+               VALUES ($1, 'drawdown', 'instrument:X', $2, $3) RETURNING id`,
+              [user, headline, randomUUID()],
+            )
+          ).rows[0].id as string;
+        const note = (ref: string, status: string, sentAt: string | null, reason = 'below_floor') =>
+          pool.query(
+            `INSERT INTO notifications (user_id, channel, ref_kind, ref_id, route, reason, status,
+                                        dedupe_key, sent_at)
+             VALUES ($1, 'digest', 'observation', $2, 'digest', $3, $4, $5, $6)`,
+            [user, ref, reason, status, randomUUID(), sentAt],
+          );
+        await note(await finding('older digest'), 'sent', '2026-09-29 05:23:07.1+00');
+        await note(await finding('last digest a'), 'sent', '2026-09-30 06:45:29.300+00');
+        await note(await finding('last digest b'), 'sent', '2026-09-30 06:45:29.305+00');
+        await note(await finding('waiting'), 'pending', null, 'quiet_hours');
+
+        const pending = await queries.listPendingDigestEntries(user);
+        expect(pending.map((row) => [row.headline, row.reason])).toEqual([['waiting', 'quiet_hours']]);
+        const last = await queries.listLastDigestEntries(user);
+        expect(last.map((row) => row.headline).sort()).toEqual(['last digest a', 'last digest b']);
+      } finally {
+        await pool.query('DELETE FROM users WHERE id = $1', [user]);
+      }
+    });
+  });
 });
