@@ -5,7 +5,7 @@ the reasoning behind it is not, and that is what this file is for. Maintained pe
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
 Updated: 2026-09-30 ~09:30 UTC - **M6 handoff at CLAUDE.md's five-merged-PR trigger (#98-#102).
-M6 is in progress; PR 11 (the feed) was then done in the same session at the user's request, so the next session starts PR 12, the mobile pass** - see "Next session: M6,
+M6 is in progress; PR 11 (the feed) was then done in the same session at the user's request, then PR 12 (mobile) as well, so the next session starts PR 13, times and disclaimers** - see "Next session: M6,
 continued" in "Where to go next". This session:
 - #98: **the backfill stored a day still trading as its close**, permanently (`DO NOTHING`) - found
   measuring history for the holding page; a manual run corrected 18 rows (AAPL 16 Sep to $332.41);
@@ -185,7 +185,7 @@ kept so the next sweep has somewhere to add to.
 | **M3 — RAG & educational engine** | ✅ Complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. #45: the paid embedder. #46: `POST /ask`, intent routing, citations, a three-state relevance floor. #47: the 35-case eval set in two CI tiers. **The relevance floor is measured to be in the wrong place — see the debt table** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
-| M6 — Frontend completion & polish | **In progress** | #88-#96 merged: fixes from the browser review, the validator's cents bug, TanStack Query everywhere (task 7 closed), page addresses, the equity curve, fixture prices kept out of a real installation. #98: the backfill's still-trading closes. PR 8: the holding page (decision 68). PR 9: the proposals inbox and pages (decision 69). #101: looping model text rejected. PR 10: the `/ask` screen (decision 70). PR 11: the feed, paged and filtered (decision 71). Left: mobile pass, times/disclaimers - see "Next session: M6, continued" |
+| M6 — Frontend completion & polish | **In progress** | #88-#96 merged: fixes from the browser review, the validator's cents bug, TanStack Query everywhere (task 7 closed), page addresses, the equity curve, fixture prices kept out of a real installation. #98: the backfill's still-trading closes. PR 8: the holding page (decision 68). PR 9: the proposals inbox and pages (decision 69). #101: looping model text rejected. PR 10: the `/ask` screen (decision 70). PR 11: the feed, paged and filtered (decision 71). PR 12: the mobile pass (decision 72). Left: mobile pass, times/disclaimers - see "Next session: M6, continued" |
 | M7 — Kubernetes & documentation | Not started | |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
@@ -223,7 +223,7 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts (2026-09-30, after PR 11): **1,687** — 840 Python, 553 orchestrator, 278 web, 16 shared - plus
+Test counts (2026-09-30, after PR 12): **1,691** — 840 Python, 553 orchestrator, 282 web, 16 shared - plus
 **22 Postgres integration tests** (13 Python, 9 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
 eval sets, which are not test counts: `/ask`'s **35 cases** (16 keyless on every PR, all 35 when
 keyed), and the topic eval's **31 cases** (`scripts/run_topic_eval.py`, keyed only, **not in CI**).
@@ -1056,6 +1056,21 @@ failure they prevent.
     "Nothing to report". Refresh invalidates every filtered view (`['observations']` prefix).
     Measured effect: the dashboard **9,557 -> 3,284 px** at 1280 and **13,727 -> 5,043 px** at 375.
 
+72. **On a phone the holdings are cards, chosen in JavaScript** (PR 12, 2026-09-30). Measured
+    first, every page at 375 px: nothing overflowed the page, and only the dashboard had a problem -
+    the holdings table was **880 px inside a 341 px box** (symbol, quantity and half a price
+    visible) with **16 px** edit/remove icons, and the four summary cards stacked to ~390 px. Now
+    `useNarrowViewport()` (`lib/viewport.ts`, Tailwind's `sm`) renders `HoldingCard`s below 640 px:
+    value and P&L first, then quantity x price, today, weight and price age, then **40 px**
+    "Quantity" and "Remove" buttons sharing `useHoldingEditor` with the table row, so the two cannot
+    differ in what Save or Remove does. **Rejected: render both and hide one with CSS** - every
+    holding twice in the DOM, and jsdom applies no Tailwind, so tests would find two of every link.
+    Without `matchMedia` (jsdom) the answer is "not narrow" - the desktop layout the older tests
+    describe; `holdingsNarrow.test.tsx` stubs it (and deletes it after, or every later test is a
+    phone). Summary cards are 2x2 at every width below `lg`, the percentage on its own line.
+    Measured after: summary 390 -> 192 px; the dashboard is **5,679 px** at 375 (5,043 before -
+    readable cards are taller than a sideways-scrolling strip, deliberately); 1280 unchanged.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -1826,7 +1841,7 @@ The remaining PRs, in order, one branch off `main` each:
 | ~~9~~ | ~~Proposals inbox~~ | **Done** (decision 69). Seen at 1280 and 375 px against live data; no decision was clicked - a decision's request is pinned by `proposalPages.test.tsx` |
 | ~~10~~ | ~~A screen for `/ask`~~ | **Done** (decision 70), after #101 (a looping model answer had passed the evidence validator). Seen at 1280 and 375 px with real questions: a weak match, a refusal, a computed answer, an advice refusal |
 | ~~11~~ | ~~Observations feed~~ | **Done** (decision 71), with the severity tie-break fix. Seen at 1280 and 375 px: filters, paging and a reloaded filtered address |
-| 12 | **Mobile pass** | Holdings as cards below `sm` (the table is 880 px inside a 341 px box: only symbol, quantity and half the price show); summary cards 2x2; every page at 375 px |
+| ~~12~~ | ~~Mobile pass~~ | **Done** (decision 72). Every page measured at 375 px first; only the dashboard needed work |
 | 13 | **Times, disclaimers, settings copy** | Timestamps in `APP_TIMEZONE` rather than the browser locale (`formatExactTime`, `toLocaleString` in 6 places); base currency shown as fixed USD in Settings; the disclaimer on every page |
 | 14 | **M6's closing handoff** | Check the exit - every PRD user-facing FR reachable, no dead ends or unhandled error states - and update this file |
 
