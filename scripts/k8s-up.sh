@@ -71,9 +71,11 @@ else
   rm -f "$cluster_config"
 fi
 
-# The ingress controller: cluster infrastructure, applied before the app.
-say "Applying the ingress controller (Traefik)"
+# Cluster infrastructure, applied before the app: the ingress controller, and
+# metrics-server, which the AI service's autoscaler reads.
+say "Applying the ingress controller (Traefik) and metrics-server"
 kubectl --context "$CONTEXT" apply -f "$K8S/kind/traefik.yaml"
+kubectl --context "$CONTEXT" apply -k "$K8S/kind/metrics-server"
 
 # --- 2. images ---------------------------------------------------------------
 IMAGE_TAG="${IMAGE_TAG:-$(image_tag)}"
@@ -171,6 +173,7 @@ for deployment in ai-service orchestrator web; do
   kc rollout status "deployment/$deployment" --timeout=300s
 done
 kubectl --context "$CONTEXT" -n traefik rollout status deployment/traefik --timeout=120s
+kubectl --context "$CONTEXT" -n kube-system rollout status deployment/metrics-server --timeout=120s
 
 say "Cluster state"
 kc get pods

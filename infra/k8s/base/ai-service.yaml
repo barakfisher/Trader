@@ -4,8 +4,9 @@
 # dies it starts another; when the image tag changes it replaces the pods - by
 # default a rolling update, starting a new pod before stopping an old one, so
 # there is no gap. This service keeps no state of its own (its cache, budget and
-# rate limits live in Redis), so any number of copies can run side by side; the
-# autoscaler in a later PR relies on that.
+# rate limits live in Redis; what each process holds is read-only settings), so
+# any number of copies can run side by side - which the autoscaler at the end of
+# this file relies on.
 #
 # The Service `ai-service:8000` is how the orchestrator reaches it
 # (AI_SERVICE_URL); with several pods it spreads requests across the ready ones.
@@ -26,7 +27,11 @@ kind: Deployment
 metadata:
   name: ai-service
 spec:
-  replicas: 1
+  # No `replicas` here, deliberately: the autoscaler below owns the count. A
+  # number written here would be re-applied by every deploy, resetting the
+  # copies the autoscaler had added - an ordinary deploy under load would drop
+  # to one pod. Without the field, a new Deployment starts at 1 and the
+  # autoscaler takes it from there.
   selector:
     matchLabels:
       app: ai-service
@@ -89,3 +94,43 @@ spec:
           resources:
             requests: { cpu: 100m, memory: 256Mi }
             limits: { memory: 1Gi }
+---
+# A HorizontalPodAutoscaler changes how many copies of a Deployment run, from
+# measurements: every 15 s it reads each pod's CPU use from metrics-server,
+# compares the average with the pods' CPU *request* (100m above), and adds or
+# removes pods to bring the average back to the target.
+#
+# Why this service and not the orchestrator: the AI service is where the CPU
+# goes (analysis, embeddings, retrieval) and it keeps nothing in memory that a
+# second copy would disagree with. The orchestrator holds import previews in
+# memory and must stay a single copy (orchestrator.yaml).
+#
+# - 1 to 3 copies. The floor is one: this is a single-user app, and an idle
+#   copy costs ~250 MiB. The ceiling keeps three copies inside a laptop's
+#   Docker memory next to everything else.
+# - Target 70% of the request: busy enough to be worth a copy, with headroom
+#   for the burst while a new pod starts (its init container checks the schema,
+#   then the startup probe waits for /healthz).
+# - Scale down slowly: a copy is removed only after five minutes below target,
+#   so the pods do not flap during a scan that pauses between holdings.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-service
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300

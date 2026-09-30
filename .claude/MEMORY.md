@@ -216,7 +216,7 @@ kept so the next sweep has somewhere to add to.
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
-| M7 — Kubernetes & documentation | **In progress** | #109-#113: images, kind cluster, services with probes, Ingress, CronJobs. **Exit so far:** clean one-command deploy to kind ✅, a CronJob fires a real run ✅ (all nine, on schedule, 2026-09-30), docs a stranger can follow - PR 7. Left: PR 6 autoscaler, PR 7 docs + stranger test. See "Next session: M7, continued" |
+| M7 — Kubernetes & documentation | **In progress** | #109-#113: images, kind cluster, services with probes, Ingress, CronJobs; PR 6 (after the handoff, same session, at the user's request): the AI service's autoscaler. **Exit so far:** clean one-command deploy to kind ✅, a CronJob fires a real run ✅ (all nine, on schedule, 2026-09-30), docs a stranger can follow - PR 7. Left: PR 6 autoscaler, PR 7 docs + stranger test. See "Next session: M7, continued" |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
 not anticipate, found by running the thing rather than by reading it. M1.5 came from auditing the
@@ -1206,6 +1206,17 @@ failure they prevent.
     the message. `test/cronJobContract.test.ts` fails if a scheduler kind has no CronJob, asks at
     another rhythm, or breaks the order.
 
+82. **The AI service autoscales 1-3 copies on CPU; the orchestrator never does** (M7 PR 6, the
+    user's choice among recommendations). **The Deployment declares no `replicas`**: a number
+    there is re-applied by every deploy and resets what the autoscaler added. 70% of the `100m`
+    request leaves headroom for the ~15-20 s a new copy spends in its schema check and startup
+    probe; scale-down waits five minutes so a scan pausing between holdings does not flap the
+    count. metrics-server is used as released (pinned v0.9.0, referenced by URL from a
+    kustomization), because nothing in it needed trimming - unlike Traefik (decision 80); the one
+    change is `--kubelet-insecure-tls`, needed only because kind's kubelets self-sign. Checked
+    before scaling: the AI service's only per-process state is read-only (settings, engine,
+    outlet table) and a log-once set.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -2040,11 +2051,10 @@ in the cluster (webhook leg only as an opt-in last PR, **with the user's explici
 on the AI service only; Kustomize; a standard Ingress served by Traefik; a kind job in CI.
 
 **Next, in order, one branch off `main` each:**
-- **PR 6 - the AI service's HorizontalPodAutoscaler.** It needs **metrics-server** (kind has none;
-  it needs `--kubelet-insecure-tls` on kind). The AI Deployment already requests `cpu: 100m`,
-  which is what an HPA measures against. Explain HPA and metrics-server from first principles.
-  Show it scaling (load it) and scaling back. The orchestrator gets no HPA - decision 77 and the
-  preview debt row say why; the manifest comment already does.
+- ~~PR 6 - the AI service's HorizontalPodAutoscaler~~ **Done after the handoff, in the same
+  session** (decision 82): metrics-server v0.9.0 from its pinned release manifest plus
+  `--kubelet-insecure-tls` (`infra/k8s/kind/metrics-server/`), an HPA of 1-3 copies at 70% of the
+  `100m` request, and no `replicas` on the Deployment. Shown scaling under load and back.
 - **PR 7 - documentation a stranger can follow**: root README with an architecture diagram, the
   runbook (rotate keys, replay a run, recover a stuck proposal), an ADR index over "Decisions",
   cost notes. **The kind CI job** (debt row) fits here or in PR 6. **Verify by following the README
