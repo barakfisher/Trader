@@ -1,0 +1,31 @@
+# The front door: requests for traders.localhost go to the web Service.
+#
+# An Ingress is a routing rule, read and enforced by an ingress controller (on
+# kind: Traefik, infra/k8s/kind/traefik.yaml). No `ingressClassName`: the rule
+# goes to the cluster's default controller, so this file works unchanged on a
+# cluster that uses another one. A real deployment patches the host.
+#
+# One rule is enough. The web pod's nginx already splits the page from the API
+# (/api/* to the orchestrator), so the browser only ever talks to this one
+# origin. /internal/* is deliberately unreachable from here - nginx answers
+# 404 - because CronJobs call the orchestrator Service inside the cluster.
+#
+# `*.localhost` resolves to this machine in every modern browser, with no
+# /etc/hosts entry; and it is a hostname of its own, so its session cookie does
+# not collide with the compose app's on 127.0.0.1.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: traders
+spec:
+  rules:
+    - host: traders.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  name: http

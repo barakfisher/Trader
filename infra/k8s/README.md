@@ -9,6 +9,9 @@ bash scripts/k8s-up.sh      # create the cluster if needed, build, load, deploy
 bash scripts/k8s-down.sh    # delete the cluster and its database (asks first)
 ```
 
+Then open **http://traders.localhost** and sign in with the cluster's passphrase
+(`grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.env`).
+
 Every `kubectl` command below names the context, so it cannot reach another cluster:
 `kubectl --context kind-traders -n traders get pods`.
 
@@ -16,12 +19,13 @@ Every `kubectl` command below names the context, so it cannot reach another clus
 
 ```
 infra/k8s/
-  kind/cluster.yaml          the cluster itself: one node, the universe mount
+  kind/cluster.yaml          the cluster itself: one node, port 80, the universe mount
+  kind/traefik.yaml          the ingress controller (cluster infrastructure, not the app)
   base/                      what Traders is, on any cluster
     kustomization.yaml         lists the files; sets the namespace; generates the ConfigMap
     config.env                 non-secret settings (keyless defaults)
     namespace.yaml, postgres.yaml, redis.yaml, jobs.yaml
-    ai-service.yaml, orchestrator.yaml, web.yaml
+    ai-service.yaml, orchestrator.yaml, web.yaml, ingress.yaml
   overlays/kind/             what only this machine has
     kustomization.yaml         the Secret, from secrets.env (git-ignored, generated)
     universe-descriptions.yaml mounts this machine's licensed descriptions into one Job
@@ -47,6 +51,11 @@ so `kubectl kustomize infra/k8s/.deploy` prints exactly what gets applied.
 | Deployment `ai-service`, `orchestrator`, `web` | keeps N identical pods running from one image; replaces them when the image changes | the three services; a crashed pod is replaced without anyone noticing |
 | Service `ai-service`, `orchestrator`, `web` | as above | `AI_SERVICE_URL` names `ai-service`; nginx names `orchestrator` |
 | Probes (startup, liveness, readiness) | questions the node keeps asking each container | see below |
+| Ingress `traders` | a routing rule: host `traders.localhost` goes to Service `web` | the front door; one rule, because nginx already splits page from API |
+| Ingress controller (Traefik) | the program that reads Ingress rules and routes the traffic | an Ingress alone does nothing |
+| IngressClass `traefik` | names a controller; marked as the cluster default | the app's Ingress names no controller, so it is portable |
+| ServiceAccount + ClusterRole + binding (RBAC) | an identity for a pod, and what it may ask the Kubernetes API | Traefik must read Ingresses and Services; the API refuses anything not granted |
+| Service type NodePort | opens a port on the node itself | how traffic from outside the cluster gets in at all |
 
 **Ordering without `depends_on`.** Everything starts the moment it is applied. `migrate` waits for
 Postgres (`pg_isready`); the loaders wait until the schema is at their image's migration head
@@ -97,13 +106,11 @@ share no database, no Telegram bot and no GDELT downloads.
    on that for normal operation hides real duplicate-trigger bugs.
 2. `replicas: 1` for the orchestrator, with no autoscaler, while import previews live in memory
    (`apps/orchestrator/src/services/previewStore.ts`) and the Telegram poller runs per process.
-3. `ALLOWED_ORIGINS` must name the addresses the browser uses (`http://traders.localhost`, and
-   the port-forward below), and
+3. `ALLOWED_ORIGINS` must name the addresses the browser uses (`http://traders.localhost`), and
    `APP_ENV` must not be `production` while the cluster serves plain http - production marks the
    session cookie `Secure`.
 
-Still to come in M7: the Ingress (PR 4), CronJobs for every run kind (PR 5), the AI service's
-autoscaler (PR 6).
+Still to come in M7: CronJobs for every run kind (PR 5), the AI service's autoscaler (PR 6).
 
 ## Images
 
@@ -121,25 +128,48 @@ with its own image store and cannot see the images on your Mac.
 
 CI builds the web image and checks the proxy (`scripts/check-web-image.sh`) on every PR.
 
-## Reaching it (until the Ingress)
+## Reaching it
+
+```
+browser -> http://traders.localhost  (127.0.0.1:80 on the Mac; *.localhost needs no hosts entry)
+  -> kind maps host port 80 to node port 30080           (kind/cluster.yaml)
+  -> the NodePort Service hands it to Traefik            (kind/traefik.yaml)
+  -> Traefik matches the Ingress rule, forwards to `web` (base/ingress.yaml)
+  -> nginx serves the page, or forwards /api/* to `orchestrator`
+```
+
+The mapping listens on 127.0.0.1 only: other machines on your network cannot reach the cluster.
+`traders.localhost` is its own hostname, so its session cookie never collides with the compose
+app's on `127.0.0.1` - a browser keeps cookies per host, not per port.
+
+`/api/internal/*` is not reachable through the front door (nginx answers 404). To reach the
+orchestrator itself - for the smoke test, or to trigger a run by hand - forward its port:
 
 ```bash
-kubectl --context kind-traders -n traders port-forward service/web 8088:80   # the app
 kubectl --context kind-traders -n traders port-forward service/orchestrator 8089:8080
 ```
 
 A port-forward attaches to one pod when it starts, so it dies when a deploy replaces that pod -
-start it again. And a browser keeps cookies per host, not per port: signing in at
-`127.0.0.1:8088` replaces the compose app's session cookie at `127.0.0.1:5174`. The Ingress gives
-the cluster its own hostname, which ends that.
-
-The end-to-end smoke test runs against the cluster (it replaces the cluster's holdings with the
-demo portfolio - never point it at a database you care about):
+start it again. The end-to-end smoke test runs against the cluster (it replaces the cluster's
+holdings with the demo portfolio - never point it at a database you care about):
 
 ```bash
 SMOKE_ENV_FILE=infra/k8s/overlays/kind/secrets.env SMOKE_ORIGIN=http://traders.localhost \
   bash scripts/smoke-test.sh http://127.0.0.1:8089
 ```
+
+## If something does not answer
+
+- **`k8s-up.sh` says the cluster "predates the port-80 mapping".** Port mappings are fixed when a
+  cluster is created: `bash scripts/k8s-down.sh && bash scripts/k8s-up.sh`.
+- **`http://traders.localhost` resets the connection.** Seen once, on the first cluster created
+  with the mapping, and not reproduced: Traefik answered from inside Docker's network but not from
+  the Mac, and a freshly created cluster worked. Recreate the cluster as above. Check first that
+  Traefik is running without `forbidden` errors:
+  `kubectl --context kind-traders -n traefik logs deploy/traefik`.
+- **Something else holds port 80** (`lsof -nP -iTCP:80 -sTCP:LISTEN`): `kind create` fails with
+  "address already in use". Stop it, or change `hostPort` in `kind/cluster.yaml` and use
+  `http://traders.localhost:<port>` - and add that origin to `ALLOWED_ORIGINS`.
 
 ## Checking on it
 

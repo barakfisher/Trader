@@ -1,0 +1,171 @@
+# The ingress controller for the local kind cluster: Traefik, in Ingress mode only.
+#
+# An Ingress object (base/ingress.yaml) is only a rule - "requests for host
+# traders.localhost go to the Service `web`". Nothing happens until a controller
+# reads the rules and does the routing. This is that controller: an ordinary
+# Deployment running a reverse proxy, which watches the Kubernetes API for
+# Ingress objects and reconfigures itself when one changes.
+#
+# It is cluster infrastructure, not part of the app - one controller serves
+# every app in a cluster - so it lives in its own namespace and is applied by
+# scripts/k8s-up.sh before the app. A real cluster usually comes with one.
+#
+# Why Traefik, and why written out here: ingress-nginx, the controller most
+# tutorials use, is retired upstream. Traefik is maintained and reads standard
+# Ingress objects, so the app's manifests stay controller-neutral. Its usual
+# install is a Helm chart; the Ingress-only subset is small enough to own as
+# plain YAML, which keeps every object readable and avoids a second tool.
+#
+# How a request arrives, from the browser to the pod:
+#   browser -> 127.0.0.1:80 on the Mac
+#     -> kind maps it to port 30080 on the node (kind/cluster.yaml)
+#     -> the NodePort Service below forwards 30080 to Traefik's port 8000
+#     -> Traefik matches the Ingress rule and forwards to the Service `web`
+#     -> nginx serves the page, or forwards /api/* to `orchestrator`.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: traefik
+---
+# RBAC ("role-based access control"): what this pod may ask the Kubernetes API.
+# A ServiceAccount is the pod's identity; a ClusterRole lists permitted actions;
+# the binding grants one to the other. Without them the API refuses Traefik's
+# requests and no route ever appears. Read-only, except writing an Ingress's
+# status (so `kubectl get ingress` shows its address).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: traefik
+  namespace: traefik
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: traefik-ingress
+rules:
+  # Where to send traffic: a Service's pods are listed in its EndpointSlices.
+  # Secrets are read for TLS certificates named by an Ingress. Nodes are
+  # listed at startup; without that right Traefik logged `nodes is forbidden`
+  # and never loaded a single route - trimmed from its published rule list,
+  # and put back after the cluster refused it.
+  - apiGroups: ['']
+    resources: ['services', 'secrets', 'nodes']
+    verbs: ['get', 'list', 'watch']
+  - apiGroups: ['discovery.k8s.io']
+    resources: ['endpointslices']
+    verbs: ['list', 'watch']
+  - apiGroups: ['networking.k8s.io']
+    resources: ['ingresses', 'ingressclasses']
+    verbs: ['get', 'list', 'watch']
+  - apiGroups: ['networking.k8s.io']
+    resources: ['ingresses/status']
+    verbs: ['update']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: traefik-ingress
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: traefik-ingress
+subjects:
+  - kind: ServiceAccount
+    name: traefik
+    namespace: traefik
+---
+# An IngressClass names a controller. Marked as the cluster's default, so the
+# app's Ingress does not have to name one - the same manifest works on a
+# cluster whose default controller is something else.
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: traefik
+  annotations:
+    ingressclass.kubernetes.io/is-default-class: 'true'
+spec:
+  controller: traefik.io/ingress-controller
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traefik
+  namespace: traefik
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traefik
+  template:
+    metadata:
+      labels:
+        app: traefik
+    spec:
+      serviceAccountName: traefik
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+      containers:
+        - name: traefik
+          image: traefik:v3.7.13
+          args:
+            # One entrance, plain http, on an unprivileged port (the pod does
+            # not run as root, and so cannot bind 80).
+            - --entrypoints.web.address=:8000
+            # Explicit, so a Traefik upgrade cannot shorten them: nginx waits
+            # up to 330 s for the orchestrator (infra/docker/nginx.conf, /ask
+            # has taken over 3 minutes), so the response side must outlast it.
+            - --entrypoints.web.transport.respondingTimeouts.readTimeout=60s
+            - --entrypoints.web.transport.respondingTimeouts.writeTimeout=340s
+            - --providers.kubernetesingress=true
+            - --providers.kubernetesingress.ingressclass=traefik
+            # Keep a route whose Service has no ready pod, answering 503 - "the
+            # app is down" - instead of dropping it and answering 404, which
+            # reads as "wrong address".
+            - --providers.kubernetesingress.allowEmptyServices=true
+            # /ping on Traefik's own port 8080, for the probes below. The
+            # dashboard and API stay off.
+            - --ping=true
+            - --log.level=INFO
+            - --accesslog=true
+          ports:
+            - name: web
+              containerPort: 8000
+            - name: admin
+              containerPort: 8080
+          livenessProbe:
+            httpGet: { path: /ping, port: admin }
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /ping, port: admin }
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+---
+# A NodePort Service opens the same port on every node (here, the one kind
+# node) and forwards it to the selected pods. kind/cluster.yaml then maps the
+# Mac's 127.0.0.1:80 to that node port - which is how traffic from outside the
+# cluster gets in at all. (A cloud cluster would use type LoadBalancer here.)
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik
+  namespace: traefik
+spec:
+  type: NodePort
+  selector:
+    app: traefik
+  ports:
+    - name: web
+      port: 80
+      targetPort: web
+      nodePort: 30080
