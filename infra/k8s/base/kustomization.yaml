@@ -22,6 +22,7 @@ resources:
   - ai-service.yaml
   - orchestrator.yaml
   - web.yaml
+  - ingress.yaml
 
 # The non-secret settings, from a committed env file. Kustomize appends a hash
 # of the contents to the name (traders-config-7h2k...), and rewrites every

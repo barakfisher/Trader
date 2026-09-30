@@ -52,6 +52,12 @@ docker info > /dev/null 2>&1 || fail "Docker is installed but not running. Start
 # --- 1. the cluster ----------------------------------------------------------
 if kind get clusters 2> /dev/null | grep -qx "$CLUSTER"; then
   ok "cluster '$CLUSTER' exists"
+  # Port mappings are fixed at creation, so a cluster made before the Ingress
+  # existed can never be reached on port 80. Say so, rather than deploy into
+  # a cluster whose front door is missing.
+  if [ -z "$(docker port "$CLUSTER-control-plane" 30080/tcp 2> /dev/null)" ]; then
+    fail "cluster '$CLUSTER' predates the port-80 mapping - recreate it: bash scripts/k8s-down.sh && bash scripts/k8s-up.sh"
+  fi
 else
   [ -d "$UNIVERSE_DIR" ] || fail "UNIVERSE_DIR does not exist: $UNIVERSE_DIR"
   UNIVERSE_DIR="$(cd "$UNIVERSE_DIR" && pwd)"
@@ -64,6 +70,10 @@ else
   kind create cluster --config "$cluster_config" --wait 120s
   rm -f "$cluster_config"
 fi
+
+# The ingress controller: cluster infrastructure, applied before the app.
+say "Applying the ingress controller (Traefik)"
+kubectl --context "$CONTEXT" apply -f "$K8S/kind/traefik.yaml"
 
 # --- 2. images ---------------------------------------------------------------
 IMAGE_TAG="${IMAGE_TAG:-$(image_tag)}"
@@ -160,10 +170,10 @@ say "Waiting for the services"
 for deployment in ai-service orchestrator web; do
   kc rollout status "deployment/$deployment" --timeout=300s
 done
+kubectl --context "$CONTEXT" -n traefik rollout status deployment/traefik --timeout=120s
 
 say "Cluster state"
 kc get pods
 echo
-ok "Traders is running in the cluster. Until the Ingress exists, reach it with:"
-echo "     kubectl --context $CONTEXT -n $NAMESPACE port-forward service/web 8088:80"
-echo "     then open http://127.0.0.1:8088"
+ok "Traders is running in the cluster: http://traders.localhost"
+echo "     sign in with: grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.env"
