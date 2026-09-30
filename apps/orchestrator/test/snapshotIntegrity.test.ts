@@ -17,6 +17,7 @@ const USER = {
   email: null,
   base_currency: 'USD',
   timezone: 'Asia/Jerusalem',
+  role: 'admin' as const,
 };
 
 function holding(symbol: string, quantity: string, assetClass = 'equity'): HoldingRow {

@@ -8,6 +8,7 @@ import {
   MessageCircleQuestion,
   RefreshCw,
   Settings,
+  ShieldCheck,
   Tags,
   Target,
 } from 'lucide-react';
@@ -150,6 +151,16 @@ export const DashboardPage = observer(function DashboardPage() {
               Settings
             </span>
           </Link>
+          {/* Shown to an admin only. Hiding it is courtesy: the server refuses
+              every /admin request from anyone else (decision 83). */}
+          {auth.user?.role === 'admin' && (
+            <Link to="/admin" className={buttonClass('secondary')}>
+              <span className="flex items-center gap-1">
+                <ShieldCheck className="size-4" aria-hidden />
+                Admin
+              </span>
+            </Link>
+          )}
           <Button
             variant="ghost"
             // Back to the top, so the next sign-in starts at the portfolio

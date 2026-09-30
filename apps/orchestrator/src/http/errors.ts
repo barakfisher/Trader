@@ -22,6 +22,8 @@ export const badRequest = (code: string, message: string, details?: unknown) =>
   new ApiProblem(400, code, message, details);
 export const unauthorized = (message = 'authentication required') =>
   new ApiProblem(401, 'unauthorized', message);
+export const forbidden = (message = 'this account may not do that') =>
+  new ApiProblem(403, 'forbidden', message);
 export const notFound = (message = 'not found') => new ApiProblem(404, 'not_found', message);
 export const conflict = (code: string, message: string, details?: unknown) =>
   new ApiProblem(409, code, message, details);

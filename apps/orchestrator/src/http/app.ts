@@ -19,7 +19,9 @@ import type { Notifier } from '../notify/notifier.js';
 import type { Config } from '../config.js';
 import { logger } from '../logger.js';
 import { SESSION_COOKIE, verifySessionToken } from './auth.js';
-import { toErrorResponse, unauthorized, ApiProblem } from './errors.js';
+import { getUser } from '../db/queries.js';
+import { forbidden, toErrorResponse, unauthorized, ApiProblem } from './errors.js';
+import { registerAdminRoutes } from './routes/admin.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAskRoutes } from './routes/ask.js';
 import { registerConceptsRoutes } from './routes/concepts.js';
@@ -71,6 +73,17 @@ const PROTECTED_PREFIXES = [
   '/telegram/bind-token',
   '/telegram/binding',
 ];
+
+/**
+ * The admin surface. Every route under it is reached only through `adminGuard`
+ * below, which is why no admin route checks the role itself: a check that each
+ * route must remember is one route away from being forgotten.
+ */
+export const ADMIN_PREFIX = '/admin';
+
+export function isAdminPath(path: string): boolean {
+  return path === ADMIN_PREFIX || path.startsWith(`${ADMIN_PREFIX}/`);
+}
 
 /**
  * `notifier` is injectable so a test can assert what would have been sent
@@ -174,6 +187,25 @@ export function createApp(
     return next();
   });
 
+  /**
+   * Admin gate: 401 without a session, 403 for a session whose user is not an
+   * admin. The role is read from `users` on every request rather than carried
+   * in the cookie (decision 83): the cookie is self-describing and lives for
+   * days, so a role copied into it would survive a demotion until it expired.
+   * One indexed read per admin request is the whole cost.
+   *
+   * Unknown paths under the prefix are gated too, so a signed-out probe of
+   * `/admin/anything` learns nothing about which admin routes exist.
+   */
+  app.use('*', async (context, next) => {
+    if (!isAdminPath(context.req.path)) return next();
+    const userId = context.get('userId');
+    if (!userId) throw unauthorized();
+    const user = await getUser(userId);
+    if (user?.role !== 'admin') throw forbidden('this account is not an administrator');
+    return next();
+  });
+
   registerHealthRoutes(app);
   registerAuthRoutes(app);
   registerPortfolioRoutes(app);
@@ -189,6 +221,7 @@ export function createApp(
   registerAskRoutes(app);
   registerTopicsRoutes(app);
   registerInternalRoutes(app);
+  registerAdminRoutes(app);
 
   return app;
 }

@@ -209,10 +209,32 @@ export interface HoldingInput {
 
 // --- Auth --------------------------------------------------------------------
 
+export type UserRole = 'user' | 'admin';
+
 export interface SessionUser {
   id: string;
   baseCurrency: string;
   timezone: string;
+  /** Display only: the server re-reads the role on every `/admin/*` request. */
+  role: UserRole;
+}
+
+// --- Admin (M8) --------------------------------------------------------------
+
+export interface AdminRun {
+  id: string;
+  /** Null for a run that belongs to the installation rather than to an account. */
+  userId: string | null;
+  kind: string;
+  runKey: string;
+  trigger: string;
+  status: string;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+export interface AdminRunsResponse {
+  runs: AdminRun[];
 }
 
 export interface ApiError {
