@@ -1744,7 +1744,8 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | **The ingest hook does not apply to a session started before it existed** | `.claude/settings.json` | The settings watcher only watches directories that had a settings file when the session began, and `.claude/` had none. Any session started after that commit picks it up; the session that wrote it did not, and confirmed so with a sentinel rather than assuming |
 | **Import previews live in process memory** | `services/previewStore.ts` | Forces `replicas: 1` in Kubernetes, **`strategy: Recreate`** (a few seconds with no API per deploy) and **no autoscaler on the orchestrator** - MILESTONES asks for an HPA on both services; the user chose the AI service only (M7). The Telegram poller would also run per replica. The only remaining in-memory state — run keys moved to the `runs` table in M2 |
 | **The cluster's `secrets.env` belongs to the checkout that ran `k8s-up.sh`** | `infra/k8s/overlays/kind/` | A worktree and the main checkout each have their own git-ignored copy. Running `k8s-up.sh` from a checkout with no copy generates a **new DB password**, and the existing cluster's Postgres (which read its password once) locks the services out. On 2026-09-30 the worktree's copy was copied to the main checkout by hand. Fix when it bites: recover the file from the cluster's Secret when it is missing, or keep it outside the checkout |
-| **No CI job deploys to kind** | `.github/workflows/ci.yml` | Planned with the user (M7 decision 7): a job that creates a kind cluster, deploys, and runs `kubectl create job --from=cronjob/run-backfill`. Not built yet; until it is, the manifests are proven only on this machine and can rot like compose would without its smoke test. Belongs in PR 6 or PR 7 |
+| ~~No CI job deploys to kind~~ | — | **Resolved** by the `kubernetes (kind)` job (M7 PR 7, #116). Original text: |
+| (history) No CI job deploys to kind | `.github/workflows/ci.yml` | Planned with the user (M7 decision 7): a job that creates a kind cluster, deploys, and runs `kubectl create job --from=cronjob/run-backfill`. Not built yet; until it is, the manifests are proven only on this machine and can rot like compose would without its smoke test. Belongs in PR 6 or PR 7 |
 | **The cluster's daily digest reads `degraded` every day** | `infra/k8s/base/config.env` | With Telegram off (decision 79) the run records "TELEGRAM_BOT_TOKEN is not set, so there is no channel to deliver on" - true, and seen on the first CronJob-fired digest (2026-09-30 12:16 UTC). The digest's UI card still works. Harmless noise in `runs`; revisit if the cluster ever gets a bot, or if a run-health view starts counting `degraded` |
 | **A crypto day's "close" is stored intraday the first night** | `app/analysis/backfill.py` (#98) | #98 decides a day is final when its 20:00 UTC stamp has passed; crypto's candle closes at 00:00 UTC. The first backfill after 21:00 UTC (the daily bucket's first tick in Jerusalem) stores a ~21:00 price as the close; the next night replaces it (the backfill rewrites its own rows). Converges in one day; a fix would use each asset class's session close (`market_sessions.py`) |
 | **Templates are the deliberate steady state until deployment** (decided 2026-09-23) — funding narration was considered and **declined for now**, to be revisited when the product is deployed for real. So a future session should *not* treat template-only explanations as a defect to fix: the cost is known ($0.45/month), the fix is known (raise the OpenRouter workspace cap, point `LLM_MODEL` at a capable model), and the decision is to wait. | `.env` | Explanations are fixed phrasing over checked figures, and the dashboard badge says so |
@@ -2058,7 +2059,15 @@ on the AI service only; Kustomize; a standard Ingress served by Traefik; a kind 
   session** (decision 82): metrics-server v0.9.0 from its pinned release manifest plus
   `--kubelet-insecure-tls` (`infra/k8s/kind/metrics-server/`), an HPA of 1-3 copies at 70% of the
   `100m` request, and no `replicas` on the Deployment. Shown scaling under load and back.
-- **PR 7 - documentation a stranger can follow**: root README with an architecture diagram, the
+- ~~PR 7~~ **Split in two after the handoff, same session.** PR 7 (#116): the `kubernetes (kind)`
+  CI job - `k8s-up.sh` on a fresh Linux runner, the front door, `/internal` refused, a
+  CronJob-made Job recording a run; first run green in 4 minutes. PR 8: the root README
+  (Kubernetes section, a mermaid architecture diagram, cost notes), `docs/RUNBOOK.md`,
+  `docs/DECISIONS.md` (generated from this file by `scripts/build_decision_index.py`; a test
+  fails when it is stale - **re-run the script after adding a decision here**), and the
+  stranger test. Between them, a measured fix: the autoscaler's one-minute scale-up window
+  (decision 82).
+- (original plan, kept) **PR 7 - documentation a stranger can follow**: root README with an architecture diagram, the
   runbook (rotate keys, replay a run, recover a stuck proposal), an ADR index over "Decisions",
   cost notes. **The kind CI job** (debt row) fits here or in PR 6. **Verify by following the README
   literally** in a fresh clone with a deleted cluster.

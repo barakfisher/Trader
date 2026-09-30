@@ -118,7 +118,10 @@ share no database, no Telegram bot and no GDELT downloads.
    `APP_ENV` must not be `production` while the cluster serves plain http - production marks the
    session cookie `Secure`.
 
-Still to come in M7: documentation a stranger can follow, and a CI job that deploys to kind (PR 7).
+CI deploys the cluster with `scripts/k8s-up.sh` on every pull request (the `kubernetes (kind)`
+job): the front door, `/internal/*` refused, and a Job created from a CronJob recording a run.
+Operating it - rotating keys, replaying runs, recovering proposals - is in
+[docs/RUNBOOK.md](../../docs/RUNBOOK.md).
 
 ## Autoscaling
 
