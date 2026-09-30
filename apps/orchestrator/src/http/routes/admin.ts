@@ -11,7 +11,15 @@ import type { Hono } from 'hono';
 
 import type { AdminAuditResponse, AdminRunsResponse, UniverseGapsResponse } from '@traders/shared';
 
-import { listAdminAudit, listAllRuns, listOpsEvents, type OpsEventKind } from '../../db/queries.js';
+import {
+  countUniverse,
+  getLatestUniverseLoad,
+  listAdminAudit,
+  listAllRuns,
+  listOpsEvents,
+  type OpsEventKind,
+} from '../../db/queries.js';
+import { universeStatus } from '../../services/universeStatus.js';
 import type { AppEnv } from '../app.js';
 import { badRequest } from '../errors.js';
 
@@ -90,5 +98,14 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
       })),
     };
     return context.json(body);
+  });
+
+  /**
+   * The universe: what the snapshot says, what the database holds, and every
+   * difference between them either named by the loader or flagged.
+   */
+  app.get('/admin/universe', async (context) => {
+    const [load, counts] = await Promise.all([getLatestUniverseLoad(), countUniverse()]);
+    return context.json(universeStatus(load, counts));
   });
 }

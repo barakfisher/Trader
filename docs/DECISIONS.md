@@ -96,3 +96,4 @@ while this file is out of date.
 | 83 | The admin role is read from `users` on every `/admin/*` request, never carried in the cookie |
 | 84 | `admin_audit` is append-only by trigger, and each row is written *before* its action runs |
 | 85 | A universe gap is decided by the AI service and recorded by the orchestrator, and only where a user named something |
+| 86 | The universe status reconciles against the loader's own account, stored per load |

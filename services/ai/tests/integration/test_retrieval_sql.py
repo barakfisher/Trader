@@ -101,3 +101,29 @@ async def test_topic_resolution_searches_the_loaded_universe(loaded: Engine) -> 
     # is that the whole path ran over real rows and returned a typed answer.
     assert resolution.embedding_model == embedder.model
     assert resolution.vector_is_semantic is False
+
+
+def test_the_loader_records_an_account_of_every_row_it_read(loaded: Engine) -> None:
+    """The admin page reconciles against this row (decision 86): every member is
+    profiled or has a named reason not to be, and every holding row is stored
+    or has one, so a remainder can only be something nobody explained."""
+    from sqlalchemy import text
+
+    with loaded.connect() as connection:
+        row = connection.execute(
+            text("SELECT source, manifest, report FROM universe_loads ORDER BY id DESC LIMIT 1")
+        ).one()
+        stored = connection.execute(text("SELECT count(*) FROM etf_holdings")).scalar_one()
+    report = row.report
+    assert row.source.startswith("fixture")
+    assert "counts" in row.manifest and "as_of" in row.manifest
+    assert report["members"] == report["profiled"] + report["undescribed"] + report["no_currency"]
+    assert report["holding_rows"] == (
+        report["holdings_stored"]
+        + report["holdings_implausible"]
+        + report["holdings_of_unprofiled_etf"]
+    )
+    assert report["holdings_stored"] == stored
+    # The fixture profiles eleven members, so almost every fund is unprofiled:
+    # the count that used to be dropped without a word is most of the file here.
+    assert report["holdings_of_unprofiled_etf"] > 0

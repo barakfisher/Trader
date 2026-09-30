@@ -8,7 +8,12 @@
 
 import { queryOptions, useQuery } from '@tanstack/react-query';
 
-import type { AdminAuditResponse, AdminRunsResponse, UniverseGapsResponse } from '@traders/shared';
+import type {
+  AdminAuditResponse,
+  AdminRunsResponse,
+  UniverseGapsResponse,
+  UniverseStatusResponse,
+} from '@traders/shared';
 
 import { api } from '../api/client.ts';
 import { queryKeys } from './queryKeys.ts';
@@ -38,4 +43,13 @@ export const adminGapsQuery = queryOptions({
 
 export function useAdminGapsQuery() {
   return useQuery(adminGapsQuery);
+}
+
+export const adminUniverseQuery = queryOptions({
+  queryKey: queryKeys.adminUniverse,
+  queryFn: () => api.get<UniverseStatusResponse>('/admin/universe'),
+});
+
+export function useAdminUniverseQuery() {
+  return useQuery(adminUniverseQuery);
 }

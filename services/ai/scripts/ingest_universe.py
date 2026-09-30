@@ -31,12 +31,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import sys
 from pathlib import Path
 
 from app.config import get_settings
 from app.corpus.embedder_factory import EmbedderConfigurationError, build_embedder
 from app.db import get_engine
+from app.universe.loads import load_record, record_load
 from app.universe.profiles import (
     DESCRIPTION_LICENSE,
     DESCRIPTION_SOURCE,
@@ -46,7 +48,7 @@ from app.universe.profiles import (
     load_holdings,
     load_universe,
 )
-from app.universe.snapshot import DESCRIPTIONS_FILE, load_snapshot, read_holdings
+from app.universe.snapshot import DESCRIPTIONS_FILE, MANIFEST_FILE, load_snapshot, read_holdings
 
 
 def default_universe() -> Path:
@@ -95,11 +97,27 @@ def main() -> int:
             f"{report.no_currency} without a currency"
         )
         # After the profiles, because a holding can only match a profiled instrument.
-        held = load_holdings(connection, read_holdings(directory), as_of=snapshot.as_of)
+        holding_rows = read_holdings(directory)
+        held = load_holdings(connection, holding_rows, as_of=snapshot.as_of)
         print(
             f"etf holdings: {held.total} rows, {held.matched_by_symbol} matched by symbol, "
             f"{held.matched_by_name} by name, {held.unmatched} with no US listing, "
-            f"{held.implausible} skipped as not a fraction of the fund"
+            f"{held.implausible} skipped as not a fraction of the fund, "
+            f"{held.of_unprofiled_etf} of a fund with no profile"
+        )
+        # What this load found, beside the manifest it read: the admin page
+        # reconciles the database against these, not against a re-derivation.
+        record_load(
+            connection,
+            snapshot_as_of=snapshot.as_of,
+            source=provenance[0],
+            manifest=json.loads((directory / MANIFEST_FILE).read_text(encoding="utf-8")),
+            record=load_record(
+                members=len(snapshot.instruments),
+                holding_rows=len(holding_rows),
+                report=report,
+                holdings=held,
+            ),
         )
         if args.no_embed:
             return 0

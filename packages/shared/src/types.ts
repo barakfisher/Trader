@@ -276,6 +276,45 @@ export interface UniverseGapsResponse {
   gaps: UniverseGap[];
 }
 
+/** One reason some of the snapshot's rows are not in the database, and how many. */
+export interface UniverseDifference {
+  reason: string;
+  count: number;
+}
+
+/**
+ * One count the snapshot and the database should agree on. `inSnapshot` is
+ * what the last load read; `inDatabase` is what the database holds now.
+ * `explained` are the loader's own reasons for the difference, and
+ * `unexplained` is what is left - zero when every row is accounted for.
+ */
+export interface UniverseReconciliation {
+  what: 'members' | 'etf_holdings';
+  inSnapshot: number;
+  inDatabase: number;
+  explained: UniverseDifference[];
+  unexplained: number;
+}
+
+export interface UniverseStatusResponse {
+  /** Null until the loader has run since M8 PR 4: there is nothing to reconcile against. */
+  lastLoad: {
+    loadedAt: string;
+    snapshotAsOf: string;
+    source: string;
+    /** The snapshot manifest's own counts, as the loader read them. */
+    manifestCounts: Record<string, number>;
+  } | null;
+  database: {
+    profiles: number;
+    equities: number;
+    etfs: number;
+    embedded: number;
+    etfHoldings: number;
+  };
+  reconciliation: UniverseReconciliation[];
+}
+
 export interface ApiError {
   error: string;
   message: string;

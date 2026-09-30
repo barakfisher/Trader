@@ -36,4 +36,5 @@ export const queryKeys = {
   adminRuns: ['admin', 'runs'] as const,
   adminAudit: ['admin', 'audit'] as const,
   adminGaps: ['admin', 'gaps'] as const,
+  adminUniverse: ['admin', 'universe'] as const,
 };

@@ -318,6 +318,10 @@ class HoldingsReport:
     unmatched: int
     #: Rows whose weight is not a fraction of the fund (see `plausible_weight`).
     implausible: int = 0
+    #: Rows of an ETF with no profile here (no description): such a fund can
+    #: never be a topic's source. Counted since M8 - skipped silently before,
+    #: which left 14 rows of the 2026-09-24 snapshot unexplained.
+    of_unprofiled_etf: int = 0
 
 
 def plausible_weight(weight: str) -> bool:
@@ -429,11 +433,12 @@ def load_holdings(
     stamp = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
     connection.execute(text("DELETE FROM etf_holdings"))
     counts = {"symbol": 0, "name": 0, None: 0}
-    written = implausible = 0
+    written = implausible = unprofiled = 0
     for holding in holdings:
         etf = matcher.member(holding.etf)
         if etf is None:
-            continue  # an ETF with no profile cannot be a topic's source
+            unprofiled += 1  # an ETF with no profile cannot be a topic's source
+            continue
         if not plausible_weight(holding.weight):
             implausible += 1
             continue
@@ -461,7 +466,9 @@ def load_holdings(
             },
         )
         written += 1
-    return HoldingsReport(written, counts["symbol"], counts["name"], counts[None], implausible)
+    return HoldingsReport(
+        written, counts["symbol"], counts["name"], counts[None], implausible, unprofiled
+    )
 
 
 @dataclass(frozen=True, slots=True)
