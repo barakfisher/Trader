@@ -1008,6 +1008,20 @@ failure they prevent.
 
 ## Bugs that cost real time, and the lesson from each
 
+**A looping model answer passed the evidence validator (found measuring `/ask` for its screen).**
+The free route answered "what is the current price of gold" with "Hereellsellsellsell…" for most of
+2,500 tokens, and `/ask` returned it as `answer_source: llm`: the validator checks *figures*, and the
+loop's one figure was in the cited passage. 1 of 7 model answers measured that morning. Fix:
+`app/llm/degenerate_text.py` (a unit of 1-10 characters containing a letter, repeated 8+ times in a
+row) runs before the figure check; `/ask` falls back to the verbatim passages with
+`fallback_reason: degenerate_completion`, and narration treats it as `malformed` (no new reason for
+`narrationHealth.ts` to learn). Checked against every stored text first - 36 corpus chunks, 72
+observations, 7,410 article titles - with no match. → **A validator that checks one property
+(sourced numbers) is not a validator of the text.** Ask what else a bad output could look like and
+still pass it; a model's failure modes are not limited to the one the check was written for.
+Also measured then: the free route takes **18-69 s** per answer, once over 3 min (client timeout is
+5 min); a refusal takes 0.6 s.
+
 **A provider's daily history includes the day still trading, and the backfill kept it forever (#98).**
 Yahoo returns today's candle while the session is open, priced at the latest trade, and the provider
 dates every candle 20:00 UTC; the backfill inserted with `DO NOTHING`. So every backfill that ran
