@@ -9,14 +9,15 @@
 
 import type { Hono } from 'hono';
 
-import type { AdminRunsResponse } from '@traders/shared';
+import type { AdminAuditResponse, AdminRunsResponse } from '@traders/shared';
 
-import { listAllRuns } from '../../db/queries.js';
+import { listAdminAudit, listAllRuns } from '../../db/queries.js';
 import type { AppEnv } from '../app.js';
 import { badRequest } from '../errors.js';
 
 /** Enough to see a day of the half-hourly scans next to everything else. */
 const ADMIN_RUNS_LIMIT = 100;
+const ADMIN_AUDIT_LIMIT = 100;
 
 export function registerAdminRoutes(app: Hono<AppEnv>): void {
   /**
@@ -40,6 +41,23 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
         status: row.status,
         startedAt: new Date(row.started_at).toISOString(),
         finishedAt: row.finished_at ? new Date(row.finished_at).toISOString() : null,
+      })),
+    };
+    return context.json(body);
+  });
+
+  /** The admin actions taken, newest first, as recorded before each one ran. */
+  app.get('/admin/audit', async (context) => {
+    const rows = await listAdminAudit(ADMIN_AUDIT_LIMIT);
+    const body: AdminAuditResponse = {
+      entries: rows.map((row) => ({
+        id: row.id,
+        adminUserId: row.admin_user_id,
+        action: row.action,
+        detail: row.detail,
+        ipAddress: row.ip_address,
+        requestId: row.request_id,
+        occurredAt: new Date(row.occurred_at).toISOString(),
       })),
     };
     return context.json(body);

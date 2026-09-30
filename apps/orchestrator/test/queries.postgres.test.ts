@@ -47,6 +47,38 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     await getPool().end();
   });
 
+  describe('the admin audit', () => {
+    // Written as the seeded admin, not USER: an audit row can never be deleted
+    // and neither can the admin it names, so USER's cleanup would be refused.
+    const SEED_ADMIN = '00000000-0000-0000-0000-000000000001';
+
+    it('stores the address as inet and reads it back without a prefix length', async () => {
+      const requestId = randomUUID();
+      await queries.insertAdminAudit({
+        adminUserId: SEED_ADMIN,
+        action: 'POST /admin/example',
+        detail: { body: { scope: 'universe' } },
+        ipAddress: '10.0.0.7',
+        requestId,
+      });
+      const row = (await queries.listAdminAudit(100)).find((r) => r.request_id === requestId);
+      expect(row).toMatchObject({
+        admin_user_id: SEED_ADMIN,
+        action: 'POST /admin/example',
+        detail: { body: { scope: 'universe' } },
+        ip_address: '10.0.0.7',
+      });
+    });
+
+    it('refuses to change a row, for the role the app connects as', async () => {
+      await expect(
+        getPool().query(`UPDATE admin_audit SET action = 'rewritten' WHERE admin_user_id = $1`, [
+          SEED_ADMIN,
+        ]),
+      ).rejects.toThrow(/append-only: UPDATE refused/);
+    });
+  });
+
   describe('listSnapshots', () => {
     it('returns the calendar date that was stored, whatever the process timezone', async () => {
       // East of UTC is where a DATE parsed to local midnight and printed in UTC

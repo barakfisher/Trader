@@ -34,4 +34,5 @@ export const queryKeys = {
   holdingHistory: (holdingId: string) => ['holdings', holdingId, 'history'] as const,
   holdingNews: (holdingId: string) => ['holdings', holdingId, 'news'] as const,
   adminRuns: ['admin', 'runs'] as const,
+  adminAudit: ['admin', 'audit'] as const,
 };

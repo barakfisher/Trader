@@ -1246,6 +1246,21 @@ failure they prevent.
     new route is guarded by being registered. 401 without a session, 403 for a non-admin *or* a
     session whose user no longer exists. The kind CI job proves it on the real stack by demoting
     the seeded admin with `psql` and watching the same cookie go 200 -> 403 -> 200.
+84. **`admin_audit` is append-only by trigger, and each row is written *before* its action runs**
+    (M8 PR 2, the user's choice among recommendations). The app connects as `traders`, a
+    superuser that owns every table, so `REVOKE UPDATE, DELETE` - the milestone's plan - would
+    have been silently meaningless; triggers fire for a superuser too, and refuse UPDATE/DELETE
+    per row and TRUNCATE per statement (`test_admin_audit_sql.py` proves each, and proves the
+    superuser premise so it fails when separate roles arrive). What is left open is a deliberate
+    `DISABLE TRIGGER`, which is DDL, never an accident of app code - separate roles are in the
+    debt table. **Written by the admin gate, not by routes**, for every non-GET admin request,
+    for the same reason as decision 83. **Before, not after:** writing after leaves a window
+    where the action happened and the audit write fails; before, a failed write means a 500 and
+    no action. The price is that the row records the request, not its outcome - outcomes live
+    with their actions (a rescreen's in `runs`). `ip_address` is the **last** `X-Forwarded-For`
+    hop (nginx appends what it saw; earlier hops are client claims, kept in `detail`); behind
+    Traefik that is Traefik's pod - honest, not useful. The FK to `users` has no ON DELETE: an
+    admin who has acted cannot be deleted. 0026's downgrade refuses while rows exist.
 
 ---
 
@@ -1756,6 +1771,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 
 | Item | Where | Impact |
 |---|---|---|
+| **The app connects to Postgres as a superuser that owns every table** | compose, kind, CI `DATABASE_URL`s | Every service uses `traders`, the only role, a superuser. So grants protect nothing: `admin_audit` is append-only only because of its triggers (decision 84), and a superuser can still `DISABLE TRIGGER`. Any SQL-injection bug would run with full rights. Fix: an owner role for Alembic and a plain application role with `INSERT, SELECT` on `admin_audit` - it touches every connection string in three environments, which is why it was not done in M8 PR 2. `test_the_app_role_is_a_superuser...` fails when it lands, as a reminder to delete this row |
 | **Telegram's inbound delivery is unproven** | deployment | Still true after M7, deliberately: the cluster runs with Telegram off (decision 79). **The user decided (2026-09-30) to prove the webhook in a real cloud deployment with HTTPS**, not through a tunnel from the laptop; `setWebhook` on the real bot stops the compose stack's polling, so it waits for that deployment. Everything else was exercised against a real bot, but `setWebhook` needs a public HTTPS URL. The handler has only ever been driven by replaying genuine payloads at it locally. **The first real deployment is the first real test of that leg** — check `getWebhookInfo` for `last_error_message` immediately after |
 | **`queries.ts` conflicts on every parallel PR** | `src/db/queries.ts` | Four M4 PRs appended a section to the end of one 1,200-line file, and every rebase put a conflict marker exactly where one function's closing brace met the next block's header — the brace was lost and hand-repaired **three separate times**. It is the cost of CLAUDE.md's "all SQL in one file" rule, which is otherwise good. Worth deciding whether to split by domain with an index |
 | **Migration 0008 hard-codes a table Mastra owns** | `0008_mastra_workflow_state.py` | The library would create `mastra_workflow_snapshot` itself; Alembic creates it instead (`disableInit: true`), because CLAUDE.md says the AI service owns the schema. An upgrade that changes the shape breaks suspended runs — so `test/mastraSchemaOwnership.test.ts` compares the migration against `WorkflowsPG.getExportDDL()` and fails the build first. Two other things cost time to find: `PostgresStore` creates **43** tables for 24 storage domains unless you route only `workflows`, and `@mastra/core` posts feature-usage telemetry to PostHog unless `MASTRA_TELEMETRY_DISABLED` is set (it is, in `workflowRuntime.ts`, in code rather than `.env`) |
