@@ -4,8 +4,26 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-29 ~13:40 UTC - **M5's closing handoff (milestone boundary). M5 is complete;
-the next session starts M6** - see "Next session: M6" in "Where to go next". This session:
+Updated: 2026-09-30 ~07:00 UTC - **M6 mid-milestone handoff, at the user's request (context full).
+M6 is in progress: 9 PRs merged (#88-#96); the next session starts PR 8, per-holding detail** - see
+"Next session: M6, continued" in "Where to go next". The five-merged-PR trigger fired at #92; the
+user asked to continue to the milestone's end, then chose to hand off here. This session:
+- measured the running app at 1280 and 375 px before building (the plan in "Next session" came
+  from that), and agreed the M6 order with the user: **TanStack Query first**;
+- #88: dashboard fixes found by looking - a donut blank on every return, a header that scrolled
+  away, "-15.5% below";
+- #89 (decision 63): **the evidence validator approved cents written as dollars** ("fell to
+  4016") - 4 of 11 stored model narrations; the 4 were rewritten by templates;
+- #90-#93 (decisions 64): **all server state in TanStack Query**; queue task 7 closed;
+- #94 (decision 65): every view has an address (TanStack Router, code routes);
+- #95 (decision 66): the equity curve, stored snapshots only - and a DATE printed through
+  `toISOString()` that made every snapshot a day early east of UTC;
+- #96 (decision 67): **fixture prices had been standing in for real ones** in this installation's
+  chain and produced a false high finding ("NVDA -48.6%"), which the user had deleted.
+Merging, rebuilding and deciding were delegated by the user for M6 in this session; **ask again**.
+
+Previous handoff, 2026-09-29 ~13:40 UTC - **M5's closing handoff (milestone boundary). M5 is complete;
+the next session starts M6** - see "Next session: M6, continued" in "Where to go next". This session:
 - designed the broader news feed with the user, every one of six decisions measured read-only on
   raw GDELT files first (three 24 h samples, then all 672 slots of 2026-09-22..29);
 - #83: discovery indexed (69 s -> 2.8 s on a real week, identical output) - it would have timed
@@ -151,7 +169,7 @@ that closed it.
 | **M3 — RAG & educational engine** | ✅ Complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. #45: the paid embedder. #46: `POST /ask`, intent routing, citations, a three-state relevance floor. #47: the 35-case eval set in two CI tiers. **The relevance floor is measured to be in the wrong place — see the debt table** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
-| M6 — Frontend completion & polish | **Next** | See "Next session: M6" |
+| M6 — Frontend completion & polish | **In progress** | #88-#96 merged: fixes from the browser review, the validator's cents bug, TanStack Query everywhere (task 7 closed), page addresses, the equity curve, fixture prices kept out of a real installation. Left: holding detail, proposals inbox, `/ask`, feed filters, mobile pass, times/disclaimers - see "Next session: M6, continued" |
 | M7 — Kubernetes & documentation | Not started | |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
@@ -189,8 +207,8 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts at handoff (2026-09-29, after #86): **1,557** — 816 Python, 525 orchestrator, 200 web, 16 shared - plus
-**13 Postgres integration tests** (9 Python, 4 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
+Test counts at handoff (2026-09-30, after #96): **1,586** — 822 Python, 525 orchestrator, 223 web, 16 shared - plus
+**15 Postgres integration tests** (10 Python, 5 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
 eval sets, which are not test counts: `/ask`'s **35 cases** (16 keyless on every PR, all 35 when
 keyed), and the topic eval's **31 cases** (`scripts/run_topic_eval.py`, keyed only, **not in CI**).
 
@@ -943,8 +961,9 @@ failure they prevent.
     fixture provider (`admissible_chain`, logged `providers.fixture_fallback_dropped` at startup),
     and (b) never reads stored fixture rows (`excluded_price_sources` -> `load_price_series`). A
     demo chain (`fixture,...`, `.env.example`, CI) is unchanged. The 48 rows were **filtered, not
-    deleted**; the false finding was left for the user to decide (deletion is irreversible). Redis
-    was checked: no fixture quote was cached.
+    deleted**. The false finding and its failed notification row were **deleted at the user's
+    request (2026-09-30)**, after #96 was live, and a manual `portfolio_scan` confirmed it did not
+    return. Redis was checked: no fixture quote was cached.
 
 ---
 
@@ -1621,6 +1640,21 @@ and `DATABASE_URL`/`AI_SERVICE_URL` pointed at the host ports; and `vite --port 
 in-app browser's existing sign-in carries over and nobody types the passphrase. A
 `.claude/launch.json` for `preview_start` is **not gitignored** - delete it before committing.
 
+**The recipe as rebuilt in the M6 session (worked all session):** two tiny scripts in the session
+scratchpad, named in `.claude/launch.json`, and `.claude/launch.json` added to
+`$(git rev-parse --git-common-dir)/info/exclude` so it can never be committed. The orchestrator
+script does `set -a; source /Users/a/projects/Traders/.env; set +a`, exports the overrides above
+plus `ORCHESTRATOR_PORT=8083` and `DATABASE_URL=postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:55432/$POSTGRES_DB`,
+then `cd apps/orchestrator && exec pnpm start`; the web script runs
+`VITE_API_BASE_URL=http://127.0.0.1:8083 pnpm exec vite --port 5179 --strictPort --host 127.0.0.1`.
+Pitfalls that cost time: **a new worktree needs `pnpm install`** before either starts;
+`pnpm start` does **not** reload, so restart the orchestrator preview after editing its code (vite
+does reload); the in-app browser pane counts as a **hidden page** when not in front, so TanStack
+Query's interval refetches never fire there (prove intervals in a test instead); and a screenshot
+of a scrolled page sometimes shows a blank band - measure with `getBoundingClientRect` instead.
+**This Mac runs in `Asia/Jerusalem`; the containers run in UTC** - a native preview is the only
+place a timezone bug shows (it is how #95's day-early dates were found).
+
 ### M5 is complete, and how it was verified
 
 **Exit:** *a free-text topic resolves to a sensible confirmed instrument set and produces topic
@@ -1649,22 +1683,37 @@ resolve the top phrases through the live `/topics/resolve`, which stores nothing
 lived in the session scratchpad and are gone - about 100 lines, all of them glue around those
 functions.
 
-### Next session: M6
+### Next session: M6, continued
 
-`docs/MILESTONES.md` M6: equity curve, per-holding detail, proposals inbox, topic management,
-settings (thresholds, quiet hours, base currency); loading/error/empty states everywhere, a
-mobile-width pass, disclaimer surfaces; and **TanStack Query for server state** (independent task
-7, the plan is in MILESTONES). Task 6 (**a screen for `/ask`**) is also M6. Suggested order:
-1. Decide with the user whether TanStack Query goes first (it touches every store, so every later
-   screen is cheaper after it) or last (screens first, one migration at the end). Do not run it
-   alongside another store-touching PR.
-2. Then the screens, one PR each; look at each in the browser at desktop and 375 px (the Topics
-   page's two faults in task 3 were found only that way).
-Before starting, glance at the new debt rows from this session (ticker networks via the followed
-feed, private-company events, the filling window) - none blocks M6, but the first one is small.
+**Decided with the user (2026-09-29), do not re-litigate:** TanStack Query first (done); the equity
+curve from stored snapshots only, gaps as gaps (done); **settings: base currency shown as fixed
+"USD" (guideline 10) and severity bands read-only - no schema or backend change**; router is
+TanStack Router (done); duplicate drift proposals are a debt row, not M6 work.
 
-Standing permissions do not carry across sessions: ask again about merging, rebuilding, and
-acting in the UI.
+The remaining PRs, in order, one branch off `main` each:
+
+| # | PR | What "done" means, and what was already measured |
+|---|---|---|
+| **8** | **Per-holding detail** `/holdings/$holdingId` | A price chart (one close per day, real prices only - `excluded_price_sources` already applies to `load_price_series`; the chart needs an orchestrator route, e.g. `GET /holdings/:id/history`, reading `quotes` with the same exclusion - note quotes hold several intraday rows a day: ~218 rows over ~190 days per holding), the position figures the dashboard shows, the holding's findings (`/observations` has no symbol filter yet - add one) and its week of news (article_entities -> articles; AAPL/NVDA have ~280 linked articles a week, SAP.DE 6). Holdings-table rows link to it. Reuse `EquityCurve`'s colour pair and mark rules (decision 66) |
+| 9 | **Proposals inbox** | Evidence rendered through `lib/evidence.ts` (the page still dumps raw keys: `value minor 3502842`, `drift 0.150073`); expired and rejected history, not only open + approved (10 expired exist); `/proposals/$proposalId` using the unused `GET /proposals/:id`; an optional `WEB_BASE_URL` config that, when set, puts that link into Telegram messages (FR-21 - Telegram refuses a `127.0.0.1` URL button, so it stays unset until M7) |
+| 10 | **A screen for `/ask`** (queue task 6) | The weak-match hedge and the three refusals must stay distinguishable on screen (decisions 32, 36); the response already carries `answered`, `relevance`, `answer_source`, verbatim citations |
+| 11 | **Observations feed** | Severity and symbol filters, and paging: the feed is 50 items and makes the dashboard ~9,000 px tall at desktop, ~13,700 at 375 px |
+| 12 | **Mobile pass** | Holdings as cards below `sm` (the table is 880 px inside a 341 px box: only symbol, quantity and half the price show); summary cards 2x2; every page at 375 px |
+| 13 | **Times, disclaimers, settings copy** | Timestamps in `APP_TIMEZONE` rather than the browser locale (`formatExactTime`, `toLocaleString` in 6 places); base currency shown as fixed USD in Settings; the disclaimer on every page |
+| 14 | **M6's closing handoff** | Check the exit - every PRD user-facing FR reachable, no dead ends or unhandled error states - and update this file |
+
+How this session worked, and it held up: measure first (read-only SQL and the browser), then
+decide, then build; every screen looked at in the in-app browser at 1280 and 375 px against live
+data; **never click a real decision (Approve/Reject/Snooze) or save real settings** - the user's
+data is live, and a decision's request is pinned by tests instead. Each correctness bug found on
+the way (#89, #96) went in as its own PR ahead of the screen that exposed it.
+
+**CI note:** a `docker compose smoke test` failure inside `corepack` downloading pnpm (an undici
+`assert(!this.paused)`) was transient on #93; `gh run rerun <id> --failed` passed. Check the PR does
+not touch dependencies before assuming that.
+
+Standing permissions do not carry across sessions: ask again about merging, rebuilding, deleting
+data and acting in the UI.
 
 ### Left unfinished, deliberately
 
