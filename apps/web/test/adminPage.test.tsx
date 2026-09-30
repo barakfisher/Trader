@@ -59,6 +59,20 @@ describe('the admin page', () => {
               },
             ],
           })
+        : path === '/admin/gaps'
+          ? Promise.resolve({
+              gaps: [
+                {
+                  id: 'g1',
+                  kind: 'universe_gap_missing_ticker',
+                  userId: 'u',
+                  detail: { symbol: 'TINY', source: 'import', gap: 'not_in_universe', rule: null },
+                  occurrences: 3,
+                  firstSeenAt: '2026-10-01T06:00:00Z',
+                  lastSeenAt: '2026-10-01T07:00:00Z',
+                },
+              ],
+            })
         : path === '/admin/audit'
           ? Promise.resolve({
               entries: [
@@ -97,6 +111,13 @@ describe('the admin page', () => {
     expect(screen.getByText('12 s')).toBeTruthy();
   });
 
+  it('shows a universe gap, counted, with why it is one', async () => {
+    renderAt('/admin', ADMIN);
+    expect(await screen.findByText('TINY')).toBeTruthy();
+    expect(screen.getByText(/below the size floor or listed since the snapshot/)).toBeTruthy();
+    expect(screen.getByText(/3×/)).toBeTruthy();
+  });
+
   it('shows what administrators have done, and from where', async () => {
     renderAt('/admin', ADMIN);
     expect(await screen.findByText('POST /admin/universe/rescreen')).toBeTruthy();
@@ -108,6 +129,7 @@ describe('the admin page', () => {
     expect(await screen.findByText('Administrators only')).toBeTruthy();
     expect(get).not.toHaveBeenCalledWith('/admin/runs');
     expect(get).not.toHaveBeenCalledWith('/admin/audit');
+    expect(get).not.toHaveBeenCalledWith('/admin/gaps');
   });
 
   it('says a run is still going rather than giving it a duration', () => {

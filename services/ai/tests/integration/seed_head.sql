@@ -134,3 +134,12 @@ INSERT INTO topic_instruments (topic_id, user_id, instrument_id, source, confide
 -- An audit row, so the round trip meets 0026's refusal to discard the audit.
 INSERT INTO admin_audit (admin_user_id, action, detail, ip_address) VALUES
   ('00000000-0000-0000-0000-00000000000a', 'POST /admin/example', '{"body": {}}', '10.0.0.1');
+
+-- One gap event of each kind.
+INSERT INTO ops_events (kind, user_id, detail, dedupe_key) VALUES
+  ('universe_gap_missing_ticker', '00000000-0000-0000-0000-00000000000a',
+   '{"symbol": "SAP.DE", "gap": "outside_screen", "outside_screen": "exchange"}',
+   'missing_ticker:a:SAP.DE:2026-10-01'),
+  ('universe_gap_low_confidence', '00000000-0000-0000-0000-00000000000a',
+   '{"topic": "quantum", "best_similarity": 0.18, "refuse_below": 0.23}',
+   'low_confidence:a:quantum:2026-10-01');

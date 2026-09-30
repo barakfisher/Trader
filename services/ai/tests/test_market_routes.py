@@ -11,10 +11,24 @@ import pytest
 from app.config import get_settings
 from app.core.cache import Cache
 from app.core.ratelimit import RateLimiter
+from app.deps import get_universe_membership
 from app.main import app
 from app.providers.registry import MarketDataService
 from tests.conftest import TEST_INTERNAL_KEY
 from tests.fakes import FakeRedis
+
+
+class StubMembership:
+    """The universe as a set of symbols, so no test needs Postgres."""
+
+    def __init__(self, symbols: set[str]) -> None:
+        self.symbols = symbols
+
+    def contains(self, symbol: str) -> bool:
+        return symbol in self.symbols
+
+
+MEMBERS = StubMembership({"AAPL"})
 
 
 @pytest.fixture
@@ -26,6 +40,7 @@ def configured_app(settings, fixture_provider):
         [fixture_provider], Cache(redis), RateLimiter(redis), settings
     )
     app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_universe_membership] = lambda: MEMBERS
     yield app
     app.dependency_overrides.clear()
 
@@ -82,6 +97,17 @@ async def test_resolve_endpoint(client):
         unknown = await client.get("/market/instruments/resolve", params={"query": "ZZZZZZ"})
     assert resolved.json()["resolved"]["asset_class"] == "crypto"
     assert unknown.json()["resolved"] is None
+
+
+async def test_resolve_says_whether_the_universe_holds_the_symbol(client):
+    async with client:
+        member = await client.get("/market/instruments/resolve", params={"query": "AAPL"})
+        crypto = await client.get("/market/instruments/resolve", params={"query": "BTC-USD"})
+        unknown = await client.get("/market/instruments/resolve", params={"query": "ZZZZZZ"})
+    assert member.json()["universe"] == {"member": True, "outside_screen": None}
+    assert crypto.json()["universe"] == {"member": False, "outside_screen": "asset_class"}
+    # Nothing resolved, so there is nothing whose membership could be asked.
+    assert unknown.json()["universe"] is None
 
 
 async def test_fx_endpoint_reports_a_missing_pair_as_404(client):

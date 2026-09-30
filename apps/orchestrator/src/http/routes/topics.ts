@@ -68,6 +68,7 @@ import {
 } from '../../services/topics.js';
 import { MAX_OPEN_PROPOSALS, MAX_OPEN_WEAK_PROPOSALS } from '../../services/topicDiscovery.js';
 import { backfillConfirmedInstruments } from '../../services/topicScan.js';
+import { recordLowConfidence, recordMissingTicker } from '../../services/universeGaps.js';
 import {
   DEFAULT_SENTIMENT_DAYS,
   MAX_SENTIMENT_DAYS,
@@ -190,12 +191,17 @@ async function confirmed(
 ): Promise<TopicDetail> {
   const userId = currentUserId(context);
   const { label, symbols } = await readConfirm(await context.req.json().catch(() => null));
+  const user = await getUser(userId);
   let outcome: ConfirmOutcome;
   try {
     outcome = await confirmTopic(
       context.get('ai'),
       { userId, topicId: topicIdOrNull, label, symbols },
       context.get('requestId'),
+      user
+        ? (symbol, resolution) =>
+            recordMissingTicker({ userId, timezone: user.timezone }, symbol, resolution, 'topic')
+        : undefined,
     );
   } catch (error) {
     if (error instanceof AiServiceError) {
@@ -223,7 +229,7 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
   app.post('/topics/resolve', async (context) => {
     // The universe is shared reference data with no `user_id` (migration 0015),
     // but resolving against it is part of the product and sits behind the gate.
-    currentUserId(context);
+    const userId = currentUserId(context);
 
     const body = (await context.req.json().catch(() => null)) as { topic?: unknown } | null;
     const topic = typeof body?.topic === 'string' ? body.topic.trim() : '';
@@ -239,7 +245,12 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
     }
 
     try {
-      return context.json(await context.get('ai').resolveTopic(topic, context.get('requestId')));
+      const resolution = await context.get('ai').resolveTopic(topic, context.get('requestId'));
+      // A topic nothing in the universe is about is recorded for the admin
+      // page, with the gate and the best score it was judged by.
+      const user = await getUser(userId);
+      if (user) await recordLowConfidence({ userId, timezone: user.timezone }, resolution);
+      return context.json(resolution);
     } catch (error) {
       if (error instanceof AiServiceError) {
         throw upstreamFailure(error.status, 'The topic could not be resolved.');

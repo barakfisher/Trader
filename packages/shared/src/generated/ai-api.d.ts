@@ -761,6 +761,10 @@ export interface components {
          *
          *     `candidates` is non-empty and ordered by confidence whenever `resolved` is
          *     None, so the UI can ask the user to disambiguate instead of guessing.
+         *
+         *     `universe` is null whenever membership was not checked - nothing resolved,
+         *     or the database could not be asked - so "unknown" is never reported as
+         *     "not a member".
          */
         InstrumentResolution: {
             /** Candidates */
@@ -775,6 +779,24 @@ export interface components {
             /** Reason */
             reason?: string | null;
             resolved?: components["schemas"]["Instrument"] | null;
+            universe?: components["schemas"]["InstrumentUniverse"] | null;
+        };
+        /**
+         * InstrumentUniverse
+         * @description Whether a resolved instrument is in the screened universe, and if not, why.
+         *
+         *     `outside_screen` names the screen rule the listing fails whatever its size
+         *     (`asset_class`: not an equity or ETF; `exchange`: not a primary US venue).
+         *     Null on a non-member is a real gap: a US equity or ETF the snapshot does
+         *     not hold - below the size floor, or listed since. Topic resolution only
+         *     searches members, so a non-member is priceable but never offered for a
+         *     topic.
+         */
+        InstrumentUniverse: {
+            /** Member */
+            member: boolean;
+            /** Outside Screen */
+            outside_screen?: ("asset_class" | "exchange") | null;
         };
         /**
          * NarrationConfigResponse

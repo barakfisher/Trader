@@ -22,6 +22,8 @@ export interface FakeAiOptions {
   missingFx?: string[];
   /** Symbols to return as ambiguous, with candidates. */
   ambiguous?: Record<string, string[]>;
+  /** Symbols the universe does not hold, with the screen rule that keeps each out (null: none). */
+  outsideUniverse?: Record<string, 'asset_class' | 'exchange' | null>;
   /** Symbols whose quote is served from a cache past its TTL. */
   stale?: string[];
 }
@@ -98,6 +100,10 @@ export function createFakeAi(options: FakeAiOptions = {}): AiClient {
         candidates: [],
         confidence: 1,
         reason: 'exact match',
+        universe:
+          options.outsideUniverse && symbol in options.outsideUniverse
+            ? { member: false, outside_screen: options.outsideUniverse[symbol] }
+            : { member: true, outside_screen: null },
       };
     },
 

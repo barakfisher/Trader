@@ -1261,6 +1261,22 @@ failure they prevent.
     hop (nginx appends what it saw; earlier hops are client claims, kept in `detail`); behind
     Traefik that is Traefik's pod - honest, not useful. The FK to `users` has no ON DELETE: an
     admin who has acted cannot be deleted. 0026's downgrade refuses while rows exist.
+85. **A universe gap is decided by the AI service and recorded by the orchestrator, and only where
+    a user named something** (M8 PR 3). Measured first: symbol lookup already asks Yahoo live, so
+    a ticker outside the universe is *priceable* at once (SAP.DE, BTC-USD, ETH-USD were held and
+    priced, none in the universe). What it lacks is a profile, so it is never offered for a topic.
+    `/market/instruments/resolve` now says `universe: {member, outside_screen}`, computed next to
+    the screen's own rules (`snapshot.screen_exclusion`: asset class first, then primary US
+    venue) - not a copy of the exchange list in TypeScript. A non-member with no rule is the
+    **real gap** (below the size floor or listed since the snapshot: BYND, GPRO); one with a rule
+    is expected and shown as such. **"Not checked" is never "missing":** `universe` is null when
+    nothing resolved, when the database could not be asked, and when the installation has **no
+    profiles at all** (a fresh clone - otherwise every symbol there is a gap). Recorded at the
+    three places a user names a symbol (add holding, import preview, add-to-topic) and the one
+    where they type a topic (`POST /topics/resolve`, verdict `none` only: `weak` is an answer,
+    `unavailable` an installation fault). Not from the metadata run or discovery - the system's
+    own searches would bury the users'. One row per thing per user per local day, **counted**
+    (`occurrences`, `last_seen_at`), and a failed write is logged, never passed to the user's flow.
 
 ---
 

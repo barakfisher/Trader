@@ -74,12 +74,18 @@ export const quoteResponseSchema = z.object({
   quotes: z.array(quoteSchema),
 });
 
+export const instrumentUniverseSchema = z.object({
+  member: z.boolean(),
+  outside_screen: z.enum(['asset_class', 'exchange']).nullable().optional(),
+});
+
 export const instrumentResolutionSchema = z.object({
   candidates: z.array(instrumentSchema).optional(),
   confidence: z.number(),
   query: z.string(),
   reason: z.string().nullable().optional(),
   resolved: instrumentSchema.nullable().optional(),
+  universe: instrumentUniverseSchema.nullable().optional(),
 });
 
 export const fxRateSchema = z.object({
@@ -255,6 +261,9 @@ export type _AssertInstrument = Expect<
 export type _AssertQuote = Expect<Equal<z.infer<typeof quoteSchema>, Schemas['Quote']>>;
 export type _AssertQuoteResponse = Expect<
   Equal<z.infer<typeof quoteResponseSchema>, Schemas['QuoteResponse']>
+>;
+export type _AssertInstrumentUniverse = Expect<
+  Equal<z.infer<typeof instrumentUniverseSchema>, Schemas['InstrumentUniverse']>
 >;
 export type _AssertInstrumentResolution = Expect<
   Equal<z.infer<typeof instrumentResolutionSchema>, Schemas['InstrumentResolution']>

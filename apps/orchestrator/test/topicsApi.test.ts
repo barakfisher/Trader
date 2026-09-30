@@ -271,6 +271,8 @@ describe('topic CRUD', () => {
       expect.anything(),
       { userId: USER.id, topicId: null, label: 'uranium', symbols: ['CCJ'] },
       expect.anything(),
+      // How an added ticker the universe lacks reaches the admin page.
+      expect.any(Function),
     );
     const body = (await response.json()) as { instruments: unknown[] };
     expect(body.instruments).toEqual([

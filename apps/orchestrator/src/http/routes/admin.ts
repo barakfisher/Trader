@@ -9,15 +9,20 @@
 
 import type { Hono } from 'hono';
 
-import type { AdminAuditResponse, AdminRunsResponse } from '@traders/shared';
+import type { AdminAuditResponse, AdminRunsResponse, UniverseGapsResponse } from '@traders/shared';
 
-import { listAdminAudit, listAllRuns } from '../../db/queries.js';
+import { listAdminAudit, listAllRuns, listOpsEvents, type OpsEventKind } from '../../db/queries.js';
 import type { AppEnv } from '../app.js';
 import { badRequest } from '../errors.js';
 
 /** Enough to see a day of the half-hourly scans next to everything else. */
 const ADMIN_RUNS_LIMIT = 100;
 const ADMIN_AUDIT_LIMIT = 100;
+const GAPS_LIMIT = 200;
+const GAP_KINDS: readonly OpsEventKind[] = [
+  'universe_gap_missing_ticker',
+  'universe_gap_low_confidence',
+];
 
 export function registerAdminRoutes(app: Hono<AppEnv>): void {
   /**
@@ -58,6 +63,30 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
         ipAddress: row.ip_address,
         requestId: row.request_id,
         occurredAt: new Date(row.occurred_at).toISOString(),
+      })),
+    };
+    return context.json(body);
+  });
+
+  /**
+   * Gaps between what users asked for and what the universe holds, most
+   * recently seen first, each counted rather than repeated.
+   */
+  app.get('/admin/gaps', async (context) => {
+    const kind = context.req.query('kind');
+    if (kind !== undefined && !GAP_KINDS.includes(kind as OpsEventKind)) {
+      throw badRequest('invalid_kind', `kind is one of ${GAP_KINDS.join(', ')}`);
+    }
+    const rows = await listOpsEvents(kind as OpsEventKind | undefined, GAPS_LIMIT);
+    const body: UniverseGapsResponse = {
+      gaps: rows.map((row) => ({
+        id: row.id,
+        kind: row.kind,
+        userId: row.user_id,
+        detail: (row.detail ?? {}) as Record<string, unknown>,
+        occurrences: row.occurrences,
+        firstSeenAt: new Date(row.occurred_at).toISOString(),
+        lastSeenAt: new Date(row.last_seen_at).toISOString(),
       })),
     };
     return context.json(body);

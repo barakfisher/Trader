@@ -77,6 +77,7 @@ vi.mock('../src/db/queries.js', () => ({
   setInstrumentName: vi.fn(async () => true),
   replaceTargetWeights: vi.fn(async () => 0),
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
+  recordOpsEvent: vi.fn(async () => undefined),
 }));
 
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
@@ -257,6 +258,57 @@ describe('API', () => {
     expect(await response.json()).toMatchObject({ error: 'unresolved_symbol' });
   });
 
+  it('records a holding the universe does not hold as a gap, and still adds it', async () => {
+    resetConfigForTests();
+    const outside = createApp(
+      loadConfig(ENV),
+      createFakeAi({ outsideUniverse: { 'SAP.DE': 'exchange' } }),
+    );
+    const cookie = await loginCookie(outside);
+    const response = await outside.request('/holdings', {
+      method: 'POST',
+      headers: { ...ORIGIN, cookie },
+      body: JSON.stringify({ symbol: 'SAP.DE', quantity: '1' }),
+    });
+    expect(response.status).toBe(201);
+    expect(queries.recordOpsEvent).toHaveBeenCalledWith({
+      kind: 'universe_gap_missing_ticker',
+      userId: USER.id,
+      detail: {
+        symbol: 'SAP.DE',
+        source: 'holding',
+        gap: 'outside_screen',
+        rule: 'exchange',
+        assetClass: 'equity',
+        exchange: 'TEST',
+      },
+      dedupeKey: expect.stringMatching(/^missing_ticker:.+:SAP\.DE:\d{4}-\d{2}-\d{2}$/),
+    });
+  });
+
+  it('adds the holding even when the gap cannot be recorded', async () => {
+    vi.mocked(queries.recordOpsEvent).mockRejectedValueOnce(new Error('connection lost'));
+    resetConfigForTests();
+    const outside = createApp(loadConfig(ENV), createFakeAi({ outsideUniverse: { 'SAP.DE': null } }));
+    const cookie = await loginCookie(outside);
+    const response = await outside.request('/holdings', {
+      method: 'POST',
+      headers: { ...ORIGIN, cookie },
+      body: JSON.stringify({ symbol: 'SAP.DE', quantity: '1' }),
+    });
+    expect(response.status).toBe(201);
+  });
+
+  it('records nothing for a symbol the universe holds', async () => {
+    const cookie = await loginCookie(app);
+    await app.request('/holdings', {
+      method: 'POST',
+      headers: { ...ORIGIN, cookie },
+      body: JSON.stringify({ symbol: 'AAPL', quantity: '1' }),
+    });
+    expect(queries.recordOpsEvent).not.toHaveBeenCalled();
+  });
+
   it('validates the holding payload', async () => {
     const cookie = await loginCookie(app);
     const response = await app.request('/holdings', {
@@ -282,6 +334,12 @@ describe('API', () => {
     const body = (await response.json()) as { counts: Record<string, number>; previewId: string };
     expect(body.counts).toMatchObject({ ok: 1, unresolved: 1 });
     expect(body.previewId).toBeTruthy();
+    // The symbol nothing could price is a gap; AAPL, a member, is not.
+    expect(queries.recordOpsEvent).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(queries.recordOpsEvent).mock.calls[0]![0]).toMatchObject({
+      kind: 'universe_gap_missing_ticker',
+      detail: { symbol: 'NOSUCH', source: 'import', gap: 'unpriced' },
+    });
   });
 
   it('rejects an unparseable import as a whole', async () => {

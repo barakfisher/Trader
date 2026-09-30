@@ -154,11 +154,30 @@ class Instrument(BaseModel):
     source: str = "unknown"
 
 
+class InstrumentUniverse(BaseModel):
+    """Whether a resolved instrument is in the screened universe, and if not, why.
+
+    `outside_screen` names the screen rule the listing fails whatever its size
+    (`asset_class`: not an equity or ETF; `exchange`: not a primary US venue).
+    Null on a non-member is a real gap: a US equity or ETF the snapshot does
+    not hold - below the size floor, or listed since. Topic resolution only
+    searches members, so a non-member is priceable but never offered for a
+    topic.
+    """
+
+    member: bool
+    outside_screen: Literal["asset_class", "exchange"] | None = None
+
+
 class InstrumentResolution(BaseModel):
     """Result of resolving a user-supplied string to a tradable instrument.
 
     `candidates` is non-empty and ordered by confidence whenever `resolved` is
     None, so the UI can ask the user to disambiguate instead of guessing.
+
+    `universe` is null whenever membership was not checked - nothing resolved,
+    or the database could not be asked - so "unknown" is never reported as
+    "not a member".
     """
 
     query: str
@@ -166,6 +185,7 @@ class InstrumentResolution(BaseModel):
     candidates: list[Instrument] = Field(default_factory=list)
     confidence: float = 0.0
     reason: str | None = None
+    universe: InstrumentUniverse | None = None
 
 
 class FxRate(BaseModel):
