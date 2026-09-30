@@ -191,6 +191,58 @@ jobs:
         if: always()
         run: docker compose -f infra/compose/docker-compose.yml down -v
 
+  # The Kubernetes deployment (M7), end to end on a fresh machine: the same one
+  # command a developer runs, `scripts/k8s-up.sh`, then the front door and one
+  # scheduled run. Without it the manifests would be proven only on the laptop
+  # that wrote them, and rot the way compose would without the smoke test above.
+  #
+  # Checks what only a cluster can show: the Jobs ordering themselves by init
+  # container, every probe passing, the Ingress routing traders.localhost, the
+  # front door refusing /internal/*, and a Job created from a CronJob reaching
+  # /internal/runs and leaving a `runs` row with trigger 'cronjob'. It runs the
+  # proposal sweep because its outcome needs no network: the cluster's prices
+  # come from Yahoo, and the compose job already covers a full import.
+  kind:
+    name: kubernetes (kind)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      KUBECTL: kubectl --context kind-traders -n traders
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kind
+        # Pinned to the version the manifests were written against.
+        run: |
+          curl -fsSLo kind https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64
+          sudo install kind /usr/local/bin/kind
+          kind version && kubectl version --client
+      - name: Deploy with the one command
+        run: bash scripts/k8s-up.sh
+      - name: The front door serves the page and the API, and refuses /internal
+        run: |
+          H='--resolve traders.localhost:80:127.0.0.1 http://traders.localhost'
+          curl -fsS -o /dev/null $H/
+          curl -fsS $H/api/readyz | tee /dev/stderr | grep -q '"postgres":"ok"'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST $H/api/internal/runs)" = 404
+      - name: A Job from a CronJob records a run
+        run: |
+          $KUBECTL create job --from=cronjob/run-proposal-sweep ci-sweep
+          $KUBECTL wait --for=condition=complete job/ci-sweep --timeout=180s
+          # "skipped" is as good as "ok": the scheduled CronJob may have fired
+          # the same 15-minute bucket first, and the run key then answers this
+          # one as a repeat - the endpoint was reached either way.
+          $KUBECTL logs job/ci-sweep | tee /dev/stderr | grep -qE '"status":"(ok|skipped)"'
+          rows=$($KUBECTL exec postgres-0 -- psql -U traders -d traders -tAc \
+            "select count(*) from runs where kind = 'proposal_sweep' and trigger = 'cronjob'")
+          test "$rows" -ge 1
+      - name: Dump cluster state on failure
+        if: failure()
+        run: |
+          $KUBECTL get all,ingress,hpa,jobs,cronjobs || true
+          $KUBECTL describe pods || true
+          for p in $($KUBECTL get pods -o name); do echo "== $p"; $KUBECTL logs "$p" --all-containers --tail=60 || true; done
+          kubectl --context kind-traders -n traefik logs deploy/traefik --tail=60 || true
+
   # The /ask eval set, keyed tier: the only automated test of the refusal M3's
   # exit criterion names, and of the relevance thresholds on held-out questions.
   #
