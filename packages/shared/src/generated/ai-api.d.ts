@@ -182,8 +182,9 @@ export interface paths {
          * @description Fill the price history the analysis rules read.
          *
          *     Idempotent, so a scheduled daily call and a manual one after an import do
-         *     the same safe thing: today's close is added once and everything already
-         *     stored is left alone.
+         *     the same safe thing: a finished day's close is added once, a close stored
+         *     while its day was still trading is corrected, and a day still trading is
+         *     not stored at all.
          */
         post: operations["backfill_market_history_backfill_post"];
         delete?: never;
@@ -461,6 +462,12 @@ export interface components {
              * @default 0
              */
             already_present: number;
+            /**
+             * Not Final
+             * @description Candles not stored because their session had not ended: a provider returns the day still trading, dated to its close.
+             * @default 0
+             */
+            not_final: number;
             /** Per Symbol */
             per_symbol?: {
                 [key: string]: number;
@@ -472,6 +479,7 @@ export interface components {
             without_history?: string[];
             /**
              * Written
+             * @description Closes inserted, or corrected from an earlier run.
              * @default 0
              */
             written: number;

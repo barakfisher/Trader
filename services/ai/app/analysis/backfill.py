@@ -6,14 +6,35 @@ observation a day. Without this, a real portfolio would wait a fortnight for its
 first finding, and only on days someone opened the dashboard.
 
 Writes are idempotent: `quotes` is keyed `(instrument_id, as_of)` and a daily
-close is dated to the session close, so re-running a backfill inserts nothing
-and re-running it tomorrow inserts one row per instrument. That makes it safe to
+close is dated to the session close, so re-running a backfill changes nothing
+and re-running it tomorrow adds one row per instrument. That makes it safe to
 run on a schedule, after an import, or by hand when something looks thin.
+
+**A provider's daily history includes the day still trading.** Yahoo returns
+today's candle while the session is open, priced at the latest trade, and every
+candle is dated to 20:00 UTC. Until 2026-09-30 the backfill stored it with
+`DO NOTHING`, so the price at run time became that day's close for good: AAPL's
+16 Sep "close" was an intraday $332.57 (the real close was $332.41), every
+crypto close since mid-September was the price at whatever hour the backfill
+ran, and a 06:45 UTC run wrote a BTC row dated 20:00 the same evening - a
+price observed in the future. Two rules now hold:
+
+  * a close dated after `now` is not stored - its session has not ended, and a
+    row dated in the future is an invented observation (guideline 7);
+  * a close the backfill wrote earlier is **replaced** by the provider's current
+    answer for the same day, because the provider's latest word on a finished
+    day is the close. That repairs what an earlier run stored mid-session - a
+    crypto day stamped 20:00 is still trading until midnight - on the next run,
+    because every run re-reads its whole window. Only the backfill's own rows
+    are replaced (same source, `delay_seconds = 0`): a live quote that happens to
+    share the 20:00 stamp is an observation, and an observation is never
+    rewritten.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
 from sqlalchemy import text
 
@@ -27,7 +48,13 @@ _INSERT = text(
     """
     INSERT INTO quotes (instrument_id, as_of, price_minor, currency, source, delay_seconds)
     VALUES (:instrument_id, :as_of, :price_minor, :currency, :source, 0)
-    ON CONFLICT (instrument_id, as_of) DO NOTHING
+    ON CONFLICT (instrument_id, as_of) DO UPDATE
+       SET price_minor = EXCLUDED.price_minor,
+           currency = EXCLUDED.currency
+     WHERE quotes.source = EXCLUDED.source
+       AND quotes.delay_seconds = 0
+       AND (quotes.price_minor, quotes.currency)
+           IS DISTINCT FROM (EXCLUDED.price_minor, EXCLUDED.currency)
     """
 )
 
@@ -37,12 +64,22 @@ async def backfill_history(
     market: MarketDataService,
     instruments: Sequence[BackfillInstrument],
     days: int,
+    *,
+    now: datetime | None = None,
 ) -> BackfillResponse:
-    """Fetch daily closes for each instrument and store what is new."""
+    """Fetch daily closes for each instrument and store what is new or corrected.
+
+    `written` counts rows inserted *or* corrected; a close already stored at the
+    same price is `already_present`. `not_final` counts candles skipped because
+    their session had not ended at `now`.
+    """
     response = BackfillResponse()
+    moment = now or datetime.now(UTC)
 
     for instrument in instruments:
-        closes = await market.history(instrument.symbol, days)
+        fetched = await market.history(instrument.symbol, days)
+        closes = [close for close in fetched if close.as_of <= moment]
+        response.not_final += len(fetched) - len(closes)
         if not closes:
             response.without_history.append(instrument.symbol.upper())
             continue
@@ -69,5 +106,6 @@ async def backfill_history(
         written=response.written,
         already_present=response.already_present,
         without_history=len(response.without_history),
+        not_final=response.not_final,
     )
     return response

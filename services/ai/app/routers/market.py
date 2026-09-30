@@ -59,8 +59,9 @@ async def backfill(payload: BackfillRequest, market: MarketDataDep) -> BackfillR
     """Fill the price history the analysis rules read.
 
     Idempotent, so a scheduled daily call and a manual one after an import do
-    the same safe thing: today's close is added once and everything already
-    stored is left alone.
+    the same safe thing: a finished day's close is added once, a close stored
+    while its day was still trading is corrected, and a day still trading is
+    not stored at all.
     """
     with get_engine().begin() as connection:
         return await backfill_history(connection, market, payload.instruments, payload.days)

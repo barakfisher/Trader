@@ -217,6 +217,7 @@ export const backfillResponseSchema = z.object({
   already_present: z.number().int(),
   per_symbol: z.record(z.string(), z.number().int()).optional(),
   without_history: z.array(z.string()).optional(),
+  not_final: z.number().int(),
 });
 
 // --- Compile-time drift detection -------------------------------------------

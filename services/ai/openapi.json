@@ -258,6 +258,12 @@
             "title": "Already Present",
             "type": "integer"
           },
+          "not_final": {
+            "default": 0,
+            "description": "Candles not stored because their session had not ended: a provider returns the day still trading, dated to its close.",
+            "title": "Not Final",
+            "type": "integer"
+          },
           "per_symbol": {
             "additionalProperties": {
               "type": "integer"
@@ -275,6 +281,7 @@
           },
           "written": {
             "default": 0,
+            "description": "Closes inserted, or corrected from an earlier run.",
             "title": "Written",
             "type": "integer"
           }
@@ -2423,7 +2430,7 @@
     },
     "/market/history/backfill": {
       "post": {
-        "description": "Fill the price history the analysis rules read.\n\nIdempotent, so a scheduled daily call and a manual one after an import do\nthe same safe thing: today's close is added once and everything already\nstored is left alone.",
+        "description": "Fill the price history the analysis rules read.\n\nIdempotent, so a scheduled daily call and a manual one after an import do\nthe same safe thing: a finished day's close is added once, a close stored\nwhile its day was still trading is corrected, and a day still trading is\nnot stored at all.",
         "operationId": "backfill_market_history_backfill_post",
         "parameters": [
           {
