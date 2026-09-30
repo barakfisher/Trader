@@ -12,13 +12,25 @@ import type { Hono } from 'hono';
 import type { AdminAuditResponse, AdminRunsResponse, UniverseGapsResponse } from '@traders/shared';
 
 import {
+  countNarrationFallbacks,
   countUniverse,
+  firstLlmCallAt,
   getLatestUniverseLoad,
+  groupLlmCalls,
   listAdminAudit,
   listAllRuns,
+  listLlmCalls,
   listOpsEvents,
+  llmLatencies,
   type OpsEventKind,
 } from '../../db/queries.js';
+import {
+  LLM_PANEL_MAX_DAYS,
+  LLM_PANEL_RECENT_LIMIT,
+  llmPanel,
+  parseWindowDays,
+  reconciliationSince,
+} from '../../services/llmPanel.js';
 import { universeStatus } from '../../services/universeStatus.js';
 import type { AppEnv } from '../app.js';
 import { badRequest } from '../errors.js';
@@ -107,5 +119,29 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
   app.get('/admin/universe', async (context) => {
     const [load, counts] = await Promise.all([getLatestUniverseLoad(), countUniverse()]);
     return context.json(universeStatus(load, counts));
+  });
+
+  /**
+   * Every model call over the last `days` (default 7), per agent, with
+   * narration's fallback reasons counted beside the calls behind them.
+   */
+  app.get('/admin/llm', async (context) => {
+    const days = parseWindowDays(context.req.query('days'));
+    if (days === null) {
+      throw badRequest('invalid_days', `days is a whole number from 1 to ${LLM_PANEL_MAX_DAYS}`);
+    }
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const firstCallAt = await firstLlmCallAt();
+    const overlap = reconciliationSince(since, firstCallAt);
+    const [groups, latencies, fallbacks, reconciledFallbacks, recent] = await Promise.all([
+      groupLlmCalls(since),
+      llmLatencies(since),
+      countNarrationFallbacks(since),
+      overlap ? countNarrationFallbacks(overlap) : Promise.resolve([]),
+      listLlmCalls(LLM_PANEL_RECENT_LIMIT),
+    ]);
+    return context.json(
+      llmPanel({ days, since, firstCallAt, groups, latencies, fallbacks, reconciledFallbacks, recent }),
+    );
   });
 }

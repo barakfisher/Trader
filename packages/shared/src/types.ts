@@ -315,6 +315,84 @@ export interface UniverseStatusResponse {
   reconciliation: UniverseReconciliation[];
 }
 
+/** What happened on the wire when a model was asked (decision 87). */
+export type LlmCallOutcome = 'ok' | 'provider_error' | 'budget_exhausted' | 'no_provider';
+
+/**
+ * The asking code's judgement of what came back. `not_judged` is a completion
+ * nobody gave a verdict on - a call that returned nothing to judge, or a call
+ * site that stopped between the call and its verdict.
+ */
+export type LlmCallVerdict =
+  | 'accepted'
+  | 'malformed'
+  | 'unsourced_figures'
+  | 'empty_completion'
+  | 'degenerate_completion'
+  | 'not_judged';
+
+export interface LlmModelUsage {
+  /** Null for a call refused before any model was chosen. */
+  model: string | null;
+  calls: number;
+  /** OpenRouter's `:free` route: it bills nothing, so a zero cost is the price, not a gap. */
+  free: boolean;
+}
+
+/** One agent's calls over the window. Money is integer micro-USD (guideline 3). */
+export interface LlmAgentSummary {
+  agent: string;
+  calls: number;
+  outcomes: Record<LlmCallOutcome, number>;
+  verdicts: Record<LlmCallVerdict, number>;
+  /** Over the calls that reached a provider; null when none did. */
+  latency: { sample: number; p50Ms: number; p95Ms: number } | null;
+  promptTokens: number;
+  completionTokens: number;
+  costMicroUsd: number;
+  models: LlmModelUsage[];
+}
+
+/**
+ * One reason a narration came out as it did, counted twice: once from the
+ * explanations stored, once from the calls recorded. Narration makes exactly
+ * one call per stored explanation, so the two should agree.
+ */
+export interface NarrationReconciliationRow {
+  /** An `observations.fallback_reason`; `none` means the model wrote it. */
+  reason: string;
+  explanations: number;
+  calls: number;
+}
+
+export interface LlmCallSummary {
+  id: string;
+  agent: string;
+  model: string | null;
+  outcome: LlmCallOutcome;
+  /** Null when the call returned nothing to judge (any outcome but `ok`). */
+  verdict: LlmCallVerdict | null;
+  /** The provider's error, cut short; never the prompt or the completion. */
+  error: string | null;
+  latencyMs: number;
+  promptTokens: number;
+  completionTokens: number;
+  costMicroUsd: number;
+  startedAt: string;
+}
+
+export interface LlmPanelResponse {
+  window: { days: number; since: string };
+  /** The oldest call still held (they are kept for a limited time); null when none is. */
+  firstCallAt: string | null;
+  agents: LlmAgentSummary[];
+  /** Stored explanations over the whole window, by fallback reason - the longer record. */
+  narrationFallbacks: { reason: string; count: number }[];
+  /** From whichever is later, the window's start or the first recorded call; null with no calls. */
+  reconciliation: { since: string; rows: NarrationReconciliationRow[] } | null;
+  recent: LlmCallSummary[];
+}
+
 export interface ApiError {
   error: string;
   message: string;

@@ -35,6 +35,11 @@ vi.mock('../src/db/queries.js', () => ({
   listOpsEvents: vi.fn(async () => []),
   getLatestUniverseLoad: vi.fn(async () => null),
   countUniverse: vi.fn(async () => ({ profiles: 0, equities: 0, etfs: 0, embedded: 0, etf_holdings: 0 })),
+  firstLlmCallAt: vi.fn(async () => null),
+  groupLlmCalls: vi.fn(async () => []),
+  llmLatencies: vi.fn(async () => []),
+  countNarrationFallbacks: vi.fn(async () => []),
+  listLlmCalls: vi.fn(async () => []),
 }));
 
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');

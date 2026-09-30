@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft, ShieldCheck } from 'lucide-react';
@@ -5,17 +6,31 @@ import { ArrowLeft, ShieldCheck } from 'lucide-react';
 import type {
   AdminAuditEntry,
   AdminRun,
+  LlmAgentSummary,
+  LlmCallSummary,
+  LlmPanelResponse,
   UniverseGap,
   UniverseReconciliation,
 } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
 import { Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
+import {
+  LLM_WINDOWS,
+  OUTCOME_LABEL,
+  VERDICT_LABEL,
+  agentCost,
+  callCost,
+  formatLatency,
+  nonZero,
+  reasonLabel,
+} from '../lib/llmCalls.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { gapExplanation, gapSubject, isRealGap } from '../lib/universeGaps.ts';
 import {
   useAdminAuditQuery,
   useAdminGapsQuery,
+  useAdminLlmQuery,
   useAdminRunsQuery,
   useAdminUniverseQuery,
 } from '../queries/admin.ts';
@@ -61,6 +76,7 @@ export const AdminPage = observer(function AdminPage() {
         <>
           <UniverseCard />
           <GapsCard />
+          <LlmCard />
           <RunsCard />
           <AuditCard />
         </>
@@ -251,6 +267,199 @@ function GapItem({ gap }: { gap: UniverseGap }) {
         {formatAge(gap.lastSeenAt)}
       </span>
     </li>
+  );
+}
+
+/**
+ * Every model call, per agent, and narration's fallback reasons counted
+ * against the calls behind them (decision 87). Cost says "free route" where a
+ * zero is the price. What is not measured is said, not shown as zero.
+ */
+function LlmCard() {
+  const [days, setDays] = useState<number>(7);
+  const llm = useAdminLlmQuery(days);
+  const data = llm.data;
+
+  return (
+    <Card
+      title="Model calls"
+      action={
+        <div className="flex gap-1" role="group" aria-label="Window">
+          {LLM_WINDOWS.map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={option === days}
+              onClick={() => setDays(option)}
+              className={`rounded px-2 py-0.5 text-xs ${
+                option === days ? 'bg-surface-hover text-text-primary' : 'text-text-muted hover:text-text-primary'
+              }`}
+            >
+              {option === 1 ? '24 h' : `${option} days`}
+            </button>
+          ))}
+        </div>
+      }
+    >
+      {llm.isPending && <Spinner label="Loading model calls…" />}
+      {llm.error && (
+        <ErrorNote
+          message={errorMessage(llm.error, 'Could not load the model calls.')}
+          onRetry={() => void llm.refetch()}
+        />
+      )}
+      {data && <LlmPanel data={data} />}
+    </Card>
+  );
+}
+
+function LlmPanel({ data }: { data: LlmPanelResponse }) {
+  return (
+    <div className="space-y-4 text-sm">
+      <p className="text-text-muted">
+        {data.firstCallAt
+          ? `Calls are recorded since ${formatExactTime(data.firstCallAt)} and kept for a limited time.`
+          : 'No model call has been recorded yet. Every call is recorded from the moment it is made.'}
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead className="text-xs text-text-muted">
+            <tr>
+              <th className="py-2 pr-3 font-medium">Agent</th>
+              <th className="py-2 pr-3 font-medium">Calls</th>
+              <th className="py-2 pr-3 font-medium">Outcomes</th>
+              <th className="py-2 pr-3 font-medium">Verdicts</th>
+              <th className="py-2 pr-3 font-medium">Latency p50 / p95</th>
+              <th className="py-2 pr-3 font-medium">Tokens in / out</th>
+              <th className="py-2 font-medium">Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.agents.map((agent) => (
+              <AgentRow key={agent.agent} agent={agent} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <NarrationReconciliation data={data} />
+      <NarrationHistory data={data} />
+      <RecentCalls calls={data.recent} />
+      <p className="text-xs text-text-muted">
+        Not measured: time to first token (no call streams its answer) and a semantic-cache hit rate
+        (there is no cache).
+      </p>
+    </div>
+  );
+}
+
+function AgentRow({ agent }: { agent: LlmAgentSummary }) {
+  const outcomes = nonZero(agent.outcomes, OUTCOME_LABEL);
+  const verdicts = nonZero(agent.verdicts, VERDICT_LABEL);
+  return (
+    <tr className="border-t border-border-subtle align-top">
+      <td className="py-2 pr-3">
+        <div className="font-medium">{agent.agent}</div>
+        {agent.models.map((model) => (
+          <div key={model.model ?? 'none'} className="break-all font-mono text-xs text-text-muted">
+            {model.model ?? 'no model'} ×{count.format(model.calls)}
+          </div>
+        ))}
+      </td>
+      <td className="py-2 pr-3">{count.format(agent.calls)}</td>
+      <td className="py-2 pr-3">{outcomes.map((o) => `${o.count} ${o.label}`).join(', ') || '-'}</td>
+      <td className="py-2 pr-3">{verdicts.map((v) => `${v.count} ${v.label}`).join(', ') || '-'}</td>
+      <td className="py-2 pr-3 whitespace-nowrap">
+        {agent.latency
+          ? `${formatLatency(agent.latency.p50Ms)} / ${formatLatency(agent.latency.p95Ms)}`
+          : '-'}
+      </td>
+      <td className="py-2 pr-3 whitespace-nowrap">
+        {count.format(agent.promptTokens)} / {count.format(agent.completionTokens)}
+      </td>
+      <td className="py-2 whitespace-nowrap">{agent.calls === 0 ? '-' : agentCost(agent)}</td>
+    </tr>
+  );
+}
+
+/** Explanations stored against calls recorded, reason by reason, where both records exist. */
+function NarrationReconciliation({ data }: { data: LlmPanelResponse }) {
+  if (!data.reconciliation) return null;
+  const { since, rows } = data.reconciliation;
+  return (
+    <div>
+      <p className="font-medium">Narration since {formatExactTime(since)}: explanations and the calls behind them</p>
+      {rows.length === 0 ? (
+        <p className="text-text-muted">Nothing narrated since then.</p>
+      ) : (
+        <ul className="ml-4 list-disc">
+          {rows.map((row) => (
+            <li key={row.reason} className={row.explanations === row.calls ? '' : 'text-warn'}>
+              {reasonLabel(row.reason)}: {count.format(row.explanations)} stored,{' '}
+              {count.format(row.calls)} {row.calls === 1 ? 'call' : 'calls'}
+              {row.explanations !== row.calls && ' - these should agree'}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** The longer record: why each stored explanation in the window was or was not the model's. */
+function NarrationHistory({ data }: { data: LlmPanelResponse }) {
+  const total = data.narrationFallbacks.reduce((sum, row) => sum + row.count, 0);
+  return (
+    <div>
+      <p className="font-medium">
+        Explanations stored in the last {data.window.days === 1 ? '24 hours' : `${data.window.days} days`}
+      </p>
+      {total === 0 ? (
+        <p className="text-text-muted">None.</p>
+      ) : (
+        <ul className="ml-4 list-disc">
+          {data.narrationFallbacks.map((row) => (
+            <li key={row.reason}>
+              {reasonLabel(row.reason)}: {count.format(row.count)} of {count.format(total)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function RecentCalls({ calls }: { calls: LlmCallSummary[] }) {
+  if (calls.length === 0) return null;
+  return (
+    <div>
+      <p className="font-medium">Latest calls</p>
+      <ul className="divide-y divide-border-subtle">
+        {calls.map((call) => (
+          <li key={call.id} className="py-2">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span>
+                {call.agent}: {OUTCOME_LABEL[call.outcome] ?? call.outcome}
+                {call.verdict && `, ${VERDICT_LABEL[call.verdict] ?? call.verdict}`}
+              </span>
+              <span className="text-xs text-text-muted" title={formatExactTime(call.startedAt)}>
+                {formatAge(call.startedAt)}
+              </span>
+            </div>
+            <div className="text-xs text-text-muted">
+              <span className="break-all font-mono">{call.model ?? 'no model'}</span>
+              {call.outcome !== 'no_provider' && call.outcome !== 'budget_exhausted' && (
+                <>
+                  {' '}
+                  · {formatLatency(call.latencyMs)} · {count.format(call.promptTokens)} /{' '}
+                  {count.format(call.completionTokens)} tokens · {callCost(call)}
+                </>
+              )}
+            </div>
+            {call.error && <div className="break-all text-xs text-loss">{call.error}</div>}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
