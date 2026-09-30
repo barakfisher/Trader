@@ -27,6 +27,7 @@ from app.llm.base import (
     LLMProvider,
     LLMUnavailableError,
 )
+from app.llm.degenerate_text import is_degenerate
 from app.narration.correlation import CandidateArticle, as_evidence
 from app.narration.evidence_validator import is_supported
 from app.narration.templates import concepts_for, explanation_for, headline_for
@@ -147,7 +148,10 @@ async def narrate(
         log.warning("narration.llm_unavailable", reason=reason, error=str(error))
         return _template(finding, evidence, reason)
 
-    parsed = _parse(completion.text)
+    # A looping completion is unusable output, the same outcome as JSON that does
+    # not parse - so it shares that reason rather than adding one every consumer
+    # of `fallback_reason` would have to learn (`narrationHealth.ts`).
+    parsed = None if is_degenerate(completion.text) else _parse(completion.text)
     if parsed is None:
         log.warning("narration.malformed_response", text=completion.text[:200])
         return _template(finding, evidence, "malformed")

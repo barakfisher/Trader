@@ -90,3 +90,28 @@ def test_a_model_written_weak_answer_is_hedged_too(monkeypatch: pytest.MonkeyPat
 
     assert result.answer_source == "llm"  # type: ignore[attr-defined]
     assert result.text.startswith(WEAK_MATCH_PREFIX)  # type: ignore[attr-defined]
+
+
+#: The first 120 characters of the answer the free route returned on 2026-09-30.
+LOOP = (
+    "Hereellsellsellsellsellsellsellsellsellsellsellsellsellsellsellsellsellsellsellsells"
+    " deep massellsellsellsellsell: 120 to 102 is a drawdown of -15%."
+)
+
+
+def test_a_looping_model_answer_falls_back_to_the_passages(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A loop can quote a sourced figure and pass the evidence check; it is still not text."""
+
+    class Model:
+        async def complete(self, **_kwargs: object) -> object:
+            class Completion:
+                text = LOOP
+
+            return Completion()
+
+    result = _run(monkeypatch, CONFIDENT_ABOVE + 0.1, llm=Model())
+
+    assert result.answer_source == "extractive"  # type: ignore[attr-defined]
+    assert result.fallback_reason == "degenerate_completion"  # type: ignore[attr-defined]
+    assert "sellsell" not in result.text  # type: ignore[attr-defined]
+    assert CHUNK.text in result.text  # type: ignore[attr-defined]

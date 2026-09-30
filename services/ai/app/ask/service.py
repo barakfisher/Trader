@@ -44,6 +44,7 @@ from app.corpus.embeddings import BaseEmbedder
 from app.corpus.retrieval import ScoredChunk, hybrid_search
 from app.corpus.vector_store import VectorStore
 from app.llm.base import LLMError, LLMProvider
+from app.llm.degenerate_text import is_degenerate, repeated_run
 from app.narration.evidence_validator import unsourced_figures
 
 log = get_logger("ask.service")
@@ -172,6 +173,10 @@ async def _generated(
     text = completion.text.strip()
     if not text:
         return None, "empty_completion"
+    # Before the figures: a loop can carry a sourced number and pass that check.
+    if is_degenerate(text):
+        log.warning("ask.degenerate_completion", run=(repeated_run(text) or "")[:40])
+        return None, "degenerate_completion"
 
     # The same check narration applies, with the passages standing in for a
     # finding's evidence: a figure in the answer that is not in the corpus text

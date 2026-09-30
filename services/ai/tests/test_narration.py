@@ -87,6 +87,14 @@ async def test_an_invented_figure_costs_the_whole_narration():
     assert result.headline == headline_for(PRICE_MOVE)
 
 
+async def test_a_looping_reply_is_malformed_even_as_valid_json():
+    # Parses, and its one figure is sourced - and it is still not a sentence.
+    llm = StubLLM(reply("NVDA fell 8.5%", "Itsellsellsellsellsellsellsellsellsellsell fell 8.5%."))
+    result = await narrate(PRICE_MOVE, [], llm)
+    assert result.source == "template"
+    assert result.fallback_reason == "malformed"
+
+
 @pytest.mark.parametrize(
     ("error", "expected"),
     [
