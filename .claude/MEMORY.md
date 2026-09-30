@@ -932,6 +932,20 @@ failure they prevent.
     (0 of 0 priced, yet a total), and value jumps 30% on 16 Sep, most likely real prices arriving
     (M2.5) - drawn as stored.
 
+67. **A fixture price never stands in for a real one** (`app/providers/price_provenance.py`, found
+    2026-09-29 while measuring history for the holding page). This machine's `.env` chain is
+    `yfinance,fixture`, so whenever Yahoo failed the fixture provider answered - and the backfill
+    stored its constant prices among real closes: 31 NVDA rows and 17 SAP.DE rows, e.g. $134.08 on
+    Sat 12 Sep between real ~$218 closes. **On 2026-09-23 the drawdown rule reported "NVDA is -48.6%
+    from its 30-day high" (high severity) from a fixture $118.45**; its Telegram send failed, so it
+    was never pushed, but it is in the feed. Guideline 7 says an unavailable price is null. Now: a
+    chain that does not *start* with `fixture` is a real installation, and it (a) never builds the
+    fixture provider (`admissible_chain`, logged `providers.fixture_fallback_dropped` at startup),
+    and (b) never reads stored fixture rows (`excluded_price_sources` -> `load_price_series`). A
+    demo chain (`fixture,...`, `.env.example`, CI) is unchanged. The 48 rows were **filtered, not
+    deleted**; the false finding was left for the user to decide (deletion is irreversible). Redis
+    was checked: no fixture quote was cached.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -1437,7 +1451,9 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 
 ## Local environment (this machine)
 
-- **`.env` has `MARKET_DATA_PROVIDERS=yfinance,fixture`** — real, 15-minute-delayed prices.
+- **`.env` has `MARKET_DATA_PROVIDERS=yfinance,fixture`** — real, 15-minute-delayed prices. Since
+  decision 67 the trailing `fixture` is dropped at startup (a real chain never falls back to invented
+  prices), so this is effectively `yfinance`: a Yahoo failure now leaves a holding unpriced.
   **`.env.example` keeps `fixture,yfinance`** so a fresh clone and CI run entirely offline with no
   API keys. Do not "fix" the difference: it is the point.
 - Other processes on this machine hold ports 5432, `127.0.0.1:8000` and `[::1]:5173`/`[::1]:5174`.
