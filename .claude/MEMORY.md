@@ -4,7 +4,22 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-30 ~12:30 UTC - **M7 handoff at CLAUDE.md's five-merged-PR trigger (#109-#113).
+Updated: 2026-09-30 ~14:45 UTC - **M7's closing handoff (milestone boundary). M7 is complete; the
+next session starts M8, admin operations and observability** - see "Next session: M8" in "Where
+to go next". After the five-PR handoff below (#114), the user asked to continue in the same
+session:
+- #115 (decision 82): the AI service's autoscaler, and metrics-server for kind;
+- #116: the `kubernetes (kind)` CI job - `k8s-up.sh` on a fresh runner on every PR;
+- #117: the autoscaler waits a minute before adding a copy - **found by measuring**: a 4-second
+  scheduled scan was adding a copy that started after the scan ended, every half hour;
+- #118: README (Kubernetes, architecture, costs), `docs/RUNBOOK.md`, `docs/DECISIONS.md`
+  (generated, CI-checked) - and the stranger test from a fresh clone.
+**M7's exit was checked** (see "M7 is complete, and how it was verified"). The session's grant -
+PR, merge on green, rebuild compose, create/delete the kind cluster - **ends here; ask again for
+M8**. The user has no Docker/Kubernetes background: every object was explained from first
+principles as it was written, and that is worth keeping for M8's new pieces too.
+
+Previous handoff, 2026-09-30 ~12:30 UTC - **M7 handoff at CLAUDE.md's five-merged-PR trigger (#109-#113).
 M7 is in progress: the app deploys to a local kind cluster with one command, sits behind an
 Ingress at http://traders.localhost, and nine CronJobs fire real runs - the milestone's first two
 exit conditions are met. The next session starts PR 6 (the AI service's autoscaler), then PR 7
@@ -216,7 +231,8 @@ kept so the next sweep has somewhere to add to.
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
-| M7 — Kubernetes & documentation | **In progress** | #109-#113: images, kind cluster, services with probes, Ingress, CronJobs; PR 6 (after the handoff, same session, at the user's request): the AI service's autoscaler. **Exit so far:** clean one-command deploy to kind ✅, a CronJob fires a real run ✅ (all nine, on schedule, 2026-09-30), docs a stranger can follow - PR 7. Left: PR 6 autoscaler, PR 7 docs + stranger test. See "Next session: M7, continued" |
+| M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
+| M8 — Admin operations & observability | **Next** | See "Next session: M8" and `docs/MILESTONES.md` |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
 not anticipate, found by running the thing rather than by reading it. M1.5 came from auditing the
@@ -1729,7 +1745,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 
 | Item | Where | Impact |
 |---|---|---|
-| **Telegram's inbound delivery is unproven** | deployment | Still true after M7's kind cluster, deliberately: the cluster runs with Telegram off (decision 79), and proving the webhook needs a public https URL (a tunnel) plus `setWebhook` on the real bot, which stops the compose stack's polling - **the user's explicit go-ahead is required**; it was offered as an optional last M7 PR. Everything else was exercised against a real bot, but `setWebhook` needs a public HTTPS URL. The handler has only ever been driven by replaying genuine payloads at it locally. **The first real deployment is the first real test of that leg** — check `getWebhookInfo` for `last_error_message` immediately after |
+| **Telegram's inbound delivery is unproven** | deployment | Still true after M7, deliberately: the cluster runs with Telegram off (decision 79). **The user decided (2026-09-30) to prove the webhook in a real cloud deployment with HTTPS**, not through a tunnel from the laptop; `setWebhook` on the real bot stops the compose stack's polling, so it waits for that deployment. Everything else was exercised against a real bot, but `setWebhook` needs a public HTTPS URL. The handler has only ever been driven by replaying genuine payloads at it locally. **The first real deployment is the first real test of that leg** — check `getWebhookInfo` for `last_error_message` immediately after |
 | **`queries.ts` conflicts on every parallel PR** | `src/db/queries.ts` | Four M4 PRs appended a section to the end of one 1,200-line file, and every rebase put a conflict marker exactly where one function's closing brace met the next block's header — the brace was lost and hand-repaired **three separate times**. It is the cost of CLAUDE.md's "all SQL in one file" rule, which is otherwise good. Worth deciding whether to split by domain with an index |
 | **Migration 0008 hard-codes a table Mastra owns** | `0008_mastra_workflow_state.py` | The library would create `mastra_workflow_snapshot` itself; Alembic creates it instead (`disableInit: true`), because CLAUDE.md says the AI service owns the schema. An upgrade that changes the shape breaks suspended runs — so `test/mastraSchemaOwnership.test.ts` compares the migration against `WorkflowsPG.getExportDDL()` and fails the build first. Two other things cost time to find: `PostgresStore` creates **43** tables for 24 storage domains unless you route only `workflows`, and `@mastra/core` posts feature-usage telemetry to PostHog unless `MASTRA_TELEMETRY_DISABLED` is set (it is, in `workflowRuntime.ts`, in code rather than `.env`) |
 | ~~Concept chips point nowhere~~ | — | **Resolved in M3 slice 1.** Kept as a line rather than deleted because it stood here from M2 to M4 and its absence would otherwise read as an oversight |
@@ -1743,7 +1759,9 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | **The corpus is a derived copy that three separate mechanisms keep in step** | `data/corpus`, compose, `.claude` | The files are the source of truth and `kb_documents`/`kb_chunks` are what the API serves. A hook covers Claude's edits, the `corpus` container covers every stack start, CI covers the image. None of the three covers a hand edit on a machine with no stack running — that reader sees stale text with nothing reporting the disagreement. `--dry-run` answers "are they in step?" and nobody is obliged to run it |
 | **The ingest hook does not apply to a session started before it existed** | `.claude/settings.json` | The settings watcher only watches directories that had a settings file when the session began, and `.claude/` had none. Any session started after that commit picks it up; the session that wrote it did not, and confirmed so with a sentinel rather than assuming |
 | **Import previews live in process memory** | `services/previewStore.ts` | Forces `replicas: 1` in Kubernetes, **`strategy: Recreate`** (a few seconds with no API per deploy) and **no autoscaler on the orchestrator** - MILESTONES asks for an HPA on both services; the user chose the AI service only (M7). The Telegram poller would also run per replica. The only remaining in-memory state — run keys moved to the `runs` table in M2 |
-| **The cluster's `secrets.env` belongs to the checkout that ran `k8s-up.sh`** | `infra/k8s/overlays/kind/` | A worktree and the main checkout each have their own git-ignored copy. Running `k8s-up.sh` from a checkout with no copy generates a **new DB password**, and the existing cluster's Postgres (which read its password once) locks the services out. On 2026-09-30 the worktree's copy was copied to the main checkout by hand. Fix when it bites: recover the file from the cluster's Secret when it is missing, or keep it outside the checkout |
+| **The cluster's `secrets.env` belongs to the checkout that ran `k8s-up.sh`** | `infra/k8s/overlays/kind/` | A worktree and the main checkout each have their own git-ignored copy. Running `k8s-up.sh` from a checkout with no copy generates a **new DB password**, and the existing cluster's Postgres (which read its password once) locks the services out. **Since M7's close the cluster is deployed from the main checkout, and that checkout's copy is the one** - deploy from there. `docs/RUNBOOK.md` section 1 recovers a lost file from the cluster's Secret (tested byte for byte). A lasting fix: recover automatically when the file is missing, or keep it outside the checkout |
+| **A decided proposal's workflow can stay suspended forever** | `mastra.mastra_workflow_snapshot` | Only the sweep closes workflows, and only for proposals it expires; nothing closes one whose proposal was *decided* while the resume failed. Harmless (the proposal row is the truth); `docs/RUNBOOK.md` section 3 has the query and a safe delete. **The one real case was removed at the user's request (2026-09-30 ~14:30 UTC)**: proposal `1e94ea62` (approved via Telegram 2026-09-23), after a full `pg_dump` to `data/local/backups/traders-before-workflow-cleanup-20260930T142938Z.sql` in the main checkout (git-ignored), in a transaction that would only commit if exactly one row went. The proposal row is untouched. A lasting fix would close the workflow when a direct-apply fallback decides it |
+| **The sign-in page says "the passphrase from your environment file"** | `apps/web` | Found by M7's stranger test: for the kind cluster the file is `infra/k8s/overlays/kind/secrets.env`. The README says so, so nobody is stuck; the wording is compose-centric |
 | ~~No CI job deploys to kind~~ | — | **Resolved** by the `kubernetes (kind)` job (M7 PR 7, #116). Original text: |
 | (history) No CI job deploys to kind | `.github/workflows/ci.yml` | Planned with the user (M7 decision 7): a job that creates a kind cluster, deploys, and runs `kubectl create job --from=cronjob/run-backfill`. Not built yet; until it is, the manifests are proven only on this machine and can rot like compose would without its smoke test. Belongs in PR 6 or PR 7 |
 | **The cluster's daily digest reads `degraded` every day** | `infra/k8s/base/config.env` | With Telegram off (decision 79) the run records "TELEGRAM_BOT_TOKEN is not set, so there is no channel to deliver on" - true, and seen on the first CronJob-fired digest (2026-09-30 12:16 UTC). The digest's UI card still works. Harmless noise in `runs`; revisit if the cluster ever gets a bot, or if a run-health view starts counting `degraded` |
@@ -1785,13 +1803,14 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 
 ## Local environment (this machine)
 
-- **A kind cluster named `traders` runs next to the compose stack** (created 2026-09-30 with
-  `UNIVERSE_DIR=/Users/a/projects/Traders/data/universe`, the main checkout's, because a worktree
-  has no descriptions file). kind 0.33 is installed with Homebrew; kubectl 1.36. Every command
+- **A kind cluster named `traders` runs next to the compose stack**, recreated at M7's close
+  (2026-09-30 ~14:30 UTC) **from the main checkout at `a13f662`** with that checkout's
+  `secrets.env` and `data/universe` (5,223 profiles loaded); the smoke test imported the demo
+  portfolio (10 holdings). Deploy it from the main checkout from now on (debt table). kind 0.33 is installed with Homebrew; kubectl 1.36. Every command
   names `--context kind-traders`. `bash scripts/k8s-up.sh` redeploys in ~1-2 minutes;
-  `k8s-down.sh` deletes it (the cluster's DB holds only the demo portfolio - the smoke test's
-  import, and the runs the CronJobs fired from 11:51 UTC on). App: **http://traders.localhost**, passphrase `grep APP_PASSPHRASE
-  infra/k8s/overlays/kind/secrets.env` (a copy is in the main checkout, see the debt row).
+  `k8s-down.sh` deletes it (its DB holds only the demo portfolio). App:
+  **http://traders.localhost**, passphrase `grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.env`
+  in the main checkout.
   Docker has 7.75 GB; compose and the cluster together used well under half.
 - **Docker Hub pulls time out inside the session's sandbox**, every time in M7: run
   `docker pull`, `build-images.sh` and `k8s-up.sh` outside the sandbox.
@@ -2046,7 +2065,57 @@ site, 2026-09-30); the dashboard's portfolio failure covers the summary, allocat
 the narration badge hides when unknown (the server already degrades to `unknown`). Dead ends: every
 page links back, an unknown address is the portfolio, a stale holding or proposal link says so.
 
-### Next session: M7, continued
+### M7 is complete, and how it was verified
+
+**Exit:** *a clean deploy to a local kind cluster, a CronJob firing a real run, docs that let a
+stranger run it.*
+- **Clean deploy** - `bash scripts/k8s-up.sh` from nothing: on this Mac repeatedly (last from the
+  main checkout at `a13f662`), from a fresh clone of #118's branch (1 min 58 s, warm build cache),
+  and on a fresh Linux runner on every PR (`kubernetes (kind)`, ~4 min cold).
+- **A CronJob fires a real run** - all nine on their own schedule, 11:51-12:16 UTC on 2026-09-30:
+  13 Jobs owned by their CronJobs, 13 `runs` rows with `trigger = 'cronjob'` (backfill wrote 1,797
+  real Yahoo closes). CI creates one from `run-proposal-sweep` on every PR.
+- **Docs a stranger can follow** - the README's Kubernetes section followed literally in a fresh
+  clone with no `.env`, no `secrets.env`, no descriptions: deploy, sign in with the printed
+  passphrase, import the demo portfolio (10 of 10 priced at real prices). Two exceptions, stated:
+  `brew install` could not be replayed (already installed), and the import made the dialog's two
+  requests with curl (the in-app browser cannot pick files). Every runbook command was run first.
+
+**Not proven, deliberately:** Telegram's webhook leg (debt table). **The user decided
+(2026-09-30) to test it in a real cloud environment with HTTPS, not on the laptop** - do not set it
+up through a tunnel. It needs `setWebhook` on the real bot (which stops any polling stack),
+`getWebhookInfo` at once, `TELEGRAM_UPDATES=webhook`, `WEB_BASE_URL` for "Open in app", and the
+signing secret different from the webhook secret (decision 20). The #98 crypto-close check (below) was
+also still pending at the close.
+
+### Next session: M8
+
+**First, if not already done: the #98 check** - see "Previous text of this section" in the M7
+section below for the query. It can run only after the first backfill past 21:00 UTC on
+2026-09-30; expect crypto's 30 Sep close to be a ~21:00 price until the following night.
+
+**M8** (`docs/MILESTONES.md`): admin operations and observability - `users.role` and one guard on
+every `/admin/*` route (403/401, proved by a test that enumerates them), universe status and gap
+events (`ops_events`), an on-demand "rescreen universe" that is the *same single run* as its
+quarterly CronJob (run key `universe-rescreen:<date>`), an `llm_calls` table and panel (latency,
+tokens, cost, fallback reasons - `observations.fallback_reason` already records the last), the
+on-demand ingestion fast path, and `admin_audit`. **Exit:** 403 on every `/admin/*` route for a
+non-admin (enumerated in a test); the rescreen button and the CronJob produce one run; the panel
+shows real calls; a searched missing ticker becomes priceable within one background fetch and
+appears as a gap event.
+
+What M7 leaves for M8 to build on: `/internal/runs` + a CronJob is the pattern for the quarterly
+rescreen (add it to `cronjobs.yaml` **and** `scheduler.ts`, or `cronJobContract.test.ts` fails);
+the rescreen needs somewhere outside the image for the licensed descriptions it fetches (today:
+the kind node's mount of `data/universe`, read-only - a writable home is a new decision); and a
+new admin page reaches the orchestrator through `/api/*` like every other.
+
+How M6 and M7 worked, and it held up: **measure first** (read-only, on the running system), then
+propose with a recommendation per decision, then one PR per change; **a fault found by measuring
+goes in its own PR ahead of the work that exposed it** (#117 before the docs). Never click a real
+decision or save real settings; never touch the real Telegram bot without asking.
+
+### M7, continued (history - superseded by "M7 is complete")
 
 **Where M7 stands** (2026-09-30 ~12:30 UTC): PRs 1-5 of the agreed seven are merged (#109-#113).
 The plan and every decision behind it were agreed with the user at the start of the session -
