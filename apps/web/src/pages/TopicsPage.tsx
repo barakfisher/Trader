@@ -14,7 +14,7 @@ import type { TopicCandidate } from '@traders/shared/ai';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Button, Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
-import { formatAge } from '../lib/relativeTime.ts';
+import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import {
   coverageNote,
   heldByText,
@@ -316,7 +316,7 @@ const DetailCard = observer(function DetailCard({ topic }: { topic: TopicDetail 
     >
       {topic.confirmedAt && (
         <p className="mb-3 text-xs text-text-muted">
-          Confirmed {new Date(topic.confirmedAt).toLocaleString()}. The reasons below are the ones
+          Confirmed {formatExactTime(topic.confirmedAt)}. The reasons below are the ones
           shown when you confirmed.
         </p>
       )}

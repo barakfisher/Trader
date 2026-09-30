@@ -12,6 +12,7 @@ import {
 import type { TargetRow } from '../stores/TargetsStore.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { errorMessage } from '../api/client.ts';
+import { formatClockTime } from '../lib/relativeTime.ts';
 import { useTargetsQuery } from '../queries/targets.ts';
 import { useStore } from '../stores/context.tsx';
 
@@ -47,7 +48,7 @@ export const TargetsPage = observer(function TargetsPage() {
           <h1 className="text-base font-semibold">Target weights</h1>
           {targets.savedAt && !targets.isDirty && (
             <span className="text-xs text-text-muted">
-              saved {targets.savedAt.toLocaleTimeString()}
+              saved {formatClockTime(targets.savedAt)}
             </span>
           )}
         </div>

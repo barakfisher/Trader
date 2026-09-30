@@ -117,7 +117,8 @@ describe('readEvidence', () => {
 
     expect(asOf?.label).toBe('Observed at');
     expect(asOf?.value).toBe(formatExactTime('2026-09-16T14:00:00Z'));
-    expect(asOf?.value).not.toContain('T');
+    // Not ISO 8601's date-T-time; the zone's own name may contain a T ("UTC").
+    expect(asOf?.value).not.toMatch(/\dT\d/);
   });
 
   it('shows an unknown key raw rather than guessing a unit for it', () => {
