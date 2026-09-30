@@ -17,7 +17,7 @@ export function EvidenceDrawer({
   baseCurrency,
   id,
 }: {
-  evidence: Record<string, unknown>;
+  evidence: unknown;
   baseCurrency: string;
   id: string;
 }) {

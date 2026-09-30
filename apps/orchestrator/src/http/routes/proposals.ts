@@ -98,6 +98,8 @@ export function registerProposalsRoutes(app: Hono<AppEnv>): void {
     const rows = await listProposals(currentUserId(context), {
       open,
       approved: filter === 'approved',
+      // `history`: approved, rejected and expired, newest decision first.
+      decided: filter === 'history',
       limit,
     });
     const proposals = rows.map((row) => toWire(row, now));

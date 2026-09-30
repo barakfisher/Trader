@@ -149,6 +149,18 @@ describe('the proposals inbox', () => {
     });
   });
 
+  it('lists the history - approved, rejected and expired - for the inbox to show what happened', async () => {
+    vi.mocked(queries.listProposals).mockResolvedValueOnce([]);
+    const response = await app.request('/proposals?state=history&limit=20', { headers: auth() });
+    expect(response.status).toBe(200);
+    expect(vi.mocked(queries.listProposals).mock.calls.at(-1)![1]).toEqual({
+      open: false,
+      approved: false,
+      decided: true,
+      limit: 20,
+    });
+  });
+
   it('keeps a live proposal in the open list', async () => {
     vi.mocked(queries.listProposals).mockResolvedValueOnce([proposalRow()] as never);
     const response = await app.request('/proposals?state=open', { headers: auth() });

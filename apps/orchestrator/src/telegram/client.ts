@@ -81,6 +81,35 @@ export interface TelegramClientOptions {
   resolveChatId: (userId: string) => Promise<string | null>;
   fetchImpl?: FetchLike;
   timeoutMs?: number;
+  /**
+   * The web app's public https origin. When present, every proposal message
+   * carries an "Open in app" link to its page; see `proposalLink`.
+   */
+  webBaseUrl?: string | null;
+}
+
+/** The label on the link from a Telegram proposal to its page in the web app. */
+export const OPEN_IN_APP_LABEL = 'Open in app';
+
+/**
+ * The web app's origin if Telegram will accept a link to it, else null.
+ *
+ * Telegram rejects a URL button pointing at `http://` or a private host, and it
+ * rejects the *whole message* with it - so a local `http://127.0.0.1:5174` here
+ * would turn every alert into a failed send. Such a value is dropped (the caller
+ * logs why) and messages go out without the link, as they did before it existed.
+ */
+export function proposalLinkBase(value: string | undefined | null): string | null {
+  if (!value) return null;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  const privateHost = /^(localhost|127\.|10\.|192\.168\.|0\.0\.0\.0|\[::1\])/.test(url.hostname);
+  if (url.protocol !== 'https:' || privateHost) return null;
+  return url.origin + url.pathname.replace(/\/+$/, '');
 }
 
 /**
@@ -153,15 +182,23 @@ export class TelegramNotifier implements Notifier {
         this.options.callbackSecret,
       ),
     });
+    // The link stays through every state, a decided one included: the page is
+    // where the audit trail is, and "what happened to this?" outlives the buttons.
+    const base = this.options.webBaseUrl ?? null;
+    const link = base
+      ? [[{ text: OPEN_IN_APP_LABEL, url: `${base}/proposals/${encodeURIComponent(proposalId)}` }]]
+      : [];
     switch (keyboard) {
       case 'decide':
-        return { inline_keyboard: [ACTIONS.map(({ action, label }) => button(action, label))] };
+        return {
+          inline_keyboard: [ACTIONS.map(({ action, label }) => button(action, label)), ...link],
+        };
       case 'undo':
-        return { inline_keyboard: [[button('undo', UNDO_LABEL)]] };
+        return { inline_keyboard: [[button('undo', UNDO_LABEL)], ...link] };
       case 'none':
         // An empty keyboard removes it. Omitting `reply_markup` would leave the
         // old one in place, which is the opposite of what a terminal state needs.
-        return { inline_keyboard: [] };
+        return { inline_keyboard: link };
     }
   }
 

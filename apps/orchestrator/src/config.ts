@@ -92,6 +92,16 @@ const schema = z.object({
   TELEGRAM_SIGNING_SECRET: optionalSetting(16),
 
   /**
+   * The web app's public address, e.g. `https://traders.example.com`. When set,
+   * a Telegram proposal carries an "Open in app" button to `/proposals/<id>`
+   * (FR-21). Unset until the app has a public https address (M7): Telegram
+   * refuses a URL button on `http://` or a private host - and refuses the whole
+   * message with it - so a value that is not https is ignored with a warning
+   * rather than sent (`notify/factory.ts`).
+   */
+  WEB_BASE_URL: optionalSetting(),
+
+  /**
    * How taps and commands reach this service. `polling` pulls them with
    * `getUpdates` and is the default, because the webhook needs a public HTTPS
    * URL that no installation has until M7's ingress. `webhook` once one is

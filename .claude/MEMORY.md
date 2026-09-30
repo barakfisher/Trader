@@ -169,7 +169,7 @@ that closed it.
 | **M3 — RAG & educational engine** | ✅ Complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. #45: the paid embedder. #46: `POST /ask`, intent routing, citations, a three-state relevance floor. #47: the 35-case eval set in two CI tiers. **The relevance floor is measured to be in the wrong place — see the debt table** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
-| M6 — Frontend completion & polish | **In progress** | #88-#96 merged: fixes from the browser review, the validator's cents bug, TanStack Query everywhere (task 7 closed), page addresses, the equity curve, fixture prices kept out of a real installation. #98: the backfill's still-trading closes. PR 8: the holding page (decision 68). Left: proposals inbox, `/ask`, feed filters, mobile pass, times/disclaimers - see "Next session: M6, continued" |
+| M6 — Frontend completion & polish | **In progress** | #88-#96 merged: fixes from the browser review, the validator's cents bug, TanStack Query everywhere (task 7 closed), page addresses, the equity curve, fixture prices kept out of a real installation. #98: the backfill's still-trading closes. PR 8: the holding page (decision 68). PR 9: the proposals inbox and pages (decision 69). Left: `/ask`, feed filters, mobile pass, times/disclaimers - see "Next session: M6, continued" |
 | M7 — Kubernetes & documentation | Not started | |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
@@ -207,8 +207,8 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts (2026-09-30, after PR 8): **1,619** — 827 Python, 535 orchestrator, 241 web, 16 shared - plus
-**20 Postgres integration tests** (13 Python, 7 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
+Test counts (2026-09-30, after PR 9): **1,644** — 827 Python, 549 orchestrator, 252 web, 16 shared - plus
+**21 Postgres integration tests** (13 Python, 8 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
 eval sets, which are not test counts: `/ask`'s **35 cases** (16 keyless on every PR, all 35 when
 keyed), and the topic eval's **31 cases** (`scripts/run_topic_eval.py`, keyed only, **not in CI**).
 
@@ -932,9 +932,9 @@ failure they prevent.
     unknown path renders the portfolio. Header and "Back" controls are `<Link>`s styled by
     `buttonClass()`, so they are real anchors (new tab, read as links). Both web servers already
     fall back to `index.html` - Vite in dev, nginx `try_files` in the prod image - so a reload deep
-    in the app is served. **Still owed for FR-21:** Telegram messages carry no link into the app,
-    because Telegram refuses a `127.0.0.1` URL button; PR 9 adds `/proposals/:id` and an optional
-    `WEB_BASE_URL` that puts the link in messages once M7 gives a public address. Tests render
+    in the app is served. **FR-21's link:** Telegram refuses a `127.0.0.1` URL button, so PR 9 added
+    `/proposals/:id` and an optional `WEB_BASE_URL` (decision 69); it stays unset until M7 gives a
+    public https address, and then messages carry the link. Tests render
     pages with `renderPage()` (a one-route router) because a page with a `Link` needs one.
 
 66. **The equity curve draws stored snapshots only** (the user's decision, 2026-09-29):
@@ -983,6 +983,26 @@ failure they prevent.
     week with `total` ("newest 20 of 333") and the collection state, each article saying how it was
     matched ("matched by name “Nvidia”") because a name match is weaker evidence than a ticker.
     A stale link renders "No such holding" and asks for none of the three.
+
+69. **The inbox shows every outcome, and each proposal has an address** (PR 9, 2026-09-30).
+    `GET /proposals?state=history` lists approved, rejected **and expired**, newest decision
+    first (20); "Just approved" above it holds only approvals Undo can still reach, and one moves to
+    the history when its window closes. `/proposals/$proposalId` reads the unused `GET /proposals/:id`:
+    an open proposal is decided there through the same `ProposalsStore` (one guard, one refusal
+    path), a decided one shows its outcome, evidence and **audit trail in words**, and a 404 is
+    "No such proposal" (resolved as `null`, never retried). Evidence goes through `readEvidence`
+    (`EvidenceDrawer`, always open, before the buttons) instead of raw keys. **Weights are now a
+    `share` unit - unsigned** ("Actual 35.16%", not "+35.16%", which read as a move); `drift` and
+    `*_pct` stay signed changes; `target_weight_sum` is "All targets together". Outcome badges are
+    accent / warn / muted, never green and red (decision 66 reserves those for gain and loss).
+    **An expiry is dated by its deadline (`expiresAt`), never by `decidedAt`**: that is when the
+    sweep recorded it, and measured over the 12 expired proposals the lag had a **median of 52 h**
+    and a maximum of 4 d 15 h, because the sweep runs only while the stack is up. The trail says
+    "recorded after its deadline passed" for the same reason. **FR-21:** optional `WEB_BASE_URL`
+    adds an "Open in app" URL row to every Telegram proposal keyboard, decided ones included (the
+    page is where the trail is). Only a public https origin is used (`proposalLinkBase`): Telegram
+    refuses the *whole message* over an `http://` or private-host URL button, so a bad value is
+    dropped with one startup warning rather than failing every alert. Unset here until M7.
 
 ---
 
@@ -1728,7 +1748,7 @@ The remaining PRs, in order, one branch off `main` each:
 | # | PR | What "done" means, and what was already measured |
 |---|---|---|
 | ~~8~~ | ~~Per-holding detail~~ | **Done** (decision 68), after #98 (a correctness bug found while measuring for it: the backfill stored a day still trading as its close). Seen at 1280 and 375 px against live data |
-| 9 | **Proposals inbox** | Evidence rendered through `lib/evidence.ts` (the page still dumps raw keys: `value minor 3502842`, `drift 0.150073`); expired and rejected history, not only open + approved (10 expired exist); `/proposals/$proposalId` using the unused `GET /proposals/:id`; an optional `WEB_BASE_URL` config that, when set, puts that link into Telegram messages (FR-21 - Telegram refuses a `127.0.0.1` URL button, so it stays unset until M7) |
+| ~~9~~ | ~~Proposals inbox~~ | **Done** (decision 69). Seen at 1280 and 375 px against live data; no decision was clicked - a decision's request is pinned by `proposalPages.test.tsx` |
 | 10 | **A screen for `/ask`** (queue task 6) | The weak-match hedge and the three refusals must stay distinguishable on screen (decisions 32, 36); the response already carries `answered`, `relevance`, `answer_source`, verbatim citations |
 | 11 | **Observations feed** | Severity and symbol filters, and paging: the feed is 50 items and makes the dashboard ~9,000 px tall at desktop, ~13,700 at 375 px |
 | 12 | **Mobile pass** | Holdings as cards below `sm` (the table is 880 px inside a 341 px box: only symbol, quantity and half the price show); summary cards 2x2; every page at 375 px |

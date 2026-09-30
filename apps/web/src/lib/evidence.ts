@@ -12,7 +12,8 @@
  *
  *   `*_minor`                        integer minor units of the currency the
  *                                    same mapping records
- *   `*_pct`, `*_ratio`, `*_weight`   a fraction, where 1 is 100%
+ *   `*_pct`, `*_ratio`               a fraction, where 1 is 100%, signed (a change)
+ *   `*_weight`, `*_weight_sum`       a share of the portfolio, unsigned
  *   `drift`                          a fraction (a weight difference)
  *   `as_of`, `*_as_of`               an ISO 8601 UTC timestamp
  *
@@ -43,7 +44,7 @@ export interface EvidenceSection {
 }
 
 /** What a key's suffix says its value is. */
-type Unit = 'money' | 'fraction' | 'timestamp' | 'unknown';
+type Unit = 'money' | 'fraction' | 'share' | 'timestamp' | 'unknown';
 
 /**
  * Labels where the generic "underscores to words" rule reads badly enough to be
@@ -66,13 +67,18 @@ const LABELS: Record<string, string> = {
   thresholds_pct: 'Thresholds',
   thresholds_sigma: 'Thresholds, in standard deviations',
   thresholds_weight: 'Thresholds',
+  // Without it the suffix rule makes this "Target", beside `target_weight`'s.
+  target_weight_sum: 'All targets together',
 };
 
 const UNIT_SUFFIXES: { suffix: string; unit: Unit }[] = [
   { suffix: '_minor', unit: 'money' },
   { suffix: '_pct', unit: 'fraction' },
   { suffix: '_ratio', unit: 'fraction' },
-  { suffix: '_weight', unit: 'fraction' },
+  // A weight is a share of the portfolio, not a change: unsigned. "Actual
+  // +35.16%" read as a move. `_weight_sum` is a sum of weights, so a share too.
+  { suffix: '_weight', unit: 'share' },
+  { suffix: '_weight_sum', unit: 'share' },
   { suffix: '_as_of', unit: 'timestamp' },
 ];
 
@@ -159,6 +165,11 @@ function render(
     // Weights arrive as exact decimal strings and returns as floats; both are
     // fractions of one, and percent is how a reader compares them.
     if (fraction !== null) return { value: formatPercent(fraction * 100), interpreted: true };
+  }
+
+  if (unit === 'share') {
+    const fraction = toNumber(value);
+    if (fraction !== null) return { value: `${(fraction * 100).toFixed(2)}%`, interpreted: true };
   }
 
   if (unit === 'timestamp' && typeof value === 'string') {

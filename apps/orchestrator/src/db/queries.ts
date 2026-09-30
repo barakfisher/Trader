@@ -945,19 +945,23 @@ export function findProposal(userId: string, proposalId: string): Promise<Propos
  */
 export function listProposals(
   userId: string,
-  options: { open?: boolean; approved?: boolean; limit?: number } = {},
+  options: { open?: boolean; approved?: boolean; decided?: boolean; limit?: number } = {},
 ): Promise<ProposalRow[]> {
-  const { open = false, approved = false, limit = 50 } = options;
+  const { open = false, approved = false, decided = false, limit = 50 } = options;
   // Approvals are listed newest decision first - they are what the web inbox
   // offers Undo on, and the one just made is the one most likely to be undone.
   // Approved is terminal, so the stored state is the effective one and no
   // deadline re-check is needed.
+  // `decided` is the inbox's history: every terminal state, including the ones
+  // nobody chose - an expiry is an outcome the user should be able to find.
   const filter = open
     ? `AND p.state IN ('pending','snoozed')`
     : approved
       ? `AND p.state = 'approved'`
-      : '';
-  const order = approved
+      : decided
+        ? `AND p.state IN ('approved','rejected','expired')`
+        : '';
+  const order = approved || decided
     ? 'p.decided_at DESC NULLS LAST, p.created_at DESC'
     : 'p.expires_at ASC, p.created_at DESC';
   return query<ProposalRow>(
