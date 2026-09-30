@@ -124,3 +124,93 @@ async def test_request_id_is_echoed_for_cross_service_tracing(client):
             "/market/quotes", json={"symbols": ["AAPL"]}, headers={"x-request-id": "abc-123"}
         )
     assert response.headers["x-request-id"] == "abc-123"
+
+
+class TestPriceHistory:
+    """`GET /market/history/{id}`: the stored series, the way the rules read it."""
+
+    @pytest.fixture
+    def stored(self, monkeypatch):
+        from contextlib import contextmanager
+        from datetime import UTC, datetime
+
+        calls: list[dict] = []
+        rows = [
+            # Two observations on one day: only the later is that day's close.
+            type(
+                "Row",
+                (),
+                {
+                    "as_of": datetime(2026, 9, 28, 14, 30, tzinfo=UTC),
+                    "price_minor": 23095,
+                    "currency": "USD",
+                },
+            ),
+            type(
+                "Row",
+                (),
+                {
+                    "as_of": datetime(2026, 9, 28, 20, 0, tzinfo=UTC),
+                    "price_minor": 22886,
+                    "currency": "USD",
+                },
+            ),
+            type(
+                "Row",
+                (),
+                {
+                    "as_of": datetime(2026, 9, 29, 20, 0, tzinfo=UTC),
+                    "price_minor": 22721,
+                    "currency": "USD",
+                },
+            ),
+        ]
+
+        class Connection:
+            def execute(self, _statement, parameters):
+                calls.append(parameters)
+                return rows
+
+        class Engine:
+            @contextmanager
+            def connect(self):
+                yield Connection()
+
+        monkeypatch.setattr("app.routers.market.get_engine", lambda: Engine())
+        return calls
+
+    async def test_one_close_per_day_oldest_first(self, client, stored):
+        async with client:
+            response = await client.get(
+                "/market/history/f2c094ed-4c04-4c6e-8216-ddc55b8aeb6b", params={"days": 30}
+            )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["days"] == 30
+        assert [(c["day"], c["price_minor"]) for c in body["closes"]] == [
+            ("2026-09-28", 22886),
+            ("2026-09-29", 22721),
+        ]
+        # Bounded above by now, so a future-dated row is never drawn as today.
+        assert "until" in stored[0]
+
+    async def test_a_real_installation_excludes_fixture_rows(self, client, stored, settings):
+        from app.providers.price_provenance import excluded_price_sources
+
+        async with client:
+            await client.get("/market/history/f2c094ed-4c04-4c6e-8216-ddc55b8aeb6b")
+        assert stored[0]["excluded_sources"] == list(
+            excluded_price_sources(settings.market_data_chain)
+        )
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/market/history/not-a-uuid",
+            "/market/history/f2c094ed-4c04-4c6e-8216-ddc55b8aeb6b?days=0",
+        ],
+    )
+    async def test_a_malformed_request_is_refused(self, client, stored, path):
+        async with client:
+            response = await client.get(path)
+        assert response.status_code == 422

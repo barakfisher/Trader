@@ -21,6 +21,15 @@ import { valuePortfolio } from '../../services/valuation.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { notFound } from '../errors.js';
 
+/**
+ * Every `subject_ref` a finding about `symbol` is stored under: the per-instrument
+ * rules write `instrument:NVDA`, allocation drift writes `portfolio:allocation:NVDA`
+ * (`services/ai/app/analysis/findings.py`). A holding page asks for both.
+ */
+export function subjectRefsFor(symbol: string): string[] {
+  return [`instrument:${symbol}`, `portfolio:allocation:${symbol}`];
+}
+
 export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
   app.get('/portfolio', async (context) => {
     const userId = currentUserId(context);
@@ -55,6 +64,7 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
 
   /**
    * The observations feed: what the analysis engine has found, newest first.
+   * `?symbol=NVDA` keeps the findings about one instrument, for its holding page.
    *
    * `evidence` is returned in full rather than summarised. It is what makes a
    * claim checkable, and a claim the reader cannot check is the thing this
@@ -63,7 +73,12 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
   app.get('/observations', async (context) => {
     const userId = currentUserId(context);
     const limit = Number(context.req.query('limit') ?? 50);
-    const rows = await listObservations(userId, Number.isFinite(limit) ? Math.min(limit, 200) : 50);
+    const symbol = context.req.query('symbol')?.trim().toUpperCase();
+    const rows = await listObservations(
+      userId,
+      Number.isFinite(limit) ? Math.min(limit, 200) : 50,
+      symbol ? subjectRefsFor(symbol) : null,
+    );
     return context.json({
       observations: rows.map((row) => ({
         id: row.id,

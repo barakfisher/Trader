@@ -77,7 +77,8 @@ export const ObservationsFeed = observer(function ObservationsFeed() {
   );
 });
 
-const ObservationRow = observer(function ObservationRow({
+/** One finding with its evidence drawer: the feed's row, and a holding page's. */
+export const ObservationRow = observer(function ObservationRow({
   observation,
   baseCurrency,
 }: {

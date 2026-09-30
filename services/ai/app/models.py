@@ -7,7 +7,7 @@ stable: renaming one is a breaking API change.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -90,6 +90,29 @@ class BackfillResponse(BaseModel):
             "returns the day still trading, dated to its close."
         ),
     )
+
+
+class DailyClosePoint(BaseModel):
+    """One day of an instrument's stored series, as the analysis rules read it."""
+
+    day: date = Field(description="The UTC calendar day this close belongs to.")
+    price_minor: int
+    currency: str
+    as_of: datetime = Field(description="When the price that closed the day was observed.")
+
+
+class PriceHistoryResponse(BaseModel):
+    """An instrument's daily closes, oldest first: real stored prices only.
+
+    The same series `run_portfolio_scan` analyses - `load_price_series` with this
+    installation's excluded sources, collapsed by `normalise` - so a chart drawn
+    from it shows the prices a finding was computed from. A day with no stored
+    price is absent, never filled.
+    """
+
+    instrument_id: str
+    days: int
+    closes: list[DailyClosePoint]
 
 
 class QuoteMarket(BaseModel):

@@ -11,6 +11,8 @@ export const queryKeys = {
   portfolio: ['portfolio'] as const,
   snapshots: ['portfolio', 'snapshots'] as const,
   observations: ['observations'] as const,
+  /** Under the feed, so anything that invalidates the feed refreshes a holding's findings too. */
+  symbolObservations: (symbol: string) => ['observations', 'symbol', symbol] as const,
   proposals: ['proposals'] as const,
   narration: ['narration'] as const,
   telegramBinding: ['telegram', 'binding'] as const,
@@ -22,4 +24,6 @@ export const queryKeys = {
   topicNews: (topicId: string) => ['topics', topicId, 'news'] as const,
   topicSentiment: (topicId: string) => ['topics', topicId, 'sentiment'] as const,
   concept: (slug: string) => ['concepts', slug] as const,
+  holdingHistory: (holdingId: string) => ['holdings', holdingId, 'history'] as const,
+  holdingNews: (holdingId: string) => ['holdings', holdingId, 'news'] as const,
 };

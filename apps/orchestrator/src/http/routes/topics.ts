@@ -37,7 +37,6 @@ import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 
 import type {
-  NewsCollectionState,
   TopicDetail,
   TopicNewsResponse,
   TopicSentimentResponse,
@@ -76,6 +75,7 @@ import {
 } from '../../services/topicSentiment.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, conflict, notFound, unprocessable, upstreamFailure } from '../errors.js';
+import { articleOut, collectionState } from '../newsArticles.js';
 
 const confirmSchema = z.object({
   label: z.string(),
@@ -216,22 +216,6 @@ async function confirmed(
   return detail(outcome.topic, outcome.instruments);
 }
 
-/** A finished `news_collect` run as the topic card needs it. */
-function collectionState(run: {
-  started_at: Date;
-  status: string;
-  stats: unknown;
-}): NewsCollectionState {
-  const failures = (run.stats as { provider_failures?: unknown } | null)?.provider_failures;
-  return {
-    lastRunAt: run.started_at.toISOString(),
-    status: run.status as NewsCollectionState['status'],
-    failedProviders: Array.isArray(failures)
-      ? failures.filter((f): f is string => typeof f === 'string')
-      : [],
-  };
-}
-
 /** How far back a topic's news reaches: a week, the span a topic card summarises. */
 export const TOPIC_NEWS_DAYS = 7;
 
@@ -308,21 +292,7 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
     const body: TopicNewsResponse = {
       topicId: id,
       days: TOPIC_NEWS_DAYS,
-      articles: rows.map((row) => ({
-        id: row.id,
-        url: row.url,
-        source: row.source,
-        title: row.title,
-        publishedAt: row.published_at ? new Date(row.published_at).toISOString() : null,
-        fetchedAt: new Date(row.fetched_at).toISOString(),
-        instruments: row.instruments.map((link) => ({
-          symbol: link.symbol,
-          matchMethod: link.match_method,
-          matchedText: link.matched_text,
-          salience: link.salience,
-        })),
-        sentiment: row.sentiment,
-      })),
+      articles: rows.map(articleOut),
       collection: lastRun ? collectionState(lastRun) : null,
     };
     return context.json(body);

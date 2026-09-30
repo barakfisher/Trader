@@ -23,6 +23,7 @@ import {
   fxRateSchema,
   healthResponseSchema,
   backfillResponseSchema,
+  priceHistoryResponseSchema,
   instrumentResolutionSchema,
   narrationConfigSchema,
   portfolioScanResponseSchema,
@@ -50,6 +51,7 @@ export type NewsCollectResponse = components['schemas']['NewsCollectResponse'];
 export type ObservationOut = components['schemas']['ObservationOut'];
 export type BackfillRequest = components['schemas']['BackfillRequest'];
 export type BackfillResponse = components['schemas']['BackfillResponse'];
+export type PriceHistoryResponse = components['schemas']['PriceHistoryResponse'];
 export type ConceptDocument = components['schemas']['ConceptDocumentResponse'];
 export type ConceptSection = components['schemas']['ConceptSection'];
 export type ConceptSearchResponse = components['schemas']['ConceptSearchResponse'];
@@ -250,6 +252,20 @@ export class AiClient {
       requestId,
       timeoutMs: SCAN_TIMEOUT_MS,
     });
+  }
+
+  /**
+   * An instrument's stored daily closes - the series the analysis rules read,
+   * real prices only. Read from the AI service rather than from `quotes` here,
+   * because "what counts as a day's close" and "which sources this installation
+   * excludes" are that service's rules, and a second copy would drift.
+   */
+  priceHistory(instrumentId: string, days: number, requestId?: string): Promise<PriceHistoryResponse> {
+    return this.request<PriceHistoryResponse>(
+      `/market/history/${encodeURIComponent(instrumentId)}?days=${days}`,
+      priceHistoryResponseSchema,
+      { method: 'GET', requestId },
+    );
   }
 
   /**

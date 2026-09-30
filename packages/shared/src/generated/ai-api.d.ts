@@ -193,6 +193,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/market/history/{instrument_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Price History
+         * @description An instrument's stored daily closes: read from `quotes`, never fetched.
+         *
+         *     Real prices only: a real installation skips stored fixture rows here exactly
+         *     as the analysis does (`excluded_price_sources`). An instrument with no stored
+         *     history answers an empty list - "nothing stored yet" is a state, not an error.
+         */
+        get: operations["price_history_market_history__instrument_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/market/instruments/resolve": {
         parameters: {
             query?: never;
@@ -587,6 +611,28 @@ export interface components {
             text: string;
         };
         /**
+         * DailyClosePoint
+         * @description One day of an instrument's stored series, as the analysis rules read it.
+         */
+        DailyClosePoint: {
+            /**
+             * As Of
+             * Format: date-time
+             * @description When the price that closed the day was observed.
+             */
+            as_of: string;
+            /** Currency */
+            currency: string;
+            /**
+             * Day
+             * Format: date
+             * @description The UTC calendar day this close belongs to.
+             */
+            day: string;
+            /** Price Minor */
+            price_minor: number;
+        };
+        /**
          * DiscoveredHeadline
          * @description A stored headline, verbatim: the evidence a proposal quotes.
          */
@@ -928,6 +974,23 @@ export interface components {
             /** Observations */
             observations: components["schemas"]["ObservationOut"][];
             stats: components["schemas"]["ScanStatsOut"];
+        };
+        /**
+         * PriceHistoryResponse
+         * @description An instrument's daily closes, oldest first: real stored prices only.
+         *
+         *     The same series `run_portfolio_scan` analyses - `load_price_series` with this
+         *     installation's excluded sources, collapsed by `normalise` - so a chart drawn
+         *     from it shows the prices a finding was computed from. A day with no stored
+         *     price is absent, never filled.
+         */
+        PriceHistoryResponse: {
+            /** Closes */
+            closes: components["schemas"]["DailyClosePoint"][];
+            /** Days */
+            days: number;
+            /** Instrument Id */
+            instrument_id: string;
         };
         /**
          * Quote
@@ -1642,6 +1705,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BackfillResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    price_history_market_history__instrument_id__get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path: {
+                instrument_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceHistoryResponse"];
                 };
             };
             /** @description Validation Error */

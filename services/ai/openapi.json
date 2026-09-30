@@ -493,6 +493,39 @@
         "title": "ConceptSection",
         "type": "object"
       },
+      "DailyClosePoint": {
+        "description": "One day of an instrument's stored series, as the analysis rules read it.",
+        "properties": {
+          "as_of": {
+            "description": "When the price that closed the day was observed.",
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "day": {
+            "description": "The UTC calendar day this close belongs to.",
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "price_minor": {
+            "title": "Price Minor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "price_minor",
+          "currency",
+          "as_of"
+        ],
+        "title": "DailyClosePoint",
+        "type": "object"
+      },
       "DiscoveredHeadline": {
         "description": "A stored headline, verbatim: the evidence a proposal quotes.",
         "properties": {
@@ -1147,6 +1180,33 @@
           "stats"
         ],
         "title": "PortfolioScanResponse",
+        "type": "object"
+      },
+      "PriceHistoryResponse": {
+        "description": "An instrument's daily closes, oldest first: real stored prices only.\n\nThe same series `run_portfolio_scan` analyses - `load_price_series` with this\ninstallation's excluded sources, collapsed by `normalise` - so a chart drawn\nfrom it shows the prices a finding was computed from. A day with no stored\nprice is absent, never filled.",
+        "properties": {
+          "closes": {
+            "items": {
+              "$ref": "#/components/schemas/DailyClosePoint"
+            },
+            "title": "Closes",
+            "type": "array"
+          },
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "days",
+          "closes"
+        ],
+        "title": "PriceHistoryResponse",
         "type": "object"
       },
       "Quote": {
@@ -2483,6 +2543,78 @@
           }
         },
         "summary": "Backfill",
+        "tags": [
+          "market"
+        ]
+      }
+    },
+    "/market/history/{instrument_id}": {
+      "get": {
+        "description": "An instrument's stored daily closes: read from `quotes`, never fetched.\n\nReal prices only: a real installation skips stored fixture rows here exactly\nas the analysis does (`excluded_price_sources`). An instrument with no stored\nhistory answers an empty list - \"nothing stored yet\" is a state, not an error.",
+        "operationId": "price_history_market_history__instrument_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instrument_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instrument Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 365,
+              "maximum": 3650,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PriceHistoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Price History",
         "tags": [
           "market"
         ]

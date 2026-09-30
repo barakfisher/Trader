@@ -53,3 +53,28 @@ def test_a_real_installation_reads_no_fixture_price(migrated: Engine) -> None:
         )
         assert [point.price_minor for point in bounded] == [21829, 21096]
         transaction.rollback()
+
+
+def test_daily_closes_are_the_last_real_observation_of_each_past_day(migrated: Engine) -> None:
+    from app.analysis.quote_history import load_daily_closes
+
+    with migrated.connect() as connection, connection.begin() as transaction:
+        aapl = connection.execute(
+            text("INSERT INTO instruments (symbol) VALUES ('AAPL') RETURNING id::text")
+        ).scalar_one()
+        day = NOW - timedelta(days=1)
+        _quote(connection, aapl, day - timedelta(hours=5), 33000, "yfinance")  # intraday
+        _quote(connection, aapl, day, 33241, "yfinance")  # the day's close
+        _quote(connection, aapl, NOW - timedelta(hours=2), 33300, "fixture")
+        _quote(connection, aapl, NOW - timedelta(hours=3), 33310, "yfinance")
+        _quote(connection, aapl, NOW + timedelta(hours=13), 99999, "yfinance")  # future-dated
+
+        closes = load_daily_closes(
+            connection, aapl, days=30, now=NOW, excluded_sources=("fixture",)
+        )
+
+        assert [(point.as_of, point.price_minor) for point in closes] == [
+            (day, 33241),
+            (NOW - timedelta(hours=3), 33310),
+        ]
+        transaction.rollback()
