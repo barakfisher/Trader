@@ -33,3 +33,7 @@ data/local/
 
 # Yahoo business summaries: fetched per installation, never committed (app/universe/snapshot.py)
 data/universe/*.local.jsonl
+
+# Kubernetes: per-machine secrets and the per-deploy kustomization (scripts/k8s-up.sh)
+infra/k8s/overlays/*/secrets.env
+infra/k8s/.deploy/

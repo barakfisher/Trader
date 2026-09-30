@@ -1,0 +1,26 @@
+# Traders on a local kind cluster: the base, plus what only this machine has.
+#
+# Applied by scripts/k8s-up.sh, which also sets the image tags (the commit being
+# deployed) - they change on every build, so they are not written here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# The Secret, from secrets.env beside this file. scripts/k8s-up.sh writes that
+# file on first run with freshly generated values (the sign-in passphrase is
+# copied from your .env) and never rewrites it; it is git-ignored. Hash-suffixed
+# like the ConfigMap, so a changed secret rolls the pods that read it.
+#
+# A Secret is not encrypted - it is base64, readable by anyone who can read
+# the namespace. What it buys is separation: it is never in git, never in an
+# image, and kubectl does not print it by default.
+secretGenerator:
+  - name: traders-secrets
+    behavior: merge
+    envs:
+      - secrets.env
+
+patches:
+  - path: universe-descriptions.yaml

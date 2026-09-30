@@ -15,3 +15,6 @@ data/universe/*.local.jsonl
 docs
 *.md
 !data/fixtures/README.md
+# Per-machine Kubernetes secrets (scripts/k8s-up.sh): never in a build context.
+infra/k8s/overlays/*/secrets.env
+infra/k8s/.deploy

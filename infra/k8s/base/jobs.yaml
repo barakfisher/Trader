@@ -1,0 +1,130 @@
+# The three one-shot steps that compose runs before the services start:
+# migrate the schema, load the concept corpus, load the instrument universe.
+#
+# A Job runs a pod until its container exits 0, then stops and stays recorded as
+# Complete. If the container fails, the Job starts a fresh pod, up to
+# `backoffLimit` times, with a growing pause between attempts; then it is
+# Failed. `restartPolicy: Never` makes each attempt a new pod, so the logs of a
+# failed attempt stay readable (`kubectl logs job/migrate`).
+#
+# Ordering. Compose has `depends_on`; Kubernetes has nothing like it - all three
+# Jobs start the moment they are applied. Each waits for what it needs in an
+# *init container*: a container that runs to completion before the main one is
+# allowed to start. migrate waits for Postgres to accept connections; the two
+# loaders wait until the schema is at this image's migration head
+# (scripts/wait_for_schema.py). The same check will guard the services, so a
+# pod started days later - with no migration Job in sight - is still safe.
+#
+# A Job's pod template cannot be edited once created, so scripts/k8s-up.sh
+# deletes these three before every apply. That is also the intended meaning: they
+# run once per deploy, as the compose containers run once per stack start.
+# Re-running is free - migrations at head do nothing, and both loaders compare
+# content hashes and write only what changed.
+#
+# The corpus and universe loaders failing must not stop the app, exactly as in
+# compose: nothing waits on them. An empty corpus costs the concept links; an
+# empty universe makes topic resolution answer `unavailable`.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+spec:
+  backoffLimit: 4
+  template:
+    metadata:
+      labels:
+        app: migrate
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-postgres
+          image: pgvector/pgvector:pg16
+          command: ['sh', '-c', 'until pg_isready -h postgres -p 5432 -U "$POSTGRES_USER"; do sleep 2; done']
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef: { name: traders-config, key: POSTGRES_USER }
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
+      containers:
+        - name: migrate
+          image: traders/ai-service
+          command: ['alembic', 'upgrade', 'head']
+          envFrom:
+            - configMapRef: { name: traders-config }
+            - secretRef: { name: traders-secrets }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 512Mi }
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: corpus
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: corpus
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-schema
+          image: traders/ai-service
+          command: ['python', 'scripts/wait_for_schema.py']
+          envFrom:
+            - configMapRef: { name: traders-config }
+            - secretRef: { name: traders-secrets }
+          resources:
+            requests: { cpu: 10m, memory: 64Mi }
+            limits: { memory: 256Mi }
+      containers:
+        - name: corpus
+          image: traders/ai-service
+          command: ['python', 'scripts/ingest_corpus.py']
+          envFrom:
+            - configMapRef: { name: traders-config }
+            - secretRef: { name: traders-secrets }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 512Mi }
+---
+# The universe's descriptions are Yahoo's text, licensed per installation and
+# never baked into an image. This base loads only what the image carries
+# (committed membership and ETF holdings), profiles nothing, and exits 0 - the
+# state of a fresh clone. The kind overlay mounts this machine's data/universe
+# over the image's copy, which is how a local descriptions file reaches it.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: universe
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: universe
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-schema
+          image: traders/ai-service
+          command: ['python', 'scripts/wait_for_schema.py']
+          envFrom:
+            - configMapRef: { name: traders-config }
+            - secretRef: { name: traders-secrets }
+          resources:
+            requests: { cpu: 10m, memory: 64Mi }
+            limits: { memory: 256Mi }
+      containers:
+        - name: universe
+          image: traders/ai-service
+          command: ['python', 'scripts/ingest_universe.py']
+          envFrom:
+            - configMapRef: { name: traders-config }
+            - secretRef: { name: traders-secrets }
+          resources:
+            requests: { cpu: 200m, memory: 256Mi }
+            limits: { memory: 1Gi }

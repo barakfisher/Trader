@@ -1,0 +1,7 @@
+# A Namespace is a named folder for cluster objects. Everything Traders runs
+# lives in `traders`, so it cannot collide with anything else in a shared
+# cluster, and `kubectl --namespace traders get all` shows exactly this app.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: traders

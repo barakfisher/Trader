@@ -1,0 +1,26 @@
+# Mount this machine's data/universe over the image's copy in the universe Job -
+# the kind equivalent of compose's `../../data/universe:/app/data/universe:ro`.
+#
+# Two hops, because a pod runs inside the kind node, which is itself a Docker
+# container: kind/cluster.yaml mounts the host directory into the node at
+# /traders/universe (fixed when the cluster is created), and this hostPath
+# volume mounts the node's directory into the pod. Without a descriptions file
+# in it the loader profiles nothing and exits 0, as in a fresh clone.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: universe
+spec:
+  template:
+    spec:
+      containers:
+        - name: universe
+          volumeMounts:
+            - name: universe
+              mountPath: /app/data/universe
+              readOnly: true
+      volumes:
+        - name: universe
+          hostPath:
+            path: /traders/universe
+            type: Directory
