@@ -23,7 +23,7 @@
 import type { Config } from '../config.js';
 import { findTelegramBindingByUser } from '../db/queries.js';
 import { logger } from '../logger.js';
-import { TelegramNotifier } from '../telegram/client.js';
+import { TelegramNotifier, proposalLinkBase } from '../telegram/client.js';
 import { NullNotifier, type Notifier } from './notifier.js';
 
 export function buildNotifier(config: Config): Notifier {
@@ -48,8 +48,17 @@ export function buildNotifier(config: Config): Notifier {
     );
   }
 
-  logger().info({ channel: 'telegram' }, 'telegram notifier selected');
+  const webBaseUrl = proposalLinkBase(config.WEB_BASE_URL);
+  if (config.WEB_BASE_URL && webBaseUrl === null) {
+    // Said once at startup rather than discovered as a failed send per alert.
+    logger().warn(
+      { channel: 'telegram' },
+      'WEB_BASE_URL is not a public https address; Telegram would refuse the link, so messages go without it',
+    );
+  }
+  logger().info({ channel: 'telegram', linksToApp: webBaseUrl !== null }, 'telegram notifier selected');
   return new TelegramNotifier({
+    webBaseUrl,
     botToken: config.TELEGRAM_BOT_TOKEN,
     callbackSecret: config.TELEGRAM_SIGNING_SECRET,
     // Looked up per send rather than cached: a user can connect, disconnect and

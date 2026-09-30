@@ -14,6 +14,9 @@ export const queryKeys = {
   /** Under the feed, so anything that invalidates the feed refreshes a holding's findings too. */
   symbolObservations: (symbol: string) => ['observations', 'symbol', symbol] as const,
   proposals: ['proposals'] as const,
+  /** Under the inbox's key, so a decision's invalidation of `['proposals']` refreshes both. */
+  proposalHistory: ['proposals', 'history'] as const,
+  proposal: (proposalId: string) => ['proposals', 'detail', proposalId] as const,
   narration: ['narration'] as const,
   telegramBinding: ['telegram', 'binding'] as const,
   settings: ['settings'] as const,

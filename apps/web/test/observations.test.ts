@@ -98,10 +98,16 @@ describe('readEvidence', () => {
     expect(change?.value).toBe('-8.50%');
   });
 
-  it('reads an exact decimal weight string as a fraction', () => {
-    // Weights cross the wire as exact decimal strings, not floats.
-    const [figures] = readEvidence({ actual_weight: '0.253100', drift: '-0.046900' });
-    expect(figures?.entries[0]).toMatchObject({ label: 'Actual', value: '+25.31%' });
+  it('reads an exact decimal weight string as a share, and drift as a signed change', () => {
+    // Weights cross the wire as exact decimal strings, not floats. A weight is
+    // a share, unsigned - "+25.31%" read as a move; drift is a change, signed.
+    const [figures] = readEvidence({
+      actual_weight: '0.253100',
+      drift: '-0.046900',
+      target_weight_sum: '0.700000',
+    });
+    expect(figures?.entries[0]).toMatchObject({ label: 'Actual', value: '25.31%' });
+    expect(figures?.entries[2]).toMatchObject({ label: 'All targets together', value: '70.00%' });
     expect(figures?.entries[1]).toMatchObject({ label: 'Drift from target', value: '-4.69%' });
   });
 
@@ -154,7 +160,8 @@ describe('readEvidence', () => {
   it('classifies keys by their unit suffix', () => {
     expect(unitFor('previous_price_minor')).toBe('money');
     expect(unitFor('return_ratio')).toBe('fraction');
-    expect(unitFor('target_weight')).toBe('fraction');
+    expect(unitFor('target_weight')).toBe('share');
+    expect(unitFor('target_weight_sum')).toBe('share');
     expect(unitFor('high_as_of')).toBe('timestamp');
     expect(unitFor('as_of')).toBe('timestamp');
     expect(unitFor('symbol')).toBe('unknown');

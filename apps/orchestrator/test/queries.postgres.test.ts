@@ -218,4 +218,36 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       await pool.query('DELETE FROM instruments WHERE id = ANY($1::uuid[])', [[instrument, other]]);
     });
   });
+  describe('the proposals history', () => {
+    it('lists every terminal state, newest decision first, and nothing still open', async () => {
+      const pool = getPool();
+      const observation = async () =>
+        (
+          await pool.query(
+            `INSERT INTO observations (user_id, kind, subject_ref, headline, dedupe_key)
+             VALUES ($1, 'allocation_drift', 'portfolio:allocation:X', 'h', $2) RETURNING id`,
+            [USER, randomUUID()],
+          )
+        ).rows[0].id as string;
+      const proposal = async (state: string, decidedHoursAgo: number | null) =>
+        (
+          await pool.query(
+            `INSERT INTO proposals (user_id, observation_id, kind, state, expires_at, decided_at, decided_via)
+             VALUES ($1, $2, 'rebalance', $3, now() + interval '1 day',
+                     CASE WHEN $4::int IS NULL THEN NULL ELSE now() - ($4::int * interval '1 hour') END,
+                     CASE WHEN $4::int IS NULL THEN NULL ELSE 'web' END)
+             RETURNING id`,
+            [USER, await observation(), state, decidedHoursAgo],
+          )
+        ).rows[0].id as string;
+      const expired = await proposal('expired', 1);
+      const approved = await proposal('approved', 3);
+      const rejected = await proposal('rejected', 2);
+      await proposal('pending', null);
+      await proposal('snoozed', null);
+
+      const history = await queries.listProposals(USER, { decided: true, limit: 10 });
+      expect(history.map((row) => row.id)).toEqual([expired, rejected, approved]);
+    });
+  });
 });

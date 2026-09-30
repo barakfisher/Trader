@@ -11,9 +11,9 @@
 
 import { queryOptions, useQuery } from '@tanstack/react-query';
 
-import type { Proposal, ProposalsResponse } from '@traders/shared';
+import type { Proposal, ProposalDetailResponse, ProposalsResponse } from '@traders/shared';
 
-import { api } from '../api/client.ts';
+import { ApiRequestError, api } from '../api/client.ts';
 import { useStore } from '../stores/context.tsx';
 import { queryKeys } from './queryKeys.ts';
 
@@ -101,4 +101,62 @@ export function useProposalsQuery({ live = false }: { live?: boolean } = {}) {
     refetchInterval: live ? inboxRefetchInterval(inFlight) : false,
     refetchOnWindowFocus: inFlight === 0,
   });
+}
+
+/** How many decided proposals the inbox's history shows: the latest page, not an archive. */
+export const HISTORY_PAGE = 20;
+
+/**
+ * What happened to past proposals: approved, rejected, and expired - the last
+ * being the outcome nobody chose, and the one a user most needs to be able to
+ * find ("I never saw that one"). Newest decision first.
+ */
+export const proposalHistoryQuery = queryOptions({
+  queryKey: queryKeys.proposalHistory,
+  queryFn: async () =>
+    (await api.get<ProposalsResponse>(`/proposals?state=history&limit=${HISTORY_PAGE}`)).proposals,
+});
+
+export function useProposalHistoryQuery() {
+  return useQuery(proposalHistoryQuery);
+}
+
+/**
+ * One proposal and its audit trail. A 404 resolves as `null`: "no such
+ * proposal" is an answer a stale link gets, not a failure to retry.
+ */
+export function proposalQuery(proposalId: string) {
+  return queryOptions({
+    queryKey: queryKeys.proposal(proposalId),
+    queryFn: async (): Promise<ProposalDetailResponse | null> => {
+      try {
+        return await api.get<ProposalDetailResponse>(`/proposals/${encodeURIComponent(proposalId)}`);
+      } catch (error) {
+        if (error instanceof ApiRequestError && error.status === 404) return null;
+        throw error;
+      }
+    },
+  });
+}
+
+/**
+ * A proposal's page is live like the inbox: a Telegram tap can decide it while
+ * it is on screen, and a page still offering Approve on it is the thing to avoid.
+ */
+export function useProposalQuery(proposalId: string) {
+  const { proposals } = useStore();
+  const inFlight = proposals.deciding.size;
+  return useQuery({
+    ...proposalQuery(proposalId),
+    refetchInterval: inboxRefetchInterval(inFlight),
+    refetchOnWindowFocus: inFlight === 0,
+  });
+}
+
+/** Everything in the history except what the undo section is still showing. */
+export function decidedHistory(
+  history: Proposal[] | undefined,
+  shownAbove: ReadonlySet<string>,
+): Proposal[] {
+  return (history ?? []).filter((proposal) => !shownAbove.has(proposal.id));
 }
