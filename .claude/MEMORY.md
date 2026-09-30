@@ -4,7 +4,31 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-30 ~14:45 UTC - **M7's closing handoff (milestone boundary). M7 is complete; the
+Updated: 2026-09-30 ~22:40 UTC - **M8 handoff at CLAUDE.md's five-merged-PR trigger (#120-#124).
+M8 is in progress: the admin surface exists and is guarded, audited, and shows runs, universe gaps
+and the universe's status; every model call is recorded. The next session starts PR 6, the LLM
+panel** - see "Next session: M8, continued" in "Where to go next". This session (grant: PR, merge
+on green, rebuild compose, create/delete the kind cluster; **ask again**):
+- **the #98 crypto check passed** (21:27 UTC): the first backfill after the local date rolled
+  over replaced both 06:45 prices (BTC-USD $82,987.53 -> $83,701.02, ETH-USD $2,659.27 ->
+  $2,683.26); nothing future-dated, no 1 Oct row. The 30 Sep close is a 21:27 price until the
+  next night's backfill, as the debt table says;
+- measured read-only first, and **six findings changed the milestone plan** (all in "Next
+  session: M8, continued"); the user accepted all eight recommendations;
+- #120 (decision 83): `users.role`, one guard on every `/admin/*` route, a test that enumerates
+  `app.routes`; the kind CI job demotes the admin with psql and sees the same cookie go 403;
+- #121 (decision 84): `admin_audit`, append-only **by trigger** - the app's role is a superuser,
+  so the planned `REVOKE` would have done nothing (new debt row);
+- #122 (decision 85): universe gaps as counted `ops_events` - the resolver now says whether the
+  universe holds a symbol; a missing ticker was already *priceable*, it lacks a *profile*;
+- #123 (decision 86): the universe status, reconciled against the loader's own stored counts -
+  and **a silent drop found by measuring** (14 holding rows counted nowhere; "Bugs");
+- #124 (decision 87): `llm_calls`, written by a wrapper the factory builds; call sites add only
+  a verdict. Shown on compose with a real call (free route: 14.3 s, 487+1,370 tokens, $0).
+**The user has no Docker/Kubernetes background** - keep explaining new infrastructure (PR 8's
+PersistentVolumeClaim, PR 9's CronJob) from first principles when proposing and when writing it.
+
+Previous handoff, 2026-09-30 ~14:45 UTC - **M7's closing handoff (milestone boundary). M7 is complete; the
 next session starts M8, admin operations and observability** - see "Next session: M8" in "Where
 to go next". After the five-PR handoff below (#114), the user asked to continue in the same
 session:
@@ -232,7 +256,7 @@ kept so the next sweep has somewhere to add to.
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
-| M8 — Admin operations & observability | **Next** | See "Next session: M8" and `docs/MILESTONES.md` |
+| M8 — Admin operations & observability | **In progress** | #120-#124: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded ✅ (the panel is PR 6); missing ticker as a gap event ✅ (the background *profile* fetch is PR 7); rescreen button = CronJob run - PRs 8-9. See "Next session: M8, continued" |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
 not anticipate, found by running the thing rather than by reading it. M1.5 came from auditing the
@@ -269,8 +293,8 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts (2026-09-30, after the digest PR): **1,703** — 840 Python, 557 orchestrator, 290 web, 16 shared - plus
-**23 Postgres integration tests** (13 Python, 10 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
+Test counts (2026-09-30, after M8 PR 5): **1,791** — 872 Python, 600 orchestrator, 302 web, 17 shared - plus
+**37 Postgres integration tests** (23 Python, 14 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
 eval sets, which are not test counts: `/ask`'s **35 cases** (16 keyless on every PR, all 35 when
 keyed), and the topic eval's **31 cases** (`scripts/run_topic_eval.py`, keyed only, **not in CI**).
 
@@ -1311,6 +1335,24 @@ failure they prevent.
 
 ## Bugs that cost real time, and the lesson from each
 
+**The universe loader skipped 14 ETF-holding rows without counting them (found in M8 PR 4).**
+`load_holdings` did `continue` for a holding whose fund had no profile - BULZ (10 rows), GDXD and
+GDXU (2 each), leveraged funds with no description. It counted implausible weights (19) but not
+these, so of the 33 rows between the snapshot (16,396) and the database (16,363), 14 had no
+explanation anywhere; found only because the status panel was built to reconcile to zero, and it
+didn't. → **Every `continue` in a loader is a count someone will later need.** A skip nobody
+counted is a difference nobody can explain, and the first person to compare the two totals has to
+re-derive the loader to find it.
+
+**The milestone plan named two protections that could not have worked (found measuring for M8).**
+"`REVOKE UPDATE, DELETE` makes `admin_audit` append-only": the app's only role is a superuser that
+owns every table, so the revoke would have been silently void. "The role travels in the
+server-side session": there is no server-side session, only a signed cookie. Neither would have
+failed a test. → **Before building a control, check the premise it rests on against the running
+system.** A security property that is a no-op looks exactly like one that works until the day
+it's needed; `test_admin_audit_sql.py` now asserts the superuser premise so it fails when it
+changes.
+
 **Deploying to Kubernetes found five faults that every test and the compose stack had passed**
 (M7, #111). (1) Kubernetes' Docker-links variables: a Service named `ai-service` sets
 `AI_SERVICE_PORT=tcp://...` in every pod, which collided with our own setting. (2) The AI
@@ -1816,6 +1858,9 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 
 | Item | Where | Impact |
 |---|---|---|
+| **The topic gate refused a nonsense phrase by 0.007** | `app/ask/relevance.py` (`refuse_below` 0.32) | Measured on compose 2026-09-30: "zzqx flibbertigibbet" scored 0.313, "medieval tapestry restoration" 0.245, "quantum computing" 0.584. The gate held, but a nonsense string sits 0.007 below it. `universe_gap_low_confidence` events now record every `none` with its score; **look at their distribution before moving the gate**, not at one example |
+| **Model cost reads $0 on this installation** | `.env` `LLM_MODEL` (a `:free` OpenRouter route) | Every recorded call is priced 0 because the configured route is free - true, and PR 6's panel must say "free route" rather than show $0.00 as if it were a price. The cost column has not yet been seen non-zero on real data |
+| **A low-confidence topic cannot be produced in the kind cluster** | fixture embedder, `app/ask/relevance.judge` | Keyless by decision 79: on a non-semantic embedder the judge abstains, so every topic is `weak`, never `none`. Show that event on compose |
 | **The app connects to Postgres as a superuser that owns every table** | compose, kind, CI `DATABASE_URL`s | Every service uses `traders`, the only role, a superuser. So grants protect nothing: `admin_audit` is append-only only because of its triggers (decision 84), and a superuser can still `DISABLE TRIGGER`. Any SQL-injection bug would run with full rights. Fix: an owner role for Alembic and a plain application role with `INSERT, SELECT` on `admin_audit` - it touches every connection string in three environments, which is why it was not done in M8 PR 2. `test_the_app_role_is_a_superuser...` fails when it lands, as a reminder to delete this row |
 | **Telegram's inbound delivery is unproven** | deployment | Still true after M7, deliberately: the cluster runs with Telegram off (decision 79). **The user decided (2026-09-30) to prove the webhook in a real cloud deployment with HTTPS**, not through a tunnel from the laptop; `setWebhook` on the real bot stops the compose stack's polling, so it waits for that deployment. Everything else was exercised against a real bot, but `setWebhook` needs a public HTTPS URL. The handler has only ever been driven by replaying genuine payloads at it locally. **The first real deployment is the first real test of that leg** — check `getWebhookInfo` for `last_error_message` immediately after |
 | **`queries.ts` conflicts on every parallel PR** | `src/db/queries.ts` | Four M4 PRs appended a section to the end of one 1,200-line file, and every rebase put a conflict marker exactly where one function's closing brace met the next block's header — the brace was lost and hand-repaired **three separate times**. It is the cost of CLAUDE.md's "all SQL in one file" rule, which is otherwise good. Worth deciding whether to split by domain with an index |
@@ -1875,6 +1920,14 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 
 ## Local environment (this machine)
 
+- **The kind cluster was redeployed from this worktree during M8** (last: PR 5's commit
+  `070fb0b`, whose content is `main`'s `a916ee6`), with the main checkout's `secrets.env` copied
+  in (it is gitignored; without it `k8s-up.sh` would mint new secrets over a running Postgres).
+  Its DB holds this session's test rows: gap events for AAPL/SAP.DE/BTC-USD/BYND/NOSUCHXQ, one
+  `llm_calls` row. **Rebuilding compose restarts the scheduler, and the backfill fires 8 s after
+  start, then hourly from there** - a rebuild after 21:00 UTC runs the next local day's backfill
+  at once. **zsh does not word-split `$KUBECTL`-style variables**: run such snippets under
+  `bash -c`, as CI does, or the command silently does not run (it cost one false "200" here).
 - **A kind cluster named `traders` runs next to the compose stack**, recreated at M7's close
   (2026-09-30 ~14:30 UTC) **from the main checkout at `a13f662`** with that checkout's
   `secrets.env` and `data/universe` (5,223 profiles loaded); the smoke test imported the demo
@@ -2160,32 +2213,75 @@ up through a tunnel. It needs `setWebhook` on the real bot (which stops any poll
 signing secret different from the webhook secret (decision 20). The #98 crypto-close check (below) was
 also still pending at the close.
 
-### Next session: M8
+### Next session: M8, continued
 
-**First, if not already done: the #98 check** - see "Previous text of this section" in the M7
-section below for the query. It can run only after the first backfill past 21:00 UTC on
-2026-09-30; expect crypto's 30 Sep close to be a ~21:00 price until the following night.
+**Where M8 stands** (2026-09-30 ~22:40 UTC): PRs 1-5 of the agreed ten are merged (#120-#124).
+The #98 check is done (see the header). Before any code this session measured the running system
+read-only and found **six things that changed the plan** - every one is now a decision or a PR:
+1. no server-side session exists (the cookie is signed, uid only) -> decision 83;
+2. the app's DB role is a superuser -> `REVOKE` is void -> triggers, decision 84, debt row;
+3. `/internal/runs` executes inside the request and `STALE_RUN_MINUTES = 30` would **reclaim a
+   live ~1 h rescreen and start a second** -> PR 8;
+4. the `universe` container re-ingests the committed snapshot on every start, replaces ETF
+   holdings from the file and never deletes a profile -> **a runtime rescreen would be half
+   undone by the next restart** -> PR 8;
+5. a missing ticker is already priceable (lookup asks Yahoo live); it lacks a *profile* -> PR 7
+   and the exit wording;
+6. model calls happen on compose (OpenRouter key; ~45 narrations/week) -> the panel's exit is
+   shown on compose, not in the keyless cluster.
 
-**M8** (`docs/MILESTONES.md`): admin operations and observability - `users.role` and one guard on
-every `/admin/*` route (403/401, proved by a test that enumerates them), universe status and gap
-events (`ops_events`), an on-demand "rescreen universe" that is the *same single run* as its
-quarterly CronJob (run key `universe-rescreen:<date>`), an `llm_calls` table and panel (latency,
-tokens, cost, fallback reasons - `observations.fallback_reason` already records the last), the
-on-demand ingestion fast path, and `admin_audit`. **Exit:** 403 on every `/admin/*` route for a
-non-admin (enumerated in a test); the rescreen button and the CronJob produce one run; the panel
-shows real calls; a searched missing ticker becomes priceable within one background fetch and
-appears as a gap event.
+**The eight decisions the user accepted ("recommendations", 2026-09-30):** (1) role read from the
+DB per admin request; (2) `admin_audit` append-only by trigger; (3) the rescreen runs async - the
+endpoint answers 202, the AI service runs it in the background with a `runs.heartbeat_at`, a run
+is dead only when its heartbeat is stale, and a DB rule allows one running rescreen; the fetch
+cache makes a killed copy resumable; (4) run key `universe-rescreen:<date>` for **both** the
+button and the CronJob (the plan's `<quarter>` for the CronJob could never be "the same single
+run" as a click); (5) the rescreen writes a complete snapshot to a **writable volume** (a
+PersistentVolumeClaim in kind), the loader loads whichever snapshot is newest by `as_of` - image
+or volume - never an older one over the DB, and dropped listings become `membership='dropped'`
+(holdings reference instruments, so no delete); the committed snapshot stays the fixed input for
+CI and the eval; (6) the fast path fetches a **profile** in the background, marked
+`membership='on_demand'`, excluded from topic resolution, and the exit is reworded to "profiled
+within one background fetch"; (7) universe status against the loader's own counts - done, #123;
+(8) `llm_calls` via a factory wrapper - done, #124.
 
-What M7 leaves for M8 to build on: `/internal/runs` + a CronJob is the pattern for the quarterly
-rescreen (add it to `cronjobs.yaml` **and** `scheduler.ts`, or `cronJobContract.test.ts` fails);
-the rescreen needs somewhere outside the image for the licensed descriptions it fetches (today:
-the kind node's mount of `data/universe`, read-only - a writable home is a new decision); and a
-new admin page reaches the orchestrator through `/api/*` like every other.
+**Next, in order, one branch off `main` each:**
+- **PR 6 - the LLM panel.** `GET /admin/llm` + a card: per agent - calls, p50/p95 latency, tokens,
+  cost (say "free route" when the model id ends `:free`, debt row), outcomes and verdicts;
+  fallback reasons for narration from `observations.fallback_reason` beside `llm_calls.verdict`
+  (the milestone asks for that query, not a new log). Say plainly that TTFT and semantic-cache
+  hit rate do not exist (no streaming, no cache) rather than showing zeros. **This closes the
+  panel exit condition** - show it on compose.
+- **PR 7 - the on-demand profile fetch.** `instrument_profiles.membership`
+  (`screened`/`on_demand`/`dropped`), a background fetch when a gap event is `not_in_universe`
+  (BYND and GPRO are live examples), excluded from `search_profiles`; update the exit wording in
+  `docs/MILESTONES.md`. The status panel's negative remainder (decision 86) is how an on-demand
+  profile shows - say so on the card.
+- **PR 8 - the rescreen run** (decisions 3-5): `universe_rescreen` run kind (a migration of
+  `runs_kind_check` - use the `KINDS`/`PREVIOUS_KINDS` pattern `test_run_kinds_contract.py`
+  reads), `runs.heartbeat_at`, the 202 path, the volume, the newest-snapshot rule in
+  `ingest_universe.py`, the button on the Admin page, and **the first real `admin_audit` row**.
+  Measure the build's real duration first (the ~1 h is the plan's figure, not a measurement).
+- **PR 9 - the quarterly CronJob**, in `cronjobs.yaml` **and** `scheduler.ts` (or
+  `cronJobContract.test.ts` fails); prove the button and a CronJob-made Job claim one run.
+- **PR 10 - exit check and M8's closing handoff.**
 
-How M6 and M7 worked, and it held up: **measure first** (read-only, on the running system), then
-propose with a recommendation per decision, then one PR per change; **a fault found by measuring
-goes in its own PR ahead of the work that exposed it** (#117 before the docs). Never click a real
+**Conventions this session relied on:** all admin routes live in `http/routes/admin.ts` and are
+guarded and audited by being there; the Admin page is `/admin` in the web app (`/api/admin/*` on
+the wire). Admin writes are POST under `/admin` - the gate audits them before they run. A
+migration constant named `KINDS` is read as a run-kind migration by a contract test; name others
+differently (0027 uses `EVENT_KINDS`).
+
+How M6-M8 worked, and it held up: **measure first** (read-only, on the running system), then
+propose with a recommendation per decision, then one PR per change, each proven live (kind for
+most, compose where keys or real data matter) before its PR is opened. Never click a real
 decision or save real settings; never touch the real Telegram bot without asking.
+
+### Next session: M8 (history - superseded by "Next session: M8, continued")
+
+What M7 left for M8: `/internal/runs` + a CronJob is the pattern for the quarterly rescreen; the
+rescreen needs somewhere outside the image for the licensed descriptions it fetches; a new admin
+page reaches the orchestrator through `/api/*` like every other.
 
 ### M7, continued (history - superseded by "M7 is complete")
 
