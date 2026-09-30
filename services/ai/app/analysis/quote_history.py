@@ -18,12 +18,12 @@ instead of one per symbol, and a test can hand in whatever it likes.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import bindparam, text
 
-from app.analysis.price_series import PricePoint
+from app.analysis.price_series import PricePoint, normalise
 
 #: Ascending by `as_of`, which is the order every rule expects, and the order the
 #: `quotes(instrument_id, as_of desc)` index can serve backwards.
@@ -127,3 +127,30 @@ def load_latest_quotes(
         )
         for row in rows
     }
+
+
+def load_daily_closes(
+    connection: object,
+    instrument_id: UUID | str,
+    *,
+    days: int,
+    now: datetime,
+    excluded_sources: Sequence[str] = (),
+) -> list[PricePoint]:
+    """One close per UTC day over the last `days`, oldest first - the series the rules see.
+
+    `load_price_series` and `normalise` composed, and nothing added: this is what
+    a chart of a holding draws, so that the line a reader looks at and the prices
+    a finding was computed from are one series by construction rather than two
+    that are meant to agree. Bounded above by `now` as well, so a row dated in the
+    future (see `backfill.py`) is never drawn as today.
+    """
+    return normalise(
+        load_price_series(
+            connection,
+            instrument_id,
+            since=now - timedelta(days=days),
+            until=now,
+            excluded_sources=excluded_sources,
+        )
+    )

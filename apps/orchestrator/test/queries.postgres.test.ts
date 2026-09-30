@@ -142,4 +142,80 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       expect(recent[0]).toEqual({ narration_source: 'template', fallback_reason: 'no_provider' });
     });
   });
+  describe('a holding page', () => {
+    it("reads one holding's findings under both subject formats, and the whole feed without one", async () => {
+      const insert = (ref: string, kind: string) =>
+        getPool().query(
+          `INSERT INTO observations (user_id, kind, subject_kind, subject_ref, headline, dedupe_key)
+           VALUES ($1, $2, 'instrument', $3, 'h', $4)`,
+          [USER, kind, ref, randomUUID()],
+        );
+      await insert('instrument:NVDA', 'price_move');
+      await insert('portfolio:allocation:NVDA', 'allocation_drift');
+      await insert('instrument:NVDAX', 'price_move');
+      await insert('instrument:SMR', 'drawdown');
+
+      const nvda = await queries.listObservations(USER, 50, [
+        'instrument:NVDA',
+        'portfolio:allocation:NVDA',
+      ]);
+      expect(nvda.map((row) => row.subject_ref).sort()).toEqual([
+        'instrument:NVDA',
+        'portfolio:allocation:NVDA',
+      ]);
+      // The untyped null is what a driver and a planner can disagree about.
+      // (An earlier test in this file left a finding too; only the superset matters.)
+      const all = (await queries.listObservations(USER, 50, null)).map((row) => row.subject_ref);
+      expect(all).toEqual(
+        expect.arrayContaining(['instrument:NVDA', 'instrument:NVDAX', 'instrument:SMR']),
+      );
+    });
+
+    it("counts the holding's whole week while returning one page of it", async () => {
+      const instrument = randomUUID();
+      const other = randomUUID();
+      const holding = randomUUID();
+      const pool = getPool();
+      await pool.query(`INSERT INTO instruments (id, symbol) VALUES ($1, $2), ($3, $4)`, [
+        instrument,
+        `T${instrument.slice(0, 6)}`,
+        other,
+        `O${other.slice(0, 6)}`,
+      ]);
+      await pool.query(
+        `INSERT INTO holdings (id, user_id, instrument_id, quantity, currency) VALUES ($1, $2, $3, 1, 'USD')`,
+        [holding, USER, instrument],
+      );
+      const article = async (hoursAgo: number, linkedTo: string, duplicateOf: string | null = null) => {
+        const id = randomUUID();
+        await pool.query(
+          `INSERT INTO articles (id, url_hash, url, source, published_at, title, raw_text, content_hash, duplicate_of_id)
+           VALUES ($1, $4, 'https://example.com/' || $4, 'example.com',
+                   now() - ($2 || ' hours')::interval, 't', '', $4, $3)`,
+          [id, String(hoursAgo), duplicateOf, id],
+        );
+        await pool.query(
+          `INSERT INTO article_entities (article_id, entity_kind, instrument_id, match_method, salience)
+           VALUES ($1, 'instrument', $2, 'cashtag', 0.9)`,
+          [id, linkedTo],
+        );
+        return id;
+      };
+      const newest = await article(1, instrument);
+      const original = await article(2, instrument);
+      await article(3, instrument);
+      await article(4, instrument, original); // a syndicated copy: not counted
+      await article(5, other); // another instrument's news
+      await article(24 * 8, instrument); // outside the week
+
+      const page = await queries.listHoldingArticles(USER, holding, 7, 2);
+      expect(page.map((row) => row.id)).toEqual([newest, original]);
+      expect(page[0]?.total).toBe('3');
+      expect(await queries.listHoldingArticles(randomUUID(), holding, 7, 2)).toEqual([]);
+
+      await pool.query('DELETE FROM holdings WHERE id = $1', [holding]);
+      // Instruments cascade to their links; the articles themselves are shared data.
+      await pool.query('DELETE FROM instruments WHERE id = ANY($1::uuid[])', [[instrument, other]]);
+    });
+  });
 });

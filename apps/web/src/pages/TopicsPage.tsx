@@ -31,6 +31,7 @@ import {
   useTopicsQuery,
 } from '../queries/topics.ts';
 import { useStore } from '../stores/context.tsx';
+import { NewsList } from '../components/NewsList.tsx';
 
 /**
  * Topics: themes the user follows, each with the instruments they confirmed
@@ -380,26 +381,7 @@ function NewsSection({ topicId }: { topicId: string }) {
           {news.collection && ` Last collection ${formatAge(news.collection.lastRunAt)}.`}
         </p>
       ) : (
-        <ul className="space-y-2">
-          {news.articles.map((article) => (
-            <li key={article.id} className="text-sm">
-              <a
-                href={article.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-accent hover:underline"
-              >
-                {article.title}
-              </a>
-              <p className="text-xs text-text-muted">
-                {article.source} · {formatAge(article.publishedAt ?? article.fetchedAt)}
-                {article.publishedAt === null && ' (found; publish date unknown)'}
-                {article.instruments.length > 0 &&
-                  ` · about ${article.instruments.map((i) => i.symbol).join(', ')}`}
-              </p>
-            </li>
-          ))}
-        </ul>
+        <NewsList articles={news.articles} />
       )}
     </section>
   );

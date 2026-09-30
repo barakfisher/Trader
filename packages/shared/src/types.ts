@@ -106,6 +106,44 @@ export interface SnapshotsResponse {
   snapshots: PortfolioSnapshot[];
 }
 
+// --- One holding -------------------------------------------------------------
+
+/**
+ * One day's close of an instrument, from stored prices only: the last real
+ * observation of that UTC day - exactly the series the analysis rules read, so
+ * a chart of it shows the prices a finding was computed from.
+ */
+export interface DailyClose {
+  /** The UTC calendar day, YYYY-MM-DD. */
+  day: string;
+  priceMinor: number;
+  currency: string;
+  /** When the price that closed the day was observed, ISO 8601 UTC. */
+  asOf: string;
+}
+
+export interface HoldingHistoryResponse {
+  holdingId: string;
+  symbol: string;
+  /** How far back the series was asked for, in days. */
+  days: number;
+  /** Oldest first. A day with no stored price is absent, never filled. */
+  closes: DailyClose[];
+}
+
+export interface HoldingNewsResponse {
+  holdingId: string;
+  symbol: string;
+  /** The window the articles were published in, in days. */
+  days: number;
+  /** The newest articles in the window, at most a page of them. */
+  articles: NewsArticle[];
+  /** How many articles the window holds in all, so a page never reads as the whole week. */
+  total: number;
+  /** As on a topic card: which empty an empty list is. */
+  collection: NewsCollectionState | null;
+}
+
 // --- Import (FLOWS.md F1) ----------------------------------------------------
 
 export type ImportRowStatus = 'ok' | 'ambiguous' | 'unresolved' | 'invalid' | 'duplicate';
@@ -597,7 +635,13 @@ export interface TopicDetail extends TopicSummary {
  * exact text that matched, because a link is evidence and evidence without its
  * provenance cannot be checked.
  */
-export interface TopicArticle {
+export type TopicArticle = NewsArticle;
+
+/**
+ * An article linked to an instrument, with the rule that linked it. Shared by a
+ * topic's news and a holding's: both are "articles about these instruments".
+ */
+export interface NewsArticle {
   id: string;
   url: string;
   source: string;

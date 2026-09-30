@@ -38,3 +38,8 @@ export function baseCurrencyOf(
 ): string {
   return portfolio?.summary.baseCurrency ?? accountCurrency ?? 'USD';
 }
+
+/** An FX rate (a decimal string) cut to four places on its digits - never rounded through a float. */
+export function shortRate(rate: string): string {
+  return rate.replace(/(\.\d{4})\d+$/, '$1');
+}

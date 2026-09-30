@@ -825,15 +825,25 @@ export async function listRecentDedupeKeys(userId: string, days = 2): Promise<st
   return rows.map((row) => row.dedupe_key);
 }
 
-export function listObservations(userId: string, limit = 50): Promise<ObservationRow[]> {
+/**
+ * The feed, newest first. `subjectRefs`, when given, keeps only findings about
+ * those subjects - a holding page passes the refs its symbol can appear under
+ * (`instrument:NVDA`, `portfolio:allocation:NVDA`).
+ */
+export function listObservations(
+  userId: string,
+  limit = 50,
+  subjectRefs: string[] | null = null,
+): Promise<ObservationRow[]> {
   return query<ObservationRow>(
     `SELECT id, kind, severity, subject_kind, subject_ref, headline, explanation,
             evidence, concept_refs, narration_source, fallback_reason, created_at
        FROM observations
       WHERE user_id = $1
+        AND ($3::text[] IS NULL OR subject_ref = ANY($3::text[]))
       ORDER BY created_at DESC, severity DESC
       LIMIT $2`,
-    [userId, limit],
+    [userId, limit, subjectRefs],
   );
 }
 
@@ -1712,6 +1722,53 @@ export function listTopicArticles(
       ORDER BY coalesce(a.published_at, a.fetched_at) DESC, a.id
       LIMIT $4`,
     [userId, topicId, String(days), limit],
+  );
+}
+
+export interface InstrumentArticleRow extends TopicArticleRow {
+  /** Every article in the window, not only this page: `count(*) OVER ()`. */
+  total: string;
+}
+
+/**
+ * A holding's news: articles linked to its instrument, newest first.
+ *
+ * Ownership goes through `holdings` - articles are shared market data with no
+ * `user_id`, so the holding row is what makes this one user's question. Shaped
+ * like `listTopicArticles` so both render with one component; `instruments`
+ * carries only this holding's link, the one that brought the article here.
+ */
+export function listHoldingArticles(
+  userId: string,
+  holdingId: string,
+  days: number,
+  limit = 20,
+): Promise<InstrumentArticleRow[]> {
+  return query<InstrumentArticleRow>(
+    `SELECT a.id, a.url, a.source, a.title, a.published_at, a.fetched_at,
+            json_build_array(json_build_object(
+              'symbol', i.symbol,
+              'match_method', ae.match_method,
+              'matched_text', ae.matched_text,
+              'salience', ae.salience::text
+            )) AS instruments,
+            (SELECT json_build_object('score', s.score::text, 'magnitude', s.magnitude::text,
+                                      'model', s.model)
+               FROM article_sentiment s
+              WHERE s.article_id = a.id
+              ORDER BY s.created_at DESC
+              LIMIT 1) AS sentiment,
+            count(*) OVER ()::text AS total
+       FROM holdings h
+       JOIN instruments i ON i.id = h.instrument_id
+       JOIN article_entities ae ON ae.instrument_id = h.instrument_id
+       JOIN articles a ON a.id = ae.article_id
+      WHERE h.user_id = $1 AND h.id = $2
+        AND a.duplicate_of_id IS NULL
+        AND coalesce(a.published_at, a.fetched_at) > now() - ($3 || ' days')::interval
+      ORDER BY coalesce(a.published_at, a.fetched_at) DESC, a.id
+      LIMIT $4`,
+    [userId, holdingId, String(days), limit],
   );
 }
 

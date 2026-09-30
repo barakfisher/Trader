@@ -97,6 +97,8 @@ export function coverageNote(universe: TopicResolveResponse['universe']): string
 export function newsEmptyMessage(
   collection: NewsCollectionState | null | undefined,
   days: number,
+  /** What the news is about: a topic's instruments, or one holding. */
+  subject = 'this topic’s instruments',
 ): string {
   // Undefined too: an orchestrator older than this field sends none, and that
   // must not read as a failed collection.
@@ -104,7 +106,7 @@ export function newsEmptyMessage(
     return 'News has not been collected yet, so there is nothing to show here.';
   }
   if (collection.status === 'ok' || collection.status === 'skipped') {
-    return `No news about this topic’s instruments in the last ${days} days.`;
+    return `No news about ${subject} in the last ${days} days.`;
   }
   const who = collection.failedProviders.length > 0 ? ` (${collection.failedProviders.join(', ')})` : '';
   return (

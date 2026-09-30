@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from '@tanstack/react-router';
 import { Check, Clock, Pencil, Trash2, X } from 'lucide-react';
 
 import { formatMoney, formatPercent, minorToNumber, type HoldingView } from '@traders/shared';
@@ -87,7 +88,13 @@ function HoldingRow({
     <tr className="border-b border-border-subtle/50 last:border-0 hover:bg-surface-hover/40">
       <td className="py-2 pr-3">
         <div className="flex items-center gap-2">
-          <span className="font-medium">{holding.instrument.symbol}</span>
+          <Link
+            to="/holdings/$holdingId"
+            params={{ holdingId: holding.id }}
+            className="font-medium text-accent hover:underline"
+          >
+            {holding.instrument.symbol}
+          </Link>
           {holding.quote?.stale && (
             <span
               title={`Last known price, observed ${formatExactTime(holding.quote.asOf)}. No provider could refresh it.`}

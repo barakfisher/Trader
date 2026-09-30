@@ -7,20 +7,51 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
 
-import { parseToMinor } from '@traders/shared';
+import {
+  parseToMinor,
+  type HoldingHistoryResponse,
+  type HoldingNewsResponse,
+} from '@traders/shared';
+import { AiServiceError } from '@traders/shared/ai';
 
 import {
   deleteHolding,
+  getHolding,
+  getLatestFinishedRun,
   getUser,
+  listHoldingArticles,
   listHoldings,
   updateHolding,
   upsertHolding,
   upsertInstrument,
 } from '../../db/queries.js';
 import { currentUserId, type AppEnv } from '../app.js';
-import { badRequest, notFound, unprocessable } from '../errors.js';
+import { badRequest, notFound, unprocessable, upstreamFailure } from '../errors.js';
+import { articleOut, collectionState } from '../newsArticles.js';
 
 const DECIMAL = /^\d+(\.\d+)?$/;
+
+/**
+ * How far back a holding's chart reaches: a year. More than the daily backfill
+ * fetches (180 days), because older stored closes are still real prices and the
+ * chart shows what is stored - it never asks a provider for more.
+ */
+export const HOLDING_HISTORY_DAYS = 365;
+
+/** A holding's news window: a week, as on a topic card. */
+export const HOLDING_NEWS_DAYS = 7;
+
+/** One page of a holding's news. AAPL links ~440 articles a week; the page says how many. */
+export const HOLDING_NEWS_PAGE = 20;
+
+const holdingId = z.string().uuid();
+
+/** A holding id from the path. Not a UUID is "no such holding", not a 400 about UUIDs. */
+function parseHoldingId(raw: string): string {
+  const parsed = holdingId.safeParse(raw);
+  if (!parsed.success) throw notFound('holding not found');
+  return parsed.data;
+}
 
 const createSchema = z.object({
   symbol: z.string().min(1).max(32),
@@ -55,6 +86,64 @@ export function registerHoldingsRoutes(app: Hono<AppEnv>): void {
         notes: row.notes,
       })),
     });
+  });
+
+  /**
+   * The holding's daily closes, for its chart: the series the analysis rules
+   * read, from the AI service, which owns "what is a day's close" and "which
+   * stored prices are real". The holding is looked up first, so another user's
+   * holding - or an instrument id guessed into the path - is a 404.
+   */
+  app.get('/holdings/:id/history', async (context) => {
+    const userId = currentUserId(context);
+    const holding = await getHolding(userId, parseHoldingId(context.req.param('id')));
+    if (!holding) throw notFound('holding not found');
+    try {
+      const history = await context
+        .get('ai')
+        .priceHistory(holding.instrument_id, HOLDING_HISTORY_DAYS, context.get('requestId'));
+      const body: HoldingHistoryResponse = {
+        holdingId: holding.id,
+        symbol: holding.symbol,
+        days: history.days,
+        closes: history.closes.map((close) => ({
+          day: close.day,
+          priceMinor: close.price_minor,
+          currency: close.currency,
+          asOf: new Date(close.as_of).toISOString(),
+        })),
+      };
+      return context.json(body);
+    } catch (error) {
+      if (error instanceof AiServiceError) {
+        throw upstreamFailure(error.status, 'The price history could not be read.');
+      }
+      throw error;
+    }
+  });
+
+  /**
+   * The holding's week of news, newest first, one page of it with the total.
+   * As on a topic card, the latest collection travels with it, so an empty list
+   * can tell a quiet week from news that could not be collected.
+   */
+  app.get('/holdings/:id/news', async (context) => {
+    const userId = currentUserId(context);
+    const holding = await getHolding(userId, parseHoldingId(context.req.param('id')));
+    if (!holding) throw notFound('holding not found');
+    const [rows, lastRun] = await Promise.all([
+      listHoldingArticles(userId, holding.id, HOLDING_NEWS_DAYS, HOLDING_NEWS_PAGE),
+      getLatestFinishedRun(userId, 'news_collect'),
+    ]);
+    const body: HoldingNewsResponse = {
+      holdingId: holding.id,
+      symbol: holding.symbol,
+      days: HOLDING_NEWS_DAYS,
+      articles: rows.map(articleOut),
+      total: rows.length === 0 ? 0 : Number(rows[0]!.total),
+      collection: lastRun ? collectionState(lastRun) : null,
+    };
+    return context.json(body);
   });
 
   app.post('/holdings', async (context) => {

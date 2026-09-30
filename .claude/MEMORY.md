@@ -169,7 +169,7 @@ that closed it.
 | **M3 — RAG & educational engine** | ✅ Complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. #45: the paid embedder. #46: `POST /ask`, intent routing, citations, a three-state relevance floor. #47: the 35-case eval set in two CI tiers. **The relevance floor is measured to be in the wrong place — see the debt table** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
-| M6 — Frontend completion & polish | **In progress** | #88-#96 merged: fixes from the browser review, the validator's cents bug, TanStack Query everywhere (task 7 closed), page addresses, the equity curve, fixture prices kept out of a real installation. Left: holding detail, proposals inbox, `/ask`, feed filters, mobile pass, times/disclaimers - see "Next session: M6, continued" |
+| M6 — Frontend completion & polish | **In progress** | #88-#96 merged: fixes from the browser review, the validator's cents bug, TanStack Query everywhere (task 7 closed), page addresses, the equity curve, fixture prices kept out of a real installation. #98: the backfill's still-trading closes. PR 8: the holding page (decision 68). Left: proposals inbox, `/ask`, feed filters, mobile pass, times/disclaimers - see "Next session: M6, continued" |
 | M7 — Kubernetes & documentation | Not started | |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
@@ -207,8 +207,8 @@ The corpus is a derived copy and is not covered by any of those. `cd services/ai
 DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders .venv/bin/python
 scripts/ingest_corpus.py --dry-run` answers whether the database is in step with `data/corpus/`.
 
-Test counts at handoff (2026-09-30, after #96): **1,586** — 822 Python, 525 orchestrator, 223 web, 16 shared - plus
-**15 Postgres integration tests** (10 Python, 5 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
+Test counts (2026-09-30, after PR 8): **1,619** — 827 Python, 535 orchestrator, 241 web, 16 shared - plus
+**20 Postgres integration tests** (13 Python, 7 orchestrator) that skip without `TEST_DATABASE_URL`. Plus two
 eval sets, which are not test counts: `/ask`'s **35 cases** (16 keyless on every PR, all 35 when
 keyed), and the topic eval's **31 cases** (`scripts/run_topic_eval.py`, keyed only, **not in CI**).
 
@@ -965,9 +965,41 @@ failure they prevent.
     request (2026-09-30)**, after #96 was live, and a manual `portfolio_scan` confirmed it did not
     return. Redis was checked: no fixture quote was cached.
 
+68. **A holding's chart draws the rules' own series** (`/holdings/$holdingId`, PR 8, 2026-09-30).
+    `GET /market/history/{instrument_id}` on the AI service returns `load_daily_closes` =
+    `load_price_series` (fixture rows excluded, bounded above by now) + `normalise`; the orchestrator's
+    `GET /holdings/:id/history` checks the holding is the user's and passes it through. Rejected:
+    SQL in `queries.ts`, which would have been a second definition of "a day's close" and of "which
+    sources are real", and the orchestrator does not know the provider chain. So the line a reader
+    sees is the series a finding was computed from, by construction. Chart rules (`lib/priceChart.ts`):
+    closed-market days are not gaps - a break only where closes are more than `MAX_CLOSED_DAYS` (5)
+    apart, measured max was 4 (5 once on XETRA); today's point is labelled "so far today", because
+    before the close it is the latest observation, not a close; the cost-per-unit line (olive, dashed,
+    decision 66's pair) is drawn only when it falls inside the price range, else the legend says
+    "below/above this range" - stretching the axis to NVDA's $98.75 under a $227 price flattened
+    every move. Position figures are the cached portfolio row (no second request, so the page and
+    the dashboard cannot disagree); findings come from `/observations?symbol=`, which matches both
+    `instrument:X` and `portfolio:allocation:X`; news is `GET /holdings/:id/news`, newest 20 of the
+    week with `total` ("newest 20 of 333") and the collection state, each article saying how it was
+    matched ("matched by name “Nvidia”") because a name match is weaker evidence than a ticker.
+    A stale link renders "No such holding" and asks for none of the three.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
+
+**A provider's daily history includes the day still trading, and the backfill kept it forever (#98).**
+Yahoo returns today's candle while the session is open, priced at the latest trade, and the provider
+dates every candle 20:00 UTC; the backfill inserted with `DO NOTHING`. So every backfill that ran
+before a session closed stored the price at run time as that day's close, permanently: AAPL's 16 Sep
+"close" was $332.57 (real $332.41, which the next morning's quote showed), every crypto close since
+mid-September was the price at the hour the backfill ran, and a 06:45 UTC run wrote a BTC row dated
+20:00 that evening. Found only because the holding page's measurement listed raw rows around "now".
+Fix: never store a close dated after now; the backfill replaces its **own** earlier rows (same
+source, `delay_seconds = 0`), never an observation. The next manual run corrected 18 rows, including
+AAPL's to $332.41. → **When a provider's "daily" series is stored, ask what it returns for today.**
+And `DO NOTHING` on a value that can legitimately change is a decision that the first answer wins;
+make it deliberately.
 
 **The equity curve was a day early on this machine and right in the container.** node-postgres
 parses a `DATE` into a JS `Date` at *local* midnight; the snapshots route printed it with
@@ -1449,6 +1481,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | (history) Auto-discovery's first real run | `app/topics/discovery.py`, `services/topicDiscovery.ts` | 2026-09-28 10:33 UTC: 123 linked headlines, 20 phrases, 8 resolved, 0 proposed. Every resolved phrase was `none` or `weak` (`ai`, `buy`, `pro`, `prediction` none; `tv`, `crypto`, `iphone`, `remittix` weak). The 12 skipped by the 8-per-run cap were resolved by hand afterwards and none would have qualified either (`chips` resolves to potato-chip makers LW and UTZ; `futures` is `confident` with no confident candidate; `bytedance alibaba` is `weak` over NVDA/TSM/MU). **So 0 proposals was the right answer, and the run exposed two faults:** (1) the resolve budget went to everyday words - `buy`, `pro`, `use`, `billion`, `season`, `prediction` belong in `GENERIC_WORDS`; (2) single words are poor resolver queries (two-letter "ai" resolves to nothing), and the one multi-word phrase was the one with a real signal. Not yet shown: discovery *finding* a theme, which M5's exit criterion needs |
 | ~~Open proposals never expire~~ | — | **Resolved** (decision 57, migration 0021): unanswered for `TOPIC_PROPOSAL_TTL_DAYS`, a proposal becomes `expired`, kept and named in the run's stats. Kept as a line so the history survives |
 | **One standing drift is proposed again every day** | `services/proposals.ts`, observation `dedupe_key` | A proposal is deduplicated by its observation, and an allocation-drift observation's `dedupe_key` changes with each day's valuation. So a drift nobody has fixed becomes a new proposal daily: on 2026-09-29 the inbox held **two open BTC-USD drift proposals** (created 09-28 16:12 and 09-29 05:20 UTC) asking the same question, and one approved on 09-26 was followed by a new one the next day. Seen in the M6 browser review; **the user decided (2026-09-29) to record it and not fix it in M6**. A fix belongs in the proposal layer (one open proposal per subject and kind), not in the observation key, which is right to change daily |
+| **An equity can have a weekend "close"** | `normalise`, the quote path | A dashboard opened on Sunday 27 Sep stored each equity's Friday price with a Sunday `as_of` (the provider's `fast_info` has no timestamp, so a quote is dated when it was fetched). `normalise` makes it a Sunday close equal to Friday's: a 0% day for the rules, a flat step on the holding chart. One day so far. A fix belongs in the quote path (do not store a quote for an exchange outside its session, `market_sessions.py` knows the sessions), not in the chart, which draws what the rules read |
 | **Company names that are everyday words link falsely** | `app/news/entities.py` | Measured on the first raw-file run (2026-09-27 19:35 UTC): 2 of 18 stored articles were about the fruit - "Apple Cider & Donut Day at the Kinney Pioneer Museum", "Czipar's annual Apple Festival" - and linked to AAPL, because a capitalised "Apple" in a headline matches the company. The same will happen for "Target", "Block", "Visa", "Shell" when followed - and for **surnames**: on 2026-09-29 the "gasoline" topic card showed "Auxiliary Bishop René Valero and His Legacy" (thetablet.org) linked to VLO. Consequences: the fruit lands on the topic card and in sentiment, and discovery reads it ("festival" was a candidate phrase on 2026-09-28). The provider is not at fault; the matcher accepts a bare name as a sole signal. **Deferred by the user to a dedicated PR after more data** - likely shape: for a name that is also a dictionary word, require a second signal (a ticker, "Inc", a product word) before linking, and measure precision over several days of runs, not one |
 | **Laptop sleep leaves gaps in collection** | local scheduler | Overnight 2026-09-27/28 the runs jumped 20:30 -> 23:13 -> 03:21 -> 10:18 UTC. The cursor caught up (16 files a run, never older than 48 h), so no news was lost - but the daily `topic_discovery` meant for local midnight ran at 10:33 UTC. Harmless for news; worth knowing when a "nightly" result appears at breakfast. M7's CronJob removes it |
 | **Names ending in ", LP" never link to news** | `app/news/entities.py` `core_name` | `core_name` strips "Fund", "Inc" and the like but not a trailing ", LP", so "United States Gasoline Fund, LP" is matched - and searched on GDELT - only by that exact phrase, which prose never writes. **Not fixed on purpose:** 37 instruments in the committed universe have LP names, and `core_name` also shapes the resolver's matching text (`app/universe/matching_text.py`), so the fix moves topic resolution and needs the new held-out batch to measure. Fix both together, or give the news matcher its own rule |
@@ -1694,7 +1727,7 @@ The remaining PRs, in order, one branch off `main` each:
 
 | # | PR | What "done" means, and what was already measured |
 |---|---|---|
-| **8** | **Per-holding detail** `/holdings/$holdingId` | A price chart (one close per day, real prices only - `excluded_price_sources` already applies to `load_price_series`; the chart needs an orchestrator route, e.g. `GET /holdings/:id/history`, reading `quotes` with the same exclusion - note quotes hold several intraday rows a day: ~218 rows over ~190 days per holding), the position figures the dashboard shows, the holding's findings (`/observations` has no symbol filter yet - add one) and its week of news (article_entities -> articles; AAPL/NVDA have ~280 linked articles a week, SAP.DE 6). Holdings-table rows link to it. Reuse `EquityCurve`'s colour pair and mark rules (decision 66) |
+| ~~8~~ | ~~Per-holding detail~~ | **Done** (decision 68), after #98 (a correctness bug found while measuring for it: the backfill stored a day still trading as its close). Seen at 1280 and 375 px against live data |
 | 9 | **Proposals inbox** | Evidence rendered through `lib/evidence.ts` (the page still dumps raw keys: `value minor 3502842`, `drift 0.150073`); expired and rejected history, not only open + approved (10 expired exist); `/proposals/$proposalId` using the unused `GET /proposals/:id`; an optional `WEB_BASE_URL` config that, when set, puts that link into Telegram messages (FR-21 - Telegram refuses a `127.0.0.1` URL button, so it stays unset until M7) |
 | 10 | **A screen for `/ask`** (queue task 6) | The weak-match hedge and the three refusals must stay distinguishable on screen (decisions 32, 36); the response already carries `answered`, `relevance`, `answer_source`, verbatim citations |
 | 11 | **Observations feed** | Severity and symbol filters, and paging: the feed is 50 items and makes the dashboard ~9,000 px tall at desktop, ~13,700 at 375 px |
