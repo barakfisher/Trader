@@ -143,3 +143,14 @@ INSERT INTO ops_events (kind, user_id, detail, dedupe_key) VALUES
   ('universe_gap_low_confidence', '00000000-0000-0000-0000-00000000000a',
    '{"topic": "quantum", "best_similarity": 0.18, "refuse_below": 0.23}',
    'low_confidence:a:quantum:2026-10-01');
+
+-- Model calls covering every agent, outcome and verdict.
+INSERT INTO llm_calls (user_id, agent, provider, model, outcome, verdict, latency_ms, prompt) VALUES
+  ('00000000-0000-0000-0000-00000000000a', 'narration', 'openrouter', 'm', 'ok', 'accepted', 900, 'p'),
+  ('00000000-0000-0000-0000-00000000000a', 'narration', 'openrouter', 'm', 'ok', 'malformed', 900, 'p'),
+  ('00000000-0000-0000-0000-00000000000a', 'narration', 'openrouter', 'm', 'ok', 'unsourced_figures', 900, 'p'),
+  ('00000000-0000-0000-0000-00000000000a', 'ask', 'openrouter', 'm', 'ok', 'empty_completion', 900, 'p'),
+  ('00000000-0000-0000-0000-00000000000a', 'ask', 'openrouter', 'm', 'ok', 'degenerate_completion', 900, 'p'),
+  ('00000000-0000-0000-0000-00000000000a', 'ask', 'openrouter', 'm', 'provider_error', NULL, 30000, 'p'),
+  (NULL, 'narration', 'openrouter', NULL, 'budget_exhausted', NULL, 0, 'p'),
+  (NULL, 'narration', 'null', NULL, 'no_provider', NULL, 0, 'p');

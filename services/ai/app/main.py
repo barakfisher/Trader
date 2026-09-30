@@ -21,6 +21,8 @@ from app.core.logging import configure_logging, get_logger, request_id_var
 from app.core.ratelimit import RateLimiter
 from app.corpus.embedder_factory import build_embedder
 from app.corpus.vector_store import PgVectorStore
+from app.db import get_engine
+from app.llm.call_log import DatabaseCallLog
 from app.llm.factory import build_llm
 from app.providers.registry import MarketDataService, build_providers
 from app.routers import analysis, ask, concepts, health, market, narration, news, topics
@@ -41,7 +43,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Built once, with the spend guard wired to the same Redis. A misconfigured
     # provider raises here in production and degrades to null elsewhere, so the
     # quotes API is never taken down by a narration setting.
-    app.state.llm = build_llm(settings, redis)
+    # Every call through it is recorded in `llm_calls` for the admin page.
+    app.state.llm = build_llm(
+        settings,
+        redis,
+        call_log=DatabaseCallLog(get_engine(), settings.llm_call_retention_days),
+    )
     # Unlike the LLM above, a misconfigured embedder raises here in every
     # environment and stops the service starting. There is no honest null
     # embedding - see app/corpus/embedder_factory.py - and the default

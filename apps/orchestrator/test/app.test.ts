@@ -459,6 +459,8 @@ describe('API', () => {
     const body = (await response.json()) as { status: string; result: { created: number } };
     expect(body.result.created).toBe(2);
     expect(queries.insertObservations).toHaveBeenCalled();
+    // Every model call the scan makes is recorded against this user (decision 87).
+    expect(fakeAi.lastScanRequest).toMatchObject({ user_id: USER.id });
   });
 
   it('stores who wrote each explanation, and why the model did not', async () => {

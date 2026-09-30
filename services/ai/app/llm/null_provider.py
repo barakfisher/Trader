@@ -15,7 +15,7 @@ say, when in fact nothing was ever asked.
 from __future__ import annotations
 
 from app.core.logging import get_logger
-from app.llm.base import LLMCompletion, LLMUnavailableError
+from app.llm.base import Caller, LLMCompletion, LLMUnavailableError, Verdict
 
 log = get_logger("llm.null")
 
@@ -40,8 +40,12 @@ class NullProvider:
         max_output_tokens: int | None = None,
         temperature: float | None = None,
         reasoning_effort: str | None = None,
+        caller: Caller | None = None,
     ) -> LLMCompletion:
         # Logged on every refusal rather than once at startup: a run that quietly
         # produced no narration for a month is the outcome this line prevents.
         log.info("llm.unavailable", reason=self._reason)
         raise LLMUnavailableError(self._reason)
+
+    async def record_verdict(self, call_id: int | None, verdict: Verdict) -> None:
+        """Nothing is recorded here; see `call_log.RecordingProvider`."""

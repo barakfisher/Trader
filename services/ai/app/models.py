@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -226,6 +227,10 @@ class ScanHolding(BaseModel):
 
 
 class PortfolioScanRequest(BaseModel):
+    #: The account this is for, recorded on each model call it makes
+    #: (`llm_calls.user_id`, decision 87). Optional: a caller that sends none
+    #: gets its calls recorded without an owner.
+    user_id: UUID | None = None
     base_currency: str = "USD"
     holdings: list[ScanHolding] = Field(min_length=1, max_length=500)
     target_weights: dict[str, str] = Field(
@@ -347,6 +352,10 @@ class TopicScanTopic(BaseModel):
 
 
 class TopicScanRequest(BaseModel):
+    #: The account this is for, recorded on each model call it makes
+    #: (`llm_calls.user_id`, decision 87). Optional: a caller that sends none
+    #: gets its calls recorded without an owner.
+    user_id: UUID | None = None
     topics: list[TopicScanTopic] = Field(min_length=1, max_length=50)
     known_dedupe_keys: list[str] = Field(
         default_factory=list,
@@ -480,6 +489,10 @@ class AskRequest(BaseModel):
     """
 
     question: str = Field(min_length=1, max_length=1000)
+    #: The account this is for, recorded on each model call it makes
+    #: (`llm_calls.user_id`, decision 87). Optional: a caller that sends none
+    #: gets its calls recorded without an owner.
+    user_id: UUID | None = None
     base_currency: str = "USD"
     holdings: list[ScanHolding] = Field(default_factory=list, max_length=500)
     target_weights: dict[str, str] = Field(default_factory=dict)

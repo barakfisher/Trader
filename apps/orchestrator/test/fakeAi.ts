@@ -29,7 +29,7 @@ export interface FakeAiOptions {
 }
 
 /** The last scan request the fake received, so a test can assert what was sent. */
-export let lastScanRequest: { known_dedupe_keys?: string[] } | null = null;
+export let lastScanRequest: { known_dedupe_keys?: string[]; user_id?: string | null } | null = null;
 export let lastCollectRequest: Record<string, unknown> | null = null;
 
 export function createFakeAi(options: FakeAiOptions = {}): AiClient {

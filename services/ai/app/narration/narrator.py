@@ -22,6 +22,7 @@ from app.analysis.findings import Finding
 from app.core.logging import get_logger
 from app.llm.base import (
     NO_REASONING,
+    Caller,
     LLMBudgetExceededError,
     LLMError,
     LLMProvider,
@@ -112,6 +113,7 @@ async def narrate(
     llm: LLMProvider | None,
     *,
     temperature: float = 0.1,
+    user_id: str | None = None,
 ) -> Narration:
     """Narrate `finding`, falling back to the template on any doubt."""
     evidence = build_evidence(finding, articles)
@@ -140,6 +142,7 @@ async def narrate(
             # its retrieved context supports an answer at all - should pass its
             # own value, or none and inherit the deployment default.
             reasoning_effort=NO_REASONING,
+            caller=Caller(agent="narration", user_id=user_id),
         )
     except LLMError as error:
         # The null provider raises Unavailable, so "no LLM configured" arrives
@@ -154,6 +157,7 @@ async def narrate(
     parsed = None if is_degenerate(completion.text) else _parse(completion.text)
     if parsed is None:
         log.warning("narration.malformed_response", text=completion.text[:200])
+        await llm.record_verdict(completion.call_id, "malformed")
         return _template(finding, evidence, "malformed")
 
     headline, explanation = parsed
@@ -166,8 +170,10 @@ async def narrate(
             kind=finding.kind,
             model=completion.model,
         )
+        await llm.record_verdict(completion.call_id, "unsourced_figures")
         return _template(finding, evidence, "unsourced_figures")
 
+    await llm.record_verdict(completion.call_id, "accepted")
     log.info(
         "narration.accepted",
         subject=finding.subject_ref,

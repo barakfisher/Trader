@@ -24,6 +24,7 @@ from app.config import Settings
 from app.core.logging import get_logger
 from app.llm.base import LLMProvider
 from app.llm.budget import BudgetedProvider, DailySpendGuard
+from app.llm.call_log import CallLog, RecordingProvider
 from app.llm.null_provider import NullProvider
 from app.llm.openai_compatible import OpenAICompatibleProvider
 
@@ -38,6 +39,34 @@ class LLMConfigurationError(RuntimeError):
 
 
 def build_llm(
+    settings: Settings,
+    redis: Redis | None = None,
+    *,
+    transport: object | None = None,
+    call_log: CallLog | None = None,
+) -> LLMProvider:
+    """The configured provider, recorded call by call when given a `call_log`.
+
+    The recorder is the outermost wrapper, around the spend guard and around a
+    `NullProvider` alike, so a call refused for budget or for want of a model
+    is recorded as well as one that reached a model (decision 87). Tests that
+    pass no log get the provider exactly as before.
+    """
+    provider = _build_provider(settings, redis, transport=transport)
+    if call_log is None:
+        return provider
+    return RecordingProvider(provider, call_log, model=_configured_model(settings))
+
+
+def _configured_model(settings: Settings) -> str | None:
+    """The model a failed call was meant for - none when narration is off."""
+    name = settings.llm_provider.strip().lower()
+    if name in _DISABLED_NAMES:
+        return None
+    return settings.ollama_model if name == "ollama" else settings.llm_model
+
+
+def _build_provider(
     settings: Settings,
     redis: Redis | None = None,
     *,

@@ -29,9 +29,19 @@ class CountingLLM:
         self.calls = 0
 
     async def complete(
-        self, *, system, user, max_output_tokens=None, temperature=None, reasoning_effort=None
+        self,
+        *,
+        system,
+        user,
+        max_output_tokens=None,
+        temperature=None,
+        reasoning_effort=None,
+        caller=None,
     ):
         self.calls += 1
+        raise RuntimeError("narration should not have been attempted")
+
+    async def record_verdict(self, call_id, verdict):
         raise RuntimeError("narration should not have been attempted")
 
 

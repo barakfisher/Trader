@@ -9,6 +9,7 @@ import pytest
 
 from app.analysis.findings import Finding
 from app.llm.base import (
+    Caller,
     LLMBudgetExceededError,
     LLMCompletion,
     LLMRequestError,
@@ -47,9 +48,18 @@ class StubLLM:
         self._reply = reply
         self._error = error
         self.calls = 0
+        self.call_id = 7
+        self.verdicts: list[tuple[int | None, str]] = []
 
     async def complete(
-        self, *, system, user, max_output_tokens=None, temperature=None, reasoning_effort=None
+        self,
+        *,
+        system,
+        user,
+        max_output_tokens=None,
+        temperature=None,
+        reasoning_effort=None,
+        caller=None,
     ):
         self.calls += 1
         if self._error:
@@ -60,7 +70,11 @@ class StubLLM:
             model=self.model,
             usage=TokenUsage(prompt_tokens=100, completion_tokens=50),
             estimated_cost_micro_usd=0,
+            call_id=self.call_id,
         )
+
+    async def record_verdict(self, call_id, verdict):
+        self.verdicts.append((call_id, verdict))
 
 
 def reply(headline: str, explanation: str) -> str:
@@ -291,3 +305,31 @@ class TestTemplatesAgainstRealRuleOutput:
         )
         assert findings, "the fixture weights must actually drift"
         await self.narrate_all(findings)
+
+
+class TestVerdicts:
+    """Narration names itself and its user, and says what it made of each reply."""
+
+    async def test_an_accepted_narration_is_recorded_as_accepted(self) -> None:
+        finding = PRICE_MOVE
+        llm = StubLLM(reply("NVDA fell 8.5% to $118.45", "It went from $129.45 to $118.45."))
+        captured: dict[str, object] = {}
+        original = llm.complete
+
+        async def spying(**kwargs):  # type: ignore[no-untyped-def]
+            captured.update(kwargs)
+            return await original(**kwargs)
+
+        llm.complete = spying  # type: ignore[method-assign]
+        await narrate(finding, [], llm, user_id="u-1")
+        assert captured["caller"] == Caller(agent="narration", user_id="u-1")
+        assert llm.verdicts == [(7, "accepted")]
+
+    async def test_a_reply_it_could_not_use_is_recorded_with_why(self) -> None:
+        malformed = StubLLM("not json")
+        await narrate(PRICE_MOVE, [], malformed)
+        assert malformed.verdicts == [(7, "malformed")]
+
+        invented = StubLLM(reply("NVDA fell 8.5%", "Its worst day in 14 months."))
+        await narrate(PRICE_MOVE, [], invented)
+        assert invented.verdicts == [(7, "unsourced_figures")]

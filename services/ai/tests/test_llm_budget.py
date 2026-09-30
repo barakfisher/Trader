@@ -34,7 +34,14 @@ class _StubProvider:
         self.calls = 0
 
     async def complete(
-        self, *, system, user, max_output_tokens=None, temperature=None, reasoning_effort=None
+        self,
+        *,
+        system,
+        user,
+        max_output_tokens=None,
+        temperature=None,
+        reasoning_effort=None,
+        caller=None,
     ):
         self.calls += 1
         if self._error is not None:

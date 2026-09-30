@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 
 #: Accounting unit for LLM spend. Money in this system is integer minor units
 #: (cents for USD), but a single narration call costs a small fraction of a
@@ -85,6 +85,9 @@ class LLMCompletion:
     #: Which adapter produced this, for logs and for observability parity with
     #: `Quote.source`.
     provider: str
+    #: The `llm_calls` row this completion was recorded as, for the caller's
+    #: verdict (`record_verdict`); None when nothing recorded it.
+    call_id: int | None = None
 
     @property
     def estimated_cost_usd(self) -> Decimal:
@@ -102,6 +105,29 @@ class LLMCompletion:
 #: meaning "say nothing and let the model decide" - a different request from
 #: "thinking off", and on a reasoning model a very different bill.
 NO_REASONING = "none"
+
+
+#: Who is asking. Every call site names itself, so the admin page can say which
+#: agent is slow, costly or failing - and never has to guess from a prompt.
+Agent = Literal["narration", "ask"]
+
+#: A call site's judgement of a completion it received: used, or why not.
+Verdict = Literal[
+    "accepted", "malformed", "unsourced_figures", "empty_completion", "degenerate_completion"
+]
+
+
+@dataclass(frozen=True)
+class Caller:
+    """The agent making a call, and the user it is for (None for none).
+
+    Carried to the recording wrapper (`call_log.py`); adapters ignore it. The
+    user is recorded because prompts and completions contain portfolio data
+    (guideline 5).
+    """
+
+    agent: Agent
+    user_id: str | None = None
 
 
 @runtime_checkable
@@ -125,6 +151,7 @@ class LLMProvider(Protocol):
         max_output_tokens: int | None = None,
         temperature: float | None = None,
         reasoning_effort: str | None = None,
+        caller: Caller | None = None,
     ) -> LLMCompletion:
         """Produce one completion, or raise an `LLMError` subclass.
 
@@ -140,6 +167,16 @@ class LLMProvider(Protocol):
         Never returns a partial or placeholder answer. Narration is optional in
         this product; a fabricated one is not an acceptable substitute for its
         absence (guideline 7).
+        """
+        ...
+
+    async def record_verdict(self, call_id: int | None, verdict: Verdict) -> None:
+        """Record what the caller made of completion `call_id`.
+
+        Only the recording wrapper writes anything; adapters do nothing. It is
+        part of the contract rather than a side channel so a call site reports
+        its verdict to the same object it asked, and cannot reach a log the
+        factory did not build.
         """
         ...
 

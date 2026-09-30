@@ -1289,6 +1289,23 @@ failure they prevent.
     loader now counts them. A negative remainder (the database holds *more*) is expected after an
     on-demand profile (M8 PR 7) and is shown as such. The orchestrator reads only the database:
     the manifest is a file inside the AI image, so the loader copies it into the row.
+87. **Every model call is recorded by a wrapper the factory builds; call sites only add a verdict**
+    (M8 PR 5, the user's choice among recommendations). `build_llm(..., call_log=)` puts
+    `RecordingProvider` *outermost* - around the budget guard and around `NullProvider` alike -
+    so a call refused for want of a model or of budget is a row too (`outcome`: `ok`,
+    `provider_error`, `budget_exhausted`, `no_provider`). A call site cannot forget to log,
+    because it never logs; what only it knows - whether the text was *usable* - it reports as
+    `record_verdict(completion.call_id, ...)` on the provider it asked (`accepted`, `malformed`,
+    `unsourced_figures`, `empty_completion`, `degenerate_completion`). That is a method on the
+    `LLMProvider` protocol (adapters do nothing) rather than a global or a duck-typed check.
+    `Caller(agent, user_id)` travels on `complete()`; a call with no caller is logged as a bug,
+    not given a guessed agent. `user_id` now rides on the portfolio-scan, topic-scan and ask
+    requests. **Cost is micro-USD**, the integer unit `pricing.py` already used (cents would
+    round a cheap call to zero). Prompts and completions hold portfolio data: 30-day retention
+    (`LLM_CALL_RETENTION_DAYS`), **pruned by the insert itself** - a separate job would be one
+    more CronJob and scheduler entry for a delete that is only due when a row is written.
+    Recording never fails a call: a failed write is logged and the completion is returned as is.
+    `test_llm_call_log.py` checks the migration's CHECK lists equal the code's Literals.
 
 ---
 
