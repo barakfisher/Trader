@@ -79,6 +79,26 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('the universe gaps', () => {
+    it('counts a repeat instead of inserting it, keeping the first detail', async () => {
+      const dedupeKey = `missing_ticker:${USER}:TINY:2026-10-01`;
+      const event = {
+        kind: 'universe_gap_missing_ticker' as const,
+        userId: USER,
+        detail: { symbol: 'TINY', source: 'import' },
+        dedupeKey,
+      };
+      await queries.recordOpsEvent(event);
+      await queries.recordOpsEvent({ ...event, detail: { symbol: 'TINY', source: 'holding' } });
+      const rows = (await queries.listOpsEvents('universe_gap_missing_ticker', 200)).filter(
+        (row) => row.user_id === USER,
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ occurrences: 2, detail: { source: 'import' } });
+      expect(rows[0]!.last_seen_at.getTime()).toBeGreaterThanOrEqual(rows[0]!.occurred_at.getTime());
+    });
+  });
+
   describe('listSnapshots', () => {
     it('returns the calendar date that was stored, whatever the process timezone', async () => {
       // East of UTC is where a DATE parsed to local midnight and printed in UTC

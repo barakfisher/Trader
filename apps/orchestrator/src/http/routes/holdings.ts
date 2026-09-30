@@ -28,6 +28,7 @@ import {
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, notFound, unprocessable, upstreamFailure } from '../errors.js';
 import { articleOut, collectionState } from '../newsArticles.js';
+import { recordMissingTicker } from '../../services/universeGaps.js';
 
 const DECIMAL = /^\d+(\.\d+)?$/;
 
@@ -163,6 +164,7 @@ export function registerHoldingsRoutes(app: Hono<AppEnv>): void {
     const resolution = await context
       .get('ai')
       .resolveInstrument(input.symbol, context.get('requestId'));
+    await recordMissingTicker({ userId, timezone: user.timezone }, input.symbol, resolution, 'holding');
     if (!resolution.resolved) {
       throw unprocessable(
         'unresolved_symbol',

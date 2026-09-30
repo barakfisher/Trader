@@ -15,7 +15,7 @@ from app.analysis.backfill import backfill_history
 from app.analysis.quote_history import load_daily_closes
 from app.core.logging import get_logger
 from app.db import get_engine
-from app.deps import MarketDataDep, SettingsDep, require_internal_key
+from app.deps import MarketDataDep, SettingsDep, UniverseMembershipDep, require_internal_key
 from app.models import (
     BackfillRequest,
     BackfillResponse,
@@ -27,6 +27,7 @@ from app.models import (
     QuoteResponse,
 )
 from app.providers.price_provenance import excluded_price_sources
+from app.universe.membership import universe_status
 
 router = APIRouter(prefix="/market", tags=["market"], dependencies=[Depends(require_internal_key)])
 log = get_logger("market")
@@ -44,9 +45,15 @@ async def get_quotes(payload: QuoteRequest, market: MarketDataDep) -> QuoteRespo
 @router.get("/instruments/resolve", response_model=InstrumentResolution)
 async def resolve_instrument(
     market: MarketDataDep,
+    membership: UniverseMembershipDep,
     query: str = Query(min_length=1, max_length=64, description="Symbol or company name"),
 ) -> InstrumentResolution:
-    return await market.resolve(query)
+    resolution = await market.resolve(query)
+    # Whether the universe holds it: a priceable symbol outside the universe is
+    # never offered for a topic, and the admin panel reports it as a gap.
+    return resolution.model_copy(
+        update={"universe": universe_status(resolution.resolved, membership)}
+    )
 
 
 @router.get("/fx", response_model=FxRate)

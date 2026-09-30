@@ -51,7 +51,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 #: Primary US venues, as Yahoo codes them: Nasdaq Global Select / Global /
 #: Capital, NYSE, NYSE American, Cboe BZX, NYSE Arca.
@@ -117,6 +117,24 @@ def _to_minor(value: object) -> int | None:
     if amount <= 0:
         return None
     return int((amount * 100).to_integral_value())
+
+
+#: Why a listing can never be in the universe, whatever its size: the screen
+#: takes US-listed equities and ETFs only. A listing outside the universe for
+#: neither reason is a real gap - below the size floor, or listed after the
+#: snapshot was taken - and only a rescreen can say which.
+SCREENED_ASSET_CLASSES = ("equity", "etf")
+
+ScreenExclusion = Literal["asset_class", "exchange"]
+
+
+def screen_exclusion(asset_class: str, exchange: str | None) -> ScreenExclusion | None:
+    """The screen rule a listing fails regardless of its size, or None."""
+    if asset_class not in SCREENED_ASSET_CLASSES:
+        return "asset_class"
+    if exchange not in PRIMARY_US_EXCHANGES:
+        return "exchange"
+    return None
 
 
 def select(quotes: Iterable[Mapping[str, Any]]) -> list[Mapping[str, Any]]:

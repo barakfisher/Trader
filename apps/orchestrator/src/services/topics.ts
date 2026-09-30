@@ -24,7 +24,7 @@
  * now, and storing it would put words in its mouth.
  */
 
-import type { AiClient, TopicCandidate } from '@traders/shared/ai';
+import type { AiClient, InstrumentResolution, TopicCandidate } from '@traders/shared/ai';
 
 import {
   listTopicInstruments,
@@ -112,11 +112,15 @@ type Addition = Required<Omit<UpsertInstrumentInput, 'name' | 'exchange'>> &
  * added, looking each addition up the way a new holding is looked up. Nothing
  * is written here, so a request with one bad ticker writes nothing at all.
  */
+/** Told each added symbol's resolution - how the route records universe gaps. */
+export type OnResolution = (symbol: string, resolution: InstrumentResolution) => Promise<void>;
+
 async function plan(
   ai: AiClient,
   label: string,
   symbols: string[],
   requestId: string | undefined,
+  onResolution?: OnResolution,
 ): Promise<
   | { ok: true; offered: TopicInstrumentInput[]; additions: Addition[] }
   | { ok: false; unresolved: string[] }
@@ -127,7 +131,11 @@ async function plan(
   const lookups = await Promise.all(
     symbols
       .filter((symbol) => !offered.has(symbol))
-      .map(async (symbol) => ({ symbol, result: await ai.resolveInstrument(symbol, requestId) })),
+      .map(async (symbol) => {
+        const result = await ai.resolveInstrument(symbol, requestId);
+        await onResolution?.(symbol, result);
+        return { symbol, result };
+      }),
   );
   const unresolved = lookups.filter((l) => !l.result.resolved).map((l) => l.symbol);
   if (unresolved.length > 0) return { ok: false, unresolved };
@@ -170,8 +178,9 @@ export async function confirmTopic(
   ai: AiClient,
   input: ConfirmInput,
   requestId?: string,
+  onResolution?: OnResolution,
 ): Promise<ConfirmOutcome> {
-  const planned = await plan(ai, input.label, input.symbols, requestId);
+  const planned = await plan(ai, input.label, input.symbols, requestId, onResolution);
   if (!planned.ok) return { ok: false, reason: 'unresolved_symbols', symbols: planned.unresolved };
 
   type Written = Exclude<ConfirmOutcome, { ok: true }> | { ok: true; id: string };

@@ -32,6 +32,7 @@ vi.mock('../src/db/queries.js', () => ({
   listAllRuns: vi.fn(async () => []),
   listAdminAudit: vi.fn(async () => []),
   insertAdminAudit: vi.fn(async () => undefined),
+  listOpsEvents: vi.fn(async () => []),
 }));
 
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');

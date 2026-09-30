@@ -2,12 +2,13 @@ import { observer } from 'mobx-react-lite';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft, ShieldCheck } from 'lucide-react';
 
-import type { AdminAuditEntry, AdminRun } from '@traders/shared';
+import type { AdminAuditEntry, AdminRun, UniverseGap } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
 import { Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
-import { useAdminAuditQuery, useAdminRunsQuery } from '../queries/admin.ts';
+import { gapExplanation, gapSubject, isRealGap } from '../lib/universeGaps.ts';
+import { useAdminAuditQuery, useAdminGapsQuery, useAdminRunsQuery } from '../queries/admin.ts';
 import { useStore } from '../stores/context.tsx';
 
 const STATUS_TONE: Record<string, string> = {
@@ -48,6 +49,7 @@ export const AdminPage = observer(function AdminPage() {
 
       {isAdmin ? (
         <>
+          <GapsCard />
           <RunsCard />
           <AuditCard />
         </>
@@ -113,6 +115,55 @@ function RunRow({ run }: { run: AdminRun }) {
       <td className="py-2 pr-3">{run.trigger}</td>
       <td className="py-2 break-all font-mono text-xs text-text-muted">{run.runKey}</td>
     </tr>
+  );
+}
+
+/**
+ * What users asked for that the universe could not give them. A gap a
+ * rescreen could close is marked; one the screen excludes by rule is listed
+ * for completeness, because "we never screen crypto" is an answer too.
+ */
+function GapsCard() {
+  const gaps = useAdminGapsQuery();
+
+  return (
+    <Card title="Universe gaps">
+      {gaps.isPending && <Spinner label="Loading gaps…" />}
+      {gaps.error && (
+        <ErrorNote
+          message={errorMessage(gaps.error, 'Could not load the universe gaps.')}
+          onRetry={() => void gaps.refetch()}
+        />
+      )}
+      {gaps.data && gaps.data.gaps.length === 0 && (
+        <p className="text-sm text-text-muted">
+          No gap recorded: every symbol and topic users asked about was in the universe.
+        </p>
+      )}
+      {gaps.data && gaps.data.gaps.length > 0 && (
+        <ul className="divide-y divide-border-subtle text-sm">
+          {gaps.data.gaps.map((gap) => (
+            <GapItem key={gap.id} gap={gap} />
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function GapItem({ gap }: { gap: UniverseGap }) {
+  const real = isRealGap(gap);
+  return (
+    <li className="flex flex-wrap items-baseline justify-between gap-2 py-2">
+      <span className="min-w-0">
+        <span className={`font-medium ${real ? 'text-warn' : ''}`}>{gapSubject(gap)}</span>
+        <span className="ml-2 text-text-muted">{gapExplanation(gap)}</span>
+      </span>
+      <span className="text-xs text-text-muted" title={formatExactTime(gap.lastSeenAt)}>
+        {gap.occurrences > 1 ? `${gap.occurrences}× · ` : ''}
+        {formatAge(gap.lastSeenAt)}
+      </span>
+    </li>
   );
 }
 

@@ -254,6 +254,28 @@ export interface AdminAuditResponse {
   entries: AdminAuditEntry[];
 }
 
+export type UniverseGapKind = 'universe_gap_missing_ticker' | 'universe_gap_low_confidence';
+
+/**
+ * One gap, counted. `detail` depends on `kind`: a missing ticker says the
+ * symbol, where it was named and why the universe lacks it (`gap`:
+ * `outside_screen` with the `rule`, `not_in_universe`, or `unpriced`); a
+ * low-confidence topic says the topic, the best score and the gate.
+ */
+export interface UniverseGap {
+  id: string;
+  kind: UniverseGapKind;
+  userId: string | null;
+  detail: Record<string, unknown>;
+  occurrences: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
+export interface UniverseGapsResponse {
+  gaps: UniverseGap[];
+}
+
 export interface ApiError {
   error: string;
   message: string;

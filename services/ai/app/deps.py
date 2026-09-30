@@ -11,6 +11,7 @@ from app.config import Settings, get_settings
 from app.corpus.embeddings import BaseEmbedder
 from app.corpus.vector_store import VectorStore
 from app.providers.registry import MarketDataService
+from app.universe.membership import DatabaseMembership, UniverseMembership
 
 
 def get_market_data(request: Request) -> MarketDataService:
@@ -60,3 +61,11 @@ def get_vector_store(request: Request) -> VectorStore:
     if service is None:  # pragma: no cover - only reachable if startup failed
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "vector store not initialised")
     return service
+
+
+def get_universe_membership() -> UniverseMembership:
+    """The database's answer; tests override it, so no suite needs Postgres."""
+    return DatabaseMembership()
+
+
+UniverseMembershipDep = Annotated[UniverseMembership, Depends(get_universe_membership)]

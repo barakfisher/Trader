@@ -10,7 +10,7 @@
  */
 
 import { parse as parseCsv } from 'csv-parse/sync';
-import { AiClient } from '@traders/shared/ai';
+import { AiClient, type InstrumentResolution } from '@traders/shared/ai';
 import { parseToMinor, type ImportRow, type ImportRowIssue, type ImportRowStatus, type Instrument } from '@traders/shared';
 
 import { logger } from '../logger.js';
@@ -192,6 +192,8 @@ export interface BuildPreviewOptions {
   defaultCurrency: string;
   ai: AiClient;
   requestId?: string;
+  /** Told each symbol's resolution - how the route records universe gaps. */
+  onResolution?: (symbol: string, resolution: InstrumentResolution) => Promise<void>;
 }
 
 export async function buildImportRows(options: BuildPreviewOptions): Promise<ImportRow[]> {
@@ -210,6 +212,7 @@ export async function buildImportRows(options: BuildPreviewOptions): Promise<Imp
       batch.map(async (symbol) => {
         try {
           const result = await options.ai.resolveInstrument(symbol, options.requestId);
+          await options.onResolution?.(symbol, result);
           resolutions.set(symbol, {
             resolved: result.resolved ? toInstrument(result.resolved) : null,
             candidates: (result.candidates ?? []).map(toInstrument),

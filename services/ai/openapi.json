@@ -793,7 +793,7 @@
         "type": "object"
       },
       "InstrumentResolution": {
-        "description": "Result of resolving a user-supplied string to a tradable instrument.\n\n`candidates` is non-empty and ordered by confidence whenever `resolved` is\nNone, so the UI can ask the user to disambiguate instead of guessing.",
+        "description": "Result of resolving a user-supplied string to a tradable instrument.\n\n`candidates` is non-empty and ordered by confidence whenever `resolved` is\nNone, so the UI can ask the user to disambiguate instead of guessing.\n\n`universe` is null whenever membership was not checked - nothing resolved,\nor the database could not be asked - so \"unknown\" is never reported as\n\"not a member\".",
         "properties": {
           "candidates": {
             "items": {
@@ -831,12 +831,51 @@
                 "type": "null"
               }
             ]
+          },
+          "universe": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstrumentUniverse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "query"
         ],
         "title": "InstrumentResolution",
+        "type": "object"
+      },
+      "InstrumentUniverse": {
+        "description": "Whether a resolved instrument is in the screened universe, and if not, why.\n\n`outside_screen` names the screen rule the listing fails whatever its size\n(`asset_class`: not an equity or ETF; `exchange`: not a primary US venue).\nNull on a non-member is a real gap: a US equity or ETF the snapshot does\nnot hold - below the size floor, or listed since. Topic resolution only\nsearches members, so a non-member is priceable but never offered for a\ntopic.",
+        "properties": {
+          "member": {
+            "title": "Member",
+            "type": "boolean"
+          },
+          "outside_screen": {
+            "anyOf": [
+              {
+                "enum": [
+                  "asset_class",
+                  "exchange"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outside Screen"
+          }
+        },
+        "required": [
+          "member"
+        ],
+        "title": "InstrumentUniverse",
         "type": "object"
       },
       "NarrationConfigResponse": {

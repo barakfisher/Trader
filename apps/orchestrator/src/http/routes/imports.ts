@@ -12,6 +12,7 @@ import { z } from 'zod';
 import type { ImportCommitRequest } from '@traders/shared';
 
 import { getUser } from '../../db/queries.js';
+import { recordMissingTicker } from '../../services/universeGaps.js';
 import { commitImport } from '../../services/importCommit.js';
 import { ImportParseError, buildImportRows, countByStatus } from '../../services/importer.js';
 import { deletePreview, getPreview, savePreview } from '../../services/previewStore.js';
@@ -46,6 +47,8 @@ export function registerImportRoutes(app: Hono<AppEnv>): void {
         defaultCurrency: user.base_currency,
         ai: context.get('ai'),
         requestId: context.get('requestId'),
+        onResolution: (symbol, resolution) =>
+          recordMissingTicker({ userId, timezone: user.timezone }, symbol, resolution, 'import'),
       });
     } catch (error) {
       if (error instanceof ImportParseError) {

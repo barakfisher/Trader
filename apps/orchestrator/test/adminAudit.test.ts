@@ -31,6 +31,7 @@ vi.mock('../src/db/queries.js', () => ({
   listAllRuns: vi.fn(async () => []),
   listAdminAudit: vi.fn(async () => []),
   insertAdminAudit: vi.fn(async () => undefined),
+  listOpsEvents: vi.fn(async () => []),
 }));
 
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
@@ -205,6 +206,44 @@ describe('the admin audit', () => {
         },
       ],
     });
+  });
+});
+
+describe('the universe gaps', () => {
+  it('lists gaps counted, not repeated, and refuses an unknown kind', async () => {
+    vi.mocked(queries.getUser).mockResolvedValue(ADMIN as never);
+    vi.mocked(queries.listOpsEvents).mockResolvedValueOnce([
+      {
+        id: '3',
+        kind: 'universe_gap_missing_ticker',
+        user_id: ADMIN.id,
+        detail: { symbol: 'SAP.DE', gap: 'outside_screen', rule: 'exchange' },
+        occurrences: 4,
+        occurred_at: new Date('2026-10-01T06:00:00Z'),
+        last_seen_at: new Date('2026-10-01T09:00:00Z'),
+      },
+    ]);
+    const app = buildApp();
+    const cookie = await sessionCookie(app);
+    const response = await app.request('/admin/gaps?kind=universe_gap_missing_ticker', {
+      headers: { cookie },
+    });
+    expect(queries.listOpsEvents).toHaveBeenCalledWith('universe_gap_missing_ticker', expect.any(Number));
+    expect(await response.json()).toEqual({
+      gaps: [
+        {
+          id: '3',
+          kind: 'universe_gap_missing_ticker',
+          userId: ADMIN.id,
+          detail: { symbol: 'SAP.DE', gap: 'outside_screen', rule: 'exchange' },
+          occurrences: 4,
+          firstSeenAt: '2026-10-01T06:00:00.000Z',
+          lastSeenAt: '2026-10-01T09:00:00.000Z',
+        },
+      ],
+    });
+    const refused = await app.request('/admin/gaps?kind=narration', { headers: { cookie } });
+    expect(refused.status).toBe(400);
   });
 });
 
