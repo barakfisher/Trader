@@ -4,7 +4,23 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-30 ~11:30 UTC - **M6's closing handoff (milestone boundary). M6 is complete; the
+Updated: 2026-09-30 ~12:30 UTC - **M7 handoff at CLAUDE.md's five-merged-PR trigger (#109-#113).
+M7 is in progress: the app deploys to a local kind cluster with one command, sits behind an
+Ingress at http://traders.localhost, and nine CronJobs fire real runs - the milestone's first two
+exit conditions are met. The next session starts PR 6 (the AI service's autoscaler), then PR 7
+(docs a stranger can follow)** - see "Next session: M7, continued" in "Where to go next". This
+session (grant: PR, merge on green, rebuild compose, create/delete the kind cluster; **ask again**):
+- #109: production images; the web image serves `/api` on the page's own origin (decision 78);
+- #110: the kind cluster, Postgres/Redis, the migrate/corpus/universe Jobs (decisions 75, 76, 79);
+- #111: the three services and probes that cannot cascade (decision 77) - five problems found by
+  deploying, each in "Bugs";
+- #112: the Ingress, Traefik as plain YAML (decision 80) - and one reset nobody explained;
+- #113: a CronJob per run kind, and a contract test against `scheduler.ts` (decision 81).
+**The user has no Docker/Kubernetes background**: every object was explained from first
+principles when proposed and again when written (what it is, why this app needs it, what breaks
+without it). Keep doing that in PR 6 and PR 7.
+
+Previous handoff, 2026-09-30 ~11:30 UTC - **M6's closing handoff (milestone boundary). M6 is complete; the
 next session starts M7, Kubernetes and documentation** - see "Next session: M7" in "Where to go
 next". After the five-PR handoff below (#103), the user asked to continue to the milestone's end in
 the same session:
@@ -200,7 +216,7 @@ kept so the next sweep has somewhere to add to.
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
-| M7 — Kubernetes & documentation | **Next** | See "Next session: M7" |
+| M7 — Kubernetes & documentation | **In progress** | #109-#113: images, kind cluster, services with probes, Ingress, CronJobs. **Exit so far:** clean one-command deploy to kind ✅, a CronJob fires a real run ✅ (all nine, on schedule, 2026-09-30), docs a stranger can follow - PR 7. Left: PR 6 autoscaler, PR 7 docs + stranger test. See "Next session: M7, continued" |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
 not anticipate, found by running the thing rather than by reading it. M1.5 came from auditing the
@@ -1115,9 +1131,109 @@ failure they prevent.
     digest's own (`summariseDigest`), so both surfaces say it the same way. A narration notice
     rides in a digest but is not counted as a finding (as in Telegram).
 
+75. **Kubernetes manifests are plain YAML with Kustomize: a cluster-agnostic `base/` and a kind
+    `overlays/kind/`** (M7, user's choice among recommendations). **Rejected: Helm** - a template
+    language and a second tool, for a user learning Kubernetes; `kubectl kustomize` prints exactly
+    what is applied. The ConfigMap and Secret are *generated* with a content hash in the name, so
+    a changed setting rolls every pod that reads it (a pod reads its environment once). **The
+    Secret is declared, empty, in the base and merged by the overlay**: Kustomize rewrites
+    references to a hash-suffixed name only for generators at or below the resources using them,
+    so declared only in the overlay every pod looked for `traders-secrets` while the Secret was
+    `traders-secrets-<hash>` (seen by rendering, before any deploy). Image tags are not in any
+    committed file: `k8s-up.sh` writes a git-ignored `infra/k8s/.deploy/kustomization.yaml` per
+    deploy (Kustomize refuses absolute resource paths, so it must sit inside the repo).
+
+76. **Ordering in the cluster is a check each pod makes, not a sequence the deploy enforces.**
+    Kubernetes has no `depends_on`. `migrate` waits for `pg_isready` in an init container; the
+    loaders *and both services* wait in an init container running `scripts/wait_for_schema.py`,
+    which passes only when the database is at exactly this image's Alembic head(s)
+    (`app/schema_revision.py`) and names a database *ahead* of the image rather than waiting
+    silently. **Rejected: relying on the Job finishing first** - a pod restarted a week later
+    never saw that Job. The orchestrator's image has no Alembic, so its init container borrows
+    the AI service's image. Jobs are deleted and re-created on every deploy (their pod template
+    is immutable, and "once per deploy" is what compose's one-shot containers meant).
+
+77. **Readiness gates on a service's own store only; the body reports everything else** (#111).
+    A probe reads only the status code. The AI service's `/readyz` answered 200 with "degraded"
+    in the body - a probe that could never fail - and now answers 503 without Redis. The
+    orchestrator's answered 503 whenever the AI service was down, which in a cluster takes the
+    whole API out of rotation (sign-in, every stored page) during an AI outage; it now answers 503
+    only without Postgres and reports the AI service in the body. Its AI check has its own
+    `HEALTH_TIMEOUT_MS` (2 s) instead of the client's 30 s, or a *hung* AI service would time out
+    the orchestrator's probe and bring the cascade back. Liveness is `/healthz` everywhere, which
+    depends on nothing: restarting never fixes a dependency. Seen live: Redis stopped -> AI pod
+    not-ready with 0 restarts, its Service empty, orchestrator ready and `degraded`; both
+    recovered alone. The orchestrator's Deployment is `strategy: Recreate` - two overlapping
+    copies would split the in-memory import previews.
+
+78. **One origin: the web image's nginx serves the page and forwards `/api/*` to the
+    orchestrator, prefix removed; `/api/internal/*` is 404 there** (#109, #111). A prefix is
+    required - `/holdings`, `/proposals`, `/topics`, `/ask`, `/settings` are both pages and API
+    routes. The bundle is built with `VITE_API_BASE_URL=/api` (relative, so one image works at
+    any address). nginx's 60 s read timeout and 1 MiB body limit are raised (330 s over
+    `SCAN_TIMEOUT_MS`; 3 MiB over the 2 MiB import). `/internal/*` is reached by CronJobs at the
+    orchestrator Service inside the cluster, never through the front door.
+    `scripts/check-web-image.sh` checks each of these in CI.
+
+79. **The cluster shares nothing with the compose stack, and needs no `.env`** (#110, #111). Its
+    Secret comes from `infra/k8s/overlays/kind/secrets.env`, generated on the first
+    `k8s-up.sh` (random keys, random DB password, **its own passphrase**, printed once) and never
+    rewritten: Postgres reads its password only when it creates the data directory. Its settings
+    are keyless (`base/config.env`: Yahoo prices, fixture news and embeddings, templates,
+    Telegram off, `SCHEDULER_ENABLED=false`), so a stranger needs no key, and GDELT is not
+    downloaded twice while compose runs. `enableServiceLinks: false` on every pod (one Kustomize
+    patch per pod-spec depth): Kubernetes' Docker-links variables turned the Service `ai-service`
+    into `AI_SERVICE_PORT=tcp://...`, which stopped the migration.
+
+80. **The front door is a standard Ingress served by Traefik, written as plain YAML**
+    (`infra/k8s/kind/traefik.yaml`, #112). ingress-nginx is retired upstream; kind's own docs
+    now point to `cloud-provider-kind`, a host process that needs extra setup on macOS. Traefik's
+    usual install is a Helm chart; its Ingress-only subset is ~150 readable lines: namespace,
+    RBAC, a default IngressClass (so the app's Ingress names no controller and stays portable),
+    a non-root read-only Deployment with an explicit 340 s write timeout (over nginx's 330 s), a
+    NodePort Service. kind maps **127.0.0.1**:80 to node port 30080 - never the LAN.
+    `traders.localhost` needs no hosts entry and is its own cookie host, so signing in there
+    never replaces the compose app's cookie on 127.0.0.1 (a browser keys cookies by host, not
+    port - which is why the PR 3 browser check waited for this).
+
+81. **CronJobs "ask often" and let the run key decide, exactly like `scheduler.ts`** (#113).
+    Nine CronJobs, every 15 minutes or hourly, minute offsets preserving the start order
+    (backfill :01 ... digest :16). **Rejected: "once a day at a set time"** - a trigger that fires
+    once per period is silently lost if the cluster is down at that minute. No `timeZone`: the
+    schedules are minutes past the hour, and which *day* a run belongs to is the orchestrator's
+    decision in the user's timezone. `startingDeadlineSeconds: 300` drops stale ticks after a
+    sleep instead of replaying a burst; `--fail-with-body` fails the Job on 4xx/5xx and keeps
+    the message. `test/cronJobContract.test.ts` fails if a scheduler kind has no CronJob, asks at
+    another rhythm, or breaks the order.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
+
+**Deploying to Kubernetes found five faults that every test and the compose stack had passed**
+(M7, #111). (1) Kubernetes' Docker-links variables: a Service named `ai-service` sets
+`AI_SERVICE_PORT=tcp://...` in every pod, which collided with our own setting. (2) The AI
+service's `/readyz` said "degraded" with a 200. (3) The orchestrator's `/readyz` failed with the
+AI service - harmless under compose, a whole-app outage under a readiness probe. (4) nginx
+exposed `/api/internal/*`. (5) Every build of an edited tree was tagged `-dirty`, so a redeploy
+changed nothing and the old pod kept running (the tag is now `-dirty-<hash of the edits>`). →
+**An environment is a test.** Each fault was invisible until something new *read* the same
+contract - an env var namespace, a status code, a tag - and each was obvious in the first
+minute of looking at the new consumer's behaviour rather than its config.
+
+**Trimming a published permission list cost a dead ingress** (#112). Traefik's RBAC was cut to
+what "Ingress mode" seemed to need; without `nodes` it logged `nodes is forbidden` and loaded no
+route at all. → **Start from the vendor's published rule list, then remove with evidence**
+(the controller's logs after the cut), not from a guess about what a mode uses.
+
+**Unexplained, and recorded as such: requests from the Mac to the kind node's port 80 were reset**
+(#112). The first cluster created with the mapping answered from Docker's network, from Docker's
+VM, over IPv4 and IPv6 - and reset every request from the Mac. Docker's own log showed the
+correct IPv4 forward; a plain container on port 80 worked; no macOS network extension or proxy;
+hostPort and hostNetwork changed nothing. A freshly created cluster worked, then the committed
+config from scratch. It was not reproduced. The README's troubleshooting says "recreate the
+cluster". → **When a cause cannot be shown, say so and write down what was ruled out** - the
+next occurrence starts from that list instead of from the beginning.
 
 **A looping model answer passed the evidence validator (found measuring `/ask` for its screen).**
 The free route answered "what is the current price of gold" with "Hereellsellsellsell…" for most of
@@ -1599,7 +1715,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 
 | Item | Where | Impact |
 |---|---|---|
-| **Telegram's inbound delivery is unproven** | deployment | Everything else was exercised against a real bot, but `setWebhook` needs a public HTTPS URL. The handler has only ever been driven by replaying genuine payloads at it locally. **The first real deployment is the first real test of that leg** — check `getWebhookInfo` for `last_error_message` immediately after |
+| **Telegram's inbound delivery is unproven** | deployment | Still true after M7's kind cluster, deliberately: the cluster runs with Telegram off (decision 79), and proving the webhook needs a public https URL (a tunnel) plus `setWebhook` on the real bot, which stops the compose stack's polling - **the user's explicit go-ahead is required**; it was offered as an optional last M7 PR. Everything else was exercised against a real bot, but `setWebhook` needs a public HTTPS URL. The handler has only ever been driven by replaying genuine payloads at it locally. **The first real deployment is the first real test of that leg** — check `getWebhookInfo` for `last_error_message` immediately after |
 | **`queries.ts` conflicts on every parallel PR** | `src/db/queries.ts` | Four M4 PRs appended a section to the end of one 1,200-line file, and every rebase put a conflict marker exactly where one function's closing brace met the next block's header — the brace was lost and hand-repaired **three separate times**. It is the cost of CLAUDE.md's "all SQL in one file" rule, which is otherwise good. Worth deciding whether to split by domain with an index |
 | **Migration 0008 hard-codes a table Mastra owns** | `0008_mastra_workflow_state.py` | The library would create `mastra_workflow_snapshot` itself; Alembic creates it instead (`disableInit: true`), because CLAUDE.md says the AI service owns the schema. An upgrade that changes the shape breaks suspended runs — so `test/mastraSchemaOwnership.test.ts` compares the migration against `WorkflowsPG.getExportDDL()` and fails the build first. Two other things cost time to find: `PostgresStore` creates **43** tables for 24 storage domains unless you route only `workflows`, and `@mastra/core` posts feature-usage telemetry to PostHog unless `MASTRA_TELEMETRY_DISABLED` is set (it is, in `workflowRuntime.ts`, in code rather than `.env`) |
 | ~~Concept chips point nowhere~~ | — | **Resolved in M3 slice 1.** Kept as a line rather than deleted because it stood here from M2 to M4 and its absence would otherwise read as an oversight |
@@ -1612,7 +1728,11 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | ~~`narration/templates.py` divides money by 100 unconditionally~~ | — | **Resolved** (independent task 1): templates render minor units at the currency's exponent (`minor_unit_exponent`), and **the evidence validator had the same assumption** - it divided every `_minor` figure by 100, so it would have *approved* "150.00" for 15000 JPY. It now reads the `currency` declared by each evidence mapping. The old template and old validator agreed on the wrong number, which is why no test saw it; the rule-output tests now run in JPY as well as USD |
 | **The corpus is a derived copy that three separate mechanisms keep in step** | `data/corpus`, compose, `.claude` | The files are the source of truth and `kb_documents`/`kb_chunks` are what the API serves. A hook covers Claude's edits, the `corpus` container covers every stack start, CI covers the image. None of the three covers a hand edit on a machine with no stack running — that reader sees stale text with nothing reporting the disagreement. `--dry-run` answers "are they in step?" and nobody is obliged to run it |
 | **The ingest hook does not apply to a session started before it existed** | `.claude/settings.json` | The settings watcher only watches directories that had a settings file when the session began, and `.claude/` had none. Any session started after that commit picks it up; the session that wrote it did not, and confirmed so with a sentinel rather than assuming |
-| **Import previews live in process memory** | `services/previewStore.ts` | Forces `replicas: 1` in Kubernetes. The only remaining in-memory state — run keys moved to the `runs` table in M2 |
+| **Import previews live in process memory** | `services/previewStore.ts` | Forces `replicas: 1` in Kubernetes, **`strategy: Recreate`** (a few seconds with no API per deploy) and **no autoscaler on the orchestrator** - MILESTONES asks for an HPA on both services; the user chose the AI service only (M7). The Telegram poller would also run per replica. The only remaining in-memory state — run keys moved to the `runs` table in M2 |
+| **The cluster's `secrets.env` belongs to the checkout that ran `k8s-up.sh`** | `infra/k8s/overlays/kind/` | A worktree and the main checkout each have their own git-ignored copy. Running `k8s-up.sh` from a checkout with no copy generates a **new DB password**, and the existing cluster's Postgres (which read its password once) locks the services out. On 2026-09-30 the worktree's copy was copied to the main checkout by hand. Fix when it bites: recover the file from the cluster's Secret when it is missing, or keep it outside the checkout |
+| **No CI job deploys to kind** | `.github/workflows/ci.yml` | Planned with the user (M7 decision 7): a job that creates a kind cluster, deploys, and runs `kubectl create job --from=cronjob/run-backfill`. Not built yet; until it is, the manifests are proven only on this machine and can rot like compose would without its smoke test. Belongs in PR 6 or PR 7 |
+| **The cluster's daily digest reads `degraded` every day** | `infra/k8s/base/config.env` | With Telegram off (decision 79) the run records "TELEGRAM_BOT_TOKEN is not set, so there is no channel to deliver on" - true, and seen on the first CronJob-fired digest (2026-09-30 12:16 UTC). The digest's UI card still works. Harmless noise in `runs`; revisit if the cluster ever gets a bot, or if a run-health view starts counting `degraded` |
+| **A crypto day's "close" is stored intraday the first night** | `app/analysis/backfill.py` (#98) | #98 decides a day is final when its 20:00 UTC stamp has passed; crypto's candle closes at 00:00 UTC. The first backfill after 21:00 UTC (the daily bucket's first tick in Jerusalem) stores a ~21:00 price as the close; the next night replaces it (the backfill rewrites its own rows). Converges in one day; a fix would use each asset class's session close (`market_sessions.py`) |
 | **Templates are the deliberate steady state until deployment** (decided 2026-09-23) — funding narration was considered and **declined for now**, to be revisited when the product is deployed for real. So a future session should *not* treat template-only explanations as a defect to fix: the cost is known ($0.45/month), the fix is known (raise the OpenRouter workspace cap, point `LLM_MODEL` at a capable model), and the decision is to wait. | `.env` | Explanations are fixed phrasing over checked figures, and the dashboard badge says so |
 | **The free tier cannot narrate at all, and the reason is not cost** | `.env`, `app/llm` | `LLM_MODEL` is a `:free` route because the OpenRouter workspace has a **lifetime** budget of $0.01 — a cumulative cap, not an allowance, so nothing resets and only an org admin changes it. On the free model narration now reaches the evidence validator and is **rejected every time** (`unsourced_figures`, 3/3 measured) for deriving figures not in the evidence. So free means templates, reliably. Real usage is ~$0.0015 per narration and ~10 findings a day ≈ **$0.45/month**, which is what funding the workspace costs. The badge (#38) states this to the user rather than hiding it |
 | ~~Crypto detection is a symbol-shape heuristic~~ | — | **Resolved** (independent task 5): the quote request carries each symbol's `asset_class`; the `-USD` suffix is only the fallback for a bare lookup with no class |
@@ -1630,7 +1750,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | **The free model is slow and flaky for `/ask` and narration** | `.env` (`LLM_MODEL`) | Measured 2026-09-30: 18-69 s per `/ask` answer, once over 3 min; 1 in 7 answers looped (now rejected, #101); and after that morning's load the narration badge read "Model unavailable" (`provider_error`). Nothing is wrong with the code - the screens say what happened - but the experience is the free route's. The funded fix is the same as narration's row above |
 | **An equity can have a weekend "close"** | `normalise`, the quote path | A dashboard opened on Sunday 27 Sep stored each equity's Friday price with a Sunday `as_of` (the provider's `fast_info` has no timestamp, so a quote is dated when it was fetched). `normalise` makes it a Sunday close equal to Friday's: a 0% day for the rules, a flat step on the holding chart. One day so far. A fix belongs in the quote path (do not store a quote for an exchange outside its session, `market_sessions.py` knows the sessions), not in the chart, which draws what the rules read |
 | **Company names that are everyday words link falsely** | `app/news/entities.py` | Measured on the first raw-file run (2026-09-27 19:35 UTC): 2 of 18 stored articles were about the fruit - "Apple Cider & Donut Day at the Kinney Pioneer Museum", "Czipar's annual Apple Festival" - and linked to AAPL, because a capitalised "Apple" in a headline matches the company. The same will happen for "Target", "Block", "Visa", "Shell" when followed - and for **surnames**: on 2026-09-29 the "gasoline" topic card showed "Auxiliary Bishop René Valero and His Legacy" (thetablet.org) linked to VLO. Consequences: the fruit lands on the topic card and in sentiment, and discovery reads it ("festival" was a candidate phrase on 2026-09-28). The provider is not at fault; the matcher accepts a bare name as a sole signal. **Deferred by the user to a dedicated PR after more data** - likely shape: for a name that is also a dictionary word, require a second signal (a ticker, "Inc", a product word) before linking, and measure precision over several days of runs, not one |
-| **Laptop sleep leaves gaps in collection** | local scheduler | Overnight 2026-09-27/28 the runs jumped 20:30 -> 23:13 -> 03:21 -> 10:18 UTC. The cursor caught up (16 files a run, never older than 48 h), so no news was lost - but the daily `topic_discovery` meant for local midnight ran at 10:33 UTC. Harmless for news; worth knowing when a "nightly" result appears at breakfast. M7's CronJob removes it |
+| **Laptop sleep leaves gaps in collection** | local scheduler | Overnight 2026-09-27/28 the runs jumped 20:30 -> 23:13 -> 03:21 -> 10:18 UTC. The cursor caught up (16 files a run, never older than 48 h), so no news was lost - but the daily `topic_discovery` meant for local midnight ran at 10:33 UTC. Harmless for news; worth knowing when a "nightly" result appears at breakfast. **M7's CronJobs do not remove it on a laptop**: the kind cluster sleeps with the machine too, and `startingDeadlineSeconds` drops the stale ticks; the "ask often" rhythm is what catches up. Only an always-on cluster removes it |
 | **Names ending in ", LP" never link to news** | `app/news/entities.py` `core_name` | `core_name` strips "Fund", "Inc" and the like but not a trailing ", LP", so "United States Gasoline Fund, LP" is matched - and searched on GDELT - only by that exact phrase, which prose never writes. **Not fixed on purpose:** 37 instruments in the committed universe have LP names, and `core_name` also shapes the resolver's matching text (`app/universe/matching_text.py`), so the fix moves topic resolution and needs the new held-out batch to measure. Fix both together, or give the news matcher its own rule |
 | **A very large instrument list outruns the collect timeout** | `app/news/gdelt.py` | 8 names per request, 5.5 s apart: 500 instruments (the request cap) is ~63 requests, ~6 min, over the 5-minute `SCAN_TIMEOUT_MS`. Irrelevant at a dozen instruments; the fix when it matters is fewer, wider requests or a per-run instrument budget - **and retries shorten the headroom**: worst case per request is three 30 s timeouts plus 40 s of backoff (~130 s), so even today's dozen instruments (two requests) could need ~260 s of the 300 s budget. That worst case needs GDELT to time out rather than refuse, and refusals so far have taken 11-15 s |
 | Redis cold start refetches everything | `core/cache.py` | The `quotes` table holds usable recent prices; warming from it was deferred |
@@ -1649,6 +1769,21 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 ---
 
 ## Local environment (this machine)
+
+- **A kind cluster named `traders` runs next to the compose stack** (created 2026-09-30 with
+  `UNIVERSE_DIR=/Users/a/projects/Traders/data/universe`, the main checkout's, because a worktree
+  has no descriptions file). kind 0.33 is installed with Homebrew; kubectl 1.36. Every command
+  names `--context kind-traders`. `bash scripts/k8s-up.sh` redeploys in ~1-2 minutes;
+  `k8s-down.sh` deletes it (the cluster's DB holds only the demo portfolio - the smoke test's
+  import, and the runs the CronJobs fired from 11:51 UTC on). App: **http://traders.localhost**, passphrase `grep APP_PASSPHRASE
+  infra/k8s/overlays/kind/secrets.env` (a copy is in the main checkout, see the debt row).
+  Docker has 7.75 GB; compose and the cluster together used well under half.
+- **Docker Hub pulls time out inside the session's sandbox**, every time in M7: run
+  `docker pull`, `build-images.sh` and `k8s-up.sh` outside the sandbox.
+- **zsh traps met in M7:** `K="kubectl --context ..."; $K get` fails (zsh does not split words
+  - use a function); `-o custom-columns=...[0]...` needs quotes (`[0]` is a glob); a heredoc
+  containing `'"'"'` confused the tool's shell - write the edit script to a file instead.
+- **A port-forward dies when its pod is replaced**, so it goes stale after every deploy.
 
 - **`.env` has `MARKET_DATA_PROVIDERS=yfinance,fixture`** — real, 15-minute-delayed prices. Since
   decision 67 the trailing `fixture` is dropped at startup (a real chain never falls back to invented
@@ -1896,7 +2031,36 @@ site, 2026-09-30); the dashboard's portfolio failure covers the summary, allocat
 the narration badge hides when unknown (the server already degrades to `unknown`). Dead ends: every
 page links back, an unknown address is the portfolio, a stale holding or proposal link says so.
 
-### Next session: M7
+### Next session: M7, continued
+
+**Where M7 stands** (2026-09-30 ~12:30 UTC): PRs 1-5 of the agreed seven are merged (#109-#113).
+The plan and every decision behind it were agreed with the user at the start of the session -
+"recommendations" to all seven: clean cluster DB + demo import; keyless providers; Telegram off
+in the cluster (webhook leg only as an opt-in last PR, **with the user's explicit go-ahead**); HPA
+on the AI service only; Kustomize; a standard Ingress served by Traefik; a kind job in CI.
+
+**Next, in order, one branch off `main` each:**
+- **PR 6 - the AI service's HorizontalPodAutoscaler.** It needs **metrics-server** (kind has none;
+  it needs `--kubelet-insecure-tls` on kind). The AI Deployment already requests `cpu: 100m`,
+  which is what an HPA measures against. Explain HPA and metrics-server from first principles.
+  Show it scaling (load it) and scaling back. The orchestrator gets no HPA - decision 77 and the
+  preview debt row say why; the manifest comment already does.
+- **PR 7 - documentation a stranger can follow**: root README with an architecture diagram, the
+  runbook (rotate keys, replay a run, recover a stuck proposal), an ADR index over "Decisions",
+  cost notes. **The kind CI job** (debt row) fits here or in PR 6. **Verify by following the README
+  literally** in a fresh clone with a deleted cluster.
+- **Optional PR 8 - Telegram's webhook leg**, only if the user says so (a tunnel, `setWebhook`,
+  `getWebhookInfo` at once, `TELEGRAM_UPDATES=webhook`; decision 20: the signing secret differs
+  from the webhook secret). Otherwise it waits for a real deployment.
+- Then M7's closing handoff.
+
+**The #98 check (from the M6 handoff) is not done yet.** At 10:14 UTC on 2026-09-30 exactly two
+future-dated rows existed (BTC-USD, ETH-USD at 2026-09-30 20:00), both from the 06:45 run; the
+07:18 run on #98's code wrote none. The first backfill able to repair them fires at the first
+hourly tick after 21:00 UTC (the daily bucket is the user's local date). Run the query below after
+that; expect crypto's 30 Sep close to be a ~21:00 price until the next night (debt table).
+
+**Previous text of this section (M6's handoff), kept for the query and the M7 list:**
 
 **First, a two-minute check left from #98:** a 06:45 UTC backfill on 2026-09-30 wrote BTC-USD
 and ETH-USD rows dated **2026-09-30 20:00 UTC** (in the future then). #98 stops new ones and makes
