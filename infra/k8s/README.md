@@ -21,6 +21,7 @@ Every `kubectl` command below names the context, so it cannot reach another clus
 infra/k8s/
   kind/cluster.yaml          the cluster itself: one node, port 80, the universe mount
   kind/traefik.yaml          the ingress controller (cluster infrastructure, not the app)
+  kind/metrics-server/       measures pod CPU for the autoscaler (upstream release, pinned)
   base/                      what Traders is, on any cluster
     kustomization.yaml         lists the files; sets the namespace; generates the ConfigMap
     config.env                 non-secret settings (keyless defaults)
@@ -57,6 +58,8 @@ so `kubectl kustomize infra/k8s/.deploy` prints exactly what gets applied.
 | IngressClass `traefik` | names a controller; marked as the cluster default | the app's Ingress names no controller, so it is portable |
 | ServiceAccount + ClusterRole + binding (RBAC) | an identity for a pod, and what it may ask the Kubernetes API | Traefik must read Ingresses and Services; the API refuses anything not granted |
 | Service type NodePort | opens a port on the node itself | how traffic from outside the cluster gets in at all |
+| HorizontalPodAutoscaler `ai-service` | adds or removes copies of a Deployment from measured CPU | the AI service is where the CPU goes; 1 to 3 copies at a 70% target |
+| metrics-server (in `kube-system`) | measures each pod's CPU and memory from the kubelets | the autoscaler's only source of numbers; kind does not ship it |
 | CronJob `run-<kind>` (9) | creates a Job on a timetable | scheduled runs: each Job POSTs one run kind to `/internal/runs`, replacing the in-process timer |
 
 **Ordering without `depends_on`.** Everything starts the moment it is applied. `migrate` waits for
@@ -115,7 +118,25 @@ share no database, no Telegram bot and no GDELT downloads.
    `APP_ENV` must not be `production` while the cluster serves plain http - production marks the
    session cookie `Secure`.
 
-Still to come in M7: the AI service's autoscaler (PR 6).
+Still to come in M7: documentation a stranger can follow, and a CI job that deploys to kind (PR 7).
+
+## Autoscaling
+
+The AI service runs 1 to 3 copies. Every 15 s the autoscaler reads each copy's CPU from
+metrics-server, compares the average with the copy's CPU *request* (`100m`, a tenth of a core),
+and adds copies above 70% or removes them after five minutes below it. The Deployment declares no
+`replicas`, because a number there would be re-applied by every deploy and undo the autoscaler.
+
+The orchestrator has no autoscaler and must not get one while import previews live in its memory
+(rule 3 above): a preview made on one copy and confirmed on another would find nothing.
+
+```bash
+kubectl --context kind-traders -n traders get hpa          # target, current CPU, copies
+kubectl --context kind-traders -n traders top pods         # what metrics-server measures
+```
+
+`kind/metrics-server` adds `--kubelet-insecure-tls`: kind's kubelets use self-signed certificates.
+Fine on one laptop; never on a real cluster.
 
 ## Scheduled runs
 

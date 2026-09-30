@@ -1,0 +1,31 @@
+# metrics-server for the local kind cluster: the add-on that measures each pod's
+# CPU and memory, by asking the kubelet (the agent on every node) every 15 s.
+#
+# The HorizontalPodAutoscaler (base/ai-service.yaml) decides how many copies of
+# the AI service to run from exactly these numbers; without metrics-server it
+# has none, shows `<unknown>` as its current CPU, and never scales. `kubectl
+# top pods` reads the same numbers. Most managed clusters ship it; kind does not.
+#
+# Cluster infrastructure like the ingress controller, so it is applied by
+# scripts/k8s-up.sh before the app. The upstream release manifest is used as
+# published, pinned by version - nothing in it is trimmed, so unlike Traefik
+# there is nothing to gain from copying its ~200 lines here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.9.0/components.yaml
+
+# kind's kubelets serve HTTPS with self-signed certificates that no cluster
+# authority signed, so metrics-server refuses to talk to them and reports
+# nothing. This flag skips that check. Acceptable on a single-machine cluster
+# where the kubelet is a container on this laptop; never on a real cluster,
+# where the kubelet's certificate is what proves the metrics came from the node.
+patches:
+  - target:
+      kind: Deployment
+      name: metrics-server
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --kubelet-insecure-tls
