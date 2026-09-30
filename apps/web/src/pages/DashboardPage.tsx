@@ -1,6 +1,16 @@
 import { observer } from 'mobx-react-lite';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { FileUp, Inbox, LineChart, LogOut, RefreshCw, Settings, Tags, Target } from 'lucide-react';
+import {
+  FileUp,
+  Inbox,
+  LineChart,
+  LogOut,
+  MessageCircleQuestion,
+  RefreshCw,
+  Settings,
+  Tags,
+  Target,
+} from 'lucide-react';
 
 import { AddHoldingForm } from '../components/AddHoldingForm.tsx';
 import { AllocationChart } from '../components/AllocationChart.tsx';
@@ -103,6 +113,12 @@ export const DashboardPage = observer(function DashboardPage() {
             <span className="flex items-center gap-1">
               <Tags className="size-4" aria-hidden />
               Topics
+            </span>
+          </Link>
+          <Link to="/ask" className={buttonClass('secondary')}>
+            <span className="flex items-center gap-1">
+              <MessageCircleQuestion className="size-4" aria-hidden />
+              Ask
             </span>
           </Link>
           <Link to="/proposals" className={buttonClass('secondary')}>

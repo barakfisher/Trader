@@ -1,0 +1,266 @@
+import { useEffect, useState, type FormEvent } from 'react';
+import { observer } from 'mobx-react-lite';
+import { Link } from '@tanstack/react-router';
+import { ArrowLeft, MessageCircleQuestion } from 'lucide-react';
+
+import type { AskCitation, AskResponse } from '@traders/shared/ai';
+
+import { ConceptText } from '../components/ConceptText.tsx';
+import { Disclaimer } from '../components/Disclaimer.tsx';
+import { EvidenceDrawer } from '../components/EvidenceDrawer.tsx';
+import { Button, Card, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
+import {
+  COMPUTABLE_QUESTIONS,
+  matchingNote,
+  outcomeOf,
+  similarityText,
+  sourceText,
+  waitingText,
+} from '../lib/askPresentation.ts';
+import { conceptLabel } from '../lib/observationPresentation.ts';
+import { baseCurrencyOf } from '../lib/portfolioView.ts';
+import { usePortfolioQuery } from '../queries/portfolio.ts';
+import { MAX_QUESTION_LENGTH, type AskEntry } from '../stores/AskStore.ts';
+import { useStore } from '../stores/context.tsx';
+
+/** Questions to start from: one of each kind the page can answer. Filled in, never sent. */
+const EXAMPLES = ['What is a drawdown?', 'What is my largest position?', 'How far am I from my targets?'];
+
+/**
+ * A question in the user's own words (FR-17).
+ *
+ * The page's job is to keep apart what the reply keeps apart (decisions 32,
+ * 36): an answer, a weak match - given, and labelled as not sure - and four
+ * refusals, each with its own title and next step. Who wrote an answer is said
+ * on every one: quoted passages, a model's paragraph over them, or arithmetic
+ * over the holdings that no model touched. And the passages an answer rests on
+ * are shown verbatim, because an answer the reader cannot check is the thing
+ * this product exists not to give.
+ */
+export const AskPage = observer(function AskPage() {
+  const { ask } = useStore();
+  const tooLong = ask.draft.length > MAX_QUESTION_LENGTH;
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    void ask.ask();
+  };
+
+  return (
+    <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <MessageCircleQuestion className="size-5 text-accent" aria-hidden />
+          <h1 className="text-base font-semibold">Ask</h1>
+        </div>
+        <Link to="/" className={buttonClass('secondary')}>
+          <span className="flex items-center gap-1">
+            <ArrowLeft className="size-4" aria-hidden />
+            Back to portfolio
+          </span>
+        </Link>
+      </header>
+
+      <Card>
+        <form onSubmit={submit} className="space-y-3">
+          <label htmlFor="ask-question" className="block text-sm text-text-muted">
+            Ask what a term means, or ask about your holdings. Answers come from this app&rsquo;s
+            reference notes and from arithmetic over your portfolio - never advice.
+          </label>
+          <textarea
+            id="ask-question"
+            value={ask.draft}
+            onChange={(event) => ask.setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              // Enter sends, as in a chat box; Shift+Enter is a new line.
+              if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                void ask.ask();
+              }
+            }}
+            rows={2}
+            placeholder="What is a drawdown?"
+            className="w-full resize-y rounded-lg border border-border-subtle bg-surface px-3 py-2 text-sm"
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              {EXAMPLES.map((example) => (
+                <button
+                  key={example}
+                  type="button"
+                  onClick={() => ask.setDraft(example)}
+                  className="rounded-full bg-surface-hover px-2.5 py-1 text-xs text-text-muted hover:text-text-primary"
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-3">
+              {tooLong && (
+                <span className="text-xs text-loss">
+                  {ask.draft.length} of {MAX_QUESTION_LENGTH} characters
+                </span>
+              )}
+              <Button type="submit" disabled={ask.pending !== null || ask.draft.trim() === '' || tooLong}>
+                {ask.pending ? 'Answering…' : 'Ask'}
+              </Button>
+            </div>
+          </div>
+        </form>
+      </Card>
+
+      <div className="space-y-4">
+        {ask.entries.map((entry) => (
+          <EntryCard key={entry.id} entry={entry} />
+        ))}
+      </div>
+
+      <Disclaimer />
+    </div>
+  );
+});
+
+const EntryCard = observer(function EntryCard({ entry }: { entry: AskEntry }) {
+  const { ask } = useStore();
+  return (
+    <Card>
+      <p className="mb-3 text-sm font-medium text-text-primary">{entry.question}</p>
+      {entry.response === null && entry.error === null && <Waiting since={entry.askedAt} />}
+      {entry.error !== null && (
+        <ErrorNote message={entry.error} onRetry={ask.pending ? undefined : () => ask.retry(entry.id)} />
+      )}
+      {entry.response !== null && <Reply response={entry.response} entryId={entry.id} />}
+    </Card>
+  );
+});
+
+/** The seconds since asking, ticking, so a minute of model time does not look like a hang. */
+function Waiting({ since }: { since: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return <Spinner label={waitingText(Math.floor((now - since) / 1000))} />;
+}
+
+const Reply = observer(function Reply({
+  response,
+  entryId,
+}: {
+  response: AskResponse;
+  entryId: number;
+}) {
+  const outcome = outcomeOf(response);
+  const baseCurrency = baseCurrencyOf(usePortfolioQuery().data);
+
+  if (outcome.kind === 'refused') {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm font-semibold text-text-primary">{outcome.title}</p>
+        <p className="text-sm text-text-muted">{response.text}</p>
+        {outcome.reason === 'not_in_corpus' && similarityText(response.best_similarity) && (
+          <p className="text-xs text-text-muted">
+            The closest passage scored {similarityText(response.best_similarity)} for relevance,
+            which is below what counts as covering the question.
+          </p>
+        )}
+        {outcome.reason === 'no_holdings' && (
+          <Link to="/" className={buttonClass('secondary')}>
+            Add or import holdings
+          </Link>
+        )}
+        {outcome.reason === 'not_computable' && (
+          <p className="text-xs text-text-muted">
+            What I can compute: {COMPUTABLE_QUESTIONS.join('; ')}.
+          </p>
+        )}
+        <MatchingNote response={response} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {outcome.kind === 'answer' && outcome.relevance === 'weak' && (
+        // Said by the page as well as by the text's own opening line: a reader
+        // skimming for the answer must not miss that it may not be one.
+        <p className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">
+          Weak match: the reference notes may not cover this question
+          {similarityText(response.best_similarity) &&
+            ` (closest passage scored ${similarityText(response.best_similarity)})`}
+          .
+        </p>
+      )}
+      <p className="whitespace-pre-line text-sm text-text-primary">{response.text}</p>
+      <p className="text-xs text-text-muted">{sourceText(response)}</p>
+      <MatchingNote response={response} />
+      {outcome.kind === 'computed' && Object.keys(response.evidence ?? {}).length > 0 && (
+        <EvidenceDrawer
+          evidence={response.evidence}
+          baseCurrency={baseCurrency}
+          id={`ask-evidence-${entryId}`}
+        />
+      )}
+      <ConceptChips slugs={response.concept_refs ?? []} />
+      <Citations citations={response.citations ?? []} />
+    </div>
+  );
+});
+
+function MatchingNote({ response }: { response: AskResponse }) {
+  const note = matchingNote(response);
+  return note ? <p className="text-xs text-text-muted">{note}</p> : null;
+}
+
+/** The terms the passages explain, each opening its full note. */
+const ConceptChips = observer(function ConceptChips({ slugs }: { slugs: string[] }) {
+  const { concepts } = useStore();
+  if (slugs.length === 0) return null;
+  return (
+    <p className="flex flex-wrap items-center gap-1 text-[11px] text-text-muted">
+      <span className="uppercase tracking-wide">Concepts</span>
+      {slugs.map((slug) => (
+        <button
+          key={slug}
+          type="button"
+          onClick={() => concepts.open(slug)}
+          className="rounded bg-surface-hover px-1.5 py-0.5 text-text-primary hover:bg-border hover:underline"
+        >
+          {conceptLabel(slug)}
+        </button>
+      ))}
+    </p>
+  );
+});
+
+/** The passages, verbatim. The first is open; the rest are one click away. */
+function Citations({ citations }: { citations: AskCitation[] }) {
+  if (citations.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      <p className="text-[11px] uppercase tracking-wide text-text-muted">
+        Passages ({citations.length})
+      </p>
+      {citations.map((citation, index) => (
+        <details
+          key={citation.chunk_id}
+          open={index === 0}
+          className="rounded-lg border border-border-subtle bg-surface/60 px-3 py-2"
+        >
+          <summary className="cursor-pointer text-xs text-text-primary">
+            {citation.title}
+            {citation.heading && <span className="text-text-muted"> - {citation.heading}</span>}
+            {similarityText(citation.similarity) && (
+              <span className="text-text-muted"> · relevance {similarityText(citation.similarity)}</span>
+            )}
+          </summary>
+          {/* Verbatim: the corpus's own words, with its own emphasis. */}
+          <blockquote className="mt-2 border-l-2 border-border-subtle pl-3">
+            <ConceptText text={citation.text} size="xs" />
+          </blockquote>
+        </details>
+      ))}
+    </div>
+  );
+}

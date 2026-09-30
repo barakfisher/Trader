@@ -85,6 +85,8 @@ const UNIT_SUFFIXES: { suffix: string; unit: Unit }[] = [
 export function unitFor(key: string): Unit {
   if (key === 'as_of') return 'timestamp';
   if (key === 'drift') return 'fraction';
+  // `/ask`'s position answers record a bare `weight`: a share of the portfolio.
+  if (key === 'weight') return 'share';
   const match = UNIT_SUFFIXES.find((candidate) => key.endsWith(candidate.suffix));
   return match ? match.unit : 'unknown';
 }

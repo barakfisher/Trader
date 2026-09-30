@@ -162,6 +162,7 @@ describe('readEvidence', () => {
     expect(unitFor('return_ratio')).toBe('fraction');
     expect(unitFor('target_weight')).toBe('share');
     expect(unitFor('target_weight_sum')).toBe('share');
+    expect(unitFor('weight')).toBe('share');
     expect(unitFor('high_as_of')).toBe('timestamp');
     expect(unitFor('as_of')).toBe('timestamp');
     expect(unitFor('symbol')).toBe('unknown');
