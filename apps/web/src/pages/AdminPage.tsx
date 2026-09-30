@@ -26,7 +26,7 @@ import {
   reasonLabel,
 } from '../lib/llmCalls.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
-import { gapExplanation, gapSubject, isRealGap } from '../lib/universeGaps.ts';
+import { gapExplanation, gapProfile, gapSubject, isRealGap } from '../lib/universeGaps.ts';
 import {
   useAdminAuditQuery,
   useAdminGapsQuery,
@@ -177,6 +177,13 @@ function UniverseCard() {
             equities, {count.format(data.database.etfs)} ETFs), {count.format(data.database.embedded)}{' '}
             embedded, {count.format(data.database.etfHoldings)} ETF holdings.
           </p>
+          {data.database.onDemand > 0 && (
+            <p className="text-text-muted">
+              Also {count.format(data.database.onDemand)} profiled on demand for listings users named.
+              They are described but not members: no topic is answered from them, and they are not
+              compared with the snapshot.
+            </p>
+          )}
           {data.lastLoad ? (
             <p className="text-text-muted">
               Snapshot of {formatExactTime(data.lastLoad.snapshotAsOf)}, last loaded{' '}
@@ -261,6 +268,7 @@ function GapItem({ gap }: { gap: UniverseGap }) {
       <span className="min-w-0">
         <span className={`font-medium ${real ? 'text-warn' : ''}`}>{gapSubject(gap)}</span>
         <span className="ml-2 text-text-muted">{gapExplanation(gap)}</span>
+        {gapProfile(gap) && <span className="block text-xs text-text-muted">{gapProfile(gap)}</span>}
       </span>
       <span className="text-xs text-text-muted" title={formatExactTime(gap.lastSeenAt)}>
         {gap.occurrences > 1 ? `${gap.occurrences}× · ` : ''}

@@ -142,10 +142,12 @@ original brief named something this repository does not have, the reconciliation
 recomputing universe membership and ETF weights; it never touches a user's holdings or proposals.
 
 **4. On-demand ingestion (fast path)** — a missing ticker is fetched from Yahoo in the background
-and written with `source = 'on_demand'`, not `'screened'`: it was never screened, so it is
-priceable and resolvable by symbol but excluded from topic resolution until the next rescreen
-admits or drops it. The user's import or topic flow never waits on it; the `MISSING_TICKER`
-event is logged either way.
+and written with `membership = 'on_demand'`, not `'screened'`: it was never screened, so it is
+described but excluded from topic resolution until a rescreen admits or drops it. The user's
+import or topic flow never waits on it; the `MISSING_TICKER` event is logged either way.
+*(As built, decisions 85 and 89: a missing ticker was already priceable - symbol lookup asks Yahoo
+live - so what the fetch adds is the **profile**. A listing the screen excludes by rule, and one
+nothing could price, is not fetched.)*
 
 **5. Isolation and audit**
 - Universe and market data stay unscoped (no `user_id`), as today.
@@ -155,8 +157,9 @@ event is logged either way.
 
 **Exit:** a non-admin session gets `403` on every `/admin/*` route (proved by a test that
 enumerates them); the rescreen button and the CronJob produce the same single run; the panel shows
-per-agent latency, tokens, cost and fallback reasons from real calls; a searched missing ticker is
-priceable within one background fetch and appears as a gap event.
+per-agent latency, tokens, cost and fallback reasons from real calls; a searched missing ticker
+appears as a gap event and is **profiled** within one background fetch (it was priceable already;
+decision 85).
 
 ---
 

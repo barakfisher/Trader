@@ -223,6 +223,7 @@ describe('the universe gaps', () => {
         occurrences: 4,
         occurred_at: new Date('2026-10-01T06:00:00Z'),
         last_seen_at: new Date('2026-10-01T09:00:00Z'),
+        profile_membership: null,
       },
     ]);
     const app = buildApp();
@@ -241,6 +242,7 @@ describe('the universe gaps', () => {
           occurrences: 4,
           firstSeenAt: '2026-10-01T06:00:00.000Z',
           lastSeenAt: '2026-10-01T09:00:00.000Z',
+          profile: null,
         },
       ],
     });

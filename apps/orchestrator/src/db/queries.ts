@@ -622,14 +622,24 @@ export interface OpsEventRow {
   occurrences: number;
   occurred_at: Date;
   last_seen_at: Date;
+  profile_membership: ProfileMembership | null;
 }
 
+/** `instrument_profiles.membership` (migration 0030). */
+export type ProfileMembership = 'screened' | 'on_demand' | 'dropped';
+
 export function listOpsEvents(kind: OpsEventKind | undefined, limit = 100): Promise<OpsEventRow[]> {
+  // A missing ticker's listing may have been profiled since: on demand, or by
+  // a rescreen that admitted it. Read now, not when the gap was recorded.
   return query<OpsEventRow>(
-    `SELECT id::text, kind, user_id, detail, occurrences, occurred_at, last_seen_at
-       FROM ops_events
-      WHERE ($1::text IS NULL OR kind = $1)
-      ORDER BY last_seen_at DESC, id DESC
+    `SELECT e.id::text, e.kind, e.user_id, e.detail, e.occurrences, e.occurred_at, e.last_seen_at,
+            p.membership AS profile_membership
+       FROM ops_events e
+       LEFT JOIN instruments i
+              ON e.kind = 'universe_gap_missing_ticker' AND i.symbol = e.detail->>'symbol'
+       LEFT JOIN instrument_profiles p ON p.instrument_id = i.id
+      WHERE ($1::text IS NULL OR e.kind = $1)
+      ORDER BY e.last_seen_at DESC, e.id DESC
       LIMIT $2`,
     [kind ?? null, limit],
   );
@@ -654,25 +664,30 @@ export function getLatestUniverseLoad(): Promise<UniverseLoadRow | null> {
 }
 
 export interface UniverseCountsRow {
+  /** Screened profiles: the ones a snapshot put here, and the only ones a topic sees. */
   profiles: number;
   equities: number;
   etfs: number;
   embedded: number;
   etf_holdings: number;
+  /** Fetched for a listing a user named (decision 89); never compared with a snapshot. */
+  on_demand: number;
 }
 
 /** What the database holds now - compared against what the last load wrote. */
 export async function countUniverse(): Promise<UniverseCountsRow> {
   const row = await queryOne<UniverseCountsRow>(
-    `SELECT count(*)::int AS profiles,
-            count(*) FILTER (WHERE i.asset_class = 'equity')::int AS equities,
-            count(*) FILTER (WHERE i.asset_class = 'etf')::int AS etfs,
-            count(p.embedding_model)::int AS embedded,
-            (SELECT count(*)::int FROM etf_holdings) AS etf_holdings
+    `SELECT count(*) FILTER (WHERE p.membership = 'screened')::int AS profiles,
+            count(*) FILTER (WHERE p.membership = 'screened' AND i.asset_class = 'equity')::int
+              AS equities,
+            count(*) FILTER (WHERE p.membership = 'screened' AND i.asset_class = 'etf')::int AS etfs,
+            count(p.embedding_model) FILTER (WHERE p.membership = 'screened')::int AS embedded,
+            (SELECT count(*)::int FROM etf_holdings) AS etf_holdings,
+            count(*) FILTER (WHERE p.membership = 'on_demand')::int AS on_demand
        FROM instrument_profiles p
        JOIN instruments i ON i.id = p.instrument_id`,
   );
-  return row ?? { profiles: 0, equities: 0, etfs: 0, embedded: 0, etf_holdings: 0 };
+  return row ?? { profiles: 0, equities: 0, etfs: 0, embedded: 0, etf_holdings: 0, on_demand: 0 };
 }
 
 /**

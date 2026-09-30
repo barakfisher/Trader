@@ -12,7 +12,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../src/db/queries.js', () => ({ recordOpsEvent: vi.fn(async () => undefined) }));
 
 const queries = await import('../src/db/queries.js');
-const { missingTickerDetail, normaliseTopic, recordLowConfidence, recordMissingTicker } = await import(
+const { missingTickerDetail, normaliseTopic, recordLowConfidence, recordMissingTicker, requestProfile } =
+  await import(
   '../src/services/universeGaps.js'
 );
 
@@ -104,6 +105,29 @@ describe('a missing ticker', () => {
   it('never throws, even when the write fails', async () => {
     vi.mocked(queries.recordOpsEvent).mockRejectedValueOnce(new Error('connection lost'));
     await expect(recordMissingTicker(USER, 'tiny', resolution(), 'import', NOW)).resolves.toBeUndefined();
+  });
+  it('asks for a profile of a real gap, and only of a real gap', async () => {
+    const ai = { requestProfile: vi.fn(async () => ({})) };
+    await recordMissingTicker({ ...USER, ai, requestId: 'r-1' }, 'tiny', resolution(), 'import', NOW);
+    expect(ai.requestProfile).toHaveBeenCalledWith('TINY', 'r-1');
+
+    ai.requestProfile.mockClear();
+    const german = resolution({ universe: { member: false, outside_screen: 'exchange' } });
+    await recordMissingTicker({ ...USER, ai }, 'SAP.DE', german, 'import', NOW);
+    const unpriced = resolution({ resolved: null, candidates: [], universe: null });
+    await recordMissingTicker({ ...USER, ai }, 'NOSUCH', unpriced, 'import', NOW);
+    expect(ai.requestProfile).not.toHaveBeenCalled();
+  });
+
+  it('does not wait for the profile request, and survives its failure', async () => {
+    let settle: (value: unknown) => void = () => {};
+    const pending = { requestProfile: vi.fn(() => new Promise((resolve) => (settle = resolve))) };
+    // Resolves although the request never has: the user's flow does not wait on it.
+    await recordMissingTicker({ ...USER, ai: pending }, 'tiny', resolution(), 'import', NOW);
+    settle({});
+
+    const failing = { requestProfile: vi.fn(async () => Promise.reject(new Error('AI service down'))) };
+    await expect(requestProfile(failing, 'TINY')).resolves.toBeUndefined();
   });
 });
 

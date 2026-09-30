@@ -79,7 +79,7 @@ def _in_universe(connection: Any, symbols: list[str]) -> set[str]:
             SELECT i.symbol
               FROM instrument_profiles p
               JOIN instruments i ON i.id = p.instrument_id
-             WHERE i.symbol = ANY(:symbols)
+             WHERE i.symbol = ANY(:symbols) AND p.membership = 'screened'
             """
         ),
         {"symbols": symbols},

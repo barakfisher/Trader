@@ -99,3 +99,4 @@ while this file is out of date.
 | 86 | The universe status reconciles against the loader's own account, stored per load |
 | 87 | Every model call is recorded by a wrapper the factory builds; call sites only add a verdict |
 | 88 | The LLM panel reconciles narration's explanations against its calls, and shows both records |
+| 89 | An on-demand profile describes a listing without making it a member |

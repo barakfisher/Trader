@@ -8,6 +8,12 @@
  * tried and dropped is the system's search, not a user's gap, and recording
  * them would bury the real ones.
  *
+ * A real gap - a US equity or ETF the universe lacks - also asks the AI
+ * service to profile the listing in the background (decision 89), so it is
+ * described within one fetch rather than at the next rescreen. The request is
+ * not awaited: the AI service answers at once, but not at no cost, and an
+ * import naming a small company should not wait on it at all.
+ *
  * Nothing here can fail the flow that called it: a gap that could not be
  * written is logged and the user's import, holding or topic carries on
  * exactly as it would have. The panel is an observation of the product, and
@@ -45,6 +51,17 @@ export interface UserContext {
   timezone: string;
 }
 
+/** The AI client, narrowed to the one call this needs, so a test can fake it. */
+export interface ProfileRequester {
+  requestProfile(symbol: string, requestId?: string): Promise<unknown>;
+}
+
+/** Who named the symbol, and - where a profile may be asked for - through what. */
+export interface GapContext extends UserContext {
+  ai?: ProfileRequester;
+  requestId?: string;
+}
+
 /**
  * The detail for a resolution that is a gap, or null when it is not one - a
  * member, or a resolution whose membership was never checked. "Not checked"
@@ -76,7 +93,7 @@ export function missingTickerDetail(
 }
 
 export async function recordMissingTicker(
-  user: UserContext,
+  user: GapContext,
   symbol: string,
   resolution: InstrumentResolution,
   source: GapSource,
@@ -84,6 +101,9 @@ export async function recordMissingTicker(
 ): Promise<void> {
   const detail = missingTickerDetail(symbol, resolution, source);
   if (!detail) return;
+  if (detail.gap === 'not_in_universe' && user.ai) {
+    void requestProfile(user.ai, detail.symbol, user.requestId);
+  }
   await record({
     kind: 'universe_gap_missing_ticker',
     userId: user.userId,
@@ -122,6 +142,22 @@ export async function recordLowConfidence(
     },
     dedupeKey: `low_confidence:${user.userId}:${topic}:${localDate(user.timezone, now)}`,
   });
+}
+
+/**
+ * Ask for the listing's profile; never throws. Repeats are cheap by design:
+ * the AI service answers `already_profiled` or `in_progress` without fetching.
+ */
+export async function requestProfile(
+  ai: ProfileRequester,
+  symbol: string,
+  requestId?: string,
+): Promise<void> {
+  try {
+    await ai.requestProfile(symbol, requestId);
+  } catch (error) {
+    logger().warn({ err: error, symbol }, 'on-demand profile not requested');
+  }
 }
 
 async function record(event: Parameters<typeof recordOpsEvent>[0]): Promise<void> {

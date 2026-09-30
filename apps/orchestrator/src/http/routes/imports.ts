@@ -48,7 +48,12 @@ export function registerImportRoutes(app: Hono<AppEnv>): void {
         ai: context.get('ai'),
         requestId: context.get('requestId'),
         onResolution: (symbol, resolution) =>
-          recordMissingTicker({ userId, timezone: user.timezone }, symbol, resolution, 'import'),
+          recordMissingTicker(
+            { userId, timezone: user.timezone, ai: context.get('ai'), requestId: context.get('requestId') },
+            symbol,
+            resolution,
+            'import',
+          ),
       });
     } catch (error) {
       if (error instanceof ImportParseError) {

@@ -133,7 +133,14 @@ describe('the admin page', () => {
                 source: 'yahoo',
                 manifestCounts: { kept: 5294 },
               },
-              database: { profiles: 5223, equities: 2534, etfs: 2689, embedded: 5223, etfHoldings: 16363 },
+              database: {
+                profiles: 5223,
+                equities: 2534,
+                etfs: 2689,
+                embedded: 5223,
+                etfHoldings: 16363,
+                onDemand: 2,
+              },
               reconciliation: [
                 {
                   what: 'etf_holdings',
@@ -155,6 +162,7 @@ describe('the admin page', () => {
                   occurrences: 3,
                   firstSeenAt: '2026-10-01T06:00:00Z',
                   lastSeenAt: '2026-10-01T07:00:00Z',
+                  profile: 'on_demand',
                 },
               ],
             })
@@ -210,6 +218,12 @@ describe('the admin page', () => {
     expect(await screen.findByText('TINY')).toBeTruthy();
     expect(screen.getByText(/below the size floor or listed since the snapshot/)).toBeTruthy();
     expect(screen.getByText(/3×/)).toBeTruthy();
+    expect(screen.getByText(/^profiled on demand; no topic is answered from it/)).toBeTruthy();
+  });
+
+  it('counts on-demand profiles apart from the members', async () => {
+    renderAt('/admin', ADMIN);
+    expect(await screen.findByText(/Also 2 profiled on demand for listings users named/)).toBeTruthy();
   });
 
   it('shows what administrators have done, and from where', async () => {

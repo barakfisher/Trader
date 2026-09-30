@@ -164,7 +164,12 @@ export function registerHoldingsRoutes(app: Hono<AppEnv>): void {
     const resolution = await context
       .get('ai')
       .resolveInstrument(input.symbol, context.get('requestId'));
-    await recordMissingTicker({ userId, timezone: user.timezone }, input.symbol, resolution, 'holding');
+    await recordMissingTicker(
+      { userId, timezone: user.timezone, ai: context.get('ai'), requestId: context.get('requestId') },
+      input.symbol,
+      resolution,
+      'holding',
+    );
     if (!resolution.resolved) {
       throw unprocessable(
         'unresolved_symbol',

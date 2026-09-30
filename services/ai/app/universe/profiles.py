@@ -12,6 +12,11 @@ a different table for the reason migration 0014 gives:
 - **The model is stored beside the vector**, and search filters on it, because
   vectors from two models are the same width and mean nothing to each other.
 
+**Only `membership = 'screened'` answers a topic.** Every read below that a
+topic reaches - the search, the held-by-an-ETF path, the holdings matcher and
+the coverage count - filters on it, so a profile fetched for one user's small
+holding (`on_demand`, migration 0030) never changes what a topic resolves to.
+
 Existing `instruments` rows are never overwritten: a holding's instrument may
 already carry a name or asset class the user's own data established, and the
 universe only fills what is missing.
@@ -168,14 +173,17 @@ def load_universe(
                 INSERT INTO instrument_profiles (
                     instrument_id, description, matching_text, source, license, content_hash,
                     sector, industry, category,
-                    market_cap_minor, net_assets_minor, size_currency, size_as_of
+                    market_cap_minor, net_assets_minor, size_currency, size_as_of, membership
                 ) VALUES (
                     :instrument_id, :description, :matching_text, :source, :license, :hash,
                     :sector, :industry, :category,
-                    :market_cap_minor, :net_assets_minor, :currency, :as_of
+                    :market_cap_minor, :net_assets_minor, :currency, :as_of, 'screened'
                 )
                 ON CONFLICT (instrument_id) DO UPDATE
                    SET description      = EXCLUDED.description,
+                       -- A snapshot member is screened, however its profile
+                       -- first arrived: an on-demand fetch the screen now admits.
+                       membership       = 'screened',
                        matching_text    = EXCLUDED.matching_text,
                        source           = EXCLUDED.source,
                        license          = EXCLUDED.license,
@@ -215,6 +223,99 @@ def load_universe(
         )
 
     return LoadReport(created, changed, unchanged, undescribed, no_currency)
+
+
+def insert_on_demand(
+    connection: Connection,
+    member: UniverseInstrument,
+    *,
+    source: str,
+    license: str,  # noqa: A002 - the column's name
+    as_of: datetime,
+) -> str | None:
+    """Write one fetched profile as `on_demand`; the instrument id, or None if one existed.
+
+    `DO NOTHING`, never an update: a screened profile must not be downgraded by
+    a user's fetch, and a second fetch of the same symbol (two tabs, two
+    copies of the service) adds nothing. The caller has checked that
+    `member` has a description and a currency.
+    """
+    instrument_id = _upsert_instrument(connection, member)
+    embedded_text = matching_text(member.name, member.asset_class, member.description or "")
+    inserted = connection.execute(
+        text(
+            """
+            INSERT INTO instrument_profiles (
+                instrument_id, description, matching_text, source, license, content_hash,
+                sector, industry, category,
+                market_cap_minor, net_assets_minor, size_currency, size_as_of, membership
+            ) VALUES (
+                :instrument_id, :description, :matching_text, :source, :license, :hash,
+                :sector, :industry, :category,
+                :market_cap_minor, :net_assets_minor, :currency, :as_of, 'on_demand'
+            )
+            ON CONFLICT (instrument_id) DO NOTHING
+            RETURNING instrument_id
+            """
+        ),
+        {
+            "instrument_id": instrument_id,
+            "description": member.description,
+            "matching_text": embedded_text,
+            "source": source,
+            "license": license,
+            "hash": content_hash(embedded_text),
+            "sector": member.sector,
+            "industry": member.industry,
+            "category": member.category,
+            "market_cap_minor": member.market_cap_minor,
+            "net_assets_minor": member.net_assets_minor,
+            "currency": member.currency,
+            "as_of": as_of,
+        },
+    ).scalar_one_or_none()
+    return None if inserted is None else str(inserted)
+
+
+def profile_exists(connection: Connection, symbol: str) -> bool:
+    """Whether `symbol` has a profile of any membership."""
+    return bool(
+        connection.execute(
+            text(
+                "SELECT EXISTS (SELECT 1 FROM instrument_profiles p "
+                "JOIN instruments i ON i.id = p.instrument_id WHERE i.symbol = :symbol)"
+            ),
+            {"symbol": symbol},
+        ).scalar_one()
+    )
+
+
+async def embed_profile(connection: Connection, instrument_id: str, embedder: BaseEmbedder) -> bool:
+    """Embed one profile if it has no vector from `embedder.model`. Whether it did."""
+    row = connection.execute(
+        text(
+            """
+            SELECT matching_text FROM instrument_profiles
+             WHERE instrument_id = :id
+               AND (embedding IS NULL OR embedding_model IS DISTINCT FROM :model)
+            """
+        ),
+        {"id": instrument_id, "model": embedder.model},
+    ).one_or_none()
+    if row is None:
+        return False
+    [vector] = await embedder.embed_documents([row.matching_text])
+    connection.execute(
+        text(
+            """
+            UPDATE instrument_profiles
+               SET embedding = CAST(:embedding AS vector), embedding_model = :model
+             WHERE instrument_id = :id
+            """
+        ),
+        {"id": instrument_id, "embedding": to_pgvector(vector), "model": embedder.model},
+    )
+    return True
 
 
 async def embed_pending(connection: Connection, embedder: BaseEmbedder) -> int:
@@ -299,6 +400,7 @@ def search_profiles(
               FROM instrument_profiles p
               JOIN instruments i ON i.id = p.instrument_id
              WHERE p.embedding_model = :model
+               AND p.membership = 'screened'
              ORDER BY p.embedding <=> CAST(:embedding AS vector)
              LIMIT :limit
             """
@@ -425,6 +527,7 @@ def load_holdings(
                     SELECT i.id, i.symbol, i.name
                       FROM instrument_profiles p
                       JOIN instruments i ON i.id = p.instrument_id
+                     WHERE p.membership = 'screened'
                     """
                 )
             )
@@ -535,6 +638,7 @@ def profiles_by_id(
               JOIN instruments i ON i.id = p.instrument_id
              WHERE p.instrument_id = ANY(CAST(:ids AS uuid[]))
                AND p.embedding_model = :model
+               AND p.membership = 'screened'
             """
         ),
         {"embedding": to_pgvector(embedding), "model": model, "ids": ids},
@@ -602,6 +706,7 @@ def coverage(connection: Connection, *, model: str) -> UniverseCoverage:
                    count(*) FILTER (WHERE embedding IS NOT NULL
                                       AND embedding_model = :model) AS embedded
               FROM instrument_profiles
+             WHERE membership = 'screened'
             """
         ),
         {"model": model},

@@ -200,7 +200,17 @@ async function confirmed(
       context.get('requestId'),
       user
         ? (symbol, resolution) =>
-            recordMissingTicker({ userId, timezone: user.timezone }, symbol, resolution, 'topic')
+            recordMissingTicker(
+              {
+                userId,
+                timezone: user.timezone,
+                ai: context.get('ai'),
+                requestId: context.get('requestId'),
+              },
+              symbol,
+              resolution,
+              'topic',
+            )
         : undefined,
     );
   } catch (error) {
