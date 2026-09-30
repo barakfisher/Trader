@@ -1,0 +1,19 @@
+# The local kind cluster: Kubernetes running inside one Docker container (the
+# "node"), created by scripts/k8s-up.sh and deleted by scripts/k8s-down.sh.
+#
+# One node that is both the control plane (the API server, the scheduler, the
+# controllers that keep reality matching the manifests) and the machine the
+# pods run on. A real cluster separates the two; one laptop gains nothing from it.
+#
+# __UNIVERSE_DIR__ is replaced by the script with an absolute path (kind wants
+# one); it defaults to this checkout's data/universe. Mounts are fixed when the
+# cluster is created - changing the directory means recreating the cluster.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: traders
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: __UNIVERSE_DIR__
+        containerPath: /traders/universe
+        readOnly: true

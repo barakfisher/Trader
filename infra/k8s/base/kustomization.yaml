@@ -1,0 +1,39 @@
+# The cluster-agnostic description of Traders. Kustomize (built into kubectl as
+# `kubectl apply -k`) reads this file, gathers the listed manifests, and applies
+# the edits below to all of them - so the namespace is written once, here, not
+# repeated in every file.
+#
+# This base is never applied on its own: it has no image tags and no Secret. An
+# overlay (overlays/kind) adds what is specific to one cluster.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: traders
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: traders
+
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - redis.yaml
+  - jobs.yaml
+
+# The non-secret settings, from a committed env file. Kustomize appends a hash
+# of the contents to the name (traders-config-7h2k...), and rewrites every
+# reference to match. That is deliberate: a pod reads its environment once, at
+# start, so a changed setting under an unchanged name would reach no running
+# pod. A new name makes every pod that uses it roll over to the new values.
+configMapGenerator:
+  - name: traders-config
+    envs:
+      - config.env
+
+# The Secret's name is declared here, empty; each cluster's overlay merges its
+# values in (overlays/kind). Declared at this level because Kustomize rewrites
+# references to a hash-suffixed name only for generators at or below the
+# resources that use it - declared only in the overlay, every pod would look for
+# `traders-secrets` while the Secret was called `traders-secrets-<hash>`.
+secretGenerator:
+  - name: traders-secrets

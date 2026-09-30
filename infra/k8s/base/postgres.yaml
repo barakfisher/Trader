@@ -1,0 +1,92 @@
+# Postgres, with pgvector - the same image the compose stack runs.
+#
+# Two objects:
+#
+# - A Service gives the database a fixed name, `postgres:5432`. Pods are
+#   disposable and get a new address every time they restart; the Service's
+#   name and address stay put and forward to whichever pod currently matches
+#   its selector (`app: postgres`). Every DATABASE_URL in the cluster names it.
+#
+# - A StatefulSet runs the pod. A Deployment would also keep one copy running,
+#   but a StatefulSet adds what a database needs: a stable identity (the pod is
+#   always `postgres-0`) and, through `volumeClaimTemplates`, a disk bound to
+#   that identity. The claim asks the cluster for 5 GiB; kind's built-in
+#   provisioner hands out a directory on its node. Delete the pod and the new
+#   `postgres-0` is given the same disk back. Without it, the data would live in
+#   the container's own filesystem and vanish on every restart.
+#
+# The password is read once, when the data directory is first created. After
+# that, changing the Secret does not change the database's password - the
+# generated secrets.env is kept across runs for exactly that reason.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg16
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef: { name: traders-config, key: POSTGRES_USER }
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef: { name: traders-config, key: POSTGRES_DB }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: traders-secrets, key: POSTGRES_PASSWORD }
+            # A subdirectory of the mounted disk: initdb refuses a directory
+            # that is not empty, and some provisioners put lost+found at the root.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          # Readiness: "may traffic be sent here yet?" Until pg_isready
+          # answers, the Service does not route to this pod, and the loader
+          # Jobs' init containers keep waiting. The same check compose uses.
+          readinessProbe:
+            exec:
+              command: ['sh', '-c', 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
+            periodSeconds: 5
+            failureThreshold: 3
+          # What the pod is guaranteed (requests) and the most memory it may
+          # use before it is stopped (limit). No CPU limit: a CPU limit throttles
+          # a busy database even when the machine is idle.
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ['ReadWriteOnce']
+        resources:
+          requests:
+            storage: 5Gi

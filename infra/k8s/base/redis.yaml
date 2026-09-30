@@ -1,0 +1,60 @@
+# Redis: the quote cache, the LLM budget and the provider rate limits.
+#
+# The same shape as postgres.yaml (see its header for what a Service and a
+# StatefulSet are), and a disk for the same reason compose gives Redis a volume:
+# every cached quote cost a request against a free provider tier, and without
+# persistence each restart throws the cache away. Expiry times are stored as
+# absolute instants, so an entry that expired while the pod was down stays
+# expired.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  selector:
+    app: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args: ['redis-server', '--save', '300', '1', '--appendonly', 'yes']
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ['redis-cli', 'ping']
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ['ReadWriteOnce']
+        resources:
+          requests:
+            storage: 1Gi
