@@ -291,6 +291,30 @@ export interface Observation {
 /** `template` is fixed phrasing over checked figures; `llm` is validated prose. */
 export type NarrationSource = 'llm' | 'template';
 
+/** Why a finding waited for the digest instead of being pushed. */
+export type DigestReason = 'below_floor' | 'quiet_hours' | 'muted' | 'above_floor';
+
+export interface DigestEntry {
+  /** Null for a notice that explanations changed, which is not a finding. */
+  observationId: string | null;
+  headline: string | null;
+  severity: ObservationSeverity | null;
+  subjectRef: string | null;
+  reason: DigestReason;
+  createdAt: string;
+}
+
+/**
+ * The daily digest as the web app shows it (FR-13): what the next one will
+ * carry, and what the last one delivered. Its findings are all in the feed too;
+ * what only this says is which were held back from an interruption, and why.
+ */
+export interface DigestResponse {
+  next: { entries: DigestEntry[] };
+  /** Null until a digest has been delivered. */
+  last: { sentAt: string; entries: DigestEntry[] } | null;
+}
+
 export interface ObservationsResponse {
   /** Newest first, and within one scan the most severe first, as returned. */
   observations: Observation[];

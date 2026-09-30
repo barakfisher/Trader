@@ -1339,6 +1339,57 @@ export function listNotifications(userId: string, limit = 50): Promise<Notificat
   );
 }
 
+export interface DigestEntryRow {
+  notification_id: string;
+  reason: string;
+  status: string;
+  sent_at: Date | null;
+  created_at: Date;
+  /** Null for a narration notice, which is not a finding. */
+  observation_id: string | null;
+  headline: string | null;
+  severity: string | null;
+  subject_ref: string | null;
+}
+
+const DIGEST_ENTRY_COLUMNS = `
+  n.id AS notification_id, n.reason, n.status, n.sent_at, n.created_at,
+  o.id AS observation_id, o.headline, o.severity, o.subject_ref`;
+
+/** What the next daily digest will carry: every digest-channel row still pending, oldest first. */
+export function listPendingDigestEntries(userId: string): Promise<DigestEntryRow[]> {
+  return query<DigestEntryRow>(
+    `SELECT ${DIGEST_ENTRY_COLUMNS}
+       FROM notifications n
+       LEFT JOIN observations o ON n.ref_kind = 'observation' AND o.id = n.ref_id
+      WHERE n.user_id = $1 AND n.channel = 'digest' AND n.status = 'pending'
+      ORDER BY n.created_at`,
+    [userId],
+  );
+}
+
+/**
+ * The last digest that was delivered. A digest is not stored as a message: it
+ * is the batch of digest-channel rows one run settled as `sent`, which lands
+ * within milliseconds (measured 2026-09-30: every batch spread under 0.06 s) -
+ * so the batch is the rows sent within a minute of the latest `sent_at`.
+ */
+export function listLastDigestEntries(userId: string): Promise<DigestEntryRow[]> {
+  return query<DigestEntryRow>(
+    `WITH last AS (
+       SELECT max(sent_at) AS at FROM notifications
+        WHERE user_id = $1 AND channel = 'digest' AND status = 'sent')
+     SELECT ${DIGEST_ENTRY_COLUMNS}
+       FROM notifications n
+       LEFT JOIN observations o ON n.ref_kind = 'observation' AND o.id = n.ref_id
+       CROSS JOIN last
+      WHERE n.user_id = $1 AND n.channel = 'digest' AND n.status = 'sent'
+        AND n.sent_at > last.at - interval '1 minute'
+      ORDER BY n.created_at`,
+    [userId],
+  );
+}
+
 /**
  * Write the whole settings object, creating the row on a first save.
  *

@@ -27,7 +27,7 @@ import { registerHealthRoutes } from './routes/health.js';
 import { registerHoldingsRoutes } from './routes/holdings.js';
 import { registerImportRoutes } from './routes/imports.js';
 import { registerInternalRoutes } from './routes/internal.js';
-import { registerNotificationsRoutes } from './routes/notifications.js';
+import { registerDigestRoute, registerNotificationsRoutes } from './routes/notifications.js';
 import { registerPortfolioRoutes } from './routes/portfolio.js';
 import { registerProposalsRoutes } from './routes/proposals.js';
 import { registerSettingsRoutes } from './routes/settings.js';
@@ -181,6 +181,7 @@ export function createApp(
   registerTargetsRoutes(app);
   registerProposalsRoutes(app);
   registerNotificationsRoutes(app);
+  registerDigestRoute(app);
   registerSettingsRoutes(app);
   registerTelegramRoutes(app);
   registerImportRoutes(app);
