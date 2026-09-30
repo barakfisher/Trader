@@ -8,7 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 
 import type { Observation } from '@traders/shared';
 
@@ -34,7 +34,7 @@ vi.mock('../src/api/client.ts', () => {
 
 const { ApiRequestError } = await import('../src/api/client.ts');
 const { ObservationsFeed } = await import('../src/components/ObservationsFeed.tsx');
-const { OBSERVATIONS_PAGE_SIZE } = await import('../src/queries/observations.ts');
+const { FEED_PAGE_SIZE } = await import('../src/queries/observations.ts');
 const { renderWithServerState } = await import('./serverStateHarness.tsx');
 
 const finding: Observation = {
@@ -69,18 +69,20 @@ describe('ObservationsFeed', () => {
   it('asks for one page and shows the findings in the order the API sent them', async () => {
     const second = { ...finding, id: 'obs-2', headline: 'VOO allocation fell below target weight' };
     serve({
-      '/observations': () => Promise.resolve({ observations: [finding, second] }),
+      '/observations': () =>
+        Promise.resolve({ observations: [finding, second], total: 2, nextCursor: null }),
       '/portfolio': noPortfolio,
     });
     renderWithServerState(<ObservationsFeed />);
 
     const headlines = await screen.findAllByText(/NVDA moved|VOO allocation/);
     expect(headlines.map((node) => node.textContent)).toEqual([finding.headline, second.headline]);
-    expect(get).toHaveBeenCalledWith(`/observations?limit=${OBSERVATIONS_PAGE_SIZE}`);
+    expect(get).toHaveBeenCalledWith(`/observations?limit=${FEED_PAGE_SIZE}`);
   });
 
   it('says "nothing to report" only once a load has succeeded with nothing', async () => {
-    let answer: (value: { observations: Observation[] }) => void = () => {};
+    let answer: (value: { observations: Observation[]; total: number; nextCursor: null }) => void =
+      () => {};
     serve({
       '/observations': () => new Promise((resolve) => (answer = resolve)),
       '/portfolio': noPortfolio,
@@ -90,7 +92,7 @@ describe('ObservationsFeed', () => {
     expect(screen.getByText('Loading observations…')).toBeTruthy();
     expect(screen.queryByText('Nothing to report')).toBeNull();
 
-    answer({ observations: [] });
+    answer({ observations: [], total: 0, nextCursor: null });
     expect(await screen.findByText('Nothing to report')).toBeTruthy();
   });
 
@@ -108,7 +110,7 @@ describe('ObservationsFeed', () => {
 
   it('keeps the findings on screen when a refresh fails', async () => {
     serve({
-      '/observations': () => Promise.resolve({ observations: [finding] }),
+      '/observations': () => Promise.resolve({ observations: [finding], total: 1, nextCursor: null }),
       '/portfolio': noPortfolio,
     });
     const { root } = renderWithServerState(<ObservationsFeed />);
@@ -124,5 +126,43 @@ describe('ObservationsFeed', () => {
     await waitFor(() => expect(screen.getByText('Cannot reach the server.')).toBeTruthy());
     expect(screen.getByText(finding.headline)).toBeTruthy();
     expect(screen.queryByText('Nothing to report')).toBeNull();
+  });
+
+  it('shows one page, says how many there are, and continues after the last one shown', async () => {
+    const second = { ...finding, id: 'obs-2', headline: 'SMR is -30.6% from its 30-day high' };
+    serve({
+      '/observations?limit=10&before=obs-1': () =>
+        Promise.resolve({ observations: [second], total: 2, nextCursor: null }),
+      '/observations': () => Promise.resolve({ observations: [finding], total: 2, nextCursor: 'obs-1' }),
+      '/portfolio': noPortfolio,
+    });
+    renderWithServerState(<ObservationsFeed filters={{}} onFiltersChange={() => {}} />);
+
+    expect(await screen.findByText('1 of 2')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Show 1 more' }));
+
+    expect(await screen.findByText(second.headline)).toBeTruthy();
+    expect(screen.getByText('2 of 2')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /more/ })).toBeNull();
+  });
+
+  it('asks for the filtered feed, and says when a filter matches nothing', async () => {
+    serve({
+      '/observations': () => Promise.resolve({ observations: [], total: 0, nextCursor: null }),
+      '/portfolio': noPortfolio,
+    });
+    const change = vi.fn();
+    renderWithServerState(
+      <ObservationsFeed filters={{ severity: 'high', symbol: 'NVDA' }} onFiltersChange={change} />,
+    );
+
+    expect(await screen.findByText('No findings match these filters')).toBeTruthy();
+    expect(screen.queryByText('Nothing to report')).toBeNull();
+    expect(get).toHaveBeenCalledWith('/observations?limit=10&severity=high&symbol=NVDA');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Notable and high' }));
+    expect(change).toHaveBeenLastCalledWith({ severity: 'notable', symbol: 'NVDA' });
+    fireEvent.click(screen.getByRole('button', { name: 'Show every finding' }));
+    expect(change).toHaveBeenLastCalledWith({});
   });
 });

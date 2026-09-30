@@ -8,6 +8,7 @@ import type { Hono } from 'hono';
 import type { SnapshotsResponse } from '@traders/shared';
 
 import {
+  countObservations,
   getUser,
   listHoldings,
   listLatestNarrationProvenance,
@@ -17,9 +18,12 @@ import {
 } from '../../db/queries.js';
 import { logger } from '../../logger.js';
 import { narrationStateFrom } from '../../services/narrationHealth.js';
+import { SEVERITY_RANK } from '../../services/notificationPolicy.js';
 import { valuePortfolio } from '../../services/valuation.js';
 import { currentUserId, type AppEnv } from '../app.js';
-import { notFound } from '../errors.js';
+import { badRequest, notFound } from '../errors.js';
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Every `subject_ref` a finding about `symbol` is stored under: the per-instrument
@@ -63,8 +67,16 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
   });
 
   /**
-   * The observations feed: what the analysis engine has found, newest first.
-   * `?symbol=NVDA` keeps the findings about one instrument, for its holding page.
+   * The observations feed: what the analysis engine has found, newest first,
+   * and within one scan the most severe first.
+   *
+   * - `?symbol=NVDA` keeps the findings about one instrument (its holding page);
+   * - `?severity=notable` keeps findings at least that severe (notable and high);
+   * - `?before=<id>` continues after the last finding the reader has.
+   *
+   * `total` is how many findings the filter matches in all, and `nextCursor` the
+   * id to pass as `before` for the next page - null when there is none, so
+   * "no more" is said by the server rather than guessed from a short page.
    *
    * `evidence` is returned in full rather than summarised. It is what makes a
    * claim checkable, and a claim the reader cannot check is the thing this
@@ -72,15 +84,31 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
    */
   app.get('/observations', async (context) => {
     const userId = currentUserId(context);
-    const limit = Number(context.req.query('limit') ?? 50);
+    const requested = Number(context.req.query('limit') ?? 50);
+    const limit = Number.isInteger(requested) && requested > 0 ? Math.min(requested, 200) : 50;
     const symbol = context.req.query('symbol')?.trim().toUpperCase();
-    const rows = await listObservations(
-      userId,
-      Number.isFinite(limit) ? Math.min(limit, 200) : 50,
-      symbol ? subjectRefsFor(symbol) : null,
-    );
+    const severity = context.req.query('severity');
+    if (severity !== undefined && !(severity in SEVERITY_RANK)) {
+      throw badRequest('invalid_severity', 'severity must be one of info, notable, high');
+    }
+    const before = context.req.query('before');
+    if (before !== undefined && !UUID.test(before)) {
+      throw badRequest('invalid_cursor', 'before must be the id of a finding');
+    }
+    const filter = {
+      subjectRefs: symbol ? subjectRefsFor(symbol) : null,
+      minRank: severity === undefined ? null : SEVERITY_RANK[severity]!,
+    };
+    // One more than a page, so whether another page exists is known, not guessed.
+    const [rows, total] = await Promise.all([
+      listObservations(userId, limit + 1, filter, before ?? null),
+      countObservations(userId, filter),
+    ]);
+    const page = rows.slice(0, limit);
     return context.json({
-      observations: rows.map((row) => ({
+      total,
+      nextCursor: rows.length > limit ? page[page.length - 1]!.id : null,
+      observations: page.map((row) => ({
         id: row.id,
         kind: row.kind,
         severity: row.severity,

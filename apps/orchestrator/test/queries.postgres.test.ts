@@ -155,17 +155,16 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       await insert('instrument:NVDAX', 'price_move');
       await insert('instrument:SMR', 'drawdown');
 
-      const nvda = await queries.listObservations(USER, 50, [
-        'instrument:NVDA',
-        'portfolio:allocation:NVDA',
-      ]);
+      const nvda = await queries.listObservations(USER, 50, {
+        subjectRefs: ['instrument:NVDA', 'portfolio:allocation:NVDA'],
+      });
       expect(nvda.map((row) => row.subject_ref).sort()).toEqual([
         'instrument:NVDA',
         'portfolio:allocation:NVDA',
       ]);
       // The untyped null is what a driver and a planner can disagree about.
       // (An earlier test in this file left a finding too; only the superset matters.)
-      const all = (await queries.listObservations(USER, 50, null)).map((row) => row.subject_ref);
+      const all = (await queries.listObservations(USER, 50)).map((row) => row.subject_ref);
       expect(all).toEqual(
         expect.arrayContaining(['instrument:NVDA', 'instrument:NVDAX', 'instrument:SMR']),
       );
@@ -248,6 +247,45 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
       const history = await queries.listProposals(USER, { decided: true, limit: 10 });
       expect(history.map((row) => row.id)).toEqual([expired, rejected, approved]);
+    });
+  });
+
+  describe('the feed', () => {
+    it('puts a scan\'s most severe finding first, filters by severity, and pages by id', async () => {
+      const pool = getPool();
+      const user = randomUUID();
+      await pool.query('INSERT INTO users (id) VALUES ($1)', [user]);
+      try {
+        // One scan: one timestamp, microseconds included, three severities.
+        const scan = '2026-09-30 07:06:52.090526+00';
+        const earlier = '2026-09-29 07:06:52.090526+00';
+        const insert = (severity: string, at: string) =>
+          pool.query(
+            `INSERT INTO observations (user_id, kind, severity, subject_ref, headline, dedupe_key, created_at)
+             VALUES ($1, 'drawdown', $2, 'instrument:X', $2, $3, $4) RETURNING id`,
+            [user, severity, randomUUID(), at],
+          );
+        await insert('info', scan);
+        await insert('high', scan);
+        await insert('notable', scan);
+        await insert('high', earlier);
+
+        const feed = await queries.listObservations(user, 10);
+        expect(feed.map((row) => row.severity)).toEqual(['high', 'notable', 'info', 'high']);
+
+        const notable = await queries.listObservations(user, 10, { minRank: 1 });
+        expect(notable.map((row) => row.severity)).toEqual(['high', 'notable', 'high']);
+        expect(await queries.countObservations(user, { minRank: 1 })).toBe(3);
+
+        // Page by page, two at a time, the same order with nothing lost or repeated.
+        const first = await queries.listObservations(user, 2);
+        const second = await queries.listObservations(user, 2, {}, first.at(-1)!.id);
+        expect([...first, ...second].map((row) => row.id)).toEqual(feed.map((row) => row.id));
+        // Another account's id is no cursor here.
+        expect(await queries.listObservations(USER, 2, {}, first.at(-1)!.id)).toEqual([]);
+      } finally {
+        await pool.query('DELETE FROM users WHERE id = $1', [user]);
+      }
     });
   });
 });
