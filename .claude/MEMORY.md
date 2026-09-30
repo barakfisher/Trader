@@ -4,7 +4,23 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-30 ~07:00 UTC - **M6 mid-milestone handoff, at the user's request (context full).
+Updated: 2026-09-30 ~09:30 UTC - **M6 handoff at CLAUDE.md's five-merged-PR trigger (#98-#102).
+M6 is in progress; the next session starts PR 11, the observations feed** - see "Next session: M6,
+continued" in "Where to go next". This session:
+- #98: **the backfill stored a day still trading as its close**, permanently (`DO NOTHING`) - found
+  measuring history for the holding page; a manual run corrected 18 rows (AAPL 16 Sep to $332.41);
+- #99 (decision 68): per-holding page `/holdings/$holdingId` - a chart of the rules' own series
+  (a new AI-service endpoint), position, findings, news;
+- #100 (decision 69): the proposals inbox - readable evidence, a history with expiries (dated by
+  deadline: the sweep recorded them a median 52 h late), `/proposals/$proposalId`, optional
+  `WEB_BASE_URL` for a Telegram "Open in app" link;
+- #101: **a looping model answer passed the evidence validator** - found measuring `/ask`;
+- #102 (decision 70): the `/ask` screen; queue task 6 closed, **the independent-tasks queue is empty**.
+The user gave this session standing permission to merge each PR once CI was green, rebuild the
+stack, and check each screen in the in-app browser, **not** to click Approve/Reject/Snooze or save
+settings. **Ask again** - permissions do not carry over.
+
+Previous handoff, 2026-09-30 ~07:00 UTC - **M6 mid-milestone handoff, at the user's request (context full).
 M6 is in progress: 9 PRs merged (#88-#96); the next session starts PR 8, per-holding detail** - see
 "Next session: M6, continued" in "Where to go next". The five-merged-PR trigger fired at #92; the
 user asked to continue to the milestone's end, then chose to hand off here. This session:
@@ -1683,9 +1699,18 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
   `:s` as a substitution and failed. Write `git show "${S}:path"` when verifying a commit by
   content.
 - **Docker Hub can time out from a session's sandbox** (`node:22-slim` metadata,
-  `DeadlineExceeded`) during one isolated build on 2026-09-24. The Python base was cached; the
-  orchestrator's was not. It was transient: two later `dev-docker.sh` runs from the same session
-  built everything. Retry before suspecting the Dockerfile.
+  `DeadlineExceeded`). On 2026-09-24 it was transient. **On 2026-09-30 it failed twice in a row**
+  from the sandbox; `docker pull node:22-slim` run *outside* the sandbox, then `dev-docker.sh`
+  (also outside), worked every time after. Retry before suspecting the Dockerfile.
+- **The native preview for a PR that changes the AI service needs a native AI service too**
+  (PR 8): uvicorn from the worktree on **8091** with `PYTHONPATH` set and the main checkout's
+  venv, and the native orchestrator's `AI_SERVICE_URL` pointed at it; otherwise point it at the
+  stack's `http://127.0.0.1:8001`. **Vite hot reload wipes in-memory store state** (`/ask`'s
+  questions vanished mid-answer when a lib file was edited) - re-ask after edits, it is not a bug.
+- **`/ask` on the free route is slow and costs nothing:** 18-69 s per model-written answer, once
+  over 3 min; a refusal 0.6 s. The in-app browser's JS tool gives up after 45 s, so measure it
+  with `curl` against `http://127.0.0.1:8001/ask` (`x-internal-key` from the main `.env`), not
+  from the page.
 - **Run a topic eval with the main checkout's `.env` sourced** — the worktree has none:
   `set -a && source /Users/a/projects/Traders/.env && set +a`, then override `DATABASE_URL` and set
   `CORPUS_DIR` to the worktree's `data/corpus` (the eval file is found beside it).
@@ -1783,16 +1808,27 @@ The remaining PRs, in order, one branch off `main` each:
 | ~~8~~ | ~~Per-holding detail~~ | **Done** (decision 68), after #98 (a correctness bug found while measuring for it: the backfill stored a day still trading as its close). Seen at 1280 and 375 px against live data |
 | ~~9~~ | ~~Proposals inbox~~ | **Done** (decision 69). Seen at 1280 and 375 px against live data; no decision was clicked - a decision's request is pinned by `proposalPages.test.tsx` |
 | ~~10~~ | ~~A screen for `/ask`~~ | **Done** (decision 70), after #101 (a looping model answer had passed the evidence validator). Seen at 1280 and 375 px with real questions: a weak match, a refusal, a computed answer, an advice refusal |
-| 11 | **Observations feed** | Severity and symbol filters, and paging: the feed is 50 items and makes the dashboard ~9,000 px tall at desktop, ~13,700 at 375 px |
+| **11** | **Observations feed** | Severity and symbol filters, and paging: the feed is 50 items and makes the dashboard ~9,000 px tall at desktop, ~13,700 at 375 px. Measured 2026-09-30: **72 findings over 8 subjects**, 25 high / 24 notable / 23 info; 51 of 72 are `allocation_drift` (the daily re-proposal debt row inflates it). `GET /observations?symbol=` already exists (PR 8, matches `instrument:X` and `portfolio:allocation:X`); a severity filter and an offset/cursor do not. `ObservationRow` is exported for reuse |
 | 12 | **Mobile pass** | Holdings as cards below `sm` (the table is 880 px inside a 341 px box: only symbol, quantity and half the price show); summary cards 2x2; every page at 375 px |
 | 13 | **Times, disclaimers, settings copy** | Timestamps in `APP_TIMEZONE` rather than the browser locale (`formatExactTime`, `toLocaleString` in 6 places); base currency shown as fixed USD in Settings; the disclaimer on every page |
 | 14 | **M6's closing handoff** | Check the exit - every PRD user-facing FR reachable, no dead ends or unhandled error states - and update this file |
+
+**First, a two-minute check left from #98:** a 06:45 UTC backfill on 2026-09-30 wrote BTC-USD
+and ETH-USD rows dated **2026-09-30 20:00 UTC** (in the future then). #98 stops new ones and makes
+the backfill replace its own rows, so the first scheduled backfill after 30 Sep 20:00 UTC should
+have rewritten both with the finished day's close. Confirm with
+`SELECT i.symbol, q.as_of, q.price_minor FROM quotes q JOIN instruments i ON i.id = q.instrument_id
+WHERE q.as_of::date = '2026-09-30' AND q.delay_seconds = 0` and `runs` (`kind = 'backfill'`,
+`stats->>'written'`); nothing dated after `now()` should exist. If the stack was down all night,
+run a manual backfill (`POST /internal/runs {"kind":"backfill"}`) - it is idempotent.
 
 How this session worked, and it held up: measure first (read-only SQL and the browser), then
 decide, then build; every screen looked at in the in-app browser at 1280 and 375 px against live
 data; **never click a real decision (Approve/Reject/Snooze) or save real settings** - the user's
 data is live, and a decision's request is pinned by tests instead. Each correctness bug found on
-the way (#89, #96) went in as its own PR ahead of the screen that exposed it.
+the way (#89, #96, #98, #101) went in as its own PR ahead of the screen that exposed it - three of
+the four were found only by *measuring the live data or the live endpoint* before building, not
+by reading code or by the suites. Keep doing that for PRs 11-13.
 
 **CI note:** a `docker compose smoke test` failure inside `corepack` downloading pnpm (an undici
 `assert(!this.paused)`) was transient on #93; `gh run rerun <id> --failed` passed. Check the PR does
