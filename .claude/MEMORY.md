@@ -4,7 +4,21 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-30 ~09:30 UTC - **M6 handoff at CLAUDE.md's five-merged-PR trigger (#98-#102).
+Updated: 2026-09-30 ~11:30 UTC - **M6's closing handoff (milestone boundary). M6 is complete; the
+next session starts M7, Kubernetes and documentation** - see "Next session: M7" in "Where to go
+next". After the five-PR handoff below (#103), the user asked to continue to the milestone's end in
+the same session:
+- #104 (decision 71): the feed paged and filtered in its address - and every scan's high finding
+  had sorted *last* (severity tie-break on the text);
+- #105 (decision 72): the mobile pass - every page measured at 375 px, only the dashboard needed it;
+- #106 (decision 73): every time in the user's timezone with the zone named; an Account card;
+- #107 (decision 74): **the daily digest in the UI** - the one FR the exit check found missing.
+**M6's exit was checked** (see "M6 is complete, and how it was verified"). The M6 grant - merge,
+rebuild, decide without asking - **ends here**; ask again for M7. **The user has no Docker or
+Kubernetes background** (user memory): M7 is where that matters most - explain each object from
+first principles as it is written, not after.
+
+Previous handoff, 2026-09-30 ~09:30 UTC - **M6 handoff at CLAUDE.md's five-merged-PR trigger (#98-#102).
 M6 is in progress; PR 11 (the feed) was then done in the same session at the user's request, then PRs 12 and 13 as well, so the next session starts PR 14, M6's closing handoff** - see "Next session: M6,
 continued" in "Where to go next". This session:
 - #98: **the backfill stored a day still trading as its close**, permanently (`DO NOTHING`) - found
@@ -185,8 +199,8 @@ kept so the next sweep has somewhere to add to.
 | **M3 — RAG & educational engine** | ✅ Complete | #42: corpus, schema, ingestion, live concept links. Slice 2: `vector(1536)`, `BaseEmbedder`, `VectorStore`, hybrid retrieval and `GET /concepts/search`. #45: the paid embedder. #46: `POST /ask`, intent routing, citations, a three-state relevance floor. #47: the 35-case eval set in two CI tiers. **The relevance floor is measured to be in the wrong place — see the debt table** |
 | **M4 — Scheduling, HITL & Telegram** | ✅ Complete | PRs #26–#33. Mastra adopted for `proposalLifecycle` only |
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
-| M6 — Frontend completion & polish | **In progress** | #88-#96 merged: fixes from the browser review, the validator's cents bug, TanStack Query everywhere (task 7 closed), page addresses, the equity curve, fixture prices kept out of a real installation. #98: the backfill's still-trading closes. PR 8: the holding page (decision 68). PR 9: the proposals inbox and pages (decision 69). #101: looping model text rejected. PR 10: the `/ask` screen (decision 70). PR 11: the feed, paged and filtered (decision 71). PR 12: the mobile pass (decision 72). PR 13: times in the user's zone, the Account card (decision 73). The digest in the UI, found by the exit check (decision 74). Left: PR 14, the closing check of the exit - see "Next session: M6, continued" |
-| M7 — Kubernetes & documentation | Not started | |
+| M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
+| M7 — Kubernetes & documentation | **Next** | See "Next session: M7" |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
 not anticipate, found by running the thing rather than by reading it. M1.5 came from auditing the
@@ -1612,6 +1626,8 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | (history) Auto-discovery's first real run | `app/topics/discovery.py`, `services/topicDiscovery.ts` | 2026-09-28 10:33 UTC: 123 linked headlines, 20 phrases, 8 resolved, 0 proposed. Every resolved phrase was `none` or `weak` (`ai`, `buy`, `pro`, `prediction` none; `tv`, `crypto`, `iphone`, `remittix` weak). The 12 skipped by the 8-per-run cap were resolved by hand afterwards and none would have qualified either (`chips` resolves to potato-chip makers LW and UTZ; `futures` is `confident` with no confident candidate; `bytedance alibaba` is `weak` over NVDA/TSM/MU). **So 0 proposals was the right answer, and the run exposed two faults:** (1) the resolve budget went to everyday words - `buy`, `pro`, `use`, `billion`, `season`, `prediction` belong in `GENERIC_WORDS`; (2) single words are poor resolver queries (two-letter "ai" resolves to nothing), and the one multi-word phrase was the one with a real signal. Not yet shown: discovery *finding* a theme, which M5's exit criterion needs |
 | ~~Open proposals never expire~~ | — | **Resolved** (decision 57, migration 0021): unanswered for `TOPIC_PROPOSAL_TTL_DAYS`, a proposal becomes `expired`, kept and named in the run's stats. Kept as a line so the history survives |
 | **One standing drift is proposed again every day** | `services/proposals.ts`, observation `dedupe_key` | A proposal is deduplicated by its observation, and an allocation-drift observation's `dedupe_key` changes with each day's valuation. So a drift nobody has fixed becomes a new proposal daily: on 2026-09-29 the inbox held **two open BTC-USD drift proposals** (created 09-28 16:12 and 09-29 05:20 UTC) asking the same question, and one approved on 09-26 was followed by a new one the next day. Seen in the M6 browser review; **the user decided (2026-09-29) to record it and not fix it in M6**. A fix belongs in the proposal layer (one open proposal per subject and kind), not in the observation key, which is right to change daily |
+| **A holding's cost basis has no edit control** | `HoldingsTable.tsx` | Found by M6's exit check (FR-2). `PATCH /holdings/:id` accepts `costBasis`, `currency`, `openedAt` and `notes`, but the row and card edit quantity only. Adding the same symbol again through the add form updates the existing holding (the insert is an upsert, `COALESCE`-ing blank fields), so a cost can be corrected - but nothing on screen says so. Small: widen `useHoldingEditor` to cost per unit |
+| **The free model is slow and flaky for `/ask` and narration** | `.env` (`LLM_MODEL`) | Measured 2026-09-30: 18-69 s per `/ask` answer, once over 3 min; 1 in 7 answers looped (now rejected, #101); and after that morning's load the narration badge read "Model unavailable" (`provider_error`). Nothing is wrong with the code - the screens say what happened - but the experience is the free route's. The funded fix is the same as narration's row above |
 | **An equity can have a weekend "close"** | `normalise`, the quote path | A dashboard opened on Sunday 27 Sep stored each equity's Friday price with a Sunday `as_of` (the provider's `fast_info` has no timestamp, so a quote is dated when it was fetched). `normalise` makes it a Sunday close equal to Friday's: a 0% day for the rules, a flat step on the holding chart. One day so far. A fix belongs in the quote path (do not store a quote for an exchange outside its session, `market_sessions.py` knows the sessions), not in the chart, which draws what the rules read |
 | **Company names that are everyday words link falsely** | `app/news/entities.py` | Measured on the first raw-file run (2026-09-27 19:35 UTC): 2 of 18 stored articles were about the fruit - "Apple Cider & Donut Day at the Kinney Pioneer Museum", "Czipar's annual Apple Festival" - and linked to AAPL, because a capitalised "Apple" in a headline matches the company. The same will happen for "Target", "Block", "Visa", "Shell" when followed - and for **surnames**: on 2026-09-29 the "gasoline" topic card showed "Auxiliary Bishop René Valero and His Legacy" (thetablet.org) linked to VLO. Consequences: the fruit lands on the topic card and in sentiment, and discovery reads it ("festival" was a candidate phrase on 2026-09-28). The provider is not at fault; the matcher accepts a bare name as a sole signal. **Deferred by the user to a dedicated PR after more data** - likely shape: for a name that is also a dictionary word, require a second signal (a ticker, "Inc", a product word) before linking, and measure precision over several days of runs, not one |
 | **Laptop sleep leaves gaps in collection** | local scheduler | Overnight 2026-09-27/28 the runs jumped 20:30 -> 23:13 -> 03:21 -> 10:18 UTC. The cursor caught up (16 files a run, never older than 48 h), so no news was lost - but the daily `topic_discovery` meant for local midnight ran at 10:33 UTC. Harmless for news; worth knowing when a "nightly" result appears at breakfast. M7's CronJob removes it |
@@ -1856,24 +1872,31 @@ resolve the top phrases through the live `/topics/resolve`, which stores nothing
 lived in the session scratchpad and are gone - about 100 lines, all of them glue around those
 functions.
 
-### Next session: M6, continued
+### M6 is complete, and how it was verified
 
-**Decided with the user (2026-09-29), do not re-litigate:** TanStack Query first (done); the equity
-curve from stored snapshots only, gaps as gaps (done); **settings: base currency shown as fixed
-"USD" (guideline 10) and severity bands read-only - no schema or backend change**; router is
-TanStack Router (done); duplicate drift proposals are a debt row, not M6 work.
+**Exit:** *every PRD user-facing FR reachable from the UI; no dead ends or unhandled error states.*
+Checked 2026-09-30 against `docs/PRD.md`, FR by FR, in the running app:
 
-The remaining PRs, in order, one branch off `main` each:
+| FR | Where it is in the UI |
+|---|---|
+| 1 import | Dashboard "Import": preview, per-row errors, confirm |
+| 2 holdings CRUD | Add form; quantity edit and remove per row / card. **Cost basis is changed only by adding the symbol again** (the insert updates the holding) - a debt row, not a dead end |
+| 3-4 instruments, valuation | Holdings table / cards, holding page: FX, P&L, price age and delay |
+| 5 snapshots | "Value over time" (decision 66) |
+| 6, 8 findings | Feed, paged and filtered (decision 71); holding page |
+| 7 news | Holding page (decision 68); topic cards |
+| 10-12 topics | Topics: resolve, confirm, suggestions from the news, tone |
+| 13 digest | **Dashboard "Daily digest"** (decision 74) - the one gap the check found; and Telegram |
+| 14-16 concepts, Q&A | Concept chips on every finding; `/ask` (decision 70) |
+| 17-19 proposals | Inbox with history, `/proposals/$id` with the audit trail (decision 69) |
+| 20-21 Telegram | Settings "Telegram"; the "Open in app" link waits for `WEB_BASE_URL` (M7) |
 
-| # | PR | What "done" means, and what was already measured |
-|---|---|---|
-| ~~8~~ | ~~Per-holding detail~~ | **Done** (decision 68), after #98 (a correctness bug found while measuring for it: the backfill stored a day still trading as its close). Seen at 1280 and 375 px against live data |
-| ~~9~~ | ~~Proposals inbox~~ | **Done** (decision 69). Seen at 1280 and 375 px against live data; no decision was clicked - a decision's request is pinned by `proposalPages.test.tsx` |
-| ~~10~~ | ~~A screen for `/ask`~~ | **Done** (decision 70), after #101 (a looping model answer had passed the evidence validator). Seen at 1280 and 375 px with real questions: a weak match, a refusal, a computed answer, an advice refusal |
-| ~~11~~ | ~~Observations feed~~ | **Done** (decision 71), with the severity tie-break fix. Seen at 1280 and 375 px: filters, paging and a reloaded filtered address |
-| ~~12~~ | ~~Mobile pass~~ | **Done** (decision 72). Every page measured at 375 px first; only the dashboard needed work |
-| ~~13~~ | ~~Times, disclaimers, settings copy~~ | **Done** (decision 73). The disclaimer was already on every page |
-| 14 | **M6's closing handoff** | Check the exit - every PRD user-facing FR reachable, no dead ends or unhandled error states - and update this file |
+Error states: every query-reading component shows its failure (a sweep of every `use*Query` call
+site, 2026-09-30); the dashboard's portfolio failure covers the summary, allocation and holdings;
+the narration badge hides when unknown (the server already degrades to `unknown`). Dead ends: every
+page links back, an unknown address is the portfolio, a stale holding or proposal link says so.
+
+### Next session: M7
 
 **First, a two-minute check left from #98:** a 06:45 UTC backfill on 2026-09-30 wrote BTC-USD
 and ETH-USD rows dated **2026-09-30 20:00 UTC** (in the future then). #98 stops new ones and makes
@@ -1884,13 +1907,27 @@ WHERE q.as_of::date = '2026-09-30' AND q.delay_seconds = 0` and `runs` (`kind = 
 `stats->>'written'`); nothing dated after `now()` should exist. If the stack was down all night,
 run a manual backfill (`POST /internal/runs {"kind":"backfill"}`) - it is idempotent.
 
-How this session worked, and it held up: measure first (read-only SQL and the browser), then
-decide, then build; every screen looked at in the in-app browser at 1280 and 375 px against live
-data; **never click a real decision (Approve/Reject/Snooze) or save real settings** - the user's
-data is live, and a decision's request is pinned by tests instead. Each correctness bug found on
-the way (#89, #96, #98, #101) went in as its own PR ahead of the screen that exposed it - three of
-the four were found only by *measuring the live data or the live endpoint* before building, not
-by reading code or by the suites. Keep doing that for PRs 11-13.
+**M7** (`docs/MILESTONES.md`): manifests, image pipeline, migration ordering, a one-command kind
+cluster, and a README a stranger can follow. **Exit:** a clean deploy to a local kind cluster, a
+CronJob firing a real run, docs that let a stranger run it. Start from `infra/k8s/README.md`, which
+already lists the two rules the manifests must keep (`SCHEDULER_ENABLED=false`; the orchestrator
+at `replicas: 1` while import previews live in memory). What else the cluster must carry, all
+already decided here:
+- **every container the compose stack runs**, not only the three services: `migrate` (Alembic,
+  before anything starts), `corpus` (re-ingest on every start - see CLAUDE.md), `universe`;
+- **CronJobs for every run kind** the local scheduler offers (`scheduler.ts`: backfill first, then
+  the scans, the sweep, and the digest last - the order is argued there), posting to
+  `/internal/runs` with `x-internal-key` - the same single trigger path;
+- **the first real test of Telegram's webhook leg** (debt table): once an Ingress gives a public
+  https URL, `setWebhook`, then `getWebhookInfo` for `last_error_message` at once; switch
+  `TELEGRAM_UPDATES` to `webhook` (never both - Telegram refuses);
+- **`WEB_BASE_URL`** set to that https origin turns on the "Open in app" link (decision 69);
+- **decision 20:** `TELEGRAM_SIGNING_SECRET` must differ from the webhook secret, in the Secret too.
+
+How M6 worked, and it held up: **measure first** (read-only SQL, the live endpoint, the browser at
+1280 and 375 px), then decide, then build; each correctness bug went in as its own PR ahead of the
+screen that exposed it, and four of five were found only by measuring live data. **Never click a
+real decision or save real settings**; pin the request with a test instead.
 
 **CI note:** a `docker compose smoke test` failure inside `corepack` downloading pnpm (an undici
 `assert(!this.paused)`) was transient on #93; `gh run rerun <id> --failed` passed. Check the PR does
