@@ -9,11 +9,11 @@
 -- adds a value cannot pass CI until a row carries it through the downgrade.
 
 -- Three users because settings are one row per user and each severity column
--- enumerates three values.
-INSERT INTO users (id) VALUES
-  ('00000000-0000-0000-0000-00000000000a'),
-  ('00000000-0000-0000-0000-00000000000b'),
-  ('00000000-0000-0000-0000-00000000000c');
+-- enumerates three values; one of them is the admin role.
+INSERT INTO users (id, role) VALUES
+  ('00000000-0000-0000-0000-00000000000a', 'admin'),
+  ('00000000-0000-0000-0000-00000000000b', 'user'),
+  ('00000000-0000-0000-0000-00000000000c', 'user');
 INSERT INTO user_settings (user_id, proposal_severity, notify_severity, quiet_hours_start, quiet_hours_end) VALUES
   ('00000000-0000-0000-0000-00000000000a', 'notable', 'info', '22:00', '07:00'),
   ('00000000-0000-0000-0000-00000000000b', 'high', 'notable', NULL, NULL),

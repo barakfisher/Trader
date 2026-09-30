@@ -23,6 +23,7 @@ const USER = {
   email: null,
   base_currency: 'USD',
   timezone: 'Asia/Jerusalem',
+  role: 'admin' as const,
 };
 const COOLDOWN = 30;
 const TTL = 11;

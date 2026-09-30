@@ -20,6 +20,7 @@ import {
 } from '@tanstack/react-router';
 
 import { ConceptDialog } from './components/ConceptDialog.tsx';
+import { AdminPage } from './pages/AdminPage.tsx';
 import { AskPage } from './pages/AskPage.tsx';
 import { DashboardPage } from './pages/DashboardPage.tsx';
 import { HoldingPage } from './pages/HoldingPage.tsx';
@@ -61,6 +62,7 @@ const routeTree = rootRoute.addChildren([
   createRoute({ getParentRoute: () => rootRoute, path: '/targets', component: TargetsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: '/topics', component: TopicsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/admin', component: AdminPage }),
 ]);
 
 /** `history` is for tests, which render at an address without a browser. */

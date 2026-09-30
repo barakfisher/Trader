@@ -11,11 +11,14 @@ export type { TopicEvidence };
 import { logger } from '../logger.js';
 import { query, queryOne, transaction } from './pool.js';
 
+export type UserRole = 'user' | 'admin';
+
 export interface UserRow {
   id: string;
   email: string | null;
   base_currency: string;
   timezone: string;
+  role: UserRole;
 }
 
 export interface InstrumentRow {
@@ -70,9 +73,10 @@ export interface SnapshotRow {
 }
 
 export function getUser(userId: string): Promise<UserRow | null> {
-  return queryOne<UserRow>('SELECT id, email, base_currency, timezone FROM users WHERE id = $1', [
-    userId,
-  ]);
+  return queryOne<UserRow>(
+    'SELECT id, email, base_currency, timezone, role FROM users WHERE id = $1',
+    [userId],
+  );
 }
 
 export interface UpsertInstrumentInput {
@@ -522,6 +526,27 @@ export function listRuns(userId: string, kind?: string, limit = 50): Promise<Run
       ORDER BY started_at DESC
       LIMIT $3`,
     [userId, kind ?? null, limit],
+  );
+}
+
+export interface AdminRunRow extends RunRow {
+  user_id: string | null;
+  trigger: string;
+}
+
+/**
+ * Most recent runs of every user and of none, newest first - the admin's view.
+ * `listRuns` answers "did my work happen?"; this answers "did the installation's
+ * work happen?", which includes runs with no `user_id` at all.
+ */
+export function listAllRuns(kind?: string, limit = 100): Promise<AdminRunRow[]> {
+  return query<AdminRunRow>(
+    `SELECT id, user_id, kind, run_key, trigger, status, started_at, finished_at
+       FROM runs
+      WHERE ($1::text IS NULL OR kind = $1)
+      ORDER BY started_at DESC
+      LIMIT $2`,
+    [kind ?? null, limit],
   );
 }
 

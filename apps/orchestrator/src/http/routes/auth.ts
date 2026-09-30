@@ -41,6 +41,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
       id: user.id,
       baseCurrency: user.base_currency,
       timezone: user.timezone,
+      role: user.role,
     });
   });
 
@@ -56,7 +57,12 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     if (!user) return context.json({ authenticated: false }, 200);
     return context.json({
       authenticated: true,
-      user: { id: user.id, baseCurrency: user.base_currency, timezone: user.timezone },
+      user: {
+        id: user.id,
+        baseCurrency: user.base_currency,
+        timezone: user.timezone,
+        role: user.role,
+      },
     });
   });
 }

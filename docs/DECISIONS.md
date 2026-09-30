@@ -93,3 +93,4 @@ while this file is out of date.
 | 80 | The front door is a standard Ingress served by Traefik, written as plain YAML |
 | 81 | CronJobs "ask often" and let the run key decide, exactly like `scheduler.ts` |
 | 82 | The AI service autoscales 1-3 copies on CPU; the orchestrator never does |
+| 83 | The admin role is read from `users` on every `/admin/*` request, never carried in the cookie |

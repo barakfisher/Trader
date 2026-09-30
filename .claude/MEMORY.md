@@ -1235,6 +1235,17 @@ failure they prevent.
     change is `--kubelet-insecure-tls`, needed only because kind's kubelets self-sign. Checked
     before scaling: the AI service's only per-process state is read-only (settings, engine,
     outlet table) and a log-once set.
+83. **The admin role is read from `users` on every `/admin/*` request, never carried in the
+    cookie** (M8 PR 1, the user's choice among recommendations). The session is a signed,
+    self-describing cookie holding only the user id (`http/auth.ts`) - there is no server-side
+    session for a role to live in, whatever `docs/MILESTONES.md` says. A role copied into the
+    cookie would survive a demotion for up to `SESSION_TTL_HOURS`; one indexed read per admin
+    request costs nothing at this scale. **One guard in `app.ts` covers every path under
+    `/admin`**, including ones with no route (a signed-out probe learns nothing); no admin route
+    checks the role itself, and `adminGuard.test.ts` reads `app.routes` rather than a list, so a
+    new route is guarded by being registered. 401 without a session, 403 for a non-admin *or* a
+    session whose user no longer exists. The kind CI job proves it on the real stack by demoting
+    the seeded admin with `psql` and watching the same cookie go 200 -> 403 -> 200.
 
 ---
 
