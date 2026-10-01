@@ -131,7 +131,7 @@ On the cluster, `kubectl create job --from=cronjob/run-<kind> <name>` triggers t
 the schedule - with the default key, so it is `skipped` if the bucket already ran.
 
 **A run stuck in `running`** (its process died mid-run) needs nothing: the next trigger for the same
-key takes it over once it is 30 minutes old (`STALE_RUN_MINUTES`, `db/queries.ts`). To see runs:
+key takes it over once it is 30 minutes old (`STALE_RUN_MINUTES`, `db/queries/runs.ts`). To see runs:
 
 ```sql
 SELECT kind, trigger, status, started_at, finished_at, run_key
