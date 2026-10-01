@@ -7,6 +7,7 @@ import type { Proposal, ProposalAction } from '@traders/shared';
 
 import { isUrgent, snoozeDescription, timeLeft } from '../lib/proposalCountdown.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
+import { SERVER_ENGLISH } from '../lib/textDirection.ts';
 import { undoSecondsLeft } from '../lib/undoWindow.ts';
 import { SNOOZE_HOURS } from '../stores/ProposalsStore.ts';
 import { useStore } from '../stores/context.tsx';
@@ -152,11 +153,11 @@ export const ProposalCard = observer(function ProposalCard({
       <div className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold text-text-primary">
+            <h2 {...SERVER_ENGLISH} className="text-sm font-semibold text-text-primary">
               <ProposalHeadline proposal={proposal} link={linkToPage} />
             </h2>
             {proposal.explanation !== null && (
-              <p className="text-sm text-text-muted">{proposal.explanation}</p>
+              <p {...SERVER_ENGLISH} className="text-sm text-text-muted">{proposal.explanation}</p>
             )}
           </div>
           <span

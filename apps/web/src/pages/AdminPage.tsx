@@ -26,6 +26,7 @@ import {
   reasonLabel,
 } from '../lib/llmCalls.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
+import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import { gapExplanation, gapProfile, gapSubject, isRealGap } from '../lib/universeGaps.ts';
 import {
   useAdminAuditQuery,
@@ -67,7 +68,7 @@ export const AdminPage = observer(function AdminPage() {
         </div>
         <Link to="/" className={buttonClass('secondary')}>
           <span className="flex items-center gap-1">
-            <ArrowLeft className="size-4" aria-hidden />
+            <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
             Back to portfolio
           </span>
         </Link>
@@ -108,14 +109,14 @@ function RunsCard() {
       )}
       {runs.data && runs.data.runs.length > 0 && (
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-start text-sm">
             <thead className="text-xs text-text-muted">
               <tr>
-                <th className="py-2 pr-3 font-medium">Kind</th>
-                <th className="py-2 pr-3 font-medium">Status</th>
-                <th className="py-2 pr-3 font-medium">Started</th>
-                <th className="py-2 pr-3 font-medium">Took</th>
-                <th className="py-2 pr-3 font-medium">Trigger</th>
+                <th className="py-2 pe-3 font-medium">Kind</th>
+                <th className="py-2 pe-3 font-medium">Status</th>
+                <th className="py-2 pe-3 font-medium">Started</th>
+                <th className="py-2 pe-3 font-medium">Took</th>
+                <th className="py-2 pe-3 font-medium">Trigger</th>
                 <th className="py-2 font-medium">Run key</th>
               </tr>
             </thead>
@@ -134,13 +135,13 @@ function RunsCard() {
 function RunRow({ run }: { run: AdminRun }) {
   return (
     <tr className="border-t border-border-subtle">
-      <td className="py-2 pr-3">{run.kind}</td>
-      <td className={`py-2 pr-3 ${STATUS_TONE[run.status] ?? ''}`}>{run.status}</td>
-      <td className="py-2 pr-3 whitespace-nowrap" title={formatExactTime(run.startedAt)}>
+      <td className="py-2 pe-3">{run.kind}</td>
+      <td className={`py-2 pe-3 ${STATUS_TONE[run.status] ?? ''}`}>{run.status}</td>
+      <td className="py-2 pe-3 whitespace-nowrap" title={formatExactTime(run.startedAt)}>
         {formatAge(run.startedAt)}
       </td>
-      <td className="py-2 pr-3 whitespace-nowrap">{duration(run)}</td>
-      <td className="py-2 pr-3">{run.trigger}</td>
+      <td className="py-2 pe-3 whitespace-nowrap">{duration(run)}</td>
+      <td className="py-2 pe-3">{run.trigger}</td>
       <td className="py-2 break-all font-mono text-xs text-text-muted">{run.runKey}</td>
     </tr>
   );
@@ -274,7 +275,7 @@ function ReconciliationRow({ row }: { row: UniverseReconciliation }) {
         {RECONCILED[row.what]}: {count.format(row.inSnapshot)} in the snapshot,{' '}
         {count.format(row.inDatabase)} in the database
       </p>
-      <ul className="ml-4 list-disc text-text-muted">
+      <ul className="ms-4 list-disc text-text-muted">
         {row.explained.map((difference) => (
           <li key={difference.reason}>
             {count.format(difference.count)}: {difference.reason}
@@ -330,7 +331,7 @@ function GapItem({ gap }: { gap: UniverseGap }) {
     <li className="flex flex-wrap items-baseline justify-between gap-2 py-2">
       <span className="min-w-0">
         <span className={`font-medium ${real ? 'text-warn' : ''}`}>{gapSubject(gap)}</span>
-        <span className="ml-2 text-text-muted">{gapExplanation(gap)}</span>
+        <span className="ms-2 text-text-muted">{gapExplanation(gap)}</span>
         {gapProfile(gap) && <span className="block text-xs text-text-muted">{gapProfile(gap)}</span>}
       </span>
       <span className="text-xs text-text-muted" title={formatExactTime(gap.lastSeenAt)}>
@@ -393,15 +394,15 @@ function LlmPanel({ data }: { data: LlmPanelResponse }) {
           : 'No model call has been recorded yet. Every call is recorded from the moment it is made.'}
       </p>
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
+        <table className="w-full text-start text-sm">
           <thead className="text-xs text-text-muted">
             <tr>
-              <th className="py-2 pr-3 font-medium">Agent</th>
-              <th className="py-2 pr-3 font-medium">Calls</th>
-              <th className="py-2 pr-3 font-medium">Outcomes</th>
-              <th className="py-2 pr-3 font-medium">Verdicts</th>
-              <th className="py-2 pr-3 font-medium">Latency p50 / p95</th>
-              <th className="py-2 pr-3 font-medium">Tokens in / out</th>
+              <th className="py-2 pe-3 font-medium">Agent</th>
+              <th className="py-2 pe-3 font-medium">Calls</th>
+              <th className="py-2 pe-3 font-medium">Outcomes</th>
+              <th className="py-2 pe-3 font-medium">Verdicts</th>
+              <th className="py-2 pe-3 font-medium">Latency p50 / p95</th>
+              <th className="py-2 pe-3 font-medium">Tokens in / out</th>
               <th className="py-2 font-medium">Cost</th>
             </tr>
           </thead>
@@ -428,7 +429,7 @@ function AgentRow({ agent }: { agent: LlmAgentSummary }) {
   const verdicts = nonZero(agent.verdicts, VERDICT_LABEL);
   return (
     <tr className="border-t border-border-subtle align-top">
-      <td className="py-2 pr-3">
+      <td className="py-2 pe-3">
         <div className="font-medium">{agent.agent}</div>
         {agent.models.map((model) => (
           <div key={model.model ?? 'none'} className="break-all font-mono text-xs text-text-muted">
@@ -436,15 +437,15 @@ function AgentRow({ agent }: { agent: LlmAgentSummary }) {
           </div>
         ))}
       </td>
-      <td className="py-2 pr-3">{count.format(agent.calls)}</td>
-      <td className="py-2 pr-3">{outcomes.map((o) => `${o.count} ${o.label}`).join(', ') || '-'}</td>
-      <td className="py-2 pr-3">{verdicts.map((v) => `${v.count} ${v.label}`).join(', ') || '-'}</td>
-      <td className="py-2 pr-3 whitespace-nowrap">
+      <td className="py-2 pe-3">{count.format(agent.calls)}</td>
+      <td className="py-2 pe-3">{outcomes.map((o) => `${o.count} ${o.label}`).join(', ') || '-'}</td>
+      <td className="py-2 pe-3">{verdicts.map((v) => `${v.count} ${v.label}`).join(', ') || '-'}</td>
+      <td className="py-2 pe-3 whitespace-nowrap">
         {agent.latency
           ? `${formatLatency(agent.latency.p50Ms)} / ${formatLatency(agent.latency.p95Ms)}`
           : '-'}
       </td>
-      <td className="py-2 pr-3 whitespace-nowrap">
+      <td className="py-2 pe-3 whitespace-nowrap">
         {count.format(agent.promptTokens)} / {count.format(agent.completionTokens)}
       </td>
       <td className="py-2 whitespace-nowrap">{agent.calls === 0 ? '-' : agentCost(agent)}</td>
@@ -462,7 +463,7 @@ function NarrationReconciliation({ data }: { data: LlmPanelResponse }) {
       {rows.length === 0 ? (
         <p className="text-text-muted">Nothing narrated since then.</p>
       ) : (
-        <ul className="ml-4 list-disc">
+        <ul className="ms-4 list-disc">
           {rows.map((row) => (
             <li key={row.reason} className={row.explanations === row.calls ? '' : 'text-warn'}>
               {reasonLabel(row.reason)}: {count.format(row.explanations)} stored,{' '}
@@ -487,7 +488,7 @@ function NarrationHistory({ data }: { data: LlmPanelResponse }) {
       {total === 0 ? (
         <p className="text-text-muted">None.</p>
       ) : (
-        <ul className="ml-4 list-disc">
+        <ul className="ms-4 list-disc">
           {data.narrationFallbacks.map((row) => (
             <li key={row.reason}>
               {reasonLabel(row.reason)}: {count.format(row.count)} of {count.format(total)}

@@ -19,6 +19,7 @@ import {
 } from '../lib/askPresentation.ts';
 import { conceptLabel } from '../lib/observationPresentation.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
+import { MIRROR_IN_RTL, SERVER_ENGLISH } from '../lib/textDirection.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { MAX_QUESTION_LENGTH, type AskEntry } from '../stores/AskStore.ts';
 import { useStore } from '../stores/context.tsx';
@@ -55,7 +56,7 @@ export const AskPage = observer(function AskPage() {
         </div>
         <Link to="/" className={buttonClass('secondary')}>
           <span className="flex items-center gap-1">
-            <ArrowLeft className="size-4" aria-hidden />
+            <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
             Back to portfolio
           </span>
         </Link>
@@ -158,7 +159,7 @@ const Reply = observer(function Reply({
     return (
       <div className="space-y-2">
         <p className="text-sm font-semibold text-text-primary">{outcome.title}</p>
-        <p className="text-sm text-text-muted">{response.text}</p>
+        <p {...SERVER_ENGLISH} className="text-sm text-text-muted">{response.text}</p>
         {outcome.reason === 'not_in_corpus' && similarityText(response.best_similarity) && (
           <p className="text-xs text-text-muted">
             The closest passage scored {similarityText(response.best_similarity)} for relevance,
@@ -192,7 +193,7 @@ const Reply = observer(function Reply({
           .
         </p>
       )}
-      <p className="whitespace-pre-line text-sm text-text-primary">{response.text}</p>
+      <p {...SERVER_ENGLISH} className="whitespace-pre-line text-sm text-text-primary">{response.text}</p>
       <p className="text-xs text-text-muted">{sourceText(response)}</p>
       <MatchingNote response={response} />
       {outcome.kind === 'computed' && Object.keys(response.evidence ?? {}).length > 0 && (
@@ -248,7 +249,7 @@ function Citations({ citations }: { citations: AskCitation[] }) {
           open={index === 0}
           className="rounded-lg border border-border-subtle bg-surface/60 px-3 py-2"
         >
-          <summary className="cursor-pointer text-xs text-text-primary">
+          <summary {...SERVER_ENGLISH} className="cursor-pointer text-xs text-text-primary">
             {citation.title}
             {citation.heading && <span className="text-text-muted"> - {citation.heading}</span>}
             {similarityText(citation.similarity) && (
@@ -256,7 +257,7 @@ function Citations({ citations }: { citations: AskCitation[] }) {
             )}
           </summary>
           {/* Verbatim: the corpus's own words, with its own emphasis. */}
-          <blockquote className="mt-2 border-l-2 border-border-subtle pl-3">
+          <blockquote className="mt-2 border-s-2 border-border-subtle ps-3">
             <ConceptText text={citation.text} size="xs" />
           </blockquote>
         </details>

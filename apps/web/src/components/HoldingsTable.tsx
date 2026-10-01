@@ -63,16 +63,16 @@ export function HoldingsTable() {
       <div className="-mx-4 overflow-x-auto px-4">
         <table className="w-full min-w-[880px] text-sm">
           <thead>
-            <tr className="border-b border-border-subtle text-left text-xs uppercase tracking-wide text-text-muted">
-              <th className="pb-2 pr-3 font-medium">Symbol</th>
-              <th className="pb-2 pr-3 text-right font-medium">Quantity</th>
-              <th className="pb-2 pr-3 text-right font-medium">Price</th>
-              <th className="pb-2 pr-3 text-right font-medium">Day</th>
-              <th className="pb-2 pr-3 text-right font-medium">Value</th>
-              <th className="pb-2 pr-3 text-right font-medium">Cost</th>
-              <th className="pb-2 pr-3 text-right font-medium">P&amp;L</th>
-              <th className="pb-2 pr-3 text-right font-medium">Weight</th>
-              <th className="pb-2 text-right font-medium">Actions</th>
+            <tr className="border-b border-border-subtle text-start text-xs uppercase tracking-wide text-text-muted">
+              <th className="pb-2 pe-3 font-medium">Symbol</th>
+              <th className="pb-2 pe-3 text-end font-medium">Quantity</th>
+              <th className="pb-2 pe-3 text-end font-medium">Price</th>
+              <th className="pb-2 pe-3 text-end font-medium">Day</th>
+              <th className="pb-2 pe-3 text-end font-medium">Value</th>
+              <th className="pb-2 pe-3 text-end font-medium">Cost</th>
+              <th className="pb-2 pe-3 text-end font-medium">P&amp;L</th>
+              <th className="pb-2 pe-3 text-end font-medium">Weight</th>
+              <th className="pb-2 text-end font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -173,20 +173,20 @@ function HoldingRow({
 
   return (
     <tr className="border-b border-border-subtle/50 last:border-0 hover:bg-surface-hover/40">
-      <td className="py-2 pr-3">
+      <td className="py-2 pe-3">
         <SymbolLabel holding={holding} />
         <p className="text-xs text-text-muted">
           {holding.instrument.name ?? holding.instrument.assetClass}
         </p>
       </td>
 
-      <td className="py-2 pr-3 text-right">
+      <td className="py-2 pe-3 text-end">
         {editing ? (
           <div className="flex items-center justify-end gap-1">
             <input
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              className="w-24 rounded border border-border-subtle bg-surface px-2 py-1 text-right text-sm"
+              className="w-24 rounded border border-border-subtle bg-surface px-2 py-1 text-end text-sm"
               inputMode="decimal"
               aria-label={`Quantity for ${holding.instrument.symbol}`}
             />
@@ -207,7 +207,7 @@ function HoldingRow({
         )}
       </td>
 
-      <td className="py-2 pr-3 text-right">
+      <td className="py-2 pe-3 text-end">
         {holding.quote ? (
           <>
             <div>{formatMoney(holding.quote.priceMinor, holding.quote.currency)}</div>
@@ -231,19 +231,19 @@ function HoldingRow({
           '—'
         )}
       </td>
-      <td className="py-2 pr-3 text-right">
+      <td className="py-2 pe-3 text-end">
         <Delta value={holding.quote?.dayChangePct ?? null}>
           {formatPercent(holding.quote?.dayChangePct ?? null)}
         </Delta>
       </td>
-      <td className="py-2 pr-3 text-right">{formatMoney(holding.valueMinor, baseCurrency)}</td>
-      <td className="py-2 pr-3 text-right text-text-muted">
+      <td className="py-2 pe-3 text-end">{formatMoney(holding.valueMinor, baseCurrency)}</td>
+      <td className="py-2 pe-3 text-end text-text-muted">
         {editing ? (
           <label className="flex items-center justify-end gap-1 text-xs">
             <input
               value={costDraft}
               onChange={(event) => setCostDraft(event.target.value)}
-              className="w-24 rounded border border-border-subtle bg-surface px-2 py-1 text-right text-sm text-text-primary"
+              className="w-24 rounded border border-border-subtle bg-surface px-2 py-1 text-end text-sm text-text-primary"
               inputMode="decimal"
               placeholder="none"
               aria-label={`Cost per unit for ${holding.instrument.symbol}, in ${holding.costCurrency}`}
@@ -254,18 +254,18 @@ function HoldingRow({
           formatMoney(holding.costMinor, baseCurrency)
         )}
       </td>
-      <td className="py-2 pr-3 text-right">
+      <td className="py-2 pe-3 text-end">
         <Delta value={holding.pnlMinor}>
           {holding.pnlMinor === null
             ? '—'
             : `${formatMoney(holding.pnlMinor, baseCurrency)} (${formatPercent(holding.pnlPct)})`}
         </Delta>
       </td>
-      <td className="py-2 pr-3 text-right text-text-muted">
+      <td className="py-2 pe-3 text-end text-text-muted">
         {holding.weightPct === null ? '—' : `${holding.weightPct.toFixed(1)}%`}
       </td>
 
-      <td className="py-2 text-right">
+      <td className="py-2 text-end">
         {confirmingDelete ? (
           <span className="flex items-center justify-end gap-2 text-xs">
             <button
@@ -371,7 +371,7 @@ function HoldingCard({
             {holding.instrument.name ?? holding.instrument.assetClass}
           </p>
         </div>
-        <div className="shrink-0 text-right">
+        <div className="shrink-0 text-end">
           <p className="text-sm font-semibold">{formatMoney(holding.valueMinor, baseCurrency)}</p>
           <p className="text-xs">
             <Delta value={holding.pnlMinor}>
@@ -406,7 +406,7 @@ function HoldingCard({
             <input
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              className="mt-1 block h-10 w-32 rounded-lg border border-border-subtle bg-surface px-3 text-right text-sm text-text-primary"
+              className="mt-1 block h-10 w-32 rounded-lg border border-border-subtle bg-surface px-3 text-end text-sm text-text-primary"
               inputMode="decimal"
               aria-label={`Quantity for ${symbol}`}
             />
@@ -416,7 +416,7 @@ function HoldingCard({
             <input
               value={costDraft}
               onChange={(event) => setCostDraft(event.target.value)}
-              className="mt-1 block h-10 w-32 rounded-lg border border-border-subtle bg-surface px-3 text-right text-sm text-text-primary"
+              className="mt-1 block h-10 w-32 rounded-lg border border-border-subtle bg-surface px-3 text-end text-sm text-text-primary"
               inputMode="decimal"
               placeholder="none"
               aria-label={`Cost per unit for ${symbol}, in ${holding.costCurrency}`}

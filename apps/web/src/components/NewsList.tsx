@@ -1,6 +1,7 @@
 import type { NewsArticle } from '@traders/shared';
 
 import { formatAge } from '../lib/relativeTime.ts';
+import { SERVER_ENGLISH } from '../lib/textDirection.ts';
 
 /**
  * Articles about some instruments, newest first: a topic's week, or a holding's.
@@ -12,6 +13,7 @@ export function NewsList({ articles, showSymbols = true }: { articles: NewsArtic
       {articles.map((article) => (
         <li key={article.id} className="text-sm">
           <a
+            {...SERVER_ENGLISH}
             href={article.url}
             target="_blank"
             rel="noopener noreferrer"

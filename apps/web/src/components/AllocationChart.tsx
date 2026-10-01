@@ -5,6 +5,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { formatMoney, minorToNumber } from '@traders/shared';
 
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
+import { CHART_DIRECTION } from '../lib/textDirection.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { Card } from './ui.tsx';
 
@@ -53,7 +54,7 @@ export const AllocationChart = observer(function AllocationChart() {
       {/* No entry animation: when the dashboard is remounted with the portfolio
           already loaded - coming back from any other view - the animated Pie
           drew zero sectors and the card stayed blank until a full reload. */}
-      <div className="h-64">
+      <div className="h-64" dir={CHART_DIRECTION}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie

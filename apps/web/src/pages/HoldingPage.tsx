@@ -14,6 +14,7 @@ import { Card, Delta, EmptyState, ErrorNote, Spinner, buttonClass } from '../com
 import { baseCurrencyOf, shortRate } from '../lib/portfolioView.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { unitsToPercent, weightToUnits } from '../lib/targetWeights.ts';
+import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import { newsEmptyMessage } from '../lib/topicPresentation.ts';
 import { useHoldingNewsQuery, useSymbolObservationsQuery } from '../queries/holding.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
@@ -67,7 +68,7 @@ export const HoldingPage = observer(function HoldingPage() {
         </div>
         <Link to="/" className={buttonClass('secondary')}>
           <span className="flex items-center gap-1">
-            <ArrowLeft className="size-4" aria-hidden />
+            <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
             Back to portfolio
           </span>
         </Link>

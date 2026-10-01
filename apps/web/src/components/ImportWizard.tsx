@@ -135,13 +135,13 @@ export const ImportWizard = observer(function ImportWizard() {
 
               <div className="max-h-96 overflow-y-auto rounded-lg border border-border-subtle">
                 <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-surface-raised text-left uppercase tracking-wide text-text-muted">
+                  <thead className="sticky top-0 bg-surface-raised text-start uppercase tracking-wide text-text-muted">
                     <tr>
                       <th className="px-3 py-2 font-medium">Import</th>
                       <th className="px-3 py-2 font-medium">Line</th>
                       <th className="px-3 py-2 font-medium">Symbol</th>
-                      <th className="px-3 py-2 text-right font-medium">Quantity</th>
-                      <th className="px-3 py-2 text-right font-medium">Cost / unit</th>
+                      <th className="px-3 py-2 text-end font-medium">Quantity</th>
+                      <th className="px-3 py-2 text-end font-medium">Cost / unit</th>
                       <th className="px-3 py-2 font-medium">Status</th>
                     </tr>
                   </thead>
@@ -220,8 +220,8 @@ const PreviewRow = observer(function PreviewRow({ row }: { row: ImportRow }) {
           </select>
         )}
       </td>
-      <td className="px-3 py-2 text-right">{row.quantity ?? '—'}</td>
-      <td className="px-3 py-2 text-right">
+      <td className="px-3 py-2 text-end">{row.quantity ?? '—'}</td>
+      <td className="px-3 py-2 text-end">
         {row.costBasisMinor === null ? '—' : formatMoney(row.costBasisMinor, row.currency)}
       </td>
       <td className="px-3 py-2">

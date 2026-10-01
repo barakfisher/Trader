@@ -27,6 +27,7 @@ import {
   type RangeKey,
 } from '../lib/priceChart.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
+import { CHART_DIRECTION } from '../lib/textDirection.ts';
 import { useHoldingHistoryQuery } from '../queries/holding.ts';
 import { Card, Delta, ErrorNote, Spinner } from './ui.tsx';
 
@@ -145,7 +146,7 @@ export function PriceChart({
               </li>
             )}
           </ul>
-          <div className="h-56" role="img" aria-label={`Daily closing price. ${coverageText(closes)}`}>
+          <div className="h-56" dir={CHART_DIRECTION} role="img" aria-label={`Daily closing price. ${coverageText(closes)}`}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke="#253052" strokeDasharray="2 4" vertical={false} />
@@ -222,16 +223,16 @@ function ClosesTable({ closes, currency }: { closes: DailyClose[]; currency: str
     <div className="max-h-80 overflow-y-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-border-subtle text-left text-xs uppercase tracking-wide text-text-muted">
+          <tr className="border-b border-border-subtle text-start text-xs uppercase tracking-wide text-text-muted">
             <th className="pb-2 font-medium">Day</th>
-            <th className="pb-2 text-right font-medium">Close</th>
+            <th className="pb-2 text-end font-medium">Close</th>
           </tr>
         </thead>
         <tbody>
           {[...closes].reverse().map((close) => (
             <tr key={close.day} className="border-b border-border-subtle/50 last:border-0">
               <td className="py-1.5">{dayName(close.day)}</td>
-              <td className="py-1.5 text-right" title={`Observed ${formatExactTime(close.asOf)}`}>
+              <td className="py-1.5 text-end" title={`Observed ${formatExactTime(close.asOf)}`}>
                 {formatMoney(close.priceMinor, currency)}
               </td>
             </tr>
