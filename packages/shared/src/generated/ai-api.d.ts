@@ -343,6 +343,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/universe/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request Profile */
+        post: operations["request_profile_universe_profiles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1017,6 +1034,32 @@ export interface components {
             days: number;
             /** Instrument Id */
             instrument_id: string;
+        };
+        /**
+         * ProfileRequest
+         * @description A listing a user named that the universe lacks, to be described on demand.
+         */
+        ProfileRequest: {
+            /** Symbol */
+            symbol: string;
+        };
+        /**
+         * ProfileRequestResponse
+         * @description What happened to the request - not to the fetch, which runs after the answer.
+         *
+         *     `queued`: the fetch runs in the background. `already_profiled`: a profile
+         *     of any membership exists. `in_progress`: this copy of the service is
+         *     fetching it already. `unavailable`: this installation has no profile
+         *     source (a fixture-only market-data chain), which is a configuration.
+         */
+        ProfileRequestResponse: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "already_profiled" | "in_progress" | "unavailable";
+            /** Symbol */
+            symbol: string;
         };
         /**
          * Quote
@@ -1993,6 +2036,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TopicResolveResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_profile_universe_profiles_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileRequestResponse"];
                 };
             };
             /** @description Validation Error */

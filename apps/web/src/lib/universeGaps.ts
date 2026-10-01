@@ -44,7 +44,29 @@ export function gapExplanation(gap: UniverseGap): string {
   }
 }
 
-/** Only a gap a rescreen could close deserves the eye; the rest are expected. */
+/**
+ * Only a gap a rescreen could close deserves the eye; the rest are expected,
+ * and one a rescreen has already closed is history.
+ */
 export function isRealGap(gap: UniverseGap): boolean {
+  if (gap.profile === 'screened') return false;
   return gap.kind === 'universe_gap_low_confidence' || gap.detail.gap === 'not_in_universe';
+}
+
+/**
+ * What has become of a missing ticker's listing since, or null when nothing
+ * has. An on-demand profile describes it without making it a member, so the
+ * gap stays open - and the card says why.
+ */
+export function gapProfile(gap: UniverseGap): string | null {
+  switch (gap.profile) {
+    case 'on_demand':
+      return 'profiled on demand; no topic is answered from it until a rescreen admits it';
+    case 'screened':
+      return 'now in the universe';
+    case 'dropped':
+      return 'dropped by a later snapshot';
+    default:
+      return null;
+  }
 }

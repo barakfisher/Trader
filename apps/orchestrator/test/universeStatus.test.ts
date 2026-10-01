@@ -25,7 +25,14 @@ const LOAD = {
   loaded_at: new Date('2026-09-30T21:47:00Z'),
 };
 
-const COUNTS = { profiles: 5223, equities: 2534, etfs: 2689, embedded: 5223, etf_holdings: 16363 };
+const COUNTS = {
+  profiles: 5223,
+  equities: 2534,
+  etfs: 2689,
+  embedded: 5223,
+  etf_holdings: 16363,
+  on_demand: 0,
+};
 
 describe('the universe status', () => {
   it('names every difference between the snapshot and the database, leaving none unexplained', () => {
@@ -61,9 +68,15 @@ describe('the universe status', () => {
   });
 
   it('flags the database holding more than the snapshot as a negative remainder', () => {
-    // An on-demand profile (M8) that no rescreen has admitted yet.
+    // A screened profile no load accounts for - written by hand, say.
     const status = universeStatus(LOAD, { ...COUNTS, profiles: 5224 });
     expect(status.reconciliation[0]!.unexplained).toBe(-1);
+  });
+
+  it('counts on-demand profiles apart, so they leave the reconciliation alone', () => {
+    const status = universeStatus(LOAD, { ...COUNTS, on_demand: 2 });
+    expect(status.database.onDemand).toBe(2);
+    expect(status.reconciliation[0]!.unexplained).toBe(0);
   });
 
   it('reports the database alone, and reconciles nothing, before any load is recorded', () => {

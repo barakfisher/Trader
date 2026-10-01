@@ -482,3 +482,14 @@ export type _AssertUniverseCoverage = Expect<
 export type _AssertTopicResolveResponse = Expect<
   Equal<z.infer<typeof topicResolveResponseSchema>, Schemas['TopicResolveResponse']>
 >;
+
+export const profileRequestResponseSchema = z.object({
+  symbol: z.string(),
+  // `queued`: fetched after the answer. `unavailable`: this installation fetches
+  // no profiles (a fixture-only chain) - a configuration, not a failure.
+  status: z.enum(['queued', 'already_profiled', 'in_progress', 'unavailable']),
+});
+
+export type _AssertProfileRequestResponse = Expect<
+  Equal<z.infer<typeof profileRequestResponseSchema>, Schemas['ProfileRequestResponse']>
+>;

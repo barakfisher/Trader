@@ -256,7 +256,7 @@ kept so the next sweep has somewhere to add to.
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
-| M8 — Admin operations & observability | **In progress** | #120-#124, #126: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event ✅ (the background *profile* fetch is PR 7); rescreen button = CronJob run - PRs 8-9. See "Next session: M8, continued" |
+| M8 — Admin operations & observability | **In progress** | #120-#124, #126-#127: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel, on-demand profiles. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event and profiled within one background fetch ✅ (#127, decision 89); rescreen button = CronJob run - PRs 8-9. See "Next session: M8, continued" |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
 not anticipate, found by running the thing rather than by reading it. M1.5 came from auditing the
@@ -1310,8 +1310,8 @@ failure they prevent.
     "missing" on day one, and a panel that is always red is ignored. **Measuring it found a silent
     drop:** 14 holding rows (BULZ 10, GDXD 2, GDXU 2 - funds with no description) were skipped by
     `load_holdings` without being counted, so 14 of the 33 had no explanation anywhere; the
-    loader now counts them. A negative remainder (the database holds *more*) is expected after an
-    on-demand profile (M8 PR 7) and is shown as such. The orchestrator reads only the database:
+    loader now counts them. On-demand profiles are counted apart and never reconciled (decision 89),
+    so a negative remainder means a screened profile no load accounts for. The orchestrator reads only the database:
     the manifest is a file inside the AI image, so the loader copies it into the row.
 87. **Every model call is recorded by a wrapper the factory builds; call sites only add a verdict**
     (M8 PR 5, the user's choice among recommendations). `build_llm(..., call_log=)` puts
@@ -1344,6 +1344,29 @@ failure they prevent.
     the current config's tier, so a call made under an earlier model is labelled by its own id.
     TTFT and semantic-cache hit rate are *said* to be unmeasured on the card (no streaming, no
     cache), never shown as zero.
+89. **An on-demand profile describes a listing without making it a member** (M8 PR 7, decision
+    6 of the plan as built). When a user names a US equity or ETF the universe lacks (gap
+    `not_in_universe`), the orchestrator fires `POST /universe/profiles` without awaiting it; the
+    AI service answers 202 and, in a `BackgroundTasks` job, fetches Yahoo's `info` through
+    `InstrumentProfileSource` (guideline 6), maps it with the loader's own `to_instrument`,
+    inserts `membership='on_demand'` **`ON CONFLICT DO NOTHING`** (a screened profile is never
+    downgraded, a second fetch adds nothing) and embeds that one row. **Measured first:** no real
+    `not_in_universe` gap existed on compose (the BYND/GPRO rows were the kind cluster's test
+    rows); Yahoo answered BYND ($142M) and GPRO ($266M) - both below the $1B floor, so no rescreen
+    would ever add them - in 0.3-1.3 s. **Four readers**, not one, would have let such a profile
+    into a topic: `search_profiles`, `profiles_by_id` (reached by being held by an ETF), the
+    holdings matcher, and `coverage` - all read `screened` only, as does the eval's
+    `_in_universe`. **Membership stays screened-only**, so the gap keeps being reported: a
+    described listing no topic can reach has not closed it; the gaps card shows the profile's
+    current membership beside the gap ("profiled on demand" / "now in the universe"). The loader
+    promotes an on-demand profile to `screened` when a snapshot admits it, and never touches one
+    it does not hold. **The universe status counts screened profiles against the snapshot and
+    on-demand ones apart** - rejected: the plan's "a negative remainder is how on-demand shows",
+    because a remainder that is always negative on a used installation reads as always wrong.
+    A fixture-only chain has no profile source and answers `unavailable` (a configuration).
+    Shown on compose 2026-09-30 22:50 UTC: an import preview of BYND, GPRO, SAP.DE profiled the
+    first two within a second, skipped SAP.DE (outside the screen), and "plant-based meat" still
+    resolved to JBS/HRL/PPC, not BYND.
 
 ---
 
@@ -1872,6 +1895,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 
 | Item | Where | Impact |
 |---|---|---|
+| **An on-demand profile is never refreshed** | `app/universe/on_demand.py` | Written once (`DO NOTHING`); its size facts and description stay as fetched until a rescreen admits it (then the loader owns it) or it is deleted. A fetch lost to a dying process (`BackgroundTasks` is in-memory) is retried only the next time a user names the symbol - on a later local day, since gap events are counted per day but the request fires on every sighting |
 | **The topic gate refused a nonsense phrase by 0.007** | `app/ask/relevance.py` (`refuse_below` 0.32) | Measured on compose 2026-09-30: "zzqx flibbertigibbet" scored 0.313, "medieval tapestry restoration" 0.245, "quantum computing" 0.584. The gate held, but a nonsense string sits 0.007 below it. `universe_gap_low_confidence` events now record every `none` with its score; **look at their distribution before moving the gate**, not at one example |
 | **Model cost reads $0 on this installation** | `.env` `LLM_MODEL` (a `:free` OpenRouter route) | Every recorded call is priced 0 because the configured route is free - true, and the panel (#126, decision 88) says "free route" rather than $0. "Free" is read from the `:free` suffix alone: a free route OpenRouter names differently would show as "$0", a price. The cost column has not yet been seen non-zero on real data |
 | **A low-confidence topic cannot be produced in the kind cluster** | fixture embedder, `app/ask/relevance.judge` | Keyless by decision 79: on a non-semantic embedder the judge abstains, so every topic is `weak`, never `none`. Show that event on compose |
@@ -1975,7 +1999,10 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
   `.venv/bin/pytest` silently tests the *other* tree. Run a worktree's Python suite as
   `cd services/ai && PYTHONPATH=$PWD /Users/a/projects/Traders/services/ai/.venv/bin/python -m pytest -q`;
   `PYTHONPATH` precedes site-packages, so it wins over the `.pth`. `pnpm install` in the worktree
-  does work and is needed once.
+  does work and is needed once. **The same holds for every script**, and
+  `scripts/export_openapi.py` is the dangerous one: run bare in PR 7 it wrote the main
+  checkout's schema (17 paths, no new route) with no error, and the generated client had nothing
+  to call. Check the path count it prints against the routes you added.
 - **Every worktree shares one development database.** A background task's migration lands in the
   same Postgres the main stack uses, so the database can end up *ahead* of the running containers.
   That is how an "impossible" `Can't locate revision` appeared: the DB was at `0010_instrument_metadata`
@@ -2273,7 +2300,9 @@ within one background fetch"; (7) universe status against the loader's own count
   (the milestone asks for that query, not a new log). Say plainly that TTFT and semantic-cache
   hit rate do not exist (no streaming, no cache) rather than showing zeros. **This closes the
   panel exit condition** - show it on compose.
-- **PR 7 - the on-demand profile fetch.** `instrument_profiles.membership`
+- ~~PR 7 - the on-demand profile fetch~~ **Done, #127 (decision 89)** - including a change to
+  the plan below: on-demand profiles are counted apart on the status card, not shown as a
+  negative remainder. The original plan: `instrument_profiles.membership`
   (`screened`/`on_demand`/`dropped`), a background fetch when a gap event is `not_in_universe`
   (BYND and GPRO are live examples), excluded from `search_profiles`; update the exit wording in
   `docs/MILESTONES.md`. The status panel's negative remainder (decision 86) is how an on-demand

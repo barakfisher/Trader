@@ -25,7 +25,8 @@ from app.db import get_engine
 from app.llm.call_log import DatabaseCallLog
 from app.llm.factory import build_llm
 from app.providers.registry import MarketDataService, build_providers
-from app.routers import analysis, ask, concepts, health, market, narration, news, topics
+from app.routers import analysis, ask, concepts, health, market, narration, news, topics, universe
+from app.universe.profile_source import build_profile_source
 
 settings = get_settings()
 configure_logging(settings.log_level, json_output=settings.is_production)
@@ -56,6 +57,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # is to have typed a provider name that does not exist.
     app.state.embedder = build_embedder(settings)
     app.state.vector_store = PgVectorStore()
+    # None on a fixture-only chain: on-demand profiles are then answered
+    # `unavailable` rather than fetched from a source the installation avoids.
+    app.state.profile_source = build_profile_source(settings)
     try:
         yield
     finally:
@@ -100,3 +104,4 @@ app.include_router(concepts.router)
 app.include_router(ask.router)
 app.include_router(topics.router)
 app.include_router(news.router)
+app.include_router(universe.router)

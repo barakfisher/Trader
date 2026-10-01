@@ -2,10 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import type { UniverseGap } from '@traders/shared';
 
-import { gapExplanation, gapSubject, isRealGap } from '../src/lib/universeGaps.ts';
+import { gapExplanation, gapProfile, gapSubject, isRealGap } from '../src/lib/universeGaps.ts';
 
-function gap(kind: UniverseGap['kind'], detail: Record<string, unknown>): UniverseGap {
+function gap(
+  kind: UniverseGap['kind'],
+  detail: Record<string, unknown>,
+  profile: UniverseGap['profile'] = null,
+): UniverseGap {
   return {
+    profile,
     id: '1',
     kind,
     userId: 'u',
@@ -52,5 +57,18 @@ describe('a universe gap, in words', () => {
     expect(
       gapExplanation(gap('universe_gap_missing_ticker', { symbol: 'X', source: 'import', gap: 'unpriced' })),
     ).toBe('in an import; no market data provider could price it');
+  });
+
+  it('says what became of a missing listing, and a closed gap is no longer real', () => {
+    const detail = { symbol: 'BYND', source: 'holding', gap: 'not_in_universe', rule: null };
+    const described = gap('universe_gap_missing_ticker', detail, 'on_demand');
+    expect(gapProfile(described)).toMatch(/^profiled on demand; no topic is answered from it/);
+    expect(isRealGap(described)).toBe(true);
+
+    const admitted = gap('universe_gap_missing_ticker', detail, 'screened');
+    expect(gapProfile(admitted)).toBe('now in the universe');
+    expect(isRealGap(admitted)).toBe(false);
+
+    expect(gapProfile(gap('universe_gap_missing_ticker', detail))).toBeNull();
   });
 });

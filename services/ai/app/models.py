@@ -170,6 +170,26 @@ class InstrumentUniverse(BaseModel):
     outside_screen: Literal["asset_class", "exchange"] | None = None
 
 
+class ProfileRequest(BaseModel):
+    """A listing a user named that the universe lacks, to be described on demand."""
+
+    #: A resolved symbol, as `/market/instruments/resolve` returned it.
+    symbol: str = Field(min_length=1, max_length=32, pattern=r"^[A-Za-z0-9.\-=^]+$")
+
+
+class ProfileRequestResponse(BaseModel):
+    """What happened to the request - not to the fetch, which runs after the answer.
+
+    `queued`: the fetch runs in the background. `already_profiled`: a profile
+    of any membership exists. `in_progress`: this copy of the service is
+    fetching it already. `unavailable`: this installation has no profile
+    source (a fixture-only market-data chain), which is a configuration.
+    """
+
+    symbol: str
+    status: Literal["queued", "already_profiled", "in_progress", "unavailable"]
+
+
 class InstrumentResolution(BaseModel):
     """Result of resolving a user-supplied string to a tradable instrument.
 

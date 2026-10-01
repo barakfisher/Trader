@@ -107,6 +107,7 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
         occurrences: row.occurrences,
         firstSeenAt: new Date(row.occurred_at).toISOString(),
         lastSeenAt: new Date(row.last_seen_at).toISOString(),
+        profile: row.profile_membership,
       })),
     };
     return context.json(body);

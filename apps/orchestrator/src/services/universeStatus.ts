@@ -4,10 +4,11 @@
  *
  * The reasons are the loader's own. It is the code that skipped each row, so
  * it is the one that knows why; the page only checks the sums. Anything the
- * sums leave over - a profile deleted by hand, an on-demand fetch since the
- * load, a loader that skipped something without counting it - shows up as
- * `unexplained`, which is exactly the disagreement the page exists to make
- * visible. Measured on the 2026-09-24 snapshot: 71 members without a
+ * sums leave over - a profile deleted by hand, a loader that skipped
+ * something without counting it - shows up as `unexplained`, which is exactly
+ * the disagreement the page exists to make visible. On-demand profiles
+ * (decision 89) are not members and are counted apart, never against the
+ * snapshot. Measured on the 2026-09-24 snapshot: 71 members without a
  * description, and 33 holding rows (19 implausible weights, 14 of three
  * unprofiled funds) - with those named, nothing is left over.
  */
@@ -46,6 +47,7 @@ export function universeStatus(
     etfs: counts.etfs,
     embedded: counts.embedded,
     etfHoldings: counts.etf_holdings,
+    onDemand: counts.on_demand,
   };
   if (!load) return { lastLoad: null, database, reconciliation: [] };
 

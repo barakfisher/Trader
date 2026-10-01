@@ -12,6 +12,7 @@ from app.corpus.embeddings import BaseEmbedder
 from app.corpus.vector_store import VectorStore
 from app.providers.registry import MarketDataService
 from app.universe.membership import DatabaseMembership, UniverseMembership
+from app.universe.profile_source import InstrumentProfileSource
 
 
 def get_market_data(request: Request) -> MarketDataService:
@@ -69,3 +70,8 @@ def get_universe_membership() -> UniverseMembership:
 
 
 UniverseMembershipDep = Annotated[UniverseMembership, Depends(get_universe_membership)]
+
+
+def get_profile_source(request: Request) -> InstrumentProfileSource | None:
+    """None when the installation fetches no profiles; see `build_profile_source`."""
+    return getattr(request.app.state, "profile_source", None)

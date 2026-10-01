@@ -1272,6 +1272,48 @@
         "title": "PriceHistoryResponse",
         "type": "object"
       },
+      "ProfileRequest": {
+        "description": "A listing a user named that the universe lacks, to be described on demand.",
+        "properties": {
+          "symbol": {
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9.\\-=^]+$",
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "title": "ProfileRequest",
+        "type": "object"
+      },
+      "ProfileRequestResponse": {
+        "description": "What happened to the request - not to the fetch, which runs after the answer.\n\n`queued`: the fetch runs in the background. `already_profiled`: a profile\nof any membership exists. `in_progress`: this copy of the service is\nfetching it already. `unavailable`: this installation has no profile\nsource (a fixture-only market-data chain), which is a configuration.",
+        "properties": {
+          "status": {
+            "enum": [
+              "queued",
+              "already_profiled",
+              "in_progress",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "status"
+        ],
+        "title": "ProfileRequestResponse",
+        "type": "object"
+      },
       "Quote": {
         "description": "A single price observation. `price_minor` is integer minor units.",
         "properties": {
@@ -3061,6 +3103,65 @@
         "summary": "Resolve",
         "tags": [
           "topics"
+        ]
+      }
+    },
+    "/universe/profiles": {
+      "post": {
+        "operationId": "request_profile_universe_profiles_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileRequestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Profile",
+        "tags": [
+          "universe"
         ]
       }
     }

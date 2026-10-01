@@ -270,6 +270,12 @@ export interface UniverseGap {
   occurrences: number;
   firstSeenAt: string;
   lastSeenAt: string;
+  /**
+   * The listing's profile now, for a missing ticker: `on_demand` once it has
+   * been described for the user who named it, `screened` once a rescreen has
+   * admitted it (the gap is closed). Null when it has none - or for a topic.
+   */
+  profile: 'screened' | 'on_demand' | 'dropped' | null;
 }
 
 export interface UniverseGapsResponse {
@@ -311,6 +317,8 @@ export interface UniverseStatusResponse {
     etfs: number;
     embedded: number;
     etfHoldings: number;
+    /** Profiles fetched for listings users named; not members, never compared with the snapshot. */
+    onDemand: number;
   };
   reconciliation: UniverseReconciliation[];
 }

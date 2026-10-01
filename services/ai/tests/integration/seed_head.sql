@@ -111,6 +111,9 @@ INSERT INTO news_feed_cursors (provider, last_file_at) VALUES ('gdelt', '2026-09
 
 INSERT INTO instrument_profiles (instrument_id, description, matching_text, source, license, content_hash, size_as_of)
 VALUES ('10000000-0000-0000-0000-000000000002', 'A fund.', 'a fund', 'fixture', 'fixture', 'seed-profile', '2026-09-01T00:00:00Z');
+INSERT INTO instrument_profiles (instrument_id, description, matching_text, source, license, content_hash, size_as_of, membership) VALUES
+  ('10000000-0000-0000-0000-000000000001', 'A company.', 'a company', 'fixture', 'fixture', 'seed-on-demand', '2026-09-01T00:00:00Z', 'on_demand'),
+  ('10000000-0000-0000-0000-000000000006', 'Gone.', 'gone', 'fixture', 'fixture', 'seed-dropped', '2026-09-01T00:00:00Z', 'dropped');
 INSERT INTO etf_holdings (etf_instrument_id, position, symbol, weight, as_of, holding_instrument_id, matched_by) VALUES
   ('10000000-0000-0000-0000-000000000002', 1, 'EQTY', '0.5', '2026-09-01T00:00:00Z', '10000000-0000-0000-0000-000000000001', 'symbol'),
   ('10000000-0000-0000-0000-000000000002', 2, 'MYST', '0.2', '2026-09-01T00:00:00Z', '10000000-0000-0000-0000-000000000006', 'name'),

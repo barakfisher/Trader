@@ -27,6 +27,7 @@ import {
   instrumentResolutionSchema,
   narrationConfigSchema,
   portfolioScanResponseSchema,
+  profileRequestResponseSchema,
   topicScanResponseSchema,
   newsCollectResponseSchema,
   quoteResponseSchema,
@@ -58,6 +59,7 @@ export type ConceptSearchResponse = components['schemas']['ConceptSearchResponse
 export type ConceptSearchMatch = components['schemas']['ConceptSearchMatch'];
 export type AskRequest = components['schemas']['AskRequest'];
 export type AskResponse = components['schemas']['AskResponse'];
+export type ProfileRequestResponse = components['schemas']['ProfileRequestResponse'];
 export type AskCitation = components['schemas']['AskCitation'];
 export type TopicResolveResponse = components['schemas']['TopicResolveResponse'];
 export type TopicCandidate = components['schemas']['TopicCandidateOut'];
@@ -192,6 +194,18 @@ export class AiClient {
     const search = new URLSearchParams({ query });
     return this.request(`/market/instruments/resolve?${search}`, instrumentResolutionSchema, {
       method: 'GET',
+      requestId,
+    });
+  }
+
+  /**
+   * Ask for a profile of a listing the universe lacks. Answered at once (202):
+   * the fetch runs in the AI service after the answer, so nothing waits on it.
+   */
+  requestProfile(symbol: string, requestId?: string): Promise<ProfileRequestResponse> {
+    return this.request('/universe/profiles', profileRequestResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify({ symbol }),
       requestId,
     });
   }

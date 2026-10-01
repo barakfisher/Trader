@@ -96,6 +96,40 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({ occurrences: 2, detail: { source: 'import' } });
       expect(rows[0]!.last_seen_at.getTime()).toBeGreaterThanOrEqual(rows[0]!.occurred_at.getTime());
+      expect(rows[0]!.profile_membership).toBeNull();
+    });
+
+    it("reads a missing ticker's profile as it is now", async () => {
+      const symbol = `OD${randomUUID().slice(0, 6).toUpperCase()}`;
+      await queries.recordOpsEvent({
+        kind: 'universe_gap_missing_ticker',
+        userId: USER,
+        detail: { symbol, source: 'holding' },
+        dedupeKey: `missing_ticker:${USER}:${symbol}:2026-10-01`,
+      });
+      const { rows } = await getPool().query<{ id: string }>(
+        `INSERT INTO instruments (symbol, asset_class) VALUES ($1, 'equity') RETURNING id`,
+        [symbol],
+      );
+      const before = await queries.countUniverse();
+      await getPool().query(
+        `INSERT INTO instrument_profiles (instrument_id, description, matching_text, source, license,
+                                          content_hash, size_as_of, membership)
+         VALUES ($1, 'd', 'd', 'test', 'test', 'h', now(), 'on_demand')`,
+        [rows[0]!.id],
+      );
+      try {
+        const gap = (await queries.listOpsEvents('universe_gap_missing_ticker', 200)).find(
+          (row) => (row.detail as { symbol?: string }).symbol === symbol,
+        );
+        expect(gap?.profile_membership).toBe('on_demand');
+        const after = await queries.countUniverse();
+        // Counted apart: the screened count the snapshot is compared with does not move.
+        expect(after.on_demand).toBe(before.on_demand + 1);
+        expect(after.profiles).toBe(before.profiles);
+      } finally {
+        await getPool().query('DELETE FROM instruments WHERE symbol = $1', [symbol]);
+      }
     });
   });
 
