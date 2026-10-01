@@ -34,6 +34,8 @@ vi.mock('../src/db/queries.js', () => ({
   listOpsEvents: vi.fn(async () => []),
   getLatestUniverseLoad: vi.fn(async () => null),
   countUniverse: vi.fn(async () => ({ profiles: 0, equities: 0, etfs: 0, embedded: 0, etf_holdings: 0 })),
+  claimRun: vi.fn(async () => ({ claimed: true, runId: 'run-1' })),
+  finishRun: vi.fn(async () => undefined),
 }));
 
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
@@ -121,6 +123,32 @@ describe('the admin audit', () => {
       ipAddress: '10.0.0.7',
       requestId: 'req-1',
     });
+  });
+
+  it('audits a rescreen before claiming it, and answers 202 once it is handed over', async () => {
+    vi.mocked(queries.claimRun).mockImplementation(async () => {
+      events.push('claim');
+      return { claimed: true, runId: 'run-1' };
+    });
+    const response = await app.request('/admin/universe/rescreen', {
+      method: 'POST',
+      headers: { ...HEADERS, cookie },
+      body: '{}',
+    });
+    expect(response.status).toBe(202);
+    expect(events).toEqual(['audit', 'claim']);
+    expect(queries.insertAdminAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'POST /admin/universe/rescreen' }),
+    );
+    // No account owns the universe; the trigger says who asked.
+    expect(queries.claimRun).toHaveBeenCalledWith({
+      userId: null,
+      kind: 'universe_rescreen',
+      runKey: expect.stringMatching(/^universe-rescreen:\d{4}-\d{2}-\d{2}$/),
+      trigger: 'admin',
+      retryFailed: true,
+    });
+    expect(await response.json()).toMatchObject({ status: 'running', runId: 'run-1' });
   });
 
   it('leaves the body readable for the action', async () => {

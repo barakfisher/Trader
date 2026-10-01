@@ -39,6 +39,10 @@ export function createFakeAi(options: FakeAiOptions = {}): AiClient {
   const missingFx = new Set(options.missingFx ?? []);
 
   const client = {
+    /** A claimed rescreen, accepted: the real one builds in the background. */
+    async rescreen(runId: string) {
+      return { run_id: runId, status: 'started' as const, reason: null };
+    },
     async quotes(symbols: string[]) {
       const quotes = [];
       const missing: string[] = [];

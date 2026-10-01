@@ -457,11 +457,32 @@ export function listSnapshots(userId: string, limit = 365): Promise<SnapshotRow[
  */
 const STALE_RUN_MINUTES = 30;
 
+/**
+ * How long a run that heartbeats (`runs.heartbeat_at`, migration 0031) may go
+ * without one before it counts as dead. A background run - the universe
+ * rescreen - beats every 30 s from the process doing the work, so five missed
+ * beats is a process that is gone, not one that is slow. It replaces the
+ * started-at rule for such a run, which would reclaim a live rescreen that
+ * simply took longer than half an hour.
+ */
+export const HEARTBEAT_STALE_MINUTES = 5;
+
+/** Postgres's unique_violation: here, the one-running-rescreen index (0031). */
+const UNIQUE_VIOLATION = '23505';
+
 export interface ClaimRunInput {
-  userId: string;
+  /** Null for the installation's own work, which belongs to no account. */
+  userId: string | null;
   kind: string;
   runKey: string;
   trigger: string;
+  /**
+   * Whether a run under this key that *failed* may be claimed again. Off for
+   * every kind but the rescreen: a failed scan is retried by the next bucket's
+   * key, while a failed rescreen keeps a fetch cache that only a retry under
+   * the same key - the same day - can resume from.
+   */
+  retryFailed?: boolean;
 }
 
 /**
@@ -475,26 +496,50 @@ export interface ClaimRunInput {
 export async function claimRun(
   input: ClaimRunInput,
 ): Promise<{ claimed: boolean; runId: string | null; existingStatus?: string }> {
-  const inserted = await queryOne<{ id: string }>(
-    `INSERT INTO runs (user_id, kind, run_key, trigger, status)
-     VALUES ($1, $2, $3, $4, 'running')
-     ON CONFLICT (run_key) DO NOTHING
-     RETURNING id`,
-    [input.userId, input.kind, input.runKey, input.trigger],
-  );
+  let inserted: { id: string } | null;
+  try {
+    inserted = await queryOne<{ id: string }>(
+      `INSERT INTO runs (user_id, kind, run_key, trigger, status)
+       VALUES ($1, $2, $3, $4, 'running')
+       ON CONFLICT (run_key) DO NOTHING
+       RETURNING id`,
+      [input.userId, input.kind, input.runKey, input.trigger],
+    );
+  } catch (error) {
+    // `ON CONFLICT (run_key)` covers the run key only. A second rescreen under
+    // another key - yesterday's still running past midnight - meets the
+    // partial unique index instead, and that is a refusal, not a failure.
+    if ((error as { code?: string }).code === UNIQUE_VIOLATION) {
+      return { claimed: false, runId: null, existingStatus: 'running (another run of this kind)' };
+    }
+    throw error;
+  }
   if (inserted) return { claimed: true, runId: inserted.id };
 
+  // A run that heartbeats is dead when its heartbeat is stale; one that never
+  // has, when it started too long ago. A reclaimed heartbeating run starts
+  // with a fresh beat, so it is not reclaimed again before its new owner beats.
   const reclaimed = await queryOne<{ id: string }>(
     `UPDATE runs
-        SET status = 'running', started_at = now(), finished_at = NULL, trigger = $2
+        SET status = 'running', started_at = now(), finished_at = NULL, trigger = $2,
+            heartbeat_at = CASE WHEN heartbeat_at IS NULL THEN NULL ELSE now() END
       WHERE run_key = $1
-        AND status = 'running'
-        AND started_at < now() - ($3 || ' minutes')::interval
+        AND ((status = 'failed' AND $5::boolean)
+             OR (status = 'running'
+                 AND CASE WHEN heartbeat_at IS NULL
+                          THEN started_at < now() - ($3 || ' minutes')::interval
+                          ELSE heartbeat_at < now() - ($4 || ' minutes')::interval END))
       RETURNING id`,
-    [input.runKey, input.trigger, String(STALE_RUN_MINUTES)],
+    [
+      input.runKey,
+      input.trigger,
+      String(STALE_RUN_MINUTES),
+      String(HEARTBEAT_STALE_MINUTES),
+      input.retryFailed ?? false,
+    ],
   );
   if (reclaimed) {
-    logger().warn({ runKey: input.runKey }, 'reclaimed a run left running by a dead process');
+    logger().warn({ runKey: input.runKey }, 'reclaimed a failed run, or one left running by a dead process');
     return { claimed: true, runId: reclaimed.id };
   }
 
@@ -672,6 +717,8 @@ export interface UniverseCountsRow {
   etf_holdings: number;
   /** Fetched for a listing a user named (decision 89); never compared with a snapshot. */
   on_demand: number;
+  /** Former members a newer snapshot no longer holds (decision 90); kept, never searched. */
+  dropped: number;
 }
 
 /** What the database holds now - compared against what the last load wrote. */
@@ -683,11 +730,14 @@ export async function countUniverse(): Promise<UniverseCountsRow> {
             count(*) FILTER (WHERE p.membership = 'screened' AND i.asset_class = 'etf')::int AS etfs,
             count(p.embedding_model) FILTER (WHERE p.membership = 'screened')::int AS embedded,
             (SELECT count(*)::int FROM etf_holdings) AS etf_holdings,
-            count(*) FILTER (WHERE p.membership = 'on_demand')::int AS on_demand
+            count(*) FILTER (WHERE p.membership = 'on_demand')::int AS on_demand,
+            count(*) FILTER (WHERE p.membership = 'dropped')::int AS dropped
        FROM instrument_profiles p
        JOIN instruments i ON i.id = p.instrument_id`,
   );
-  return row ?? { profiles: 0, equities: 0, etfs: 0, embedded: 0, etf_holdings: 0, on_demand: 0 };
+  return (
+    row ?? { profiles: 0, equities: 0, etfs: 0, embedded: 0, etf_holdings: 0, on_demand: 0, dropped: 0 }
+  );
 }
 
 /**

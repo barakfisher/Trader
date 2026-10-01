@@ -48,6 +48,7 @@ export function universeStatus(
     embedded: counts.embedded,
     etfHoldings: counts.etf_holdings,
     onDemand: counts.on_demand,
+    dropped: counts.dropped,
   };
   if (!load) return { lastLoad: null, database, reconciliation: [] };
 
@@ -63,8 +64,10 @@ export function universeStatus(
     database,
     reconciliation: [
       reconcile('members', count('members'), counts.profiles, [
-        ['no description on this installation', count('undescribed')],
-        ['no currency reported by the provider', count('no_currency')],
+        // A skipped member that kept an earlier snapshot's profile is in the
+        // database, so it is not one of the missing (the `_kept` counts).
+        ['no description on this installation', count('undescribed') - count('undescribed_kept')],
+        ['no currency reported by the provider', count('no_currency') - count('no_currency_kept')],
       ]),
       reconcile('etf_holdings', count('holding_rows'), counts.etf_holdings, [
         ['weight is not a fraction of the fund', count('holdings_implausible')],

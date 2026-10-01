@@ -176,6 +176,14 @@ class Settings(BaseSettings):
     # CORPUS_DIR in the environment always wins.
     corpus_dir: str = Field(default_factory=_default_corpus_dir)
 
+    # A writable directory that outlives the process: a compose volume, a
+    # Kubernetes PersistentVolumeClaim. The rescreen (M8) writes each new
+    # universe snapshot under `snapshots/` here, with its fetch caches under
+    # `cache/`, and the universe loader reads the newest snapshot found here or
+    # in the image. Unset, the installation cannot rescreen - a configuration,
+    # answered as such - and the loader reads the image's snapshot alone.
+    universe_snapshot_dir: str | None = None
+
     # Absolute path to the outlet-country table (`data/outlets`, decision 61).
     # Resolved for the current runtime; OUTLETS_DIR in the environment always wins.
     outlets_dir: str = Field(default_factory=_default_outlets_dir)

@@ -28,7 +28,9 @@ def load_record(
     """The loader's counts, named for the reconciliation they support.
 
     `members = profiled + undescribed + no_currency` - where `profiled` is
-    created + text_changed + unchanged - and `holding_rows = stored +
+    created + text_changed + unchanged; of the skipped, `undescribed_kept` and
+    `no_currency_kept` still hold an earlier profile, so they are in the
+    database and not among the missing - and `holding_rows = stored +
     implausible + of_unprofiled_etf`. The admin page checks both sums and
     flags any remainder as unexplained.
     """
@@ -40,6 +42,8 @@ def load_record(
         "unchanged": report.unchanged,
         "undescribed": report.undescribed,
         "no_currency": report.no_currency,
+        "undescribed_kept": report.undescribed_kept,
+        "no_currency_kept": report.no_currency_kept,
         "holding_rows": holding_rows,
         "holdings_stored": holdings.total,
         "holdings_matched_by_symbol": holdings.matched_by_symbol,

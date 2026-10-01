@@ -28,6 +28,7 @@ import {
   narrationConfigSchema,
   portfolioScanResponseSchema,
   profileRequestResponseSchema,
+  rescreenResponseSchema,
   topicScanResponseSchema,
   newsCollectResponseSchema,
   quoteResponseSchema,
@@ -60,6 +61,7 @@ export type ConceptSearchMatch = components['schemas']['ConceptSearchMatch'];
 export type AskRequest = components['schemas']['AskRequest'];
 export type AskResponse = components['schemas']['AskResponse'];
 export type ProfileRequestResponse = components['schemas']['ProfileRequestResponse'];
+export type RescreenResponse = components['schemas']['RescreenResponse'];
 export type AskCitation = components['schemas']['AskCitation'];
 export type TopicResolveResponse = components['schemas']['TopicResolveResponse'];
 export type TopicCandidate = components['schemas']['TopicCandidateOut'];
@@ -206,6 +208,18 @@ export class AiClient {
     return this.request('/universe/profiles', profileRequestResponseSchema, {
       method: 'POST',
       body: JSON.stringify({ symbol }),
+      requestId,
+    });
+  }
+
+  /**
+   * Carry out a claimed `universe_rescreen` run. Answered at once; the AI
+   * service builds in the background and finishes the run row itself.
+   */
+  rescreen(runId: string, requestId?: string): Promise<RescreenResponse> {
+    return this.request('/universe/rescreen', rescreenResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify({ run_id: runId }),
       requestId,
     });
   }

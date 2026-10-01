@@ -94,6 +94,17 @@ spec:
           resources:
             requests: { cpu: 100m, memory: 256Mi }
             limits: { memory: 1Gi }
+          # Where a rescreen writes the new universe snapshot (decision 90).
+          volumeMounts:
+            - name: universe-snapshots
+              mountPath: /var/lib/traders/universe
+      # The image's user (uid 10001) owns files it writes to the claim.
+      securityContext:
+        fsGroup: 10001
+      volumes:
+        - name: universe-snapshots
+          persistentVolumeClaim:
+            claimName: universe-snapshots
 ---
 # A HorizontalPodAutoscaler changes how many copies of a Deployment run, from
 # measurements: every 15 s it reads each pod's CPU use from metrics-server,

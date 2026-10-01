@@ -402,6 +402,21 @@ describe('API', () => {
     expect(queries.finishRun).toHaveBeenCalledWith('run-1', 'failed', expect.anything());
   });
 
+  it("starts a rescreen as the installation's run - no user - and answers 202", async () => {
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'universe_rescreen', trigger: 'cron' }),
+    });
+    expect(response.status).toBe(202);
+    expect(queries.claimRun).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: null, kind: 'universe_rescreen', trigger: 'cron' }),
+    );
+    // The AI service finishes it, in the background - not this request.
+    expect(queries.finishRun).not.toHaveBeenCalled();
+    expect(queries.getUser).not.toHaveBeenCalled();
+  });
+
   it('deduplicates a repeated run so a double trigger is a no-op', async () => {
     const init = {
       method: 'POST',

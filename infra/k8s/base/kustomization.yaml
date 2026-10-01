@@ -18,6 +18,7 @@ resources:
   - namespace.yaml
   - postgres.yaml
   - redis.yaml
+  - universe-snapshots.yaml
   - jobs.yaml
   - ai-service.yaml
   - orchestrator.yaml

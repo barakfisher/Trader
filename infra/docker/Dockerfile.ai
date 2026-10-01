@@ -48,8 +48,11 @@ COPY data/outlets /app/data/outlets
 
 RUN pip install --no-cache-dir --no-deps -e .
 
-# Run as a non-root user.
-RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
+# Run as a non-root user. The universe snapshot directory is created here, owned
+# by that user, because a new Docker volume mounted on it starts as a copy of it:
+# without it the rescreen's volume would be root's and unwritable (decision 90).
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app \
+    && mkdir -p /var/lib/traders/universe && chown -R appuser:appuser /var/lib/traders
 USER appuser
 
 EXPOSE 8000
