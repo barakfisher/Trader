@@ -121,7 +121,10 @@ Admin page. And through this endpoint it runs only when **due** - the snapshot l
 days old - so a manual trigger usually answers `not due`. To rescreen now, use the Admin page's
 **Rescreen universe** button (audited), which is never held back. It rewrites what every topic
 resolves against: think twice, as with the digest. A failed rescreen is retried the same day by
-any trigger and resumes from its fetch cache.
+any trigger and resumes from its fetch cache. One whose process died (no heartbeat for 5 minutes)
+is closed as `failed` by the next claim of any day - the hourly CronJob's or the button's - with
+`stats.supersededBy` naming the run that took over, which resumes from the same cache; no row
+needs editing by hand.
 
 On the cluster, `kubectl create job --from=cronjob/run-<kind> <name>` triggers the same request as
 the schedule - with the default key, so it is `skipped` if the bucket already ran.

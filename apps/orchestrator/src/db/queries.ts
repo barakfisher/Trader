@@ -496,23 +496,37 @@ export interface ClaimRunInput {
 export async function claimRun(
   input: ClaimRunInput,
 ): Promise<{ claimed: boolean; runId: string | null; existingStatus?: string }> {
-  let inserted: { id: string } | null;
-  try {
-    inserted = await queryOne<{ id: string }>(
+  const insert = () =>
+    queryOne<{ id: string }>(
       `INSERT INTO runs (user_id, kind, run_key, trigger, status)
        VALUES ($1, $2, $3, $4, 'running')
        ON CONFLICT (run_key) DO NOTHING
        RETURNING id`,
       [input.userId, input.kind, input.runKey, input.trigger],
     );
+  let inserted: { id: string } | null;
+  try {
+    inserted = await insert();
   } catch (error) {
     // `ON CONFLICT (run_key)` covers the run key only. A second rescreen under
     // another key - yesterday's still running past midnight - meets the
-    // partial unique index instead, and that is a refusal, not a failure.
-    if ((error as { code?: string }).code === UNIQUE_VIOLATION) {
+    // partial unique index instead. A live one is a refusal, not a failure.
+    if ((error as { code?: string }).code !== UNIQUE_VIOLATION) throw error;
+    // A dead one is not (independent task 12). Its key names its own day, so
+    // nothing would ever claim that key again to reclaim it, and every later
+    // day's key met this index - the button and the CronJob refused forever,
+    // until someone edited the row. Close it out and claim once more; the
+    // rescreen's fetch cache is not tied to a key, so the new run resumes.
+    const abandoned = await abandonDeadRuns(input.kind, input.runKey);
+    if (abandoned === 0) {
       return { claimed: false, runId: null, existingStatus: 'running (another run of this kind)' };
     }
-    throw error;
+    try {
+      inserted = await insert();
+    } catch (retryError) {
+      if ((retryError as { code?: string }).code !== UNIQUE_VIOLATION) throw retryError;
+      return { claimed: false, runId: null, existingStatus: 'running (another run of this kind)' };
+    }
   }
   if (inserted) return { claimed: true, runId: inserted.id };
 
@@ -548,6 +562,33 @@ export async function claimRun(
     [input.runKey],
   );
   return { claimed: false, runId: null, existingStatus: existing?.status };
+}
+
+/**
+ * Mark failed every run of `kind` left `running` by a dead process, naming the
+ * run that found it. "Dead" is `claimRun`'s own test for reclaiming a key: a
+ * stale heartbeat, or - for a run that never beat, such as a rescreen whose
+ * process died between the claim and its first beat - a start older than
+ * STALE_RUN_MINUTES.
+ */
+async function abandonDeadRuns(kind: string, supersededBy: string): Promise<number> {
+  const rows = await query<{ run_key: string }>(
+    `UPDATE runs
+        SET status = 'failed', finished_at = now(),
+            stats = COALESCE(stats, '{}'::jsonb) || jsonb_build_object(
+              'error', 'abandoned: its process stopped before finishing',
+              'supersededBy', $4::text)
+      WHERE kind = $1 AND status = 'running'
+        AND CASE WHEN heartbeat_at IS NULL
+                 THEN started_at < now() - ($2 || ' minutes')::interval
+                 ELSE heartbeat_at < now() - ($3 || ' minutes')::interval END
+      RETURNING run_key`,
+    [kind, String(STALE_RUN_MINUTES), String(HEARTBEAT_STALE_MINUTES), supersededBy],
+  );
+  for (const row of rows) {
+    logger().warn({ runKey: row.run_key, supersededBy }, 'closed a run whose process stopped heartbeating');
+  }
+  return rows.length;
 }
 
 /** Whether any run, in any state, holds `runKey`. */

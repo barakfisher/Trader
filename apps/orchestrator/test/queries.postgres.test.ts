@@ -206,6 +206,51 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       await queries.finishRun(first.runId!, 'ok');
     });
 
+    it("takes over from yesterday's dead rescreen instead of refusing every day after", async () => {
+      // Independent task 12: a dead run's key names its own day, so only
+      // another key's claim can ever find it.
+      const yesterday = key('dead-yesterday');
+      const dead = await claim(yesterday);
+      await getPool().query(
+        `UPDATE runs SET heartbeat_at = now() - ($2 || ' minutes')::interval WHERE id = $1`,
+        [dead.runId, String(queries.HEARTBEAT_STALE_MINUTES + 1)],
+      );
+      const today = await claim(key('today'));
+      expect(today.claimed).toBe(true);
+      const { rows } = await getPool().query<{ status: string; stats: Record<string, unknown> }>(
+        'SELECT status, stats FROM runs WHERE id = $1',
+        [dead.runId],
+      );
+      expect(rows[0]!.status).toBe('failed');
+      expect(rows[0]!.stats).toMatchObject({ supersededBy: expect.stringContaining('today') });
+      await queries.finishRun(today.runId!, 'ok');
+    });
+
+    it('takes over from one that died before its first heartbeat, once it is old enough', async () => {
+      const yesterday = key('never-beat');
+      const dead = await claim(yesterday);
+      // Never beat, started an hour ago: past STALE_RUN_MINUTES.
+      await getPool().query(
+        `UPDATE runs SET started_at = now() - interval '1 hour', heartbeat_at = NULL WHERE id = $1`,
+        [dead.runId],
+      );
+      const today = await claim(key('after-never-beat'));
+      expect(today.claimed).toBe(true);
+      await queries.finishRun(today.runId!, 'ok');
+    });
+
+    it('leaves a live rescreen under another key alone', async () => {
+      const live = await claim(key('live'));
+      await getPool().query(`UPDATE runs SET heartbeat_at = now() WHERE id = $1`, [live.runId]);
+      expect((await claim(key('blocked'))).claimed).toBe(false);
+      const { rows } = await getPool().query<{ status: string }>(
+        'SELECT status FROM runs WHERE id = $1',
+        [live.runId],
+      );
+      expect(rows[0]!.status).toBe('running');
+      await queries.finishRun(live.runId!, 'ok');
+    });
+
     it('retries a failed rescreen under its own key, and nothing else', async () => {
       const runKey = key('retry');
       const first = await claim(runKey);
