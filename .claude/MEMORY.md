@@ -4,7 +4,27 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-09-30 ~22:40 UTC - **M8 handoff at CLAUDE.md's five-merged-PR trigger (#120-#124).
+Updated: 2026-10-01 ~06:40 UTC - **M8's closing handoff (milestone boundary). M8 is complete, and
+it was the last milestone in `docs/MILESTONES.md`; the next session starts by choosing what follows
+it** - see "Next session: after M8" in "Where to go next". This session (grant: PR, merge on green,
+rebuild compose, create/delete the kind cluster - **it ends here; ask again**):
+- #126 (decision 88): the LLM panel - per agent, and narration's fallback reasons reconciled
+  against the calls behind them; shown on compose with real narration calls;
+- #127 (decision 89): on-demand profiles - described, never members; four readers, not one, had
+  to be filtered;
+- #128 (decision 90): the rescreen as a heartbeating background run into a volume (a
+  PersistentVolumeClaim in kind) the loader reads newest-first. **The first real rescreen found
+  three bugs no test had** - a rate limit a sample hid, a weight that rounds to zero, a snapshot
+  published before its load - plus a reconciliation gap; all in "Bugs";
+- #129 (decision 91): the CronJob asks hourly and rescreens when the loaded snapshot is a quarter
+  old; the button and the CronJob are one run;
+- CI was refused for a while by a GitHub billing block (jobs "not started" in 3 s - not a code
+  failure; it cleared at the 1 Oct 00:00 UTC monthly reset). Read the annotation before the log.
+**The compose universe has not been rescreened** (the user was asked; it rewrites the real
+universe); it falls due by itself on 2026-12-24. **The user has no Docker/Kubernetes background** -
+keep explaining infrastructure from first principles.
+
+Previous handoff, 2026-09-30 ~22:40 UTC - **M8 handoff at CLAUDE.md's five-merged-PR trigger (#120-#124).
 M8 is in progress: the admin surface exists and is guarded, audited, and shows runs, universe gaps
 and the universe's status; every model call is recorded. The next session starts PR 6, the LLM
 panel** - see "Next session: M8, continued" in "Where to go next". This session (grant: PR, merge
@@ -256,7 +276,7 @@ kept so the next sweep has somewhere to add to.
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
-| M8 — Admin operations & observability | **In progress** | #120-#124, #126-#129: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel, on-demand profiles, the rescreen run and its CronJob. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event and profiled within one background fetch ✅ (#127, decision 89); rescreen button ✅ (#128, decision 90; shown in kind); button and CronJob are one run ✅ (#129, decision 91; shown in kind). Left: PR 10, the exit check and the closing handoff. See "Next session: M8, continued" |
+| M8 — Admin operations & observability | ✅ Complete | #120-#124, #126-#130: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel, on-demand profiles, the rescreen run and its CronJob. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event and profiled within one background fetch ✅ (#127, decision 89); rescreen button ✅ (#128, decision 90; shown in kind); button and CronJob are one run ✅ (#129, decision 91; shown in kind). Checked live 2026-10-01 - see "M8 is complete, and how it was verified" |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
 not anticipate, found by running the thing rather than by reading it. M1.5 came from auditing the
@@ -2332,7 +2352,41 @@ up through a tunnel. It needs `setWebhook` on the real bot (which stops any poll
 signing secret different from the webhook secret (decision 20). The #98 crypto-close check (below) was
 also still pending at the close.
 
-### Next session: M8, continued
+### M8 is complete, and how it was verified
+
+**Exit** (`docs/MILESTONES.md`, as reworded by decisions 85 and 89-91), checked 2026-10-01 on the
+running systems, not only in tests:
+- **A non-admin session gets 403 on every `/admin/*` route.** `adminGuard.test.ts` enumerates
+  `app.routes`; the kind CI job demotes the admin. Live in kind: all six routes (five reads and
+  `POST /admin/universe/rescreen`) answered 200 as admin and **403 with the same cookie** after
+  `UPDATE users SET role='user'`; the role was restored.
+- **The rescreen button and the CronJob produce the same single run.** Kind: the button's run
+  `universe-rescreen:2026-10-01` (ok, 22 dropped); the CronJob's own tick, a Job made from it,
+  and a later button press all answered *already claimed (ok)*; one rescreen row in `runs`.
+- **The panel shows per-agent latency, tokens, cost and fallback reasons from real calls.**
+  Compose: narration 3 calls (2 accepted, 1 unsourced), p50/p95 5.7 s / 34.1 s, 1,507/293
+  tokens, "free route"; ask 1 call; the reconciliation agreed reason by reason (2/2, 1/1); TTFT
+  and cache hit rate stated as unmeasured.
+- **A searched missing ticker appears as a gap event and is profiled within one fetch.** Compose
+  (#127): an import preview of BYND and GPRO profiled both within a second; SAP.DE, outside the
+  screen, was not fetched; "plant-based meat" still resolved without them.
+
+### Next session: after M8
+
+`docs/MILESTONES.md` has no milestone after M8. **Ask the user what comes next**, with a
+recommendation; the options as they stand:
+1. **A debt sweep into the independent-tasks queue** (it is empty), the way it was done on
+   2026-09-28 - the debt table has grown through M8 (ReadWriteOnce volume, a dead rescreen waits
+   for a trigger, on-demand profiles never refreshed, the `:free`-suffix rule, the 0.007 topic
+   gate). Recommended first: it is how the last queue was built, and it is cheap.
+2. **The items deliberately left out of the queue** ("Not in the queue, and why"): everyday-word
+   company names, ", LP" names, citing news in observations, splitting `queries.ts` - each was
+   held for the user's decision or for data.
+3. **A real deployment** (decision 20's signing secret, Telegram's webhook leg, ReadWriteMany
+   storage or a pinned rescreen node) - a new milestone the user would write.
+Also open: **rescreening compose** (ask; or let it fall due on 2026-12-24).
+
+### Next session: M8, continued (history - superseded by "M8 is complete")
 
 **Where M8 stands** (2026-09-30 ~22:40 UTC): PRs 1-5 of the agreed ten are merged (#120-#124).
 The #98 check is done (see the header). Before any code this session measured the running system
