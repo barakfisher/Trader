@@ -29,15 +29,22 @@ price observed in the future. Two rules now hold:
     are replaced (same source, `delay_seconds = 0`): a live quote that happens to
     share the 20:00 stamp is an observation, and an observation is never
     rewritten.
+
+**A crypto day ends at midnight UTC, not at its candle's 20:00 stamp.** The
+first rule alone stored a ~21:00 BTC price as that day's close on the first
+backfill after 20:00 and corrected it the next night - one day on which the
+rules read an intraday price as a close. A crypto candle is now final only once
+its UTC day is over (`is_final`); an equity's, at its stamp, as before.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
 
+from app.core.cache_policy import is_continuous
 from app.core.logging import get_logger
 from app.models import BackfillInstrument, BackfillResponse
 from app.providers.registry import MarketDataService
@@ -59,6 +66,20 @@ _INSERT = text(
 )
 
 
+def is_final(symbol: str, as_of: datetime, now: datetime) -> bool:
+    """Has the session behind a daily candle stamped `as_of` ended by `now`?
+
+    A listed instrument's candle is stamped at its close. A crypto candle is
+    stamped 20:00 UTC too, but its day runs until the next midnight UTC.
+    """
+    if is_continuous(symbol, None):
+        day_end = datetime.combine(
+            as_of.astimezone(UTC).date() + timedelta(days=1), datetime.min.time(), UTC
+        )
+        return day_end <= now
+    return as_of <= now
+
+
 async def backfill_history(
     connection: object,
     market: MarketDataService,
@@ -78,7 +99,7 @@ async def backfill_history(
 
     for instrument in instruments:
         fetched = await market.history(instrument.symbol, days)
-        closes = [close for close in fetched if close.as_of <= moment]
+        closes = [close for close in fetched if is_final(instrument.symbol, close.as_of, moment)]
         response.not_final += len(fetched) - len(closes)
         if not closes:
             response.without_history.append(instrument.symbol.upper())

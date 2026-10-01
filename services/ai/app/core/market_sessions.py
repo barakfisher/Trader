@@ -74,3 +74,15 @@ def session_for(exchange: str | None) -> Session:
     if exchange is None:
         return US
     return _SESSIONS.get(exchange.strip().upper(), US)
+
+
+def known_session(exchange: str | None) -> Session | None:
+    """The session for `exchange` when this table names it, else None.
+
+    For a caller that must not guess: `session_for`'s US fallback is right for
+    a cache TTL (wrong costs a few requests) and wrong for re-dating a price
+    (wrong moves an observation to another day).
+    """
+    if exchange is None:
+        return None
+    return _SESSIONS.get(exchange.strip().upper())

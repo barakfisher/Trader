@@ -14,6 +14,7 @@ from decimal import Decimal
 
 import pytest
 
+from app.analysis.backfill import is_final
 from app.models import BackfillInstrument
 from app.providers.base import ProviderError
 
@@ -194,3 +195,22 @@ async def test_history_dates_do_not_collide_with_intraday_quotes(fixture_provide
         for a, b in zip(closes, closes[1:])  # noqa: B905 - deliberately ragged
     }
     assert all(gap >= timedelta(days=1) for gap in gaps)
+
+
+class TestIsFinal:
+    """When a daily candle stamped at 20:00 UTC (CLOSE_TIME) is a close."""
+
+    STAMP = datetime(2026, 9, 30, 20, 0, tzinfo=UTC)
+
+    def test_an_equity_day_is_final_at_its_stamp(self):
+        assert is_final("AAPL", self.STAMP, self.STAMP) is True
+
+    def test_a_crypto_day_is_still_trading_after_its_stamp(self):
+        # The case that stored a ~21:00 BTC price as the day's close.
+        assert is_final("BTC-USD", self.STAMP, datetime(2026, 9, 30, 21, 0, tzinfo=UTC)) is False
+        assert (
+            is_final("BTC-USD", self.STAMP, datetime(2026, 9, 30, 23, 59, 59, tzinfo=UTC)) is False
+        )
+
+    def test_a_crypto_day_is_final_at_midnight_utc(self):
+        assert is_final("BTC-USD", self.STAMP, datetime(2026, 10, 1, 0, 0, tzinfo=UTC)) is True

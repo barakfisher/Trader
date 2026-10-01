@@ -22,11 +22,13 @@ skips the provider and the chain continues.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import UTC, datetime
 
 from app.config import Settings
 from app.core.cache import Cache
 from app.core.cache_policy import quote_ttl
 from app.core.logging import get_logger
+from app.core.observation_time import at_last_close
 from app.core.ratelimit import RateLimiter
 from app.models import DailyClose, FxRate, InstrumentResolution, Quote, QuoteMarket
 from app.providers.base import MarketDataProvider, ProviderError
@@ -118,12 +120,20 @@ class MarketDataService:
                 log.warning("providers.failed", provider=provider.name, error=str(exc))
                 continue
             for quote in quotes:
+                market = market_of.get(quote.symbol.upper())
+                # A Sunday read of a stock is Friday's close, and is dated so.
+                quote.as_of = at_last_close(
+                    quote.as_of,
+                    datetime.now(UTC),
+                    symbol=quote.symbol,
+                    asset_class=market.asset_class if market else None,
+                    exchange=market.exchange if market else None,
+                )
                 found[quote.symbol] = quote
                 payload = quote.model_dump(mode="json")
                 # The TTL is per quote, not per config: a 15-minute-delayed
                 # equity and a 24/7 crypto pair from the same provider have
                 # different notions of "fresh". See core/cache_policy.py.
-                market = market_of.get(quote.symbol.upper())
                 ttl = quote_ttl(
                     quote.symbol,
                     provider.delay_seconds,
