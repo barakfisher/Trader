@@ -245,11 +245,27 @@ them; task 1 (money at the currency's exponent) was done in #73, task 2 (the nar
 decision 58) in #74, task 3 (the Topics page in a browser) in #75, and task 4 (the Postgres CI
 job, approved by the user 2026-09-28) in #76, and task 5 (quotes carry asset class and exchange) in
 the PR after that. Task 7 (server state in TanStack Query) was done across #90-#92 and the topics PR
-that closed it, and task 6 (a screen for `/ask`) in M6 PR 10. **The queue is empty**; the table is
-kept so the next sweep has somewhere to add to.
+that closed it, and task 6 (a screen for `/ask`) in M6 PR 10. That queue emptied at M8's close.
+
+**The post-M8 sweep (2026-10-01)** refilled it as tasks 8-15, approved by the user in that order,
+with the same grant as M8 (PR, merge on green, verify on `main` by content, rebuild compose and
+kind). It was measured on compose before it was written: the BTC-USD drift was proposed **7 days
+running** (25 Sep-1 Oct; approved once, 5 expired unanswered), only 2 low-confidence gap events
+exist (both hand-made), only 2 profiles are `on_demand`, and no run was stuck. **Next after the
+queue: Hebrew and RTL** - which needs CLAUDE.md guideline 1 amended first (the proposal: code and
+docs stay English, UI copy becomes localizable with English the default); measure hard-coded
+strings and left-to-right assumptions before designing it.
 
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
+| 8 | **One open proposal per subject and kind** | - (P5) | S-M | `services/proposals.ts`. A standing drift nobody fixed is asked once, not daily: while a proposal for the same `subjectRef` and kind is pending or snoozed, a new observation refreshes it (or is skipped) instead of opening another. Resolves the "one standing drift is proposed again every day" debt row. The observation key keeps changing daily - that part is right |
+| 9 | **Separate database roles** | M8 §5 | M | An owner role runs Alembic; the application connects as a plain role with `INSERT, SELECT` only on `admin_audit`. Compose, kind and CI `DATABASE_URL`s. `test_the_app_role_is_a_superuser...` fails when it lands - delete it and the debt row. Also correct `docs/MILESTONES.md` M8 §5, which today claims Postgres enforces what only triggers enforce |
+| 10 | **Edit a holding's cost basis on screen**, and the sign-in page's wording | M6 (FR-2) | S | `HoldingsTable.tsx`, `useHoldingEditor`: cost per unit beside quantity. The sign-in page stops saying "the passphrase from your environment file" as if compose were the only installation. Resolves both debt rows |
+| 11 | **Session-aware closes** | M2.5 | S-M | The quote path does not store an equity quote dated outside its exchange's session (the Sunday "close"), and the backfill finalises a crypto day at 00:00 UTC, not 20:00 - both from `market_sessions.py`. Resolves the two debt rows |
+| 12 | **A dead rescreen is reclaimed by the next hourly check** | M8 | S | `app/universe/rescreen.py`, `claimRun`. A `running` rescreen with a stale heartbeat is taken over whatever day its key names, so a death no longer waits for a click. Resolves the debt row |
+| 13 | **`k8s-up.sh` recovers a missing `secrets.env` from the cluster** | M7 | S | Instead of generating a new DB password that locks out the existing Postgres. `docs/RUNBOOK.md` section 1 already has the steps; the script runs them. Resolves the debt row |
+| 14 | **Close the workflow when a direct-apply fallback decides a proposal** | M4 | S | So `mastra_workflow_snapshot` no longer keeps a suspended run for a decided proposal. Resolves the debt row |
+| 15 | **Split `queries.ts` by domain** | - | M | **Decided by the user 2026-10-01.** `src/db/queries/<domain>.ts` plus an index; CLAUDE.md's rule becomes "all SQL lives under `src/db/queries/`". Pure move, no query text changes. Resolves the conflict debt row. Done before the multi-agent work, which edits nearly every query |
 
 **Not in the queue, and why** - so they are not added back by the next sweep:
 - *Everyday-word company names* ("Apple" the fruit): the user deferred it to a dedicated PR after
@@ -258,7 +274,10 @@ kept so the next sweep has somewhere to add to.
   without a new held-out batch (batch 3) written by the user.
 - *Citing news in observations* (`articles=()`): would cite the fruit headlines as evidence; after
   the everyday-word fix.
-- *Splitting `queries.ts`*: changes CLAUDE.md's "all SQL in one file" rule - the user's decision.
+- *The 0.007 topic gate*: 2 low-confidence events exist, both hand-made; wait for real ones.
+- *ReadWriteOnce snapshot volume, Telegram's webhook leg*: belong to a real deployment.
+- *The `:free`-suffix cost rule*: matters once the workspace is funded.
+- *On-demand profiles never refreshed*: 2 rows; revisit when gap events show real use.
 
 ---
 
