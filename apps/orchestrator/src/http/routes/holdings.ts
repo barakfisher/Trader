@@ -208,12 +208,23 @@ export function registerHoldingsRoutes(app: Hono<AppEnv>): void {
     }
     const { costBasis, ...rest } = parsed.data;
     const currency = rest.currency?.toUpperCase();
+    // A cost with no currency is in the holding's own currency. This used to
+    // read it at USD's exponent, so 1500 JPY was stored as 150000 - a hundred
+    // times the cost - whenever a client sent the amount alone.
+    let costCurrency = currency;
+    if (costBasis != null && costCurrency === undefined) {
+      const holding = await getHolding(userId, context.req.param('id'));
+      if (!holding) throw notFound('holding not found');
+      costCurrency = holding.currency;
+    }
     const updated = await updateHolding(userId, context.req.param('id'), {
       ...rest,
       ...(currency ? { currency } : {}),
       ...(costBasis === undefined
         ? {}
-        : { costBasisMinor: costBasis === null ? null : parseToMinor(costBasis, currency ?? 'USD') }),
+        : {
+            costBasisMinor: costBasis === null ? null : parseToMinor(costBasis, costCurrency!),
+          }),
     });
     if (!updated) throw notFound('holding not found');
     return context.json({ id: updated.id, symbol: updated.symbol });

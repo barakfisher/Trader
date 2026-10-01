@@ -36,11 +36,20 @@ export function useAddHolding() {
   });
 }
 
-export function useUpdateQuantity() {
+/** What an edit changes: the quantity always, the cost per unit only when it was touched. */
+export interface HoldingEdit {
+  holdingId: string;
+  quantity: string;
+  /** A decimal per unit in `currency`; null clears it. Absent: left as stored. */
+  costBasis?: string | null;
+  currency?: string;
+}
+
+export function useUpdateHolding() {
   const invalidate = useInvalidatePortfolio();
   return useMutation({
-    mutationFn: ({ holdingId, quantity }: { holdingId: string; quantity: string }) =>
-      api.patch(`/holdings/${holdingId}`, { quantity }),
+    mutationFn: ({ holdingId, ...fields }: HoldingEdit) =>
+      api.patch(`/holdings/${holdingId}`, fields),
     onSuccess: invalidate,
   });
 }

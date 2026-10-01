@@ -327,6 +327,39 @@ describe('API', () => {
     expect(await response.json()).toMatchObject({ error: 'invalid_body' });
   });
 
+  it("reads a cost sent without a currency at the holding's own exponent", async () => {
+    vi.mocked(queries.getHolding).mockResolvedValueOnce({
+      ...holdingRow,
+      currency: 'JPY',
+    } as unknown as Awaited<ReturnType<typeof queries.getHolding>>);
+    const cookie = await loginCookie(app);
+    const response = await app.request('/holdings/holding-1', {
+      method: 'PATCH',
+      headers: { ...ORIGIN, cookie },
+      body: JSON.stringify({ costBasis: '1500' }),
+    });
+    expect(response.status).toBe(200);
+    // 1500 yen, not 150000: JPY has no minor unit.
+    expect(queries.updateHolding).toHaveBeenLastCalledWith(USER.id, 'holding-1', {
+      costBasisMinor: 1500,
+    });
+  });
+
+  it('reads a cost sent with a currency at that currency', async () => {
+    const cookie = await loginCookie(app);
+    const response = await app.request('/holdings/holding-1', {
+      method: 'PATCH',
+      headers: { ...ORIGIN, cookie },
+      body: JSON.stringify({ quantity: '12', costBasis: '185.40', currency: 'usd' }),
+    });
+    expect(response.status).toBe(200);
+    expect(queries.updateHolding).toHaveBeenLastCalledWith(USER.id, 'holding-1', {
+      quantity: '12',
+      currency: 'USD',
+      costBasisMinor: 18540,
+    });
+  });
+
   it('previews an import without writing anything', async () => {
     const cookie = await loginCookie(app);
     const response = await app.request('/imports/preview', {

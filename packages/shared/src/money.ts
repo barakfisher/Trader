@@ -18,6 +18,20 @@ export function minorToNumber(minor: number, currency: string): number {
   return minor / 10 ** minorUnitExponent(currency);
 }
 
+/**
+ * Integer minor units -> the plain decimal a person would type: `12345` USD is
+ * `"123.45"`, `1500` JPY is `"1500"`. Exact (integer arithmetic on the digits),
+ * so `parseToMinor` reads it back to the same integer - which is what lets an
+ * edit field start from the stored value without moving it.
+ */
+export function minorToDecimalString(minor: number, currency: string): string {
+  const exponent = minorUnitExponent(currency);
+  const digits = String(Math.abs(Math.trunc(minor))).padStart(exponent + 1, '0');
+  const sign = minor < 0 ? '-' : '';
+  if (exponent === 0) return `${sign}${digits}`;
+  return `${sign}${digits.slice(0, -exponent)}.${digits.slice(-exponent)}`;
+}
+
 /** Parse a user-entered decimal amount into integer minor units (half up). */
 export function parseToMinor(input: string | number, currency: string): number | null {
   const text = String(input).trim().replace(/,/g, '');
