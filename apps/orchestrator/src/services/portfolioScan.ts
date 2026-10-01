@@ -22,6 +22,7 @@ import {
 import { logger } from '../logger.js';
 import { mayRaiseProposal, startProposalLifecycle } from '../mastra/proposalLifecycle.js';
 import type { Notifier } from '../notify/notifier.js';
+import { admitCandidates, settleEpisodes } from './proposalEpisodes.js';
 import { watchNarration, type NarrationWatchOutcome } from './narrationWatch.js';
 import { fanOut, settingsForNotification, type NotifiableFinding } from './notifications.js';
 import { valuePortfolio } from './valuation.js';
@@ -43,6 +44,10 @@ export interface ScanResult {
   /** New findings that warranted a decision, and how many became one. */
   proposalsSelected: number;
   proposalsCreated: number;
+  /** Selected, but their subject was already asked about (decision 92). */
+  proposalsHeld: number;
+  /** Episodes this scan saw resolved, so the next return is asked about again. */
+  episodesResolved: number;
   /** Where the new findings went: pushed now, deferred to the digest, or already sent. */
   notified: { pushed: number; deferred: number; duplicate: number; failed: number };
   /** What this scan learned about who writes the explanations (`narrationWatch.ts`). */
@@ -71,6 +76,8 @@ export async function runPortfolioScan(
       degraded: false,
       proposalsSelected: 0,
       proposalsCreated: 0,
+      proposalsHeld: 0,
+      episodesResolved: 0,
       notified: { pushed: 0, deferred: 0, duplicate: 0, failed: 0 },
       narration: 'not_measured',
     };
@@ -168,7 +175,7 @@ export async function runPortfolioScan(
    * proposal instead of one for the batch, which at the current policy (one
    * proposable kind, one finding at a time) is the same INSERT.
    */
-  const candidates = inserted
+  const selected = inserted
     .map((observation) => ({
       id: observation.id,
       kind: observation.kind,
@@ -177,6 +184,24 @@ export async function runPortfolioScan(
       evidence: observation.evidence,
     }))
     .filter((finding) => mayRaiseProposal(finding, settings.proposal_severity));
+
+  /**
+   * A new observation is not a new question (decision 92). First close the
+   * episodes this scan shows resolved - judged on everything it saw, since the
+   * observations above are only what is new - then let through the candidates
+   * whose subject has no open episode, or whose finding has worsened or turned.
+   */
+  const episodesResolved = await settleEpisodes(
+    user.id,
+    response.stats.seen ?? [],
+    { allocation_drift: !response.stats.drift_skipped_reason },
+    settings.proposal_severity,
+  );
+  const { admitted: candidates, held: proposalsHeld } = await admitCandidates(
+    user.id,
+    selected,
+    settings.proposal_severity,
+  );
 
   const raised: { proposalId: string | null }[] = [];
   for (const finding of candidates) {
@@ -269,8 +294,10 @@ export async function runPortfolioScan(
     // did less than it appears to have done. Recording that is the difference
     // between "nothing happened" and "we did not look".
     degraded: portfolio.summary.degraded || skipped.length > 0,
-    proposalsSelected: candidates.length,
+    proposalsSelected: selected.length,
     proposalsCreated: raised.filter((lifecycle) => lifecycle.proposalId !== null).length,
+    proposalsHeld,
+    episodesResolved,
     notified: {
       pushed: notified.pushed,
       deferred: notified.deferred,

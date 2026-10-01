@@ -102,3 +102,4 @@ while this file is out of date.
 | 89 | An on-demand profile describes a listing without making it a member |
 | 90 | The rescreen is a run the orchestrator claims and the AI service finishes, on a heartbeat, into a volume the loader reads newest-first |
 | 91 | The quarterly rescreen asks hourly, and is due by the age of the snapshot loaded |
+| 92 | A standing finding is asked about once per episode, not once per observation |

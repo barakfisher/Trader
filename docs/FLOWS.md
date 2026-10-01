@@ -48,6 +48,8 @@ sequenceDiagram
   A->>A: correlate price↔news → narrate (validated) → concept links
   A-->>O: observations[] + proposal candidates[]
   O->>DB: upsert observations by dedupe_key
+  O->>DB: close episodes the scan saw resolved (stats.seen)
+  O->>DB: claim an episode per new candidate — open episode ⇒ no proposal (decision 92)
   O->>DB: create proposals (state=pending, expires_at)
   O->>N: fan-out (severity, quiet hours, digest batching)
   N-->>O: notification rows written with dedupe_key

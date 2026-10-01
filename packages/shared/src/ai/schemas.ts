@@ -136,6 +136,16 @@ export const scanStatsSchema = z.object({
   narration_fallbacks: z.record(z.string(), z.number().int()).optional(),
   drift_skipped_reason: z.string().nullish(),
   insufficient_history: z.array(z.string()).optional(),
+  // Every finding, new or already known - what ends a proposal episode (decision 92).
+  seen: z
+    .array(
+      z.object({
+        kind: z.string(),
+        subject_ref: z.string(),
+        severity: z.enum(['info', 'notable', 'high']),
+      }),
+    )
+    .optional(),
 });
 
 export const portfolioScanResponseSchema = z.object({

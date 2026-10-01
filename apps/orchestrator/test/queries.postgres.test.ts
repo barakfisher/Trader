@@ -396,6 +396,46 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       expect(recent[0]).toEqual({ narration_source: 'template', fallback_reason: 'no_provider' });
     });
   });
+
+  describe('proposal episodes (decision 92)', () => {
+    it('holds one open episode per subject, and reopens it only after closing', async () => {
+      const { inserted } = await queries.insertObservations([
+        {
+          userId: USER,
+          runId: null,
+          kind: 'allocation_drift',
+          severity: 'high',
+          subjectKind: 'portfolio',
+          subjectRef: 'portfolio:allocation:EPI',
+          headline: 'EPI drifted',
+          explanation: 'EPI drifted.',
+          evidence: { drift: '0.150619' },
+          conceptRefs: [],
+          dedupeKey: `test-${randomUUID()}`,
+          narrationSource: 'template',
+          fallbackReason: 'no_provider',
+        },
+      ]);
+      const episode = {
+        userId: USER,
+        observationKind: 'allocation_drift',
+        subjectRef: 'portfolio:allocation:EPI',
+        observationId: inserted[0]!.id,
+        askedMagnitude: '0.150619',
+      };
+
+      const first = await queries.claimEpisode(episode);
+      expect(first).not.toBeNull();
+      expect(await queries.claimEpisode(episode)).toBeNull();
+      expect(await queries.listOpenEpisodes(USER, 'allocation_drift')).toEqual([
+        { id: first, subject_ref: 'portfolio:allocation:EPI', asked_magnitude: '0.150619000000000000' },
+      ]);
+
+      expect(await queries.closeEpisodes(USER, [first!], 'worsened')).toBe(1);
+      expect(await queries.closeEpisodes(USER, [first!], 'resolved')).toBe(0);
+      expect(await queries.claimEpisode(episode)).not.toBeNull();
+    });
+  });
   describe('a holding page', () => {
     it("reads one holding's findings under both subject formats, and the whole feed without one", async () => {
       const insert = (ref: string, kind: string) =>

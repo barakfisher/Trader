@@ -1609,6 +1609,13 @@
             "title": "Narration Fallbacks",
             "type": "object"
           },
+          "seen": {
+            "items": {
+              "$ref": "#/components/schemas/SeenFindingOut"
+            },
+            "title": "Seen",
+            "type": "array"
+          },
           "subjects": {
             "default": 0,
             "title": "Subjects",
@@ -1621,6 +1628,35 @@
           }
         },
         "title": "ScanStatsOut",
+        "type": "object"
+      },
+      "SeenFindingOut": {
+        "description": "A finding the scan made, whether or not it is new to the caller.",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "notable",
+              "high"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "subject_ref": {
+            "title": "Subject Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "subject_ref",
+          "severity"
+        ],
+        "title": "SeenFindingOut",
         "type": "object"
       },
       "SuspectedNetwork": {
