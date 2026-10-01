@@ -1407,6 +1407,29 @@ export function listProposalsToExpire(limit = 500): Promise<ProposalRow[]> {
   );
 }
 
+/**
+ * Workflow runs still waiting on a proposal that is already decided (task 14).
+ *
+ * The run id is the observation id. A run is left like this when a resume
+ * failed and `decideProposal` fell back to writing the decision directly: the
+ * answer landed, and nothing told the waiting run. Bounded, because the sweep
+ * closes them one resume at a time.
+ */
+export async function listLeftoverLifecycles(limit = 50): Promise<string[]> {
+  const rows = await query<{ run_id: string }>(
+    `SELECT s.run_id
+       FROM mastra.mastra_workflow_snapshot s
+       JOIN proposals p ON s.run_id = p.observation_id::text
+      WHERE s.workflow_name = 'proposalLifecycle'
+        AND s.snapshot->>'status' = 'suspended'
+        AND p.state IN ('approved', 'rejected', 'expired')
+      ORDER BY p.decided_at NULLS LAST
+      LIMIT $1`,
+    [limit],
+  );
+  return rows.map((row) => row.run_id);
+}
+
 export interface TransitionToApply {
   proposalId: string;
   userId: string;
