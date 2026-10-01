@@ -558,6 +558,49 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       await pool.query('DELETE FROM instruments WHERE id = ANY($1::uuid[])', [[instrument, other]]);
     });
   });
+  describe('leftover proposal workflows (task 14)', () => {
+    it('lists runs still suspended on a decided proposal, and nothing else', async () => {
+      const pool = getPool();
+      const runIds: string[] = [];
+      const proposalWithRun = async (state: string, workflowStatus: string) => {
+        const observationId = (
+          await pool.query(
+            `INSERT INTO observations (user_id, kind, subject_ref, headline, dedupe_key)
+             VALUES ($1, 'allocation_drift', 'portfolio:allocation:W', 'h', $2) RETURNING id`,
+            [USER, randomUUID()],
+          )
+        ).rows[0].id as string;
+        await pool.query(
+          `INSERT INTO proposals (user_id, observation_id, kind, state, expires_at, decided_at)
+           VALUES ($1, $2, 'rebalance', $3, now() + interval '1 day',
+                   CASE WHEN $3 IN ('pending', 'snoozed') THEN NULL ELSE now() END)`,
+          [USER, observationId, state],
+        );
+        // As the app role: the sweep reads and Mastra writes this table through
+        // traders_app's grants on the mastra schema (migration 0033).
+        await pool.query(
+          `INSERT INTO mastra.mastra_workflow_snapshot
+                  (workflow_name, run_id, snapshot, "createdAt", "updatedAt")
+           VALUES ('proposalLifecycle', $1, jsonb_build_object('status', $2::text), now(), now())`,
+          [observationId, workflowStatus],
+        );
+        runIds.push(observationId);
+        return observationId;
+      };
+      const leftover = await proposalWithRun('approved', 'suspended');
+      const rejected = await proposalWithRun('rejected', 'suspended');
+      await proposalWithRun('pending', 'suspended'); // still waiting for its answer
+      await proposalWithRun('approved', 'success'); // already ended
+
+      const found = await queries.listLeftoverLifecycles(500);
+      expect(found.filter((id) => runIds.includes(id)).sort()).toEqual([leftover, rejected].sort());
+
+      await pool.query('DELETE FROM mastra.mastra_workflow_snapshot WHERE run_id = ANY($1)', [runIds]);
+      // Proposals cascade with their observations; USER is shared with later tests.
+      await pool.query('DELETE FROM observations WHERE id = ANY($1::uuid[])', [runIds]);
+    });
+  });
+
   describe('the proposals history', () => {
     it('lists every terminal state, newest decision first, and nothing still open', async () => {
       const pool = getPool();

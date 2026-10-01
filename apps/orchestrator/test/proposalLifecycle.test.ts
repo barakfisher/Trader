@@ -35,6 +35,7 @@ vi.mock('../src/db/queries.js', () => ({
   createProposals: vi.fn(),
   findProposal: vi.fn(async () => row),
   listProposalsToExpire: vi.fn(async () => []),
+  listLeftoverLifecycles: vi.fn(async () => []),
   applyProposalTransition: vi.fn(async (transition: Record<string, unknown>) => {
     if (row.state !== transition.fromState) return { applied: false, intentId: null };
     row.state = transition.toState;
@@ -266,9 +267,9 @@ describe('sweepAndCloseLifecycles', () => {
     row.expires_at = at(-1);
     vi.mocked(queries.listProposalsToExpire).mockResolvedValueOnce([row] as never);
 
-    const expired = await sweepAndCloseLifecycles(at(61));
+    const swept = await sweepAndCloseLifecycles(at(61));
 
-    expect(expired).toBe(1);
+    expect(swept).toEqual({ expired: 1, closed: 1 });
     expect(row.state).toBe('expired');
     expect(await runStatus()).toBe('success');
   });
@@ -276,7 +277,30 @@ describe('sweepAndCloseLifecycles', () => {
   it('leaves the run of a live proposal waiting', async () => {
     await start();
 
-    expect(await sweepAndCloseLifecycles(NOW)).toBe(0);
+    expect(await sweepAndCloseLifecycles(NOW)).toEqual({ expired: 0, closed: 0 });
+    expect(await runStatus()).toBe('suspended');
+  });
+
+  it('ends the run left waiting on a proposal the fallback decided (task 14)', async () => {
+    await start();
+    // A resume failed and `decideProposal` wrote the decision directly: the
+    // proposal is approved, and the run is still suspended on it.
+    row.state = 'approved';
+    row.decided_at = NOW;
+    expect(await runStatus()).toBe('suspended');
+    vi.mocked(queries.listLeftoverLifecycles).mockResolvedValueOnce([observationId]);
+
+    expect(await sweepAndCloseLifecycles(NOW)).toEqual({ expired: 0, closed: 1 });
+    expect(await runStatus()).toBe('success');
+    // Ended by reading, not deciding: the approval is untouched.
+    expect(row.state).toBe('approved');
+  });
+
+  it('never ends the run of a proposal that is still answerable, whatever the query says', async () => {
+    await start();
+    vi.mocked(queries.listLeftoverLifecycles).mockResolvedValueOnce([observationId]);
+
+    expect(await sweepAndCloseLifecycles(NOW)).toEqual({ expired: 0, closed: 0 });
     expect(await runStatus()).toBe('suspended');
   });
 });

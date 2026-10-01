@@ -231,14 +231,14 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
         // as that account stayed quiet.
         // The sweep also ends the workflow runs suspended on what it expired;
         // a deadline nobody is told about leaves a run waiting forever.
-        const expired = await sweepAndCloseLifecycles();
-        await finishRun(runId, 'ok', { expired });
+        const { expired, closed } = await sweepAndCloseLifecycles();
+        await finishRun(runId, 'ok', { expired, closed });
         return context.json({
           kind: parsed.data.kind,
           runKey,
           runId,
           status: 'ok',
-          result: { expired },
+          result: { expired, closed },
         });
       }
 

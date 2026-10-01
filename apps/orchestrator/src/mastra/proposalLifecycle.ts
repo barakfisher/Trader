@@ -30,7 +30,7 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 
-import { findProposal } from '../db/queries.js';
+import { findProposal, listLeftoverLifecycles } from '../db/queries.js';
 import { logger } from '../logger.js';
 import {
   applyDecision,
@@ -355,30 +355,43 @@ export async function decideProposal(
  * - and this adds the second half F3 implies: a run suspended on a question
  * nobody answered has to end, or `mastra_workflow_snapshot` accumulates a
  * suspended run per dead proposal forever.
+ *
+ * It also ends the runs left waiting on a proposal that is already decided
+ * (independent task 14): when a resume fails, `decideProposal` writes the
+ * decision directly, and before this nothing ever told the waiting run. A
+ * `refresh` reads the proposal, finds it finished, and ends the run - so one
+ * sweep, every fifteen minutes, closes them, including any from before.
  */
-export async function sweepAndCloseLifecycles(now: Date = new Date()): Promise<number> {
+export async function sweepAndCloseLifecycles(
+  now: Date = new Date(),
+): Promise<{ expired: number; closed: number }> {
   const expired = await sweepExpiredProposals(now);
   const runtime = getWorkflowRuntime();
-  if (runtime === null || expired.length === 0) return expired.length;
+  if (runtime === null) return { expired: expired.length, closed: 0 };
 
   const workflow = runtime.getWorkflow(PROPOSAL_LIFECYCLE_ID);
-  for (const proposal of expired) {
+  const runIds = new Set(expired.map((proposal) => proposal.observationId));
+  for (const runId of await listLeftoverLifecycles()) runIds.add(runId);
+
+  let closed = 0;
+  for (const runId of runIds) {
     try {
-      const state = await workflow.getWorkflowRunById(proposal.observationId);
+      const state = await workflow.getWorkflowRunById(runId);
       if (state?.status !== 'suspended') continue;
-      const run = await workflow.createRun({ runId: proposal.observationId });
-      await run.resume({
+      const run = await workflow.createRun({ runId });
+      const result = await run.resume({
         step: AWAIT_DECISION_STEP,
         resumeData: { action: 'refresh', surface: 'system', decidedAt: now.toISOString() },
       });
+      if (result.status === 'success') closed += 1;
     } catch (error) {
-      // One stuck run must not stop the sweep: the expiry itself is already
+      // One stuck run must not stop the sweep: the proposal's state is already
       // written, so the worst case is a snapshot row that outlives its
       // proposal, which is litter rather than a correctness problem.
-      logger().warn({ err: error, proposalId: proposal.id }, 'proposal.lifecycle_close_failed');
+      logger().warn({ err: error, runId }, 'proposal.lifecycle_close_failed');
     }
   }
-  return expired.length;
+  return { expired: expired.length, closed };
 }
 
 // --- Reading Mastra's answers -------------------------------------------------

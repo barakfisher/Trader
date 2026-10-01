@@ -163,12 +163,13 @@ ORDER BY p.created_at DESC LIMIT 20;
 | `pending`, `expires_at` in the past | the sweep has not recorded the expiry yet | nothing: expiry is computed on every read, so it already cannot be approved. If it persists, check the sweep runs (section 2, kind `proposal_sweep`) |
 | `pending`, deadline ahead, no Telegram message | it was raised, but the notification did not reach the chat | answer it in the app (**Proposals**); check `SELECT * FROM notifications ORDER BY created_at DESC LIMIT 5` for the delivery's status |
 | a decision in the app did not "take" | a resume of the workflow failed | nothing: a failed resume falls back to writing the decision directly (`proposalLifecycle.ts`), and deciding again answers `unchanged` rather than writing twice |
-| `approved`/`rejected`/`expired`, workflow `suspended` | the decision is recorded; only the waiting workflow was never closed | harmless litter - see below |
+| `approved`/`rejected`/`expired`, workflow `suspended` | the decision is recorded; only the waiting workflow was not closed yet | nothing: the next `proposal_sweep` (every 15 minutes) closes it and counts it in `stats.closed`. If one survives several sweeps, see below |
 
-**Closing a leftover workflow.** The sweep closes the workflows of proposals it expires. A
-workflow left `suspended` beside an already-*decided* proposal is not closed by anything; it
-occupies one row in `mastra.mastra_workflow_snapshot` and affects nothing else. To remove such
-rows - a deletion, so take a backup first (`docker exec traders-postgres-1 pg_dump -U traders
+**Closing a leftover workflow.** The sweep closes the workflows of proposals it expires, and -
+since independent task 14 - any left `suspended` beside an already-*decided* proposal (what a
+failed resume leaves behind), by resuming it with `refresh`. One that survives several sweeps is
+failing to resume: the sweep logs `proposal.lifecycle_close_failed` for it. It occupies one row in
+`mastra.mastra_workflow_snapshot` and affects nothing else. To remove such rows by hand - a deletion, so take a backup first (`docker exec traders-postgres-1 pg_dump -U traders
 traders > backup.sql`) - delete only those whose proposal is terminal:
 
 ```sql
