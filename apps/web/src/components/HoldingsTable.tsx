@@ -2,28 +2,34 @@ import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Check, Clock, Pencil, Trash2, X } from 'lucide-react';
 
-import { formatMoney, formatPercent, minorToNumber, type HoldingView } from '@traders/shared';
+import {
+  formatMoney,
+  formatPercent,
+  minorToDecimalString,
+  minorToNumber,
+  type HoldingView,
+} from '@traders/shared';
 
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { errorMessage } from '../api/client.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { useNarrowViewport } from '../lib/viewport.ts';
-import { usePortfolioQuery, useRemoveHolding, useUpdateQuantity } from '../queries/portfolio.ts';
+import { usePortfolioQuery, useRemoveHolding, useUpdateHolding } from '../queries/portfolio.ts';
 import { Card, Delta } from './ui.tsx';
 
-type UpdateQuantity = ReturnType<typeof useUpdateQuantity>;
+type UpdateHolding = ReturnType<typeof useUpdateHolding>;
 type RemoveHolding = ReturnType<typeof useRemoveHolding>;
 
 export function HoldingsTable() {
   const { data: portfolio } = usePortfolioQuery();
   // Owned by the table, not each row, so a failure is reported once, under the
   // table, whichever row caused it - as it was before.
-  const updateQuantity = useUpdateQuantity();
+  const updateHolding = useUpdateHolding();
   const removeHolding = useRemoveHolding();
   const holdings = portfolio?.holdings ?? [];
   const currency = baseCurrencyOf(portfolio);
   const failure =
-    (updateQuantity.error && errorMessage(updateQuantity.error, 'Could not update that holding.')) ||
+    (updateHolding.error && errorMessage(updateHolding.error, 'Could not update that holding.')) ||
     (removeHolding.error && errorMessage(removeHolding.error, 'Could not remove that holding.'));
 
   // Below `sm` the table became an 880 px strip inside a 341 px box, showing
@@ -41,7 +47,7 @@ export function HoldingsTable() {
               <HoldingCard
                 holding={holding}
                 baseCurrency={currency}
-                updateQuantity={updateQuantity}
+                updateHolding={updateHolding}
                 removeHolding={removeHolding}
               />
             </li>
@@ -75,7 +81,7 @@ export function HoldingsTable() {
                 key={holding.id}
                 holding={holding}
                 baseCurrency={currency}
-                updateQuantity={updateQuantity}
+                updateHolding={updateHolding}
                 removeHolding={removeHolding}
               />
             ))}
@@ -87,46 +93,83 @@ export function HoldingsTable() {
   );
 }
 
+/** The stored cost per unit as the edit field shows it: exact, at its currency's exponent. */
+function costDraftOf(holding: HoldingView): string {
+  return holding.costBasisMinor === null
+    ? ''
+    : minorToDecimalString(holding.costBasisMinor, holding.costCurrency);
+}
+
 /**
  * One holding's edit and remove state, shared by its table row and its card so
  * the two cannot disagree about what Save or Remove does.
+ *
+ * Cost is per unit, in the holding's own currency (guideline 3: totals are
+ * computed at read time). It is sent only when it was changed, and always with
+ * its currency, so an untouched cost is never rewritten and a typed one is
+ * never read at another currency's exponent.
  */
-function useHoldingEditor(holding: HoldingView, updateQuantity: UpdateQuantity) {
+function useHoldingEditor(holding: HoldingView, updateHolding: UpdateHolding) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(holding.quantity);
+  const [costDraft, setCostDraft] = useState(() => costDraftOf(holding));
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   return {
     editing,
     draft,
     setDraft,
+    costDraft,
+    setCostDraft,
     confirmingDelete,
     setConfirmingDelete,
-    startEditing: () => setEditing(true),
+    startEditing: () => {
+      setDraft(holding.quantity);
+      setCostDraft(costDraftOf(holding));
+      setEditing(true);
+    },
     cancel: () => {
       setDraft(holding.quantity);
+      setCostDraft(costDraftOf(holding));
       setEditing(false);
     },
-    save: () =>
-      updateQuantity.mutate(
-        { holdingId: holding.id, quantity: draft },
+    save: () => {
+      const cost = costDraft.trim();
+      const costChanged = cost !== costDraftOf(holding);
+      updateHolding.mutate(
+        {
+          holdingId: holding.id,
+          quantity: draft,
+          ...(costChanged ? { costBasis: cost === '' ? null : cost, currency: holding.costCurrency } : {}),
+        },
         { onSuccess: () => setEditing(false) },
-      ),
+      );
+    },
   };
 }
 
 function HoldingRow({
   holding,
   baseCurrency,
-  updateQuantity,
+  updateHolding,
   removeHolding,
 }: {
   holding: HoldingView;
   baseCurrency: string;
-  updateQuantity: UpdateQuantity;
+  updateHolding: UpdateHolding;
   removeHolding: RemoveHolding;
 }) {
-  const { editing, draft, setDraft, confirmingDelete, setConfirmingDelete, startEditing, cancel, save } =
-    useHoldingEditor(holding, updateQuantity);
+  const {
+    editing,
+    draft,
+    setDraft,
+    costDraft,
+    setCostDraft,
+    confirmingDelete,
+    setConfirmingDelete,
+    startEditing,
+    cancel,
+    save,
+  } = useHoldingEditor(holding, updateHolding);
 
   return (
     <tr className="border-b border-border-subtle/50 last:border-0 hover:bg-surface-hover/40">
@@ -147,7 +190,7 @@ function HoldingRow({
               inputMode="decimal"
               aria-label={`Quantity for ${holding.instrument.symbol}`}
             />
-            <button type="button" onClick={save} aria-label="Save quantity" className="text-gain">
+            <button type="button" onClick={save} aria-label="Save" className="text-gain">
               <Check className="size-4" />
             </button>
             <button
@@ -195,7 +238,21 @@ function HoldingRow({
       </td>
       <td className="py-2 pr-3 text-right">{formatMoney(holding.valueMinor, baseCurrency)}</td>
       <td className="py-2 pr-3 text-right text-text-muted">
-        {formatMoney(holding.costMinor, baseCurrency)}
+        {editing ? (
+          <label className="flex items-center justify-end gap-1 text-xs">
+            <input
+              value={costDraft}
+              onChange={(event) => setCostDraft(event.target.value)}
+              className="w-24 rounded border border-border-subtle bg-surface px-2 py-1 text-right text-sm text-text-primary"
+              inputMode="decimal"
+              placeholder="none"
+              aria-label={`Cost per unit for ${holding.instrument.symbol}, in ${holding.costCurrency}`}
+            />
+            <span>{holding.costCurrency}/unit</span>
+          </label>
+        ) : (
+          formatMoney(holding.costMinor, baseCurrency)
+        )}
       </td>
       <td className="py-2 pr-3 text-right">
         <Delta value={holding.pnlMinor}>
@@ -283,16 +340,26 @@ const CARD_BUTTON = 'flex h-10 items-center gap-1.5 rounded-lg border border-bor
 function HoldingCard({
   holding,
   baseCurrency,
-  updateQuantity,
+  updateHolding,
   removeHolding,
 }: {
   holding: HoldingView;
   baseCurrency: string;
-  updateQuantity: UpdateQuantity;
+  updateHolding: UpdateHolding;
   removeHolding: RemoveHolding;
 }) {
-  const { editing, draft, setDraft, confirmingDelete, setConfirmingDelete, startEditing, cancel, save } =
-    useHoldingEditor(holding, updateQuantity);
+  const {
+    editing,
+    draft,
+    setDraft,
+    costDraft,
+    setCostDraft,
+    confirmingDelete,
+    setConfirmingDelete,
+    startEditing,
+    cancel,
+    save,
+  } = useHoldingEditor(holding, updateHolding);
   const symbol = holding.instrument.symbol;
 
   return (
@@ -333,14 +400,28 @@ function HoldingCard({
       </p>
 
       {editing ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            className="h-10 w-32 rounded-lg border border-border-subtle bg-surface px-3 text-right text-sm"
-            inputMode="decimal"
-            aria-label={`Quantity for ${symbol}`}
-          />
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-xs text-text-muted">
+            Quantity
+            <input
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              className="mt-1 block h-10 w-32 rounded-lg border border-border-subtle bg-surface px-3 text-right text-sm text-text-primary"
+              inputMode="decimal"
+              aria-label={`Quantity for ${symbol}`}
+            />
+          </label>
+          <label className="text-xs text-text-muted">
+            Cost per unit ({holding.costCurrency})
+            <input
+              value={costDraft}
+              onChange={(event) => setCostDraft(event.target.value)}
+              className="mt-1 block h-10 w-32 rounded-lg border border-border-subtle bg-surface px-3 text-right text-sm text-text-primary"
+              inputMode="decimal"
+              placeholder="none"
+              aria-label={`Cost per unit for ${symbol}, in ${holding.costCurrency}`}
+            />
+          </label>
           <button type="button" onClick={save} className={`${CARD_BUTTON} text-gain`}>
             <Check className="size-4" aria-hidden /> Save
           </button>
@@ -374,7 +455,7 @@ function HoldingCard({
             aria-label={`Edit ${symbol}`}
             className={`${CARD_BUTTON} text-text-muted`}
           >
-            <Pencil className="size-4" aria-hidden /> Quantity
+            <Pencil className="size-4" aria-hidden /> Edit
           </button>
           <button
             type="button"

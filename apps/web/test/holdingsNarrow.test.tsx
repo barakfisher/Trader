@@ -118,3 +118,60 @@ it('asks before it removes, and removes only on the second press', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
   await waitFor(() => expect(del).toHaveBeenCalledWith('/holdings/h-aapl'));
 });
+
+it('edits the cost per unit from the table, starting from the stored value', async () => {
+  narrowScreen(false);
+  patch.mockResolvedValue({ id: 'h-aapl', symbol: 'AAPL' });
+  renderPage(<HoldingsTable />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit AAPL' }));
+  const cost = screen.getByLabelText('Cost per unit for AAPL, in USD') as HTMLInputElement;
+  expect(cost.value).toBe('185.40');
+  fireEvent.change(cost, { target: { value: '190' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+  // Always with its currency, so the server never reads it at another exponent.
+  await waitFor(() =>
+    expect(patch).toHaveBeenCalledWith('/holdings/h-aapl', {
+      quantity: AAPL.quantity,
+      costBasis: '190',
+      currency: 'USD',
+    }),
+  );
+});
+
+it('clears a cost from the card when the field is emptied', async () => {
+  narrowScreen(true);
+  patch.mockResolvedValue({ id: 'h-aapl', symbol: 'AAPL' });
+  renderPage(<HoldingsTable />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit AAPL' }));
+  fireEvent.change(screen.getByLabelText('Cost per unit for AAPL, in USD'), { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+
+  await waitFor(() =>
+    expect(patch).toHaveBeenCalledWith('/holdings/h-aapl', {
+      quantity: AAPL.quantity,
+      costBasis: null,
+      currency: 'USD',
+    }),
+  );
+});
+
+it('shows a yen cost as yen, with no decimal places to invent', async () => {
+  narrowScreen(false);
+  const toyota: HoldingView = {
+    ...AAPL,
+    id: 'h-tm',
+    instrument: { ...AAPL.instrument, id: 'i-tm', symbol: '7203.T', currency: 'JPY' },
+    costBasisMinor: 1500,
+    costCurrency: 'JPY',
+  };
+  get.mockResolvedValue({ ...PORTFOLIO, holdings: [toyota] });
+  renderPage(<HoldingsTable />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit 7203.T' }));
+  expect((screen.getByLabelText('Cost per unit for 7203.T, in JPY') as HTMLInputElement).value).toBe(
+    '1500',
+  );
+});

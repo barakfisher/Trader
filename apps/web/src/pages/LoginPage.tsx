@@ -18,7 +18,9 @@ export const LoginPage = observer(function LoginPage() {
           <h1 className="text-lg font-semibold">Traders</h1>
         </div>
         <p className="text-sm text-text-muted">
-          Portfolio copilot. Sign in with the passphrase from your environment file.
+          Portfolio copilot. Sign in with this installation's passphrase - its{' '}
+          <code className="text-xs">APP_PASSPHRASE</code>, in <code className="text-xs">.env</code> for
+          docker compose or in the cluster's <code className="text-xs">secrets.env</code>.
         </p>
 
         <form
