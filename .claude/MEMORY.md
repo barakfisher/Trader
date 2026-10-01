@@ -4,7 +4,23 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-01 ~07:51 UTC - **Post-M8 queue handoff at CLAUDE.md's five-merged-PR trigger
+Updated: 2026-10-01 ~13:27 UTC - **Post-M8 queue complete (#137-#140 after the #136 handoff). The
+independent-tasks queue is empty; the next session starts Hebrew and RTL** - see "Next session:
+Hebrew and RTL" in "Where to go next". The user re-granted (PR, merge on green, verify by content,
+rebuild compose and kind) right after #136 and chose to continue in the same session; **that grant
+ends here - ask again**:
+- #137 (task 12): a dead rescreen held its day's key and the one-running index refused every later
+  day's - button and CronJob alike - until the row was edited. `claimRun` now closes out runs dead
+  by its own reclaim test and claims again; the shared fetch cache makes the new run resume;
+- #138 (task 13): `k8s-up.sh` recovers a missing `secrets.env` from the Secret the running Postgres
+  reads, and refuses when a database exists with no Secret - checked identical to the real file;
+- #139 (task 14): the proposal sweep closes workflows left suspended on a decided proposal, by
+  `refresh`, which reads and never writes;
+- #140 (task 15): `queries.ts` split into 21 modules under `src/db/queries/` behind an index; a pure
+  move checked line by line; CLAUDE.md's rule amended as the user decided.
+Both environments run `main` at `1a12eac`.
+
+Previous handoff, 2026-10-01 - **Post-M8 queue handoff at CLAUDE.md's five-merged-PR trigger
 (#131-#135). There is no milestone in flight: the user chose a debt sweep after M8, approved it as
 independent tasks 8-15, and tasks 8-11 are done. The next session starts task 12** - see "Next
 session: the post-M8 queue, continued" in "Where to go next". This session (grant: one PR per task,
@@ -268,7 +284,7 @@ job, approved by the user 2026-09-28) in #76, and task 5 (quotes carry asset cla
 the PR after that. Task 7 (server state in TanStack Query) was done across #90-#92 and the topics PR
 that closed it, and task 6 (a screen for `/ask`) in M6 PR 10. That queue emptied at M8's close.
 
-**The post-M8 sweep (2026-10-01)** refilled it as tasks 8-15 (task 8, one question per standing
+**The post-M8 sweep (2026-10-01)** refilled it as tasks 8-15 - **all done by #140; the queue is empty again** (task 8, one question per standing
 finding, became decision 92 when measured; task 9 is decision 93; task 10 found a latent cost-currency bug), approved by the user in that order,
 with the same grant as M8 (PR, merge on green, verify on `main` by content, rebuild compose and
 kind). It was measured on compose before it was written: the BTC-USD drift was proposed **7 days
@@ -2144,7 +2160,8 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
   (`ln -s /Users/a/projects/Traders/services/ai/.venv services/ai/.venv`; untracked, never commit)
   and ran scripts with `PYTHONPATH=.` so they import the worktree's `app`. Before `PYTHONPATH` was
   set, `export_openapi.py` reported writing the spec and produced no diff.
-- **At this handoff compose and kind both run `main` at `680ef20`** (#135), rebuilt and redeployed from the main checkout. **Both run migration 0033**: services connect as
+- **At this handoff compose and kind both run `main` at `1a12eac`** (#140; the line below is from #136, kept for its other facts)
+- **Earlier, compose and kind ran `main` at `680ef20`** (#135), rebuilt and redeployed from the main checkout. **Both run migration 0033**: services connect as
   `traders_app` (compose password: `APP_DB_PASSWORD`, defaulting to `traders_app` because this
   machine's `.env` does not set it - set one if the stack ever leaves the laptop); kind's is in
   `secrets.env`, which `k8s-up.sh` upgraded in place on 2026-10-01.
@@ -2463,7 +2480,31 @@ running systems, not only in tests:
   (#127): an import preview of BYND and GPRO profiled both within a second; SAP.DE, outside the
   screen, was not fetched; "plant-based meat" still resolved without them.
 
-### Next session: the post-M8 queue, continued
+### Next session: Hebrew and RTL
+
+The user asked for it on 2026-10-01, after the queue. **Ask for a grant first** (the last one ended
+with #140). Then, in the order the user's working agreement asks for (measure, decide, build):
+1. **Measure, read-only.** Hard-coded UI strings in `apps/web/src` (JSX text, `aria-label`,
+   `title`, `placeholder`, error fallbacks such as `errorMessage(..., 'Could not ...')`); left/right
+   assumptions in Tailwind classes (`ml-`/`mr-`/`pl-`/`pr-`/`left-`/`right-`/`text-left`/
+   `text-right`, `-mx-4`...) against their logical forms (`ms-`/`me-`/`ps-`/`pe-`/`start-`/`end-`/
+   `text-start`); number, money, percent and date formatting (`formatMoney`, `formatPercent`,
+   `relativeTime.ts`) and which locale they use; charts (Recharts axes) and the icons that point a
+   direction (chevrons, arrows). Server-produced text the UI shows - observation headlines and
+   explanations, Telegram messages, the digest - is a separate question: it is generated in
+   English by templates and validated by the evidence validator.
+2. **Decide with the user**, a recommendation each: the CLAUDE.md guideline-1 amendment (proposed:
+   code, comments, docs and commits stay English; UI copy is translatable with English the
+   default); a library (`react-i18next` is the common choice; formatting through `Intl` with the
+   chosen locale) or none; whether Hebrew covers server-generated text in v1; where the language
+   setting lives (`user_settings`, so Telegram and the digest can follow it).
+3. **Build in slices**, one PR each: the RTL-safe layout first (logical classes, `dir` on `<html>`),
+   which is invisible in English and testable at 375 px in both directions; then extraction of
+   strings; then Hebrew.
+After that, the likely next milestone is the multi-agent sandbox (`docs/PROPOSAL-MULTI-AGENT.md`
+stages 1-3, an approved spec, unbuilt); the `queries.ts` split was done first partly for it.
+
+### Next session: the post-M8 queue, continued (history - done by #140)
 
 Tasks 12-15 remain in "Independent tasks queue", in the approved order. **The grant ended with this
 handoff; ask the user again** (last time: one PR per task, merge on green, verify on `main` by
