@@ -129,6 +129,9 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
       const started = await startRescreen(context.get('ai'), {
         timezone: config.APP_TIMEZONE,
         trigger: parsed.data.trigger ?? 'unknown',
+        // Every caller of this endpoint is a timer or a CronJob: it asks hourly,
+        // and the rescreen is done only when the universe is a quarter old.
+        scheduled: true,
         requestId: context.get('requestId'),
         runKey: parsed.data.runKey,
       });

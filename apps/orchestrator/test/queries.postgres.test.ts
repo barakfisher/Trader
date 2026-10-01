@@ -169,8 +169,11 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
 
     it('belongs to no user, and a second one waits while the first is running', async () => {
-      const first = await claim(key('first'));
+      const firstKey = key('first');
+      expect(await queries.runKeyExists(firstKey)).toBe(false);
+      const first = await claim(firstKey);
       expect(first.claimed).toBe(true);
+      expect(await queries.runKeyExists(firstKey)).toBe(true);
       // Another key - yesterday's run going past midnight - meets the index.
       const second = await claim(key('second'));
       expect(second).toMatchObject({ claimed: false, existingStatus: expect.stringMatching(/^running/) });

@@ -321,6 +321,50 @@ spec:
                 requests: { cpu: 10m, memory: 16Mi }
                 limits: { memory: 64Mi }
 ---
+# The universe rescreen (decision 90), asked hourly like everything above,
+# though it is due once a quarter: a CronJob that fired on the first of the
+# quarter only would be lost whenever the cluster was down that minute. The
+# orchestrator answers most asks "not due" without writing anything, rescreens
+# when the snapshot last loaded is RESCREEN_DUE_DAYS old, and retries a failed
+# rescreen at the next ask. The rescreen itself runs in the AI service in the
+# background, so this request returns 202 at once - the curl pod does not wait
+# for the half hour of fetching. Same run key as the admin's button: a click
+# and this Job on the same day are one run.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: run-universe-rescreen
+spec:
+  schedule: '15 * * * *'
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 420
+      template:
+        metadata:
+          labels:
+            app: run-trigger
+            run-kind: universe_rescreen
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: trigger
+              image: curlimages/curl:8.22.0
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              env:
+                - name: RUN_KIND
+                  value: universe_rescreen
+                - name: INTERNAL_API_KEY
+                  valueFrom:
+                    secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { memory: 64Mi }
+---
 # Last: it reports on what the scans and the sweep just did.
 apiVersion: batch/v1
 kind: CronJob

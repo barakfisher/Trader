@@ -101,11 +101,20 @@ curl -s -X POST http://127.0.0.1:8089/internal/runs \
 ```
 
 Kinds: `backfill`, `instrument_metadata`, `snapshot`, `news_collect`, `portfolio_scan`,
-`topic_scan`, `proposal_sweep`, `topic_discovery`, `daily_digest`. The answer carries the run's
+`topic_scan`, `proposal_sweep`, `topic_discovery`, `daily_digest`, `universe_rescreen`. The answer carries the run's
 status and its result. Replaying is safe for every kind: each writes idempotently (observations
 and notifications carry a `dedupe_key`; the backfill rewrites only its own rows). The one kind to
 think twice about is **`daily_digest`**: a second digest the same day splits the day's deferred
 findings across two messages.
+
+**`universe_rescreen`** is different in three ways (decision 90). It belongs to no account, so it
+takes no `userId`. It answers 202 once the AI service has it, and the AI service finishes the run
+in the background - half an hour or more, as Yahoo rate-limits it; follow it in `runs` or on the
+Admin page. And through this endpoint it runs only when **due** - the snapshot last loaded is 91
+days old - so a manual trigger usually answers `not due`. To rescreen now, use the Admin page's
+**Rescreen universe** button (audited), which is never held back. It rewrites what every topic
+resolves against: think twice, as with the digest. A failed rescreen is retried the same day by
+any trigger and resumes from its fetch cache.
 
 On the cluster, `kubectl create job --from=cronjob/run-<kind> <name>` triggers the same request as
 the schedule - with the default key, so it is `skipped` if the bucket already ran.

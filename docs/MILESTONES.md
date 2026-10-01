@@ -140,6 +140,10 @@ original brief named something this repository does not have, the reconciliation
 **3. Quarterly baseline refresh** — a K8s CronJob hitting `/internal/runs` with
 `universe-rescreen:<quarter>`, the same job the button triggers. "Rebalancing" here means
 recomputing universe membership and ETF weights; it never touches a user's holdings or proposals.
+*(As built, decisions 90-91: the key is `universe-rescreen:<date>` for the button and the CronJob
+alike, and the CronJob asks hourly - like every other run here - while the endpoint rescreens
+only when the snapshot last loaded is a quarter old. A once-a-quarter trigger is lost whenever the
+cluster is down that minute.)*
 
 **4. On-demand ingestion (fast path)** — a missing ticker is fetched from Yahoo in the background
 and written with `membership = 'on_demand'`, not `'screened'`: it was never screened, so it is

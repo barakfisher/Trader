@@ -54,6 +54,9 @@ vi.mock('../src/db/queries.js', () => ({
   upsertSnapshot: vi.fn(async () => undefined),
   claimRun: vi.fn(),
   finishRun: vi.fn(async () => undefined),
+  // No run today and no snapshot ever loaded: a scheduled rescreen is due.
+  runKeyExists: vi.fn(async () => false),
+  getLatestUniverseLoad: vi.fn(async () => null),
   listRuns: vi.fn(async () => []),
   insertObservations: vi.fn(async () => ({ created: 0, suppressed: 0, inserted: [] })),
   getOrCreateUserSettings: vi.fn(async () => ({

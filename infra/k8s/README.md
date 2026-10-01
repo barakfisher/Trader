@@ -48,6 +48,7 @@ so `kubectl kustomize infra/k8s/.deploy` prints exactly what gets applied.
 | Service `postgres`, `redis` | a fixed name and address in front of changing pods | every connection string names the Service, never a pod |
 | StatefulSet `postgres`, `redis` | keeps one pod with a stable identity and its own disk | a database must get the *same* disk back after a restart |
 | PersistentVolumeClaim `data-postgres-0` | a request for a disk that outlives any pod | without it, deleting the pod deletes the data |
+| PersistentVolumeClaim `universe-snapshots` | the same, mounted by the AI service and the `universe` Job | where a rescreen writes the new universe snapshot; without it a restart would load the image's older one (decision 90) |
 | Job `migrate`, `corpus`, `universe` | runs a pod to completion, retrying on failure | the compose one-shot containers; re-run on every deploy |
 | init container | runs to completion before a pod's main container starts | Kubernetes has no `depends_on`: each pod waits for what it needs itself |
 | Deployment `ai-service`, `orchestrator`, `web` | keeps N identical pods running from one image; replaces them when the image changes | the three services; a crashed pod is replaced without anyone noticing |
@@ -60,7 +61,7 @@ so `kubectl kustomize infra/k8s/.deploy` prints exactly what gets applied.
 | Service type NodePort | opens a port on the node itself | how traffic from outside the cluster gets in at all |
 | HorizontalPodAutoscaler `ai-service` | adds or removes copies of a Deployment from measured CPU | the AI service is where the CPU goes; 1 to 3 copies at a 70% target |
 | metrics-server (in `kube-system`) | measures each pod's CPU and memory from the kubelets | the autoscaler's only source of numbers; kind does not ship it |
-| CronJob `run-<kind>` (9) | creates a Job on a timetable | scheduled runs: each Job POSTs one run kind to `/internal/runs`, replacing the in-process timer |
+| CronJob `run-<kind>` (10) | creates a Job on a timetable | scheduled runs: each Job POSTs one run kind to `/internal/runs`, replacing the in-process timer |
 
 **Ordering without `depends_on`.** Everything starts the moment it is applied. `migrate` waits for
 Postgres (`pg_isready`); the loaders wait until the schema is at their image's migration head
@@ -143,7 +144,7 @@ Fine on one laptop; never on a real cluster.
 
 ## Scheduled runs
 
-Nine CronJobs, one per run kind, each creating a small Job that POSTs `{kind, trigger: "cronjob"}`
+Ten CronJobs, one per run kind, each creating a small Job that POSTs `{kind, trigger: "cronjob"}`
 to the orchestrator's `/internal/runs` inside the cluster - the same endpoint the local timer
 calls. The schedules copy the timer's rhythm (every 15 minutes or every hour, backfill first and
 the digest last), and the run key decides whether a trigger does work: a second trigger in the
