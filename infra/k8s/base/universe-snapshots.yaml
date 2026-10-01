@@ -1,0 +1,31 @@
+# Storage that outlives every pod: the universe snapshots the admin's rescreen
+# writes (decision 90).
+#
+# A container's own filesystem is thrown away whenever the container is
+# replaced - a deploy, a crash, the autoscaler removing a copy. A
+# PersistentVolumeClaim is a request for storage that is not: "this app needs
+# 1 GiB that survives its pods". The cluster answers it by binding a
+# PersistentVolume - on kind, a directory on the node, made by its built-in
+# local-path provisioner the first time a pod uses the claim. Pods then mount
+# the claim by name, and every pod that mounts it sees the same files.
+#
+# Two kinds of pod mount it: the AI service, which writes a new snapshot when a
+# rescreen runs, and the `universe` Job, which loads the newest snapshot it can
+# find - here or in the image - on every deploy. Without the claim a rescreen
+# would be written inside one pod and lost with it, and the next deploy would
+# load the image's older snapshot.
+#
+# ReadWriteOnce: mountable read-write by pods on one node at a time. kind has
+# one node, so every AI-service copy and the Job can share it; a multi-node
+# cluster needs ReadWriteMany storage or the rescreen pinned to one node (see
+# the debt table in .claude/MEMORY.md). A snapshot is ~7 MB; 1 GiB is years of
+# quarterly rescreens and their fetch caches.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: universe-snapshots
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi

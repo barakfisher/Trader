@@ -23,6 +23,7 @@ import { runPortfolioScan } from '../../services/portfolioScan.js';
 import { marketRetentionDays, runTopicDiscovery } from '../../services/topicDiscovery.js';
 import { HISTORY_BACKFILL_DAYS, runTopicScan } from '../../services/topicScan.js';
 import { sendDigest } from '../../services/notifications.js';
+import { RESCREEN_KIND, startRescreen } from '../../services/universeRescreen.js';
 import { sweepExpiredProposals } from '../../services/proposals.js';
 import { logger } from '../../logger.js';
 import { localDate, takeSnapshot } from '../../services/snapshot.js';
@@ -101,6 +102,7 @@ const runSchema = z.object({
     'proposal_sweep',
     'daily_digest',
     'instrument_metadata',
+    'universe_rescreen',
   ]),
   userId: z.string().uuid().optional(),
   runKey: z.string().max(200).optional(),
@@ -117,6 +119,20 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
     const parsed = runSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
       throw badRequest('invalid_body', 'expected { kind, userId?, runKey?, trigger? }', parsed.error.issues);
+    }
+
+    if (parsed.data.kind === RESCREEN_KIND) {
+      // The installation's work, not an account's: no user, and the AI service
+      // finishes the run in the background, so the answer is 202 once handed
+      // over. A trigger is a request to run; the run key decides whether it is
+      // a repeat (the button and the CronJob share it).
+      const started = await startRescreen(context.get('ai'), {
+        timezone: config.APP_TIMEZONE,
+        trigger: parsed.data.trigger ?? 'unknown',
+        requestId: context.get('requestId'),
+        runKey: parsed.data.runKey,
+      });
+      return context.json({ kind: RESCREEN_KIND, ...started }, started.status === 'running' ? 202 : 200);
     }
 
     const userId = parsed.data.userId ?? config.SINGLE_USER_ID;

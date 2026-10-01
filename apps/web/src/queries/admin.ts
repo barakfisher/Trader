@@ -6,12 +6,13 @@
  * requests on a table nobody is watching.
  */
 
-import { queryOptions, useQuery } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type {
   AdminAuditResponse,
   AdminRunsResponse,
   LlmPanelResponse,
+  RescreenStartResponse,
   UniverseGapsResponse,
   UniverseStatusResponse,
 } from '@traders/shared';
@@ -64,4 +65,19 @@ export function adminLlmQuery(days: number) {
 
 export function useAdminLlmQuery(days: number) {
   return useQuery(adminLlmQuery(days));
+}
+
+/**
+ * Rescreen the universe. The run appears in the runs list at once, and the
+ * admin actions list has its audit row; both are refetched rather than polled.
+ */
+export function useRescreen() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<RescreenStartResponse>('/admin/universe/rescreen', {}),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.adminRuns });
+      void client.invalidateQueries({ queryKey: queryKeys.adminAudit });
+    },
+  });
 }

@@ -154,6 +154,79 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('claiming a rescreen', () => {
+    const keys: string[] = [];
+    const key = (label: string) => {
+      const runKey = `universe-rescreen:test-${label}-${randomUUID()}`;
+      keys.push(runKey);
+      return runKey;
+    };
+    const claim = (runKey: string) =>
+      queries.claimRun({ userId: null, kind: 'universe_rescreen', runKey, trigger: 'test' });
+
+    afterAll(async () => {
+      await getPool().query('DELETE FROM runs WHERE run_key = ANY($1)', [keys]);
+    });
+
+    it('belongs to no user, and a second one waits while the first is running', async () => {
+      const first = await claim(key('first'));
+      expect(first.claimed).toBe(true);
+      // Another key - yesterday's run going past midnight - meets the index.
+      const second = await claim(key('second'));
+      expect(second).toMatchObject({ claimed: false, existingStatus: expect.stringMatching(/^running/) });
+      await queries.finishRun(first.runId!, 'ok');
+    });
+
+    it('is reclaimed only once its heartbeat is stale, however long ago it started', async () => {
+      const runKey = key('heartbeat');
+      const first = await claim(runKey);
+      // Started an hour ago - past STALE_RUN_MINUTES - but beating now: alive.
+      await getPool().query(
+        `UPDATE runs SET started_at = now() - interval '1 hour', heartbeat_at = now() WHERE id = $1`,
+        [first.runId],
+      );
+      expect((await claim(runKey)).claimed).toBe(false);
+
+      await getPool().query(
+        `UPDATE runs SET heartbeat_at = now() - ($2 || ' minutes')::interval WHERE id = $1`,
+        [first.runId, String(queries.HEARTBEAT_STALE_MINUTES + 1)],
+      );
+      const reclaimed = await claim(runKey);
+      expect(reclaimed).toMatchObject({ claimed: true, runId: first.runId });
+      const { rows } = await getPool().query<{ fresh: boolean }>(
+        `SELECT heartbeat_at > now() - interval '1 minute' AS fresh FROM runs WHERE id = $1`,
+        [first.runId],
+      );
+      expect(rows[0]!.fresh).toBe(true);
+      await queries.finishRun(first.runId!, 'ok');
+    });
+
+    it('retries a failed rescreen under its own key, and nothing else', async () => {
+      const runKey = key('retry');
+      const first = await claim(runKey);
+      await queries.finishRun(first.runId!, 'failed', { error: 'rate limited' });
+      expect((await claim(runKey)).claimed).toBe(false);
+      const retried = await queries.claimRun({
+        userId: null,
+        kind: 'universe_rescreen',
+        runKey,
+        trigger: 'test',
+        retryFailed: true,
+      });
+      expect(retried).toMatchObject({ claimed: true, runId: first.runId });
+      await queries.finishRun(first.runId!, 'ok');
+      // A finished one is never claimed again, retry or not.
+      const again = await queries.claimRun({
+        userId: null,
+        kind: 'universe_rescreen',
+        runKey,
+        trigger: 'test',
+        retryFailed: true,
+      });
+      expect(again.claimed).toBe(false);
+    });
+  });
+
   describe('the LLM panel', () => {
     // Dated a day ahead so a window starting tomorrow sees only these rows,
     // whatever else the database holds.

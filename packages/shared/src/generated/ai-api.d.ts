@@ -360,6 +360,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/universe/rescreen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rescreen */
+        post: operations["rescreen_universe_rescreen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1138,6 +1155,35 @@ export interface components {
             missing?: string[];
             /** Quotes */
             quotes: components["schemas"]["Quote"][];
+        };
+        /**
+         * RescreenRequest
+         * @description A `universe_rescreen` run the orchestrator has claimed, to be carried out here.
+         */
+        RescreenRequest: {
+            /** Run Id */
+            run_id: string;
+        };
+        /**
+         * RescreenResponse
+         * @description Whether the rescreen started. The run row says how it ended.
+         *
+         *     `started`: building in the background; this service finishes the run.
+         *     `in_progress`: this copy is already working on that run. `unavailable`: the
+         *     installation cannot rescreen (no snapshot volume, or no Yahoo in the
+         *     market-data chain) - a configuration, and `reason` names it. `not_running`:
+         *     the run is not a claimed, running rescreen, so there is nothing to carry out.
+         */
+        RescreenResponse: {
+            /** Reason */
+            reason?: string | null;
+            /** Run Id */
+            run_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "started" | "in_progress" | "unavailable" | "not_running";
         };
         /**
          * ScanHolding
@@ -2071,6 +2117,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProfileRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rescreen_universe_rescreen_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RescreenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RescreenResponse"];
                 };
             };
             /** @description Validation Error */

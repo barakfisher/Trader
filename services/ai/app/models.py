@@ -190,6 +190,27 @@ class ProfileRequestResponse(BaseModel):
     status: Literal["queued", "already_profiled", "in_progress", "unavailable"]
 
 
+class RescreenRequest(BaseModel):
+    """A `universe_rescreen` run the orchestrator has claimed, to be carried out here."""
+
+    run_id: str = Field(min_length=36, max_length=36)
+
+
+class RescreenResponse(BaseModel):
+    """Whether the rescreen started. The run row says how it ended.
+
+    `started`: building in the background; this service finishes the run.
+    `in_progress`: this copy is already working on that run. `unavailable`: the
+    installation cannot rescreen (no snapshot volume, or no Yahoo in the
+    market-data chain) - a configuration, and `reason` names it. `not_running`:
+    the run is not a claimed, running rescreen, so there is nothing to carry out.
+    """
+
+    run_id: str
+    status: Literal["started", "in_progress", "unavailable", "not_running"]
+    reason: str | None = None
+
+
 class InstrumentResolution(BaseModel):
     """Result of resolving a user-supplied string to a tradable instrument.
 

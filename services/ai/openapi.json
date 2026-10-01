@@ -1467,6 +1467,58 @@
         "title": "QuoteResponse",
         "type": "object"
       },
+      "RescreenRequest": {
+        "description": "A `universe_rescreen` run the orchestrator has claimed, to be carried out here.",
+        "properties": {
+          "run_id": {
+            "maxLength": 36,
+            "minLength": 36,
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id"
+        ],
+        "title": "RescreenRequest",
+        "type": "object"
+      },
+      "RescreenResponse": {
+        "description": "Whether the rescreen started. The run row says how it ended.\n\n`started`: building in the background; this service finishes the run.\n`in_progress`: this copy is already working on that run. `unavailable`: the\ninstallation cannot rescreen (no snapshot volume, or no Yahoo in the\nmarket-data chain) - a configuration, and `reason` names it. `not_running`:\nthe run is not a claimed, running rescreen, so there is nothing to carry out.",
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "started",
+              "in_progress",
+              "unavailable",
+              "not_running"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status"
+        ],
+        "title": "RescreenResponse",
+        "type": "object"
+      },
       "ScanHolding": {
         "description": "One holding as the scan needs it.\n\n`value_minor` is the holding's market value in the portfolio's base currency,\ncomputed by the orchestrator, which owns valuation and the FX rates. It is\nnull when the holding could not be priced - carried rather than omitted so\nthe scan can report that allocation drift was skipped, and why.",
         "properties": {
@@ -3160,6 +3212,65 @@
           }
         },
         "summary": "Request Profile",
+        "tags": [
+          "universe"
+        ]
+      }
+    },
+    "/universe/rescreen": {
+      "post": {
+        "operationId": "rescreen_universe_rescreen_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RescreenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RescreenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rescreen",
         "tags": [
           "universe"
         ]

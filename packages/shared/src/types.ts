@@ -319,9 +319,21 @@ export interface UniverseStatusResponse {
     etfHoldings: number;
     /** Profiles fetched for listings users named; not members, never compared with the snapshot. */
     onDemand: number;
+    /** Former members a later snapshot no longer holds; kept, never searched. */
+    dropped: number;
   };
   reconciliation: UniverseReconciliation[];
 }
+
+/**
+ * The answer to "rescreen now" (decision 90). `running`: claimed and handed to
+ * the AI service, which finishes the run - follow it in the runs list.
+ * `skipped`: already claimed today, another rescreen still running, or this
+ * installation cannot rescreen; `reason` says which.
+ */
+export type RescreenStartResponse =
+  | { status: 'running'; runId: string; runKey: string }
+  | { status: 'skipped'; runId: string | null; runKey: string; reason: string };
 
 /** What happened on the wire when a model was asked (decision 87). */
 export type LlmCallOutcome = 'ok' | 'provider_error' | 'budget_exhausted' | 'no_provider';

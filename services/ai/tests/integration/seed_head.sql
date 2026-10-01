@@ -43,6 +43,9 @@ SELECT ('20000000-0000-0000-0000-0000000000' || lpad(n::text, 2, '0'))::uuid, ki
                'instrument_metadata','news_collect','topic_discovery'],
          ARRAY['running','ok','degraded','failed','skipped','ok','ok','ok','ok']
        ) WITH ORDINALITY AS t(kind, status, n);
+-- A rescreen running on a heartbeat (0031): the partial unique index allows one.
+INSERT INTO runs (id, kind, run_key, status, heartbeat_at) VALUES
+  ('20000000-0000-0000-0000-000000000099', 'universe_rescreen', 'universe-rescreen:2026-10-01', 'running', now());
 
 INSERT INTO observations (id, user_id, run_id, kind, severity, subject_kind, subject_ref, headline, dedupe_key, narration_source, fallback_reason) VALUES
   ('30000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-000000000002',

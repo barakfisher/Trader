@@ -32,6 +32,7 @@ const COUNTS = {
   embedded: 5223,
   etf_holdings: 16363,
   on_demand: 0,
+  dropped: 0,
 };
 
 describe('the universe status', () => {
@@ -71,6 +72,20 @@ describe('the universe status', () => {
     // A screened profile no load accounts for - written by hand, say.
     const status = universeStatus(LOAD, { ...COUNTS, profiles: 5224 });
     expect(status.reconciliation[0]!.unexplained).toBe(-1);
+  });
+
+  it('does not count a member that kept an earlier profile among the missing', () => {
+    // The first real rescreen: 72 members without a description, 4 of which
+    // still held the profile an earlier snapshot gave them.
+    const rescreened = {
+      ...LOAD,
+      report: { ...LOAD.report, members: 5289, profiled: 5217, undescribed: 72, undescribed_kept: 4 },
+    };
+    const status = universeStatus(rescreened, { ...COUNTS, profiles: 5221 });
+    expect(status.reconciliation[0]).toMatchObject({
+      explained: [{ reason: 'no description on this installation', count: 68 }],
+      unexplained: 0,
+    });
   });
 
   it('counts on-demand profiles apart, so they leave the reconciliation alone', () => {

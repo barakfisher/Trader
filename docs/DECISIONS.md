@@ -100,3 +100,4 @@ while this file is out of date.
 | 87 | Every model call is recorded by a wrapper the factory builds; call sites only add a verdict |
 | 88 | The LLM panel reconciles narration's explanations against its calls, and shows both records |
 | 89 | An on-demand profile describes a listing without making it a member |
+| 90 | The rescreen is a run the orchestrator claims and the AI service finishes, on a heartbeat, into a volume the loader reads newest-first |

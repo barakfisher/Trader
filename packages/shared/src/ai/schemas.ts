@@ -493,3 +493,15 @@ export const profileRequestResponseSchema = z.object({
 export type _AssertProfileRequestResponse = Expect<
   Equal<z.infer<typeof profileRequestResponseSchema>, Schemas['ProfileRequestResponse']>
 >;
+
+export const rescreenResponseSchema = z.object({
+  run_id: z.string(),
+  // `started`: the AI service builds in the background and finishes the run
+  // itself. `unavailable`: the installation cannot rescreen (`reason` says why).
+  status: z.enum(['started', 'in_progress', 'unavailable', 'not_running']),
+  reason: z.string().nullable().optional(),
+});
+
+export type _AssertRescreenResponse = Expect<
+  Equal<z.infer<typeof rescreenResponseSchema>, Schemas['RescreenResponse']>
+>;

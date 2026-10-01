@@ -9,7 +9,12 @@
 
 import type { Hono } from 'hono';
 
-import type { AdminAuditResponse, AdminRunsResponse, UniverseGapsResponse } from '@traders/shared';
+import type {
+  AdminAuditResponse,
+  AdminRunsResponse,
+  RescreenStartResponse,
+  UniverseGapsResponse,
+} from '@traders/shared';
 
 import {
   countNarrationFallbacks,
@@ -31,6 +36,7 @@ import {
   parseWindowDays,
   reconciliationSince,
 } from '../../services/llmPanel.js';
+import { startRescreen } from '../../services/universeRescreen.js';
 import { universeStatus } from '../../services/universeStatus.js';
 import type { AppEnv } from '../app.js';
 import { badRequest } from '../errors.js';
@@ -144,5 +150,19 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
     return context.json(
       llmPanel({ days, since, firstCallAt, groups, latencies, fallbacks, reconciledFallbacks, recent }),
     );
+  });
+
+  /**
+   * Rescreen the universe now. Audited by the gate before this runs (decision
+   * 84), and the same run as the quarterly CronJob's on the same day.
+   */
+  app.post('/admin/universe/rescreen', async (context) => {
+    const started = await startRescreen(context.get('ai'), {
+      timezone: context.get('config').APP_TIMEZONE,
+      trigger: 'admin',
+      requestId: context.get('requestId'),
+    });
+    const body: RescreenStartResponse = started;
+    return context.json(body, started.status === 'running' ? 202 : 200);
   });
 }

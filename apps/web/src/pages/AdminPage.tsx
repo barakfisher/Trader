@@ -14,7 +14,7 @@ import type {
 } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
-import { Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
+import { Button, Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import {
   LLM_WINDOWS,
   OUTCOME_LABEL,
@@ -33,6 +33,7 @@ import {
   useAdminLlmQuery,
   useAdminRunsQuery,
   useAdminUniverseQuery,
+  useRescreen,
 } from '../queries/admin.ts';
 import { useStore } from '../stores/context.tsx';
 
@@ -163,6 +164,7 @@ function UniverseCard() {
 
   return (
     <Card title="Universe">
+      <RescreenControl />
       {universe.isPending && <Spinner label="Loading the universe…" />}
       {universe.error && (
         <ErrorNote
@@ -177,6 +179,12 @@ function UniverseCard() {
             equities, {count.format(data.database.etfs)} ETFs), {count.format(data.database.embedded)}{' '}
             embedded, {count.format(data.database.etfHoldings)} ETF holdings.
           </p>
+          {data.database.dropped > 0 && (
+            <p className="text-text-muted">
+              {count.format(data.database.dropped)} dropped by a later snapshot: kept, because
+              holdings and topics refer to them, but no longer members.
+            </p>
+          )}
           {data.database.onDemand > 0 && (
             <p className="text-text-muted">
               Also {count.format(data.database.onDemand)} profiled on demand for listings users named.
@@ -201,6 +209,61 @@ function UniverseCard() {
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Rescreen now. Asked twice, because it rewrites what every topic resolves
+ * against: listings cross the size floor both ways, and a member the new
+ * screen lacks is marked dropped. The answer says where to follow the run.
+ */
+function RescreenControl() {
+  const rescreen = useRescreen();
+  const [confirming, setConfirming] = useState(false);
+  const result = rescreen.data;
+
+  return (
+    <div className="mb-3 space-y-2 border-b border-border-subtle pb-3 text-sm">
+      {!confirming ? (
+        <Button variant="secondary" onClick={() => setConfirming(true)} disabled={rescreen.isPending}>
+          Rescreen universe
+        </Button>
+      ) : (
+        <div className="space-y-2">
+          <p>
+            This rebuilds the universe from Yahoo&apos;s screener - half an hour or more, as Yahoo
+            limits how fast it answers - and loads it. If Yahoo refuses some listings the run fails
+            and keeps what it fetched; rescreening again the same day resumes.
+            Listings cross the size floor both ways; a member the new screen lacks is marked dropped
+            and no topic is answered from it. Once a rescreen has succeeded, another the same day
+            does nothing.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => {
+                setConfirming(false);
+                rescreen.mutate();
+              }}
+            >
+              Rescreen now
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+      {rescreen.isPending && <Spinner label="Starting the rescreen…" />}
+      {rescreen.error && (
+        <ErrorNote message={errorMessage(rescreen.error, 'Could not start the rescreen.')} />
+      )}
+      {result?.status === 'running' && (
+        <p className="text-text-muted">
+          Rescreen started ({result.runKey}). It runs in the background; follow it under Recent runs.
+        </p>
+      )}
+      {result?.status === 'skipped' && <p className="text-warn">Not started: {result.reason}.</p>}
+    </div>
   );
 }
 

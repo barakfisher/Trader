@@ -7,10 +7,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen } from '@testing-library/react';
 import { createMemoryHistory } from '@tanstack/react-router';
 
 const get = vi.fn();
+const post = vi.fn();
 
 vi.mock('../src/api/client.ts', async () => {
   const actual = await vi.importActual<typeof import('../src/api/client.ts')>(
@@ -18,7 +19,7 @@ vi.mock('../src/api/client.ts', async () => {
   );
   return {
     ...actual,
-    api: { get, post: vi.fn(), put: vi.fn(), delete: vi.fn(), postForm: vi.fn() },
+    api: { get, post, put: vi.fn(), delete: vi.fn(), postForm: vi.fn() },
   };
 });
 
@@ -140,6 +141,7 @@ describe('the admin page', () => {
                 embedded: 5223,
                 etfHoldings: 16363,
                 onDemand: 2,
+                dropped: 0,
               },
               reconciliation: [
                 {
@@ -249,6 +251,30 @@ describe('the admin page', () => {
     const disagreed = screen.getByText(/provider error: 2 stored, 1 call - these should agree/);
     expect(disagreed.className).toContain('text-warn');
     expect(screen.getByText('refused: figures not in the evidence: 17 of 27')).toBeTruthy();
+  });
+
+  it('rescreens only once confirmed, then says where to follow the run', async () => {
+    post.mockResolvedValue({ status: 'running', runId: 'r9', runKey: 'universe-rescreen:2026-10-01' });
+    renderAt('/admin', ADMIN);
+    fireEvent.click(await screen.findByRole('button', { name: 'Rescreen universe' }));
+    expect(post).not.toHaveBeenCalled();
+    expect(screen.getByText(/rebuilds the universe from Yahoo/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Rescreen now' }));
+    expect(await screen.findByText(/Rescreen started \(universe-rescreen:2026-10-01\)/)).toBeTruthy();
+    expect(post).toHaveBeenCalledWith('/admin/universe/rescreen', {});
+  });
+
+  it('says why a rescreen did not start', async () => {
+    post.mockResolvedValue({
+      status: 'skipped',
+      runId: null,
+      runKey: 'universe-rescreen:2026-10-01',
+      reason: 'this run key was already claimed (ok)',
+    });
+    renderAt('/admin', ADMIN);
+    fireEvent.click(await screen.findByRole('button', { name: 'Rescreen universe' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Rescreen now' }));
+    expect(await screen.findByText('Not started: this run key was already claimed (ok).')).toBeTruthy();
   });
 
   it('asks the server for nothing when the account is not an admin', async () => {

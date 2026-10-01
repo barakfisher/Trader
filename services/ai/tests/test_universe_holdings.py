@@ -59,6 +59,10 @@ def test_only_a_fraction_of_the_fund_is_a_plausible_weight() -> None:
     assert not plausible_weight("1.0622402")  # a wrapper holding another ETF
     assert not plausible_weight("668.8027")  # a reporting error
     assert not plausible_weight("n/a")
+    # Above zero as written, zero as numeric(9, 6) stores it - met by the first
+    # real rescreen, where it failed the CHECK and with it the whole load.
+    assert not plausible_weight("9.9999994E-8")
+    assert plausible_weight("0.0000005")  # rounds up to the column's smallest weight
 
 
 def test_group_is_part_of_a_name_not_a_legal_form() -> None:

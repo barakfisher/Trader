@@ -256,7 +256,7 @@ kept so the next sweep has somewhere to add to.
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
-| M8 — Admin operations & observability | **In progress** | #120-#124, #126-#127: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel, on-demand profiles. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event and profiled within one background fetch ✅ (#127, decision 89); rescreen button = CronJob run - PRs 8-9. See "Next session: M8, continued" |
+| M8 — Admin operations & observability | **In progress** | #120-#124, #126-#127: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel, on-demand profiles. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event and profiled within one background fetch ✅ (#127, decision 89); rescreen button ✅ (#128, decision 90; shown in kind); = CronJob run - PR 9. See "Next session: M8, continued" |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
 not anticipate, found by running the thing rather than by reading it. M1.5 came from auditing the
@@ -1367,10 +1367,70 @@ failure they prevent.
     Shown on compose 2026-09-30 22:50 UTC: an import preview of BYND, GPRO, SAP.DE profiled the
     first two within a second, skipped SAP.DE (outside the screen), and "plant-based meat" still
     resolved to JBS/HRL/PPC, not BYND.
+90. **The rescreen is a run the orchestrator claims and the AI service finishes, on a
+    heartbeat, into a volume the loader reads newest-first** (M8 PR 8; the plan's decisions
+    3-5 as built). **Measured first, and then measured properly:** a sample (screener 19 s for
+    5,427 rows; 100 `info` in 8.9 s, 40 holdings in 1.4 s, 4 workers, no failures) extrapolated
+    to ~10 minutes; the real run was rate-limited and took 28 minutes to fail on 64 symbols (see
+    "Bugs"). The heartbeat was the right call: such a run outlives `STALE_RUN_MINUTES`.
+    - **One path, two triggers.** `startRescreen` (orchestrator) claims run key
+      `universe-rescreen:<APP_TIMEZONE date>` with **`user_id` null** - the universe is the
+      installation's - for both `POST /admin/universe/rescreen` (audited by the gate first) and
+      `POST /internal/runs {kind: universe_rescreen}` (PR 9's CronJob). It hands the run id to
+      `POST /universe/rescreen` (202) and answers 202 itself; the AI service builds in a
+      `BackgroundTasks` thread and **finishes the run row** (`app/universe/rescreen.py`).
+    - **Heartbeat** (`runs.heartbeat_at`, 0031): written every 30 s from the event loop, not the
+      fetching thread, so it means "this process is alive". `claimRun` reclaims a heartbeating
+      run only after `HEARTBEAT_STALE_MINUTES` (5) without a beat, and gives the reclaimed run a
+      fresh beat; runs that never beat keep the started-at rule. A partial unique index allows
+      one running rescreen (a run past midnight vs the next day's key); `claimRun` maps that
+      unique violation to "already claimed", not an error.
+    - **The volume** (`UNIVERSE_SNAPSHOT_DIR`): compose's named volume `universe-snapshots`
+      (the image creates `/var/lib/traders/universe` owned by uid 10001, and a new named volume
+      starts as a copy of it - otherwise root's and unwritable); kind's PersistentVolumeClaim of
+      the same name, mounted in the AI Deployment and the `universe` Job. Each snapshot is built
+      in `snapshots/.building-<run>` and renamed into place after its manifest is written; the
+      fetch caches live in `cache/`, kept on failure (the next attempt resumes), discarded after
+      24 h or on success. The fetch code moved to `app/universe/screener.py`;
+      `build_instrument_universe.py` is its command line.
+    - **The loader** (`app/universe/loading.py`, used by `ingest_universe.py` and the rescreen):
+      the newest snapshot by `as_of`, image or volume, **and never one older than the last
+      `universe_loads` row** - a lost volume would otherwise reload the image's quarter-old
+      snapshot over a fresher database. Every load marks screened profiles the snapshot lacks
+      `dropped` (counted in the load record and on the status card).
+    - **Shown in kind 2026-10-01** after three attempts (28 min failed on rate limits; 3 min
+      failed on 4 ETFs' holdings; 40 s from a complete cache): 5,289 members, 20 created, 64
+      changed, **22 dropped**, 16,307 holdings, 84 embedded; four real `admin_audit` rows; a
+      redeploy's `universe` Job chose the volume's snapshot and kept the drops; both
+      reconciliations at 0 unexplained. See "Bugs" for what the real run found.
+    - **A failed rescreen can be retried the same day** (`claimRun({retryFailed: true})`, the
+      rescreen only): its cache is kept, and found necessary on the first real run in kind -
+      Yahoo rate-limited it (`YFRateLimitError`) within two minutes, which the 100-symbol
+      sample had not. Every other kind keeps "a failed key stays failed"; the next bucket's key
+      retries a scan.
+    - **Not here:** retrying a dead rescreen automatically. A run whose process died stays
+      `running` until a trigger (a click, the CronJob) reclaims it - see the debt table.
 
 ---
 
 ## Bugs that cost real time, and the lesson from each
+
+**The first real rescreen (kind, 2026-10-01) found four things every test had passed (M8 PR 8).**
+1. *A sample is not a run.* 100 `info` fetches in 8.9 s extrapolated to a 10-minute build; the
+   real one met `YFRateLimitError` within two minutes, took 28 minutes and failed on 64 symbols.
+   That forced the same-day retry of a failed rescreen (its kept cache made the retry 3 minutes).
+   → **Measure the duration of anything rate-limited with the whole run, not a sample of it.**
+2. *Validate at the precision you store.* A holding weight of `9.9999994E-8` passed
+   `0 < w <= 1` and became `0.000000` in `numeric(9,6)`, so the CHECK failed the whole load.
+   `plausible_weight` now quantizes to the column's resolution first.
+3. *Publish after commit, not before.* The snapshot was renamed into the volume before its load
+   committed; when the load failed, the startup loader (newest snapshot wins) would have failed on
+   it at every deploy. It is now loaded from the dot-directory and renamed only after commit.
+4. *A skip is not a removal.* 4 members lost their description in the new snapshot but kept the
+   earlier profile, and showed as `-4 unexplained`. The loader now counts `undescribed_kept` /
+   `no_currency_kept` - decision 86's lesson, met again from the other side.
+→ **Prove a long background job end to end on real data before the PR**; each of these was
+invisible to unit tests, the integration suite and a sampled measurement alike.
 
 **The universe loader skipped 14 ETF-holding rows without counting them (found in M8 PR 4).**
 `load_holdings` did `continue` for a holding whose fund had no profile - BULZ (10 rows), GDXD and
@@ -1895,6 +1955,8 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 
 | Item | Where | Impact |
 |---|---|---|
+| **A dead rescreen waits for the next trigger** | `app/universe/rescreen.py`, `claimRun` | The rescreen runs in an AI-service process (`BackgroundTasks`). If that process dies - a deploy, the autoscaler removing a copy - the run stays `running` with a stale heartbeat; nothing retries it until a click or the CronJob claims the key again (reclaimed after 5 min; the cache makes it resume). Same day only: a new day's key is a new run, which the one-running index blocks until the dead one is reclaimed by its own key or finished by hand |
+| **The snapshot volume is ReadWriteOnce** | `infra/k8s/base/universe-snapshots.yaml` | kind has one node, so every AI-service copy and the `universe` Job share the claim. On a multi-node cluster, pods on a second node cannot mount it: it needs ReadWriteMany storage or the rescreen pinned to one node |
 | **An on-demand profile is never refreshed** | `app/universe/on_demand.py` | Written once (`DO NOTHING`); its size facts and description stay as fetched until a rescreen admits it (then the loader owns it) or it is deleted. A fetch lost to a dying process (`BackgroundTasks` is in-memory) is retried only the next time a user names the symbol - on a later local day, since gap events are counted per day but the request fires on every sighting |
 | **The topic gate refused a nonsense phrase by 0.007** | `app/ask/relevance.py` (`refuse_below` 0.32) | Measured on compose 2026-09-30: "zzqx flibbertigibbet" scored 0.313, "medieval tapestry restoration" 0.245, "quantum computing" 0.584. The gate held, but a nonsense string sits 0.007 below it. `universe_gap_low_confidence` events now record every `none` with its score; **look at their distribution before moving the gate**, not at one example |
 | **Model cost reads $0 on this installation** | `.env` `LLM_MODEL` (a `:free` OpenRouter route) | Every recorded call is priced 0 because the configured route is free - true, and the panel (#126, decision 88) says "free route" rather than $0. "Free" is read from the `:free` suffix alone: a free route OpenRouter names differently would show as "$0", a price. The cost column has not yet been seen non-zero on real data |
@@ -1945,7 +2007,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | `instruments`, `quotes` and the news tables (and `instrument_profiles`, `etf_holdings`) have no `user_id` | migrations | **Intentional** — shared reference and market data, not user-owned. Documented so an audit does not re-flag it |
 | **Topic resolution finds 14/35 expected tickers on held-out topics** | `app/topics/resolution.py` | Measured on the user's sealed batch; slice 2 did not change it. Causes, measured: one outlier sets the gate; no ETF clears the source floor for cloud/e-commerce/obesity/robot surgery; giants are described too broadly; OTC-only ADRs (LVMUY) are not in the universe. The backlog, ranked, is `docs/TOPIC_RESOLUTION.md` §4 — **and it needs a new held-out batch before any of it can be measured** |
 | ~~The universe is not reachable from the running stack~~ | — | **Resolved in M5 slice 3** (`POST /topics/resolve`). The image copies `data/universe` without the descriptions; the compose `universe` container loads it on every start from a read-only mount of the checkout. CI loads hand-written fixture descriptions so the smoke test runs the resolver's SQL. **Still true:** nothing refreshes the snapshot itself, and a machine with no `descriptions.local.jsonl` answers `unavailable`, by design |
-| **A fresh machine needs ~1 h of Yahoo fetching before topics resolve** | `build_instrument_universe.py` | Descriptions are not committed (decision 40). The build is resumable (`--cache`, `--holdings-cache`) and refuses to write a snapshot with holes; rate-limit failures are retried on the next run. Rebuilding also re-screens, so membership near the $1B line moves (LAC sits at $1.05B) |
+| **A fresh machine needs 30+ min of Yahoo fetching, and a retry, before topics resolve** (2026-10-01: a sample suggested ~10 min; the real rescreen was rate-limited, failed at 28 min on 64 symbols and needed two resumed retries) | `build_instrument_universe.py`, or the admin's rescreen button | Descriptions are not committed (decision 40). The build is resumable (`--cache`, `--holdings-cache`) and refuses to write a snapshot with holes; rate-limit failures are retried on the next run. Rebuilding also re-screens, so membership near the $1B line moves (LAC sits at $1.05B) |
 | **Disambiguation is built and dormant** | `app/topics/meanings.py` | `MEANINGS_SPLIT_BELOW` was fitted before name stripping; afterwards no fitting topic splits, including "chips" and "mining". The code and its constant say so. Needs genuinely ambiguous fitting topics on current vectors before it is trusted |
 | **Ticker networks still reach discovery through the followed feed** | `app/news/gdelt.py`, `market_feed.py` | `EXCLUDED_OUTLETS` applies to the market filter only (decision 60, deliberately: it did not change what the followed feed collects). But a network headline that names a followed company ("Nvidia (NASDAQ:NVDA) short interest...") is still collected and read by discovery, and on 2026-09-29 it produced a **weak proposal, "short interest"** (IWM, IWR, LQD...). Options: exclude the listed outlets from the followed feed too (changes topic news for the user - ask), or add "short interest"-style template words to `GENERIC_WORDS`. Measure on the stored window first |
 | **The resolver cannot match events about private companies** | `app/topics/resolution.py` | "anthropic ipo" is a real, recurring story; it resolves `weak` to LLY, ABBV, PLTR - nothing to do with it - because Anthropic is not listed. Weak proposals are hidden by default exactly for this (decision 62), but the band does not say *why* the match is weak. A resolver change needs the new held-out batch (batch 3) |
@@ -2307,7 +2369,8 @@ within one background fetch"; (7) universe status against the loader's own count
   (BYND and GPRO are live examples), excluded from `search_profiles`; update the exit wording in
   `docs/MILESTONES.md`. The status panel's negative remainder (decision 86) is how an on-demand
   profile shows - say so on the card.
-- **PR 8 - the rescreen run** (decisions 3-5): `universe_rescreen` run kind (a migration of
+- ~~PR 8 - the rescreen run~~ **Done, #128 (decision 90)** - shown in kind; **compose has not
+  been rescreened** (it rewrites the real universe: ask first). Original plan (decisions 3-5): `universe_rescreen` run kind (a migration of
   `runs_kind_check` - use the `KINDS`/`PREVIOUS_KINDS` pattern `test_run_kinds_contract.py`
   reads), `runs.heartbeat_at`, the 202 path, the volume, the newest-snapshot rule in
   `ingest_universe.py`, the button on the Admin page, and **the first real `admin_audit` row**.

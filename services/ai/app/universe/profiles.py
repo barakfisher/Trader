@@ -28,7 +28,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from enum import StrEnum
 from typing import Any
 
@@ -70,6 +70,13 @@ class LoadReport:
     #: Members skipped because Yahoo reported no currency, which `instruments`
     #: requires and which is not ours to guess.
     no_currency: int
+    #: Of the undescribed and the no-currency, those whose profile from an
+    #: earlier snapshot is kept: still members, so still screened, and in the
+    #: database although this load wrote nothing for them. Counted since the
+    #: first real rescreen, where 4 such members were the reconciliation's only
+    #: unexplained rows.
+    undescribed_kept: int = 0
+    no_currency_kept: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,15 +153,28 @@ def load_universe(
             text("SELECT instrument_id, content_hash FROM instrument_profiles")
         )
     }
+    screened_symbols = set(
+        connection.execute(
+            text(
+                "SELECT i.symbol FROM instrument_profiles p JOIN instruments i "
+                "ON i.id = p.instrument_id WHERE p.membership = 'screened'"
+            )
+        ).scalars()
+    )
     as_of = datetime.fromisoformat(snapshot.as_of.replace("Z", "+00:00"))
     created = changed = unchanged = undescribed = no_currency = 0
+    undescribed_kept = no_currency_kept = 0
 
     for member in snapshot.instruments:
+        # Skipped, but not dropped: a member's earlier profile stays.
+        kept = member.symbol in screened_symbols
         if member.description is None:
             undescribed += 1
+            undescribed_kept += kept
             continue
         if member.currency is None:
             no_currency += 1
+            no_currency_kept += kept
             continue
         instrument_id = _upsert_instrument(connection, member)
         embedded_text = matching_text(member.name, member.asset_class, member.description)
@@ -222,7 +242,33 @@ def load_universe(
             },
         )
 
-    return LoadReport(created, changed, unchanged, undescribed, no_currency)
+    return LoadReport(
+        created, changed, unchanged, undescribed, no_currency, undescribed_kept, no_currency_kept
+    )
+
+
+def mark_dropped(connection: Connection, members: set[str]) -> int:
+    """Mark every screened profile the snapshot does not hold as `dropped`. How many.
+
+    Kept, not deleted: holdings and topics reference instruments, and a listing
+    that fell below the floor this quarter may be back the next - `load_universe`
+    promotes it again then. Only screened profiles: an on-demand one was never
+    the snapshot's to drop.
+    """
+    result = connection.execute(
+        text(
+            """
+            UPDATE instrument_profiles p
+               SET membership = 'dropped', updated_at = now()
+              FROM instruments i
+             WHERE i.id = p.instrument_id
+               AND p.membership = 'screened'
+               AND NOT (i.symbol = ANY(:members))
+            """
+        ),
+        {"members": sorted(members)},
+    )
+    return int(result.rowcount or 0)
 
 
 def insert_on_demand(
@@ -426,17 +472,26 @@ class HoldingsReport:
     of_unprofiled_etf: int = 0
 
 
+#: `etf_holdings.weight` is numeric(9, 6): a weight is stored to a millionth.
+WEIGHT_RESOLUTION = Decimal("0.000001")
+
+
 def plausible_weight(weight: str) -> bool:
-    """Is this a fraction of a fund, 0 < w <= 1?
+    """Is this a fraction of a fund, 0 < w <= 1, *as the column will store it*?
 
     Measured in the 2026-09-24 snapshot: 19 of 16,396 rows are not - cash
     placeholders at 0, wrappers holding another ETF at 1.006-1.39, and one money
     fund reported at 668.8 (66,880%). None is a company holding, which is all
     this table is for, so they are counted and skipped rather than stored as
     facts or allowed by loosening the column's CHECK.
+
+    Judged after rounding to the column's resolution, the way Postgres rounds
+    (half away from zero): the first real rescreen (2026-10-01) met a money fund
+    at `9.9999994E-8`, which is above zero as written and `0.000000` once
+    stored - the CHECK refused it and failed the whole load.
     """
     try:
-        value = Decimal(weight)
+        value = Decimal(weight).quantize(WEIGHT_RESOLUTION, rounding=ROUND_HALF_UP)
     except InvalidOperation:
         return False
     return Decimal(0) < value <= Decimal(1)
