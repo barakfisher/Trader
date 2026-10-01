@@ -95,11 +95,14 @@ Service `ai-service` became `AI_SERVICE_PORT=tcp://10.96.x.x:8000`, which collid
 service's own `AI_SERVICE_PORT` setting and stopped it at startup.
 
 **Secrets.** `scripts/k8s-up.sh` writes `overlays/kind/secrets.env` on the first run: random
-session and internal keys, a random database password, and the cluster's own sign-in passphrase,
-printed once (`grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.env` to read it again). The
-cluster needs no `.env`. The file is never rewritten, because Postgres reads the password only when
-it first creates its data directory - a new password would lock the services out of the existing
-database. To start over: `k8s-down.sh`, then delete the file.
+session and internal keys, random passwords for the database owner (`POSTGRES_PASSWORD`, used by
+the `migrate` Job through `MIGRATION_DATABASE_URL`) and for `traders_app`, the role every other pod
+connects as (`APP_DB_PASSWORD`, `DATABASE_URL`; migration 0033), and the cluster's own sign-in
+passphrase, printed once (`grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.env` to read it
+again). The cluster needs no `.env`. The owner password is never rewritten, because Postgres reads it
+only when it first creates its data directory - a new one would lock the migrations out of the
+existing database. A file from before the app role is upgraded in place: the app role's lines are
+added and nothing else changes. To start over: `k8s-down.sh`, then delete the file.
 
 **Settings.** `base/config.env` is keyless: Yahoo prices (no key needed), fixture news, fixture
 embeddings, template narration, Telegram off. The compose stack keeps its own `.env`; the two

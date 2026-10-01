@@ -59,8 +59,9 @@ fi
 # already-set DATABASE_URL wins, so this is overridable.
 if [ -z "${DATABASE_URL:-}" ] && [ -f "$root/.env" ]; then
   # shellcheck disable=SC2046
-  eval $(grep -E '^(POSTGRES_USER|POSTGRES_PASSWORD|POSTGRES_DB|POSTGRES_HOST_PORT)=' "$root/.env" | sed 's/^/export /')
-  export DATABASE_URL="postgresql://${POSTGRES_USER:-traders}:${POSTGRES_PASSWORD:-traders}@127.0.0.1:${POSTGRES_HOST_PORT:-5432}/${POSTGRES_DB:-traders}"
+  eval $(grep -E '^(APP_DB_PASSWORD|POSTGRES_DB|POSTGRES_HOST_PORT)=' "$root/.env" | sed 's/^/export /')
+  # As traders_app, like the corpus container (migration 0033).
+  export DATABASE_URL="postgresql://traders_app:${APP_DB_PASSWORD:-traders_app}@127.0.0.1:${POSTGRES_HOST_PORT:-5432}/${POSTGRES_DB:-traders}"
 fi
 
 output="$(cd "$root/services/ai" && PYTHONPATH="$root/services/ai" CORPUS_DIR="$root/data/corpus" \

@@ -103,3 +103,4 @@ while this file is out of date.
 | 90 | The rescreen is a run the orchestrator claims and the AI service finishes, on a heartbeat, into a volume the loader reads newest-first |
 | 91 | The quarterly rescreen asks hourly, and is due by the age of the snapshot loaded |
 | 92 | A standing finding is asked about once per episode, not once per observation |
+| 93 | The services connect as `traders_app`; only migrations connect as the owner |

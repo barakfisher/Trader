@@ -158,6 +158,10 @@ nothing could price, is not fetched.)*
 - `admin_audit` (`admin_user_id`, `action`, `detail`, `ip_address`, `occurred_at`) is append-only:
   the application role has `INSERT`/`SELECT` only, so immutability is enforced by Postgres, not by
   convention.
+  *(As built: M8 shipped this with triggers only (decision 84), because every service connected as
+  the superuser that owns the table, and a grant cannot bind a superuser. It became true as written
+  with migration 0033 (independent task 9): the services connect as `traders_app`, and an UPDATE
+  is refused by privilege before any trigger runs.)*
 
 **Exit:** a non-admin session gets `403` on every `/admin/*` route (proved by a test that
 enumerates them); the rescreen button and the CronJob produce the same single run; the panel shows

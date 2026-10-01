@@ -109,7 +109,19 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Orchestrator queries against Postgres
+      # As the migrate container does it: upgrade (already at head here) and
+      # give traders_app its password - which also proves the script.
+      - name: Migrate and let the app role log in
+        working-directory: services/ai
+        env:
+          DATABASE_URL: postgresql://traders:traders@localhost:5432/traders_ci
+          APP_DB_PASSWORD: traders_app
+        run: .venv/bin/python scripts/migrate.py
+      # As traders_app, the role every service connects as (migration 0033), so
+      # a query the app's grants do not cover fails here and not in production.
+      - name: Orchestrator queries against Postgres, as the app role
+        env:
+          TEST_DATABASE_URL: postgresql://traders_app:traders_app@localhost:5432/traders_ci
         run: pnpm --filter @traders/orchestrator exec vitest run test/queries.postgres.test.ts
 
   compose:

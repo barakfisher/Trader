@@ -248,7 +248,7 @@ the PR after that. Task 7 (server state in TanStack Query) was done across #90-#
 that closed it, and task 6 (a screen for `/ask`) in M6 PR 10. That queue emptied at M8's close.
 
 **The post-M8 sweep (2026-10-01)** refilled it as tasks 8-15 (task 8, one question per standing
-finding, became decision 92 when measured), approved by the user in that order,
+finding, became decision 92 when measured; task 9 is decision 93), approved by the user in that order,
 with the same grant as M8 (PR, merge on green, verify on `main` by content, rebuild compose and
 kind). It was measured on compose before it was written: the BTC-USD drift was proposed **7 days
 running** (25 Sep-1 Oct; approved once, 5 expired unanswered), only 2 low-confidence gap events
@@ -259,7 +259,6 @@ strings and left-to-right assumptions before designing it.
 
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
-| 9 | **Separate database roles** | M8 §5 | M | An owner role runs Alembic; the application connects as a plain role with `INSERT, SELECT` only on `admin_audit`. Compose, kind and CI `DATABASE_URL`s. `test_the_app_role_is_a_superuser...` fails when it lands - delete it and the debt row. Also correct `docs/MILESTONES.md` M8 §5, which today claims Postgres enforces what only triggers enforce |
 | 10 | **Edit a holding's cost basis on screen**, and the sign-in page's wording | M6 (FR-2) | S | `HoldingsTable.tsx`, `useHoldingEditor`: cost per unit beside quantity. The sign-in page stops saying "the passphrase from your environment file" as if compose were the only installation. Resolves both debt rows |
 | 11 | **Session-aware closes** | M2.5 | S-M | The quote path does not store an equity quote dated outside its exchange's session (the Sunday "close"), and the backfill finalises a crypto day at 00:00 UTC, not 20:00 - both from `market_sessions.py`. Resolves the two debt rows |
 | 12 | **A dead rescreen is reclaimed by the next hourly check** | M8 | S | `app/universe/rescreen.py`, `claimRun`. A `running` rescreen with a stale heartbeat is taken over whatever day its key names, so a death no longer waits for a click. Resolves the debt row |
@@ -1489,6 +1488,26 @@ failure they prevent.
     "still drifted" daily; only the question goes quiet. Replayed in
     `proposalEpisodes.test.ts`: the week asks once.
 
+93. **The services connect as `traders_app`; only migrations connect as the owner**
+    (independent task 9, migration 0033). Measured first: no service, loader or script issues
+    DDL, `TRUNCATE`, `COPY` or an advisory lock at runtime, so a role with `SELECT, INSERT,
+    UPDATE, DELETE` on `public` and `mastra` (and their sequences) is enough - and on
+    `admin_audit` only `INSERT, SELECT`, so decision 84's triggers are now the second line, not
+    the only one. Choices argued: **the password is never in the migration** (committed); 0033
+    creates the role `NOLOGIN` and `scripts/migrate.py` sets `LOGIN PASSWORD` from
+    `APP_DB_PASSWORD` after every upgrade, which also makes rotation "change the variable,
+    restart". Rejected: a Postgres init script (runs only on an empty data directory, so never
+    on an existing installation). **The role is never dropped**: roles are cluster-wide and the
+    test databases share a cluster with the real one, so the downgrade revokes its rights in
+    that database only. **Default privileges** grant future tables automatically; a future
+    append-only table must `REVOKE` explicitly. Compose keeps the owner URL on `migrate` alone;
+    kind overrides the `migrate` Job's `DATABASE_URL` from `MIGRATION_DATABASE_URL`, and
+    `k8s-up.sh` upgrades an existing `secrets.env` in place (adds the app role, keeps the owner
+    password the database already has). CI runs `scripts/migrate.py` and then
+    `queries.postgres.test.ts` **as `traders_app`**, so a query the grants do not cover fails in
+    CI. Locally all 22 orchestrator SQL tests passed as the app role with one expected change:
+    an UPDATE on the audit is now refused by privilege, not by the trigger.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -2039,7 +2058,8 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | **The topic gate refused a nonsense phrase by 0.007** | `app/ask/relevance.py` (`refuse_below` 0.32) | Measured on compose 2026-09-30: "zzqx flibbertigibbet" scored 0.313, "medieval tapestry restoration" 0.245, "quantum computing" 0.584. The gate held, but a nonsense string sits 0.007 below it. `universe_gap_low_confidence` events now record every `none` with its score; **look at their distribution before moving the gate**, not at one example |
 | **Model cost reads $0 on this installation** | `.env` `LLM_MODEL` (a `:free` OpenRouter route) | Every recorded call is priced 0 because the configured route is free - true, and the panel (#126, decision 88) says "free route" rather than $0. "Free" is read from the `:free` suffix alone: a free route OpenRouter names differently would show as "$0", a price. The cost column has not yet been seen non-zero on real data |
 | **A low-confidence topic cannot be produced in the kind cluster** | fixture embedder, `app/ask/relevance.judge` | Keyless by decision 79: on a non-semantic embedder the judge abstains, so every topic is `weak`, never `none`. Show that event on compose |
-| **The app connects to Postgres as a superuser that owns every table** | compose, kind, CI `DATABASE_URL`s | Every service uses `traders`, the only role, a superuser. So grants protect nothing: `admin_audit` is append-only only because of its triggers (decision 84), and a superuser can still `DISABLE TRIGGER`. Any SQL-injection bug would run with full rights. Fix: an owner role for Alembic and a plain application role with `INSERT, SELECT` on `admin_audit` - it touches every connection string in three environments, which is why it was not done in M8 PR 2. `test_the_app_role_is_a_superuser...` fails when it lands, as a reminder to delete this row |
+| ~~The app connects to Postgres as a superuser that owns every table~~ | — | **Resolved** by decision 93 (independent task 9, migration 0033): the services connect as `traders_app`; the owner runs migrations only. What remains is the next row |
+| **The owner's password still reaches every container** | compose `env_file`, kind `traders-secrets` | Compose loads `.env` into every service, and every kind pod reads the one Secret, so `POSTGRES_PASSWORD` (and in kind `MIGRATION_DATABASE_URL`) is in each service's environment even though no service uses it. Task 9 closed the SQL-injection path (a query runs as `traders_app`); code execution inside a service could still read the owner's password. Fix: a second Secret (and a second env file) that only Postgres and `migrate` mount - it changes the shape of `secrets.env` and `.env`, which is why it was not folded into task 9 |
 | **Telegram's inbound delivery is unproven** | deployment | Still true after M7, deliberately: the cluster runs with Telegram off (decision 79). **The user decided (2026-09-30) to prove the webhook in a real cloud deployment with HTTPS**, not through a tunnel from the laptop; `setWebhook` on the real bot stops the compose stack's polling, so it waits for that deployment. Everything else was exercised against a real bot, but `setWebhook` needs a public HTTPS URL. The handler has only ever been driven by replaying genuine payloads at it locally. **The first real deployment is the first real test of that leg** — check `getWebhookInfo` for `last_error_message` immediately after |
 | **`queries.ts` conflicts on every parallel PR** | `src/db/queries.ts` | Four M4 PRs appended a section to the end of one 1,200-line file, and every rebase put a conflict marker exactly where one function's closing brace met the next block's header — the brace was lost and hand-repaired **three separate times**. It is the cost of CLAUDE.md's "all SQL in one file" rule, which is otherwise good. Worth deciding whether to split by domain with an index |
 | **Migration 0008 hard-codes a table Mastra owns** | `0008_mastra_workflow_state.py` | The library would create `mastra_workflow_snapshot` itself; Alembic creates it instead (`disableInit: true`), because CLAUDE.md says the AI service owns the schema. An upgrade that changes the shape breaks suspended runs — so `test/mastraSchemaOwnership.test.ts` compares the migration against `WorkflowsPG.getExportDDL()` and fails the build first. Two other things cost time to find: `PostgresStore` creates **43** tables for 24 storage domains unless you route only `workflows`, and `@mastra/core` posts feature-usage telemetry to PostHog unless `MASTRA_TELEMETRY_DISABLED` is set (it is, in `workflowRuntime.ts`, in code rather than `.env`) |
