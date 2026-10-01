@@ -102,7 +102,8 @@ passphrase, printed once (`grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.e
 again). The cluster needs no `.env`. The owner password is never rewritten, because Postgres reads it
 only when it first creates its data directory - a new one would lock the migrations out of the
 existing database. A file from before the app role is upgraded in place: the app role's lines are
-added and nothing else changes. To start over: `k8s-down.sh`, then delete the file.
+added and nothing else changes. A missing file next to an existing cluster is recovered from the
+cluster's own Secret rather than regenerated. To start over: `k8s-down.sh`, then delete the file.
 
 **Settings.** `base/config.env` is keyless: Yahoo prices (no key needed), fixture news, fixture
 embeddings, template narration, Telegram off. The compose stack keeps its own `.env`; the two
