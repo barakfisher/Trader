@@ -139,7 +139,7 @@ export const DashboardPage = observer(function DashboardPage() {
                 is indistinguishable from one with nothing behind it.
               */}
               {openCount > 0 && (
-                <span className="ml-1 rounded-full bg-accent px-1.5 text-xs font-semibold text-surface">
+                <span className="ms-1 rounded-full bg-accent px-1.5 text-xs font-semibold text-surface">
                   {openCount}
                 </span>
               )}

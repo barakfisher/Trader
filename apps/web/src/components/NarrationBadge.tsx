@@ -43,7 +43,7 @@ export function NarrationBadge() {
 
       {/* Shown on hover and on keyboard focus: a control reachable only by mouse
           hides its explanation from anyone not using one. */}
-      <div className="pointer-events-none absolute right-0 z-20 mt-2 hidden w-80 rounded-xl border border-border-subtle bg-surface-raised p-3 text-left shadow-lg group-hover:block group-focus-within:block">
+      <div className="pointer-events-none absolute end-0 z-20 mt-2 hidden w-80 rounded-xl border border-border-subtle bg-surface-raised p-3 text-start shadow-lg group-hover:block group-focus-within:block">
         <p className="text-xs text-text-primary">{copy.summary}</p>
         {copy.consequence && <p className="mt-1.5 text-xs text-text-muted">{copy.consequence}</p>}
 

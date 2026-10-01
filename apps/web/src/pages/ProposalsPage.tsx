@@ -11,6 +11,7 @@ import { errorMessage } from '../api/client.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { outcomeAt, outcomeText, outcomeTone } from '../lib/proposalOutcome.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
+import { MIRROR_IN_RTL, SERVER_ENGLISH } from '../lib/textDirection.ts';
 import { undoSecondsLeft } from '../lib/undoWindow.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import {
@@ -85,7 +86,7 @@ export const ProposalsPage = observer(function ProposalsPage() {
         </div>
         <Link to="/" className={buttonClass('ghost')}>
           <span className="flex items-center gap-1.5">
-            <ArrowLeft className="size-4" aria-hidden />
+            <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
             Back to portfolio
           </span>
         </Link>
@@ -197,6 +198,7 @@ function HistorySection({
                 <Link
                   to="/proposals/$proposalId"
                   params={{ proposalId: proposal.id }}
+                  {...SERVER_ENGLISH}
                   className="min-w-0 text-sm text-text-primary hover:text-accent hover:underline"
                 >
                   {proposal.headline}

@@ -28,6 +28,17 @@ body {
   font-feature-settings: 'tnum' 1; /* tabular figures keep price columns aligned */
 }
 
+/* A header cell takes its row's alignment. Browsers centre a <th> unless an
+   ancestor sets an explicit alignment, and `text-align: start` - the logical
+   form every table here uses - is the default value, so it does not count as
+   one: with `text-start` on the row, every header sat centred over a
+   start-aligned column. `text-end` on a cell still wins (utilities layer). */
+@layer base {
+  th {
+    text-align: inherit;
+  }
+}
+
 /* Form inputs are repeated often enough to justify one utility class. */
 @layer components {
   .input {

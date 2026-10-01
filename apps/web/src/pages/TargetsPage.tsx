@@ -9,6 +9,7 @@ import {
   formatDriftPoints,
   unitsToPercent,
 } from '../lib/targetWeights.ts';
+import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import type { TargetRow } from '../stores/TargetsStore.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { errorMessage } from '../api/client.ts';
@@ -54,7 +55,7 @@ export const TargetsPage = observer(function TargetsPage() {
         </div>
         <Link to="/" className={buttonClass('secondary')}>
           <span className="flex items-center gap-1">
-            <ArrowLeft className="size-4" aria-hidden />
+            <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
             Back to portfolio
           </span>
         </Link>
@@ -116,12 +117,12 @@ export const TargetsPage = observer(function TargetsPage() {
           >
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="text-left text-xs uppercase tracking-wide text-text-muted">
+                <thead className="text-start text-xs uppercase tracking-wide text-text-muted">
                   <tr>
-                    <th className="py-2 pr-3 font-medium">Holding</th>
-                    <th className="py-2 pr-3 text-right font-medium">Now</th>
-                    <th className="py-2 pr-3 text-right font-medium">Target</th>
-                    <th className="py-2 text-right font-medium">Drift</th>
+                    <th className="py-2 pe-3 font-medium">Holding</th>
+                    <th className="py-2 pe-3 text-end font-medium">Now</th>
+                    <th className="py-2 pe-3 text-end font-medium">Target</th>
+                    <th className="py-2 text-end font-medium">Drift</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -131,12 +132,12 @@ export const TargetsPage = observer(function TargetsPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-border-subtle text-text-muted">
-                    <td className="py-2 pr-3">Targeted</td>
-                    <td className="py-2 pr-3 text-right" />
-                    <td className="py-2 pr-3 text-right tabular-nums text-text-primary">
+                    <td className="py-2 pe-3">Targeted</td>
+                    <td className="py-2 pe-3 text-end" />
+                    <td className="py-2 pe-3 text-end tabular-nums text-text-primary">
                       {unitsToPercent(targets.totalUnits)}%
                     </td>
-                    <td className="py-2 text-right text-xs">
+                    <td className="py-2 text-end text-xs">
                       {targets.unallocatedUnits >= 0
                         ? `${unitsToPercent(targets.unallocatedUnits)}% not spoken for`
                         : `${unitsToPercent(-targets.unallocatedUnits)}% too much`}
@@ -158,15 +159,15 @@ export const TargetsPage = observer(function TargetsPage() {
 
           <div className="flex flex-wrap items-center justify-end gap-3">
             {targets.blockingIssue && (
-              <span className="mr-auto text-sm text-loss">{targets.blockingIssue}</span>
+              <span className="me-auto text-sm text-loss">{targets.blockingIssue}</span>
             )}
             {targets.isDirty && !targets.blockingIssue && (
-              <span className="mr-auto text-sm text-text-muted">
+              <span className="me-auto text-sm text-text-muted">
                 Unsaved changes. Nothing is compared against these until you save.
               </span>
             )}
             {!targets.isDirty && targets.savedAt && (
-              <span className="mr-auto text-sm text-text-muted">
+              <span className="me-auto text-sm text-text-muted">
                 Saved. Drift is measured on the next scan, not immediately.
               </span>
             )}
@@ -204,7 +205,7 @@ const Row = observer(function Row({ row }: { row: TargetRow }) {
 
   return (
     <tr className="border-t border-border-subtle">
-      <td className="py-2 pr-3">
+      <td className="py-2 pe-3">
         <span className="font-medium text-text-primary">{row.symbol}</span>
         {row.name && <span className="block text-xs text-text-muted">{row.name}</span>}
         {!row.held && (
@@ -213,14 +214,14 @@ const Row = observer(function Row({ row }: { row: TargetRow }) {
           </span>
         )}
       </td>
-      <td className="py-2 pr-3 text-right tabular-nums text-text-muted">
+      <td className="py-2 pe-3 text-end tabular-nums text-text-muted">
         {/* Unpriced is a known unknown and says so; it is never rendered as 0%. */}
         {row.actualUnits === null ? 'unpriced' : `${unitsToPercent(row.actualUnits)}%`}
       </td>
-      <td className="py-2 pr-3 text-right">
+      <td className="py-2 pe-3 text-end">
         <div className="flex items-center justify-end gap-1">
           <input
-            className={`input max-w-24 text-right tabular-nums ${row.invalid ? 'border-loss' : ''}`}
+            className={`input max-w-24 text-end tabular-nums ${row.invalid ? 'border-loss' : ''}`}
             type="text"
             inputMode="decimal"
             aria-label={`Target weight for ${row.symbol}, in percent`}
@@ -232,7 +233,7 @@ const Row = observer(function Row({ row }: { row: TargetRow }) {
           <span className="text-text-muted">%</span>
         </div>
       </td>
-      <td className={`py-2 text-right tabular-nums ${tone}`}>
+      <td className={`py-2 text-end tabular-nums ${tone}`}>
         {row.driftUnits === null ? '—' : formatDriftPoints(row.driftUnits)}
       </td>
     </tr>

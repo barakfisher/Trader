@@ -15,6 +15,7 @@ import type { TopicCandidate } from '@traders/shared/ai';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Button, Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
+import { MIRROR_IN_RTL, SERVER_ENGLISH } from '../lib/textDirection.ts';
 import {
   coverageNote,
   heldByText,
@@ -63,7 +64,7 @@ export const TopicsPage = observer(function TopicsPage() {
         </div>
         <Link to="/" className={buttonClass('secondary')}>
           <span className="flex items-center gap-1">
-            <ArrowLeft className="size-4" aria-hidden />
+            <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
             Back to portfolio
           </span>
         </Link>
@@ -142,7 +143,7 @@ const TopicList = observer(function TopicList() {
             <button
               type="button"
               onClick={() => void topics.open(topic.id)}
-              className={`flex w-full items-center justify-between gap-3 py-2 text-left text-sm hover:text-accent ${
+              className={`flex w-full items-center justify-between gap-3 py-2 text-start text-sm hover:text-accent ${
                 topics.openTopicId === topic.id ? 'text-accent' : ''
               }`}
             >
@@ -248,7 +249,7 @@ const ProposalRow = observer(function ProposalRow({ topic }: { topic: TopicSumma
           <ul className="space-y-0.5">
             {evidence.headlines.map((headline) => (
               <li key={headline.articleId} className="break-words text-xs">
-                <q className="italic text-text-muted">{headline.title}</q>
+                <q {...SERVER_ENGLISH} className="italic text-text-muted">{headline.title}</q>
                 <span className="text-text-muted"> · {headline.source}</span>
               </li>
             ))}
@@ -355,7 +356,7 @@ function ToneLine({ sentiment }: { sentiment: TopicSentimentResponse }) {
   return (
     <p className="text-sm">
       {summary.score !== null && (
-        <span className="mr-2 font-semibold tabular-nums">{summary.score}</span>
+        <span className="me-2 font-semibold tabular-nums">{summary.score}</span>
       )}
       <span className="text-xs text-text-muted">{summary.text}</span>
     </p>

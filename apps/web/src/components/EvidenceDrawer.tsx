@@ -55,7 +55,7 @@ export function EvidenceDrawer({
                 <dt className="text-xs text-text-muted" title={entry.key}>
                   {entry.label}
                 </dt>
-                <dd className="text-right text-xs font-medium text-text-primary">{entry.value}</dd>
+                <dd className="text-end text-xs font-medium text-text-primary">{entry.value}</dd>
               </div>
             ))}
           </dl>

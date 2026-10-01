@@ -14,6 +14,7 @@ import {
 } from '../lib/notificationSchedule.ts';
 import { SEVERITY_BANDS, SEVERITY_CHOICES, describeSeverityFloor } from '../lib/severityScale.ts';
 import { formatClockTime, formatExactTime, getDisplayTimeZone } from '../lib/relativeTime.ts';
+import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import {
   MAX_PROPOSAL_TTL_HOURS,
   MIN_PROPOSAL_TTL_HOURS,
@@ -56,7 +57,7 @@ export const SettingsPage = observer(function SettingsPage() {
         </div>
         <Link to="/" className={buttonClass('secondary')}>
           <span className="flex items-center gap-1">
-            <ArrowLeft className="size-4" aria-hidden />
+            <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
             Back to portfolio
           </span>
         </Link>
@@ -239,23 +240,23 @@ export const SettingsPage = observer(function SettingsPage() {
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="text-left text-xs uppercase tracking-wide text-text-muted">
+                <thead className="text-start text-xs uppercase tracking-wide text-text-muted">
                   <tr>
-                    <th className="py-2 pr-3 font-medium">Finding</th>
-                    <th className="py-2 pr-3 font-medium">Info</th>
-                    <th className="py-2 pr-3 font-medium">Notable</th>
+                    <th className="py-2 pe-3 font-medium">Finding</th>
+                    <th className="py-2 pe-3 font-medium">Info</th>
+                    <th className="py-2 pe-3 font-medium">Notable</th>
                     <th className="py-2 font-medium">High</th>
                   </tr>
                 </thead>
                 <tbody>
                   {SEVERITY_BANDS.map((band) => (
                     <tr key={band.rule} className="border-t border-border-subtle">
-                      <td className="py-2 pr-3">
+                      <td className="py-2 pe-3">
                         <span className="text-text-primary">{band.rule}</span>
                         <span className="block text-xs text-text-muted">{band.measure}</span>
                       </td>
-                      <td className="py-2 pr-3 text-text-muted">{band.info}</td>
-                      <td className="py-2 pr-3 text-warn">{band.notable}</td>
+                      <td className="py-2 pe-3 text-text-muted">{band.info}</td>
+                      <td className="py-2 pe-3 text-warn">{band.notable}</td>
                       <td className="py-2 text-loss">{band.high}</td>
                     </tr>
                   ))}
@@ -266,10 +267,10 @@ export const SettingsPage = observer(function SettingsPage() {
 
           <div className="flex flex-wrap items-center justify-end gap-3">
             {settings.blockingIssue && (
-              <span className="mr-auto text-sm text-loss">{settings.blockingIssue}</span>
+              <span className="me-auto text-sm text-loss">{settings.blockingIssue}</span>
             )}
             {settings.isDirty && !settings.blockingIssue && (
-              <span className="mr-auto text-sm text-text-muted">
+              <span className="me-auto text-sm text-text-muted">
                 Unsaved changes. Nothing is in force until you save.
               </span>
             )}

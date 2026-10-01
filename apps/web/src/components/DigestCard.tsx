@@ -6,6 +6,7 @@ import { errorMessage } from '../api/client.ts';
 import { countText, findingsIn, reasonSummary, reasonText } from '../lib/digestPresentation.ts';
 import { severityStyle, subjectLabel } from '../lib/observationPresentation.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
+import { SERVER_ENGLISH } from '../lib/textDirection.ts';
 import { useDigestQuery } from '../queries/digest.ts';
 import { Card, ErrorNote, Spinner } from './ui.tsx';
 
@@ -85,7 +86,7 @@ function EntryList({ entries }: { entries: DigestEntry[] }) {
             {entry.subjectRef && (
               <span className="font-medium text-text-primary">{subjectLabel(entry.subjectRef)}</span>
             )}
-            <span className="text-text-primary">{entry.headline}</span>
+            <span {...SERVER_ENGLISH} className="text-text-primary">{entry.headline}</span>
             <span className="text-text-muted">· {reasonText(entry.reason)}</span>
           </li>
         );

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { X } from 'lucide-react';
 
+import { SERVER_ENGLISH } from '../lib/textDirection.ts';
 import { ConceptText } from './ConceptText.tsx';
 import { conceptLabel } from '../lib/observationPresentation.ts';
 import { errorMessage } from '../api/client.ts';
@@ -100,7 +101,7 @@ export const ConceptDialog = observer(function ConceptDialog() {
           )}
 
           {document_ !== null && (
-            <article className="space-y-5">
+            <article {...SERVER_ENGLISH} className="space-y-5">
               {document_.sections.map((section) => (
                 <section key={section.id}>
                   {section.heading !== null && (

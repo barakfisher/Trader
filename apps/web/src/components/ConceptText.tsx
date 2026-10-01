@@ -1,4 +1,5 @@
 import { parseConceptText, type TextSpan } from '../lib/conceptText.ts';
+import { SERVER_ENGLISH } from '../lib/textDirection.ts';
 
 /**
  * Corpus text rendered as the corpus wrote it: paragraphs, formula blocks,
@@ -9,7 +10,7 @@ import { parseConceptText, type TextSpan } from '../lib/conceptText.ts';
 export function ConceptText({ text, size = 'sm' }: { text: string; size?: 'sm' | 'xs' }) {
   const prose = size === 'sm' ? 'text-sm' : 'text-xs';
   return (
-    <div className="space-y-2">
+    <div {...SERVER_ENGLISH} className="space-y-2">
       {parseConceptText(text).map((block, index) =>
         block.kind === 'code' ? (
           <pre

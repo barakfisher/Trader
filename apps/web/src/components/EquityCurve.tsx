@@ -15,6 +15,7 @@ import { formatMoney, minorToNumber } from '@traders/shared';
 import { errorMessage } from '../api/client.ts';
 import { coverageText, curvePoints, type CurvePoint } from '../lib/equityCurve.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
+import { CHART_DIRECTION } from '../lib/textDirection.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { useSnapshotsQuery } from '../queries/snapshots.ts';
 import { Card, ErrorNote, Spinner } from './ui.tsx';
@@ -93,7 +94,7 @@ export function EquityCurve() {
               Cost basis
             </li>
           </ul>
-          <div className="h-56" role="img" aria-label={`Portfolio value over time. ${coverageText(points)}`}>
+          <div className="h-56" dir={CHART_DIRECTION} role="img" aria-label={`Portfolio value over time. ${coverageText(points)}`}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke="#253052" strokeDasharray="2 4" vertical={false} />
@@ -192,10 +193,10 @@ function CurveTable({ points, currency }: { points: CurvePoint[]; currency: stri
   return (
     <table className="w-full text-sm">
       <thead>
-        <tr className="border-b border-border-subtle text-left text-xs uppercase tracking-wide text-text-muted">
+        <tr className="border-b border-border-subtle text-start text-xs uppercase tracking-wide text-text-muted">
           <th className="pb-2 font-medium">Day</th>
-          <th className="pb-2 text-right font-medium">Value</th>
-          <th className="pb-2 text-right font-medium">Cost basis</th>
+          <th className="pb-2 text-end font-medium">Value</th>
+          <th className="pb-2 text-end font-medium">Cost basis</th>
         </tr>
       </thead>
       <tbody>
@@ -203,10 +204,10 @@ function CurveTable({ points, currency }: { points: CurvePoint[]; currency: stri
           <tr key={point.date} className="border-b border-border-subtle/50 last:border-0">
             <td className="py-1.5">
               {formatDay(point.date)}
-              {point.degraded && <span className="ml-1 text-xs text-text-muted">(understated)</span>}
+              {point.degraded && <span className="ms-1 text-xs text-text-muted">(understated)</span>}
             </td>
-            <td className="py-1.5 text-right">{formatMoney(point.totalMinor!, currency)}</td>
-            <td className="py-1.5 text-right text-text-muted">
+            <td className="py-1.5 text-end">{formatMoney(point.totalMinor!, currency)}</td>
+            <td className="py-1.5 text-end text-text-muted">
               {point.costMinor === null ? '—' : formatMoney(point.costMinor, currency)}
             </td>
           </tr>
