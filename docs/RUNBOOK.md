@@ -46,20 +46,27 @@ keyless); add a key to `secrets.env` and its setting to `config.env` if you want
 `curl -s http://traders.localhost/api/readyz` (cluster) reports `"postgres":"ok","aiService":"ok"`;
 a run triggered as in section 2 answers instead of 401.
 
-### The database password
+### The database passwords
 
-Postgres reads `POSTGRES_PASSWORD` only when it first creates its data directory. After that, the
-password lives in the database, and the file only tells the *services* what to send. So change it
-in the database first, then everywhere else:
+There are two roles (migration 0033). **`traders`**, the owner, runs migrations only; **`traders_app`**
+is what every service connects as, and can read and write rows and nothing more.
+
+**The app role's password** (`APP_DB_PASSWORD`) is set by the migrate step on every start, so
+changing it is: put the new value in `APP_DB_PASSWORD` and in `DATABASE_URL`
+(`postgresql://traders_app:<new password>@postgres:5432/traders`) - in `.env` for compose, in
+`secrets.env` for the cluster - and restart as above. Migrate runs first and sets it.
+
+**The owner's password** is different: Postgres reads `POSTGRES_PASSWORD` only when it first
+creates its data directory. After that, the password lives in the database. So change it in the
+database first, then everywhere else:
 
 ```sql
 ALTER ROLE traders WITH PASSWORD '<new password>';
 ```
 
-then put the same value in `POSTGRES_PASSWORD` **and** in `DATABASE_URL`
-(`postgresql://traders:<new password>@postgres:5432/traders`) - in `.env` for compose, in
-`secrets.env` for the cluster - and restart as above. Use a password without URL-special
-characters (`openssl rand -hex 16` is safe).
+then put the same value in `POSTGRES_PASSWORD` - and, for the cluster, in `MIGRATION_DATABASE_URL`
+(`postgresql://traders:<new password>@postgres:5432/traders`) - and restart. Use passwords without
+URL-special characters (`openssl rand -hex 16` is safe).
 
 If `secrets.env` is ever lost while the cluster's database still exists, do not let `k8s-up.sh`
 generate a new one: it would invent a password the database has never heard of. Recover it from

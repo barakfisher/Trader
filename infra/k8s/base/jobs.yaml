@@ -50,10 +50,17 @@ spec:
       containers:
         - name: migrate
           image: traders/ai-service
-          command: ['alembic', 'upgrade', 'head']
+          # Upgrades as the owner, then gives traders_app - the role every
+          # other pod connects as - its password (migration 0033).
+          command: ['python', 'scripts/migrate.py']
           envFrom:
             - configMapRef: { name: traders-config }
             - secretRef: { name: traders-secrets }
+          env:
+            # Wins over the secret's DATABASE_URL, which names traders_app.
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: traders-secrets, key: MIGRATION_DATABASE_URL }
           resources:
             requests: { cpu: 100m, memory: 128Mi }
             limits: { memory: 512Mi }

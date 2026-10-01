@@ -89,17 +89,36 @@ done
 # --- 3. secrets --------------------------------------------------------------
 if [ -f "$SECRETS_FILE" ]; then
   ok "using existing $(basename "$SECRETS_FILE")"
+  # A file written before the app role existed (migration 0033): keep every
+  # value, add the app role's password, and point DATABASE_URL at it. The owner
+  # password is untouched, so the running Postgres still accepts it.
+  if ! grep -q '^APP_DB_PASSWORD=' "$SECRETS_FILE"; then
+    say "Adding the app role to $(basename "$SECRETS_FILE")"
+    owner_password="$(grep '^POSTGRES_PASSWORD=' "$SECRETS_FILE" | cut -d= -f2-)"
+    app_password="$(openssl rand -hex 16)"
+    (
+      umask 077
+      grep -v '^DATABASE_URL=' "$SECRETS_FILE" > "$SECRETS_FILE.new"
+      printf 'APP_DB_PASSWORD=%s\n' "$app_password" >> "$SECRETS_FILE.new"
+      printf 'DATABASE_URL=postgresql://traders_app:%s@postgres:5432/traders\n' "$app_password" >> "$SECRETS_FILE.new"
+      printf 'MIGRATION_DATABASE_URL=postgresql://traders:%s@postgres:5432/traders\n' "$owner_password" >> "$SECRETS_FILE.new"
+    )
+    mv "$SECRETS_FILE.new" "$SECRETS_FILE"
+  fi
 else
   say "Generating $(basename "$SECRETS_FILE") (git-ignored; kept from now on)"
   passphrase="cluster-$(openssl rand -hex 6)"
   db_password="$(openssl rand -hex 16)"
+  app_password="$(openssl rand -hex 16)"
   umask 077
   cat > "$SECRETS_FILE" << EOF
 APP_PASSPHRASE=$passphrase
 SESSION_SECRET=$(openssl rand -hex 32)
 INTERNAL_API_KEY=$(openssl rand -hex 16)
 POSTGRES_PASSWORD=$db_password
-DATABASE_URL=postgresql://traders:$db_password@postgres:5432/traders
+APP_DB_PASSWORD=$app_password
+DATABASE_URL=postgresql://traders_app:$app_password@postgres:5432/traders
+MIGRATION_DATABASE_URL=postgresql://traders:$db_password@postgres:5432/traders
 EOF
   printf '     %sSign-in passphrase for the cluster: %s%s%s\n' "$C_DIM" "$C_BOLD" "$passphrase" "$C_RESET"
 fi

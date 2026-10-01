@@ -71,11 +71,13 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
 
     it('refuses to change a row, for the role the app connects as', async () => {
+      // By privilege, not by trigger: CI runs this file as traders_app, which
+      // holds INSERT and SELECT on the audit and nothing more (migration 0033).
       await expect(
         getPool().query(`UPDATE admin_audit SET action = 'rewritten' WHERE admin_user_id = $1`, [
           SEED_ADMIN,
         ]),
-      ).rejects.toThrow(/append-only: UPDATE refused/);
+      ).rejects.toThrow(/permission denied for table admin_audit/);
     });
   });
 

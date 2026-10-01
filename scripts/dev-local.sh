@@ -122,7 +122,9 @@ fi
 # 127.0.0.1 and the host port from .env, which may have been remapped to avoid
 # a clash with another project.
 # -----------------------------------------------------------------------------
-export DATABASE_URL="postgresql://${POSTGRES_USER:-traders}:${POSTGRES_PASSWORD:-traders}@127.0.0.1:${POSTGRES_HOST_PORT:-5432}/${POSTGRES_DB:-traders}"
+# As traders_app, like the containers: the owner (POSTGRES_USER) runs migrations
+# only, through the `migrate` container above (migration 0033).
+export DATABASE_URL="postgresql://traders_app:${APP_DB_PASSWORD:-traders_app}@127.0.0.1:${POSTGRES_HOST_PORT:-5432}/${POSTGRES_DB:-traders}"
 export REDIS_URL="redis://127.0.0.1:${REDIS_HOST_PORT:-6379}/0"
 # Running natively, each process binds the host port directly - there is no
 # port mapping in play, so the host port IS the port the process listens on.

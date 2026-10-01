@@ -1,19 +1,26 @@
-"""`admin_audit` is append-only against a real Postgres, for the role the app uses.
+"""`admin_audit` is append-only against a real Postgres, for both roles.
 
-The application connects as a superuser that owns the table, so a `REVOKE`
-would change nothing and a test of one would pass while proving nothing. These
-run as that same role: an INSERT and a SELECT work, and UPDATE, DELETE and
-TRUNCATE are each refused by a trigger (decision 84).
+The services connect as `traders_app` (migration 0033), which holds `INSERT`
+and `SELECT` on the table and nothing else: Postgres refuses its UPDATE, DELETE
+and TRUNCATE by privilege, before any trigger runs. The owner, which runs the
+migrations, is refused by the triggers instead (decision 84) - the line of
+defence that remains for a role grants cannot bind.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 import pytest
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import DBAPIError
 
 SEED_ADMIN = "00000000-0000-0000-0000-000000000001"
+
+#: A test password for the app role in a disposable database.
+APP_PASSWORD = "traders_app_test"
 
 
 def _insert(connection: Connection) -> int:
@@ -36,12 +43,98 @@ def _refused(connection: Connection, statement: str, **params: object) -> str:
     return str(refusal.value.orig)
 
 
-def test_the_app_role_is_a_superuser_so_grants_would_not_protect_it(migrated: Engine) -> None:
-    # The premise of the triggers. If this ever turns false, separate roles
-    # have arrived and the debt row can go.
+@pytest.fixture(scope="module")
+def as_app(migrated: Engine, database_url: str) -> Iterator[Engine]:
+    """An engine logged in as `traders_app`, as every service is.
+
+    The password is set here the way `scripts/migrate.py` sets it, since the
+    migration creates the role without one.
+    """
+    with migrated.begin() as connection:
+        connection.execute(text(f"ALTER ROLE traders_app WITH LOGIN PASSWORD '{APP_PASSWORD}'"))
+    url = make_url(database_url).set(
+        drivername="postgresql+psycopg", username="traders_app", password=APP_PASSWORD
+    )
+    engine = create_engine(url, future=True)
+    yield engine
+    engine.dispose()
+
+
+def test_the_app_role_is_not_a_superuser(as_app: Engine) -> None:
+    with as_app.connect() as connection:
+        role = connection.execute(
+            text("SELECT rolname, rolsuper FROM pg_roles WHERE rolname = current_user")
+        ).one()
+    assert (role.rolname, role.rolsuper) == ("traders_app", False)
+
+
+def test_the_app_role_writes_and_reads_the_audit(as_app: Engine) -> None:
+    with as_app.connect() as connection, connection.begin() as transaction:
+        row_id = _insert(connection)
+        assert (
+            connection.execute(
+                text("SELECT action FROM admin_audit WHERE id = :id"), {"id": row_id}
+            ).scalar_one()
+            == "POST /admin/example"
+        )
+        transaction.rollback()
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "UPDATE admin_audit SET action = 'rewritten' WHERE id = :id",
+        "DELETE FROM admin_audit WHERE id = :id",
+        "TRUNCATE admin_audit",
+        # And the triggers that are the owner's only protection.
+        "ALTER TABLE admin_audit DISABLE TRIGGER USER",
+    ],
+)
+def test_the_app_role_is_refused_by_privilege(as_app: Engine, statement: str) -> None:
+    with as_app.connect() as connection, connection.begin() as transaction:
+        row_id = _insert(connection)
+        refusal = _refused(connection, statement, id=row_id)
+        assert "permission denied" in refusal or "must be owner" in refusal
+        transaction.rollback()
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "CREATE TABLE intruder (id int)",
+        "DROP TABLE holdings",
+        "UPDATE alembic_version SET version_num = 'x'",
+        "CREATE ROLE intruder",
+    ],
+)
+def test_the_app_role_cannot_change_the_schema(as_app: Engine, statement: str) -> None:
+    with as_app.connect() as connection, connection.begin() as transaction:
+        refusal = _refused(connection, statement)
+        assert "permission denied" in refusal or "must be owner" in refusal
+        transaction.rollback()
+
+
+def test_a_table_created_by_a_later_migration_is_usable_by_the_app(
+    migrated: Engine, as_app: Engine
+) -> None:
+    # The default privileges, which save each migration from granting.
+    with migrated.begin() as connection:
+        connection.execute(text("CREATE TABLE later_table (id serial PRIMARY KEY, note text)"))
+    try:
+        with as_app.begin() as connection:
+            connection.execute(text("INSERT INTO later_table (note) VALUES ('ok')"))
+            assert connection.execute(text("SELECT count(*) FROM later_table")).scalar() == 1
+    finally:
+        with migrated.begin() as connection:
+            connection.execute(text("DROP TABLE later_table"))
+
+
+def test_the_trigger_tests_below_run_as_the_owner(migrated: Engine) -> None:
     with migrated.connect() as connection:
         superuser = "SELECT rolsuper FROM pg_roles WHERE rolname = current_user"
-        assert connection.execute(text(superuser)).scalar()
+        assert connection.execute(text(superuser)).scalar(), (
+            "the owner tests below assume the role the migrations run as"
+        )
 
 
 def test_rows_are_written_and_read(migrated: Engine) -> None:
