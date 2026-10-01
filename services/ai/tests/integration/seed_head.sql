@@ -160,3 +160,10 @@ INSERT INTO llm_calls (user_id, agent, provider, model, outcome, verdict, latenc
   ('00000000-0000-0000-0000-00000000000a', 'ask', 'openrouter', 'm', 'provider_error', NULL, 30000, 'p'),
   (NULL, 'narration', 'openrouter', NULL, 'budget_exhausted', NULL, 0, 'p'),
   (NULL, 'narration', 'null', NULL, 'no_provider', NULL, 0, 'p');
+
+-- Proposal episodes (0032): one closed by each reason, and one still open.
+INSERT INTO proposal_episodes (user_id, observation_kind, subject_ref, observation_id, asked_magnitude, closed_at, close_reason) VALUES
+  ('00000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '0.150619', now(), 'resolved'),
+  ('00000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '0.150619', now(), 'worsened'),
+  ('00000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '-0.150619', now(), 'reversed'),
+  ('00000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '0.210000', NULL, NULL);

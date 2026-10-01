@@ -311,6 +311,14 @@ class ObservationOut(BaseModel):
     fallback_reason: str = "none"
 
 
+class SeenFindingOut(BaseModel):
+    """A finding the scan made, whether or not it is new to the caller."""
+
+    kind: str
+    subject_ref: str
+    severity: Severity
+
+
 class ScanStatsOut(BaseModel):
     subjects: int = 0
     subjects_with_history: int = 0
@@ -320,6 +328,8 @@ class ScanStatsOut(BaseModel):
     narration_fallbacks: dict[str, int] = Field(default_factory=dict)
     drift_skipped_reason: str | None = None
     insufficient_history: list[str] = Field(default_factory=list)
+    #: Every finding, new or already known - the observations carry only the new.
+    seen: list[SeenFindingOut] = Field(default_factory=list)
 
 
 class PortfolioScanResponse(BaseModel):

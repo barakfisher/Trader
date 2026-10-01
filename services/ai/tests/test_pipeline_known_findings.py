@@ -132,6 +132,16 @@ async def test_findings_are_still_counted_when_skipped(falling_series):
     # make a working scan indistinguishable from a broken one.
     assert stats.findings == len(first)
     assert stats.already_known == len(first)
+    # And says what they were: a proposal episode ends on what the scan saw,
+    # and a known finding still means "the situation stands" (decision 92).
+    assert stats.seen == [
+        {
+            "kind": item.finding.kind,
+            "subject_ref": item.finding.subject_ref,
+            "severity": item.finding.severity,
+        }
+        for item in first
+    ]
 
 
 async def test_an_unknown_key_does_not_suppress_anything(falling_series):

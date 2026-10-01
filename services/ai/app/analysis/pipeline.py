@@ -78,6 +78,11 @@ class ScanStats:
     #: Findings the caller already has. Counted rather than narrated: see the
     #: note above `run_portfolio_scan`.
     already_known: int = 0
+    #: Every finding this scan made, new or already known, as kind, subject and
+    #: severity. The observations carry only what is new, so without this a
+    #: caller cannot tell "the drift fell back" from "the feed already has it" -
+    #: which is the difference that ends a proposal episode (decision 92).
+    seen: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +172,10 @@ async def run_portfolio_scan(
         )
 
     stats.findings = len(findings)
+    stats.seen = [
+        {"kind": finding.kind, "subject_ref": finding.subject_ref, "severity": finding.severity}
+        for finding in findings
+    ]
 
     observations = await _narrate_new(
         findings, known_dedupe_keys, llm, stats, articles, user_id=user_id

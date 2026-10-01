@@ -247,7 +247,8 @@ job, approved by the user 2026-09-28) in #76, and task 5 (quotes carry asset cla
 the PR after that. Task 7 (server state in TanStack Query) was done across #90-#92 and the topics PR
 that closed it, and task 6 (a screen for `/ask`) in M6 PR 10. That queue emptied at M8's close.
 
-**The post-M8 sweep (2026-10-01)** refilled it as tasks 8-15, approved by the user in that order,
+**The post-M8 sweep (2026-10-01)** refilled it as tasks 8-15 (task 8, one question per standing
+finding, became decision 92 when measured), approved by the user in that order,
 with the same grant as M8 (PR, merge on green, verify on `main` by content, rebuild compose and
 kind). It was measured on compose before it was written: the BTC-USD drift was proposed **7 days
 running** (25 Sep-1 Oct; approved once, 5 expired unanswered), only 2 low-confidence gap events
@@ -258,7 +259,6 @@ strings and left-to-right assumptions before designing it.
 
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
-| 8 | **One open proposal per subject and kind** | - (P5) | S-M | `services/proposals.ts`. A standing drift nobody fixed is asked once, not daily: while a proposal for the same `subjectRef` and kind is pending or snoozed, a new observation refreshes it (or is skipped) instead of opening another. Resolves the "one standing drift is proposed again every day" debt row. The observation key keeps changing daily - that part is right |
 | 9 | **Separate database roles** | M8 §5 | M | An owner role runs Alembic; the application connects as a plain role with `INSERT, SELECT` only on `admin_audit`. Compose, kind and CI `DATABASE_URL`s. `test_the_app_role_is_a_superuser...` fails when it lands - delete it and the debt row. Also correct `docs/MILESTONES.md` M8 §5, which today claims Postgres enforces what only triggers enforce |
 | 10 | **Edit a holding's cost basis on screen**, and the sign-in page's wording | M6 (FR-2) | S | `HoldingsTable.tsx`, `useHoldingEditor`: cost per unit beside quantity. The sign-in page stops saying "the passphrase from your environment file" as if compose were the only installation. Resolves both debt rows |
 | 11 | **Session-aware closes** | M2.5 | S-M | The quote path does not store an equity quote dated outside its exchange's session (the Sunday "close"), and the backfill finalises a crypto day at 00:00 UTC, not 20:00 - both from `market_sessions.py`. Resolves the two debt rows |
@@ -1466,6 +1466,29 @@ failure they prevent.
     answered *already claimed (ok)* with the button's `universe-rescreen:2026-10-01`; a fresh key
     answered *not due ... falls due on 2026-12-31*; one rescreen row in `runs`.
 
+92. **A standing finding is asked about once per episode, not once per observation**
+    (independent task 8). Measured on compose before building: the BTC-USD drift sat at
+    0.149-0.153 all week on the 0.15 `high` line and was proposed **7 days running**, once 20
+    minutes after the user approved it - approval writes the virtual ledger, so it never moves the
+    drift, and the line was crossed several times a day. Rejected: the queued "one open proposal
+    per subject" (would have prevented 1 of the 7: they were mostly sequential, each expiring at
+    24 h); "re-ask when it goes away and comes back" (the flicker re-arms it daily); a reminder
+    every N days (a number to tune; the user chose without). Chosen with the user: an episode
+    (`proposal_episodes`, migration 0032, one open per user/kind/subject by a partial unique
+    index) is claimed before the proposal is raised, and while it is open no new proposal is
+    raised whatever the answer was. It ends **resolved** when a scan in which the rule ran sees the
+    subject below the band beneath the floor (`high` floor: below `notable` - a band of
+    hysteresis), or is replaced when the drift is **worsened** by one band (floor threshold minus
+    the one beneath, read from the finding's `thresholds_weight`) or **reversed** in sign. No
+    number to tune. **Two things made it possible:** the scan's reply now carries `stats.seen`
+    (every finding, known or new), because observations carry only the new and "the feed already
+    has it" is not "it went away"; and a scan whose drift rule was skipped (an unpriced holding)
+    resolves nothing. A kind with no episode policy, or evidence it cannot read, is asked about
+    as before - over-asking is the safe failure. The migration seeds each subject's latest
+    proposal as an open episode; a stale seed is closed by the next scan. The feed still says
+    "still drifted" daily; only the question goes quiet. Replayed in
+    `proposalEpisodes.test.ts`: the week asks once.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -2050,7 +2073,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | ~~Auto-discovery has run once on real, title-matched headlines and proposed nothing~~ | — | **Resolved 2026-09-29** by the market feed (decision 60): the first run over it proposed "data center" and "bond yields". The original text follows because its lesson (resolve budget spent on everyday words) still shapes `GENERIC_WORDS` |
 | (history) Auto-discovery's first real run | `app/topics/discovery.py`, `services/topicDiscovery.ts` | 2026-09-28 10:33 UTC: 123 linked headlines, 20 phrases, 8 resolved, 0 proposed. Every resolved phrase was `none` or `weak` (`ai`, `buy`, `pro`, `prediction` none; `tv`, `crypto`, `iphone`, `remittix` weak). The 12 skipped by the 8-per-run cap were resolved by hand afterwards and none would have qualified either (`chips` resolves to potato-chip makers LW and UTZ; `futures` is `confident` with no confident candidate; `bytedance alibaba` is `weak` over NVDA/TSM/MU). **So 0 proposals was the right answer, and the run exposed two faults:** (1) the resolve budget went to everyday words - `buy`, `pro`, `use`, `billion`, `season`, `prediction` belong in `GENERIC_WORDS`; (2) single words are poor resolver queries (two-letter "ai" resolves to nothing), and the one multi-word phrase was the one with a real signal. Not yet shown: discovery *finding* a theme, which M5's exit criterion needs |
 | ~~Open proposals never expire~~ | — | **Resolved** (decision 57, migration 0021): unanswered for `TOPIC_PROPOSAL_TTL_DAYS`, a proposal becomes `expired`, kept and named in the run's stats. Kept as a line so the history survives |
-| **One standing drift is proposed again every day** | `services/proposals.ts`, observation `dedupe_key` | A proposal is deduplicated by its observation, and an allocation-drift observation's `dedupe_key` changes with each day's valuation. So a drift nobody has fixed becomes a new proposal daily: on 2026-09-29 the inbox held **two open BTC-USD drift proposals** (created 09-28 16:12 and 09-29 05:20 UTC) asking the same question, and one approved on 09-26 was followed by a new one the next day. Seen in the M6 browser review; **the user decided (2026-09-29) to record it and not fix it in M6**. A fix belongs in the proposal layer (one open proposal per subject and kind), not in the observation key, which is right to change daily |
+| ~~One standing drift is proposed again every day~~ | — | **Resolved** by decision 92 (independent task 8): a question belongs to an episode, not an observation. Measured first: 7 BTC-USD proposals in 7 days, mostly one after another, so the fix this row proposed (one open proposal per subject) would have stopped 1. Kept as a line so the history survives |
 | **A holding's cost basis has no edit control** | `HoldingsTable.tsx` | Found by M6's exit check (FR-2). `PATCH /holdings/:id` accepts `costBasis`, `currency`, `openedAt` and `notes`, but the row and card edit quantity only. Adding the same symbol again through the add form updates the existing holding (the insert is an upsert, `COALESCE`-ing blank fields), so a cost can be corrected - but nothing on screen says so. Small: widen `useHoldingEditor` to cost per unit |
 | **The free model is slow and flaky for `/ask` and narration** | `.env` (`LLM_MODEL`) | Measured 2026-09-30: 18-69 s per `/ask` answer, once over 3 min; 1 in 7 answers looped (now rejected, #101); and after that morning's load the narration badge read "Model unavailable" (`provider_error`). Nothing is wrong with the code - the screens say what happened - but the experience is the free route's. The funded fix is the same as narration's row above |
 | **An equity can have a weekend "close"** | `normalise`, the quote path | A dashboard opened on Sunday 27 Sep stored each equity's Friday price with a Sunday `as_of` (the provider's `fast_info` has no timestamp, so a quote is dated when it was fetched). `normalise` makes it a Sunday close equal to Friday's: a 0% day for the rules, a flat step on the holding chart. One day so far. A fix belongs in the quote path (do not store a quote for an exchange outside its session, `market_sessions.py` knows the sessions), not in the chart, which draws what the rules read |

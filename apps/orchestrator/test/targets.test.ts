@@ -51,6 +51,10 @@ vi.mock('../src/db/pool.js', () => ({
 
 vi.mock('../src/db/queries.js', () => ({
   getUser: vi.fn(async () => USER),
+  // Proposal episodes (decision 92): none open, every claim succeeds.
+  listOpenEpisodes: vi.fn(async () => []),
+  claimEpisode: vi.fn(async () => 'episode-1'),
+  closeEpisodes: vi.fn(async () => 0),
   listHoldings: vi.fn(async () => [holdingRow]),
   listSnapshots: vi.fn(async () => []),
   recordQuotes: vi.fn(async () => undefined),

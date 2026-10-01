@@ -1237,6 +1237,8 @@ export interface components {
             narration_fallbacks?: {
                 [key: string]: number;
             };
+            /** Seen */
+            seen?: components["schemas"]["SeenFindingOut"][];
             /**
              * Subjects
              * @default 0
@@ -1247,6 +1249,21 @@ export interface components {
              * @default 0
              */
             subjects_with_history: number;
+        };
+        /**
+         * SeenFindingOut
+         * @description A finding the scan made, whether or not it is new to the caller.
+         */
+        SeenFindingOut: {
+            /** Kind */
+            kind: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "info" | "notable" | "high";
+            /** Subject Ref */
+            subject_ref: string;
         };
         /**
          * SuspectedNetwork
