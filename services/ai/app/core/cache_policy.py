@@ -26,7 +26,7 @@ tested against a fake clock rather than against whatever time CI happens to run 
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.core.logging import get_logger
@@ -130,6 +130,39 @@ def is_session_open(now: datetime, session: Session) -> bool:
         return False
     minute_of_day = local.hour * 60 + local.minute
     return open_minute <= minute_of_day < close_minute
+
+
+def last_session_close(now: datetime, session: Session) -> datetime | None:
+    """The most recent instant `session` closed at or before `now`, in UTC.
+
+    A weekday's close in the exchange's own timezone, so daylight saving moves it
+    without a constant to remember. Holidays are ignored, as in
+    `is_session_open`: on one, this names a close that did not happen, carrying
+    the price of the one before it - the same price either way. None when the
+    timezone database is unavailable, so a caller keeps what it had rather than
+    guessing an hour.
+    """
+    try:
+        zone = ZoneInfo(session.timezone)
+    except ZoneInfoNotFoundError:
+        log.warning("cache_policy.timezone_unavailable", timezone=session.timezone)
+        return None
+    local = now.astimezone(zone)
+    day = local.date()
+    for _ in range(8):
+        if day.weekday() < 5:
+            close = datetime(
+                day.year,
+                day.month,
+                day.day,
+                session.close_minute // 60,
+                session.close_minute % 60,
+                tzinfo=zone,
+            )
+            if close <= local:
+                return close.astimezone(UTC)
+        day -= timedelta(days=1)
+    return None
 
 
 def quote_ttl(

@@ -337,3 +337,24 @@ def test_crypto_still_refreshes_far_more_often_than_a_closed_market():
     assert quote_ttl("BTC-USD", YFINANCE_DELAY, weekday(3, 0)) < quote_ttl(
         "AAPL", YFINANCE_DELAY, weekday(3, 0)
     )
+
+
+async def test_registry_dates_each_quote_by_its_market(settings, monkeypatch):
+    from app.models import QuoteMarket
+
+    seen: dict[str, tuple] = {}
+    friday_close = datetime(2026, 9, 25, 20, 0, tzinfo=UTC)
+
+    def fake_redate(as_of, now, *, symbol, asset_class, exchange):
+        seen[symbol] = (asset_class, exchange)
+        return friday_close
+
+    monkeypatch.setattr("app.providers.registry.at_last_close", fake_redate)
+    service, _ = _service_with_recording_cache(settings)
+
+    quotes, _ = await service.quotes(
+        ["SAP.DE", "AAPL"], {"SAP.DE": QuoteMarket(asset_class="equity", exchange="XETRA")}
+    )
+
+    assert seen == {"SAP.DE": ("equity", "XETRA"), "AAPL": (None, None)}
+    assert {quote.as_of for quote in quotes} == {friday_close}
