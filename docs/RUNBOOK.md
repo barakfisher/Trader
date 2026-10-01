@@ -68,9 +68,10 @@ then put the same value in `POSTGRES_PASSWORD` - and, for the cluster, in `MIGRA
 (`postgresql://traders:<new password>@postgres:5432/traders`) - and restart. Use passwords without
 URL-special characters (`openssl rand -hex 16` is safe).
 
-If `secrets.env` is ever lost while the cluster's database still exists, do not let `k8s-up.sh`
-generate a new one: it would invent a password the database has never heard of. Recover it from
-the cluster instead (every value is in the Secret):
+If `secrets.env` is ever lost while the cluster's database still exists, `k8s-up.sh` recovers it
+from the Secret the running Postgres reads before it would generate anything, and refuses outright
+when a database exists with no Secret to recover from. By hand, the same thing is (every value is
+in the Secret):
 
 ```bash
 # the Secret the running orchestrator reads (older hashed copies may linger beside it)

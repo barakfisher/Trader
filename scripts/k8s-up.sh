@@ -11,7 +11,9 @@
 #      secrets, including the cluster's own sign-in passphrase, printed once
 #      (read it again with: grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.env).
 #      The cluster needs no .env. Kept after that - the database password in
-#      particular is fixed when Postgres first creates its data directory.
+#      particular is fixed when Postgres first creates its data directory - and
+#      recovered from the cluster's own Secret when the file is missing but the
+#      cluster is not (a worktree, a fresh clone, a deleted file).
 #   4. Applies the manifests for the commit being deployed, re-running the
 #      migrate / corpus / universe Jobs.
 #   5. Waits for Postgres, Redis and the migration, reports the loaders, then
@@ -87,6 +89,34 @@ for image in ai-service orchestrator web; do
 done
 
 # --- 3. secrets --------------------------------------------------------------
+# A missing file next to a cluster that already has a database must not be
+# regenerated: Postgres keeps the password it was created with, and a new one
+# would lock every service out. Recover the file from the Secret the running
+# Postgres reads instead (independent task 13; the commands are
+# docs/RUNBOOK.md section 1's). A worktree, a fresh clone or a deleted file all
+# arrive here.
+if [ ! -f "$SECRETS_FILE" ]; then
+  secret_name="$(kc get statefulset postgres -o \
+    jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POSTGRES_PASSWORD")].valueFrom.secretKeyRef.name}' \
+    2> /dev/null || true)"
+  if [ -n "$secret_name" ] && kc get secret "$secret_name" > /dev/null 2>&1; then
+    say "Recovering $(basename "$SECRETS_FILE") from the cluster's Secret $secret_name"
+    (
+      umask 077
+      kc get secret "$secret_name" -o json | python3 -c '
+import base64, json, sys
+for key, value in sorted(json.load(sys.stdin)["data"].items()):
+    print(f"{key}={base64.b64decode(value).decode()}")
+' > "$SECRETS_FILE.new"
+    )
+    grep -q '^POSTGRES_PASSWORD=' "$SECRETS_FILE.new" \
+      || fail "Secret $secret_name has no POSTGRES_PASSWORD - not writing $(basename "$SECRETS_FILE"); see docs/RUNBOOK.md section 1"
+    mv "$SECRETS_FILE.new" "$SECRETS_FILE"
+  elif kc get pvc data-postgres-0 > /dev/null 2>&1; then
+    fail "the cluster has a database (data-postgres-0) but no Secret to recover its password from; new secrets would lock the services out. See docs/RUNBOOK.md section 1, or start over: bash scripts/k8s-down.sh"
+  fi
+fi
+
 if [ -f "$SECRETS_FILE" ]; then
   ok "using existing $(basename "$SECRETS_FILE")"
   # A file written before the app role existed (migration 0033): keep every
