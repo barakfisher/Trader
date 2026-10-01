@@ -256,7 +256,7 @@ kept so the next sweep has somewhere to add to.
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
-| M8 — Admin operations & observability | **In progress** | #120-#124, #126-#127: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel, on-demand profiles. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event and profiled within one background fetch ✅ (#127, decision 89); rescreen button ✅ (#128, decision 90; shown in kind); = CronJob run - PR 9. See "Next session: M8, continued" |
+| M8 — Admin operations & observability | **In progress** | #120-#124, #126-#129: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel, on-demand profiles, the rescreen run and its CronJob. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event and profiled within one background fetch ✅ (#127, decision 89); rescreen button ✅ (#128, decision 90; shown in kind); button and CronJob are one run ✅ (#129, decision 91; shown in kind). Left: PR 10, the exit check and the closing handoff. See "Next session: M8, continued" |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
 not anticipate, found by running the thing rather than by reading it. M1.5 came from auditing the
@@ -1410,6 +1410,22 @@ failure they prevent.
       retries a scan.
     - **Not here:** retrying a dead rescreen automatically. A run whose process died stays
       `running` until a trigger (a click, the CronJob) reclaims it - see the debt table.
+91. **The quarterly rescreen asks hourly, and is due by the age of the snapshot loaded** (M8 PR
+    9). Rejected: the plan's quarterly schedule (`0 3 1 1,4,7,10 *`) - the one trigger shape this
+    repo's `cronjobs.yaml` exists to avoid (a once-per-period tick is lost if the cluster is
+    down that minute), and `cronJobContract.test.ts` would have refused its rhythm anyway. Instead
+    `run-universe-rescreen` (minute 15, before the digest) and the local timer ask hourly like
+    every kind, and `startRescreen({scheduled: true})` decides: **due when
+    `universe_loads.snapshot_as_of` is `RESCREEN_DUE_DAYS` (91) old**, or when nothing was ever
+    loaded. The loader's own record, not the last successful run, so an installation on the
+    committed snapshot falls due when that snapshot is a quarter old (compose: 2026-12-24) and
+    never rescreens on its first start. A not-due ask writes no run row. **If today's key exists,
+    the ask goes to `claimRun`** - so the button and the CronJob the same day are one run, and a
+    failed scheduled rescreen is retried at the next hourly ask (decision 90's `retryFailed`),
+    resuming from its cache. The button is never held back. Shown in kind 2026-10-01: the
+    CronJob's own tick and a `kubectl create job --from=cronjob/run-universe-rescreen` both
+    answered *already claimed (ok)* with the button's `universe-rescreen:2026-10-01`; a fresh key
+    answered *not due ... falls due on 2026-12-31*; one rescreen row in `runs`.
 
 ---
 
@@ -2375,7 +2391,8 @@ within one background fetch"; (7) universe status against the loader's own count
   reads), `runs.heartbeat_at`, the 202 path, the volume, the newest-snapshot rule in
   `ingest_universe.py`, the button on the Admin page, and **the first real `admin_audit` row**.
   Measure the build's real duration first (the ~1 h is the plan's figure, not a measurement).
-- **PR 9 - the quarterly CronJob**, in `cronjobs.yaml` **and** `scheduler.ts` (or
+- ~~PR 9 - the quarterly CronJob~~ **Done, #129 (decision 91)** - hourly asks, due by snapshot
+  age. Original plan: the quarterly CronJob, in `cronjobs.yaml` **and** `scheduler.ts` (or
   `cronJobContract.test.ts` fails); prove the button and a CronJob-made Job claim one run.
 - **PR 10 - exit check and M8's closing handoff.**
 

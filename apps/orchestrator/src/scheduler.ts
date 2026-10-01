@@ -45,6 +45,10 @@ export const INTERVALS_MS: Record<string, number> = {
   // Hourly against a daily bucket, like backfill. Most days it finds nothing to
   // do and returns without an upstream request, so the extras are cheap.
   instrument_metadata: 60 * 60 * 1000,
+  // Hourly, against a quarter: `startRescreen` rescreens only when the snapshot
+  // last loaded is RESCREEN_DUE_DAYS old, and a not-due ask writes nothing. A
+  // quarterly timer would be the once-per-period trigger a restart swallows.
+  universe_rescreen: 60 * 60 * 1000,
 };
 
 /** Stagger the first run of each kind so a restart does not fire both at once. */
@@ -69,6 +73,8 @@ const FIRST_RUN_DELAY_MS: Record<string, number> = {
   // After backfill and before the scan: naming an instrument changes nothing
   // the analysis reads, so it only has to stay out of the way of what does.
   instrument_metadata: 30_000,
+  // After the scans and discovery, before the digest; most asks are "not due".
+  universe_rescreen: 65_000,
 };
 
 const timers: NodeJS.Timeout[] = [];

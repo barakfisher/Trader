@@ -550,6 +550,15 @@ export async function claimRun(
   return { claimed: false, runId: null, existingStatus: existing?.status };
 }
 
+/** Whether any run, in any state, holds `runKey`. */
+export async function runKeyExists(runKey: string): Promise<boolean> {
+  const row = await queryOne<{ exists: boolean }>(
+    'SELECT EXISTS (SELECT 1 FROM runs WHERE run_key = $1) AS exists',
+    [runKey],
+  );
+  return row?.exists ?? false;
+}
+
 export async function finishRun(
   runId: string,
   status: 'ok' | 'degraded' | 'failed' | 'skipped',

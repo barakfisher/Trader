@@ -101,3 +101,4 @@ while this file is out of date.
 | 88 | The LLM panel reconciles narration's explanations against its calls, and shows both records |
 | 89 | An on-demand profile describes a listing without making it a member |
 | 90 | The rescreen is a run the orchestrator claims and the AI service finishes, on a heartbeat, into a volume the loader reads newest-first |
+| 91 | The quarterly rescreen asks hourly, and is due by the age of the snapshot loaded |
