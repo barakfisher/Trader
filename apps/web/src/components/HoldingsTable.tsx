@@ -7,6 +7,7 @@ import { minorToDecimalString, minorToNumber, type HoldingView } from '@traders/
 import { errorMessage } from '../api/client.ts';
 import { formatMoney, formatPercent, formatShare } from '../i18n/format.ts';
 import { Trans, useTranslation } from '../i18n/index.ts';
+import { assetClassName } from '../lib/assetClass.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { useNarrowViewport } from '../lib/viewport.ts';
@@ -174,7 +175,7 @@ function HoldingRow({
       <td className="py-2 pe-3">
         <SymbolLabel holding={holding} />
         <p className="text-xs text-text-muted">
-          {holding.instrument.name ?? holding.instrument.assetClass}
+          <bdi>{holding.instrument.name ?? assetClassName(holding.instrument.assetClass)}</bdi>
         </p>
       </td>
 
@@ -381,7 +382,7 @@ function HoldingCard({
         <div className="min-w-0">
           <SymbolLabel holding={holding} />
           <p className="truncate text-xs text-text-muted">
-            {holding.instrument.name ?? holding.instrument.assetClass}
+            <bdi>{holding.instrument.name ?? assetClassName(holding.instrument.assetClass)}</bdi>
           </p>
         </div>
         <div className="shrink-0 text-end">

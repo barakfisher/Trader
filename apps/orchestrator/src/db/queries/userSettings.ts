@@ -7,6 +7,7 @@ export interface UserSettingsRow {
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
   muted_until: Date | null;
+  language: string;
 }
 
 export interface UserSettingsInput {
@@ -18,6 +19,8 @@ export interface UserSettingsInput {
   quietHoursEnd: string | null;
   /** ISO 8601 UTC, or null to clear the mute. */
   mutedUntil: string | null;
+  /** The interface language; migration 0034's CHECK is the authority on which. */
+  language: string;
 }
 
 /**
@@ -32,7 +35,7 @@ export interface UserSettingsInput {
 const USER_SETTINGS_COLUMNS = `proposal_severity, proposal_ttl_hours, notify_severity,
                to_char(quiet_hours_start, 'HH24:MI') AS quiet_hours_start,
                to_char(quiet_hours_end, 'HH24:MI') AS quiet_hours_end,
-               muted_until`;
+               muted_until, language`;
 
 /**
  * A user's settings, materialising the defaults if they have never saved any.
@@ -76,8 +79,8 @@ export async function replaceUserSettings(
 ): Promise<UserSettingsRow> {
   const row = await queryOne<UserSettingsRow>(
     `INSERT INTO user_settings (user_id, proposal_severity, proposal_ttl_hours, notify_severity,
-                                quiet_hours_start, quiet_hours_end, muted_until, updated_at)
-     VALUES ($1, $2, $3, $4, $5::time, $6::time, $7::timestamptz, now())
+                                quiet_hours_start, quiet_hours_end, muted_until, language, updated_at)
+     VALUES ($1, $2, $3, $4, $5::time, $6::time, $7::timestamptz, $8, now())
      ON CONFLICT (user_id) DO UPDATE
         SET proposal_severity  = EXCLUDED.proposal_severity,
             proposal_ttl_hours = EXCLUDED.proposal_ttl_hours,
@@ -85,6 +88,7 @@ export async function replaceUserSettings(
             quiet_hours_start  = EXCLUDED.quiet_hours_start,
             quiet_hours_end    = EXCLUDED.quiet_hours_end,
             muted_until        = EXCLUDED.muted_until,
+            language           = EXCLUDED.language,
             updated_at         = now()
      RETURNING ${USER_SETTINGS_COLUMNS}`,
     [
@@ -95,6 +99,7 @@ export async function replaceUserSettings(
       input.quietHoursStart,
       input.quietHoursEnd,
       input.mutedUntil,
+      input.language,
     ],
   );
   if (row === null) throw new Error(`user_settings could not be written for ${userId}`);

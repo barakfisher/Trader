@@ -23,7 +23,7 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
 
-import type { ObservationSeverity, UserSettings } from '@traders/shared';
+import { UI_LANGUAGES, type ObservationSeverity, type UiLanguage, type UserSettings } from '@traders/shared';
 
 import {
   getOrCreateUserSettings,
@@ -72,6 +72,9 @@ const putSchema = z.object({
   // ISO 8601 UTC with an offset, like every other timestamp on this wire. Null
   // clears the mute, which is the only way to end one early.
   mutedUntil: z.string().datetime({ offset: true }).nullable(),
+  // Required, like every field: this is a replace, and a language left out
+  // would otherwise be reset to English by the user's next unrelated save.
+  language: z.enum(UI_LANGUAGES),
 });
 
 /**
@@ -89,6 +92,7 @@ function toWire(row: UserSettingsRow): UserSettings {
     quietHoursStart: row.quiet_hours_start,
     quietHoursEnd: row.quiet_hours_end,
     mutedUntil: row.muted_until?.toISOString() ?? null,
+    language: row.language as UiLanguage,
   };
 }
 

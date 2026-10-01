@@ -6,6 +6,7 @@ import { minorToNumber } from '@traders/shared';
 
 import { formatMoney, formatShare } from '../i18n/format.ts';
 import { useTranslation } from '../i18n/index.ts';
+import { assetClassGroup } from '../lib/assetClass.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { CHART_DIRECTION } from '../lib/textDirection.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
@@ -28,7 +29,7 @@ export const AllocationChart = observer(function AllocationChart() {
   if (!slices || slices.length === 0) return null;
 
   const data = slices.map((slice) => ({
-    name: slice.label,
+    name: groupBy === 'assetClass' ? assetClassGroup(slice.key, slice.label) : slice.label,
     value: minorToNumber(slice.valueMinor, currency),
     valueMinor: slice.valueMinor,
     weightPct: slice.weightPct,
@@ -104,7 +105,7 @@ export const AllocationChart = observer(function AllocationChart() {
                 style={{ background: PALETTE[index % PALETTE.length] }}
                 aria-hidden
               />
-              {entry.name}
+              <bdi>{entry.name}</bdi>
             </span>
             <span className="text-text-muted">{formatShare(entry.weightPct)}</span>
           </li>

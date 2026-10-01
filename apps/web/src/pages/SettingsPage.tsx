@@ -20,7 +20,7 @@ import {
   MIN_PROPOSAL_TTL_HOURS,
 } from '../stores/SettingsStore.ts';
 import { errorMessage } from '../api/client.ts';
-import { useTranslation } from '../i18n/index.ts';
+import { LANGUAGES, useTranslation, type Language } from '../i18n/index.ts';
 import { useSettingsQuery } from '../queries/settings.ts';
 import { useStore } from '../stores/context.tsx';
 
@@ -82,6 +82,25 @@ export const SettingsPage = observer(function SettingsPage() {
 
       {draft !== null && (
         <>
+          <Card title={t('settings.language')}>
+            <Field label={t('settings.interfaceLanguage')} hint={t('settings.languageHint')}>
+              <select
+                className="input max-w-60"
+                aria-label={t('settings.interfaceLanguage')}
+                value={draft.language}
+                onChange={(event) => settings.setLanguage(event.target.value as Language)}
+              >
+                {LANGUAGES.map((language) => (
+                  // Each name in its own language and direction: someone who
+                  // cannot read the current one can still find their own.
+                  <option key={language} value={language} lang={language}>
+                    {t(`languages.${language}`)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </Card>
+
           <Card title={t('settings.proposals')}>
             <div className="space-y-4">
               <Field

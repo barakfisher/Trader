@@ -203,7 +203,7 @@ const Row = observer(function Row({ row }: { row: TargetRow }) {
     <tr className="border-t border-border-subtle">
       <td className="py-2 pe-3">
         <span className="font-medium text-text-primary">{row.symbol}</span>
-        {row.name && <span className="block text-xs text-text-muted">{row.name}</span>}
+        {row.name && <bdi className="block text-xs text-text-muted">{row.name}</bdi>}
         {!row.held && (
           <span className="block text-xs text-text-muted">
             {t('targets.notHeld')}

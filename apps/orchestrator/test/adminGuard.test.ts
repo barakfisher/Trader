@@ -29,6 +29,8 @@ vi.mock('../src/db/pool.js', () => ({
 
 vi.mock('../src/db/queries.js', () => ({
   getUser: vi.fn(async () => ADMIN),
+  // Read by the session (its language), at sign-in.
+  getOrCreateUserSettings: vi.fn(async () => ({ language: 'en' })),
   listAllRuns: vi.fn(async () => []),
   listAdminAudit: vi.fn(async () => []),
   insertAdminAudit: vi.fn(async () => undefined),

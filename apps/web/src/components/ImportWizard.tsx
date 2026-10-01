@@ -200,7 +200,7 @@ const PreviewRow = observer(function PreviewRow({ row }: { row: ImportRow }) {
       <td className="px-3 py-2">
         <div className="font-medium">{row.symbol ?? '—'}</div>
         {row.resolvedInstrument?.name && (
-          <div className="text-text-muted">{row.resolvedInstrument.name}</div>
+          <bdi className="block text-text-muted">{row.resolvedInstrument.name}</bdi>
         )}
         {row.status === 'ambiguous' && (
           <select

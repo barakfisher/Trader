@@ -8,6 +8,8 @@
  *  - timestamps: ISO 8601 UTC strings.
  */
 
+import type { UiLanguage } from './language.js';
+
 export type AssetClass = 'equity' | 'etf' | 'crypto' | 'fx' | 'index' | 'unknown';
 
 export interface Instrument {
@@ -217,6 +219,12 @@ export interface SessionUser {
   timezone: string;
   /** Display only: the server re-reads the role on every `/admin/*` request. */
   role: UserRole;
+  /**
+   * The interface language, from `user_settings`. Sent with the session so the
+   * first screen after a sign-in or a reload is already in it - read from the
+   * settings page instead, every page would draw in English first.
+   */
+  language: UiLanguage;
 }
 
 // --- Admin (M8) --------------------------------------------------------------
@@ -549,6 +557,8 @@ export interface UserSettings {
   quietHoursEnd: string | null;
   /** A one-off silence, ISO 8601 UTC, or null when notifications are live. */
   mutedUntil: string | null;
+  /** The language the web interface is shown in (migration 0034). */
+  language: UiLanguage;
 }
 
 export interface UserSettingsResponse {

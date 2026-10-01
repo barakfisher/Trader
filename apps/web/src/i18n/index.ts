@@ -21,16 +21,30 @@ import i18n from 'i18next';
 import { createAtom } from 'mobx';
 import { initReactI18next } from 'react-i18next';
 
-import en from './locales/en.json';
+import { UI_LANGUAGES, type UiLanguage } from '@traders/shared';
 
-/** The languages the interface is written in. English is the source and the default. */
-export const LANGUAGES = ['en'] as const;
-export type Language = (typeof LANGUAGES)[number];
+import en from './locales/en.json';
+import he from './locales/he.json';
+import { applyDocumentDirection, directionOf } from '../lib/textDirection.ts';
+import type { Catalogue } from './parity.ts';
+
+/**
+ * The languages the interface is written in - the list migration 0034's CHECK
+ * allows, shared with the orchestrator. English is the source and the default.
+ */
+export const LANGUAGES = UI_LANGUAGES;
+export type Language = UiLanguage;
 export const DEFAULT_LANGUAGE: Language = 'en';
 
-/** Each language's catalogue, keyed as i18next expects: one namespace, `translation`. */
-export const CATALOGUES: Record<Language, { translation: typeof en }> = {
+/**
+ * Each language's catalogue, keyed as i18next expects: one namespace,
+ * `translation`. Hebrew is typed loosely on purpose: its plural forms
+ * (`_two`) are not English's, and `test/i18n.test.ts` - not TypeScript - is
+ * what holds it to having everything English has.
+ */
+export const CATALOGUES: Record<Language, { translation: Catalogue }> = {
   en: { translation: en },
+  he: { translation: he },
 };
 
 void i18n.use(initReactI18next).init({
@@ -43,6 +57,23 @@ void i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
   returnNull: false,
 });
+
+/**
+ * Show the interface in `language`: the catalogue, and the page's `lang` and
+ * `dir`, which every logical class and `rtl:` variant follows. Called when the
+ * session arrives and when the setting is saved, so nothing draws in English
+ * first and then flips.
+ */
+export function applyLanguage(
+  language: Language,
+  // No document in a store test: the language still changes, the page has none.
+  root: HTMLElement | null = typeof document === 'undefined' ? null : document.documentElement,
+): void {
+  void i18n.changeLanguage(language);
+  if (root === null) return;
+  root.lang = language;
+  applyDocumentDirection(directionOf(language), root);
+}
 
 /** The active language; anything i18next reports that is not one of ours is the default. */
 export function currentLanguage(): Language {

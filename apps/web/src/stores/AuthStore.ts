@@ -1,10 +1,10 @@
 import { makeAutoObservable, reaction, runInAction } from 'mobx';
 
-import type { SessionUser } from '@traders/shared';
+import type { SessionUser, UiLanguage } from '@traders/shared';
 
 import { ApiRequestError, api } from '../api/client.ts';
 import { setDisplayTimeZone } from '../lib/relativeTime.ts';
-import { t } from '../i18n/index.ts';
+import { DEFAULT_LANGUAGE, applyLanguage, t } from '../i18n/index.ts';
 import type { RootStore } from './RootStore.ts';
 
 export class AuthStore {
@@ -25,6 +25,19 @@ export class AuthStore {
       (zone) => setDisplayTimeZone(zone),
       { fireImmediately: true },
     );
+    // And in the user's language, by the same reasoning: `App` draws nothing
+    // until the session is known, so the first screen is already in it. Signed
+    // out - the sign-in page - is English, the default.
+    reaction(
+      () => this.user?.language ?? DEFAULT_LANGUAGE,
+      (language) => applyLanguage(language),
+      { fireImmediately: true },
+    );
+  }
+
+  /** A saved language change, so the page follows it without a reload. */
+  adoptLanguage(language: UiLanguage): void {
+    if (this.user !== null) this.user = { ...this.user, language };
   }
 
   get isAuthenticated(): boolean {
