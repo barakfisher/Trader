@@ -52,7 +52,9 @@ Each of these cost real time. They are listed so the cost is paid once.
 
 - Monorepo: `apps/web`, `apps/orchestrator`, `packages/shared`, `services/ai`, `infra/*`.
 - The AI service owns the schema (Alembic). The orchestrator reads/writes the same tables through
-  hand-written SQL in `src/db/queries.ts` — all SQL lives in that one file.
+  hand-written SQL under `src/db/queries/` — one module per concept (`runs.ts`, `proposals.ts`, …),
+  re-exported by `src/db/queries.ts`, which is the one path callers import and tests mock. All SQL
+  lives in that directory and nowhere else.
 - The TypeScript AI client is generated from the committed `services/ai/openapi.json`. After
   changing a pydantic wire model: `python scripts/export_openapi.py && pnpm gen:api`, and commit
   both.
