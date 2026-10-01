@@ -1,5 +1,6 @@
 import type { NewsArticle } from '@traders/shared';
 
+import { t as translate, useTranslation } from '../i18n/index.ts';
 import { formatAge } from '../lib/relativeTime.ts';
 import { SERVER_ENGLISH } from '../lib/textDirection.ts';
 
@@ -8,6 +9,7 @@ import { SERVER_ENGLISH } from '../lib/textDirection.ts';
  * Each says which instrument brought it here, because a link is evidence.
  */
 export function NewsList({ articles, showSymbols = true }: { articles: NewsArticle[]; showSymbols?: boolean }) {
+  const { t } = useTranslation();
   return (
     <ul className="space-y-2">
       {articles.map((article) => (
@@ -23,10 +25,12 @@ export function NewsList({ articles, showSymbols = true }: { articles: NewsArtic
           </a>
           <p className="text-xs text-text-muted">
             {article.source} · {formatAge(article.publishedAt ?? article.fetchedAt)}
-            {article.publishedAt === null && ' (found; publish date unknown)'}
+            {article.publishedAt === null && t('news.publishDateUnknown')}
             {showSymbols &&
               article.instruments.length > 0 &&
-              ` · about ${article.instruments.map((i) => i.symbol).join(', ')}`}
+              t('news.about', {
+                symbols: article.instruments.map((i) => i.symbol).join(t('common.listSeparator')),
+              })}
             {!showSymbols && article.instruments[0] && ` · ${matchText(article.instruments[0])}`}
           </p>
         </li>
@@ -39,11 +43,13 @@ export function NewsList({ articles, showSymbols = true }: { articles: NewsArtic
 export function matchText(link: NewsArticle['instruments'][number]): string {
   switch (link.matchMethod) {
     case 'cashtag':
-      return `ticker $${link.symbol} in the text`;
+      return translate('news.cashtag', { symbol: link.symbol });
     case 'exchange_prefix':
-      return `listing ${link.matchedText ?? link.symbol} in the text`;
+      return translate('news.exchangePrefix', { listing: link.matchedText ?? link.symbol });
     case 'company_name':
-      return `matched by name${link.matchedText ? ` “${link.matchedText}”` : ''}`;
+      return link.matchedText
+        ? translate('news.companyNameQuoted', { text: link.matchedText })
+        : translate('news.companyName');
     default:
       return link.matchMethod;
   }

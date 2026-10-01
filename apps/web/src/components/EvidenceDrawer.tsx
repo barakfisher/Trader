@@ -1,3 +1,4 @@
+import { useTranslation } from '../i18n/index.ts';
 import { readEvidence } from '../lib/evidence.ts';
 
 /**
@@ -21,15 +22,13 @@ export function EvidenceDrawer({
   baseCurrency: string;
   id: string;
 }) {
+  const { t } = useTranslation();
   const sections = readEvidence(evidence, { fallbackCurrency: baseCurrency });
 
   if (sections.length === 0) {
     return (
       <div id={id} className="mt-3 rounded-lg border border-border-subtle bg-surface/60 px-3 py-2">
-        <p className="text-xs text-text-muted">
-          This observation was stored without evidence. It is shown as it was recorded rather than
-          filled in.
-        </p>
+        <p className="text-xs text-text-muted">{t('evidence.none')}</p>
       </div>
     );
   }

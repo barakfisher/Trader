@@ -25,6 +25,7 @@ import { ObservationsFeed } from '../components/ObservationsFeed.tsx';
 import { SummaryCards } from '../components/SummaryCards.tsx';
 import { Button, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import { errorMessage } from '../api/client.ts';
+import { useTranslation } from '../i18n/index.ts';
 import { hasStaleQuotes, pricesAsOf } from '../lib/portfolioView.ts';
 import { formatAge, formatClockTime, formatExactTime } from '../lib/relativeTime.ts';
 import { feedFiltersFrom } from '../lib/feedFilters.ts';
@@ -40,6 +41,7 @@ export const DashboardPage = observer(function DashboardPage() {
     queryClient,
   } = useStore();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const portfolio = usePortfolioQuery();
   // The feed's filters live in the address (`/?severity=high&symbol=NVDA`), so
   // a filtered view survives a reload and can be sent. Read loosely: this page
@@ -62,18 +64,19 @@ export const DashboardPage = observer(function DashboardPage() {
       <header className="sticky top-0 z-20 -mx-4 flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle bg-surface/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
         <div className="flex flex-wrap items-center gap-2">
           <LineChart className="size-5 text-accent" aria-hidden />
-          <h1 className="text-base font-semibold">Portfolio</h1>
+          <h1 className="text-base font-semibold">{t('dashboard.title')}</h1>
           <NarrationBadge />
           {pricesFrom && (
             <span
               className="text-xs text-text-muted"
-              title={`Prices observed ${formatExactTime(pricesFrom)}. Fetched ${formatClockTime(
-                portfolio.dataUpdatedAt,
-              )}.`}
+              title={t('dashboard.pricesTitle', {
+                observed: formatExactTime(pricesFrom),
+                fetched: formatClockTime(portfolio.dataUpdatedAt),
+              })}
             >
-              prices from {formatAge(pricesFrom)}
-              {hasStaleQuotes(portfolio.data) && ' · some cached'}
-              {refreshing && ' · refreshing…'}
+              {t('dashboard.pricesFrom', { age: formatAge(pricesFrom) })}
+              {hasStaleQuotes(portfolio.data) && t('dashboard.someCached')}
+              {refreshing && t('dashboard.refreshing')}
             </span>
           )}
         </div>
@@ -97,13 +100,13 @@ export const DashboardPage = observer(function DashboardPage() {
           >
             <span className="flex items-center gap-1">
               <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden />
-              Refresh
+              {t('nav.refresh')}
             </span>
           </Button>
           <Button variant="secondary" onClick={importStore.openDialog}>
             <span className="flex items-center gap-1">
               <FileUp className="size-4" aria-hidden />
-              Import
+              {t('nav.import')}
             </span>
           </Button>
           {/* Links, not buttons: each view has an address. Targets, topics and
@@ -113,25 +116,25 @@ export const DashboardPage = observer(function DashboardPage() {
           <Link to="/targets" className={buttonClass('secondary')}>
             <span className="flex items-center gap-1">
               <Target className="size-4" aria-hidden />
-              Targets
+              {t('nav.targets')}
             </span>
           </Link>
           <Link to="/topics" className={buttonClass('secondary')}>
             <span className="flex items-center gap-1">
               <Tags className="size-4" aria-hidden />
-              Topics
+              {t('nav.topics')}
             </span>
           </Link>
           <Link to="/ask" className={buttonClass('secondary')}>
             <span className="flex items-center gap-1">
               <MessageCircleQuestion className="size-4" aria-hidden />
-              Ask
+              {t('nav.ask')}
             </span>
           </Link>
           <Link to="/proposals" className={buttonClass('secondary')}>
             <span className="flex items-center gap-1">
               <Inbox className="size-4" aria-hidden />
-              Proposals
+              {t('nav.proposals')}
               {/*
                 The count is the point of the button. A question that expires
                 unanswered because nobody knew it was there is the failure this
@@ -148,7 +151,7 @@ export const DashboardPage = observer(function DashboardPage() {
           <Link to="/settings" className={buttonClass('secondary')}>
             <span className="flex items-center gap-1">
               <Settings className="size-4" aria-hidden />
-              Settings
+              {t('nav.settings')}
             </span>
           </Link>
           {/* Shown to an admin only. Hiding it is courtesy: the server refuses
@@ -157,7 +160,7 @@ export const DashboardPage = observer(function DashboardPage() {
             <Link to="/admin" className={buttonClass('secondary')}>
               <span className="flex items-center gap-1">
                 <ShieldCheck className="size-4" aria-hidden />
-                Admin
+                {t('nav.admin')}
               </span>
             </Link>
           )}
@@ -169,16 +172,16 @@ export const DashboardPage = observer(function DashboardPage() {
           >
             <span className="flex items-center gap-1">
               <LogOut className="size-4" aria-hidden />
-              Sign out
+              {t('nav.signOut')}
             </span>
           </Button>
         </div>
       </header>
 
-      {portfolio.isPending && <Spinner label="Loading your portfolio…" />}
+      {portfolio.isPending && <Spinner label={t('dashboard.loading')} />}
       {portfolio.error && (
         <ErrorNote
-          message={errorMessage(portfolio.error, 'Could not load your portfolio.')}
+          message={errorMessage(portfolio.error, t('common.loadPortfolioFailed'))}
           onRetry={() => void portfolio.refetch()}
         />
       )}
@@ -187,9 +190,9 @@ export const DashboardPage = observer(function DashboardPage() {
         <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
           <div className="rounded-xl border border-border-subtle bg-surface-raised">
             <EmptyState
-              title="No holdings yet"
-              body="Import a CSV or JSON file from your broker, or add a position by hand. The demo portfolio in data/fixtures/demo-portfolio.csv works with no API keys."
-              action={<Button onClick={importStore.openDialog}>Import a file</Button>}
+              title={t('dashboard.emptyTitle')}
+              body={t('dashboard.emptyBody')}
+              action={<Button onClick={importStore.openDialog}>{t('dashboard.importFile')}</Button>}
             />
           </div>
           <AddHoldingForm />

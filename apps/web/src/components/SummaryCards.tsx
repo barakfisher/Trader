@@ -1,13 +1,14 @@
 import { observer } from 'mobx-react-lite';
 import { AlertTriangle } from 'lucide-react';
 
-import { formatMoney, formatPercent } from '@traders/shared';
-
+import { formatMoney, formatPercent } from '../i18n/format.ts';
+import { Trans, useTranslation } from '../i18n/index.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { Delta } from './ui.tsx';
 
 export const SummaryCards = observer(function SummaryCards() {
   const summary = usePortfolioQuery().data?.summary;
+  const { t } = useTranslation();
   if (!summary) return null;
   const currency = summary.baseCurrency;
 
@@ -17,19 +18,19 @@ export const SummaryCards = observer(function SummaryCards() {
           screen, before anything else. The percentage goes on its own line so a
           160 px card never has to wrap a figure. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Metric label="Total value" value={formatMoney(summary.totalValueMinor, currency)} />
+        <Metric label={t('summary.totalValue')} value={formatMoney(summary.totalValueMinor, currency)} />
         <Metric
-          label="Total cost"
+          label={t('summary.totalCost')}
           value={formatMoney(summary.totalCostMinor, currency)}
-          hint={`${summary.pricedCount} of ${summary.holdingsCount} priced`}
+          hint={t('summary.priced', { priced: summary.pricedCount, holdings: summary.holdingsCount })}
         />
         <Metric
-          label="Unrealised P&L"
+          label={t('summary.unrealisedPnl')}
           value={<Delta value={summary.pnlMinor}>{formatMoney(summary.pnlMinor, currency)}</Delta>}
           detail={<Delta value={summary.pnlMinor}>{formatPercent(summary.pnlPct)}</Delta>}
         />
         <Metric
-          label="Today"
+          label={t('summary.today')}
           value={
             <Delta value={summary.dayChangeMinor}>
               {summary.dayChangeMinor === null ? '—' : formatMoney(summary.dayChangeMinor, currency)}
@@ -47,16 +48,15 @@ export const SummaryCards = observer(function SummaryCards() {
         <div className="flex items-start gap-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
           <p>
-            This view is incomplete.
+            {t('summary.incomplete')}
             {summary.unpricedSymbols.length > 0 && (
-              <>
-                {' '}
-                No provider could price{' '}
-                <strong className="font-semibold">{summary.unpricedSymbols.join(', ')}</strong>, so
-                those positions are excluded from the totals rather than valued at zero.
-              </>
-            )}{' '}
-            Some quotes may be served from the last known price.
+              <Trans
+                i18nKey="summary.unpriced"
+                values={{ symbols: summary.unpricedSymbols.join(t('common.listSeparator')) }}
+                components={{ strong: <strong className="font-semibold" /> }}
+              />
+            )}
+            {t('summary.lastKnown')}
           </p>
         </div>
       )}

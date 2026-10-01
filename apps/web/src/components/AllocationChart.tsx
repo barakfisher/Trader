@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 
-import { formatMoney, minorToNumber } from '@traders/shared';
+import { minorToNumber } from '@traders/shared';
 
+import { formatMoney, formatShare } from '../i18n/format.ts';
+import { useTranslation } from '../i18n/index.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { CHART_DIRECTION } from '../lib/textDirection.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
@@ -14,6 +16,7 @@ const PALETTE = ['#6d8bff', '#59c2e8', '#9a7bf0', '#4fb9a5', '#e5a13c', '#e2736f
 
 export const AllocationChart = observer(function AllocationChart() {
   const { data: portfolio } = usePortfolioQuery();
+  const { t } = useTranslation();
   const [groupBy, setGroupBy] = useState<'assetClass' | 'instrument'>('assetClass');
 
   const slices =
@@ -33,7 +36,7 @@ export const AllocationChart = observer(function AllocationChart() {
 
   return (
     <Card
-      title="Allocation"
+      title={t('allocation.title')}
       action={
         <div className="flex gap-1 rounded-lg border border-border-subtle p-0.5 text-xs">
           {(['assetClass', 'instrument'] as const).map((option) => (
@@ -45,7 +48,7 @@ export const AllocationChart = observer(function AllocationChart() {
                 groupBy === option ? 'bg-surface-hover text-text-primary' : 'text-text-muted'
               }`}
             >
-              {option === 'assetClass' ? 'By class' : 'By holding'}
+              {option === 'assetClass' ? t('allocation.byClass') : t('allocation.byHolding')}
             </button>
           ))}
         </div>
@@ -79,7 +82,13 @@ export const AllocationChart = observer(function AllocationChart() {
               }}
               formatter={(_value, _name, item) => {
                 const payload = item.payload as { valueMinor: number; weightPct: number };
-                return [`${formatMoney(payload.valueMinor, currency)} (${payload.weightPct.toFixed(1)}%)`, ''];
+                return [
+                  t('allocation.tooltip', {
+                    value: formatMoney(payload.valueMinor, currency),
+                    share: formatShare(payload.weightPct),
+                  }),
+                  '',
+                ];
               }}
             />
           </PieChart>
@@ -97,7 +106,7 @@ export const AllocationChart = observer(function AllocationChart() {
               />
               {entry.name}
             </span>
-            <span className="text-text-muted">{entry.weightPct.toFixed(1)}%</span>
+            <span className="text-text-muted">{formatShare(entry.weightPct)}</span>
           </li>
         ))}
       </ul>

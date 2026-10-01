@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { Check, Link2, Send } from 'lucide-react';
 
 import { errorMessage } from '../api/client.ts';
+import { Trans, useTranslation } from '../i18n/index.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
 import { useTelegramBindingQuery } from '../queries/telegram.ts';
 import { useStore } from '../stores/context.tsx';
@@ -24,6 +25,7 @@ import { Button, ErrorNote } from './ui.tsx';
  */
 export const TelegramConnect = observer(function TelegramConnect() {
   const { telegram } = useStore();
+  const { t } = useTranslation();
   const bindingQuery = useTelegramBindingQuery();
   const binding = bindingQuery.data;
   const connected = binding?.connected === true;
@@ -47,7 +49,7 @@ export const TelegramConnect = observer(function TelegramConnect() {
     <div className="space-y-3">
       {bindingQuery.error && (
         <ErrorNote
-          message={errorMessage(bindingQuery.error, 'Could not check your Telegram link.')}
+          message={errorMessage(bindingQuery.error, t('telegram.checkFailed'))}
           onRetry={() => void bindingQuery.refetch()}
         />
       )}
@@ -55,8 +57,7 @@ export const TelegramConnect = observer(function TelegramConnect() {
 
       {telegram.unavailable && (
         <p className="text-sm text-text-muted">
-          This installation has no Telegram bot configured, so there is nothing to connect to.
-          Alerts and proposals still appear here in the app.
+          {t('telegram.unavailable')}
         </p>
       )}
 
@@ -64,17 +65,16 @@ export const TelegramConnect = observer(function TelegramConnect() {
         <div className="space-y-1">
           <p className="flex items-center gap-2 text-sm text-gain">
             <Check className="size-4" aria-hidden />
-            Connected{binding?.username && ` as @${binding.username}`}
+            {binding?.username
+              ? t('telegram.connectedAs', { username: binding.username })
+              : t('telegram.connected')}
           </p>
           <p className="text-xs text-text-muted">
-            {binding?.boundAt && `Linked ${formatExactTime(binding.boundAt)}. `}
-            Proposals arrive with Approve, Reject and Snooze buttons, and answering one there is the
-            same act as answering it here.
+            {binding?.boundAt && t('telegram.linked', { when: formatExactTime(binding.boundAt) })}
+            {t('telegram.buttonsExplained')}
           </p>
           <p className="text-xs text-text-muted">
-            To disconnect, send <span className="font-mono">/stop</span> to the bot. That removes
-            the link and nothing else — the portfolio is still watched, and findings still appear in
-            this app.
+            <Trans i18nKey="telegram.disconnect" components={{ mono: <span className="font-mono" /> }} />
           </p>
         </div>
       ) : binding === undefined ? null : (
@@ -83,21 +83,20 @@ export const TelegramConnect = observer(function TelegramConnect() {
         // connected, which the reader has no way to tell from this card.
         <div className="space-y-2">
           <p className="text-sm text-text-muted">
-            Not connected. Without a chat linked, notifications are still recorded — you can see
-            what you were not told — but nothing is pushed to you.
+            {t('telegram.notConnected')}
           </p>
 
           {link === null ? (
             <Button onClick={() => void telegram.connect()} disabled={telegram.minting}>
               <span className="flex items-center gap-1">
                 <Send className="size-4" aria-hidden />
-                {telegram.minting ? 'Creating a link…' : 'Connect Telegram'}
+                {telegram.minting ? t('telegram.creatingLink') : t('telegram.connect')}
               </span>
             </Button>
           ) : (
             <div className="space-y-2 rounded-lg border border-border-subtle bg-surface-hover p-3">
               <p className="text-sm text-text-primary">
-                Open this link in Telegram and press Start.
+                {t('telegram.openAndStart')}
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <a
@@ -107,10 +106,10 @@ export const TelegramConnect = observer(function TelegramConnect() {
                   rel="noreferrer noopener"
                 >
                   <Link2 className="size-4" aria-hidden />
-                  Open in Telegram
+                  {t('telegram.openInTelegram')}
                 </a>
                 <Button variant="ghost" onClick={() => void bindingQuery.refetch()}>
-                  I have pressed Start
+                  {t('telegram.pressedStart')}
                 </Button>
               </div>
 
@@ -133,24 +132,21 @@ export const TelegramConnect = observer(function TelegramConnect() {
               {startCommand && (
                 <div className="space-y-1 border-t border-border-subtle pt-2">
                   <p className="text-xs text-text-muted">
-                    Already started this bot before? The link will open the chat without sending
-                    anything. Paste this into it instead:
+                    {t('telegram.alreadyStarted')}
                   </p>
                   <div className="flex items-start gap-2">
                     <code className="block flex-1 break-all rounded bg-surface px-2 py-1 font-mono text-[11px] text-text-primary">
                       {startCommand}
                     </code>
                     <Button variant="secondary" onClick={() => void copy(startCommand)}>
-                      {copied ? 'Copied' : 'Copy'}
+                      {copied ? t('telegram.copied') : t('telegram.copy')}
                     </Button>
                   </div>
                 </div>
               )}
 
               <p className="text-xs text-warn">
-                Treat this link like a password. Anyone who opens it connects their own Telegram
-                chat to this account, and could then answer your proposals. It can be used once and
-                expires {formatExactTime(link.expiresAt)}.
+                {t('telegram.bearerWarning', { when: formatExactTime(link.expiresAt) })}
               </p>
             </div>
           )}

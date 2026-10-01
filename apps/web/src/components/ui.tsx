@@ -2,6 +2,8 @@
 
 import type { ReactNode } from 'react';
 
+import { useTranslation } from '../i18n/index.ts';
+
 export function Card({
   title,
   action,
@@ -88,12 +90,13 @@ export function Spinner({ label }: { label: string }) {
 }
 
 export function ErrorNote({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-loss/40 bg-loss/10 px-3 py-2 text-sm text-loss">
       <span>{message}</span>
       {onRetry && (
         <button type="button" onClick={onRetry} className="underline">
-          Retry
+          {t('common.retry')}
         </button>
       )}
     </div>

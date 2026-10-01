@@ -13,6 +13,8 @@
  * expensive direction.
  */
 
+import { t } from '../i18n/index.ts';
+
 /** Below this, the countdown switches to minutes: hours stop being useful. */
 const MINUTES_THRESHOLD_MS = 60 * 60 * 1000;
 
@@ -26,14 +28,22 @@ const IMMINENT_THRESHOLD_MS = 60 * 1000;
  * state instead, and a negative countdown is not a thing to show anybody.
  */
 export function timeLeft(expiresAt: string, now: Date = new Date()): string | null {
+  const remaining = remainingDuration(expiresAt, now);
+  if (remaining === null) return null;
+  return remaining === 'now' ? t('countdown.expiringNow') : t('countdown.left', { duration: remaining });
+}
+
+/** The time remaining as a short duration ("2h"), 'now' inside the last minute, null once passed. */
+function remainingDuration(expiresAt: string, now: Date): string | 'now' | null {
   const remaining = new Date(expiresAt).getTime() - now.getTime();
   if (Number.isNaN(remaining) || remaining <= 0) return null;
-  if (remaining < IMMINENT_THRESHOLD_MS) return 'expiring now';
-  if (remaining < MINUTES_THRESHOLD_MS) return `${Math.floor(remaining / 60_000)}m left`;
-
+  if (remaining < IMMINENT_THRESHOLD_MS) return 'now';
+  if (remaining < MINUTES_THRESHOLD_MS) {
+    return t('duration.minutes', { count: Math.floor(remaining / 60_000) });
+  }
   const hours = Math.floor(remaining / MINUTES_THRESHOLD_MS);
-  if (hours < 24) return `${hours}h left`;
-  return `${Math.floor(hours / 24)}d left`;
+  if (hours < 24) return t('duration.hours', { count: hours });
+  return t('duration.days', { count: Math.floor(hours / 24) });
 }
 
 /**
@@ -56,6 +66,9 @@ export function snoozeDescription(
   now: Date = new Date(),
 ): string | null {
   if (snoozedUntil === null) return null;
-  const left = timeLeft(snoozedUntil, now);
-  return left === null ? 'waking now' : `snoozed, back in ${left.replace(' left', '')}`;
+  const left = remainingDuration(snoozedUntil, now);
+  // Inside the last minute the snooze is over in all but name, as it is once passed.
+  return left === null || left === 'now'
+    ? t('countdown.wakingNow')
+    : t('countdown.snoozedUntil', { duration: left });
 }

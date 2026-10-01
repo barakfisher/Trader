@@ -11,6 +11,7 @@ import {
 } from '../lib/observationPresentation.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { errorMessage } from '../api/client.ts';
+import { useTranslation } from '../i18n/index.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { MIRROR_IN_RTL, SERVER_ENGLISH } from '../lib/textDirection.ts';
 import {
@@ -25,10 +26,10 @@ import { Card, EmptyState, ErrorNote, Spinner } from './ui.tsx';
 import { EvidenceDrawer } from './EvidenceDrawer.tsx';
 
 /** The severity choices, as "at least this severe". */
-const SEVERITY_OPTIONS: { value: FeedFilters['severity']; label: string }[] = [
-  { value: undefined, label: 'All' },
-  { value: 'notable', label: 'Notable and high' },
-  { value: 'high', label: 'High only' },
+const SEVERITY_OPTIONS: { value: FeedFilters['severity']; key: 'all' | 'notable' | 'high' }[] = [
+  { value: undefined, key: 'all' },
+  { value: 'notable', key: 'notable' },
+  { value: 'high', key: 'high' },
 ];
 
 /**
@@ -46,6 +47,7 @@ export const ObservationsFeed = observer(function ObservationsFeed({
   onFiltersChange?: (filters: FeedFilters) => void;
 }) {
   const feed = useFeedQuery(filters);
+  const { t } = useTranslation();
   const portfolio = usePortfolioQuery().data;
   const baseCurrency = baseCurrencyOf(portfolio);
   // A failed refresh keeps the previous findings on screen: it must not read as
@@ -64,23 +66,23 @@ export const ObservationsFeed = observer(function ObservationsFeed({
 
   return (
     <Card
-      title="Observations"
+      title={t('feed.title')}
       action={
         <span className="text-xs text-text-muted">
           {feed.isFetching && !feed.isPending && !feed.isFetchingNextPage
-            ? 'refreshing…'
+            ? t('feed.refreshing')
             : latestAt
-              ? `latest ${formatAge(latestAt)}`
+              ? t('feed.latest', { age: formatAge(latestAt) })
               : null}
         </span>
       }
     >
       {onFiltersChange && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <div className="flex flex-wrap gap-1" role="group" aria-label="Severity">
+          <div className="flex flex-wrap gap-1" role="group" aria-label={t('feed.severity')}>
             {SEVERITY_OPTIONS.map((option) => (
               <button
-                key={option.label}
+                key={option.key}
                 type="button"
                 aria-pressed={filters.severity === option.value}
                 onClick={() => onFiltersChange({ ...filters, severity: option.value })}
@@ -90,19 +92,19 @@ export const ObservationsFeed = observer(function ObservationsFeed({
                     : 'text-text-muted hover:text-text-primary'
                 }`}
               >
-                {option.label}
+                {t(`feed.severityOptions.${option.key}`)}
               </button>
             ))}
           </div>
           <select
-            aria-label="Symbol"
+            aria-label={t('feed.symbol')}
             value={filters.symbol ?? ''}
             onChange={(event) =>
               onFiltersChange({ ...filters, symbol: event.target.value || undefined })
             }
             className="rounded border border-border-subtle bg-surface px-2 py-1 text-xs"
           >
-            <option value="">All symbols</option>
+            <option value="">{t('feed.allSymbols')}</option>
             {symbols.map((symbol) => (
               <option key={symbol} value={symbol}>
                 {symbol}
@@ -111,18 +113,18 @@ export const ObservationsFeed = observer(function ObservationsFeed({
           </select>
           {total !== null && (
             <span className="text-xs text-text-muted">
-              {items.length} of {total}
+              {t('feed.shownOf', { shown: items.length, total })}
             </span>
           )}
         </div>
       )}
 
-      {feed.isPending && <Spinner label="Loading observations…" />}
+      {feed.isPending && <Spinner label={t('feed.loading')} />}
 
       {feed.error && (
         <div className="mb-3">
           <ErrorNote
-            message={errorMessage(feed.error, 'Could not load your observations.')}
+            message={errorMessage(feed.error, t('feed.loadFailed'))}
             onRetry={() => void feed.refetch()}
           />
         </div>
@@ -133,14 +135,14 @@ export const ObservationsFeed = observer(function ObservationsFeed({
           different statement, and says so. */}
       {isEmpty && !filtered && (
         <EmptyState
-          title="Nothing to report"
-          body="The last scan found no price move, unusual move, drawdown or allocation drift above your thresholds. That is the ordinary outcome on a calm day, not a missing result."
+          title={t('feed.quietTitle')}
+          body={t('feed.quietBody')}
         />
       )}
       {isEmpty && filtered && (
         <EmptyState
-          title="No findings match these filters"
-          body="There are findings, but none at this severity or about this symbol."
+          title={t('feed.noMatchTitle')}
+          body={t('feed.noMatchBody')}
           action={
             onFiltersChange && (
               <button
@@ -148,7 +150,7 @@ export const ObservationsFeed = observer(function ObservationsFeed({
                 onClick={() => onFiltersChange({})}
                 className="text-xs text-accent underline"
               >
-                Show every finding
+                {t('feed.showAll')}
               </button>
             )
           }
@@ -174,8 +176,8 @@ export const ObservationsFeed = observer(function ObservationsFeed({
             className="rounded border border-border-subtle px-3 py-1.5 text-xs text-text-primary hover:bg-surface-hover disabled:opacity-60"
           >
             {feed.isFetchingNextPage
-              ? 'Loading…'
-              : `Show ${Math.min(FEED_PAGE_SIZE, remaining || FEED_PAGE_SIZE)} more`}
+              ? t('common.loading')
+              : t('feed.showMore', { count: Math.min(FEED_PAGE_SIZE, remaining || FEED_PAGE_SIZE) })}
           </button>
         </div>
       )}
@@ -199,6 +201,7 @@ export const ObservationRow = observer(function ObservationRow({
   baseCurrency: string;
 }) {
   const { observations, concepts } = useStore();
+  const { t } = useTranslation();
   const severity = severityStyle(observation.severity);
   const open = observations.isExpanded(observation.id);
   const drawerId = `evidence-${observation.id}`;
@@ -220,7 +223,7 @@ export const ObservationRow = observer(function ObservationRow({
           <span aria-hidden>·</span>
           <span>{kindLabel(observation.kind)}</span>
           <span aria-hidden>·</span>
-          <span title={`Recorded ${formatExactTime(observation.createdAt)}`}>
+          <span title={t('feed.recorded', { when: formatExactTime(observation.createdAt) })}>
             {formatAge(observation.createdAt)}
           </span>
         </div>
@@ -230,13 +233,13 @@ export const ObservationRow = observer(function ObservationRow({
 
         {observation.conceptRefs.length > 0 && (
           <p className="mt-2 flex flex-wrap items-center gap-1 text-[11px] text-text-muted">
-            <span className="uppercase tracking-wide">Concepts</span>
+            <span className="uppercase tracking-wide">{t('feed.concepts')}</span>
             {observation.conceptRefs.map((slug) => (
               <button
                 key={slug}
                 type="button"
                 onClick={() => concepts.open(slug)}
-                title={`What is ${conceptLabel(slug).toLowerCase()}?`}
+                title={t('feed.whatIs', { concept: conceptLabel(slug).toLowerCase() })}
                 className="rounded bg-surface-hover px-1.5 py-0.5 text-text-primary hover:bg-border hover:underline focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
               >
                 {conceptLabel(slug)}
@@ -257,7 +260,7 @@ export const ObservationRow = observer(function ObservationRow({
           ) : (
             <ChevronRight className={`size-3.5 ${MIRROR_IN_RTL}`} aria-hidden />
           )}
-          {open ? 'Hide evidence' : 'Show evidence'}
+          {open ? t('feed.hideEvidence') : t('feed.showEvidence')}
         </button>
 
         {open && (

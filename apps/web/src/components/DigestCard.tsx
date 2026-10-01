@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import type { DigestEntry } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
+import { useTranslation } from '../i18n/index.ts';
 import { countText, findingsIn, reasonSummary, reasonText } from '../lib/digestPresentation.ts';
 import { severityStyle, subjectLabel } from '../lib/observationPresentation.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
@@ -23,42 +24,46 @@ const SHOWN = 5;
  */
 export const DigestCard = observer(function DigestCard() {
   const digest = useDigestQuery();
+  const { t } = useTranslation();
   const data = digest.data;
   const next = findingsIn(data?.next.entries ?? []);
   const last = data?.last ?? null;
   const lastFindings = findingsIn(last?.entries ?? []);
 
   return (
-    <Card title="Daily digest">
-      {digest.isPending && <Spinner label="Loading the digest…" />}
+    <Card title={t('digest.title')}>
+      {digest.isPending && <Spinner label={t('digest.loading')} />}
       {digest.error && (
         <ErrorNote
-          message={errorMessage(digest.error, 'Could not load the digest.')}
+          message={errorMessage(digest.error, t('digest.loadFailed'))}
           onRetry={() => void digest.refetch()}
         />
       )}
       {data && (
         <div className="space-y-3 text-sm">
           <p className="text-xs text-text-muted">
-            Findings above your alert threshold are pushed when found. The rest wait for the daily
-            digest - here and in Telegram.
+            {t('digest.intro')}
           </p>
           <div>
             <p className="font-medium">
               {next.length === 0
-                ? 'Nothing is waiting for the next digest.'
-                : `Next digest: ${countText(next.length)} - ${reasonSummary(next)}.`}
+                ? t('digest.nothingWaiting')
+                : t('digest.next', { findings: countText(next.length), reasons: reasonSummary(next) })}
             </p>
             {next.length > 0 && <EntryList entries={next} />}
           </div>
           <div className="border-t border-border-subtle pt-3">
             {last === null ? (
-              <p className="text-text-muted">No digest has been delivered yet.</p>
+              <p className="text-text-muted">{t('digest.noneDelivered')}</p>
             ) : (
               <details>
                 <summary className="cursor-pointer text-text-muted">
-                  Last delivered {formatExactTime(last.sentAt)}: {countText(lastFindings.length)}
-                  {lastFindings.length > 0 && ` - ${reasonSummary(lastFindings)}`}
+                  {t('digest.lastDelivered', {
+                    when: formatExactTime(last.sentAt),
+                    findings: countText(lastFindings.length),
+                  })}
+                  {lastFindings.length > 0 &&
+                    t('digest.lastDeliveredReasons', { reasons: reasonSummary(lastFindings) })}
                 </summary>
                 <EntryList entries={lastFindings} />
               </details>
@@ -71,6 +76,7 @@ export const DigestCard = observer(function DigestCard() {
 });
 
 function EntryList({ entries }: { entries: DigestEntry[] }) {
+  const { t } = useTranslation();
   const shown = entries.slice(0, SHOWN);
   return (
     <ul className="mt-2 space-y-1.5">
@@ -92,7 +98,7 @@ function EntryList({ entries }: { entries: DigestEntry[] }) {
         );
       })}
       {entries.length > SHOWN && (
-        <li className="text-xs text-text-muted">and {entries.length - SHOWN} more, all in the feed below.</li>
+        <li className="text-xs text-text-muted">{t('digest.more', { count: entries.length - SHOWN })}</li>
       )}
     </ul>
   );

@@ -4,6 +4,7 @@ import type { DecisionResponse, Proposal, ProposalAction } from '@traders/shared
 
 import { ApiRequestError, api } from '../api/client.ts';
 import { queryKeys } from '../queries/queryKeys.ts';
+import { t } from '../i18n/index.ts';
 import type { RootStore } from './RootStore.ts';
 
 /**
@@ -120,7 +121,7 @@ export class ProposalsStore {
           this.refusal = { proposalId, message: error.message };
         } else {
           this.decisionError =
-            error instanceof ApiRequestError ? error.message : 'Could not record your decision.';
+            error instanceof ApiRequestError ? error.message : t('errors.decisionFailed');
         }
       });
     } finally {

@@ -13,6 +13,7 @@ import {
   weightToUnits,
 } from '../lib/targetWeights.ts';
 import { queryKeys } from '../queries/queryKeys.ts';
+import { t } from '../i18n/index.ts';
 import type { RootStore } from './RootStore.ts';
 
 /** One line of the form: what is held, what was meant to be, and the gap. */
@@ -201,19 +202,23 @@ export class TargetsStore {
   get blockingIssue(): string | null {
     const invalid = this.rows.filter((row) => row.invalid);
     if (invalid.length > 0) {
-      return `${invalid.map((row) => row.symbol).join(', ')}: a target must be a percentage, with at most two decimal places.`;
+      return t('validation.targetFormat', {
+        symbols: invalid.map((row) => row.symbol).join(t('common.listSeparator')),
+      });
     }
     const over = this.rows.filter(
       (row) => row.targetUnits !== null && row.targetUnits > WEIGHT_UNITS_PER_PORTFOLIO,
     );
     if (over.length > 0) {
-      return `${over.map((row) => row.symbol).join(', ')}: no single target can be more than 100% of the portfolio.`;
+      return t('validation.targetOver100', {
+        symbols: over.map((row) => row.symbol).join(t('common.listSeparator')),
+      });
     }
     if (this.totalUnits > WEIGHT_UNITS_PER_PORTFOLIO) {
       // A set summing over 100% describes a portfolio larger than itself, so no
       // allocation could ever satisfy it and every drift against it would be
       // permanent. Summing to *less* is fine and deliberately not flagged.
-      return `Your targets add up to ${unitsToPercent(this.totalUnits)}%. They can add up to less than 100%, but not more.`;
+      return t('validation.targetsTotal', { total: unitsToPercent(this.totalUnits) });
     }
     return null;
   }
@@ -266,7 +271,7 @@ export class TargetsStore {
     } catch (error) {
       runInAction(() => {
         this.error =
-          error instanceof ApiRequestError ? error.message : 'Could not save your targets.';
+          error instanceof ApiRequestError ? error.message : t('errors.targetsSaveFailed');
       });
       return false;
     } finally {

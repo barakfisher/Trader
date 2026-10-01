@@ -3,6 +3,7 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import type { ImportCommitResult, ImportMode, ImportPreview, ImportRowStatus } from '@traders/shared';
 
 import { ApiRequestError, api } from '../api/client.ts';
+import { t } from '../i18n/index.ts';
 import { queryKeys } from '../queries/queryKeys.ts';
 import type { RootStore } from './RootStore.ts';
 
@@ -101,7 +102,7 @@ export class ImportStore {
       });
     } catch (error) {
       runInAction(() => {
-        this.error = error instanceof ApiRequestError ? error.message : 'Could not read that file.';
+        this.error = error instanceof ApiRequestError ? error.message : t('import.readFailed');
       });
     } finally {
       runInAction(() => {
@@ -130,7 +131,7 @@ export class ImportStore {
       void this.root.queryClient.invalidateQueries({ queryKey: queryKeys.portfolio });
     } catch (error) {
       runInAction(() => {
-        this.error = error instanceof ApiRequestError ? error.message : 'Import failed.';
+        this.error = error instanceof ApiRequestError ? error.message : t('import.failed');
       });
     } finally {
       runInAction(() => {

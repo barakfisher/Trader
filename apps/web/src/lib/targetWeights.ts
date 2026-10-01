@@ -19,6 +19,8 @@
  * server already avoids it the same way — see `routes/targets.ts`.
  */
 
+import { t } from '../i18n/index.ts';
+
 /** Ten-thousandths of a portfolio: the scale of `target_weights.weight`. */
 export const WEIGHT_UNITS_PER_PORTFOLIO = 10_000;
 
@@ -109,7 +111,8 @@ export function weightToUnits(weight: string): number {
 /** A drift, signed, in the percentage points the feed quotes: `+3.2pp`. */
 export function formatDriftPoints(units: number): string {
   const sign = units > 0 ? '+' : units < 0 ? '−' : '';
-  return `${sign}${unitsToPercent(Math.abs(units))}pp`;
+  // The digits are exact (integer units), so they are built here, not by `Intl`.
+  return t('targets.driftPoints', { value: `${sign}${unitsToPercent(Math.abs(units))}` });
 }
 
 /**

@@ -3,6 +3,7 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import type { TelegramConnectLink } from '@traders/shared';
 
 import { ApiRequestError, api } from '../api/client.ts';
+import { t } from '../i18n/index.ts';
 import type { RootStore } from './RootStore.ts';
 
 /**
@@ -53,7 +54,7 @@ export class TelegramStore {
           return;
         }
         this.error =
-          error instanceof ApiRequestError ? error.message : 'Could not create a connect link.';
+          error instanceof ApiRequestError ? error.message : t('telegram.mintFailed');
       });
     } finally {
       runInAction(() => {

@@ -16,13 +16,16 @@
 
 import type { DailyClose } from '@traders/shared';
 
+import { formatDate } from '../i18n/format.ts';
+import { t } from '../i18n/index.ts';
+
 /** The longest run of consecutive days a market is closed for, plus the day after. */
 export const MAX_CLOSED_DAYS = 5;
 
 export const RANGES = [
-  { key: '1m', label: '1M', days: 30 },
-  { key: '3m', label: '3M', days: 91 },
-  { key: 'all', label: 'All', days: null },
+  { key: '1m', days: 30 },
+  { key: '3m', days: 91 },
+  { key: 'all', days: null },
 ] as const;
 
 export type RangeKey = (typeof RANGES)[number]['key'];
@@ -98,7 +101,7 @@ export function isOpenDay(day: string, now: Date = new Date()): boolean {
 
 /** A day as the chart names it: the date, or "so far today" for a day not yet closed. */
 export function dayName(day: string, now: Date = new Date()): string {
-  return isOpenDay(day, now) ? `${formatDay(day)} (so far today)` : formatDay(day);
+  return isOpenDay(day, now) ? t('price.soFarToday', { day: formatDay(day) }) : formatDay(day);
 }
 
 /** Where a price level sits against the closes drawn: on the chart, or off one edge. */
@@ -113,31 +116,25 @@ export function levelPosition(levelMinor: number, closes: DailyClose[]): 'within
 /** What the chart's caption says about its own coverage. */
 export function coverageText(closes: DailyClose[]): string {
   if (closes.length === 0) {
-    return 'No stored closing price yet. The daily history run fills it; nothing is fetched to draw this chart.';
+    return t('price.coverage.none');
   }
   const first = closes[0]!;
   const last = closes[closes.length - 1]!;
   const parts = [
-    `${closes.length} daily close${closes.length === 1 ? '' : 's'} from ${formatDay(first.day)} to ${formatDay(last.day)}`,
-    'stored prices only',
+    t('price.coverage.closes', { count: closes.length, from: formatDay(first.day), to: formatDay(last.day) }),
+    t('price.coverage.storedOnly'),
   ];
   const missing = missingStretches(closes);
-  if (missing > 0) {
-    parts.push(
-      `${missing} stretch${missing === 1 ? '' : 'es'} with no stored price ${missing === 1 ? 'is a break' : 'are breaks'} in the line`,
-    );
-  }
-  return `${parts.join('; ')}.`;
+  if (missing > 0) parts.push(t('price.coverage.breaks', { count: missing }));
+  return t('price.coverage.sentence', { clauses: parts.join(t('common.clauseSeparator')) });
 }
-
-const dayLabel = new Intl.DateTimeFormat('en-GB', {
-  day: 'numeric',
-  month: 'short',
-  year: 'numeric',
-  timeZone: 'UTC',
-});
 
 /** A calendar day, formatted in UTC so no timezone moves it. */
 export function formatDay(day: string): string {
-  return dayLabel.format(new Date(`${day}T00:00:00Z`));
+  return formatDate(new Date(`${day}T00:00:00Z`), {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 }

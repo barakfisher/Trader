@@ -3,7 +3,6 @@ import { observer } from 'mobx-react-lite';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft, Newspaper, Plus, Search, Tags, X } from 'lucide-react';
 
-import { formatMoney } from '@traders/shared';
 import type {
   TopicDetail,
   TopicInstrument,
@@ -14,6 +13,8 @@ import type { TopicCandidate } from '@traders/shared/ai';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Button, Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
+import { formatMoney } from '../i18n/format.ts';
+import { useTranslation } from '../i18n/index.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { MIRROR_IN_RTL, SERVER_ENGLISH } from '../lib/textDirection.ts';
 import {
@@ -48,6 +49,7 @@ import { NewsList } from '../components/NewsList.tsx';
 export const TopicsPage = observer(function TopicsPage() {
   const { topics } = useStore();
   const list = useTopicsQuery();
+  const { t } = useTranslation();
   const limits = topics.limits;
 
   return (
@@ -55,32 +57,29 @@ export const TopicsPage = observer(function TopicsPage() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Tags className="size-5 text-accent" aria-hidden />
-          <h1 className="text-base font-semibold">Topics</h1>
+          <h1 className="text-base font-semibold">{t('topicsPage.title')}</h1>
           {limits && (
             <span className="text-xs text-text-muted">
-              {topics.activeCount} of {limits.maxActiveTopics}
+              {t('topicsPage.count', { active: topics.activeCount, max: limits.maxActiveTopics })}
             </span>
           )}
         </div>
         <Link to="/" className={buttonClass('secondary')}>
           <span className="flex items-center gap-1">
             <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
-            Back to portfolio
+            {t('common.backToPortfolio')}
           </span>
         </Link>
       </header>
 
       <p className="max-w-3xl text-sm text-text-muted">
-        A topic is a theme you want to follow, in your own words: “uranium”, “robot surgery”. Type
-        one and the app suggests instruments whose business descriptions are about it, each with the
-        sentence that matched. Suggestions are never ticked for you, and you can add any ticker they
-        missed. Following a topic buys nothing; it decides what the app watches.
+        {t('topicsPage.intro')}
       </p>
 
       {/* A failed read with nothing to show; a failed re-read keeps the list. */}
       {list.error && topics.topics === null && (
         <ErrorNote
-          message={errorMessage(list.error, 'Could not load your topics.')}
+          message={errorMessage(list.error, t('topicsPage.loadFailed'))}
           onRetry={() => void list.refetch()}
         />
       )}
@@ -104,15 +103,16 @@ export const TopicsPage = observer(function TopicsPage() {
 const TopicList = observer(function TopicList() {
   const { topics } = useStore();
   const list = useTopicsQuery();
+  const { t } = useTranslation();
 
-  if (list.isPending) return <Spinner label="Loading your topics…" />;
+  if (list.isPending) return <Spinner label={t('topicsPage.loading')} />;
   if (topics.topics === null) return null;
 
   const newButton = (
     <Button onClick={topics.startNew} disabled={topics.atLimit || topics.composer !== null}>
       <span className="flex items-center gap-1">
         <Plus className="size-4" aria-hidden />
-        New topic
+        {t('topicsPage.new')}
       </span>
     </Button>
   );
@@ -121,8 +121,8 @@ const TopicList = observer(function TopicList() {
     return topics.composer ? null : (
       <div className="rounded-xl border border-border-subtle bg-surface-raised">
         <EmptyState
-          title="No topics yet"
-          body="Follow a theme and the app will watch the instruments you confirm for it."
+          title={t('topicsPage.emptyTitle')}
+          body={t('topicsPage.emptyBody')}
           action={newButton}
         />
       </div>
@@ -130,11 +130,10 @@ const TopicList = observer(function TopicList() {
   }
 
   return (
-    <Card title="Your topics" action={newButton}>
+    <Card title={t('topicsPage.yours')} action={newButton}>
       {topics.atLimit && (
         <p className="mb-3 text-xs text-text-muted">
-          You follow {topics.limits?.maxActiveTopics} topics, which is the most you can. Remove one
-          to add another.
+          {t('topicsPage.atLimit', { max: topics.limits?.maxActiveTopics })}
         </p>
       )}
       <ul className="divide-y divide-border-subtle">
@@ -149,8 +148,8 @@ const TopicList = observer(function TopicList() {
             >
               <span className="font-medium">{topic.label}</span>
               <span className="text-xs text-text-muted">
-                {topic.instrumentCount} instrument{topic.instrumentCount === 1 ? '' : 's'}
-                {topic.createdBy === 'auto' && ' · found in the news'}
+                {t('topicsPage.instruments', { count: topic.instrumentCount })}
+                {topic.createdBy === 'auto' && t('topicsPage.foundInNews')}
               </span>
             </button>
           </li>
@@ -169,20 +168,18 @@ const TopicList = observer(function TopicList() {
  */
 const ProposalList = observer(function ProposalList() {
   const { topics } = useStore();
+  const { t } = useTranslation();
   if (topics.proposals.length === 0) return null;
   const cooldown = topics.limits?.rejectionCooldownDays;
   const ttl = topics.limits?.proposalTtlDays;
   const weak = topics.weakProposals.length;
 
   return (
-    <Card title="Suggested from the news">
+    <Card title={t('topicsPage.suggested')}>
       <p className="mb-3 text-xs text-text-muted">
-        These themes kept coming up in headlines about what you hold and follow. They are
-        suggestions only: nothing is followed until you choose its instruments.
-        {cooldown !== undefined &&
-          ` If you are not interested, a theme like it is not suggested again for ${cooldown} days.`}
-        {ttl !== undefined &&
-          ` A suggestion left unanswered is withdrawn after ${ttl} days, to make room for new ones.`}
+        {t('topicsPage.suggestedIntro')}
+        {cooldown !== undefined && t('topicsPage.cooldown', { days: cooldown })}
+        {ttl !== undefined && t('topicsPage.proposalTtl', { days: ttl })}
       </p>
       {topics.shownProposals.length > 0 && (
         <ul className="space-y-4">
@@ -195,11 +192,11 @@ const ProposalList = observer(function ProposalList() {
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-text-muted">
           <Button variant="ghost" onClick={topics.toggleWeakProposals}>
             {topics.showWeakProposals
-              ? 'Hide weak matches'
-              : `Show ${weak} weak match${weak === 1 ? '' : 'es'}`}
+              ? t('topicsPage.hideWeak')
+              : t('topicsPage.showWeak', { count: weak })}
           </Button>
           {!topics.showWeakProposals &&
-            'Themes the news kept mentioning, where the instruments found fit only loosely.'}
+            t('topicsPage.weakExplained')}
         </div>
       )}
     </Card>
@@ -208,6 +205,7 @@ const ProposalList = observer(function ProposalList() {
 
 const ProposalRow = observer(function ProposalRow({ topic }: { topic: TopicSummary }) {
   const { topics } = useStore();
+  const { t } = useTranslation();
   const evidence = topic.evidence;
   const reviewing = topics.composer?.topicId === topic.id;
 
@@ -219,7 +217,7 @@ const ProposalRow = observer(function ProposalRow({ topic }: { topic: TopicSumma
           {topic.label}
           {topic.proposalBand === 'weak' && (
             <span className="rounded border border-border-subtle px-1.5 py-0.5 text-xs font-normal text-text-muted">
-              weak match
+              {t('topicsPage.weakMatch')}
             </span>
           )}
         </span>
@@ -229,28 +227,33 @@ const ProposalRow = observer(function ProposalRow({ topic }: { topic: TopicSumma
             onClick={() => topics.review(topic)}
             disabled={reviewing || topics.atLimit}
           >
-            Choose instruments
+            {t('topicsPage.chooseInstruments')}
           </Button>
           <Button variant="ghost" onClick={() => void topics.reject(topic.id)}>
-            Not interested
+            {t('topicsPage.notInterested')}
           </Button>
         </span>
       </div>
       {evidence && (
         <div className="mt-1 space-y-1">
           <p className="text-xs text-text-muted">
-            In {evidence.articleCount} headlines from {evidence.sourceCount} outlets over the last{' '}
-            {evidence.windowDays} days
+            {t('topicsPage.evidence', {
+              articles: evidence.articleCount,
+              sources: evidence.sourceCount,
+              days: evidence.windowDays,
+            })}
             {evidence.symbols.length > 0 &&
               (topic.proposalBand === 'weak'
-                ? ` · loose matches: ${evidence.symbols.join(', ')}`
-                : ` · the resolver suggested ${evidence.symbols.join(', ')}`)}
+                ? t('topicsPage.looseMatches', { symbols: evidence.symbols.join(t('common.listSeparator')) })
+                : t('topicsPage.resolverSuggested', {
+                    symbols: evidence.symbols.join(t('common.listSeparator')),
+                  }))}
           </p>
           <ul className="space-y-0.5">
             {evidence.headlines.map((headline) => (
               <li key={headline.articleId} className="break-words text-xs">
                 <q {...SERVER_ENGLISH} className="italic text-text-muted">{headline.title}</q>
-                <span className="text-text-muted"> · {headline.source}</span>
+                <span className="text-text-muted">{t('topicsPage.headlineSource', { source: headline.source })}</span>
               </li>
             ))}
           </ul>
@@ -258,7 +261,7 @@ const ProposalRow = observer(function ProposalRow({ topic }: { topic: TopicSumma
       )}
       {topics.atLimit && (
         <p className="mt-1 text-xs text-text-muted">
-          You follow the most topics you can; remove one to take this suggestion up.
+          {t('topicsPage.atLimitSuggestion')}
         </p>
       )}
     </li>
@@ -268,11 +271,12 @@ const ProposalRow = observer(function ProposalRow({ topic }: { topic: TopicSumma
 /** The open topic: its confirmed instruments, then its tone and news, each read on its own. */
 function OpenTopic({ topicId }: { topicId: string }) {
   const detail = useTopicQuery(topicId);
-  if (detail.isPending) return <Spinner label="Loading that topic…" />;
+  const { t } = useTranslation();
+  if (detail.isPending) return <Spinner label={t('topicsPage.topicLoading')} />;
   if (detail.error) {
     return (
       <ErrorNote
-        message={errorMessage(detail.error, 'Could not load that topic.')}
+        message={errorMessage(detail.error, t('topicsPage.topicLoadFailed'))}
         onRetry={() => void detail.refetch()}
       />
     );
@@ -282,6 +286,7 @@ function OpenTopic({ topicId }: { topicId: string }) {
 
 const DetailCard = observer(function DetailCard({ topic }: { topic: TopicDetail }) {
   const { topics } = useStore();
+  const { t } = useTranslation();
   const [confirmingRemove, setConfirmingRemove] = useState(false);
 
   return (
@@ -291,24 +296,24 @@ const DetailCard = observer(function DetailCard({ topic }: { topic: TopicDetail 
         <div className="flex items-center gap-2">
           {confirmingRemove ? (
             <>
-              <span className="text-xs text-text-muted">Stop following this topic?</span>
+              <span className="text-xs text-text-muted">{t('topicsPage.stopFollowing')}</span>
               <Button variant="danger" onClick={() => void topics.remove(topic.id)}>
-                Remove
+                {t('common.remove')}
               </Button>
               <Button variant="ghost" onClick={() => setConfirmingRemove(false)}>
-                Keep
+                {t('topicsPage.keep')}
               </Button>
             </>
           ) : (
             <>
               <Button variant="secondary" onClick={() => topics.edit(topic)}>
-                Edit
+                {t('common.edit')}
               </Button>
               <Button variant="ghost" onClick={() => setConfirmingRemove(true)}>
-                Remove
+                {t('common.remove')}
               </Button>
               <Button variant="ghost" onClick={topics.closeDetail}>
-                <X className="size-4" aria-label="Close" />
+                <X className="size-4" aria-label={t('common.close')} />
               </Button>
             </>
           )}
@@ -317,8 +322,7 @@ const DetailCard = observer(function DetailCard({ topic }: { topic: TopicDetail 
     >
       {topic.confirmedAt && (
         <p className="mb-3 text-xs text-text-muted">
-          Confirmed {formatExactTime(topic.confirmedAt)}. The reasons below are the ones
-          shown when you confirmed.
+          {t('topicsPage.confirmedAt', { when: formatExactTime(topic.confirmedAt) })}
         </p>
       )}
       <ul className="space-y-3">
@@ -335,15 +339,16 @@ const DetailCard = observer(function DetailCard({ topic }: { topic: TopicDetail 
 /** The topic's tone: a score with the counts behind it, or the reason there is none. */
 function ToneSection({ topicId }: { topicId: string }) {
   const tone = useTopicSentimentQuery(topicId);
+  const { t } = useTranslation();
   return (
     <section className="mt-5 border-t border-border-subtle pt-4">
-      <h3 className="mb-1 text-sm font-semibold">Tone this week</h3>
+      <h3 className="mb-1 text-sm font-semibold">{t('topicsPage.tone')}</h3>
       {tone.error ? (
         <p className="text-xs text-text-muted">
-          {errorMessage(tone.error, 'Could not load this topic’s tone.')}
+          {errorMessage(tone.error, t('topicsPage.toneFailed'))}
         </p>
       ) : tone.data === undefined ? (
-        <Spinner label="Reading the tone…" />
+        <Spinner label={t('topicsPage.toneLoading')} />
       ) : (
         <ToneLine sentiment={tone.data} />
       )}
@@ -367,19 +372,20 @@ function ToneLine({ sentiment }: { sentiment: TopicSentimentResponse }) {
 function NewsSection({ topicId }: { topicId: string }) {
   const query = useTopicNewsQuery(topicId);
   const news = query.data;
+  const { t } = useTranslation();
   return (
     <section className="mt-5 border-t border-border-subtle pt-4">
-      <h3 className="mb-1 text-sm font-semibold">News this week</h3>
+      <h3 className="mb-1 text-sm font-semibold">{t('topicsPage.news')}</h3>
       {query.error ? (
         <p className="text-xs text-text-muted">
-          {errorMessage(query.error, 'Could not load this topic’s news.')}
+          {errorMessage(query.error, t('topicsPage.newsFailed'))}
         </p>
       ) : news === undefined ? (
-        <Spinner label="Loading news…" />
+        <Spinner label={t('holding.newsLoading')} />
       ) : news.articles.length === 0 ? (
         <p className="text-xs text-text-muted">
           {newsEmptyMessage(news.collection, news.days)}
-          {news.collection && ` Last collection ${formatAge(news.collection.lastRunAt)}.`}
+          {news.collection && t('holding.lastCollection', { age: formatAge(news.collection.lastRunAt) })}
         </p>
       ) : (
         <NewsList articles={news.articles} />
@@ -390,13 +396,14 @@ function NewsSection({ topicId }: { topicId: string }) {
 
 function ConfirmedRow({ instrument }: { instrument: TopicInstrument }) {
   const held = heldByText(instrument.heldBy);
+  const { t } = useTranslation();
   return (
     <li className="text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">{instrument.symbol}</span>
         {instrument.name && <span className="text-text-muted">{instrument.name}</span>}
         {instrument.source === 'user' ? (
-          <Badge tone="muted">added by you</Badge>
+          <Badge tone="muted">{t('topicsPage.addedByYou')}</Badge>
         ) : (
           <Band confidence={instrument.confidence} />
         )}
@@ -409,6 +416,7 @@ function ConfirmedRow({ instrument }: { instrument: TopicInstrument }) {
 
 const ComposerCard = observer(function ComposerCard({ composer }: { composer: Composer }) {
   const { topics } = useStore();
+  const { t } = useTranslation();
   const resolution = composer.resolution;
   const message = resolution ? verdictMessage(resolution) : null;
   const coverage = resolution ? coverageNote(resolution.universe) : null;
@@ -426,24 +434,24 @@ const ComposerCard = observer(function ComposerCard({ composer }: { composer: Co
     <Card
       title={
         composer.topicId === null
-          ? 'New topic'
+          ? t('topicsPage.newTopic')
           : topics.isProposal(composer.topicId)
-            ? 'Suggested topic'
-            : 'Edit topic'
+            ? t('topicsPage.suggestedTopic')
+            : t('topicsPage.editTopic')
       }
       action={
         <Button variant="ghost" onClick={topics.closeComposer}>
-          <X className="size-4" aria-label="Close" />
+          <X className="size-4" aria-label={t('common.close')} />
         </Button>
       }
     >
       <div className="space-y-4">
         <form onSubmit={submitLabel} className="flex flex-wrap items-center gap-2">
           <input
-            aria-label="Topic"
+            aria-label={t('topicsPage.topic')}
             value={composer.label}
             onChange={(event) => composer.setLabel(event.target.value)}
-            placeholder="e.g. uranium, robot surgery, GLP-1"
+            placeholder={t('topicsPage.topicPlaceholder')}
             maxLength={composer.maxLabelLength}
             className="min-w-60 flex-1 rounded-lg border border-border-subtle bg-surface px-3 py-1.5 text-sm"
           />
@@ -454,17 +462,15 @@ const ComposerCard = observer(function ComposerCard({ composer }: { composer: Co
           >
             <span className="flex items-center gap-1">
               <Search className="size-4" aria-hidden />
-              Find instruments
+              {t('topicsPage.find')}
             </span>
           </Button>
         </form>
 
-        {composer.resolving && <Spinner label="Looking through the instrument universe…" />}
+        {composer.resolving && <Spinner label={t('topicsPage.resolving')} />}
         {composer.stale && !composer.resolving && (
           <p className="text-xs text-text-muted">
-            The suggestions below are for “{composer.resolvedLabel}”. Find instruments again to see
-            them for the new name. When you confirm, reasons are kept only for suggestions the new
-            name also brings up.
+            {t('topicsPage.stale', { label: composer.resolvedLabel })}
           </p>
         )}
         {message && (
@@ -482,21 +488,21 @@ const ComposerCard = observer(function ComposerCard({ composer }: { composer: Co
 
         {resolution?.ambiguous && (
           <p className="text-sm text-text-muted">
-            This topic matches more than one kind of business. Choose from whichever you meant.
+            {t('topicsPage.ambiguous')}
           </p>
         )}
         {(resolution?.interpretations ?? []).map((interpretation, index) => (
           <section key={`${interpretation.label ?? 'group'}-${index}`} className="space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-                {interpretation.label ?? 'Suggestions'}
+                {interpretation.label ?? t('topicsPage.suggestions')}
               </h3>
               <Button
                 variant="ghost"
                 onClick={() => composer.selectAll(interpretation.candidates)}
                 disabled={composer.atInstrumentLimit}
               >
-                Tick all
+                {t('topicsPage.tickAll')}
               </Button>
             </div>
             <ul className="space-y-2">
@@ -513,14 +519,14 @@ const ComposerCard = observer(function ComposerCard({ composer }: { composer: Co
 
         <section className="space-y-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
-            Add tickers the suggestions missed
+            {t('topicsPage.addMissed')}
           </h3>
           <form onSubmit={submitAdd} className="flex flex-wrap items-center gap-2">
             <input
-              aria-label="Add tickers"
+              aria-label={t('topicsPage.addTickers')}
               value={composer.addText}
               onChange={(event) => composer.setAddText(event.target.value)}
-              placeholder="e.g. ISRG or BWXT, LEU"
+              placeholder={t('topicsPage.addPlaceholder')}
               className="min-w-48 flex-1 rounded-lg border border-border-subtle bg-surface px-3 py-1.5 text-sm"
             />
             <Button
@@ -528,7 +534,7 @@ const ComposerCard = observer(function ComposerCard({ composer }: { composer: Co
               variant="secondary"
               disabled={!composer.addText.trim() || composer.atInstrumentLimit}
             >
-              Add
+              {t('topicsPage.add')}
             </Button>
           </form>
           {composer.additions.length > 0 && (
@@ -543,11 +549,11 @@ const ComposerCard = observer(function ComposerCard({ composer }: { composer: Co
                     }`}
                   >
                     {symbol}
-                    {unknown && <span>· not recognised</span>}
+                    {unknown && <span>{t('topicsPage.notRecognised')}</span>}
                     <button
                       type="button"
                       onClick={() => composer.toggle(symbol)}
-                      aria-label={`Remove ${symbol}`}
+                      aria-label={t('holdings.removeSymbol', { symbol })}
                     >
                       <X className="size-3" aria-hidden />
                     </button>
@@ -557,8 +563,7 @@ const ComposerCard = observer(function ComposerCard({ composer }: { composer: Co
             </ul>
           )}
           <p className="text-xs text-text-muted">
-            Tickers are checked when you confirm. One that no market data provider recognises is
-            marked here, and nothing is saved until it is fixed or removed.
+            {t('topicsPage.checkedOnConfirm')}
           </p>
         </section>
 
@@ -567,14 +572,14 @@ const ComposerCard = observer(function ComposerCard({ composer }: { composer: Co
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle pt-3">
           <span className="text-xs text-text-muted">
             {composer.blockingIssue ??
-              `${composer.selected.length} of at most ${composer.maxInstruments} instruments chosen`}
+              t('topicsPage.chosen', { chosen: composer.selected.length, max: composer.maxInstruments })}
           </span>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={topics.closeComposer}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button onClick={() => void composer.confirm()} disabled={!composer.canConfirm}>
-              {composer.saving ? 'Saving…' : 'Confirm topic'}
+              {composer.saving ? t('settings.saving') : t('topicsPage.confirm')}
             </Button>
           </div>
         </footer>
@@ -590,6 +595,7 @@ const CandidateRow = observer(function CandidateRow({
   composer: Composer;
   candidate: TopicCandidate;
 }) {
+  const { t } = useTranslation();
   const checked = composer.isSelected(candidate.symbol);
   const held = heldByText(candidate.held_by ?? []);
   const size =
@@ -612,7 +618,7 @@ const CandidateRow = observer(function CandidateRow({
             <span className="font-semibold">{candidate.symbol}</span>
             {candidate.name && <span className="text-text-muted">{candidate.name}</span>}
             <Band confidence={candidate.confidence} />
-            {candidate.asset_class === 'etf' && <Badge tone="muted">ETF</Badge>}
+            {candidate.asset_class === 'etf' && <Badge tone="muted">{t('topicsPage.etf')}</Badge>}
             {size && <span className="text-xs text-text-muted">{size}</span>}
           </span>
           <Quote text={candidate.rationale} />
@@ -625,11 +631,12 @@ const CandidateRow = observer(function CandidateRow({
 
 /** The match band. Never a percentage: a similarity score is not a probability. */
 function Band({ confidence }: { confidence: 'confident' | 'weak' | null }) {
+  const { t } = useTranslation();
   if (confidence === null) return null;
   return confidence === 'confident' ? (
-    <Badge tone="accent">strong match</Badge>
+    <Badge tone="accent">{t('topicsPage.strongMatch')}</Badge>
   ) : (
-    <Badge tone="muted">weak match</Badge>
+    <Badge tone="muted">{t('topicsPage.weakMatch')}</Badge>
   );
 }
 
@@ -645,7 +652,11 @@ function Badge({ tone, children }: { tone: 'accent' | 'muted'; children: string 
   );
 }
 
-/** Quoted, because it is: verbatim from the instrument's own description. */
+/** Quoted, because it is: verbatim from the instrument's own description - in English. */
 function Quote({ text }: { text: string }) {
-  return <q className="block text-xs italic text-text-muted">{text}</q>;
+  return (
+    <q {...SERVER_ENGLISH} className="block text-xs italic text-text-muted">
+      {text}
+    </q>
+  );
 }

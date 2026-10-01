@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Plus } from 'lucide-react';
 
 import { errorMessage } from '../api/client.ts';
+import { useTranslation } from '../i18n/index.ts';
 import { useAddHolding } from '../queries/portfolio.ts';
 import { Button, Card } from './ui.tsx';
 
@@ -9,6 +10,7 @@ export function AddHoldingForm() {
   // Pending until the portfolio has refetched, so the new row is on screen by
   // the time the button stops saying "Adding…".
   const addHolding = useAddHolding();
+  const { t } = useTranslation();
   const [symbol, setSymbol] = useState('');
   const [quantity, setQuantity] = useState('');
   const [costBasis, setCostBasis] = useState('');
@@ -35,9 +37,9 @@ export function AddHoldingForm() {
   };
 
   return (
-    <Card title="Add a holding">
+    <Card title={t('addHolding.title')}>
       <form onSubmit={submit} className="space-y-3">
-        <Field label="Symbol" hint="Ticker as your data provider spells it, e.g. AAPL or BTC-USD">
+        <Field label={t('addHolding.symbol')} hint={t('addHolding.symbolHint')}>
           <input
             value={symbol}
             onChange={(event) => setSymbol(event.target.value.toUpperCase())}
@@ -47,7 +49,7 @@ export function AddHoldingForm() {
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Quantity">
+          <Field label={t('addHolding.quantity')}>
             <input
               value={quantity}
               onChange={(event) => setQuantity(event.target.value)}
@@ -57,7 +59,7 @@ export function AddHoldingForm() {
               className="input"
             />
           </Field>
-          <Field label="Cost per unit" hint="Optional">
+          <Field label={t('addHolding.costPerUnit')} hint={t('addHolding.optional')}>
             <input
               value={costBasis}
               onChange={(event) => setCostBasis(event.target.value)}
@@ -67,7 +69,7 @@ export function AddHoldingForm() {
             />
           </Field>
         </div>
-        <Field label="Opened" hint="Optional">
+        <Field label={t('addHolding.opened')} hint={t('addHolding.optional')}>
           <input
             type="date"
             value={openedAt}
@@ -77,13 +79,13 @@ export function AddHoldingForm() {
         </Field>
 
         {addHolding.error && (
-          <p className="text-xs text-loss">{errorMessage(addHolding.error, 'Could not add that holding.')}</p>
+          <p className="text-xs text-loss">{errorMessage(addHolding.error, t('addHolding.failed'))}</p>
         )}
 
         <Button type="submit" disabled={addHolding.isPending || !symbol || !quantity}>
           <span className="flex items-center gap-1">
             <Plus className="size-4" aria-hidden />
-            {addHolding.isPending ? 'Adding…' : 'Add holding'}
+            {addHolding.isPending ? t('addHolding.adding') : t('addHolding.add')}
           </span>
         </Button>
       </form>

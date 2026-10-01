@@ -1,5 +1,6 @@
 import { Sparkles } from 'lucide-react';
 
+import { useTranslation } from '../i18n/index.ts';
 import { describeNarration, isNoteworthy, narrationOptions } from '../lib/narrationStatus.ts';
 import { useNarrationQuery } from '../queries/narration.ts';
 
@@ -18,6 +19,7 @@ import { useNarrationQuery } from '../queries/narration.ts';
  */
 export function NarrationBadge() {
   const health = useNarrationQuery().data;
+  const { t } = useTranslation();
 
   if (health === undefined || !isNoteworthy(health)) return null;
 
@@ -34,10 +36,10 @@ export function NarrationBadge() {
       <button
         type="button"
         className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${tone}`}
-        aria-label={`Explanations: ${copy.label}`}
+        aria-label={t('narration.badgeLabel', { label: copy.label })}
       >
         <Sparkles className="size-3" aria-hidden />
-        {health.tier === 'free' && <span className="font-medium">Free tier</span>}
+        {health.tier === 'free' && <span className="font-medium">{t('narration.freeTier')}</span>}
         <span>{copy.label}</span>
       </button>
 
@@ -59,8 +61,8 @@ export function NarrationBadge() {
         {health.model && (
           <p className="mt-2 border-t border-border-subtle pt-2 text-[11px] text-text-muted">
             {health.model}
-            {health.lastFallbackReason && ` · ${health.lastFallbackReason}`}
-            {health.sampleSize > 0 && ` · from ${health.sampleSize} explanation${health.sampleSize === 1 ? '' : 's'}`}
+            {health.lastFallbackReason && t('narration.fallback', { reason: health.lastFallbackReason })}
+            {health.sampleSize > 0 && t('narration.sample', { count: health.sampleSize })}
           </p>
         )}
       </div>

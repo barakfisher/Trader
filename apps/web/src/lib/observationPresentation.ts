@@ -12,6 +12,8 @@
 
 import type { ObservationSeverity } from '@traders/shared';
 
+import { i18n, t } from '../i18n/index.ts';
+
 /** Ascending, matching the engine's own ladder in `analysis/findings.py`. */
 export const SEVERITY_ORDER: readonly ObservationSeverity[] = ['info', 'notable', 'high'];
 
@@ -23,26 +25,24 @@ export interface SeverityStyle {
   railClassName: string;
 }
 
-const SEVERITY_STYLES: Record<ObservationSeverity, SeverityStyle> = {
+const SEVERITY_CLASSES: Record<ObservationSeverity, Omit<SeverityStyle, 'label'>> = {
   info: {
-    label: 'Info',
     chipClassName: 'bg-surface-hover text-text-muted',
     railClassName: 'bg-border-subtle',
   },
   notable: {
-    label: 'Notable',
     chipClassName: 'bg-warn/15 text-warn',
     railClassName: 'bg-warn',
   },
   high: {
-    label: 'High',
     chipClassName: 'bg-loss/15 text-loss',
     railClassName: 'bg-loss',
   },
 };
 
 export function severityStyle(severity: string): SeverityStyle {
-  return SEVERITY_STYLES[severity as ObservationSeverity] ?? SEVERITY_STYLES.info;
+  const known: ObservationSeverity = severity in SEVERITY_CLASSES ? (severity as ObservationSeverity) : 'info';
+  return { label: t(`severity.labels.${known}`), ...SEVERITY_CLASSES[known] };
 }
 
 export function severityRank(severity: string): number {
@@ -52,17 +52,11 @@ export function severityRank(severity: string): number {
   return index === -1 ? -1 : index;
 }
 
-const KIND_LABELS: Record<string, string> = {
-  price_move: 'Price move',
-  sigma_move: 'Unusual move',
-  drawdown: 'Drawdown',
-  allocation_drift: 'Allocation drift',
-  topic_move: 'Topic move',
-};
-
 /** A kind this build has never seen still gets a readable name, never a blank. */
 export function kindLabel(kind: string): string {
-  return KIND_LABELS[kind] ?? humanise(kind.replace(/_/g, ' '));
+  return i18n.exists(`kinds.${kind}`)
+    ? t(`kinds.${kind as 'price_move'}`)
+    : humanise(kind.replace(/_/g, ' '));
 }
 
 /**

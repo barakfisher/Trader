@@ -5,21 +5,21 @@
 
 import type { UniverseGap } from '@traders/shared';
 
-const RULES: Record<string, string> = {
-  asset_class: 'not an equity or ETF, so never screened',
-  exchange: 'not listed on a primary US exchange, so never screened',
-};
+import { formatFixed } from '../i18n/format.ts';
+import { i18n, t } from '../i18n/index.ts';
 
-const SOURCES: Record<string, string> = {
-  holding: 'added as a holding',
-  import: 'in an import',
-  topic: 'added to a topic',
-};
+function rule(name: string): string {
+  return i18n.exists(`gaps.rules.${name}`) ? t(`gaps.rules.${name as 'exchange'}`) : t('gaps.outsideScreen');
+}
+
+function source(name: string): string {
+  return i18n.exists(`gaps.sources.${name}`) ? t(`gaps.sources.${name as 'import'}`) : t('gaps.named');
+}
 
 /** The headline: what was asked for. */
 export function gapSubject(gap: UniverseGap): string {
   const detail = gap.detail;
-  if (gap.kind === 'universe_gap_low_confidence') return `“${String(detail.topic ?? '')}”`;
+  if (gap.kind === 'universe_gap_low_confidence') return t('gaps.quoted', { text: String(detail.topic ?? '') });
   return String(detail.symbol ?? '');
 }
 
@@ -27,18 +27,18 @@ export function gapSubject(gap: UniverseGap): string {
 export function gapExplanation(gap: UniverseGap): string {
   const detail = gap.detail;
   if (gap.kind === 'universe_gap_low_confidence') {
-    const best = typeof detail.bestSimilarity === 'number' ? detail.bestSimilarity.toFixed(2) : 'n/a';
-    const gate = typeof detail.refuseBelow === 'number' ? detail.refuseBelow.toFixed(2) : 'n/a';
-    return `topic matched nothing: best score ${best}, gate ${gate}`;
+    const score = (value: unknown) =>
+      typeof value === 'number' ? formatFixed(value, 2) : t('common.notAvailable');
+    return t('gaps.lowConfidence', { best: score(detail.bestSimilarity), gate: score(detail.refuseBelow) });
   }
-  const where = SOURCES[String(detail.source)] ?? 'named';
+  const where = source(String(detail.source));
   switch (detail.gap) {
     case 'outside_screen':
-      return `${where}; ${RULES[String(detail.rule)] ?? 'outside the screen'}`;
+      return t('gaps.because', { where, why: rule(String(detail.rule)) });
     case 'not_in_universe':
-      return `${where}; a US listing the universe lacks - below the size floor or listed since the snapshot`;
+      return t('gaps.because', { where, why: t('gaps.notInUniverse') });
     case 'unpriced':
-      return `${where}; no market data provider could price it`;
+      return t('gaps.because', { where, why: t('gaps.unpriced') });
     default:
       return where;
   }
@@ -61,11 +61,9 @@ export function isRealGap(gap: UniverseGap): boolean {
 export function gapProfile(gap: UniverseGap): string | null {
   switch (gap.profile) {
     case 'on_demand':
-      return 'profiled on demand; no topic is answered from it until a rescreen admits it';
     case 'screened':
-      return 'now in the universe';
     case 'dropped':
-      return 'dropped by a later snapshot';
+      return t(`gaps.profiles.${gap.profile}`);
     default:
       return null;
   }

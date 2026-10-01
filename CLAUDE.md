@@ -10,11 +10,13 @@ and [docs/MILESTONES.md](docs/MILESTONES.md) before changing architecture.
 
 1. **English is the language of the repository.** Code, identifiers, comments, docstrings, commit
    messages and documentation are English. **UI copy is translatable:** every string a user sees
-   comes from a typed message catalogue; English is the source and the default, and a missing
-   translation is a type error, not a runtime fallback. The layout is written in logical directions
-   (`ms-`/`pe-`/`text-end`) so a right-to-left language mirrors it. Server-generated text
-   (observations, narration, `/ask` answers, Telegram, the digest, the concept corpus) stays English
-   until a decision says otherwise, and is marked `lang="en"` where the UI shows it.
+   comes from the react-i18next catalogue (`apps/web/src/i18n/`); English is the source and the
+   default, `t()` is typed against it, and a translation missing a key, a plural form or a
+   placeholder fails CI rather than falling back to English at runtime. Numbers, money and dates
+   go through `Intl` in the language's locale (`i18n/format.ts`). The layout is written in logical
+   directions (`ms-`/`pe-`/`text-end`) so a right-to-left language mirrors it. Server-generated
+   text (observations, narration, `/ask` answers, Telegram, the digest, the concept corpus) stays
+   English until a decision says otherwise, and is marked `lang="en"` where the UI shows it.
 2. **No order execution, ever.** Approvals write to the virtual ledger only. No broker API, no
    personalized investment advice; output is observation + explanation.
 3. **Money is integer minor units plus an explicit currency code.** `Decimal` in Python, integer

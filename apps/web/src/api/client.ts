@@ -8,6 +8,8 @@
 
 import type { ApiError } from '@traders/shared';
 
+import { t } from '../i18n/index.ts';
+
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080').replace(/\/$/, '');
 
 export class ApiRequestError extends Error {
@@ -34,7 +36,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       },
     });
   } catch {
-    throw new ApiRequestError('Cannot reach the server. Is the orchestrator running?', 0, 'network_error');
+    throw new ApiRequestError(t('api.unreachable'), 0, 'network_error');
   }
 
   const text = await response.text();
@@ -43,7 +45,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     const error = (body ?? {}) as ApiError;
     throw new ApiRequestError(
-      error.message ?? `Request failed with status ${response.status}`,
+      error.message ?? t('api.failedWithStatus', { status: response.status }),
       response.status,
       error.error ?? 'unknown_error',
       error.details,
