@@ -4,7 +4,28 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-01 ~06:40 UTC - **M8's closing handoff (milestone boundary). M8 is complete, and
+Updated: 2026-10-01 ~07:51 UTC - **Post-M8 queue handoff at CLAUDE.md's five-merged-PR trigger
+(#131-#135). There is no milestone in flight: the user chose a debt sweep after M8, approved it as
+independent tasks 8-15, and tasks 8-11 are done. The next session starts task 12** - see "Next
+session: the post-M8 queue, continued" in "Where to go next". This session (grant: one PR per task,
+merge on green, verify on `main` by content, rebuild compose and kind - **it ends here; ask
+again**):
+- #131: the queue, measured on compose before it was written;
+- #132 (decision 92): one question per standing finding - the queued fix (one open proposal per
+  subject) was measured to stop 1 of 7 repeats, so the user chose episodes with hysteresis instead.
+  Live: the first scan closed the AAPL and SPY seeds as resolved and held VOO (-0.124, notable);
+- #133 (decision 93): the services connect as `traders_app`; only `migrate` is the owner. Live on
+  compose and kind (kind's `secrets.env` upgraded in place, owner password kept); an audit UPDATE
+  as the app role is refused by privilege;
+- #134: cost per unit editable on screen, and a latent bug - a bare `costBasis` was read at USD's
+  exponent (1500 JPY -> 150000); no stored row was affected;
+- #135: a closed market's quote is dated at its last close (48 Sunday rows measured, then deleted
+  from compose at the user's request); a crypto day ends at midnight UTC.
+**Next after the queue: Hebrew and RTL** (the user's request, 2026-10-01) - CLAUDE.md guideline 1
+says "English only" including UI copy, so it starts by amending that rule with the user. **The
+user has no Docker/Kubernetes background** - keep explaining infrastructure from first principles.
+
+Previous handoff, 2026-10-01 ~06:40 UTC - **M8's closing handoff (milestone boundary). M8 is complete, and
 it was the last milestone in `docs/MILESTONES.md`; the next session starts by choosing what follows
 it** - see "Next session: after M8" in "Where to go next". This session (grant: PR, merge on green,
 rebuild compose, create/delete the kind cluster - **it ends here; ask again**):
@@ -2058,6 +2079,7 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 | **A low-confidence topic cannot be produced in the kind cluster** | fixture embedder, `app/ask/relevance.judge` | Keyless by decision 79: on a non-semantic embedder the judge abstains, so every topic is `weak`, never `none`. Show that event on compose |
 | ~~The app connects to Postgres as a superuser that owns every table~~ | — | **Resolved** by decision 93 (independent task 9, migration 0033): the services connect as `traders_app`; the owner runs migrations only. What remains is the next row |
 | **The owner's password still reaches every container** | compose `env_file`, kind `traders-secrets` | Compose loads `.env` into every service, and every kind pod reads the one Secret, so `POSTGRES_PASSWORD` (and in kind `MIGRATION_DATABASE_URL`) is in each service's environment even though no service uses it. Task 9 closed the SQL-injection path (a query runs as `traders_app`); code execution inside a service could still read the owner's password. Fix: a second Secret (and a second env file) that only Postgres and `migrate` mount - it changes the shape of `secrets.env` and `.env`, which is why it was not folded into task 9 |
+| **The integration suite changes a cluster-wide role's password** | `tests/integration/test_admin_audit_sql.py` | `as_app` sets `traders_app`'s password to a test value, and a role belongs to the whole Postgres server. Harmless in CI (its own server); against a server that also hosts a running stack, the services lose their login until `migrate` runs. A fix: create a per-run role for the test (`traders_app_test_<random>`, granted like `traders_app`) instead of borrowing the real one |
 | **Telegram's inbound delivery is unproven** | deployment | Still true after M7, deliberately: the cluster runs with Telegram off (decision 79). **The user decided (2026-09-30) to prove the webhook in a real cloud deployment with HTTPS**, not through a tunnel from the laptop; `setWebhook` on the real bot stops the compose stack's polling, so it waits for that deployment. Everything else was exercised against a real bot, but `setWebhook` needs a public HTTPS URL. The handler has only ever been driven by replaying genuine payloads at it locally. **The first real deployment is the first real test of that leg** — check `getWebhookInfo` for `last_error_message` immediately after |
 | **`queries.ts` conflicts on every parallel PR** | `src/db/queries.ts` | Four M4 PRs appended a section to the end of one 1,200-line file, and every rebase put a conflict marker exactly where one function's closing brace met the next block's header — the brace was lost and hand-repaired **three separate times**. It is the cost of CLAUDE.md's "all SQL in one file" rule, which is otherwise good. Worth deciding whether to split by domain with an index |
 | **Migration 0008 hard-codes a table Mastra owns** | `0008_mastra_workflow_state.py` | The library would create `mastra_workflow_snapshot` itself; Alembic creates it instead (`disableInit: true`), because CLAUDE.md says the AI service owns the schema. An upgrade that changes the shape breaks suspended runs — so `test/mastraSchemaOwnership.test.ts` compares the migration against `WorkflowsPG.getExportDDL()` and fails the build first. Two other things cost time to find: `PostgresStore` creates **43** tables for 24 storage domains unless you route only `workflows`, and `@mastra/core` posts feature-usage telemetry to PostHog unless `MASTRA_TELEMETRY_DISABLED` is set (it is, in `workflowRuntime.ts`, in code rather than `.env`) |
@@ -2116,6 +2138,20 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 
 ## Local environment (this machine)
 
+- **Never point the Python integration suite at the compose Postgres while the stack runs.**
+  Roles are per Postgres server, not per database, and `test_admin_audit_sql.py`'s `as_app` fixture
+  sets `traders_app`'s password to a test value - so the live services lose their login until the
+  next `migrate` (any `dev-docker.sh` start) sets it back. It was done once this session, against a
+  throwaway `*_ci` database on the compose server, and the rebuild that followed repaired it. Use a
+  separate Postgres container for local integration runs, or rebuild afterwards.
+- **A worktree has no `services/ai/.venv`.** This session symlinked the main checkout's
+  (`ln -s /Users/a/projects/Traders/services/ai/.venv services/ai/.venv`; untracked, never commit)
+  and ran scripts with `PYTHONPATH=.` so they import the worktree's `app`. Before `PYTHONPATH` was
+  set, `export_openapi.py` reported writing the spec and produced no diff.
+- **At this handoff compose and kind both run `main` at `680ef20`** (#135), rebuilt and redeployed from the main checkout. **Both run migration 0033**: services connect as
+  `traders_app` (compose password: `APP_DB_PASSWORD`, defaulting to `traders_app` because this
+  machine's `.env` does not set it - set one if the stack ever leaves the laptop); kind's is in
+  `secrets.env`, which `k8s-up.sh` upgraded in place on 2026-10-01.
 - **The kind cluster was redeployed from this worktree during M8** (last: PR 5's commit
   `070fb0b`, whose content is `main`'s `a916ee6`), with the main checkout's `secrets.env` copied
   in (it is gitignored; without it `k8s-up.sh` would mint new secrets over a running Postgres).
@@ -2431,7 +2467,26 @@ running systems, not only in tests:
   (#127): an import preview of BYND and GPRO profiled both within a second; SAP.DE, outside the
   screen, was not fetched; "plant-based meat" still resolved without them.
 
-### Next session: after M8
+### Next session: the post-M8 queue, continued
+
+Tasks 12-15 remain in "Independent tasks queue", in the approved order. **The grant ended with this
+handoff; ask the user again** (last time: one PR per task, merge on green, verify on `main` by
+content, rebuild compose and kind). Notes for each, from reading the code this session:
+- **12, a dead rescreen across days:** `claimRun` reclaims a stale heartbeat only under the same
+  run key; the one-running partial index (0031) blocks a new day's key while yesterday's dead run
+  holds it. The hourly CronJob's ask is the natural place to reclaim it.
+- **13, `secrets.env` recovery:** `docs/RUNBOOK.md` section 1 has the commands; `k8s-up.sh`
+  already upgrades a file in place (#133), so it now has a "file exists" and a "file missing" branch
+  - recovery belongs in the second, before generating anything.
+- **14, close a decided proposal's workflow** on the direct-apply fallback path.
+- **15, split `queries.ts`:** decided by the user; amend CLAUDE.md's rule in the same PR. Pure
+  move. Do it last in the queue so 12-14's SQL lands before the move.
+Then **Hebrew and RTL**: measure first (hard-coded strings in `apps/web`, left/right assumptions
+in Tailwind classes such as `ml-`/`pr-`/`text-left`, number and date formatting), then bring the
+guideline-1 amendment and a design to the user. After that the likely next milestone is the
+multi-agent sandbox (`docs/PROPOSAL-MULTI-AGENT.md` stages 1-3; approved spec, unbuilt).
+
+### Next session: after M8 (history - the user chose the debt sweep, 2026-10-01)
 
 `docs/MILESTONES.md` has no milestone after M8. **Ask the user what comes next**, with a
 recommendation; the options as they stand:
