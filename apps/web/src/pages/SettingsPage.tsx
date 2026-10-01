@@ -20,6 +20,7 @@ import {
   MIN_PROPOSAL_TTL_HOURS,
 } from '../stores/SettingsStore.ts';
 import { errorMessage } from '../api/client.ts';
+import { useTranslation } from '../i18n/index.ts';
 import { useSettingsQuery } from '../queries/settings.ts';
 import { useStore } from '../stores/context.tsx';
 
@@ -39,6 +40,7 @@ import { useStore } from '../stores/context.tsx';
  */
 export const SettingsPage = observer(function SettingsPage() {
   const { settings } = useStore();
+  const { t } = useTranslation();
   // Read on arrival, not at sign-in: settings are read when someone goes looking.
   const stored = useSettingsQuery();
   const draft = settings.draft;
@@ -48,29 +50,29 @@ export const SettingsPage = observer(function SettingsPage() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <SettingsIcon className="size-5 text-accent" aria-hidden />
-          <h1 className="text-base font-semibold">Settings</h1>
+          <h1 className="text-base font-semibold">{t('settings.title')}</h1>
           {settings.savedAt && !settings.isDirty && (
             <span className="text-xs text-text-muted">
-              saved {formatClockTime(settings.savedAt)}
+              {t('settings.saved', { time: formatClockTime(settings.savedAt) })}
             </span>
           )}
         </div>
         <Link to="/" className={buttonClass('secondary')}>
           <span className="flex items-center gap-1">
             <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
-            Back to portfolio
+            {t('common.backToPortfolio')}
           </span>
         </Link>
       </header>
 
-      {stored.isPending && <Spinner label="Loading your settings…" />}
+      {stored.isPending && <Spinner label={t('settings.loading')} />}
 
       {/* A failed read with nothing to show: the page has no settings, rather
           than a settings object that happens to be empty. A failed re-read
           after a good one keeps the form - and any edits in it. */}
       {stored.error && draft === null && (
         <ErrorNote
-          message={errorMessage(stored.error, 'Could not load your settings.')}
+          message={errorMessage(stored.error, t('settings.loadFailed'))}
           onRetry={() => void stored.refetch()}
         />
       )}
@@ -80,15 +82,15 @@ export const SettingsPage = observer(function SettingsPage() {
 
       {draft !== null && (
         <>
-          <Card title="Proposals">
+          <Card title={t('settings.proposals')}>
             <div className="space-y-4">
               <Field
-                label="Ask me to decide when a finding is"
+                label={t('settings.proposalFloor')}
                 hint={describeSeverityFloor(draft.proposalSeverity)}
               >
                 <select
                   className="input"
-                  aria-label="Ask me to decide when a finding is"
+                  aria-label={t('settings.proposalFloor')}
                   value={draft.proposalSeverity}
                   onChange={(event) =>
                     settings.setProposalSeverity(
@@ -105,14 +107,14 @@ export const SettingsPage = observer(function SettingsPage() {
               </Field>
 
               <Field
-                label="Keep a proposal answerable for"
-                hint="After this, the proposal expires. A decision taken against prices that have moved is a different decision from the one you were asked about."
+                label={t('settings.ttl')}
+                hint={t('settings.ttlHint')}
               >
                 <div className="flex items-center gap-2">
                   <input
                     className="input max-w-28"
                     type="number"
-                    aria-label="Keep a proposal answerable for, in hours"
+                    aria-label={t('settings.ttlInHours')}
                     inputMode="numeric"
                     min={MIN_PROPOSAL_TTL_HOURS}
                     max={MAX_PROPOSAL_TTL_HOURS}
@@ -123,22 +125,22 @@ export const SettingsPage = observer(function SettingsPage() {
                     }
                   />
                   <span className="text-sm text-text-muted">
-                    hours ({MIN_PROPOSAL_TTL_HOURS}–{MAX_PROPOSAL_TTL_HOURS})
+                    {t('settings.ttlRange', { min: MIN_PROPOSAL_TTL_HOURS, max: MAX_PROPOSAL_TTL_HOURS })}
                   </span>
                 </div>
               </Field>
             </div>
           </Card>
 
-          <Card title="Notifications">
+          <Card title={t('settings.notifications')}>
             <div className="space-y-4">
               <Field
-                label="Interrupt me when a finding is"
-                hint={`${describeSeverityFloor(draft.notifySeverity)} This is a separate floor from the one above: what you must answer and what may interrupt you are different questions.`}
+                label={t('settings.notifyFloor')}
+                hint={t('settings.notifyFloorHint', { floor: describeSeverityFloor(draft.notifySeverity) })}
               >
                 <select
                   className="input"
-                  aria-label="Interrupt me when a finding is"
+                  aria-label={t('settings.notifyFloor')}
                   value={draft.notifySeverity}
                   onChange={(event) =>
                     settings.setNotifySeverity(event.target.value as typeof draft.notifySeverity)
@@ -153,8 +155,10 @@ export const SettingsPage = observer(function SettingsPage() {
               </Field>
 
               <Field
-                label="Quiet hours"
-                hint={`${describeQuietHours(draft.quietHoursStart, draft.quietHoursEnd)} Read in your own timezone, and a window that runs past midnight is normal.`}
+                label={t('settings.quietHours')}
+                hint={t('settings.quietHoursHint', {
+                  window: describeQuietHours(draft.quietHoursStart, draft.quietHoursEnd),
+                })}
               >
                 <div className="flex flex-wrap items-center gap-3">
                   <label className="flex items-center gap-2 text-sm">
@@ -163,24 +167,24 @@ export const SettingsPage = observer(function SettingsPage() {
                       checked={settings.quietHoursEnabled}
                       onChange={(event) => settings.setQuietHoursEnabled(event.target.checked)}
                     />
-                    Silence pushes overnight
+                    {t('settings.silenceOvernight')}
                   </label>
                   {settings.quietHoursEnabled && (
                     <div className="flex items-center gap-2">
                       <input
                         className="input max-w-32"
                         type="time"
-                        aria-label="Quiet hours start"
+                        aria-label={t('settings.quietStart')}
                         value={draft.quietHoursStart ?? ''}
                         onChange={(event) =>
                           settings.setQuietHours(event.target.value, draft.quietHoursEnd ?? '')
                         }
                       />
-                      <span className="text-sm text-text-muted">to</span>
+                      <span className="text-sm text-text-muted">{t('settings.quietTo')}</span>
                       <input
                         className="input max-w-32"
                         type="time"
-                        aria-label="Quiet hours end"
+                        aria-label={t('settings.quietEnd')}
                         value={draft.quietHoursEnd ?? ''}
                         onChange={(event) =>
                           settings.setQuietHours(draft.quietHoursStart ?? '', event.target.value)
@@ -192,8 +196,8 @@ export const SettingsPage = observer(function SettingsPage() {
               </Field>
 
               <Field
-                label="Mute"
-                hint="A one-off silence, separate from quiet hours: nothing is pushed until it ends, whatever the severity."
+                label={t('settings.mute')}
+                hint={t('settings.muteHint')}
               >
                 <div className="flex flex-wrap items-center gap-2">
                   {MUTE_PRESET_HOURS.map((hours) => (
@@ -204,19 +208,21 @@ export const SettingsPage = observer(function SettingsPage() {
                     >
                       <span className="flex items-center gap-1">
                         <BellOff className="size-4" aria-hidden />
-                        {hours}h
+                        {t('duration.hours', { count: hours })}
                       </span>
                     </Button>
                   ))}
                   {isMuted(draft.mutedUntil) && (
                     <Button variant="ghost" onClick={settings.clearMute}>
-                      Unmute
+                      {t('settings.unmute')}
                     </Button>
                   )}
                   <span
                     className="text-sm text-text-muted"
                     title={
-                      draft.mutedUntil ? `Ends ${formatExactTime(draft.mutedUntil)}` : undefined
+                      draft.mutedUntil
+                        ? t('settings.muteEnds', { when: formatExactTime(draft.mutedUntil) })
+                        : undefined
                     }
                   >
                     {describeMute(draft.mutedUntil)}
@@ -226,26 +232,24 @@ export const SettingsPage = observer(function SettingsPage() {
             </div>
           </Card>
 
-          <Card title="Telegram">
+          <Card title={t('settings.telegram')}>
             <TelegramConnect />
           </Card>
 
           <AccountCard />
 
-          <Card title="What the severity levels mean">
+          <Card title={t('settings.severityTitle')}>
             <p className="mb-3 text-sm text-text-muted">
-              Severity is derived from the size of the finding, never chosen by a narrator. These
-              are the default bands; an operator can retune them, and the feed always shows the
-              figure a finding was judged on.
+              {t('settings.severityIntro')}
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-start text-xs uppercase tracking-wide text-text-muted">
                   <tr>
-                    <th className="py-2 pe-3 font-medium">Finding</th>
-                    <th className="py-2 pe-3 font-medium">Info</th>
-                    <th className="py-2 pe-3 font-medium">Notable</th>
-                    <th className="py-2 font-medium">High</th>
+                    <th className="py-2 pe-3 font-medium">{t('settings.finding')}</th>
+                    <th className="py-2 pe-3 font-medium">{t('severity.labels.info')}</th>
+                    <th className="py-2 pe-3 font-medium">{t('severity.labels.notable')}</th>
+                    <th className="py-2 font-medium">{t('severity.labels.high')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -271,14 +275,14 @@ export const SettingsPage = observer(function SettingsPage() {
             )}
             {settings.isDirty && !settings.blockingIssue && (
               <span className="me-auto text-sm text-text-muted">
-                Unsaved changes. Nothing is in force until you save.
+                {t('settings.unsaved')}
               </span>
             )}
             <Button variant="ghost" onClick={settings.discard} disabled={!settings.isDirty}>
-              Discard
+              {t('settings.discard')}
             </Button>
             <Button onClick={() => void settings.save()} disabled={!settings.canSave}>
-              {settings.saving ? 'Saving…' : 'Save changes'}
+              {settings.saving ? t('settings.saving') : t('settings.saveChanges')}
             </Button>
           </div>
         </>
@@ -314,23 +318,23 @@ function Field({
  */
 const AccountCard = observer(function AccountCard() {
   const { auth } = useStore();
+  const { t } = useTranslation();
   const zone = getDisplayTimeZone();
   return (
-    <Card title="Account">
+    <Card title={t('settings.account')}>
       <dl className="grid gap-3 text-sm sm:grid-cols-2">
         <div>
-          <dt className="text-xs uppercase tracking-wide text-text-muted">Base currency</dt>
+          <dt className="text-xs uppercase tracking-wide text-text-muted">{t('settings.baseCurrency')}</dt>
           <dd className="font-medium">{auth.user?.baseCurrency ?? 'USD'}</dd>
           <dd className="text-xs text-text-muted">
-            Every total, P&amp;L and weight is converted into it. Fixed in this version.
+            {t('settings.baseCurrencyNote')}
           </dd>
         </div>
         <div>
-          <dt className="text-xs uppercase tracking-wide text-text-muted">Timezone</dt>
+          <dt className="text-xs uppercase tracking-wide text-text-muted">{t('settings.timezone')}</dt>
           <dd className="font-medium">{zone}</dd>
           <dd className="text-xs text-text-muted">
-            Every time on screen is shown in it, and &ldquo;today&rdquo; - quiet hours, the daily
-            summary, the daily snapshot - begins at midnight here.
+            {t('settings.timezoneNote')}
           </dd>
         </div>
       </dl>

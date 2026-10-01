@@ -4,10 +4,12 @@ import { LineChart, LockKeyhole } from 'lucide-react';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Button, ErrorNote } from '../components/ui.tsx';
+import { Trans, useTranslation } from '../i18n/index.ts';
 import { useStore } from '../stores/context.tsx';
 
 export const LoginPage = observer(function LoginPage() {
   const { auth } = useStore();
+  const { t } = useTranslation();
   const [passphrase, setPassphrase] = useState('');
 
   return (
@@ -15,12 +17,10 @@ export const LoginPage = observer(function LoginPage() {
       <div className="w-full max-w-sm space-y-4">
         <div className="flex items-center gap-2">
           <LineChart className="size-6 text-accent" aria-hidden />
-          <h1 className="text-lg font-semibold">Traders</h1>
+          <h1 className="text-lg font-semibold">{t('login.title')}</h1>
         </div>
         <p className="text-sm text-text-muted">
-          Portfolio copilot. Sign in with this installation's passphrase - its{' '}
-          <code className="text-xs">APP_PASSPHRASE</code>, in <code className="text-xs">.env</code> for
-          docker compose or in the cluster's <code className="text-xs">secrets.env</code>.
+          <Trans i18nKey="login.intro" components={{ code: <code className="text-xs" /> }} />
         </p>
 
         <form
@@ -31,7 +31,7 @@ export const LoginPage = observer(function LoginPage() {
           className="space-y-3 rounded-xl border border-border-subtle bg-surface-raised p-4"
         >
           <label className="block space-y-1">
-            <span className="text-xs uppercase tracking-wide text-text-muted">Passphrase</span>
+            <span className="text-xs uppercase tracking-wide text-text-muted">{t('login.passphrase')}</span>
             <div className="flex items-center gap-2">
               <LockKeyhole className="size-4 text-text-muted" aria-hidden />
               <input
@@ -48,7 +48,7 @@ export const LoginPage = observer(function LoginPage() {
           {auth.error && <ErrorNote message={auth.error} />}
 
           <Button type="submit" disabled={auth.submitting || passphrase.length === 0} className="w-full">
-            {auth.submitting ? 'Signing in…' : 'Sign in'}
+            {auth.submitting ? t('login.signingIn') : t('login.signIn')}
           </Button>
         </form>
 

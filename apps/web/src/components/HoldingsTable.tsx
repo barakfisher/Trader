@@ -2,16 +2,12 @@ import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Check, Clock, Pencil, Trash2, X } from 'lucide-react';
 
-import {
-  formatMoney,
-  formatPercent,
-  minorToDecimalString,
-  minorToNumber,
-  type HoldingView,
-} from '@traders/shared';
+import { minorToDecimalString, minorToNumber, type HoldingView } from '@traders/shared';
 
-import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { errorMessage } from '../api/client.ts';
+import { formatMoney, formatPercent, formatShare } from '../i18n/format.ts';
+import { Trans, useTranslation } from '../i18n/index.ts';
+import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { useNarrowViewport } from '../lib/viewport.ts';
 import { usePortfolioQuery, useRemoveHolding, useUpdateHolding } from '../queries/portfolio.ts';
@@ -22,6 +18,7 @@ type RemoveHolding = ReturnType<typeof useRemoveHolding>;
 
 export function HoldingsTable() {
   const { data: portfolio } = usePortfolioQuery();
+  const { t } = useTranslation();
   // Owned by the table, not each row, so a failure is reported once, under the
   // table, whichever row caused it - as it was before.
   const updateHolding = useUpdateHolding();
@@ -29,8 +26,8 @@ export function HoldingsTable() {
   const holdings = portfolio?.holdings ?? [];
   const currency = baseCurrencyOf(portfolio);
   const failure =
-    (updateHolding.error && errorMessage(updateHolding.error, 'Could not update that holding.')) ||
-    (removeHolding.error && errorMessage(removeHolding.error, 'Could not remove that holding.'));
+    (updateHolding.error && errorMessage(updateHolding.error, t('holdings.updateFailed'))) ||
+    (removeHolding.error && errorMessage(removeHolding.error, t('holdings.removeFailed')));
 
   // Below `sm` the table became an 880 px strip inside a 341 px box, showing
   // the symbol, the quantity and half a price: a phone gets one card per holding.
@@ -40,7 +37,7 @@ export function HoldingsTable() {
 
   if (narrow) {
     return (
-      <Card title={`Holdings (${holdings.length})`}>
+      <Card title={t('holdings.title', { count: holdings.length })}>
         <ul className="divide-y divide-border-subtle/60">
           {holdings.map((holding) => (
             <li key={holding.id} className="py-3 first:pt-0 last:pb-0">
@@ -59,20 +56,20 @@ export function HoldingsTable() {
   }
 
   return (
-    <Card title={`Holdings (${holdings.length})`} className="overflow-hidden">
+    <Card title={t('holdings.title', { count: holdings.length })} className="overflow-hidden">
       <div className="-mx-4 overflow-x-auto px-4">
         <table className="w-full min-w-[880px] text-sm">
           <thead>
             <tr className="border-b border-border-subtle text-start text-xs uppercase tracking-wide text-text-muted">
-              <th className="pb-2 pe-3 font-medium">Symbol</th>
-              <th className="pb-2 pe-3 text-end font-medium">Quantity</th>
-              <th className="pb-2 pe-3 text-end font-medium">Price</th>
-              <th className="pb-2 pe-3 text-end font-medium">Day</th>
-              <th className="pb-2 pe-3 text-end font-medium">Value</th>
-              <th className="pb-2 pe-3 text-end font-medium">Cost</th>
-              <th className="pb-2 pe-3 text-end font-medium">P&amp;L</th>
-              <th className="pb-2 pe-3 text-end font-medium">Weight</th>
-              <th className="pb-2 text-end font-medium">Actions</th>
+              <th className="pb-2 pe-3 font-medium">{t('holdings.columns.symbol')}</th>
+              <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.quantity')}</th>
+              <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.price')}</th>
+              <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.day')}</th>
+              <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.value')}</th>
+              <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.cost')}</th>
+              <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.pnl')}</th>
+              <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.weight')}</th>
+              <th className="pb-2 text-end font-medium">{t('holdings.columns.actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -170,6 +167,7 @@ function HoldingRow({
     cancel,
     save,
   } = useHoldingEditor(holding, updateHolding);
+  const { t } = useTranslation();
 
   return (
     <tr className="border-b border-border-subtle/50 last:border-0 hover:bg-surface-hover/40">
@@ -188,15 +186,15 @@ function HoldingRow({
               onChange={(event) => setDraft(event.target.value)}
               className="w-24 rounded border border-border-subtle bg-surface px-2 py-1 text-end text-sm"
               inputMode="decimal"
-              aria-label={`Quantity for ${holding.instrument.symbol}`}
+              aria-label={t('holdings.quantityFor', { symbol: holding.instrument.symbol })}
             />
-            <button type="button" onClick={save} aria-label="Save" className="text-gain">
+            <button type="button" onClick={save} aria-label={t('common.save')} className="text-gain">
               <Check className="size-4" />
             </button>
             <button
               type="button"
               onClick={cancel}
-              aria-label="Cancel"
+              aria-label={t('common.cancel')}
               className="text-text-muted"
             >
               <X className="size-4" />
@@ -216,15 +214,22 @@ function HoldingRow({
                 implying every figure is live. */}
             <div
               className="text-[11px] text-text-muted"
-              title={`Observed ${formatExactTime(holding.quote.asOf)} via ${holding.quote.source}${
+              title={
                 holding.quote.delaySeconds > 0
-                  ? `, on a ${Math.round(holding.quote.delaySeconds / 60)}-minute delayed feed`
-                  : ''
-              }`}
+                  ? t('holdings.observedViaDelayed', {
+                      when: formatExactTime(holding.quote.asOf),
+                      source: holding.quote.source,
+                      minutes: Math.round(holding.quote.delaySeconds / 60),
+                    })
+                  : t('holdings.observedVia', {
+                      when: formatExactTime(holding.quote.asOf),
+                      source: holding.quote.source,
+                    })
+              }
             >
               {formatAge(holding.quote.asOf)}
               {holding.quote.delaySeconds > 0 &&
-                ` · ${Math.round(holding.quote.delaySeconds / 60)}m delay`}
+                t('holdings.delay', { minutes: Math.round(holding.quote.delaySeconds / 60) })}
             </div>
           </>
         ) : (
@@ -245,10 +250,13 @@ function HoldingRow({
               onChange={(event) => setCostDraft(event.target.value)}
               className="w-24 rounded border border-border-subtle bg-surface px-2 py-1 text-end text-sm text-text-primary"
               inputMode="decimal"
-              placeholder="none"
-              aria-label={`Cost per unit for ${holding.instrument.symbol}, in ${holding.costCurrency}`}
+              placeholder={t('common.none')}
+              aria-label={t('holdings.costFor', {
+                symbol: holding.instrument.symbol,
+                currency: holding.costCurrency,
+              })}
             />
-            <span>{holding.costCurrency}/unit</span>
+            <span>{t('holdings.perUnit', { currency: holding.costCurrency })}</span>
           </label>
         ) : (
           formatMoney(holding.costMinor, baseCurrency)
@@ -258,11 +266,14 @@ function HoldingRow({
         <Delta value={holding.pnlMinor}>
           {holding.pnlMinor === null
             ? '—'
-            : `${formatMoney(holding.pnlMinor, baseCurrency)} (${formatPercent(holding.pnlPct)})`}
+            : t('holdings.pnl', {
+                money: formatMoney(holding.pnlMinor, baseCurrency),
+                percent: formatPercent(holding.pnlPct),
+              })}
         </Delta>
       </td>
       <td className="py-2 pe-3 text-end text-text-muted">
-        {holding.weightPct === null ? '—' : `${holding.weightPct.toFixed(1)}%`}
+        {formatShare(holding.weightPct)}
       </td>
 
       <td className="py-2 text-end">
@@ -273,10 +284,10 @@ function HoldingRow({
               onClick={() => removeHolding.mutate(holding.id)}
               className="text-loss underline"
             >
-              Remove
+              {t('common.remove')}
             </button>
             <button type="button" onClick={() => setConfirmingDelete(false)} className="text-text-muted">
-              Cancel
+              {t('common.cancel')}
             </button>
           </span>
         ) : (
@@ -284,7 +295,7 @@ function HoldingRow({
             <button
               type="button"
               onClick={startEditing}
-              aria-label={`Edit ${holding.instrument.symbol}`}
+              aria-label={t('holdings.editSymbol', { symbol: holding.instrument.symbol })}
               className="text-text-muted hover:text-text-primary"
             >
               <Pencil className="size-4" />
@@ -292,7 +303,7 @@ function HoldingRow({
             <button
               type="button"
               onClick={() => setConfirmingDelete(true)}
-              aria-label={`Remove ${holding.instrument.symbol}`}
+              aria-label={t('holdings.removeSymbol', { symbol: holding.instrument.symbol })}
               className="text-text-muted hover:text-loss"
             >
               <Trash2 className="size-4" />
@@ -306,6 +317,7 @@ function HoldingRow({
 
 /** The symbol with its warnings: a stale price and an unpriced holding are said beside it. */
 function SymbolLabel({ holding }: { holding: HoldingView }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Link
@@ -317,14 +329,14 @@ function SymbolLabel({ holding }: { holding: HoldingView }) {
       </Link>
       {holding.quote?.stale && (
         <span
-          title={`Last known price, observed ${formatExactTime(holding.quote.asOf)}. No provider could refresh it.`}
+          title={t('holdings.staleTitle', { when: formatExactTime(holding.quote.asOf) })}
           className="flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-[10px] text-warn"
         >
-          <Clock className="size-3" aria-hidden /> stale
+          <Clock className="size-3" aria-hidden /> {t('holdings.stale')}
         </span>
       )}
       {holding.valueMinor === null && (
-        <span className="rounded bg-loss/15 px-1.5 py-0.5 text-[10px] text-loss">unpriced</span>
+        <span className="rounded bg-loss/15 px-1.5 py-0.5 text-[10px] text-loss">{t('holdings.unpriced')}</span>
       )}
     </div>
   );
@@ -361,6 +373,7 @@ function HoldingCard({
     save,
   } = useHoldingEditor(holding, updateHolding);
   const symbol = holding.instrument.symbol;
+  const { t } = useTranslation();
 
   return (
     <div className="space-y-2">
@@ -377,7 +390,10 @@ function HoldingCard({
             <Delta value={holding.pnlMinor}>
               {holding.pnlMinor === null
                 ? '—'
-                : `${formatMoney(holding.pnlMinor, baseCurrency)} (${formatPercent(holding.pnlPct)})`}
+                : t('holdings.pnl', {
+                    money: formatMoney(holding.pnlMinor, baseCurrency),
+                    percent: formatPercent(holding.pnlPct),
+                  })}
             </Delta>
           </p>
         </div>
@@ -385,66 +401,67 @@ function HoldingCard({
 
       <p className="text-xs text-text-muted">
         {trimQuantity(holding.quantity)} ×{' '}
-        {holding.quote ? formatMoney(holding.quote.priceMinor, holding.quote.currency) : 'no price'}
+        {holding.quote
+          ? formatMoney(holding.quote.priceMinor, holding.quote.currency)
+          : t('holdings.noPrice')}
         {holding.quote && (
-          <>
-            {' · '}
-            <Delta value={holding.quote.dayChangePct}>
-              {formatPercent(holding.quote.dayChangePct)}
-            </Delta>{' '}
-            today
-          </>
+          <Trans
+            i18nKey="holdings.today"
+            values={{ change: formatPercent(holding.quote.dayChangePct) }}
+            components={{ delta: <Delta value={holding.quote.dayChangePct}>{null}</Delta> }}
+          />
         )}
-        {holding.weightPct !== null && ` · ${holding.weightPct.toFixed(1)}% of portfolio`}
-        {holding.quote && ` · price ${formatAge(holding.quote.asOf)}`}
+        {holding.weightPct !== null &&
+          t('holdings.ofPortfolio', { share: formatShare(holding.weightPct) })}
+        {holding.quote && t('holdings.priceAge', { age: formatAge(holding.quote.asOf) })}
       </p>
 
       {editing ? (
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-xs text-text-muted">
-            Quantity
+            {t('holdings.columns.quantity')}
             <input
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               className="mt-1 block h-10 w-32 rounded-lg border border-border-subtle bg-surface px-3 text-end text-sm text-text-primary"
               inputMode="decimal"
-              aria-label={`Quantity for ${symbol}`}
+              aria-label={t('holdings.quantityFor', { symbol })}
             />
           </label>
           <label className="text-xs text-text-muted">
-            Cost per unit ({holding.costCurrency})
+            {t('holdings.costPerUnitIn', { currency: holding.costCurrency })}
             <input
               value={costDraft}
               onChange={(event) => setCostDraft(event.target.value)}
               className="mt-1 block h-10 w-32 rounded-lg border border-border-subtle bg-surface px-3 text-end text-sm text-text-primary"
               inputMode="decimal"
-              placeholder="none"
-              aria-label={`Cost per unit for ${symbol}, in ${holding.costCurrency}`}
+              placeholder={t('common.none')}
+              aria-label={t('holdings.costFor', { symbol, currency: holding.costCurrency })}
             />
           </label>
           <button type="button" onClick={save} className={`${CARD_BUTTON} text-gain`}>
-            <Check className="size-4" aria-hidden /> Save
+            <Check className="size-4" aria-hidden /> {t('common.save')}
           </button>
           <button type="button" onClick={cancel} className={`${CARD_BUTTON} text-text-muted`}>
-            Cancel
+            {t('common.cancel')}
           </button>
         </div>
       ) : confirmingDelete ? (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-text-muted">Remove {symbol}?</span>
+          <span className="text-xs text-text-muted">{t('holdings.removeConfirm', { symbol })}</span>
           <button
             type="button"
             onClick={() => removeHolding.mutate(holding.id)}
             className={`${CARD_BUTTON} border-loss/40 text-loss`}
           >
-            Remove
+            {t('common.remove')}
           </button>
           <button
             type="button"
             onClick={() => setConfirmingDelete(false)}
             className={`${CARD_BUTTON} text-text-muted`}
           >
-            Cancel
+            {t('common.cancel')}
           </button>
         </div>
       ) : (
@@ -452,18 +469,18 @@ function HoldingCard({
           <button
             type="button"
             onClick={startEditing}
-            aria-label={`Edit ${symbol}`}
+            aria-label={t('holdings.editSymbol', { symbol })}
             className={`${CARD_BUTTON} text-text-muted`}
           >
-            <Pencil className="size-4" aria-hidden /> Edit
+            <Pencil className="size-4" aria-hidden /> {t('common.edit')}
           </button>
           <button
             type="button"
             onClick={() => setConfirmingDelete(true)}
-            aria-label={`Remove ${symbol}`}
+            aria-label={t('holdings.removeSymbol', { symbol })}
             className={`${CARD_BUTTON} text-text-muted`}
           >
-            <Trash2 className="size-4" aria-hidden /> Remove
+            <Trash2 className="size-4" aria-hidden /> {t('common.remove')}
           </button>
         </div>
       )}

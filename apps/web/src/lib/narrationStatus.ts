@@ -15,6 +15,8 @@
 
 import type { NarrationHealthResponse, NarrationState, NarrationTier } from '@traders/shared';
 
+import { t } from '../i18n/index.ts';
+
 export interface NarrationCopy {
   /** Two or three words, for the badge itself. */
   label: string;
@@ -26,47 +28,24 @@ export interface NarrationCopy {
   tone: 'neutral' | 'warn' | 'loss';
 }
 
-const COPY: Record<NarrationState, NarrationCopy> = {
-  narrating: {
-    label: 'Explanations by model',
-    summary: 'A model is writing the explanations, and every figure in them is checked against the evidence before it is stored.',
-    consequence: null,
-    tone: 'neutral',
-  },
-  off: {
-    label: 'Explanations by template',
-    summary: 'No language model is configured, so explanations are written from fixed templates.',
-    consequence: 'Every figure is still checked and still correct. The phrasing is fixed, and a finding cannot be described in its own terms.',
-    tone: 'neutral',
-  },
-  rejected: {
-    label: 'Model output refused',
-    summary: 'The model is answering, and its sentences are being refused because they contain figures that are not in the evidence.',
-    consequence: 'Templates are used instead, so nothing wrong has been shown to you - the refusal is the safeguard working. A more capable model is the only thing that changes this; waiting will not, and neither will paying for this one.',
-    tone: 'warn',
-  },
-  exhausted: {
-    label: 'Budget spent',
-    summary: 'The daily spend ceiling stopped the model calls.',
-    consequence: 'Explanations fall back to templates until the ceiling resets or is raised.',
-    tone: 'warn',
-  },
-  unavailable: {
-    label: 'Model unavailable',
-    summary: 'The provider refused the last requests. On a free route this usually means the shared pool is busy.',
-    consequence: 'Templates are used meanwhile. This often clears by itself.',
-    tone: 'warn',
-  },
-  unknown: {
-    label: 'Not recorded',
-    summary: 'Nothing has been recorded about how the recent explanations were written.',
-    consequence: 'Observations written before this was tracked do not say who wrote them, and are shown as they are rather than guessed at.',
-    tone: 'neutral',
-  },
+/** How loud each state's badge is; the words are in the catalogue (`narration.states`). */
+const TONES: Record<NarrationState, NarrationCopy['tone']> = {
+  narrating: 'neutral',
+  off: 'neutral',
+  rejected: 'warn',
+  exhausted: 'warn',
+  unavailable: 'warn',
+  unknown: 'neutral',
 };
 
 export function describeNarration(state: NarrationState): NarrationCopy {
-  return COPY[state];
+  return {
+    label: t(`narration.states.${state}.label`),
+    summary: t(`narration.states.${state}.summary`),
+    // A model narrating normally costs the reader nothing, so it has nothing to say here.
+    consequence: state === 'narrating' ? null : t(`narration.states.${state}.consequence`),
+    tone: TONES[state],
+  };
 }
 
 /** The two ways out, in the order a reader would weigh them. */
@@ -83,16 +62,12 @@ export interface NarrationOption {
 export function narrationOptions(tier: NarrationTier): readonly [NarrationOption, NarrationOption] {
   return [
     {
-      title: 'Fund the model — about $0.45 a month',
-      detail:
-        tier === 'free'
-          ? 'Measured from real usage: roughly $0.0015 per explanation, and about ten new findings a day. A capable model restates the evidence without deriving figures of its own, which is what the free one cannot do.'
-          : 'Measured from real usage: roughly $0.0015 per explanation, and about ten new findings a day. The figure moves with how much the holdings move.',
+      title: t('narration.fund.title'),
+      detail: tier === 'free' ? t('narration.fund.detailFree') : t('narration.fund.detailPaid'),
     },
     {
-      title: 'Stay on templates — no cost, no change needed',
-      detail:
-        'Fixed phrasing over the same checked figures. Nothing is ever wrong and nothing is ever invented; what is lost is prose that can describe an unusual finding in its own words rather than in a sentence written in advance.',
+      title: t('narration.templates.title'),
+      detail: t('narration.templates.detail'),
     },
   ] as const;
 }

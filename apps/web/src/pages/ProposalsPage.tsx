@@ -8,6 +8,7 @@ import { Disclaimer } from '../components/Disclaimer.tsx';
 import { ApprovedCard, ProposalCard, useNow } from '../components/ProposalCards.tsx';
 import { Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import { errorMessage } from '../api/client.ts';
+import { useTranslation } from '../i18n/index.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { outcomeAt, outcomeText, outcomeTone } from '../lib/proposalOutcome.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
@@ -49,6 +50,7 @@ import { useStore } from '../stores/context.tsx';
  */
 export const ProposalsPage = observer(function ProposalsPage() {
   const { proposals } = useStore();
+  const { t } = useTranslation();
   // Live: re-read on an interval and on focus while this page is open, because
   // a decision can arrive from Telegram at any moment (`REFRESH_INTERVAL_MS`).
   const inbox = useProposalsQuery({ live: true });
@@ -77,17 +79,17 @@ export const ProposalsPage = observer(function ProposalsPage() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Inbox className="size-5 text-accent" aria-hidden />
-          <h1 className="text-base font-semibold">Proposals</h1>
+          <h1 className="text-base font-semibold">{t('proposals.title')}</h1>
           {open.length > 0 && (
             <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent">
-              {open.length} open
+              {t('proposals.open', { count: open.length })}
             </span>
           )}
         </div>
         <Link to="/" className={buttonClass('ghost')}>
           <span className="flex items-center gap-1.5">
             <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
-            Back to portfolio
+            {t('common.backToPortfolio')}
           </span>
         </Link>
       </header>
@@ -101,20 +103,17 @@ export const ProposalsPage = observer(function ProposalsPage() {
       <Card>
         <p className="flex items-start gap-2 text-sm text-text-muted">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden />
-          <span>
-            Approving records your intention in this app&rsquo;s own ledger. No order is ever placed
-            and no broker is contacted.
-          </span>
+          <span>{t('proposals.ledgerOnly')}</span>
         </p>
       </Card>
 
-      {inbox.isPending && <Spinner label="Loading proposals…" />}
+      {inbox.isPending && <Spinner label={t('proposals.loading')} />}
 
       {/* A failed background read after a good one keeps the cards and says
           nothing: the last good view stays up and the next tick tries again. */}
       {inbox.error && inbox.data === undefined && (
         <ErrorNote
-          message={errorMessage(inbox.error, 'Could not load your proposals.')}
+          message={errorMessage(inbox.error, t('proposals.loadFailed'))}
           onRetry={() => void inbox.refetch()}
         />
       )}
@@ -123,11 +122,11 @@ export const ProposalsPage = observer(function ProposalsPage() {
 
       {isEmpty && (
         <EmptyState
-          title="Nothing waiting on you"
-          body="When a finding needs a decision, it appears here. You can change what qualifies in Settings."
+          title={t('proposals.emptyTitle')}
+          body={t('proposals.emptyBody')}
           action={
             <Link to="/settings" className={buttonClass('secondary')}>
-              Open settings
+              {t('proposals.openSettings')}
             </Link>
           }
         />
@@ -141,7 +140,7 @@ export const ProposalsPage = observer(function ProposalsPage() {
 
       {undoable.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-sm font-semibold text-text-muted">Just approved</h2>
+          <h2 className="text-sm font-semibold text-text-muted">{t('proposals.justApproved')}</h2>
           {undoable.map((proposal) => (
             <ApprovedCard key={proposal.id} proposal={proposal} />
           ))}
@@ -180,15 +179,16 @@ function HistorySection({
   /** True when the page is full, so older decisions exist beyond it. */
   full: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <section className="space-y-2">
-      <h2 className="text-sm font-semibold text-text-muted">History</h2>
-      {isPending && <Spinner label="Loading past proposals…" />}
+      <h2 className="text-sm font-semibold text-text-muted">{t('proposals.history')}</h2>
+      {isPending && <Spinner label={t('proposals.historyLoading')} />}
       {error && (
-        <ErrorNote message={errorMessage(error, 'Could not load past proposals.')} onRetry={onRetry} />
+        <ErrorNote message={errorMessage(error, t('proposals.historyFailed'))} onRetry={onRetry} />
       )}
       {!isPending && !error && proposals.length === 0 && (
-        <p className="text-sm text-text-muted">No proposal has been decided or has expired yet.</p>
+        <p className="text-sm text-text-muted">{t('proposals.historyEmpty')}</p>
       )}
       {proposals.length > 0 && (
         <Card>
@@ -212,8 +212,7 @@ function HistorySection({
           </ul>
           {full && (
             <p className="mt-3 text-xs text-text-muted">
-              The {HISTORY_PAGE} most recent. Older proposals are kept, and each one’s own page
-              still opens from its link.
+              {t('proposals.historyFull', { count: HISTORY_PAGE })}
             </p>
           )}
         </Card>

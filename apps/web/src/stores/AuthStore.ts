@@ -4,6 +4,7 @@ import type { SessionUser } from '@traders/shared';
 
 import { ApiRequestError, api } from '../api/client.ts';
 import { setDisplayTimeZone } from '../lib/relativeTime.ts';
+import { t } from '../i18n/index.ts';
 import type { RootStore } from './RootStore.ts';
 
 export class AuthStore {
@@ -61,7 +62,7 @@ export class AuthStore {
     } catch (error) {
       runInAction(() => {
         this.error =
-          error instanceof ApiRequestError ? error.message : 'Login failed. Please try again.';
+          error instanceof ApiRequestError ? error.message : t('errors.loginFailed');
       });
     } finally {
       runInAction(() => {

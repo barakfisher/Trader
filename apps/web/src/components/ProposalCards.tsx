@@ -5,6 +5,7 @@ import { Undo2 } from 'lucide-react';
 
 import type { Proposal, ProposalAction } from '@traders/shared';
 
+import { useTranslation } from '../i18n/index.ts';
 import { isUrgent, snoozeDescription, timeLeft } from '../lib/proposalCountdown.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
 import { SERVER_ENGLISH } from '../lib/textDirection.ts';
@@ -33,14 +34,6 @@ function ProposalHeadline({ proposal, link }: { proposal: Proposal; link: boolea
     </Link>
   );
 }
-
-/** What the clicked button says while its action is in flight. */
-const IN_FLIGHT_LABELS: Record<ProposalAction, string> = {
-  approve: 'Approving…',
-  reject: 'Rejecting…',
-  snooze: 'Snoozing…',
-  undo: 'Undoing…',
-};
 
 /**
  * The current time, re-read every second while `active` - enough to count an
@@ -73,6 +66,7 @@ export const ApprovedCard = observer(function ApprovedCard({
   proposal: Proposal;
   linkToPage?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -81,9 +75,10 @@ export const ApprovedCard = observer(function ApprovedCard({
             <ProposalHeadline proposal={proposal} link={linkToPage} />
           </p>
           <p className="text-xs text-text-muted">
-            Approved
-            {proposal.decidedVia === 'telegram' ? ' from Telegram' : ''}
-            {proposal.decidedAt !== null && ` at ${formatExactTime(proposal.decidedAt)}`}
+            {t('proposal.approved')}
+            {proposal.decidedVia === 'telegram' ? t('proposal.approvedFromTelegram') : ''}
+            {proposal.decidedAt !== null &&
+              t('proposal.approvedAt', { when: formatExactTime(proposal.decidedAt) })}
           </p>
         </div>
         <UndoButton proposal={proposal} />
@@ -99,6 +94,7 @@ export const ApprovedCard = observer(function ApprovedCard({
  */
 export const UndoButton = observer(function UndoButton({ proposal }: { proposal: Proposal }) {
   const { proposals } = useStore();
+  const { t } = useTranslation();
   const inFlight = proposals.decidingAction(proposal.id);
   const now = useNow(proposal.undoableUntil !== null);
   const secondsLeft = undoSecondsLeft(proposal.undoableUntil, now);
@@ -116,7 +112,9 @@ export const UndoButton = observer(function UndoButton({ proposal }: { proposal:
         >
           <span className="flex items-center gap-1.5">
             <Undo2 className="size-4" aria-hidden />
-            {inFlight === 'undo' ? IN_FLIGHT_LABELS.undo : `Undo approval (${secondsLeft}s)`}
+            {inFlight === 'undo'
+              ? t('proposal.inFlight.undo')
+              : t('proposal.undo', { seconds: secondsLeft })}
           </span>
         </Button>
       )}
@@ -136,12 +134,13 @@ export const ProposalCard = observer(function ProposalCard({
   linkToPage?: boolean;
 }) {
   const { proposals } = useStore();
+  const { t } = useTranslation();
   const inFlight = proposals.decidingAction(proposal.id);
   // Every button is disabled while any one is in flight; only the clicked one
   // changes its label, so the user can see which choice registered.
   const deciding = inFlight !== null;
   const label = (action: ProposalAction, idle: string) =>
-    inFlight === action ? IN_FLIGHT_LABELS[action] : idle;
+    inFlight === action ? t(`proposal.inFlight.${action}`) : idle;
   const remaining = timeLeft(proposal.expiresAt);
   const urgent = isUrgent(proposal.expiresAt);
   const snoozed = proposal.state === 'snoozed' ? snoozeDescription(proposal.snoozedUntil) : null;
@@ -169,7 +168,7 @@ export const ProposalCard = observer(function ProposalCard({
             }`}
             title={formatExactTime(proposal.expiresAt)}
           >
-            {remaining ?? 'expired'}
+            {remaining ?? t('countdown.expired')}
           </span>
         </div>
 
@@ -196,21 +195,21 @@ export const ProposalCard = observer(function ProposalCard({
 
         <div className="flex flex-wrap gap-2">
           <Button disabled={deciding} onClick={() => void proposals.decide(proposal.id, 'approve')}>
-            {label('approve', 'Approve')}
+            {label('approve', t('proposal.approve'))}
           </Button>
           <Button
             variant="secondary"
             disabled={deciding}
             onClick={() => void proposals.decide(proposal.id, 'snooze')}
           >
-            {label('snooze', `Snooze ${SNOOZE_HOURS}h`)}
+            {label('snooze', t('proposal.snooze', { hours: SNOOZE_HOURS }))}
           </Button>
           <Button
             variant="danger"
             disabled={deciding}
             onClick={() => void proposals.decide(proposal.id, 'reject')}
           >
-            {label('reject', 'Reject')}
+            {label('reject', t('proposal.reject'))}
           </Button>
         </div>
       </div>

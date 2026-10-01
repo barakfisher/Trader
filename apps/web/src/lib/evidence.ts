@@ -24,8 +24,9 @@
  * computed - the exact failure the evidence validator exists to prevent.
  */
 
-import { formatMoney, formatPercent } from '@traders/shared';
-
+import { formatMoney, formatPercent, formatShare } from '../i18n/format.ts';
+import { i18n, t } from '../i18n/index.ts';
+import type en from '../i18n/locales/en.json';
 import { formatExactTime } from './relativeTime.ts';
 
 export interface EvidenceEntry {
@@ -47,29 +48,19 @@ export interface EvidenceSection {
 type Unit = 'money' | 'fraction' | 'share' | 'timestamp' | 'unknown';
 
 /**
- * Labels where the generic "underscores to words" rule reads badly enough to be
- * worth an exception. Kept short on purpose: an entry here is a phrase this
- * module has to keep in step with the rule that emits the key.
+ * Labels live in the catalogue (`evidence.labels`), looked up by the whole key
+ * first and then by its stem, so `price_minor` and `previous_price_minor` read
+ * "Price" and "Previous price" in any language. The whole-key entries are the
+ * exceptions where the generic "underscores to words" rule reads badly -
+ * `target_weight_sum` would otherwise be "Target", beside `target_weight`'s.
+ * A key the catalogue has never seen - a rule added next month - still gets the
+ * generic English words, rather than nothing.
  */
-const LABELS: Record<string, string> = {
-  as_of: 'Observed at',
-  previous_as_of: 'Previous observation',
-  high_as_of: 'High observed at',
-  change_pct: 'Change',
-  drawdown_pct: 'Decline from high',
-  drift: 'Drift from target',
-  z_score: 'Z-score',
-  held: 'Currently held',
-  return_stdev: 'Daily return volatility',
-  return_stdev_used: 'Volatility used',
-  return_stdev_floor: 'Volatility floor',
-  return_stdev_floor_applied: 'Volatility floor applied',
-  thresholds_pct: 'Thresholds',
-  thresholds_sigma: 'Thresholds, in standard deviations',
-  thresholds_weight: 'Thresholds',
-  // Without it the suffix rule makes this "Target", beside `target_weight`'s.
-  target_weight_sum: 'All targets together',
-};
+type LabelKey = keyof typeof en.evidence.labels;
+
+function knownLabel(key: string): key is LabelKey {
+  return i18n.exists(`evidence.labels.${key}`);
+}
 
 const UNIT_SUFFIXES: { suffix: string; unit: Unit }[] = [
   { suffix: '_minor', unit: 'money' },
@@ -171,7 +162,7 @@ function render(
 
   if (unit === 'share') {
     const fraction = toNumber(value);
-    if (fraction !== null) return { value: `${(fraction * 100).toFixed(2)}%`, interpreted: true };
+    if (fraction !== null) return { value: formatShare(fraction * 100, 2), interpreted: true };
   }
 
   if (unit === 'timestamp' && typeof value === 'string') {
@@ -183,7 +174,7 @@ function render(
 }
 
 function renderRaw(value: unknown): string {
-  if (typeof value === 'boolean') return value ? 'yes' : 'no';
+  if (typeof value === 'boolean') return value ? t('common.yes') : t('common.no');
   if (Array.isArray(value)) return value.length === 0 ? '—' : value.map(renderRaw).join(', ');
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) return String(value);
@@ -196,10 +187,10 @@ function renderRaw(value: unknown): string {
 
 /** `previous_price_minor` -> `Previous price`. */
 export function labelFor(key: string): string {
-  const special = LABELS[key];
-  if (special) return special;
+  if (knownLabel(key)) return t(`evidence.labels.${key}`);
   const suffix = UNIT_SUFFIXES.find((candidate) => key.endsWith(candidate.suffix));
   const stem = suffix ? key.slice(0, -suffix.suffix.length) : key;
+  if (knownLabel(stem)) return t(`evidence.labels.${stem}`);
   const words = (stem || key).replace(/_/g, ' ').trim();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }

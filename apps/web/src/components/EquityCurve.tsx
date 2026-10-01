@@ -10,9 +10,11 @@ import {
   type DotProps,
 } from 'recharts';
 
-import { formatMoney, minorToNumber } from '@traders/shared';
+import { minorToNumber } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
+import { formatCompactMoney, formatDate, formatMoney } from '../i18n/format.ts';
+import { useTranslation } from '../i18n/index.ts';
 import { coverageText, curvePoints, type CurvePoint } from '../lib/equityCurve.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { CHART_DIRECTION } from '../lib/textDirection.ts';
@@ -32,8 +34,8 @@ const VALUE_COLOUR = '#6d8bff';
 const COST_COLOUR = '#8f9b2f';
 
 /** Dates are calendar dates, so they are formatted as such: in UTC, where no offset moves them. */
-const dayLabel = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-const formatDay = (date: string) => dayLabel.format(new Date(`${date}T00:00:00Z`));
+const formatDay = (date: string) =>
+  formatDate(new Date(`${date}T00:00:00Z`), { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 /**
  * The portfolio's value per day, from the daily snapshots only.
@@ -45,6 +47,7 @@ const formatDay = (date: string) => dayLabel.format(new Date(`${date}T00:00:00Z`
  */
 export function EquityCurve() {
   const snapshots = useSnapshotsQuery();
+  const { t } = useTranslation();
   const currency = baseCurrencyOf(usePortfolioQuery().data);
   const [asTable, setAsTable] = useState(false);
 
@@ -57,7 +60,7 @@ export function EquityCurve() {
 
   return (
     <Card
-      title="Value over time"
+      title={t('equity.title')}
       action={
         points.length > 0 && (
           <button
@@ -65,15 +68,15 @@ export function EquityCurve() {
             className="text-xs text-text-muted underline hover:text-text-primary"
             onClick={() => setAsTable(!asTable)}
           >
-            {asTable ? 'Show as chart' : 'Show as table'}
+            {asTable ? t('equity.showChart') : t('equity.showTable')}
           </button>
         )
       }
     >
-      {snapshots.isPending && <Spinner label="Loading the daily snapshots…" />}
+      {snapshots.isPending && <Spinner label={t('equity.loading')} />}
       {snapshots.error && (
         <ErrorNote
-          message={errorMessage(snapshots.error, 'Could not load the daily snapshots.')}
+          message={errorMessage(snapshots.error, t('equity.loadFailed'))}
           onRetry={() => void snapshots.refetch()}
         />
       )}
@@ -87,14 +90,14 @@ export function EquityCurve() {
           <ul className="mb-2 flex gap-4 text-xs text-text-muted" aria-hidden>
             <li className="flex items-center gap-1.5">
               <span className="h-0.5 w-4 rounded" style={{ background: VALUE_COLOUR }} />
-              Value
+              {t('equity.value')}
             </li>
             <li className="flex items-center gap-1.5">
               <span className="h-0 w-4 border-t-2 border-dashed" style={{ borderColor: COST_COLOUR }} />
-              Cost basis
+              {t('equity.costBasis')}
             </li>
           </ul>
-          <div className="h-56" dir={CHART_DIRECTION} role="img" aria-label={`Portfolio value over time. ${coverageText(points)}`}>
+          <div className="h-56" dir={CHART_DIRECTION} role="img" aria-label={t('equity.chartLabel', { coverage: coverageText(points) })}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke="#253052" strokeDasharray="2 4" vertical={false} />
@@ -107,7 +110,7 @@ export function EquityCurve() {
                   minTickGap={24}
                 />
                 <YAxis
-                  tickFormatter={(value: number) => compactMoney(value, currency)}
+                  tickFormatter={(value: number) => formatCompactMoney(value, currency)}
                   tick={{ fill: '#94a0c0', fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
@@ -164,21 +167,25 @@ function ValueDot({ cx, cy, payload }: DotProps & { payload?: CurvePoint }) {
 }
 
 function DayTooltip({ point, currency }: { point: CurvePoint; currency: string }) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-lg border border-border-subtle bg-surface-raised px-3 py-2 text-xs shadow-lg">
       <p className="mb-1 font-medium text-text-primary">{formatDay(point.date)}</p>
       {point.totalMinor === null ? (
-        <p className="text-text-muted">No snapshot this day.</p>
+        <p className="text-text-muted">{t('equity.noSnapshotThisDay')}</p>
       ) : (
         <>
-          <p className="text-text-primary">Value {formatMoney(point.totalMinor, currency)}</p>
+          <p className="text-text-primary">
+            {t('equity.tooltipValue', { value: formatMoney(point.totalMinor, currency) })}
+          </p>
           {point.costMinor !== null && (
-            <p className="text-text-muted">Cost basis {formatMoney(point.costMinor, currency)}</p>
+            <p className="text-text-muted">
+              {t('equity.tooltipCost', { value: formatMoney(point.costMinor, currency) })}
+            </p>
           )}
           {point.degraded && (
             <p className="mt-1 text-text-muted">
-              Understated: {point.pricedCount} of {point.holdingsCount} holdings priced, or a
-              price was stale.
+              {t('equity.understatedDetail', { priced: point.pricedCount, holdings: point.holdingsCount })}
             </p>
           )}
         </>
@@ -189,14 +196,15 @@ function DayTooltip({ point, currency }: { point: CurvePoint; currency: string }
 
 /** The same figures as rows: for a screen reader, or anyone who wants the numbers. */
 function CurveTable({ points, currency }: { points: CurvePoint[]; currency: string }) {
+  const { t } = useTranslation();
   const measured = points.filter((point) => point.totalMinor !== null).reverse();
   return (
     <table className="w-full text-sm">
       <thead>
         <tr className="border-b border-border-subtle text-start text-xs uppercase tracking-wide text-text-muted">
-          <th className="pb-2 font-medium">Day</th>
-          <th className="pb-2 text-end font-medium">Value</th>
-          <th className="pb-2 text-end font-medium">Cost basis</th>
+          <th className="pb-2 font-medium">{t('equity.day')}</th>
+          <th className="pb-2 text-end font-medium">{t('equity.value')}</th>
+          <th className="pb-2 text-end font-medium">{t('equity.costBasis')}</th>
         </tr>
       </thead>
       <tbody>
@@ -204,7 +212,7 @@ function CurveTable({ points, currency }: { points: CurvePoint[]; currency: stri
           <tr key={point.date} className="border-b border-border-subtle/50 last:border-0">
             <td className="py-1.5">
               {formatDay(point.date)}
-              {point.degraded && <span className="ms-1 text-xs text-text-muted">(understated)</span>}
+              {point.degraded && <span className="ms-1 text-xs text-text-muted">{t('equity.understated')}</span>}
             </td>
             <td className="py-1.5 text-end">{formatMoney(point.totalMinor!, currency)}</td>
             <td className="py-1.5 text-end text-text-muted">
@@ -215,14 +223,4 @@ function CurveTable({ points, currency }: { points: CurvePoint[]; currency: stri
       </tbody>
     </table>
   );
-}
-
-/** "$100k" for an axis tick: the tooltip and table carry the exact figure. */
-function compactMoney(value: number, currency: string): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(value);
 }

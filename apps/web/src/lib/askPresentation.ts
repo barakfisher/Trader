@@ -11,33 +11,33 @@
 
 import type { AskResponse } from '@traders/shared/ai';
 
+import { formatFixed } from '../i18n/format.ts';
+import { i18n, t } from '../i18n/index.ts';
+
 export type AskOutcome =
   | { kind: 'answer'; relevance: 'confident' | 'weak' }
   | { kind: 'computed' }
   | { kind: 'refused'; title: string; reason: string };
 
-const REFUSAL_TITLES: Record<string, string> = {
-  not_in_corpus: 'Not in the reference corpus',
-  no_holdings: 'No holdings to compute from',
-  advice: 'No personal investment advice',
-  not_computable: 'Not something I can compute',
-};
+function refusalTitle(reason: string): string {
+  return i18n.exists(`ask.refusals.${reason}`)
+    ? t(`ask.refusals.${reason as 'advice'}`)
+    : t('ask.notAnswered', { reason });
+}
 
 export function outcomeOf(response: AskResponse): AskOutcome {
   if (!response.answered) {
     const reason = response.refused_reason ?? 'unknown';
-    return { kind: 'refused', reason, title: REFUSAL_TITLES[reason] ?? `Not answered (${reason})` };
+    return { kind: 'refused', reason, title: refusalTitle(reason) };
   }
   if (response.answer_source === 'computed') return { kind: 'computed' };
   return { kind: 'answer', relevance: response.relevance === 'weak' ? 'weak' : 'confident' };
 }
 
 /** What the portfolio half can compute: said when it declines, so the reader knows what to ask. */
-export const COMPUTABLE_QUESTIONS = [
-  'what your portfolio is worth',
-  'your largest and smallest position',
-  'how far your weights sit from your targets',
-];
+export function computableQuestions(): string[] {
+  return [t('ask.computable.worth'), t('ask.computable.positions'), t('ask.computable.targets')];
+}
 
 /**
  * Why a model's draft was not used, when one was attempted. `none` and
@@ -49,17 +49,15 @@ function setAsideReason(reason: string): string | null {
     case 'no_llm_configured':
       return null;
     case 'unsourced_figures':
-      return 'it stated a figure the passages do not contain';
     case 'degenerate_completion':
-      return 'it was not readable text';
     case 'empty_completion':
-      return 'it came back empty';
+      return t(`ask.setAside.${reason}`);
     case 'LLMBudgetExceededError':
-      return 'today’s model budget is spent';
+      return t('ask.setAside.budget');
     case 'LLMTimeoutError':
-      return 'the model did not answer in time';
+      return t('ask.setAside.timeout');
     default:
-      return 'the model could not be reached';
+      return t('ask.setAside.unreachable');
   }
 }
 
@@ -67,14 +65,12 @@ function setAsideReason(reason: string): string | null {
 export function sourceText(response: AskResponse): string {
   switch (response.answer_source) {
     case 'llm':
-      return 'Written by a model from the passages below. Every figure in it was checked against them.';
+      return t('ask.source.llm');
     case 'computed':
-      return 'Computed from your holdings. No model wrote this.';
+      return t('ask.source.computed');
     case 'extractive': {
       const aside = setAsideReason(response.fallback_reason ?? 'none');
-      return aside
-        ? `Quoted from the passages below. A model’s draft was set aside: ${aside}.`
-        : 'Quoted from the passages below.';
+      return aside ? t('ask.source.extractiveSetAside', { reason: aside }) : t('ask.source.extractive');
     }
     default:
       return '';
@@ -89,17 +85,17 @@ export function matchingNote(response: AskResponse): string | null {
   // Only a concept answer searched the corpus; arithmetic over holdings matched nothing.
   return response.vector_is_semantic || response.intent !== 'concept'
     ? null
-    : 'Matched on shared words, not meaning: no semantic embedder is configured here, so the relevance check is not applied.';
+    : t('ask.lexicalMatching');
 }
 
 /** A similarity for display: two places, cut on the digits. */
 export function similarityText(similarity: number | null | undefined): string | null {
   if (similarity === null || similarity === undefined) return null;
-  return (Math.trunc(similarity * 100) / 100).toFixed(2);
+  return formatFixed(Math.trunc(similarity * 100) / 100, 2);
 }
 
 /** What the page says while waiting, by how long it has waited. */
 export function waitingText(seconds: number): string {
-  if (seconds < 3) return 'Searching the reference corpus…';
-  return `Still working (${seconds}s). When a model writes the answer from the passages, this can take a minute or more.`;
+  if (seconds < 3) return t('ask.searching');
+  return t('ask.stillWorking', { seconds });
 }

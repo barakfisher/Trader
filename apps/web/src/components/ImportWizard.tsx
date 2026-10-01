@@ -2,9 +2,11 @@ import { useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 import { FileUp, X } from 'lucide-react';
 
-import { formatMoney, type ImportRow, type ImportRowStatus } from '@traders/shared';
+import type { ImportRow, ImportRowStatus } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
+import { formatMoney } from '../i18n/format.ts';
+import { Trans, useTranslation } from '../i18n/index.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { useStore } from '../stores/context.tsx';
 import { Button, ErrorNote, Spinner } from './ui.tsx';
@@ -17,20 +19,13 @@ const STATUS_STYLES: Record<ImportRowStatus, string> = {
   duplicate: 'bg-surface-hover text-text-muted',
 };
 
-const STATUS_LABELS: Record<ImportRowStatus, string> = {
-  ok: 'ready',
-  ambiguous: 'pick one',
-  unresolved: 'unknown symbol',
-  invalid: 'invalid',
-  duplicate: 'duplicate',
-};
-
 export const ImportWizard = observer(function ImportWizard() {
   const { import: store } = useStore();
   // A committed import refetches the portfolio; if that fails, say so here,
   // where the user is looking, rather than only on the page behind the dialog.
   const portfolio = usePortfolioQuery();
   const fileInput = useRef<HTMLInputElement>(null);
+  const { t } = useTranslation();
 
   if (!store.open) return null;
 
@@ -38,8 +33,8 @@ export const ImportWizard = observer(function ImportWizard() {
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 sm:p-8">
       <div className="w-full max-w-4xl rounded-xl border border-border-subtle bg-surface-raised">
         <header className="flex items-center justify-between border-b border-border-subtle px-4 py-3">
-          <h2 className="text-sm font-semibold">Import holdings</h2>
-          <button type="button" onClick={store.closeDialog} aria-label="Close" className="text-text-muted hover:text-text-primary">
+          <h2 className="text-sm font-semibold">{t('import.title')}</h2>
+          <button type="button" onClick={store.closeDialog} aria-label={t('common.close')} className="text-text-muted hover:text-text-primary">
             <X className="size-4" />
           </button>
         </header>
@@ -48,16 +43,7 @@ export const ImportWizard = observer(function ImportWizard() {
           {!store.preview && !store.result && (
             <div className="space-y-3">
               <p className="text-sm text-text-muted">
-                Upload a CSV or JSON file. Recognised columns:{' '}
-                <code className="text-text-primary">symbol</code>,{' '}
-                <code className="text-text-primary">quantity</code>,{' '}
-                <code className="text-text-primary">cost_basis</code> (per unit),{' '}
-                <code className="text-text-primary">currency</code>,{' '}
-                <code className="text-text-primary">opened_at</code>,{' '}
-                <code className="text-text-primary">notes</code>. Common aliases such as{' '}
-                <code className="text-text-primary">ticker</code> or{' '}
-                <code className="text-text-primary">shares</code> also work. Nothing is saved until
-                you confirm.
+                <Trans i18nKey="import.intro" components={{ code: <code className="text-text-primary" /> }} />
               </p>
               <input
                 ref={fileInput}
@@ -72,10 +58,10 @@ export const ImportWizard = observer(function ImportWizard() {
               <Button onClick={() => fileInput.current?.click()} disabled={store.uploading}>
                 <span className="flex items-center gap-2">
                   <FileUp className="size-4" aria-hidden />
-                  {store.uploading ? 'Reading…' : 'Choose a file'}
+                  {store.uploading ? t('import.reading') : t('import.chooseFile')}
                 </span>
               </Button>
-              {store.uploading && <Spinner label="Parsing and resolving symbols…" />}
+              {store.uploading && <Spinner label={t('import.parsing')} />}
             </div>
           )}
 
@@ -84,20 +70,26 @@ export const ImportWizard = observer(function ImportWizard() {
           {store.result && (
             <div className="space-y-3">
               <p className="text-sm">
-                Imported <strong>{store.result.created}</strong> new and updated{' '}
-                <strong>{store.result.updated}</strong> holdings. {store.result.skipped} row(s)
-                skipped.
+                <Trans
+                  i18nKey="import.result"
+                  values={{
+                    created: store.result.created,
+                    updated: store.result.updated,
+                    skipped: t('import.skipped', { count: store.result.skipped }),
+                  }}
+                  components={{ strong: <strong /> }}
+                />
               </p>
               {store.result.failed.length > 0 && (
                 <ul className="space-y-1 text-xs text-loss">
                   {store.result.failed.map((failure) => (
                     <li key={failure.line}>
-                      Line {failure.line}: {failure.message}
+                      {t('import.failedLine', { line: failure.line, message: failure.message })}
                     </li>
                   ))}
                 </ul>
               )}
-              <Button onClick={store.closeDialog}>Done</Button>
+              <Button onClick={store.closeDialog}>{t('common.done')}</Button>
             </div>
           )}
 
@@ -109,27 +101,30 @@ export const ImportWizard = observer(function ImportWizard() {
                     .filter((status) => store.preview!.counts[status] > 0)
                     .map((status) => (
                       <span key={status} className={`rounded px-2 py-1 ${STATUS_STYLES[status]}`}>
-                        {store.preview!.counts[status]} {STATUS_LABELS[status]}
+                        {t('import.statusCount', {
+                          count: store.preview!.counts[status],
+                          status: t(`import.status.${status}`),
+                        })}
                       </span>
                     ))}
                 </div>
 
                 <label className="flex items-center gap-2 text-xs text-text-muted">
-                  Mode
+                  {t('import.mode')}
                   <select
                     value={store.mode}
                     onChange={(event) => store.setMode(event.target.value as 'merge' | 'replace')}
                     className="input w-auto"
                   >
-                    <option value="merge">Merge into current portfolio</option>
-                    <option value="replace">Replace everything</option>
+                    <option value="merge">{t('import.merge')}</option>
+                    <option value="replace">{t('import.replace')}</option>
                   </select>
                 </label>
               </div>
 
               {store.mode === 'replace' && (
                 <p className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">
-                  Replace deletes every existing holding before importing. This cannot be undone.
+                  {t('import.replaceWarning')}
                 </p>
               )}
 
@@ -137,12 +132,12 @@ export const ImportWizard = observer(function ImportWizard() {
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-surface-raised text-start uppercase tracking-wide text-text-muted">
                     <tr>
-                      <th className="px-3 py-2 font-medium">Import</th>
-                      <th className="px-3 py-2 font-medium">Line</th>
-                      <th className="px-3 py-2 font-medium">Symbol</th>
-                      <th className="px-3 py-2 text-end font-medium">Quantity</th>
-                      <th className="px-3 py-2 text-end font-medium">Cost / unit</th>
-                      <th className="px-3 py-2 font-medium">Status</th>
+                      <th className="px-3 py-2 font-medium">{t('import.columns.import')}</th>
+                      <th className="px-3 py-2 font-medium">{t('import.columns.line')}</th>
+                      <th className="px-3 py-2 font-medium">{t('import.columns.symbol')}</th>
+                      <th className="px-3 py-2 text-end font-medium">{t('import.columns.quantity')}</th>
+                      <th className="px-3 py-2 text-end font-medium">{t('import.columns.costPerUnit')}</th>
+                      <th className="px-3 py-2 font-medium">{t('import.columns.status')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -155,19 +150,21 @@ export const ImportWizard = observer(function ImportWizard() {
 
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs text-text-muted">
-                  {store.readyLines.length} row(s) will be imported.
+                  {t('import.willImport', { count: store.readyLines.length })}
                   {store.blockedRows.length > 0 &&
-                    ` ${store.blockedRows.length} row(s) need attention and will be skipped.`}
+                    t('import.needAttention', { count: store.blockedRows.length })}
                 </p>
                 <div className="flex gap-2">
                   <Button variant="secondary" onClick={store.closeDialog}>
-                    Cancel
+                    {t('common.cancel')}
                   </Button>
                   <Button
                     onClick={store.commit}
                     disabled={store.committing || store.readyLines.length === 0}
                   >
-                    {store.committing ? 'Importing…' : `Import ${store.readyLines.length} row(s)`}
+                    {store.committing
+                      ? t('import.importing')
+                      : t('import.importRows', { count: store.readyLines.length })}
                   </Button>
                 </div>
               </div>
@@ -175,7 +172,7 @@ export const ImportWizard = observer(function ImportWizard() {
           )}
 
           {portfolio.error && (
-            <ErrorNote message={errorMessage(portfolio.error, 'Could not load your portfolio.')} />
+            <ErrorNote message={errorMessage(portfolio.error, t('common.loadPortfolioFailed'))} />
           )}
         </div>
       </div>
@@ -185,6 +182,7 @@ export const ImportWizard = observer(function ImportWizard() {
 
 const PreviewRow = observer(function PreviewRow({ row }: { row: ImportRow }) {
   const { import: store } = useStore();
+  const { t } = useTranslation();
   const selectable = row.status === 'ok' || row.status === 'ambiguous';
 
   return (
@@ -195,7 +193,7 @@ const PreviewRow = observer(function PreviewRow({ row }: { row: ImportRow }) {
           checked={store.selected.has(row.line)}
           onChange={() => store.toggleRow(row.line)}
           disabled={!selectable || (row.status === 'ambiguous' && !store.overrides.has(row.line))}
-          aria-label={`Import line ${row.line}`}
+          aria-label={t('import.importLine', { line: row.line })}
         />
       </td>
       <td className="px-3 py-2 text-text-muted">{row.line}</td>
@@ -210,11 +208,12 @@ const PreviewRow = observer(function PreviewRow({ row }: { row: ImportRow }) {
             onChange={(event) => store.setOverride(row.line, event.target.value)}
             className="input mt-1 w-auto"
           >
-            <option value="">Choose…</option>
+            <option value="">{t('import.choose')}</option>
             {row.candidates.map((candidate) => (
               <option key={candidate.symbol} value={candidate.symbol}>
-                {candidate.symbol}
-                {candidate.name ? ` — ${candidate.name}` : ''}
+                {candidate.name
+                  ? t('import.candidate', { symbol: candidate.symbol, name: candidate.name })
+                  : candidate.symbol}
               </option>
             ))}
           </select>
@@ -226,13 +225,13 @@ const PreviewRow = observer(function PreviewRow({ row }: { row: ImportRow }) {
       </td>
       <td className="px-3 py-2">
         <span className={`rounded px-2 py-0.5 ${STATUS_STYLES[row.status]}`}>
-          {STATUS_LABELS[row.status]}
+          {t(`import.status.${row.status}`)}
         </span>
         {row.issues.length > 0 && (
           <ul className="mt-1 space-y-0.5 text-text-muted">
             {row.issues.map((issue, index) => (
               <li key={`${issue.field}-${index}`}>
-                {issue.field}: {issue.message}
+                {t('import.issue', { field: issue.field, message: issue.message })}
               </li>
             ))}
           </ul>

@@ -3,6 +3,7 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import type { AskResponse } from '@traders/shared/ai';
 
 import { api, errorMessage } from '../api/client.ts';
+import { t } from '../i18n/index.ts';
 import type { RootStore } from './RootStore.ts';
 
 /** The server's own bound on a question (`MAX_QUESTION_LENGTH` in `routes/ask.ts`). */
@@ -64,7 +65,7 @@ export class AskStore {
       });
     } catch (error) {
       runInAction(() => {
-        this.update(entry.id, { error: errorMessage(error, 'Could not get an answer.') });
+        this.update(entry.id, { error: errorMessage(error, t('errors.askFailed')) });
       });
     }
   }

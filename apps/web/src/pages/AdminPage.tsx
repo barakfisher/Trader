@@ -14,6 +14,8 @@ import type {
 } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
+import { formatNumber } from '../i18n/format.ts';
+import { t as translate, useTranslation } from '../i18n/index.ts';
 import { Button, Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import {
   LLM_WINDOWS,
@@ -57,6 +59,7 @@ const STATUS_TONE: Record<string, string> = {
  */
 export const AdminPage = observer(function AdminPage() {
   const { auth } = useStore();
+  const { t } = useTranslation();
   const isAdmin = auth.user?.role === 'admin';
 
   return (
@@ -64,12 +67,12 @@ export const AdminPage = observer(function AdminPage() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <ShieldCheck className="size-5 text-accent" aria-hidden />
-          <h1 className="text-base font-semibold">Admin</h1>
+          <h1 className="text-base font-semibold">{t('admin.title')}</h1>
         </div>
         <Link to="/" className={buttonClass('secondary')}>
           <span className="flex items-center gap-1">
             <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
-            Back to portfolio
+            {t('common.backToPortfolio')}
           </span>
         </Link>
       </header>
@@ -84,8 +87,8 @@ export const AdminPage = observer(function AdminPage() {
         </>
       ) : (
         <EmptyState
-          title="Administrators only"
-          body="This account is not an administrator, so there is nothing to show here."
+          title={t('admin.onlyTitle')}
+          body={t('admin.onlyBody')}
         />
       )}
     </div>
@@ -94,30 +97,31 @@ export const AdminPage = observer(function AdminPage() {
 
 function RunsCard() {
   const runs = useAdminRunsQuery();
+  const { t } = useTranslation();
 
   return (
-    <Card title="Recent runs, every account">
-      {runs.isPending && <Spinner label="Loading runs…" />}
+    <Card title={t('admin.runs')}>
+      {runs.isPending && <Spinner label={t('admin.runsLoading')} />}
       {runs.error && (
         <ErrorNote
-          message={errorMessage(runs.error, 'Could not load the run history.')}
+          message={errorMessage(runs.error, t('admin.runsFailed'))}
           onRetry={() => void runs.refetch()}
         />
       )}
       {runs.data && runs.data.runs.length === 0 && (
-        <p className="text-sm text-text-muted">No run has been recorded yet.</p>
+        <p className="text-sm text-text-muted">{t('admin.runsEmpty')}</p>
       )}
       {runs.data && runs.data.runs.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-start text-sm">
             <thead className="text-xs text-text-muted">
               <tr>
-                <th className="py-2 pe-3 font-medium">Kind</th>
-                <th className="py-2 pe-3 font-medium">Status</th>
-                <th className="py-2 pe-3 font-medium">Started</th>
-                <th className="py-2 pe-3 font-medium">Took</th>
-                <th className="py-2 pe-3 font-medium">Trigger</th>
-                <th className="py-2 font-medium">Run key</th>
+                <th className="py-2 pe-3 font-medium">{t('admin.runColumns.kind')}</th>
+                <th className="py-2 pe-3 font-medium">{t('admin.runColumns.status')}</th>
+                <th className="py-2 pe-3 font-medium">{t('admin.runColumns.started')}</th>
+                <th className="py-2 pe-3 font-medium">{t('admin.runColumns.took')}</th>
+                <th className="py-2 pe-3 font-medium">{t('admin.runColumns.trigger')}</th>
+                <th className="py-2 font-medium">{t('admin.runColumns.runKey')}</th>
               </tr>
             </thead>
             <tbody>
@@ -147,12 +151,8 @@ function RunRow({ run }: { run: AdminRun }) {
   );
 }
 
-const RECONCILED: Record<UniverseReconciliation['what'], string> = {
-  members: 'Members',
-  etf_holdings: 'ETF holdings',
-};
-
-const count = new Intl.NumberFormat('en-US');
+/** A count as the locale groups it: "5,223". */
+const count = { format: (value: number) => formatNumber(value) };
 
 /**
  * The universe: the snapshot the loader last read, what the database holds,
@@ -162,46 +162,49 @@ const count = new Intl.NumberFormat('en-US');
 function UniverseCard() {
   const universe = useAdminUniverseQuery();
   const data = universe.data;
+  const { t } = useTranslation();
 
   return (
-    <Card title="Universe">
+    <Card title={t('admin.universe')}>
       <RescreenControl />
-      {universe.isPending && <Spinner label="Loading the universe…" />}
+      {universe.isPending && <Spinner label={t('admin.universeLoading')} />}
       {universe.error && (
         <ErrorNote
-          message={errorMessage(universe.error, 'Could not load the universe status.')}
+          message={errorMessage(universe.error, t('admin.universeFailed'))}
           onRetry={() => void universe.refetch()}
         />
       )}
       {data && (
         <div className="space-y-3 text-sm">
           <p>
-            {count.format(data.database.profiles)} profiled ({count.format(data.database.equities)}{' '}
-            equities, {count.format(data.database.etfs)} ETFs), {count.format(data.database.embedded)}{' '}
-            embedded, {count.format(data.database.etfHoldings)} ETF holdings.
+            {t('admin.profiled', {
+              profiles: count.format(data.database.profiles),
+              equities: count.format(data.database.equities),
+              etfs: count.format(data.database.etfs),
+              embedded: count.format(data.database.embedded),
+              holdings: count.format(data.database.etfHoldings),
+            })}
           </p>
           {data.database.dropped > 0 && (
             <p className="text-text-muted">
-              {count.format(data.database.dropped)} dropped by a later snapshot: kept, because
-              holdings and topics refer to them, but no longer members.
+              {t('admin.dropped', { value: count.format(data.database.dropped) })}
             </p>
           )}
           {data.database.onDemand > 0 && (
             <p className="text-text-muted">
-              Also {count.format(data.database.onDemand)} profiled on demand for listings users named.
-              They are described but not members: no topic is answered from them, and they are not
-              compared with the snapshot.
+              {t('admin.onDemand', { value: count.format(data.database.onDemand) })}
             </p>
           )}
           {data.lastLoad ? (
             <p className="text-text-muted">
-              Snapshot of {formatExactTime(data.lastLoad.snapshotAsOf)}, last loaded{' '}
-              {formatAge(data.lastLoad.loadedAt)}.
+              {t('admin.lastLoad', {
+                snapshot: formatExactTime(data.lastLoad.snapshotAsOf),
+                age: formatAge(data.lastLoad.loadedAt),
+              })}
             </p>
           ) : (
             <p className="text-warn">
-              No load has been recorded, so there is nothing to compare the database against. The
-              universe loader records one every time it runs.
+              {t('admin.noLoad')}
             </p>
           )}
           {data.reconciliation.map((row) => (
@@ -222,22 +225,18 @@ function RescreenControl() {
   const rescreen = useRescreen();
   const [confirming, setConfirming] = useState(false);
   const result = rescreen.data;
+  const { t } = useTranslation();
 
   return (
     <div className="mb-3 space-y-2 border-b border-border-subtle pb-3 text-sm">
       {!confirming ? (
         <Button variant="secondary" onClick={() => setConfirming(true)} disabled={rescreen.isPending}>
-          Rescreen universe
+          {t('admin.rescreen')}
         </Button>
       ) : (
         <div className="space-y-2">
           <p>
-            This rebuilds the universe from Yahoo&apos;s screener - half an hour or more, as Yahoo
-            limits how fast it answers - and loads it. If Yahoo refuses some listings the run fails
-            and keeps what it fetched; rescreening again the same day resumes.
-            Listings cross the size floor both ways; a member the new screen lacks is marked dropped
-            and no topic is answered from it. Once a rescreen has succeeded, another the same day
-            does nothing.
+            {t('admin.rescreenWarning')}
           </p>
           <div className="flex gap-2">
             <Button
@@ -246,45 +245,52 @@ function RescreenControl() {
                 rescreen.mutate();
               }}
             >
-              Rescreen now
+              {t('admin.rescreenNow')}
             </Button>
             <Button variant="ghost" onClick={() => setConfirming(false)}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
         </div>
       )}
-      {rescreen.isPending && <Spinner label="Starting the rescreen…" />}
+      {rescreen.isPending && <Spinner label={t('admin.rescreenStarting')} />}
       {rescreen.error && (
-        <ErrorNote message={errorMessage(rescreen.error, 'Could not start the rescreen.')} />
+        <ErrorNote message={errorMessage(rescreen.error, t('admin.rescreenFailed'))} />
       )}
       {result?.status === 'running' && (
         <p className="text-text-muted">
-          Rescreen started ({result.runKey}). It runs in the background; follow it under Recent runs.
+          {t('admin.rescreenStarted', { runKey: result.runKey })}
         </p>
       )}
-      {result?.status === 'skipped' && <p className="text-warn">Not started: {result.reason}.</p>}
+      {result?.status === 'skipped' && (
+        <p className="text-warn">{t('admin.rescreenSkipped', { reason: result.reason })}</p>
+      )}
     </div>
   );
 }
 
 function ReconciliationRow({ row }: { row: UniverseReconciliation }) {
+  const { t } = useTranslation();
   return (
     <div>
       <p className="font-medium">
-        {RECONCILED[row.what]}: {count.format(row.inSnapshot)} in the snapshot,{' '}
-        {count.format(row.inDatabase)} in the database
+        {t('admin.reconciliation', {
+          what: t(`admin.reconciled.${row.what}`),
+          snapshot: count.format(row.inSnapshot),
+          database: count.format(row.inDatabase),
+        })}
       </p>
       <ul className="ms-4 list-disc text-text-muted">
         {row.explained.map((difference) => (
           <li key={difference.reason}>
-            {count.format(difference.count)}: {difference.reason}
+            {t('admin.explained', { value: count.format(difference.count), reason: difference.reason })}
           </li>
         ))}
         {row.unexplained !== 0 && (
           <li className="text-warn">
-            {count.format(Math.abs(row.unexplained))}{' '}
-            {row.unexplained > 0 ? 'missing from' : 'more in'} the database, unexplained
+            {row.unexplained > 0
+              ? t('admin.missingFrom', { value: count.format(row.unexplained) })
+              : t('admin.moreIn', { value: count.format(-row.unexplained) })}
           </li>
         )}
       </ul>
@@ -299,19 +305,20 @@ function ReconciliationRow({ row }: { row: UniverseReconciliation }) {
  */
 function GapsCard() {
   const gaps = useAdminGapsQuery();
+  const { t } = useTranslation();
 
   return (
-    <Card title="Universe gaps">
-      {gaps.isPending && <Spinner label="Loading gaps…" />}
+    <Card title={t('admin.gaps')}>
+      {gaps.isPending && <Spinner label={t('admin.gapsLoading')} />}
       {gaps.error && (
         <ErrorNote
-          message={errorMessage(gaps.error, 'Could not load the universe gaps.')}
+          message={errorMessage(gaps.error, t('admin.gapsFailed'))}
           onRetry={() => void gaps.refetch()}
         />
       )}
       {gaps.data && gaps.data.gaps.length === 0 && (
         <p className="text-sm text-text-muted">
-          No gap recorded: every symbol and topic users asked about was in the universe.
+          {t('admin.gapsEmpty')}
         </p>
       )}
       {gaps.data && gaps.data.gaps.length > 0 && (
@@ -327,6 +334,7 @@ function GapsCard() {
 
 function GapItem({ gap }: { gap: UniverseGap }) {
   const real = isRealGap(gap);
+  const { t } = useTranslation();
   return (
     <li className="flex flex-wrap items-baseline justify-between gap-2 py-2">
       <span className="min-w-0">
@@ -335,7 +343,7 @@ function GapItem({ gap }: { gap: UniverseGap }) {
         {gapProfile(gap) && <span className="block text-xs text-text-muted">{gapProfile(gap)}</span>}
       </span>
       <span className="text-xs text-text-muted" title={formatExactTime(gap.lastSeenAt)}>
-        {gap.occurrences > 1 ? `${gap.occurrences}× · ` : ''}
+        {gap.occurrences > 1 ? t('admin.occurrences', { count: gap.occurrences }) : ''}
         {formatAge(gap.lastSeenAt)}
       </span>
     </li>
@@ -351,12 +359,13 @@ function LlmCard() {
   const [days, setDays] = useState<number>(7);
   const llm = useAdminLlmQuery(days);
   const data = llm.data;
+  const { t } = useTranslation();
 
   return (
     <Card
-      title="Model calls"
+      title={t('admin.llm')}
       action={
-        <div className="flex gap-1" role="group" aria-label="Window">
+        <div className="flex gap-1" role="group" aria-label={t('admin.window')}>
           {LLM_WINDOWS.map((option) => (
             <button
               key={option}
@@ -367,16 +376,16 @@ function LlmCard() {
                 option === days ? 'bg-surface-hover text-text-primary' : 'text-text-muted hover:text-text-primary'
               }`}
             >
-              {option === 1 ? '24 h' : `${option} days`}
+              {option === 1 ? t('admin.last24h') : t('admin.lastDays', { count: option })}
             </button>
           ))}
         </div>
       }
     >
-      {llm.isPending && <Spinner label="Loading model calls…" />}
+      {llm.isPending && <Spinner label={t('admin.llmLoading')} />}
       {llm.error && (
         <ErrorNote
-          message={errorMessage(llm.error, 'Could not load the model calls.')}
+          message={errorMessage(llm.error, t('admin.llmFailed'))}
           onRetry={() => void llm.refetch()}
         />
       )}
@@ -386,24 +395,25 @@ function LlmCard() {
 }
 
 function LlmPanel({ data }: { data: LlmPanelResponse }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4 text-sm">
       <p className="text-text-muted">
         {data.firstCallAt
-          ? `Calls are recorded since ${formatExactTime(data.firstCallAt)} and kept for a limited time.`
-          : 'No model call has been recorded yet. Every call is recorded from the moment it is made.'}
+          ? t('admin.recordedSince', { when: formatExactTime(data.firstCallAt) })
+          : t('admin.noCalls')}
       </p>
       <div className="overflow-x-auto">
         <table className="w-full text-start text-sm">
           <thead className="text-xs text-text-muted">
             <tr>
-              <th className="py-2 pe-3 font-medium">Agent</th>
-              <th className="py-2 pe-3 font-medium">Calls</th>
-              <th className="py-2 pe-3 font-medium">Outcomes</th>
-              <th className="py-2 pe-3 font-medium">Verdicts</th>
-              <th className="py-2 pe-3 font-medium">Latency p50 / p95</th>
-              <th className="py-2 pe-3 font-medium">Tokens in / out</th>
-              <th className="py-2 font-medium">Cost</th>
+              <th className="py-2 pe-3 font-medium">{t('admin.llmColumns.agent')}</th>
+              <th className="py-2 pe-3 font-medium">{t('admin.llmColumns.calls')}</th>
+              <th className="py-2 pe-3 font-medium">{t('admin.llmColumns.outcomes')}</th>
+              <th className="py-2 pe-3 font-medium">{t('admin.llmColumns.verdicts')}</th>
+              <th className="py-2 pe-3 font-medium">{t('admin.llmColumns.latency')}</th>
+              <th className="py-2 pe-3 font-medium">{t('admin.llmColumns.tokens')}</th>
+              <th className="py-2 font-medium">{t('admin.llmColumns.cost')}</th>
             </tr>
           </thead>
           <tbody>
@@ -417,8 +427,7 @@ function LlmPanel({ data }: { data: LlmPanelResponse }) {
       <NarrationHistory data={data} />
       <RecentCalls calls={data.recent} />
       <p className="text-xs text-text-muted">
-        Not measured: time to first token (no call streams its answer) and a semantic-cache hit rate
-        (there is no cache).
+        {t('admin.notMeasured')}
       </p>
     </div>
   );
@@ -427,26 +436,36 @@ function LlmPanel({ data }: { data: LlmPanelResponse }) {
 function AgentRow({ agent }: { agent: LlmAgentSummary }) {
   const outcomes = nonZero(agent.outcomes, OUTCOME_LABEL);
   const verdicts = nonZero(agent.verdicts, VERDICT_LABEL);
+  const { t } = useTranslation();
+  const counted = (rows: { count: number; label: string }[]) =>
+    rows.map((row) => t('admin.countLabel', { count: row.count, label: row.label })).join(t('common.listSeparator')) ||
+    '-';
   return (
     <tr className="border-t border-border-subtle align-top">
       <td className="py-2 pe-3">
         <div className="font-medium">{agent.agent}</div>
         {agent.models.map((model) => (
           <div key={model.model ?? 'none'} className="break-all font-mono text-xs text-text-muted">
-            {model.model ?? 'no model'} ×{count.format(model.calls)}
+            {t('admin.modelCalls', { model: model.model ?? t('admin.noModel'), value: count.format(model.calls) })}
           </div>
         ))}
       </td>
       <td className="py-2 pe-3">{count.format(agent.calls)}</td>
-      <td className="py-2 pe-3">{outcomes.map((o) => `${o.count} ${o.label}`).join(', ') || '-'}</td>
-      <td className="py-2 pe-3">{verdicts.map((v) => `${v.count} ${v.label}`).join(', ') || '-'}</td>
+      <td className="py-2 pe-3">{counted(outcomes)}</td>
+      <td className="py-2 pe-3">{counted(verdicts)}</td>
       <td className="py-2 pe-3 whitespace-nowrap">
         {agent.latency
-          ? `${formatLatency(agent.latency.p50Ms)} / ${formatLatency(agent.latency.p95Ms)}`
+          ? t('admin.latencyPair', {
+              p50: formatLatency(agent.latency.p50Ms),
+              p95: formatLatency(agent.latency.p95Ms),
+            })
           : '-'}
       </td>
       <td className="py-2 pe-3 whitespace-nowrap">
-        {count.format(agent.promptTokens)} / {count.format(agent.completionTokens)}
+        {t('admin.tokensPair', {
+          prompt: count.format(agent.promptTokens),
+          completion: count.format(agent.completionTokens),
+        })}
       </td>
       <td className="py-2 whitespace-nowrap">{agent.calls === 0 ? '-' : agentCost(agent)}</td>
     </tr>
@@ -455,20 +474,24 @@ function AgentRow({ agent }: { agent: LlmAgentSummary }) {
 
 /** Explanations stored against calls recorded, reason by reason, where both records exist. */
 function NarrationReconciliation({ data }: { data: LlmPanelResponse }) {
+  const { t } = useTranslation();
   if (!data.reconciliation) return null;
   const { since, rows } = data.reconciliation;
   return (
     <div>
-      <p className="font-medium">Narration since {formatExactTime(since)}: explanations and the calls behind them</p>
+      <p className="font-medium">{t('admin.narrationSince', { when: formatExactTime(since) })}</p>
       {rows.length === 0 ? (
-        <p className="text-text-muted">Nothing narrated since then.</p>
+        <p className="text-text-muted">{t('admin.nothingNarrated')}</p>
       ) : (
         <ul className="ms-4 list-disc">
           {rows.map((row) => (
             <li key={row.reason} className={row.explanations === row.calls ? '' : 'text-warn'}>
-              {reasonLabel(row.reason)}: {count.format(row.explanations)} stored,{' '}
-              {count.format(row.calls)} {row.calls === 1 ? 'call' : 'calls'}
-              {row.explanations !== row.calls && ' - these should agree'}
+              {t('admin.storedCalls', {
+                reason: reasonLabel(row.reason),
+                stored: count.format(row.explanations),
+                count: row.calls,
+              })}
+              {row.explanations !== row.calls && t('admin.shouldAgree')}
             </li>
           ))}
         </ul>
@@ -480,18 +503,25 @@ function NarrationReconciliation({ data }: { data: LlmPanelResponse }) {
 /** The longer record: why each stored explanation in the window was or was not the model's. */
 function NarrationHistory({ data }: { data: LlmPanelResponse }) {
   const total = data.narrationFallbacks.reduce((sum, row) => sum + row.count, 0);
+  const { t } = useTranslation();
   return (
     <div>
       <p className="font-medium">
-        Explanations stored in the last {data.window.days === 1 ? '24 hours' : `${data.window.days} days`}
+        {data.window.days === 1
+          ? t('admin.storedLast24h')
+          : t('admin.storedLastDays', { count: data.window.days })}
       </p>
       {total === 0 ? (
-        <p className="text-text-muted">None.</p>
+        <p className="text-text-muted">{t('admin.none')}</p>
       ) : (
         <ul className="ms-4 list-disc">
           {data.narrationFallbacks.map((row) => (
             <li key={row.reason}>
-              {reasonLabel(row.reason)}: {count.format(row.count)} of {count.format(total)}
+              {t('admin.fallbackShare', {
+                reason: reasonLabel(row.reason),
+                value: count.format(row.count),
+                total: count.format(total),
+              })}
             </li>
           ))}
         </ul>
@@ -501,30 +531,32 @@ function NarrationHistory({ data }: { data: LlmPanelResponse }) {
 }
 
 function RecentCalls({ calls }: { calls: LlmCallSummary[] }) {
+  const { t } = useTranslation();
   if (calls.length === 0) return null;
   return (
     <div>
-      <p className="font-medium">Latest calls</p>
+      <p className="font-medium">{t('admin.latestCalls')}</p>
       <ul className="divide-y divide-border-subtle">
         {calls.map((call) => (
           <li key={call.id} className="py-2">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <span>
-                {call.agent}: {OUTCOME_LABEL[call.outcome] ?? call.outcome}
-                {call.verdict && `, ${VERDICT_LABEL[call.verdict] ?? call.verdict}`}
+                {t('admin.callOutcome', { agent: call.agent, outcome: OUTCOME_LABEL[call.outcome] ?? call.outcome })}
+                {call.verdict && t('admin.callVerdict', { verdict: VERDICT_LABEL[call.verdict] ?? call.verdict })}
               </span>
               <span className="text-xs text-text-muted" title={formatExactTime(call.startedAt)}>
                 {formatAge(call.startedAt)}
               </span>
             </div>
             <div className="text-xs text-text-muted">
-              <span className="break-all font-mono">{call.model ?? 'no model'}</span>
+              <span className="break-all font-mono">{call.model ?? t('admin.noModel')}</span>
               {call.outcome !== 'no_provider' && call.outcome !== 'budget_exhausted' && (
-                <>
-                  {' '}
-                  · {formatLatency(call.latencyMs)} · {count.format(call.promptTokens)} /{' '}
-                  {count.format(call.completionTokens)} tokens · {callCost(call)}
-                </>
+                t('admin.callDetail', {
+                  latency: formatLatency(call.latencyMs),
+                  prompt: count.format(call.promptTokens),
+                  completion: count.format(call.completionTokens),
+                  cost: callCost(call),
+                })
               )}
             </div>
             {call.error && <div className="break-all text-xs text-loss">{call.error}</div>}
@@ -542,18 +574,19 @@ function RecentCalls({ calls }: { calls: LlmCallSummary[] }) {
  */
 function AuditCard() {
   const audit = useAdminAuditQuery();
+  const { t } = useTranslation();
 
   return (
-    <Card title="Admin actions">
-      {audit.isPending && <Spinner label="Loading admin actions…" />}
+    <Card title={t('admin.audit')}>
+      {audit.isPending && <Spinner label={t('admin.auditLoading')} />}
       {audit.error && (
         <ErrorNote
-          message={errorMessage(audit.error, 'Could not load the admin actions.')}
+          message={errorMessage(audit.error, t('admin.auditFailed'))}
           onRetry={() => void audit.refetch()}
         />
       )}
       {audit.data && audit.data.entries.length === 0 && (
-        <p className="text-sm text-text-muted">No admin action has been taken yet.</p>
+        <p className="text-sm text-text-muted">{t('admin.auditEmpty')}</p>
       )}
       {audit.data && audit.data.entries.length > 0 && (
         <ul className="divide-y divide-border-subtle text-sm">
@@ -567,12 +600,13 @@ function AuditCard() {
 }
 
 function AuditItem({ entry }: { entry: AdminAuditEntry }) {
+  const { t } = useTranslation();
   return (
     <li className="flex flex-wrap items-baseline justify-between gap-2 py-2">
       <span className="font-mono text-xs">{entry.action}</span>
       <span className="text-xs text-text-muted" title={formatExactTime(entry.occurredAt)}>
         {formatAge(entry.occurredAt)}
-        {entry.ipAddress ? ` from ${entry.ipAddress}` : ''}
+        {entry.ipAddress ? t('admin.fromIp', { ip: entry.ipAddress }) : ''}
       </span>
     </li>
   );
@@ -580,9 +614,11 @@ function AuditItem({ entry }: { entry: AdminAuditEntry }) {
 
 /** Seconds a finished run took; a run still going says so rather than showing a number. */
 export function duration(run: Pick<AdminRun, 'startedAt' | 'finishedAt'>): string {
-  if (!run.finishedAt) return 'still running';
+  if (!run.finishedAt) return translate('admin.stillRunning');
   const ms = Date.parse(run.finishedAt) - Date.parse(run.startedAt);
-  if (ms < 1000) return '<1 s';
+  if (ms < 1000) return translate('admin.underASecond');
   const seconds = Math.round(ms / 1000);
-  return seconds < 120 ? `${seconds} s` : `${Math.round(seconds / 60)} min`;
+  return seconds < 120
+    ? translate('admin.seconds', { count: seconds })
+    : translate('admin.minutes', { count: Math.round(seconds / 60) });
 }

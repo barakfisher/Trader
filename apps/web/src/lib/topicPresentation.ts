@@ -10,6 +10,9 @@
 import type { NewsCollectionState, TopicSentimentGap, TopicSentimentResponse } from '@traders/shared';
 import type { TopicResolveResponse } from '@traders/shared/ai';
 
+import { formatNumber } from '../i18n/format.ts';
+import { t } from '../i18n/index.ts';
+
 export type Verdict = TopicResolveResponse['verdict'];
 export type UniverseState = TopicResolveResponse['universe']['state'];
 
@@ -34,7 +37,8 @@ export function fundShare(weight: string): string {
 /** "held by URA 21.9%, NLR 4.0%" - the checkable half of a candidate's reason. */
 export function heldByText(heldBy: { etf: string; weight: string }[]): string | null {
   if (heldBy.length === 0) return null;
-  return `held by ${heldBy.map((h) => `${h.etf} ${fundShare(h.weight)}`).join(', ')}`;
+  const funds = heldBy.map((h) => t('topics.fundShare', { etf: h.etf, share: fundShare(h.weight) }));
+  return t('topics.heldBy', { funds: funds.join(t('common.listSeparator')) });
 }
 
 /**
@@ -56,12 +60,12 @@ export function verdictMessage(resolution: Pick<TopicResolveResponse, 'verdict' 
     case 'weak':
       return {
         tone: 'caution',
-        text: 'These are weak matches: the closest descriptions are only loosely about this topic. Keep only what you recognise, and add what is missing.',
+        text: t('topics.verdicts.weak'),
       };
     case 'none':
       return {
         tone: 'empty',
-        text: 'Nothing in the instrument universe describes itself as being about this topic. You can still add tickers yourself.',
+        text: t('topics.verdicts.none'),
       };
     case 'unavailable':
       return { tone: 'empty', text: universeMessage(resolution.universe.state) };
@@ -71,20 +75,22 @@ export function verdictMessage(resolution: Pick<TopicResolveResponse, 'verdict' 
 function universeMessage(state: UniverseState): string {
   switch (state) {
     case 'not_loaded':
-      return 'No suggestions: this installation has no instrument universe loaded, so the topic was not looked up. You can still add tickers yourself.';
     case 'not_embedded':
-      return 'No suggestions: the instrument universe is loaded but not indexed for the configured embedding model, so the topic was not looked up. You can still add tickers yourself.';
+      return t(`topics.universe.${state}`);
     // Resolution runs in both of these states; `unavailable` never carries them.
     case 'partially_embedded':
     case 'ready':
-      return 'No suggestions are available right now. You can still add tickers yourself.';
+      return t('topics.universe.available');
   }
 }
 
 /** A note when only part of the universe could be searched, or null. */
 export function coverageNote(universe: TopicResolveResponse['universe']): string | null {
   if (universe.state !== 'partially_embedded') return null;
-  return `Only ${universe.embedded.toLocaleString('en-US')} of ${universe.profiles.toLocaleString('en-US')} instruments could be searched, so some matches may be missing.`;
+  return t('topics.partialCoverage', {
+    embedded: formatNumber(universe.embedded),
+    profiles: formatNumber(universe.profiles),
+  });
 }
 
 // --- The topic card: news and tone ------------------------------------------
@@ -98,21 +104,21 @@ export function newsEmptyMessage(
   collection: NewsCollectionState | null | undefined,
   days: number,
   /** What the news is about: a topic's instruments, or one holding. */
-  subject = 'this topic’s instruments',
+  subject: string = t('topics.news.thisTopicsInstruments'),
 ): string {
   // Undefined too: an orchestrator older than this field sends none, and that
   // must not read as a failed collection.
   if (!collection) {
-    return 'News has not been collected yet, so there is nothing to show here.';
+    return t('topics.news.notCollected');
   }
   if (collection.status === 'ok' || collection.status === 'skipped') {
-    return `No news about ${subject} in the last ${days} days.`;
+    return t('topics.news.quiet', { subject, days });
   }
-  const who = collection.failedProviders.length > 0 ? ` (${collection.failedProviders.join(', ')})` : '';
-  return (
-    `No news to show, but that may not mean a quiet week: the last news collection could not ` +
-    `reach its sources${who}, so stories may be missing.`
-  );
+  const who =
+    collection.failedProviders.length > 0
+      ? t('topics.news.failedProviders', { providers: collection.failedProviders.join(t('common.listSeparator')) })
+      : '';
+  return t('topics.news.unreachable', { who });
 }
 
 /**
@@ -130,11 +136,9 @@ export function signedScore(score: string): string {
 }
 
 /** Why there is no tone, in words. A null score is never shown as 0. */
-const GAP_TEXT: Record<TopicSentimentGap, string> = {
-  no_articles: 'No tone yet: there were no articles to read.',
-  not_scored: 'No tone yet: the articles have not been scored.',
-  too_few_polarised: 'Too little to judge: too few articles expressed any tone.',
-};
+function gapText(gap: TopicSentimentGap): string {
+  return t(`topics.tone.gaps.${gap}`);
+}
 
 /**
  * The tone line of a topic card: the score with the counts it rests on, or the
@@ -147,13 +151,19 @@ export function sentimentSummary(sentiment: TopicSentimentResponse): {
   const { counts, days } = sentiment;
   if (sentiment.score === null) {
     const gap = sentiment.gap ?? 'no_articles';
-    return { score: null, text: GAP_TEXT[gap] };
+    return { score: null, text: gapText(gap) };
   }
-  const tones = `${counts.positive} positive, ${counts.negative} negative, ${counts.neutral} neutral`;
+  const tones = t('topics.tone.counts', {
+    positive: counts.positive,
+    negative: counts.negative,
+    neutral: counts.neutral,
+  });
   return {
     score: signedScore(sentiment.score),
-    text: `Headline tone over ${days} days, from ${counts.articles} article${
-      counts.articles === 1 ? '' : 's'
-    } (${tones}). A word count, not a forecast.`,
+    text: t('topics.tone.summary', {
+      days,
+      articles: t('topics.tone.articles', { count: counts.articles }),
+      tones,
+    }),
   };
 }

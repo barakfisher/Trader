@@ -6,6 +6,9 @@
  * window, so "now" is almost never the right answer.
  */
 
+import { formatDate } from '../i18n/format.ts';
+import { t } from '../i18n/index.ts';
+
 const MINUTE = 60;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
@@ -26,10 +29,10 @@ export function ageInSeconds(iso: string, now: Date = new Date()): number {
 export function formatAge(iso: string | null | undefined, now: Date = new Date()): string {
   if (!iso) return '—';
   const seconds = ageInSeconds(iso, now);
-  if (seconds < MINUTE) return 'just now';
-  if (seconds < HOUR) return `${Math.floor(seconds / MINUTE)}m ago`;
-  if (seconds < DAY) return `${Math.floor(seconds / HOUR)}h ago`;
-  return `${Math.floor(seconds / DAY)}d ago`;
+  if (seconds < MINUTE) return t('age.justNow');
+  if (seconds < HOUR) return t('age.ago', { duration: t('duration.minutes', { count: Math.floor(seconds / MINUTE) }) });
+  if (seconds < DAY) return t('age.ago', { duration: t('duration.hours', { count: Math.floor(seconds / HOUR) }) });
+  return t('age.ago', { duration: t('duration.days', { count: Math.floor(seconds / DAY) }) });
 }
 
 /**
@@ -65,7 +68,7 @@ function isValidTimeZone(zone: string): boolean {
 }
 
 function formatIn(parsed: Date, options: Intl.DateTimeFormatOptions): string {
-  return new Intl.DateTimeFormat('en-GB', { timeZone: getDisplayTimeZone(), ...options }).format(parsed);
+  return formatDate(parsed, { timeZone: getDisplayTimeZone(), ...options });
 }
 
 /**
@@ -74,9 +77,9 @@ function formatIn(parsed: Date, options: Intl.DateTimeFormatOptions): string {
  * time without its zone is a guess the reader has to make.
  */
 export function formatExactTime(iso: string | null | undefined): string {
-  if (!iso) return 'unknown';
+  if (!iso) return t('common.unknown');
   const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return 'unknown';
+  if (Number.isNaN(parsed.getTime())) return t('common.unknown');
   return formatIn(parsed, {
     day: 'numeric',
     month: 'short',
@@ -92,6 +95,6 @@ export function formatExactTime(iso: string | null | undefined): string {
 /** A clock time for "saved 13:18" and "fetched 13:18": the same zone, no date. */
 export function formatClockTime(when: Date | string | number): string {
   const parsed = new Date(when);
-  if (Number.isNaN(parsed.getTime())) return 'unknown';
+  if (Number.isNaN(parsed.getTime())) return t('common.unknown');
   return formatIn(parsed, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 }

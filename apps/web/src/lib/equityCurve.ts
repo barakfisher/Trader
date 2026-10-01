@@ -16,6 +16,8 @@
 
 import type { PortfolioSnapshot } from '@traders/shared';
 
+import { t } from '../i18n/index.ts';
+
 export interface CurvePoint {
   /** Calendar date, YYYY-MM-DD, as the snapshot states it. */
   date: string;
@@ -69,17 +71,16 @@ export function curvePoints(snapshots: PortfolioSnapshot[]): CurvePoint[] {
 /** What the chart's caption says about its own coverage. */
 export function coverageText(points: CurvePoint[]): string {
   const measured = points.filter((point) => point.totalMinor !== null);
-  if (measured.length === 0) return 'No daily snapshot yet. The first is taken by the daily close run.';
+  if (measured.length === 0) return t('equity.coverage.none');
   const days = points.length;
   const degraded = measured.filter((point) => point.degraded).length;
   const parts = [
-    `${measured.length} daily snapshot${measured.length === 1 ? '' : 's'} over ${days} day${days === 1 ? '' : 's'}`,
+    t('equity.coverage.span', {
+      snapshots: t('equity.coverage.snapshots', { count: measured.length }),
+      days: t('equity.coverage.days', { count: days }),
+    }),
   ];
-  if (measured.length < days) parts.push('days without one are gaps, not estimates');
-  if (degraded > 0) {
-    parts.push(
-      `${degraded} ${degraded === 1 ? 'is' : 'are'} marked: some holdings were unpriced or stale, so the total is understated`,
-    );
-  }
-  return `${parts.join('; ')}.`;
+  if (measured.length < days) parts.push(t('equity.coverage.gaps'));
+  if (degraded > 0) parts.push(t('equity.coverage.marked', { count: degraded }));
+  return t('equity.coverage.sentence', { clauses: parts.join(t('common.clauseSeparator')) });
 }

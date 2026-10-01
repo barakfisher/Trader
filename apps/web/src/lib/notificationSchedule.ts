@@ -11,6 +11,8 @@
  * what these sentences say is testable without freezing time.
  */
 
+import { t } from '../i18n/index.ts';
+
 const MINUTES_PER_HOUR = 60;
 const MS_PER_MINUTE = 60 * 1000;
 
@@ -43,8 +45,12 @@ export function isMuted(mutedUntil: string | null, now: Date = new Date()): bool
 export function formatDuration(minutes: number): string {
   const hours = Math.floor(minutes / MINUTES_PER_HOUR);
   const rest = minutes % MINUTES_PER_HOUR;
-  if (hours === 0) return `${rest}m`;
-  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+  if (hours === 0) return t('duration.minutes', { count: rest });
+  if (rest === 0) return t('duration.hours', { count: hours });
+  return t('duration.hoursAndMinutes', {
+    hours: t('duration.hours', { count: hours }),
+    minutes: t('duration.minutes', { count: rest }),
+  });
 }
 
 export function describeMute(mutedUntil: string | null, now: Date = new Date()): string {
@@ -52,8 +58,8 @@ export function describeMute(mutedUntil: string | null, now: Date = new Date()):
   // A stored mute whose end has passed reads as live rather than as a mute of
   // zero length: the user is about to be notified, and saying otherwise would
   // be the one misleading direction for this sentence to fail in.
-  if (remaining === 0) return 'Notifications are live.';
-  return `Muted for another ${formatDuration(remaining)}.`;
+  if (remaining === 0) return t('mute.live');
+  return t('mute.mutedFor', { duration: formatDuration(remaining) });
 }
 
 /**
@@ -64,6 +70,6 @@ export function describeMute(mutedUntil: string | null, now: Date = new Date()):
  * mistake. So it is named rather than merely rendered.
  */
 export function describeQuietHours(start: string | null, end: string | null): string {
-  if (start === null || end === null) return 'Off — a push may arrive at any hour.';
-  return end < start ? `${start} to ${end} the next morning.` : `${start} to ${end}.`;
+  if (start === null || end === null) return t('quietHours.off');
+  return end < start ? t('quietHours.overnight', { start, end }) : t('quietHours.window', { start, end });
 }

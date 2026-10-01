@@ -6,6 +6,7 @@ import { SERVER_ENGLISH } from '../lib/textDirection.ts';
 import { ConceptText } from './ConceptText.tsx';
 import { conceptLabel } from '../lib/observationPresentation.ts';
 import { errorMessage } from '../api/client.ts';
+import { useTranslation } from '../i18n/index.ts';
 import { useConceptQuery } from '../queries/concepts.ts';
 import { useStore } from '../stores/context.tsx';
 import { ErrorNote, Spinner } from './ui.tsx';
@@ -23,6 +24,7 @@ import { ErrorNote, Spinner } from './ui.tsx';
  */
 export const ConceptDialog = observer(function ConceptDialog() {
   const { concepts } = useStore();
+  const { t } = useTranslation();
   const closeRef = useRef<HTMLButtonElement>(null);
   const slug = concepts.openSlug;
   const concept = useConceptQuery(slug);
@@ -70,13 +72,13 @@ export const ConceptDialog = observer(function ConceptDialog() {
             <h2 id="concept-dialog-title" className="text-base font-medium text-text-primary">
               {title}
             </h2>
-            <p className="mt-0.5 text-[11px] uppercase tracking-wide text-text-muted">Concept</p>
+            <p className="mt-0.5 text-[11px] uppercase tracking-wide text-text-muted">{t('concept.kind')}</p>
           </div>
           <button
             ref={closeRef}
             type="button"
             onClick={concepts.close}
-            aria-label="Close explanation"
+            aria-label={t('concept.close')}
             className="rounded p-1 text-text-muted hover:bg-surface-hover hover:text-text-primary"
           >
             <X className="h-4 w-4" />
@@ -84,18 +86,17 @@ export const ConceptDialog = observer(function ConceptDialog() {
         </div>
 
         <div className="px-5 py-4">
-          {concept.isPending && <Spinner label="Loading the explanation…" />}
+          {concept.isPending && <Spinner label={t('concept.loading')} />}
 
           {concept.data === null && (
             <p className="text-sm text-text-muted">
-              No explanation is available for “{conceptLabel(slug)}” yet. The concept corpus may not
-              have been ingested in this environment.
+              {t('concept.missing', { concept: conceptLabel(slug) })}
             </p>
           )}
 
           {concept.error && (
             <ErrorNote
-              message={errorMessage(concept.error, 'The explanation could not be loaded.')}
+              message={errorMessage(concept.error, t('concept.loadFailed'))}
               onRetry={() => void concept.refetch()}
             />
           )}
@@ -114,7 +115,7 @@ export const ConceptDialog = observer(function ConceptDialog() {
               ))}
 
               <p className="border-t border-border pt-3 text-[11px] text-text-muted">
-                Source: {document_.source} · Licence: {document_.license}
+                {t('concept.source', { source: document_.source, license: document_.license })}
                 {document_.uri !== null && (
                   <>
                     {' · '}
@@ -124,7 +125,7 @@ export const ConceptDialog = observer(function ConceptDialog() {
                       rel="noreferrer noopener"
                       className="text-accent hover:underline"
                     >
-                      original
+                      {t('concept.original')}
                     </a>
                   </>
                 )}

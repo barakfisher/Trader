@@ -3,9 +3,11 @@ import { Link, useParams } from '@tanstack/react-router';
 import { ArrowLeft, Clock } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { formatMoney, formatPercent, type HoldingView } from '@traders/shared';
+import type { HoldingView } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
+import { formatMoney, formatPercent, formatShare } from '../i18n/format.ts';
+import { useTranslation } from '../i18n/index.ts';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { NewsList } from '../components/NewsList.tsx';
 import { ObservationRow } from '../components/ObservationsFeed.tsx';
@@ -32,6 +34,7 @@ import { useTargetsQuery } from '../queries/targets.ts';
 export const HoldingPage = observer(function HoldingPage() {
   const { holdingId } = useParams({ from: '/holdings/$holdingId' });
   const portfolio = usePortfolioQuery();
+  const { t } = useTranslation();
   const holding = portfolio.data?.holdings.find((row) => row.id === holdingId) ?? null;
 
   return (
@@ -44,15 +47,15 @@ export const HoldingPage = observer(function HoldingPage() {
                 {holding.instrument.symbol}
                 {holding.quote?.stale && (
                   <span
-                    title={`Last known price, observed ${formatExactTime(holding.quote.asOf)}. No provider could refresh it.`}
+                    title={t('holdings.staleTitle', { when: formatExactTime(holding.quote.asOf) })}
                     className="flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-[10px] font-normal text-warn"
                   >
-                    <Clock className="size-3" aria-hidden /> stale
+                    <Clock className="size-3" aria-hidden /> {t('holdings.stale')}
                   </span>
                 )}
                 {holding.valueMinor === null && (
                   <span className="rounded bg-loss/15 px-1.5 py-0.5 text-[10px] font-normal text-loss">
-                    unpriced
+                    {t('holdings.unpriced')}
                   </span>
                 )}
               </h1>
@@ -63,32 +66,32 @@ export const HoldingPage = observer(function HoldingPage() {
               </p>
             </>
           ) : (
-            <h1 className="text-base font-semibold">Holding</h1>
+            <h1 className="text-base font-semibold">{t('holding.title')}</h1>
           )}
         </div>
         <Link to="/" className={buttonClass('secondary')}>
           <span className="flex items-center gap-1">
             <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
-            Back to portfolio
+            {t('common.backToPortfolio')}
           </span>
         </Link>
       </header>
 
-      {portfolio.isPending && <Spinner label="Loading the portfolio…" />}
+      {portfolio.isPending && <Spinner label={t('holding.loading')} />}
       {portfolio.error && !portfolio.data && (
         <ErrorNote
-          message={errorMessage(portfolio.error, 'Could not load the portfolio.')}
+          message={errorMessage(portfolio.error, t('holding.loadFailed'))}
           onRetry={() => void portfolio.refetch()}
         />
       )}
 
       {portfolio.data && !holding && (
         <EmptyState
-          title="No such holding"
-          body="This address does not match a holding in your portfolio. It may have been removed, or the link may be from another account."
+          title={t('holding.notFoundTitle')}
+          body={t('holding.notFoundBody')}
           action={
             <Link to="/" className={buttonClass('primary')}>
-              Back to portfolio
+              {t('common.backToPortfolio')}
             </Link>
           }
         />
@@ -115,66 +118,75 @@ export const HoldingPage = observer(function HoldingPage() {
 /** The dashboard row's figures, laid out to be read rather than scanned. */
 function PositionCard({ holding, baseCurrency }: { holding: HoldingView; baseCurrency: string }) {
   const targets = useTargetsQuery();
+  const { t } = useTranslation();
   const target = targets.data?.find((row) => row.symbol === holding.instrument.symbol) ?? null;
 
   return (
-    <Card title="Position">
+    <Card title={t('holding.position')}>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-        <Figure label="Quantity">{trimQuantity(holding.quantity)}</Figure>
+        <Figure label={t('holding.quantity')}>{trimQuantity(holding.quantity)}</Figure>
         <Figure
-          label="Price"
+          label={t('holding.price')}
           note={
             holding.quote
-              ? `${formatAge(holding.quote.asOf)} via ${holding.quote.source}${
-                  holding.quote.delaySeconds > 0
-                    ? `, ${Math.round(holding.quote.delaySeconds / 60)}m delay`
-                    : ''
-                }`
-              : 'no provider could price it'
+              ? holding.quote.delaySeconds > 0
+                ? t('holding.priceViaDelayed', {
+                    age: formatAge(holding.quote.asOf),
+                    source: holding.quote.source,
+                    minutes: Math.round(holding.quote.delaySeconds / 60),
+                  })
+                : t('holding.priceVia', { age: formatAge(holding.quote.asOf), source: holding.quote.source })
+              : t('holding.unpricedNote')
           }
         >
           {holding.quote ? formatMoney(holding.quote.priceMinor, holding.quote.currency) : '—'}
         </Figure>
-        <Figure label="Day">
+        <Figure label={t('holding.day')}>
           <Delta value={holding.quote?.dayChangePct ?? null}>
             {formatPercent(holding.quote?.dayChangePct ?? null)}
           </Delta>
         </Figure>
-        <Figure label="Value">{formatMoney(holding.valueMinor, baseCurrency)}</Figure>
+        <Figure label={t('holding.value')}>{formatMoney(holding.valueMinor, baseCurrency)}</Figure>
         <Figure
-          label="Cost"
+          label={t('holding.cost')}
           note={
             holding.costBasisMinor === null
-              ? 'no cost recorded'
-              : `${formatMoney(holding.costBasisMinor, holding.costCurrency)} per unit`
+              ? t('holding.noCost')
+              : t('holding.perUnit', { cost: formatMoney(holding.costBasisMinor, holding.costCurrency) })
           }
         >
           {formatMoney(holding.costMinor, baseCurrency)}
         </Figure>
-        <Figure label="P&L">
+        <Figure label={t('holding.pnl')}>
           <Delta value={holding.pnlMinor}>
             {holding.pnlMinor === null
               ? '—'
-              : `${formatMoney(holding.pnlMinor, baseCurrency)} (${formatPercent(holding.pnlPct)})`}
+              : t('holdings.pnl', {
+                  money: formatMoney(holding.pnlMinor, baseCurrency),
+                  percent: formatPercent(holding.pnlPct),
+                })}
           </Delta>
         </Figure>
-        <Figure label="Weight">
-          {holding.weightPct === null ? '—' : `${holding.weightPct.toFixed(1)}%`}
+        <Figure label={t('holding.weight')}>
+          {formatShare(holding.weightPct)}
         </Figure>
-        <Figure label="Target">
+        <Figure label={t('holding.target')}>
           {target ? (
-            `${unitsToPercent(weightToUnits(target.weight))}%`
+            t('holding.targetValue', { value: unitsToPercent(weightToUnits(target.weight)) })
           ) : (
             <Link to="/targets" className="text-sm text-text-muted underline hover:text-text-primary">
-              none set
+              {t('holding.noTarget')}
             </Link>
           )}
         </Figure>
       </dl>
       {holding.fxRate && holding.instrument.currency !== baseCurrency && (
-        <p className="mt-3 text-xs text-text-muted" title={`Exact rate: ${holding.fxRate}`}>
-          Value, cost and P&amp;L in {baseCurrency} at {shortRate(holding.fxRate)} {baseCurrency} per{' '}
-          {holding.instrument.currency}.
+        <p className="mt-3 text-xs text-text-muted" title={t('holding.fxRateTitle', { rate: holding.fxRate })}>
+          {t('holding.fx', {
+            base: baseCurrency,
+            rate: shortRate(holding.fxRate),
+            currency: holding.instrument.currency,
+          })}
         </p>
       )}
     </Card>
@@ -194,20 +206,20 @@ function Figure({ label, note, children }: { label: string; note?: string; child
 /** What the analysis recorded about this instrument: its own rules and allocation drift. */
 function FindingsCard({ symbol, baseCurrency }: { symbol: string; baseCurrency: string }) {
   const findings = useSymbolObservationsQuery(symbol);
+  const { t } = useTranslation();
   const items = findings.data ?? [];
   return (
-    <Card title="Findings">
-      {findings.isPending && <Spinner label="Loading findings…" />}
+    <Card title={t('holding.findings')}>
+      {findings.isPending && <Spinner label={t('holding.findingsLoading')} />}
       {findings.error && (
         <ErrorNote
-          message={errorMessage(findings.error, `Could not load the findings about ${symbol}.`)}
+          message={errorMessage(findings.error, t('holding.findingsFailed', { symbol }))}
           onRetry={() => void findings.refetch()}
         />
       )}
       {findings.status === 'success' && items.length === 0 && (
         <p className="text-sm text-text-muted">
-          The analysis has recorded no price move, unusual move, drawdown or allocation drift about{' '}
-          {symbol}. That is the ordinary outcome, not a missing result.
+          {t('holding.noFindings', { symbol })}
         </p>
       )}
       {items.length > 0 && (
@@ -225,29 +237,30 @@ function FindingsCard({ symbol, baseCurrency }: { symbol: string; baseCurrency: 
 
 function NewsCard({ holdingId, symbol }: { holdingId: string; symbol: string }) {
   const query = useHoldingNewsQuery(holdingId, true);
+  const { t } = useTranslation();
   const news = query.data;
   return (
     <Card
-      title="News this week"
+      title={t('holding.news')}
       action={
         news && news.total > news.articles.length ? (
           <span className="text-xs text-text-muted">
-            newest {news.articles.length} of {news.total}
+            {t('holding.newest', { shown: news.articles.length, total: news.total })}
           </span>
         ) : null
       }
     >
-      {query.isPending && <Spinner label="Loading news…" />}
+      {query.isPending && <Spinner label={t('holding.newsLoading')} />}
       {query.error && (
         <ErrorNote
-          message={errorMessage(query.error, `Could not load the news about ${symbol}.`)}
+          message={errorMessage(query.error, t('holding.newsFailed', { symbol }))}
           onRetry={() => void query.refetch()}
         />
       )}
       {news && news.articles.length === 0 && (
         <p className="text-sm text-text-muted">
           {newsEmptyMessage(news.collection, news.days, symbol)}
-          {news.collection && ` Last collection ${formatAge(news.collection.lastRunAt)}.`}
+          {news.collection && t('holding.lastCollection', { age: formatAge(news.collection.lastRunAt) })}
         </p>
       )}
       {news && news.articles.length > 0 && <NewsList articles={news.articles} showSymbols={false} />}

@@ -9,8 +9,9 @@ import { ConceptText } from '../components/ConceptText.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { EvidenceDrawer } from '../components/EvidenceDrawer.tsx';
 import { Button, Card, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
+import { useTranslation } from '../i18n/index.ts';
 import {
-  COMPUTABLE_QUESTIONS,
+  computableQuestions,
   matchingNote,
   outcomeOf,
   similarityText,
@@ -24,7 +25,12 @@ import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { MAX_QUESTION_LENGTH, type AskEntry } from '../stores/AskStore.ts';
 import { useStore } from '../stores/context.tsx';
 
-/** Questions to start from: one of each kind the page can answer. Filled in, never sent. */
+/**
+ * Questions to start from: one of each kind the page can answer. Filled in,
+ * never sent. Deliberately not translated: they become the question itself,
+ * and the service that reads it - its intent rules and its corpus - is English
+ * (CLAUDE.md guideline 1), so they are marked as English text.
+ */
 const EXAMPLES = ['What is a drawdown?', 'What is my largest position?', 'How far am I from my targets?'];
 
 /**
@@ -40,6 +46,7 @@ const EXAMPLES = ['What is a drawdown?', 'What is my largest position?', 'How fa
  */
 export const AskPage = observer(function AskPage() {
   const { ask } = useStore();
+  const { t } = useTranslation();
   const tooLong = ask.draft.length > MAX_QUESTION_LENGTH;
 
   const submit = (event: FormEvent) => {
@@ -52,12 +59,12 @@ export const AskPage = observer(function AskPage() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <MessageCircleQuestion className="size-5 text-accent" aria-hidden />
-          <h1 className="text-base font-semibold">Ask</h1>
+          <h1 className="text-base font-semibold">{t('ask.title')}</h1>
         </div>
         <Link to="/" className={buttonClass('secondary')}>
           <span className="flex items-center gap-1">
             <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
-            Back to portfolio
+            {t('common.backToPortfolio')}
           </span>
         </Link>
       </header>
@@ -65,8 +72,7 @@ export const AskPage = observer(function AskPage() {
       <Card>
         <form onSubmit={submit} className="space-y-3">
           <label htmlFor="ask-question" className="block text-sm text-text-muted">
-            Ask what a term means, or ask about your holdings. Answers come from this app&rsquo;s
-            reference notes and from arithmetic over your portfolio - never advice.
+            {t('ask.intro')}
           </label>
           <textarea
             id="ask-question"
@@ -80,7 +86,8 @@ export const AskPage = observer(function AskPage() {
               }
             }}
             rows={2}
-            placeholder="What is a drawdown?"
+            placeholder={EXAMPLES[0]}
+            lang="en"
             className="w-full resize-y rounded-lg border border-border-subtle bg-surface px-3 py-2 text-sm"
           />
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -88,6 +95,7 @@ export const AskPage = observer(function AskPage() {
               {EXAMPLES.map((example) => (
                 <button
                   key={example}
+                  lang="en"
                   type="button"
                   onClick={() => ask.setDraft(example)}
                   className="rounded-full bg-surface-hover px-2.5 py-1 text-xs text-text-muted hover:text-text-primary"
@@ -99,11 +107,11 @@ export const AskPage = observer(function AskPage() {
             <div className="flex items-center gap-3">
               {tooLong && (
                 <span className="text-xs text-loss">
-                  {ask.draft.length} of {MAX_QUESTION_LENGTH} characters
+                  {t('ask.tooLong', { length: ask.draft.length, max: MAX_QUESTION_LENGTH })}
                 </span>
               )}
               <Button type="submit" disabled={ask.pending !== null || ask.draft.trim() === '' || tooLong}>
-                {ask.pending ? 'Answering…' : 'Ask'}
+                {ask.pending ? t('ask.answering') : t('ask.submit')}
               </Button>
             </div>
           </div>
@@ -152,6 +160,7 @@ const Reply = observer(function Reply({
   response: AskResponse;
   entryId: number;
 }) {
+  const { t } = useTranslation();
   const outcome = outcomeOf(response);
   const baseCurrency = baseCurrencyOf(usePortfolioQuery().data);
 
@@ -162,18 +171,17 @@ const Reply = observer(function Reply({
         <p {...SERVER_ENGLISH} className="text-sm text-text-muted">{response.text}</p>
         {outcome.reason === 'not_in_corpus' && similarityText(response.best_similarity) && (
           <p className="text-xs text-text-muted">
-            The closest passage scored {similarityText(response.best_similarity)} for relevance,
-            which is below what counts as covering the question.
+            {t('ask.closestBelow', { score: similarityText(response.best_similarity) })}
           </p>
         )}
         {outcome.reason === 'no_holdings' && (
           <Link to="/" className={buttonClass('secondary')}>
-            Add or import holdings
+            {t('ask.addHoldings')}
           </Link>
         )}
         {outcome.reason === 'not_computable' && (
           <p className="text-xs text-text-muted">
-            What I can compute: {COMPUTABLE_QUESTIONS.join('; ')}.
+            {t('ask.canCompute', { questions: computableQuestions().join(t('common.clauseSeparator')) })}
           </p>
         )}
         <MatchingNote response={response} />
@@ -187,10 +195,9 @@ const Reply = observer(function Reply({
         // Said by the page as well as by the text's own opening line: a reader
         // skimming for the answer must not miss that it may not be one.
         <p className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">
-          Weak match: the reference notes may not cover this question
-          {similarityText(response.best_similarity) &&
-            ` (closest passage scored ${similarityText(response.best_similarity)})`}
-          .
+          {similarityText(response.best_similarity)
+            ? t('ask.weakMatchScored', { score: similarityText(response.best_similarity) })
+            : t('ask.weakMatch')}
         </p>
       )}
       <p {...SERVER_ENGLISH} className="whitespace-pre-line text-sm text-text-primary">{response.text}</p>
@@ -217,10 +224,11 @@ function MatchingNote({ response }: { response: AskResponse }) {
 /** The terms the passages explain, each opening its full note. */
 const ConceptChips = observer(function ConceptChips({ slugs }: { slugs: string[] }) {
   const { concepts } = useStore();
+  const { t } = useTranslation();
   if (slugs.length === 0) return null;
   return (
     <p className="flex flex-wrap items-center gap-1 text-[11px] text-text-muted">
-      <span className="uppercase tracking-wide">Concepts</span>
+      <span className="uppercase tracking-wide">{t('ask.concepts')}</span>
       {slugs.map((slug) => (
         <button
           key={slug}
@@ -237,11 +245,12 @@ const ConceptChips = observer(function ConceptChips({ slugs }: { slugs: string[]
 
 /** The passages, verbatim. The first is open; the rest are one click away. */
 function Citations({ citations }: { citations: AskCitation[] }) {
+  const { t } = useTranslation();
   if (citations.length === 0) return null;
   return (
     <div className="space-y-2">
       <p className="text-[11px] uppercase tracking-wide text-text-muted">
-        Passages ({citations.length})
+        {t('ask.passages', { count: citations.length })}
       </p>
       {citations.map((citation, index) => (
         <details
@@ -251,9 +260,13 @@ function Citations({ citations }: { citations: AskCitation[] }) {
         >
           <summary {...SERVER_ENGLISH} className="cursor-pointer text-xs text-text-primary">
             {citation.title}
-            {citation.heading && <span className="text-text-muted"> - {citation.heading}</span>}
+            {citation.heading && (
+              <span className="text-text-muted">{t('ask.heading', { heading: citation.heading })}</span>
+            )}
             {similarityText(citation.similarity) && (
-              <span className="text-text-muted"> · relevance {similarityText(citation.similarity)}</span>
+              <span className="text-text-muted">
+                {t('ask.relevance', { score: similarityText(citation.similarity) })}
+              </span>
             )}
           </summary>
           {/* Verbatim: the corpus's own words, with its own emphasis. */}

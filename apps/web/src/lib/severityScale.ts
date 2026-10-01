@@ -17,6 +17,9 @@
 
 import type { ObservationSeverity } from '@traders/shared';
 
+import { formatShare } from '../i18n/format.ts';
+import { t } from '../i18n/index.ts';
+
 export interface SeverityBand {
   /** The rule, in the words the feed uses for it. */
   rule: string;
@@ -27,35 +30,43 @@ export interface SeverityBand {
   high: string;
 }
 
+/**
+ * The words are the catalogue's (`kinds`, `severity.measures`) and are read when
+ * a band is read, so a change of language reaches a page that is already open.
+ */
+function band(
+  kind: 'price_move' | 'sigma_move' | 'drawdown' | 'allocation_drift',
+  levels: [number, number, number],
+  unit: (value: number) => string,
+): SeverityBand {
+  return {
+    get rule() {
+      return t(`kinds.${kind}`);
+    },
+    get measure() {
+      return t(`severity.measures.${kind}`);
+    },
+    get info() {
+      return unit(levels[0]);
+    },
+    get notable() {
+      return unit(levels[1]);
+    },
+    get high() {
+      return unit(levels[2]);
+    },
+  };
+}
+
+const percent = (value: number) => formatShare(value, 0);
+const sigma = (value: number) => t('units.sigma', { value });
+const points = (value: number) => t('units.percentagePoints', { value });
+
 export const SEVERITY_BANDS: readonly SeverityBand[] = [
-  {
-    rule: 'Price move',
-    measure: 'one day, in either direction',
-    info: '3%',
-    notable: '5%',
-    high: '8%',
-  },
-  {
-    rule: 'Unusual move',
-    measure: 'against the holding’s own recent volatility',
-    info: '2σ',
-    notable: '3σ',
-    high: '4σ',
-  },
-  {
-    rule: 'Drawdown',
-    measure: 'below a 30-day high',
-    info: '10%',
-    notable: '15%',
-    high: '25%',
-  },
-  {
-    rule: 'Allocation drift',
-    measure: 'away from your target weight',
-    info: '5pp',
-    notable: '10pp',
-    high: '15pp',
-  },
+  band('price_move', [3, 5, 8], percent),
+  band('sigma_move', [2, 3, 4], sigma),
+  band('drawdown', [10, 15, 25], percent),
+  band('allocation_drift', [5, 10, 15], points),
 ];
 
 /**
@@ -63,19 +74,16 @@ export const SEVERITY_BANDS: readonly SeverityBand[] = [
  * rather than the definition: the question a user is answering here is "how
  * often do I want to hear from this?", not "what does notable mean?".
  */
-const FLOOR_DESCRIPTIONS: Record<ObservationSeverity, string> = {
-  info: 'Everything the engine finds, including the smallest moves it reports.',
-  notable: 'Middle-of-the-ladder findings and above. Ordinary days stay quiet.',
-  high: 'Only the largest moves on the ladder. The fewest interruptions.',
-};
-
 export function describeSeverityFloor(severity: ObservationSeverity): string {
-  return FLOOR_DESCRIPTIONS[severity];
+  return t(`severity.floors.${severity}`);
 }
 
 /** The ladder in the order the engine ranks it, lowest floor first. */
-export const SEVERITY_CHOICES: readonly { value: ObservationSeverity; label: string }[] = [
-  { value: 'info', label: 'Info and above' },
-  { value: 'notable', label: 'Notable and above' },
-  { value: 'high', label: 'High only' },
-];
+export const SEVERITY_CHOICES: readonly { value: ObservationSeverity; label: string }[] = (
+  ['info', 'notable', 'high'] as const
+).map((value) => ({
+  value,
+  get label() {
+    return t(`severity.choices.${value}`);
+  },
+}));

@@ -10,38 +10,25 @@ import type {
   LlmCallVerdict,
 } from '@traders/shared';
 
+import { formatFixed, formatNumber } from '../i18n/format.ts';
+import { i18n, t, translatedRecord } from '../i18n/index.ts';
+
 /** The windows the card offers; the server accepts any whole number up to its retention. */
 export const LLM_WINDOWS = [1, 7, 30] as const;
 
-export const OUTCOME_LABEL: Record<LlmCallOutcome, string> = {
-  ok: 'answered',
-  provider_error: 'provider error',
-  budget_exhausted: 'daily budget spent',
-  no_provider: 'no model configured',
-};
+export const OUTCOME_LABEL: Record<LlmCallOutcome, string> = translatedRecord(
+  ['ok', 'provider_error', 'budget_exhausted', 'no_provider'],
+  (outcome) => t(`llm.outcomes.${outcome}`),
+);
 
-export const VERDICT_LABEL: Record<LlmCallVerdict, string> = {
-  accepted: 'accepted',
-  malformed: 'malformed',
-  unsourced_figures: 'unsourced figures',
-  empty_completion: 'empty',
-  degenerate_completion: 'looping',
-  not_judged: 'no verdict given',
-};
+export const VERDICT_LABEL: Record<LlmCallVerdict, string> = translatedRecord(
+  ['accepted', 'malformed', 'unsourced_figures', 'empty_completion', 'degenerate_completion', 'not_judged'],
+  (verdict) => t(`llm.verdicts.${verdict}`),
+);
 
-/** An `observations.fallback_reason`, as an operator would say it. */
-const REASON_LABEL: Record<string, string> = {
-  none: 'written by the model',
-  unsourced_figures: 'refused: figures not in the evidence',
-  malformed: 'refused: unusable reply',
-  provider_error: 'provider error',
-  budget_exhausted: 'daily budget spent',
-  no_provider: 'no model configured',
-  not_judged: 'no verdict given',
-};
-
+/** An `observations.fallback_reason`, as an operator would say it; an unknown one as it is. */
 export function reasonLabel(reason: string): string {
-  return REASON_LABEL[reason] ?? reason;
+  return i18n.exists(`llm.reasons.${reason}`) ? t(`llm.reasons.${reason as 'none'}`) : reason;
 }
 
 /** The non-zero entries of a count map, largest first, labelled. */
@@ -64,12 +51,15 @@ const TEN_THOUSANDTHS_PER_DOLLAR = 10_000;
  * here, with integer arithmetic (guideline 3).
  */
 export function formatMicroUsd(micro: number): string {
-  if (micro === 0) return '$0';
+  if (micro === 0) return usd(0, 0, 0);
   const units = Math.round(micro / MICRO_PER_TEN_THOUSANDTH);
-  if (units === 0) return '<$0.0001';
-  const dollars = Math.floor(units / TEN_THOUSANDTHS_PER_DOLLAR);
-  const fraction = String(units % TEN_THOUSANDTHS_PER_DOLLAR).padStart(4, '0').replace(/0{1,2}$/, '');
-  return `$${dollars.toLocaleString('en-US')}.${fraction}`;
+  if (units === 0) return t('llm.belowSmallest', { amount: usd(1 / TEN_THOUSANDTHS_PER_DOLLAR, 4, 4) });
+  // Two to four places: the rounding happened above, in integers; this only prints it.
+  return usd(units / TEN_THOUSANDTHS_PER_DOLLAR, 2, 4);
+}
+
+function usd(dollars: number, minimumFractionDigits: number, maximumFractionDigits: number): string {
+  return formatNumber(dollars, { style: 'currency', currency: 'USD', minimumFractionDigits, maximumFractionDigits });
 }
 
 /**
@@ -79,17 +69,19 @@ export function formatMicroUsd(micro: number): string {
 export function agentCost(agent: Pick<LlmAgentSummary, 'costMicroUsd' | 'models'>): string {
   const reached = agent.models.filter((model) => model.model !== null);
   if (agent.costMicroUsd === 0 && reached.length > 0 && reached.every((model) => model.free)) {
-    return 'free route';
+    return t('llm.freeRoute');
   }
   return formatMicroUsd(agent.costMicroUsd);
 }
 
 /** One call's cost; a free route's zero is its price, so it says so. */
 export function callCost(call: Pick<LlmCallSummary, 'costMicroUsd' | 'model'>): string {
-  if (call.costMicroUsd === 0 && call.model?.endsWith(':free')) return 'free';
+  if (call.costMicroUsd === 0 && call.model?.endsWith(':free')) return t('llm.free');
   return formatMicroUsd(call.costMicroUsd);
 }
 
 export function formatLatency(ms: number): string {
-  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
+  return ms < 1000
+    ? t('llm.milliseconds', { value: formatNumber(ms) })
+    : t('llm.seconds', { value: formatFixed(ms / 1000, 1) });
 }

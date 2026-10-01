@@ -10,9 +10,11 @@ import {
   YAxis,
 } from 'recharts';
 
-import { formatMoney, formatPercent, minorToNumber, type DailyClose } from '@traders/shared';
+import { minorToNumber, type DailyClose } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
+import { formatCompactMoney, formatDate, formatMoney, formatPercent } from '../i18n/format.ts';
+import { Trans, useTranslation } from '../i18n/index.ts';
 import {
   RANGES,
   chartPoints,
@@ -40,7 +42,8 @@ import { Card, Delta, ErrorNote, Spinner } from './ui.tsx';
 const PRICE_COLOUR = '#6d8bff';
 const COST_COLOUR = '#8f9b2f';
 
-const tickDay = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const tickDay = (day: string) =>
+  formatDate(new Date(`${day}T00:00:00Z`), { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 /**
  * A holding's daily closes, from stored prices only, with the price it cost as
@@ -57,6 +60,7 @@ export function PriceChart({
   costCurrency: string;
 }) {
   const history = useHoldingHistoryQuery(holdingId, true);
+  const { t } = useTranslation();
   const [range, setRange] = useState<RangeKey>('3m');
   const [asTable, setAsTable] = useState(false);
 
@@ -76,11 +80,11 @@ export function PriceChart({
 
   return (
     <Card
-      title="Price"
+      title={t('price.title')}
       action={
         closes.length > 0 && (
           <div className="flex items-center gap-3">
-            <div className="flex gap-1" role="group" aria-label="Range">
+            <div className="flex gap-1" role="group" aria-label={t('price.range')}>
               {RANGES.map((option) => (
                 <button
                   key={option.key}
@@ -93,7 +97,7 @@ export function PriceChart({
                       : 'text-text-muted hover:text-text-primary'
                   }`}
                 >
-                  {option.label}
+                  {t(`price.ranges.${option.key}`)}
                 </button>
               ))}
             </div>
@@ -102,16 +106,16 @@ export function PriceChart({
               className="text-xs text-text-muted underline hover:text-text-primary"
               onClick={() => setAsTable(!asTable)}
             >
-              {asTable ? 'Chart' : 'Table'}
+              {asTable ? t('price.chart') : t('price.table')}
             </button>
           </div>
         )
       }
     >
-      {history.isPending && <Spinner label="Loading the stored closes…" />}
+      {history.isPending && <Spinner label={t('price.loading')} />}
       {history.error && (
         <ErrorNote
-          message={errorMessage(history.error, 'Could not load the price history.')}
+          message={errorMessage(history.error, t('price.loadFailed'))}
           onRetry={() => void history.refetch()}
         />
       )}
@@ -122,11 +126,18 @@ export function PriceChart({
 
       {change && (
         <p className="mb-3 text-sm">
-          {formatMoney(change.from.priceMinor, currency)} on {formatDay(change.from.day)} to{' '}
-          {formatMoney(change.to.priceMinor, currency)} on {dayName(change.to.day)}:{' '}
-          <Delta value={change.changeMinor}>
-            {formatMoney(change.changeMinor, currency)} ({formatPercent(change.changePct)})
-          </Delta>
+          <Trans
+            i18nKey="price.change"
+            values={{
+              from: formatMoney(change.from.priceMinor, currency),
+              fromDay: formatDay(change.from.day),
+              to: formatMoney(change.to.priceMinor, currency),
+              toDay: dayName(change.to.day),
+              change: formatMoney(change.changeMinor, currency),
+              percent: formatPercent(change.changePct),
+            }}
+            components={{ delta: <Delta value={change.changeMinor}>{null}</Delta> }}
+          />
         </p>
       )}
 
@@ -135,31 +146,31 @@ export function PriceChart({
           <ul className="mb-2 flex gap-4 text-xs text-text-muted" aria-hidden>
             <li className="flex items-center gap-1.5">
               <span className="h-0.5 w-4 rounded" style={{ background: PRICE_COLOUR }} />
-              Daily close
+              {t('price.dailyClose')}
             </li>
             {cost !== null && (
               <li className="flex items-center gap-1.5">
                 <span className="h-0 w-4 border-t-2 border-dashed" style={{ borderColor: COST_COLOUR }} />
-                Your cost per unit {formatMoney(cost, currency)}
-                {costPosition === 'below' && ' (below this range)'}
-                {costPosition === 'above' && ' (above this range)'}
+                {t('price.yourCost', { cost: formatMoney(cost, currency) })}
+                {costPosition === 'below' && t('price.belowRange')}
+                {costPosition === 'above' && t('price.aboveRange')}
               </li>
             )}
           </ul>
-          <div className="h-56" dir={CHART_DIRECTION} role="img" aria-label={`Daily closing price. ${coverageText(closes)}`}>
+          <div className="h-56" dir={CHART_DIRECTION} role="img" aria-label={t('price.chartLabel', { coverage: coverageText(closes) })}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke="#253052" strokeDasharray="2 4" vertical={false} />
                 <XAxis
                   dataKey="day"
-                  tickFormatter={(day: string) => tickDay.format(new Date(`${day}T00:00:00Z`))}
+                  tickFormatter={tickDay}
                   tick={{ fill: '#94a0c0', fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                   minTickGap={32}
                 />
                 <YAxis
-                  tickFormatter={(value: number) => compactMoney(value, currency)}
+                  tickFormatter={(value: number) => formatCompactMoney(value, currency)}
                   tick={{ fill: '#94a0c0', fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
@@ -205,34 +216,40 @@ export function PriceChart({
 }
 
 function CloseTooltip({ point, currency }: { point: ChartPoint; currency: string }) {
+  const { t } = useTranslation();
   if (point.priceMinor === null) return null;
   return (
     <div className="rounded-lg border border-border-subtle bg-surface-raised px-3 py-2 text-xs shadow-lg">
       <p className="mb-1 font-medium text-text-primary">{dayName(point.day)}</p>
       <p className="text-text-primary">
-        {isOpenDay(point.day) ? 'Latest' : 'Close'} {formatMoney(point.priceMinor, currency)}
+        {isOpenDay(point.day)
+          ? t('price.latest', { price: formatMoney(point.priceMinor, currency) })
+          : t('price.close', { price: formatMoney(point.priceMinor, currency) })}
       </p>
-      {point.asOf && <p className="text-text-muted">Observed {formatExactTime(point.asOf)}</p>}
+      {point.asOf && (
+        <p className="text-text-muted">{t('price.observed', { when: formatExactTime(point.asOf) })}</p>
+      )}
     </div>
   );
 }
 
 /** The same closes as rows, newest first: for a screen reader, or anyone who wants the numbers. */
 function ClosesTable({ closes, currency }: { closes: DailyClose[]; currency: string }) {
+  const { t } = useTranslation();
   return (
     <div className="max-h-80 overflow-y-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border-subtle text-start text-xs uppercase tracking-wide text-text-muted">
-            <th className="pb-2 font-medium">Day</th>
-            <th className="pb-2 text-end font-medium">Close</th>
+            <th className="pb-2 font-medium">{t('price.day')}</th>
+            <th className="pb-2 text-end font-medium">{t('price.closeColumn')}</th>
           </tr>
         </thead>
         <tbody>
           {[...closes].reverse().map((close) => (
             <tr key={close.day} className="border-b border-border-subtle/50 last:border-0">
               <td className="py-1.5">{dayName(close.day)}</td>
-              <td className="py-1.5 text-end" title={`Observed ${formatExactTime(close.asOf)}`}>
+              <td className="py-1.5 text-end" title={t('price.observed', { when: formatExactTime(close.asOf) })}>
                 {formatMoney(close.priceMinor, currency)}
               </td>
             </tr>
@@ -241,14 +258,4 @@ function ClosesTable({ closes, currency }: { closes: DailyClose[]; currency: str
       </table>
     </div>
   );
-}
-
-/** "$230" or "$84K" for an axis tick: the tooltip and table carry the exact figure. */
-function compactMoney(value: number, currency: string): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(value);
 }

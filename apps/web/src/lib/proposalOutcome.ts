@@ -8,24 +8,18 @@
 
 import type { DecisionSurface, Proposal, ProposalState, ProposalTransition } from '@traders/shared';
 
-const STATE_WORDS: Record<ProposalState, string> = {
-  pending: 'Open',
-  snoozed: 'Snoozed',
-  approved: 'Approved',
-  rejected: 'Rejected',
-  expired: 'Expired',
-};
+import { t } from '../i18n/index.ts';
 
 export function stateWord(state: ProposalState): string {
-  return STATE_WORDS[state];
+  return t(`proposal.states.${state}`);
 }
 
 function surfaceWords(surface: DecisionSurface | null): string {
   switch (surface) {
     case 'telegram':
-      return 'from Telegram';
+      return t('proposal.fromTelegram');
     case 'web':
-      return 'in the app';
+      return t('proposal.inTheApp');
     default:
       return '';
   }
@@ -33,26 +27,28 @@ function surfaceWords(surface: DecisionSurface | null): string {
 
 /** One history row's outcome: "Approved from Telegram", "Expired unanswered". */
 export function outcomeText(proposal: Pick<Proposal, 'state' | 'decidedVia'>): string {
-  if (proposal.state === 'expired') return 'Expired unanswered';
+  if (proposal.state === 'expired') return t('proposal.expiredUnanswered');
   const where = surfaceWords(proposal.decidedVia);
-  return where ? `${stateWord(proposal.state)} ${where}` : stateWord(proposal.state);
+  return where ? t('proposal.outcome', { state: stateWord(proposal.state), where }) : stateWord(proposal.state);
 }
 
 /** One audit-trail entry: "Open → Approved, from Telegram", "Open → Expired, at its deadline". */
 export function transitionText(transition: ProposalTransition): string {
-  const move = `${stateWord(transition.from)} → ${stateWord(transition.to)}`;
+  // The arrow is the catalogue's: it points along the reading direction.
+  const move = t('proposal.move', { from: stateWord(transition.from), to: stateWord(transition.to) });
   if (!transition.byUser) {
     // Recorded when the sweep noticed, which can be hours after the deadline
     // itself - so the time beside this entry is not called the deadline.
     return transition.to === 'expired'
-      ? `${move}, recorded after its deadline passed`
-      : `${move}, by the system`;
+      ? t('proposal.recordedAfterDeadline', { move })
+      : t('proposal.bySystem', { move });
   }
+  const where = surfaceWords(transition.surface);
   // An approval moved back to Open is an undo; saying so beats an arrow backwards.
   if (transition.from === 'approved' && transition.to === 'pending') {
-    return `Approval undone ${surfaceWords(transition.surface)}`.trim();
+    return where ? t('proposal.undoneWhere', { where }) : t('proposal.undone');
   }
-  return `${move}, ${surfaceWords(transition.surface)}`.replace(/, $/, '');
+  return where ? t('proposal.moveWhere', { move, where }) : move;
 }
 
 /**

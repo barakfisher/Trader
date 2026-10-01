@@ -5,6 +5,7 @@ import type { TopicCandidate, TopicResolveResponse } from '@traders/shared/ai';
 
 import { ApiRequestError, api } from '../api/client.ts';
 import { queryKeys } from '../queries/queryKeys.ts';
+import { t } from '../i18n/index.ts';
 import type { RootStore } from './RootStore.ts';
 
 /**
@@ -161,7 +162,7 @@ export class TopicsStore {
       return true;
     } catch (error) {
       runInAction(() => {
-        this.error = messageOf(error, 'Could not decline that proposal.');
+        this.error = messageOf(error, t('errors.topicDeclineFailed'));
       });
       return false;
     }
@@ -185,7 +186,7 @@ export class TopicsStore {
       return true;
     } catch (error) {
       runInAction(() => {
-        this.error = messageOf(error, 'Could not remove that topic.');
+        this.error = messageOf(error, t('errors.topicRemoveFailed'));
       });
       return false;
     }
@@ -291,17 +292,17 @@ export class Composer {
    */
   get blockingIssue(): string | null {
     const label = this.label.trim();
-    if (!label) return 'Name the topic.';
+    if (!label) return t('validation.topicName');
     if (label.length > this.maxLabelLength) {
-      return `A topic name can be at most ${this.maxLabelLength} characters.`;
+      return t('validation.topicNameLength', { max: this.maxLabelLength });
     }
-    if (this.selected.length === 0) return 'Choose at least one instrument.';
+    if (this.selected.length === 0) return t('validation.topicInstruments');
     if (this.selected.length > this.maxInstruments) {
-      return `A topic can hold at most ${this.maxInstruments} instruments.`;
+      return t('validation.topicInstrumentsMax', { max: this.maxInstruments });
     }
     // A proposal is not followed yet, so confirming it adds a topic like a new one does.
     if ((this.topicId === null || this.store.isProposal(this.topicId)) && this.store.atLimit) {
-      return `You follow ${this.store.limits?.maxActiveTopics} topics already, which is the most you can. Remove one to add another.`;
+      return t('validation.topicsLimit', { max: this.store.limits?.maxActiveTopics });
     }
     return null;
   }
@@ -327,7 +328,7 @@ export class Composer {
       });
     } catch (error) {
       runInAction(() => {
-        this.error = messageOf(error, 'Could not look that topic up.');
+        this.error = messageOf(error, t('errors.topicLookupFailed'));
       });
     } finally {
       runInAction(() => {
@@ -388,7 +389,7 @@ export class Composer {
       return true;
     } catch (error) {
       runInAction(() => {
-        this.error = messageOf(error, 'Could not save the topic.');
+        this.error = messageOf(error, t('errors.topicSaveFailed'));
         if (error instanceof ApiRequestError && error.code === 'unresolved_symbols') {
           this.unresolved = unresolvedFrom(error.details);
         }

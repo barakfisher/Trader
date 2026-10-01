@@ -5,6 +5,7 @@ import type { ObservationSeverity, UserSettings, UserSettingsResponse } from '@t
 import { ApiRequestError, api } from '../api/client.ts';
 import { muteEndingIn } from '../lib/notificationSchedule.ts';
 import { queryKeys } from '../queries/queryKeys.ts';
+import { t } from '../i18n/index.ts';
 import type { RootStore } from './RootStore.ts';
 
 /**
@@ -84,16 +85,16 @@ export class SettingsStore {
     const draft = this.draft;
     if (draft === null) return null;
     if (!Number.isInteger(draft.proposalTtlHours)) {
-      return 'How long a proposal stays open must be a whole number of hours.';
+      return t('validation.ttlWhole');
     }
     if (
       draft.proposalTtlHours < MIN_PROPOSAL_TTL_HOURS ||
       draft.proposalTtlHours > MAX_PROPOSAL_TTL_HOURS
     ) {
-      return `How long a proposal stays open must be between ${MIN_PROPOSAL_TTL_HOURS} and ${MAX_PROPOSAL_TTL_HOURS} hours.`;
+      return t('validation.ttlRange', { min: MIN_PROPOSAL_TTL_HOURS, max: MAX_PROPOSAL_TTL_HOURS });
     }
     if (draft.quietHoursStart !== null && draft.quietHoursStart === draft.quietHoursEnd) {
-      return 'Quiet hours must start and end at different times.';
+      return t('validation.quietHoursSame');
     }
     return null;
   }
@@ -118,7 +119,7 @@ export class SettingsStore {
     } catch (error) {
       runInAction(() => {
         this.error =
-          error instanceof ApiRequestError ? error.message : 'Could not save your settings.';
+          error instanceof ApiRequestError ? error.message : t('errors.settingsSaveFailed');
       });
     } finally {
       runInAction(() => {
