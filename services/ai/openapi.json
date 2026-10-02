@@ -890,6 +890,25 @@
         "title": "InstrumentUniverse",
         "type": "object"
       },
+      "LocalizedTextOut": {
+        "description": "An observation's headline and explanation in one language.",
+        "properties": {
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          }
+        },
+        "required": [
+          "headline",
+          "explanation"
+        ],
+        "title": "LocalizedTextOut",
+        "type": "object"
+      },
       "NarrationConfigResponse": {
         "description": "How narration is configured, for a UI that must not guess.\n\n`tier` is what a reader needs and the model id only implies: `free` is a\nroute that bills nothing and is served from a shared pool, `paid` bills per\ntoken, `none` means no provider was asked for at all. The last is a\nconfiguration rather than a failure, and the three are kept distinct so a UI\ncannot report \"deliberately off\" as \"broken\".",
         "properties": {
@@ -1137,6 +1156,13 @@
           "kind": {
             "title": "Kind",
             "type": "string"
+          },
+          "localized": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/LocalizedTextOut"
+            },
+            "title": "Localized",
+            "type": "object"
           },
           "narration_source": {
             "enum": [

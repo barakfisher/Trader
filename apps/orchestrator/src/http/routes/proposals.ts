@@ -73,6 +73,7 @@ function toWire(row: ProposalRow, now: Date) {
     subjectRef: row.subject_ref,
     headline: row.headline,
     explanation: row.explanation,
+    localized: row.localized,
     evidence: row.evidence,
     expiresAt: row.expires_at.toISOString(),
     snoozedUntil: row.snoozed_until?.toISOString() ?? null,

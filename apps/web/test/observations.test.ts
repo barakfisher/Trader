@@ -53,6 +53,7 @@ const priceMove: Observation = {
     thresholds_pct: { info: 0.03, notable: 0.05, high: 0.08 },
   },
   conceptRefs: ['daily-return'],
+  localized: {},
   narrationSource: 'llm',
   fallbackReason: 'none',
   createdAt: '2026-09-16T14:00:00Z',

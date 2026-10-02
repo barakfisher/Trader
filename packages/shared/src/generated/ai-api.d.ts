@@ -835,6 +835,16 @@ export interface components {
             outside_screen?: ("asset_class" | "exchange") | null;
         };
         /**
+         * LocalizedTextOut
+         * @description An observation's headline and explanation in one language.
+         */
+        LocalizedTextOut: {
+            /** Explanation */
+            explanation: string;
+            /** Headline */
+            headline: string;
+        };
+        /**
          * NarrationConfigResponse
          * @description How narration is configured, for a UI that must not guess.
          *
@@ -992,6 +1002,10 @@ export interface components {
             headline: string;
             /** Kind */
             kind: string;
+            /** Localized */
+            localized?: {
+                [key: string]: components["schemas"]["LocalizedTextOut"];
+            };
             /**
              * Narration Source
              * @enum {string}

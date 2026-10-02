@@ -12,7 +12,8 @@ import { useTranslation } from '../i18n/index.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { outcomeAt, outcomeText, outcomeTone } from '../lib/proposalOutcome.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
-import { MIRROR_IN_RTL, SERVER_ENGLISH } from '../lib/textDirection.ts';
+import { observationText } from '../lib/observationText.ts';
+import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import { undoSecondsLeft } from '../lib/undoWindow.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import {
@@ -179,7 +180,7 @@ function HistorySection({
   /** True when the page is full, so older decisions exist beyond it. */
   full: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   return (
     <section className="space-y-2">
       <h2 className="text-sm font-semibold text-text-muted">{t('proposals.history')}</h2>
@@ -193,22 +194,25 @@ function HistorySection({
       {proposals.length > 0 && (
         <Card>
           <ul className="divide-y divide-border-subtle/60">
-            {proposals.map((proposal) => (
-              <li key={proposal.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0">
-                <Link
-                  to="/proposals/$proposalId"
-                  params={{ proposalId: proposal.id }}
-                  {...SERVER_ENGLISH}
-                  className="min-w-0 text-sm text-text-primary hover:text-accent hover:underline"
-                >
-                  {proposal.headline}
-                </Link>
-                <span className="shrink-0 text-xs text-text-muted">
-                  <OutcomeBadge proposal={proposal} />{' '}
-                  {outcomeAt(proposal) !== null && formatExactTime(outcomeAt(proposal))}
-                </span>
-              </li>
-            ))}
+            {proposals.map((proposal) => {
+              const text = observationText(proposal, i18n.language);
+              return (
+                <li key={proposal.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 py-2 first:pt-0 last:pb-0">
+                  <Link
+                    to="/proposals/$proposalId"
+                    params={{ proposalId: proposal.id }}
+                    {...text.attributes}
+                    className="min-w-0 text-sm text-text-primary hover:text-accent hover:underline"
+                  >
+                    {text.headline}
+                  </Link>
+                  <span className="shrink-0 text-xs text-text-muted">
+                    <OutcomeBadge proposal={proposal} />{' '}
+                    {outcomeAt(proposal) !== null && formatExactTime(outcomeAt(proposal))}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
           {full && (
             <p className="mt-3 text-xs text-text-muted">

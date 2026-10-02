@@ -1,3 +1,4 @@
+import type { LocalizedTexts } from '@traders/shared';
 import { query, queryOne, transaction } from '../pool.js';
 
 export interface ProposalRow {
@@ -17,6 +18,7 @@ export interface ProposalRow {
   subject_ref: string | null;
   headline: string;
   explanation: string | null;
+  localized: LocalizedTexts;
   evidence: unknown;
 }
 
@@ -71,7 +73,7 @@ export async function createProposals(proposals: ProposalToCreate[]): Promise<st
 /** The columns every proposal read returns, joined to the finding behind it. */
 const PROPOSAL_COLUMNS = `p.id, p.user_id, p.observation_id, p.kind, p.payload, p.state,
        p.expires_at, p.snoozed_until, p.decided_at, p.decided_via, p.created_at,
-       o.severity, o.subject_ref, o.headline, o.explanation, o.evidence`;
+       o.severity, o.subject_ref, o.headline, o.explanation, o.localized, o.evidence`;
 
 export function findProposal(userId: string, proposalId: string): Promise<ProposalRow | null> {
   return queryOne<ProposalRow>(

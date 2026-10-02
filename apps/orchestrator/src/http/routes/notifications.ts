@@ -57,6 +57,7 @@ function digestEntry(row: DigestEntryRow): DigestEntry {
   return {
     observationId: row.observation_id,
     headline: row.headline,
+    localized: row.localized ?? {},
     severity: row.severity as ObservationSeverity | null,
     subjectRef: row.subject_ref,
     reason: row.reason as DigestReason,

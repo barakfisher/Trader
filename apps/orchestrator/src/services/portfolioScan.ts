@@ -143,6 +143,7 @@ export async function runPortfolioScan(
     // would attribute authorship nobody checked.
     narrationSource: observation.narration_source ?? null,
     fallbackReason: observation.fallback_reason ?? null,
+    localized: observation.localized ?? {},
   }));
 
   const { created, suppressed, inserted } = await insertObservations(toStore);

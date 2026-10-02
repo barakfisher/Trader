@@ -26,6 +26,7 @@ const { renderWithServerState } = await import('./serverStateHarness.tsx');
 const entry = (overrides: Partial<DigestEntry> = {}): DigestEntry => ({
   observationId: 'o-1',
   headline: 'SMR is -30.6% from its 30-day high',
+  localized: {},
   severity: 'high',
   subjectRef: 'instrument:SMR',
   reason: 'quiet_hours',

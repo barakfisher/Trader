@@ -1,4 +1,4 @@
-import type { AssetClass } from '@traders/shared';
+import type { AssetClass, LocalizedTexts } from '@traders/shared';
 import { query, queryOne } from '../pool.js';
 
 export interface ObservationToStore {
@@ -23,6 +23,8 @@ export interface ObservationToStore {
    */
   narrationSource: string | null;
   fallbackReason: string | null;
+  /** The template's wording in each translated language; `{}` when there is none. */
+  localized: LocalizedTexts;
 }
 
 /** An observation that was actually written, as opposed to one suppressed. */
@@ -74,18 +76,19 @@ export async function insertObservations(
       observation.dedupeKey,
       observation.narrationSource,
       observation.fallbackReason,
+      JSON.stringify(observation.localized),
     );
     values.push(
       `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, ` +
         `$${base + 7}, $${base + 8}, $${base + 9}::jsonb, $${base + 10}::text[], $${base + 11}, ` +
-        `$${base + 12}, $${base + 13})`,
+        `$${base + 12}, $${base + 13}, $${base + 14}::jsonb)`,
     );
   });
 
   const inserted = await query<InsertedObservation>(
     `INSERT INTO observations
        (user_id, run_id, kind, severity, subject_kind, subject_ref, headline, explanation,
-        evidence, concept_refs, dedupe_key, narration_source, fallback_reason)
+        evidence, concept_refs, dedupe_key, narration_source, fallback_reason, localized)
      VALUES ${values.join(', ')}
      ON CONFLICT (dedupe_key) DO NOTHING
      RETURNING id, kind, severity, subject_ref, evidence, headline, explanation`,
@@ -111,6 +114,7 @@ export interface ObservationRow {
   /** Null on rows written before provenance was recorded. Not a guess. */
   narration_source: string | null;
   fallback_reason: string | null;
+  localized: LocalizedTexts;
   created_at: Date;
 }
 
@@ -209,7 +213,7 @@ export function listObservations(
   const where = observationWhere(filter, 4);
   return query<ObservationRow>(
     `SELECT id, kind, severity, subject_kind, subject_ref, headline, explanation,
-            evidence, concept_refs, narration_source, fallback_reason, created_at
+            evidence, concept_refs, narration_source, fallback_reason, localized, created_at
        FROM observations
       WHERE user_id = $1
         ${where.sql}

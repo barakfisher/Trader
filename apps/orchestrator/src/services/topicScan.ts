@@ -100,6 +100,7 @@ export async function runTopicScan(
     dedupeKey: observation.dedupe_key,
     narrationSource: observation.narration_source ?? null,
     fallbackReason: observation.fallback_reason ?? null,
+    localized: observation.localized ?? {},
   }));
   const { created, suppressed, inserted } = await insertObservations(toStore);
 

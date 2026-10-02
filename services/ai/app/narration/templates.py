@@ -34,7 +34,7 @@ CONCEPTS: dict[str, tuple[str, ...]] = {
 }
 
 
-def _symbol(finding: Finding) -> str:
+def symbol_of(finding: Finding) -> str:
     """The subject as a reader would name it: `instrument:NVDA` is "NVDA".
 
     A topic is named by its label: its `subject_ref` carries an id, which is
@@ -46,18 +46,18 @@ def _symbol(finding: Finding) -> str:
     return finding.subject_ref.rsplit(":", 1)[-1]
 
 
-def _sigma(value: object) -> Decimal:
+def sigma_of(value: object) -> Decimal:
     return abs(Decimal(str(value)).quantize(Decimal("0.1")))
 
 
-def _pct(value: object, places: int = 1) -> str:
+def signed_pct(value: object, places: int = 1) -> str:
     """Render a ratio as a signed percentage, rounding rather than truncating."""
     number = Decimal(str(value)) * 100
     quantum = Decimal(1).scaleb(-places)
     return f"{number.quantize(quantum):+}%"
 
 
-def _money(minor: object, currency: str) -> str:
+def money(minor: object, currency: str) -> str:
     """Minor units at the currency's own precision: 11845 USD is "118.45 USD",
     and 15000 JPY is "15000 JPY" - a yen has no cents, so dividing by 100 would
     understate it a hundredfold."""
@@ -69,24 +69,24 @@ def _money(minor: object, currency: str) -> str:
 def headline_for(finding: Finding) -> str:
     """One line, derived entirely from evidence."""
     evidence = finding.evidence
-    symbol = _symbol(finding)
+    symbol = symbol_of(finding)
     currency = str(evidence.get("currency", ""))
 
     if finding.kind == "price_move":
-        price = _money(evidence["price_minor"], currency)
-        return f"{symbol} moved {_pct(evidence['change_pct'])} to {price}"
+        price = money(evidence["price_minor"], currency)
+        return f"{symbol} moved {signed_pct(evidence['change_pct'])} to {price}"
 
     if finding.kind == "sigma_move":
         sigma = Decimal(str(evidence["z_score"])).quantize(Decimal("0.1"))
         return (
-            f"{symbol} moved {_pct(evidence['change_pct'])}, "
+            f"{symbol} moved {signed_pct(evidence['change_pct'])}, "
             f"{abs(sigma)} standard deviations from its recent average"
         )
 
     if finding.kind == "drawdown":
         window = evidence.get("window_days")
         span = f"{window}-day high" if window else "recent high"
-        return f"{symbol} is {_pct(evidence['drawdown_pct'])} from its {span}"
+        return f"{symbol} is {signed_pct(evidence['drawdown_pct'])} from its {span}"
 
     if finding.kind == "allocation_drift":
         # Percentage POINTS, not percent. A weight of 12.7% against a target of
@@ -96,13 +96,13 @@ def headline_for(finding: Finding) -> str:
         drift = Decimal(str(evidence["drift"])) * 100
         direction = "below" if drift < 0 else "above"
         points = abs(drift).quantize(Decimal("0.1"))
-        target = _pct(evidence["target_weight"], 1).lstrip("+")
+        target = signed_pct(evidence["target_weight"], 1).lstrip("+")
         return f"{symbol} is {points} percentage points {direction} its {target} target"
 
     if finding.kind == "topic_move":
         return (
-            f"{symbol} moved {_pct(evidence['basket_change_pct'])} on average, "
-            f"{_sigma(evidence['z_score'])} standard deviations from its recent average"
+            f"{symbol} moved {signed_pct(evidence['basket_change_pct'])} on average, "
+            f"{sigma_of(evidence['z_score'])} standard deviations from its recent average"
         )
 
     # A new rule without a template should be obvious, not silently blank.
@@ -117,14 +117,14 @@ def explanation_for(finding: Finding) -> str:
     a cause here would be the same failure by a different author.
     """
     evidence = finding.evidence
-    symbol = _symbol(finding)
+    symbol = symbol_of(finding)
     currency = str(evidence.get("currency", ""))
 
     if finding.kind in ("price_move", "sigma_move"):
         parts = [
-            f"{symbol} went from {_money(evidence['previous_price_minor'], currency)} "
-            f"to {_money(evidence['price_minor'], currency)}, a change of "
-            f"{_pct(evidence['change_pct'])}."
+            f"{symbol} went from {money(evidence['previous_price_minor'], currency)} "
+            f"to {money(evidence['price_minor'], currency)}, a change of "
+            f"{signed_pct(evidence['change_pct'])}."
         ]
         if finding.kind == "sigma_move":
             sigma = Decimal(str(evidence["z_score"])).quantize(Decimal("0.1"))
@@ -143,17 +143,17 @@ def explanation_for(finding: Finding) -> str:
         # Unsigned: "below" already says which way, and the signed form read
         # "-15.5% below", a double negative. The validator accepts either sign.
         return (
-            f"{symbol} last traded at {_money(evidence['price_minor'], currency)}, "
-            f"{_pct(evidence['drawdown_pct']).lstrip('+-')} below its recent high of "
-            f"{_money(evidence['high_price_minor'], currency)}."
+            f"{symbol} last traded at {money(evidence['price_minor'], currency)}, "
+            f"{signed_pct(evidence['drawdown_pct']).lstrip('+-')} below its recent high of "
+            f"{money(evidence['high_price_minor'], currency)}."
         )
 
     if finding.kind == "allocation_drift":
         # Weights arrive as decimal strings, because a portfolio weight is money
         # arithmetic and must not round through a float on its way here.
         return (
-            f"{symbol} is {_pct(evidence['actual_weight'], 1).lstrip('+')} of the portfolio "
-            f"against a target of {_pct(evidence['target_weight'], 1).lstrip('+')}."
+            f"{symbol} is {signed_pct(evidence['actual_weight'], 1).lstrip('+')} of the portfolio "
+            f"against a target of {signed_pct(evidence['target_weight'], 1).lstrip('+')}."
         )
 
     if finding.kind == "topic_move":
@@ -177,14 +177,14 @@ def _topic_move_explanation(label: str, evidence: dict[str, object]) -> str:
     ]
     movers = evidence.get("movers") or []
     if isinstance(movers, list) and movers:
-        named = ", ".join(f"{item['symbol']} {_pct(item['change_pct'])}" for item in movers)
+        named = ", ".join(f"{item['symbol']} {signed_pct(item['change_pct'])}" for item in movers)
         parts.append(f"Largest moves: {named}.")
     missing = evidence.get("not_priced_on_session") or []
     if isinstance(missing, list) and missing:
         parts.append(f"Not priced that day: {', '.join(str(symbol) for symbol in missing)}.")
     parts.append(
         f"Measured against the {evidence['sample_size']} most recent daily moves of the "
-        f"same basket, that is {_sigma(evidence['z_score'])} standard deviations from average."
+        f"same basket, that is {sigma_of(evidence['z_score'])} standard deviations from average."
     )
     if evidence.get("return_stdev_floor_applied"):
         parts.append(

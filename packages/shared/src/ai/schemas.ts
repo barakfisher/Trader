@@ -121,6 +121,9 @@ export const observationSchema = z.object({
   // Required, not optional: it carries a plain default of "none", which pydantic
   // publishes as a default and the generator therefore treats as always present.
   fallback_reason: z.string(),
+  // Optional on the wire because pydantic publishes a default; the orchestrator
+  // stores `{}` for a response without it, which reads as "English only".
+  localized: z.record(z.string(), z.object({ headline: z.string(), explanation: z.string() })).optional(),
 });
 
 // Counters carry plain defaults, which pydantic publishes as a `default` and the
