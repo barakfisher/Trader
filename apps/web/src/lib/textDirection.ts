@@ -3,58 +3,24 @@
  *
  * The layout is written in logical terms - `ms-`/`pe-`/`text-end`, never their
  * left/right forms (`test/textDirection.test.ts` refuses those) - so one `dir`
- * attribute on `<html>` mirrors every page. Until the language setting exists
- * the direction is always left-to-right, except when `?dir=rtl` asks for the
- * mirror: that is how a page is checked in both directions before there is any
- * Hebrew to read.
+ * attribute on `<html>` mirrors every page. The direction is the language's
+ * (`directionOf`), set with it by `applyLanguage` in `i18n/index.ts`. Slice 1's
+ * `?dir=rtl` test switch is gone with the setting that replaced it: a switch
+ * that outlives its purpose is how a tab ends up mirrored in English.
  */
 
 export type TextDirection = 'ltr' | 'rtl';
 
-const OVERRIDE_KEY = 'traders.dir';
+/** The languages written right to left. Every other one reads left to right. */
+const RIGHT_TO_LEFT = new Set(['he']);
 
-/** `?dir=rtl` or `?dir=ltr` from a query string; anything else is no override. */
-export function directionFromQuery(search: string): TextDirection | null {
-  const value = new URLSearchParams(search).get('dir');
-  return value === 'rtl' || value === 'ltr' ? value : null;
-}
-
-/**
- * The direction to start in: an override from the address, remembered for the
- * tab so that a full reload or a link opened in place keeps the mirror on, and
- * left-to-right otherwise. Storage can be unavailable (a private window); the
- * override then lasts for this load only, which is the safe way to lose it.
- */
-export function initialDirection(search: string, storage: Storage | null = sessionStorageOrNull()): TextDirection {
-  const fromQuery = directionFromQuery(search);
-  if (fromQuery !== null) {
-    try {
-      storage?.setItem(OVERRIDE_KEY, fromQuery);
-    } catch {
-      // Not remembered; this load still honours it.
-    }
-    return fromQuery;
-  }
-  try {
-    const remembered = storage?.getItem(OVERRIDE_KEY);
-    if (remembered === 'rtl' || remembered === 'ltr') return remembered;
-  } catch {
-    // Unreadable storage is the same as no override.
-  }
-  return 'ltr';
+export function directionOf(language: string): TextDirection {
+  return RIGHT_TO_LEFT.has(language) ? 'rtl' : 'ltr';
 }
 
 /** Set `dir` on `<html>`: every logical class, and every `rtl:` variant, follows it. */
 export function applyDocumentDirection(direction: TextDirection, root: HTMLElement = document.documentElement): void {
   root.dir = direction;
-}
-
-function sessionStorageOrNull(): Storage | null {
-  try {
-    return window.sessionStorage;
-  } catch {
-    return null;
-  }
 }
 
 /**

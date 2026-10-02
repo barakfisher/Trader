@@ -19,6 +19,10 @@ import { currentLanguage, type Language } from './index.ts';
 /** The `Intl` locale each language formats numbers and dates in. */
 export const FORMAT_LOCALES: Record<Language, { number: string; date: string }> = {
   en: { number: 'en-US', date: 'en-GB' },
+  // Western digits, as Israel writes them, with Hebrew's own placement of the
+  // sign and the currency symbol - and the direction marks that keep "-1.23%"
+  // whole on a right-to-left page.
+  he: { number: 'he-IL', date: 'he-IL' },
 };
 
 export function numberLocale(): string {

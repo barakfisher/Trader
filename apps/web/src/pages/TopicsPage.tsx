@@ -401,7 +401,7 @@ function ConfirmedRow({ instrument }: { instrument: TopicInstrument }) {
     <li className="text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold">{instrument.symbol}</span>
-        {instrument.name && <span className="text-text-muted">{instrument.name}</span>}
+        {instrument.name && <bdi className="text-text-muted">{instrument.name}</bdi>}
         {instrument.source === 'user' ? (
           <Badge tone="muted">{t('topicsPage.addedByYou')}</Badge>
         ) : (
@@ -616,7 +616,7 @@ const CandidateRow = observer(function CandidateRow({
         <span className="flex-1 space-y-1">
           <span className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{candidate.symbol}</span>
-            {candidate.name && <span className="text-text-muted">{candidate.name}</span>}
+            {candidate.name && <bdi className="text-text-muted">{candidate.name}</bdi>}
             <Band confidence={candidate.confidence} />
             {candidate.asset_class === 'etf' && <Badge tone="muted">{t('topicsPage.etf')}</Badge>}
             {size && <span className="text-xs text-text-muted">{size}</span>}

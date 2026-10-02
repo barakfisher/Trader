@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS_ROW = {
   quiet_hours_start: '22:00',
   quiet_hours_end: '07:00',
   muted_until: null as Date | null,
+  language: 'en',
 };
 
 vi.mock('../src/db/pool.js', () => ({
@@ -61,6 +62,7 @@ vi.mock('../src/db/queries.js', () => ({
     quiet_hours_start: input.quietHoursStart,
     quiet_hours_end: input.quietHoursEnd,
     muted_until: input.mutedUntil === null ? null : new Date(input.mutedUntil as string),
+    language: input.language,
   })),
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
 }));
@@ -94,6 +96,7 @@ const VALID_SETTINGS = {
   quietHoursStart: '23:00',
   quietHoursEnd: '06:30',
   mutedUntil: null as string | null,
+  language: 'he',
 };
 
 function buildApp() {
@@ -168,6 +171,7 @@ describe('user settings', () => {
         quietHoursStart: DEFAULT_SETTINGS_ROW.quiet_hours_start,
         quietHoursEnd: DEFAULT_SETTINGS_ROW.quiet_hours_end,
         mutedUntil: null,
+        language: 'en',
       },
     });
     expect(queries.getOrCreateUserSettings).toHaveBeenCalledWith(USER.id);
@@ -188,6 +192,26 @@ describe('user settings', () => {
     });
     const response = await putSettings(app, cookie, VALID_SETTINGS);
     expect(await response.json()).toMatchObject({ settings: { proposalTtlHours: 12 } });
+  });
+
+  it('stores the interface language with the rest, and sends it back', async () => {
+    const response = await putSettings(app, cookie, VALID_SETTINGS);
+    expect(await response.json()).toMatchObject({ settings: { language: 'he' } });
+  });
+
+  it('refuses a language there is no catalogue for, rather than storing English under its name', async () => {
+    const response = await putSettings(app, cookie, { ...VALID_SETTINGS, language: 'fr' });
+    expect(response.status).toBe(400);
+    expect(queries.replaceUserSettings).not.toHaveBeenCalled();
+  });
+
+  it('sends the language with the session, so the first screen is already in it', async () => {
+    vi.mocked(queries.getOrCreateUserSettings).mockResolvedValueOnce({
+      ...DEFAULT_SETTINGS_ROW,
+      language: 'he',
+    });
+    const response = await app.request('/auth/session', { headers: { cookie } });
+    expect(await response.json()).toMatchObject({ authenticated: true, user: { language: 'he' } });
   });
 
   it('renders a stored mute as an ISO 8601 UTC timestamp', async () => {

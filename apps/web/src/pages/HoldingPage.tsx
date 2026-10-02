@@ -13,6 +13,7 @@ import { NewsList } from '../components/NewsList.tsx';
 import { ObservationRow } from '../components/ObservationsFeed.tsx';
 import { PriceChart } from '../components/PriceChart.tsx';
 import { Card, Delta, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
+import { assetClassName } from '../lib/assetClass.ts';
 import { baseCurrencyOf, shortRate } from '../lib/portfolioView.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { unitsToPercent, weightToUnits } from '../lib/targetWeights.ts';
@@ -60,9 +61,14 @@ export const HoldingPage = observer(function HoldingPage() {
                 )}
               </h1>
               <p className="text-xs text-text-muted">
-                {[holding.instrument.name, holding.instrument.exchange, holding.instrument.assetClass]
-                  .filter(Boolean)
-                  .join(' · ')}
+                {[holding.instrument.name, holding.instrument.exchange, assetClassName(holding.instrument.assetClass)]
+                  .filter((part): part is string => Boolean(part))
+                  .map((part, index) => (
+                    <span key={index}>
+                      {index > 0 && ' · '}
+                      <bdi>{part}</bdi>
+                    </span>
+                  ))}
               </p>
             </>
           ) : (

@@ -11,9 +11,8 @@ const english = CATALOGUES[DEFAULT_LANGUAGE].translation;
 
 describe('every language has what English has', () => {
   it('finds no gap between the English catalogue and any other', () => {
-    const catalogues: Record<string, { translation: typeof english }> = CATALOGUES;
-    const problems = LANGUAGES.filter((language) => language !== DEFAULT_LANGUAGE).flatMap(
-      (language: string) => catalogueProblems(english, catalogues[language]!.translation, language),
+    const problems = LANGUAGES.filter((language) => language !== DEFAULT_LANGUAGE).flatMap((language) =>
+      catalogueProblems(english, CATALOGUES[language].translation, language),
     );
     expect(problems).toEqual([]);
   });

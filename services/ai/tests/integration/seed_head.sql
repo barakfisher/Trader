@@ -14,10 +14,11 @@ INSERT INTO users (id, role) VALUES
   ('00000000-0000-0000-0000-00000000000a', 'admin'),
   ('00000000-0000-0000-0000-00000000000b', 'user'),
   ('00000000-0000-0000-0000-00000000000c', 'user');
-INSERT INTO user_settings (user_id, proposal_severity, notify_severity, quiet_hours_start, quiet_hours_end) VALUES
-  ('00000000-0000-0000-0000-00000000000a', 'notable', 'info', '22:00', '07:00'),
-  ('00000000-0000-0000-0000-00000000000b', 'high', 'notable', NULL, NULL),
-  ('00000000-0000-0000-0000-00000000000c', 'info', 'high', NULL, NULL);
+-- `language` (0034) enumerates two values; the third row keeps the default.
+INSERT INTO user_settings (user_id, proposal_severity, notify_severity, quiet_hours_start, quiet_hours_end, language) VALUES
+  ('00000000-0000-0000-0000-00000000000a', 'notable', 'info', '22:00', '07:00', 'en'),
+  ('00000000-0000-0000-0000-00000000000b', 'high', 'notable', NULL, NULL, 'he'),
+  ('00000000-0000-0000-0000-00000000000c', 'info', 'high', NULL, NULL, 'en');
 
 INSERT INTO instruments (id, symbol, asset_class) VALUES
   ('10000000-0000-0000-0000-000000000001', 'EQTY', 'equity'),

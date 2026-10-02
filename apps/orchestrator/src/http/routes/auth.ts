@@ -8,12 +8,31 @@ import type { Hono } from 'hono';
 import { deleteCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
 
-import { getUser } from '../../db/queries.js';
+import type { SessionUser, UiLanguage } from '@traders/shared';
+
+import { getOrCreateUserSettings, getUser, type UserRow } from '../../db/queries.js';
 import type { AppEnv } from '../app.js';
 import { SESSION_COOKIE, createSessionToken, passphraseMatches } from '../auth.js';
 import { badRequest, notFound, unauthorized } from '../errors.js';
 
 const loginSchema = z.object({ passphrase: z.string().min(1) });
+
+/**
+ * The signed-in user as the web app needs it before drawing anything: who,
+ * which currency and timezone - and which language, read from the settings row
+ * (materialised with the schema's defaults if the user never saved one), so
+ * the first screen is already in it.
+ */
+async function sessionUser(user: UserRow): Promise<SessionUser> {
+  const settings = await getOrCreateUserSettings(user.id);
+  return {
+    id: user.id,
+    baseCurrency: user.base_currency,
+    timezone: user.timezone,
+    role: user.role,
+    language: settings.language as UiLanguage,
+  };
+}
 
 export function registerAuthRoutes(app: Hono<AppEnv>): void {
   app.post('/auth/login', async (context) => {
@@ -37,12 +56,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
       maxAge: config.SESSION_TTL_HOURS * 3600,
     });
 
-    return context.json({
-      id: user.id,
-      baseCurrency: user.base_currency,
-      timezone: user.timezone,
-      role: user.role,
-    });
+    return context.json(await sessionUser(user));
   });
 
   app.post('/auth/logout', (context) => {
@@ -55,14 +69,6 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     if (!userId) return context.json({ authenticated: false }, 200);
     const user = await getUser(userId);
     if (!user) return context.json({ authenticated: false }, 200);
-    return context.json({
-      authenticated: true,
-      user: {
-        id: user.id,
-        baseCurrency: user.base_currency,
-        timezone: user.timezone,
-        role: user.role,
-      },
-    });
+    return context.json({ authenticated: true, user: await sessionUser(user) });
   });
 }

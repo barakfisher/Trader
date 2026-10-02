@@ -3,12 +3,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import {
-  MIRROR_IN_RTL,
-  applyDocumentDirection,
-  directionFromQuery,
-  initialDirection,
-} from '../src/lib/textDirection.ts';
+import { applyLanguage } from '../src/i18n/index.ts';
+import { MIRROR_IN_RTL, applyDocumentDirection, directionOf } from '../src/lib/textDirection.ts';
 
 /**
  * The layout mirrors because it is written in logical terms. One `ml-4` or
@@ -78,56 +74,24 @@ describe('the layout is written in logical directions', () => {
 });
 
 describe('the page direction', () => {
-  function memoryStorage(): Storage {
-    const values = new Map<string, string>();
-    return {
-      get length() {
-        return values.size;
-      },
-      clear: () => values.clear(),
-      getItem: (key) => values.get(key) ?? null,
-      key: (index) => [...values.keys()][index] ?? null,
-      removeItem: (key) => void values.delete(key),
-      setItem: (key, value) => void values.set(key, value),
-    };
-  }
-
-  it('reads an override only for the two directions there are', () => {
-    expect(directionFromQuery('?dir=rtl')).toBe('rtl');
-    expect(directionFromQuery('?view=x&dir=ltr')).toBe('ltr');
-    expect(directionFromQuery('?dir=RTL')).toBeNull();
-    expect(directionFromQuery('')).toBeNull();
-  });
-
-  it('is left-to-right unless asked otherwise', () => {
-    expect(initialDirection('', memoryStorage())).toBe('ltr');
-    expect(initialDirection('', null)).toBe('ltr');
-  });
-
-  it('remembers an override for the tab, so a reload keeps the mirror on', () => {
-    const storage = memoryStorage();
-    expect(initialDirection('?dir=rtl', storage)).toBe('rtl');
-    expect(initialDirection('', storage)).toBe('rtl');
-    expect(initialDirection('?dir=ltr', storage)).toBe('ltr');
-    expect(initialDirection('', storage)).toBe('ltr');
-  });
-
-  it('still honours an override when storage refuses it', () => {
-    const refusing = memoryStorage();
-    refusing.setItem = () => {
-      throw new Error('QuotaExceededError');
-    };
-    refusing.getItem = () => {
-      throw new Error('SecurityError');
-    };
-    expect(initialDirection('?dir=rtl', refusing)).toBe('rtl');
-    expect(initialDirection('', refusing)).toBe('ltr');
+  it('is the language\'s: Hebrew reads right to left, English left to right', () => {
+    expect(directionOf('he')).toBe('rtl');
+    expect(directionOf('en')).toBe('ltr');
   });
 
   it('is set on <html>, which every logical class and rtl: variant follows', () => {
     applyDocumentDirection('rtl');
     expect(document.documentElement.dir).toBe('rtl');
     applyDocumentDirection('ltr');
+    expect(document.documentElement.dir).toBe('ltr');
+  });
+
+  it('changes with the language, together with lang, so neither is left behind', () => {
+    applyLanguage('he');
+    expect(document.documentElement.lang).toBe('he');
+    expect(document.documentElement.dir).toBe('rtl');
+    applyLanguage('en');
+    expect(document.documentElement.lang).toBe('en');
     expect(document.documentElement.dir).toBe('ltr');
   });
 });

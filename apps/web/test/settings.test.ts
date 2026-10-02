@@ -11,6 +11,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { UserSettings } from '@traders/shared';
 
+import { i18n } from '../src/i18n/index.ts';
+
 const get = vi.fn();
 const post = vi.fn();
 const postForm = vi.fn();
@@ -63,6 +65,7 @@ const STORED: UserSettings = {
   quietHoursStart: '22:00',
   quietHoursEnd: '07:00',
   mutedUntil: null,
+  language: 'en',
 };
 
 function storeWithSettings(settings: UserSettings = STORED) {
@@ -211,6 +214,32 @@ describe('SettingsStore', () => {
 
     root.settings.clearMute();
     expect(root.settings.draft?.mutedUntil).toBeNull();
+  });
+
+  it('switches the page language only once the server holds the new one', async () => {
+    const root = storeWithSettings();
+    await readSettings(root);
+    root.auth.user = { id: 'u', baseCurrency: 'USD', timezone: 'UTC', role: 'user', language: 'en' };
+    root.settings.setLanguage('he');
+    expect(root.settings.isDirty).toBe(true);
+    // Chosen but not saved: the page stays in the language that is in force.
+    expect(i18n.language).toBe('en');
+
+    put.mockResolvedValueOnce({ settings: { ...STORED, language: 'he' } });
+    await root.settings.save();
+    expect(put).toHaveBeenCalledWith('/settings', { ...STORED, language: 'he' });
+    expect(i18n.language).toBe('he');
+
+    // A failed save leaves the language as it was.
+    root.settings.setLanguage('en');
+    put.mockRejectedValueOnce(new ApiRequestError('Settings rejected.', 422, 'invalid_body'));
+    await root.settings.save();
+    expect(i18n.language).toBe('he');
+
+    // Signing out returns the sign-in page to the default.
+    post.mockResolvedValueOnce(undefined);
+    await root.auth.logout();
+    expect(i18n.language).toBe('en');
   });
 
   it('forgets everything when the session ends', async () => {

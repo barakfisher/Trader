@@ -87,7 +87,10 @@ export const AskPage = observer(function AskPage() {
             }}
             rows={2}
             placeholder={EXAMPLES[0]}
+            // The question is English (see EXAMPLES), so the box takes the
+            // direction of what is typed into it, not the page's.
             lang="en"
+            dir="auto"
             className="w-full resize-y rounded-lg border border-border-subtle bg-surface px-3 py-2 text-sm"
           />
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -95,7 +98,7 @@ export const AskPage = observer(function AskPage() {
               {EXAMPLES.map((example) => (
                 <button
                   key={example}
-                  lang="en"
+                  {...SERVER_ENGLISH}
                   type="button"
                   onClick={() => ask.setDraft(example)}
                   className="rounded-full bg-surface-hover px-2.5 py-1 text-xs text-text-muted hover:text-text-primary"

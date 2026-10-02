@@ -16,7 +16,7 @@
  *  - the markup tags `<Trans>` fills (`<code>`, `<strong>`, `<delta>`).
  */
 
-type Catalogue = { [key: string]: string | Catalogue };
+export type Catalogue = { [key: string]: string | Catalogue };
 
 const PLURAL_SUFFIX = /_(zero|one|two|few|many|other)$/;
 

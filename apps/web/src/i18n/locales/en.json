@@ -767,7 +767,10 @@
     "baseCurrency": "Base currency",
     "baseCurrencyNote": "Every total, P&L and weight is converted into it. Fixed in this version.",
     "timezone": "Timezone",
-    "timezoneNote": "Every time on screen is shown in it, and “today” - quiet hours, the daily summary, the daily snapshot - begins at midnight here."
+    "timezoneNote": "Every time on screen is shown in it, and “today” - quiet hours, the daily summary, the daily snapshot - begins at midnight here.",
+    "language": "Language",
+    "languageHint": "The language of this interface. Observations, explanations, answers and Telegram messages are written by the server and stay in English.",
+    "interfaceLanguage": "Interface language"
   },
   "topicsPage": {
     "title": "Topics",
@@ -921,5 +924,27 @@
     "underASecond": "<1 s",
     "seconds": "{{count}} s",
     "minutes": "{{count}} min"
+  },
+  "languages": {
+    "en": "English",
+    "he": "עברית"
+  },
+  "assetClasses": {
+    "groups": {
+      "equity": "Stocks",
+      "etf": "ETFs",
+      "crypto": "Crypto",
+      "fx": "FX",
+      "index": "Indices",
+      "unknown": "Unclassified"
+    },
+    "one": {
+      "equity": "equity",
+      "etf": "etf",
+      "crypto": "crypto",
+      "fx": "fx",
+      "index": "index",
+      "unknown": "unknown"
+    }
   }
 }

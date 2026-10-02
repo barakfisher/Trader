@@ -1,6 +1,6 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 
-import type { ObservationSeverity, UserSettings, UserSettingsResponse } from '@traders/shared';
+import type { ObservationSeverity, UiLanguage, UserSettings, UserSettingsResponse } from '@traders/shared';
 
 import { ApiRequestError, api } from '../api/client.ts';
 import { muteEndingIn } from '../lib/notificationSchedule.ts';
@@ -64,7 +64,8 @@ export class SettingsStore {
       this.saved.notifySeverity !== this.draft.notifySeverity ||
       this.saved.quietHoursStart !== this.draft.quietHoursStart ||
       this.saved.quietHoursEnd !== this.draft.quietHoursEnd ||
-      this.saved.mutedUntil !== this.draft.mutedUntil
+      this.saved.mutedUntil !== this.draft.mutedUntil ||
+      this.saved.language !== this.draft.language
     );
   }
 
@@ -112,6 +113,9 @@ export class SettingsStore {
       // From the response: the server returns the stored row, so the form shows
       // what was written rather than what was typed.
       this.root.queryClient.setQueryData(queryKeys.settings, response.settings);
+      // The page switches language only once the server holds the new one, so
+      // what is on screen never claims a setting that failed to save.
+      this.root.auth.adoptLanguage(response.settings.language);
       runInAction(() => {
         this.edits = null;
         this.savedAt = new Date();
@@ -140,6 +144,10 @@ export class SettingsStore {
 
   setNotifySeverity(severity: ObservationSeverity): void {
     this.update({ notifySeverity: severity });
+  }
+
+  setLanguage(language: UiLanguage): void {
+    this.update({ language });
   }
 
   setProposalTtlHours(hours: number): void {
