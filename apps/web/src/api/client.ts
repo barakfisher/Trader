@@ -10,7 +10,10 @@ import type { ApiError } from '@traders/shared';
 
 import { t } from '../i18n/index.ts';
 
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080').replace(/\/$/, '');
+// Relative: the API is served on the page's own origin, by nginx in the image
+// and by Vite's proxy in development (vite.config.ts), so the session cookie
+// always belongs to the address the page was opened at.
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '');
 
 export class ApiRequestError extends Error {
   constructor(
