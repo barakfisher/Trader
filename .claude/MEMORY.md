@@ -4,7 +4,26 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-01 ~13:27 UTC - **Post-M8 queue complete (#137-#140 after the #136 handoff). The
+Updated: 2026-10-02 ~06:45 UTC - **Hebrew and RTL is complete (#142-#144); this is its closing
+handoff. Nothing is in flight. The next session starts by asking the user what comes next** - see
+"Next session: after Hebrew" in "Where to go next". This session (grant: PR, merge on green, verify
+on `main` by content, rebuild compose and kind - **it ends here; ask again**) measured first,
+brought four decisions (all accepted; the library changed once, on the user's question), then built
+three slices:
+- #142 (decision 94): the layout in logical directions - 120 physical Tailwind classes converted,
+  a test that refuses them, back arrows mirrored, charts pinned left-to-right, server English
+  marked; and CLAUDE.md guideline 1 amended. Found by looking, not by tests: `text-start` on a
+  header row centred every `<th>` (see the bug list);
+- #143 (decision 95): every UI string in a react-i18next catalogue (759 keys), figures through
+  `Intl`; the English text of every page was compared line by line with `main`'s and matched;
+- #144 (decisions 96-97): migration 0034 `user_settings.language`, delivered with the session;
+  `he.json` (775 keys with Hebrew's dual plurals); he-IL formatting; Unicode isolates for signed
+  figures and English fragments. Checked page by page in Hebrew against a **copy** of the live
+  database before merging; the user asked to merge.
+Both environments run `main` at `7dcaf0a`, migration `0034_user_language`. The live account's
+language is still `en` - the user switches it in Settings.
+
+Previous handoff, 2026-10-01 ~13:27 UTC - **Post-M8 queue complete (#137-#140 after the #136 handoff). The
 independent-tasks queue is empty; the next session starts Hebrew and RTL** - see "Next session:
 Hebrew and RTL" in "Where to go next". The user re-granted (PR, merge on green, verify by content,
 rebuild compose and kind) right after #136 and chose to continue in the same session; **that grant
@@ -325,6 +344,7 @@ strings and left-to-right assumptions before designing it.
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
+| Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | M8 — Admin operations & observability | ✅ Complete | #120-#124, #126-#130: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel, on-demand profiles, the rescreen run and its CronJob. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event and profiled within one background fetch ✅ (#127, decision 89); rescreen button ✅ (#128, decision 90; shown in kind); button and CronJob are one run ✅ (#129, decision 91; shown in kind). Checked live 2026-10-01 - see "M8 is complete, and how it was verified" |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
@@ -1539,6 +1559,55 @@ failure they prevent.
     CI. Locally all 22 orchestrator SQL tests passed as the app role with one expected change:
     an UPDATE on the audit is now refused by privilege, not by the trigger.
 
+94. **The layout is written in logical directions, and guideline 1 was amended rather than
+    worked around** (Hebrew slice 1, #142). The user asked for Hebrew while CLAUDE.md guideline
+    1 said "English only, including UI copy"; the rule was changed with them first: the
+    repository stays English, UI copy is translatable. The layout uses `ms-`/`pe-`/`text-end`
+    so one `dir` on `<html>` mirrors every page; `test/textDirection.test.ts` refuses any
+    physical class and any horizontal arrow or chevron without `MIRROR_IN_RTL`. **Charts stay
+    left-to-right** in Hebrew (`CHART_DIRECTION`): time running backwards reads as a mirror
+    image, and Recharts has no RTL mode. Rejected: converting classes later, page by page - a
+    physical class looks right in English, so nothing would ever have reported one. Slice 1's
+    `?dir=rtl` test switch was **removed** in slice 3: kept in `sessionStorage`, it left a
+    user's tab mirrored in English and looked like a bug.
+
+95. **react-i18next, with a CI parity test, not an in-house catalogue** (Hebrew slice 2, #143).
+    First recommended in-house (~100 lines, a missing key a type error); the user asked whether
+    a library existed, and the recommendation changed: the one argument against i18next - a
+    missing Hebrew key silently shows English - is closed by `i18n/parity.ts`, which fails CI
+    on a missing key, a missing plural form (from `Intl.PluralRules`, so Hebrew's `_two`), a
+    dropped `{{placeholder}}` or `<Trans>` tag, or a stale key. `t()` is typed against
+    `en.json`. A second test fails on any word written straight into JSX or a text attribute.
+    Formatting is not in the catalogue: `i18n/format.ts` formats money, percents, shares and
+    dates with `Intl` in the language's locale - English keeps en-US numbers with en-GB
+    day-first dates, exactly as before. `t()` outside React reports a MobX dependency on the
+    language, so a store's cached message is recomputed when the language changes. Rejected:
+    `useTranslation` everywhere (stores and `lib/` build half the strings) and reloading the page
+    on a language change.
+
+96. **v1 translates the interface only; server-generated text stays English** (the user's
+    decision, 2026-10-01). Observations, narration, `/ask` answers, news, the concept corpus,
+    Telegram, the digest and API error messages are English, marked `lang="en" dir="auto"`
+    (`SERVER_ENGLISH`) so they keep their own direction on a Hebrew page. Why: headlines are
+    stored in English when written, the evidence validator parses only `1,234.5`-style
+    numbers, the corpus is 4,253 English words ingested once, and the Ask intent rules are
+    English - each is its own project. Consequences kept on purpose: the Ask example questions
+    stay English (they become the question), the Topics placeholder says "in English", concept
+    chips are English. The cheapest next step, if wanted, is the 198 lines of deterministic
+    templates (`app/narration/templates.py`), rendered per language.
+
+97. **The language lives on `user_settings` and travels with the session** (Hebrew slice 3,
+    #144, migration 0034). `'en' | 'he'`, default `'en'`, CHECKed (`UI_LANGUAGES` in
+    `packages/shared/src/language.ts` restates it for both services). On `user_settings`, not
+    `users`: 0006's line - `users` resolves "today", `user_settings` holds what reaches the user
+    - and it is the row Telegram and the digest already read. Required in `PUT /settings`
+    (a replace: left out, it would reset to English on an unrelated save). `/auth/session` and
+    `/auth/login` read it through `getOrCreateUserSettings`, so the default is written once, in
+    the schema, and the first screen is already in the language - `App` draws nothing until the
+    session is known. The page switches language only once the save succeeds. Rejected:
+    `localStorage` (one browser, no message, and an English flash on every load). The sign-in
+    page is English: the language is unknown until someone signs in.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -2079,10 +2148,46 @@ nor our request is the server's load, not our counter. → **Before explaining a
 behaviour, vary that behaviour and check that the failure moves with it.** Spacing probes
 beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 
+**`text-start` on a header row centred every `<th>`, in English too** (#142). Browsers centre a
+header cell unless an ancestor sets an explicit alignment, and `text-align: start` is the initial
+value, so Chrome does not count it - `left` did. All eight tables were affected; the tests passed,
+the screen did not. Fixed once in `index.css` (`th { text-align: inherit }`). → **A logical value
+that equals the initial value is not "set".** After a mechanical CSS rewrite, look at the pages;
+a class-for-class swap is not behaviour-preserving by construction.
+
+**Hand-built signed numbers reorder in right-to-left text** (#142-#144). `+0.41%` rendered as
+`0.41%+`, `1–168` as `168–1`, `$AAPL` as `AAPL$`, and an English reason after a colon came out in
+pieces: the Unicode bidirectional algorithm gives a leading `+`/`-`, a dash or `$` with no strong
+letter beside it the paragraph's direction. `Intl` in he-IL inserts its own marks, which is why
+every figure goes through `i18n/format.ts`; what is built by hand is wrapped **in the Hebrew
+string** in LRI…PDI (`\u2066…\u2069`, signed figures, ranges, tickers) or FSI…PDI
+(`\u2068…\u2069`, English fragments from the server); names go in `<bdi>`. → **In an RTL
+language, check every number that has a sign, a range or a currency beside it, on screen.**
+
+**i18next treats a parameter named `count` as a plural selector** (#143). Passing formatted text
+under `count` ("5,223", "2 findings") makes it parse text to choose a form; in English it happened
+to fall back to the base key, in Hebrew it would pick a wrong one. → **`count` only for numbers;
+formatted figures are `value`.** The catalogue keeps that rule.
+
+**Two Hebrew states translated to the same word** (#144): "Snoozed" and "Rejected" were both
+"נדחה", one meaning postponed and one refused; the audit trail would have read "נדחה ← נדחה".
+Snooze is "השהיה". Found by reading the screen, not by the parity test, which checks presence,
+not meaning. → **A translation is reviewed on screen, by state, next to its neighbours.**
+
+**`seed_head.sql` must carry every value a CHECK enumerates** (#144's CI). Adding `'he'` to a
+CHECK failed `test_the_seed_covers_every_enumerated_value` until a seed row held it, so the
+downgrade runs over real data. → **A migration that adds an enumerated value adds a seed row in
+the same PR.** Run `test_migrations.py` against a throwaway Postgres container, never compose's
+(see Local environment).
+
 ## Current technical debt
 
 | Item | Where | Impact |
 |---|---|---|
+| **A Hebrew page still shows English server text** | decision 96 | Observations, narration, `/ask` answers, news, the corpus, Telegram and the digest are English on a Hebrew page, marked `lang="en"` so they read correctly. Deliberate for v1. Next step if wanted: render `app/narration/templates.py` per language (the evidence validator's number regex would need Hebrew formats if the model narrates in Hebrew) |
+| **The Hebrew wording was written by the model and merged without line-by-line corrections** | `apps/web/src/i18n/locales/he.json` | The user asked to merge after a side-by-side list was sent (17 strings flagged as least sure: "נ״א", "סטייה בפיזור", "ירידה מהשיא", "השהיה", "מוערך בחסר", "מכשיר", "יקום", the ד׳/ש׳/ימ׳ abbreviations). Instructions use the plural ("בחרו") and possessives "שלך" - the user was asked whether to change the form and did not answer. Corrections are edits to `he.json` only; the parity test keeps them complete |
+| **The sign-in page is always English** | `AuthStore` default | The language is per account and unknown before sign-in. `navigator.language` could choose the sign-in page's language; not done |
+| **Duration abbreviations have no plural forms** | `duration.*` in the catalogues | English needs none, so Hebrew cannot add `_one`/`_two` (parity refuses keys English lacks): "לפני 1 ימ׳" rather than "לפני יום". Adding plural forms to the English keys would allow it |
 | ~~A dead rescreen waits for the next trigger~~ | — | **Resolved** (independent task 12): worse than this row said - a rescreen that died held its own day's key, and the one-running index (0031) refused **every later day's** key, button and CronJob alike, until someone edited the row. `claimRun` now meets that index by closing out runs of the kind that are dead by its own reclaim test (stale heartbeat, or never beat and older than `STALE_RUN_MINUTES`), marking them `failed` with `stats.supersededBy`, and claiming once more; a live one still refuses. The fetch cache is not tied to a key, so the new run resumes. Tested against Postgres as `traders_app` |
 | **The snapshot volume is ReadWriteOnce** | `infra/k8s/base/universe-snapshots.yaml` | kind has one node, so every AI-service copy and the `universe` Job share the claim. On a multi-node cluster, pods on a second node cannot mount it: it needs ReadWriteMany storage or the rescreen pinned to one node |
 | **An on-demand profile is never refreshed** | `app/universe/on_demand.py` | Written once (`DO NOTHING`); its size facts and description stay as fetched until a rescreen admits it (then the loader owns it) or it is deleted. A fetch lost to a dying process (`BackgroundTasks` is in-memory) is retried only the next time a user names the symbol - on a later local day, since gap events are counted per day but the request fires on every sighting |
@@ -2160,7 +2265,24 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
   (`ln -s /Users/a/projects/Traders/services/ai/.venv services/ai/.venv`; untracked, never commit)
   and ran scripts with `PYTHONPATH=.` so they import the worktree's `app`. Before `PYTHONPATH` was
   set, `export_openapi.py` reported writing the spec and produced no diff.
-- **At this handoff compose and kind both run `main` at `1a12eac`** (#140; the line below is from #136, kept for its other facts)
+- **At the Hebrew handoff (2026-10-02) compose and kind both run `main` at `7dcaf0a`, migration
+  `0034_user_language`** (#144). The live account's `user_settings.language` is `en`.
+- **Two browsers, two cookie jars.** The user signs in in **their Chrome**, not in the app's
+  browser pane, and does not want to look for the pane; reading their pages needs the Claude in
+  Chrome tools, with their go-ahead. The session cookie is per host, not per port, so any
+  `localhost:<port>` dev server behind a `/__api` Vite proxy to an orchestrator shares the sign-in.
+  `127.0.0.1` and `localhost` are different hosts. Chrome will not shrink below ~500 px: check
+  375 px with an `<iframe style="width:375px">` written into a same-origin page.
+- **A review copy of the live database is cheap and safe** (how #144 was checked before merging):
+  `docker exec traders-postgres-1 createdb -U traders traders_review`, then
+  `pg_dump -U traders traders | psql -U traders -d traders_review` inside the container, migrate the
+  copy with the worktree's alembic (`DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders_review`),
+  and run the branch orchestrator against it as `traders_app` with `SCHEDULER_ENABLED=false` and
+  every `TELEGRAM_*` unset (a second poller would steal the real bot's updates). Drop the copy after.
+- **Stray processes from older sessions:** an orchestrator from the `m3-slice-2` worktree
+  listens on **8081**, and a Vite server from `~/.Trash/frontend` on **5173**. Neither was
+  started or stopped by the Hebrew session; pick other ports (8082, 5175 worked).
+- **Earlier, compose and kind both ran `main` at `1a12eac`** (#140; the line below is from #136, kept for its other facts)
 - **Earlier, compose and kind ran `main` at `680ef20`** (#135), rebuilt and redeployed from the main checkout. **Both run migration 0033**: services connect as
   `traders_app` (compose password: `APP_DB_PASSWORD`, defaulting to `traders_app` because this
   machine's `.env` does not set it - set one if the stack ever leaves the laptop); kind's is in
@@ -2339,6 +2461,40 @@ beyond the stated limit (20 s against a 5 s limit) is safe and is how to do it.
 
 ## Where to go next
 
+### Next session: after Hebrew
+
+**Ask the user what comes next, with a recommendation; then ask for a grant** (the last one ended
+with this handoff). The options as they stand:
+1. **The multi-agent sandbox** (`docs/PROPOSAL-MULTI-AGENT.md` stages 1-3: the `agents` table and
+   `agent_id` everywhere, deterministic agents, budget/fills/scoring) - an approved spec, unbuilt,
+   and named as the likely next milestone since M8. The `queries.ts` split (#140) was done partly
+   for it. **Recommended**: it is the only item with an approved spec, and it is a milestone.
+   Start the way every milestone here starts: measure the tables it touches, then propose slices.
+2. **Hebrew for server-generated text** (decision 96): the deterministic templates first, then
+   the digest and Telegram; narration in Hebrew needs the evidence validator to read Hebrew
+   number formats. Only if the user wants Hebrew beyond the interface.
+3. **The debt table**, notably the owner's password in every container and the integration
+   suite borrowing `traders_app`'s password.
+4. **A real deployment** (Telegram's webhook leg, ReadWriteMany storage) - a milestone the user
+   would write.
+Before any of them: if the user sends Hebrew corrections, they are edits to `he.json` alone.
+
+### Hebrew and RTL is complete, and how it was verified
+
+- **Measured first** (2026-10-01, read-only): ~640 hard-coded strings in 44 files; 120 physical
+  direction classes in 12 files and none logical; `formatMoney` defaulting to en-US with a
+  hand-built `formatPercent`; dates hard-coded `en-GB`; 8 back arrows and a chevron that point.
+- **Slice 1 (#142):** the English pages looked identical; RTL checked page by page in Chrome at
+  desktop and 375 px with `?dir=rtl` (since removed).
+- **Slice 2 (#143):** the visible text of every page (dashboard 347 lines, admin 690, holding
+  287, ...) compared line by line between the branch and `main`, both served against the same
+  live API; identical apart from relative ages. Two intended English changes: real plurals for
+  "row(s)" and a snooze bug ("snoozed, back in expiring now").
+- **Slice 3 (#144):** Hebrew chosen and saved in Settings switched the page at once; every page
+  checked in Hebrew at desktop and 375 px against a copy of the live database. Five faults found
+  and fixed on screen (the reversed range, names' full stops, the Ask examples' question mark,
+  English admin reasons, the snooze/reject clash). CI caught the missing seed row.
+
 ### M3 is complete, and how it was verified
 
 Every slice was verified by running it against the real database and, where it mattered, the real
@@ -2480,7 +2636,7 @@ running systems, not only in tests:
   (#127): an import preview of BYND and GPRO profiled both within a second; SAP.DE, outside the
   screen, was not fetched; "plant-based meat" still resolved without them.
 
-### Next session: Hebrew and RTL
+### Next session: Hebrew and RTL (history - done by #142-#144)
 
 The user asked for it on 2026-10-01, after the queue. **Ask for a grant first** (the last one ended
 with #140). Then, in the order the user's working agreement asks for (measure, decide, build):

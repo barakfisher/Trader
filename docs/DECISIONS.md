@@ -104,3 +104,7 @@ while this file is out of date.
 | 91 | The quarterly rescreen asks hourly, and is due by the age of the snapshot loaded |
 | 92 | A standing finding is asked about once per episode, not once per observation |
 | 93 | The services connect as `traders_app`; only migrations connect as the owner |
+| 94 | The layout is written in logical directions, and guideline 1 was amended rather than worked around |
+| 95 | react-i18next, with a CI parity test, not an in-house catalogue |
+| 96 | v1 translates the interface only; server-generated text stays English |
+| 97 | The language lives on `user_settings` and travels with the session |
