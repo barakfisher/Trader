@@ -51,6 +51,7 @@ function proposal(overrides: Partial<Proposal> = {}): Proposal {
     subjectRef: 'portfolio:allocation:BTC-USD',
     headline: 'BTC-USD is 15.2 percentage points above its 20.0% target',
     explanation: null,
+    localized: {},
     evidence: EVIDENCE,
     expiresAt: new Date(Date.now() + 17 * 3_600_000).toISOString(),
     snoozedUntil: null,

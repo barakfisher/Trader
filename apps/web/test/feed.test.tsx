@@ -8,7 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 
 import type { Observation } from '@traders/shared';
 
@@ -34,6 +34,7 @@ vi.mock('../src/api/client.ts', () => {
 
 const { ApiRequestError } = await import('../src/api/client.ts');
 const { ObservationsFeed } = await import('../src/components/ObservationsFeed.tsx');
+const { applyLanguage } = await import('../src/i18n/index.ts');
 const { FEED_PAGE_SIZE } = await import('../src/queries/observations.ts');
 const { renderWithServerState } = await import('./serverStateHarness.tsx');
 
@@ -47,6 +48,7 @@ const finding: Observation = {
   explanation: 'NVDA went from 129.45 USD to 118.45 USD, a change of -8.5%.',
   evidence: { symbol: 'NVDA', currency: 'USD', price_minor: 11845 },
   conceptRefs: [],
+  localized: {},
   narrationSource: 'template',
   fallbackReason: 'none',
   createdAt: '2026-09-16T14:00:00Z',
@@ -78,6 +80,38 @@ describe('ObservationsFeed', () => {
     const headlines = await screen.findAllByText(/NVDA moved|VOO allocation/);
     expect(headlines.map((node) => node.textContent)).toEqual([finding.headline, second.headline]);
     expect(get).toHaveBeenCalledWith(`/observations?limit=${FEED_PAGE_SIZE}`);
+  });
+
+  it('shows a finding in the page language, and the English where it has no translation', async () => {
+    const hebrew = {
+      headline: 'מחיר \u2066NVDA\u2069 השתנה ב־\u2066-8.5%\u2069 ל־\u2066118.45 USD\u2069',
+      explanation: 'מחיר \u2066NVDA\u2069 עבר מ־\u2066129.45 USD\u2069 ל־\u2066118.45 USD\u2069.',
+    };
+    const untranslated = { ...finding, id: 'obs-2', headline: 'VOO allocation fell below target weight' };
+    serve({
+      '/observations': () =>
+        Promise.resolve({
+          observations: [{ ...finding, localized: { he: hebrew } }, untranslated],
+          total: 2,
+          nextCursor: null,
+        }),
+      '/portfolio': noPortfolio,
+    });
+    try {
+      renderWithServerState(<ObservationsFeed />);
+      await screen.findByText(finding.headline);
+      // After the store has started: it applies the session's language, English
+      // here. Switching re-renders the text without a refetch.
+      act(() => applyLanguage('he'));
+      const translated = await screen.findByText(hebrew.headline);
+      expect(translated.getAttribute('lang')).toBe('he');
+      expect(screen.getByText(hebrew.explanation).getAttribute('lang')).toBe('he');
+      // No translation: the English, still marked as English.
+      expect(screen.getByText(untranslated.headline).getAttribute('lang')).toBe('en');
+      expect(screen.queryByText(finding.headline)).toBeNull();
+    } finally {
+      applyLanguage('en');
+    }
   });
 
   it('says "nothing to report" only once a load has succeeded with nothing', async () => {

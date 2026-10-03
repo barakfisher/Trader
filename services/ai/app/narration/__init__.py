@@ -7,11 +7,14 @@ correlation so the model has real context rather than a reason to invent some.
 
 from app.narration.correlation import CandidateArticle, as_evidence, correlate
 from app.narration.evidence_validator import is_supported, sourced_values, unsourced_figures
+from app.narration.localized import TRANSLATED_LANGUAGES, LocalizedText, localize
 from app.narration.narrator import Narration, build_evidence, narrate
 from app.narration.templates import concepts_for, explanation_for, headline_for
 
 __all__ = [
+    "TRANSLATED_LANGUAGES",
     "CandidateArticle",
+    "LocalizedText",
     "Narration",
     "as_evidence",
     "build_evidence",
@@ -20,6 +23,7 @@ __all__ = [
     "explanation_for",
     "headline_for",
     "is_supported",
+    "localize",
     "narrate",
     "sourced_values",
     "unsourced_figures",

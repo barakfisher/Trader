@@ -289,6 +289,13 @@ class PortfolioScanRequest(BaseModel):
     )
 
 
+class LocalizedTextOut(BaseModel):
+    """An observation's headline and explanation in one language."""
+
+    headline: str
+    explanation: str
+
+
 class ObservationOut(BaseModel):
     """A finding, its words, and its identity.
 
@@ -309,6 +316,10 @@ class ObservationOut(BaseModel):
     dedupe_key: str
     narration_source: NarrationSource
     fallback_reason: str = "none"
+    #: The template's words in each language besides English, keyed by language
+    #: code. Template-written in every language, even when the model wrote the
+    #: English: see `app/narration/localized.py`.
+    localized: dict[str, LocalizedTextOut] = Field(default_factory=dict)
 
 
 class SeenFindingOut(BaseModel):

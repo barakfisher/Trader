@@ -77,7 +77,8 @@ const get = () => app.request('/notifications/digest', { headers: { cookie } });
 
 describe('GET /notifications/digest', () => {
   it('says what the next digest holds, with why each was held back', async () => {
-    queries.listPendingDigestEntries.mockResolvedValueOnce([row()]);
+    const localized = { he: { headline: 'מחיר \u2066SMR\u2069 נמצא \u2066-30.6%\u2069 מהשיא של \u206630\u2069 יום', explanation: '' } };
+    queries.listPendingDigestEntries.mockResolvedValueOnce([row({ localized })]);
 
     const body = await (await get()).json();
 
@@ -86,6 +87,7 @@ describe('GET /notifications/digest', () => {
       {
         observationId: 'o-1',
         headline: 'SMR is -30.6% from its 30-day high',
+        localized,
         severity: 'high',
         subjectRef: 'instrument:SMR',
         reason: 'quiet_hours',

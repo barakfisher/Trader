@@ -24,8 +24,8 @@ export function applyDocumentDirection(direction: TextDirection, root: HTMLEleme
 }
 
 /**
- * Text the server wrote in English - observation headlines and explanations,
- * narration, `/ask` answers, the concept corpus, news headlines. The interface
+ * Text the server wrote in English - `/ask` answers, the concept corpus, news
+ * headlines, and an observation with no translation (`observationText`). The interface
  * around it may be translated; this text is not (CLAUDE.md guideline 1), so it
  * says so: `lang="en"` for screen readers and hyphenation, and `dir="auto"` so
  * an English sentence keeps its own direction - and its full stop and minus

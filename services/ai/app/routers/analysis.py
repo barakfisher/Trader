@@ -26,6 +26,7 @@ from app.core.logging import get_logger
 from app.db import get_engine
 from app.deps import SettingsDep, require_internal_key
 from app.models import (
+    LocalizedTextOut,
     ObservationOut,
     PortfolioScanRequest,
     PortfolioScanResponse,
@@ -141,4 +142,8 @@ def _observation_out(item: ScanObservation) -> ObservationOut:
         dedupe_key=item.dedupe_key,
         narration_source=item.narration.source,
         fallback_reason=item.narration.fallback_reason,
+        localized={
+            language: LocalizedTextOut(**text)
+            for language, text in item.narration.localized.items()
+        },
     )

@@ -7,7 +7,7 @@ import { useTranslation } from '../i18n/index.ts';
 import { countText, findingsIn, reasonSummary, reasonText } from '../lib/digestPresentation.ts';
 import { severityStyle, subjectLabel } from '../lib/observationPresentation.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
-import { SERVER_ENGLISH } from '../lib/textDirection.ts';
+import { observationText } from '../lib/observationText.ts';
 import { useDigestQuery } from '../queries/digest.ts';
 import { Card, ErrorNote, Spinner } from './ui.tsx';
 
@@ -76,12 +76,13 @@ export const DigestCard = observer(function DigestCard() {
 });
 
 function EntryList({ entries }: { entries: DigestEntry[] }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const shown = entries.slice(0, SHOWN);
   return (
     <ul className="mt-2 space-y-1.5">
       {shown.map((entry, index) => {
         const severity = entry.severity ? severityStyle(entry.severity) : null;
+        const text = observationText(entry, i18n.language);
         return (
           <li key={`${entry.observationId}-${index}`} className="flex flex-wrap items-baseline gap-x-2 text-xs">
             {severity && (
@@ -92,7 +93,7 @@ function EntryList({ entries }: { entries: DigestEntry[] }) {
             {entry.subjectRef && (
               <span className="font-medium text-text-primary">{subjectLabel(entry.subjectRef)}</span>
             )}
-            <span {...SERVER_ENGLISH} className="text-text-primary">{entry.headline}</span>
+            <span {...text.attributes} className="text-text-primary">{text.headline}</span>
             <span className="text-text-muted">· {reasonText(entry.reason)}</span>
           </li>
         );

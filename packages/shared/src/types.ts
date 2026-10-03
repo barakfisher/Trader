@@ -8,7 +8,7 @@
  *  - timestamps: ISO 8601 UTC strings.
  */
 
-import type { UiLanguage } from './language.js';
+import type { LocalizedTexts, UiLanguage } from './language.js';
 
 export type AssetClass = 'equity' | 'etf' | 'crypto' | 'fx' | 'index' | 'unknown';
 
@@ -482,6 +482,8 @@ export interface Observation {
    * checked, and a UI must say the former rather than imply the latter.
    */
   narrationSource: NarrationSource | null;
+  /** The template's wording in each translated language (`LocalizedTexts`). */
+  localized: LocalizedTexts;
   /**
    * Why the model did not write it, when it did not.
    *
@@ -504,6 +506,8 @@ export interface DigestEntry {
   /** Null for a notice that explanations changed, which is not a finding. */
   observationId: string | null;
   headline: string | null;
+  /** Empty for a notice, which is written in the interface's own catalogue. */
+  localized: LocalizedTexts;
   severity: ObservationSeverity | null;
   subjectRef: string | null;
   reason: DigestReason;
@@ -601,6 +605,7 @@ export interface Proposal {
   subjectRef: string | null;
   headline: string;
   explanation: string | null;
+  localized: LocalizedTexts;
   /** The figures behind the headline. Every number in the text appears here. */
   evidence: unknown;
   expiresAt: string;

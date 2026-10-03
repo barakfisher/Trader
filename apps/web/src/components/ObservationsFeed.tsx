@@ -13,7 +13,8 @@ import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { errorMessage } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
-import { MIRROR_IN_RTL, SERVER_ENGLISH } from '../lib/textDirection.ts';
+import { observationText } from '../lib/observationText.ts';
+import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import {
   FEED_PAGE_SIZE,
   loadedFindings,
@@ -201,8 +202,9 @@ export const ObservationRow = observer(function ObservationRow({
   baseCurrency: string;
 }) {
   const { observations, concepts } = useStore();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const severity = severityStyle(observation.severity);
+  const text = observationText(observation, i18n.language);
   const open = observations.isExpanded(observation.id);
   const drawerId = `evidence-${observation.id}`;
 
@@ -228,8 +230,8 @@ export const ObservationRow = observer(function ObservationRow({
           </span>
         </div>
 
-        <p {...SERVER_ENGLISH} className="mt-1 text-sm font-medium text-text-primary">{observation.headline}</p>
-        <p {...SERVER_ENGLISH} className="mt-1 text-sm text-text-muted">{observation.explanation}</p>
+        <p {...text.attributes} className="mt-1 text-sm font-medium text-text-primary">{text.headline}</p>
+        <p {...text.attributes} className="mt-1 text-sm text-text-muted">{text.explanation}</p>
 
         {observation.conceptRefs.length > 0 && (
           <p className="mt-2 flex flex-wrap items-center gap-1 text-[11px] text-text-muted">

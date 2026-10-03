@@ -14,7 +14,8 @@ import { subjectLabel } from '../lib/observationPresentation.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { outcomeAt, outcomeText, transitionText } from '../lib/proposalOutcome.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
-import { MIRROR_IN_RTL, SERVER_ENGLISH } from '../lib/textDirection.ts';
+import { observationText } from '../lib/observationText.ts';
+import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { useProposalQuery } from '../queries/proposals.ts';
 import { useStore } from '../stores/context.tsx';
@@ -98,7 +99,8 @@ export const ProposalPage = observer(function ProposalPage() {
 
 /** A decided proposal: its outcome, what it asked, and the figures - no buttons. */
 function DecidedCard({ proposal, baseCurrency }: { proposal: Proposal; baseCurrency: string }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const text = observationText(proposal, i18n.language);
   return (
     <Card>
       <div className="space-y-2">
@@ -106,9 +108,9 @@ function DecidedCard({ proposal, baseCurrency }: { proposal: Proposal; baseCurre
           <OutcomeBadge proposal={proposal} />{' '}
           {outcomeAt(proposal) !== null && formatExactTime(outcomeAt(proposal))}
         </p>
-        <h2 {...SERVER_ENGLISH} className="text-sm font-semibold text-text-primary">{proposal.headline}</h2>
-        {proposal.explanation !== null && (
-          <p {...SERVER_ENGLISH} className="text-sm text-text-muted">{proposal.explanation}</p>
+        <h2 {...text.attributes} className="text-sm font-semibold text-text-primary">{text.headline}</h2>
+        {text.explanation !== null && (
+          <p {...text.attributes} className="text-sm text-text-muted">{text.explanation}</p>
         )}
         <p className="text-xs text-text-muted">
           {proposal.state === 'expired'

@@ -433,6 +433,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         dedupeKey: `test-${randomUUID()}`,
         narrationSource: 'template',
         fallbackReason: 'no_provider',
+        localized: { he: { headline: '\u2066TEST\u2069 זז', explanation: '\u2066TEST\u2069 זז.' } },
       };
       const first = await queries.insertObservations([observation]);
       const second = await queries.insertObservations([observation]);
@@ -441,6 +442,10 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
       const recent = await queries.listRecentNarrationProvenance(USER, 3);
       expect(recent[0]).toEqual({ narration_source: 'template', fallback_reason: 'no_provider' });
+
+      // The translations come back as they went in, isolates included.
+      const [stored] = await queries.listObservations(USER, 1);
+      expect(stored!.localized).toEqual(observation.localized);
     });
   });
 
@@ -461,6 +466,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           dedupeKey: `test-${randomUUID()}`,
           narrationSource: 'template',
           fallbackReason: 'no_provider',
+          localized: {},
         },
       ]);
       const episode = {

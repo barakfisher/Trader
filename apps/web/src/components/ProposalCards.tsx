@@ -8,7 +8,7 @@ import type { Proposal, ProposalAction } from '@traders/shared';
 import { useTranslation } from '../i18n/index.ts';
 import { isUrgent, snoozeDescription, timeLeft } from '../lib/proposalCountdown.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
-import { SERVER_ENGLISH } from '../lib/textDirection.ts';
+import { observationText } from '../lib/observationText.ts';
 import { undoSecondsLeft } from '../lib/undoWindow.ts';
 import { SNOOZE_HOURS } from '../stores/ProposalsStore.ts';
 import { useStore } from '../stores/context.tsx';
@@ -22,15 +22,15 @@ import { Button, Card } from './ui.tsx';
  */
 
 /** The headline, as a link to the proposal's own page unless it is that page. */
-function ProposalHeadline({ proposal, link }: { proposal: Proposal; link: boolean }) {
-  if (!link) return <>{proposal.headline}</>;
+function ProposalHeadline({ proposal, link, headline }: { proposal: Proposal; link: boolean; headline: string }) {
+  if (!link) return <>{headline}</>;
   return (
     <Link
       to="/proposals/$proposalId"
       params={{ proposalId: proposal.id }}
       className="hover:text-accent hover:underline"
     >
-      {proposal.headline}
+      {headline}
     </Link>
   );
 }
@@ -66,13 +66,14 @@ export const ApprovedCard = observer(function ApprovedCard({
   proposal: Proposal;
   linkToPage?: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const text = observationText(proposal, i18n.language);
   return (
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-0.5">
-          <p className="text-sm text-text-primary">
-            <ProposalHeadline proposal={proposal} link={linkToPage} />
+          <p {...text.attributes} className="text-sm text-text-primary">
+            <ProposalHeadline proposal={proposal} link={linkToPage} headline={text.headline} />
           </p>
           <p className="text-xs text-text-muted">
             {t('proposal.approved')}
@@ -134,7 +135,8 @@ export const ProposalCard = observer(function ProposalCard({
   linkToPage?: boolean;
 }) {
   const { proposals } = useStore();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const text = observationText(proposal, i18n.language);
   const inFlight = proposals.decidingAction(proposal.id);
   // Every button is disabled while any one is in flight; only the clicked one
   // changes its label, so the user can see which choice registered.
@@ -152,11 +154,11 @@ export const ProposalCard = observer(function ProposalCard({
       <div className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="space-y-1">
-            <h2 {...SERVER_ENGLISH} className="text-sm font-semibold text-text-primary">
-              <ProposalHeadline proposal={proposal} link={linkToPage} />
+            <h2 {...text.attributes} className="text-sm font-semibold text-text-primary">
+              <ProposalHeadline proposal={proposal} link={linkToPage} headline={text.headline} />
             </h2>
-            {proposal.explanation !== null && (
-              <p {...SERVER_ENGLISH} className="text-sm text-text-muted">{proposal.explanation}</p>
+            {text.explanation !== null && (
+              <p {...text.attributes} className="text-sm text-text-muted">{text.explanation}</p>
             )}
           </div>
           <span

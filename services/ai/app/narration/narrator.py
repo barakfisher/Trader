@@ -15,7 +15,7 @@ produced the words, so a reader and a later audit can tell.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from app.analysis.findings import Finding
@@ -31,6 +31,7 @@ from app.llm.base import (
 from app.llm.degenerate_text import is_degenerate
 from app.narration.correlation import CandidateArticle, as_evidence
 from app.narration.evidence_validator import is_supported
+from app.narration.localized import LocalizedText, TranslatedLanguage, localize
 from app.narration.templates import concepts_for, explanation_for, headline_for
 
 log = get_logger("narration")
@@ -72,6 +73,8 @@ class Narration:
     evidence: dict[str, object]
     source: NarrationSource
     fallback_reason: FallbackReason = "none"
+    #: The template's words in each translated language, whoever wrote the English.
+    localized: dict[TranslatedLanguage, LocalizedText] = field(default_factory=dict)
 
 
 def build_evidence(finding: Finding, articles: list[CandidateArticle]) -> dict[str, object]:
@@ -95,6 +98,7 @@ def _template(finding: Finding, evidence: dict[str, object], reason: FallbackRea
         evidence=evidence,
         source="template",
         fallback_reason=reason,
+        localized=localize(finding),
     )
 
 
@@ -186,6 +190,7 @@ async def narrate(
         concepts=concepts_for(finding),
         evidence=evidence,
         source="llm",
+        localized=localize(finding),
     )
 
 

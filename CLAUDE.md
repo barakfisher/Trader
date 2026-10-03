@@ -14,9 +14,11 @@ and [docs/MILESTONES.md](docs/MILESTONES.md) before changing architecture.
    default, `t()` is typed against it, and a translation missing a key, a plural form or a
    placeholder fails CI rather than falling back to English at runtime. Numbers, money and dates
    go through `Intl` in the language's locale (`i18n/format.ts`). The layout is written in logical
-   directions (`ms-`/`pe-`/`text-end`) so a right-to-left language mirrors it. Server-generated
-   text (observations, narration, `/ask` answers, Telegram, the digest, the concept corpus) stays
-   English until a decision says otherwise, and is marked `lang="en"` where the UI shows it.
+   directions (`ms-`/`pe-`/`text-end`) so a right-to-left language mirrors it. Observations are
+   stored with their template wording in every UI language (`observations.localized`, rendered
+   when written); a model-written observation shows its template in a language other than
+   English. Other server-generated text (`/ask` answers, news, the concept corpus) stays English
+   until a decision says otherwise, and is marked `lang="en"` where the UI shows it.
 2. **No order execution, ever.** Approvals write to the virtual ledger only. No broker API, no
    personalized investment advice; output is observation + explanation.
 3. **Money is integer minor units plus an explicit currency code.** `Decimal` in Python, integer

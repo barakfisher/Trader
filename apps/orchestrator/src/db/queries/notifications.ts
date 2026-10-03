@@ -1,3 +1,4 @@
+import type { LocalizedTexts } from '@traders/shared';
 import { query, queryOne } from '../pool.js';
 
 export interface NotificationToRecord {
@@ -116,13 +117,15 @@ export interface DigestEntryRow {
   /** Null for a narration notice, which is not a finding. */
   observation_id: string | null;
   headline: string | null;
+  /** Null for a notice, which has no observation behind it. */
+  localized: LocalizedTexts | null;
   severity: string | null;
   subject_ref: string | null;
 }
 
 const DIGEST_ENTRY_COLUMNS = `
   n.id AS notification_id, n.reason, n.status, n.sent_at, n.created_at,
-  o.id AS observation_id, o.headline, o.severity, o.subject_ref`;
+  o.id AS observation_id, o.headline, o.localized, o.severity, o.subject_ref`;
 
 /** What the next daily digest will carry: every digest-channel row still pending, oldest first. */
 export function listPendingDigestEntries(userId: string): Promise<DigestEntryRow[]> {
