@@ -37,6 +37,7 @@ const SETTINGS = {
   quietHoursEnd: '07:00',
   mutedUntil: null,
   timezone: 'Asia/Jerusalem',
+  language: 'en',
 };
 
 function finding(overrides: Record<string, unknown> = {}) {
@@ -46,6 +47,7 @@ function finding(overrides: Record<string, unknown> = {}) {
     severity: 'high',
     headline: 'VOO is 12pp above target',
     explanation: 'The position has drifted since the target was set.',
+    localized: {},
     ...overrides,
   };
 }
@@ -215,6 +217,22 @@ describe('fanOut', () => {
   });
 });
 
+describe('fanOut in the user’s language', () => {
+  const hebrew = { headline: 'משקל \u2066VOO\u2069 גבוה', explanation: 'משקל \u2066VOO\u2069 בתיק.' };
+
+  it('sends the stored translation, and says which language it is in', async () => {
+    const { sent, notifier } = workingNotifier();
+    await fanOut(USER, [finding({ localized: { he: hebrew } })], { ...SETTINGS, language: 'he' }, notifier, DAYTIME);
+    expect(sent[0]).toMatchObject({ title: hebrew.headline, body: hebrew.explanation, language: 'he' });
+  });
+
+  it('sends the English when a finding has no translation, rather than nothing', async () => {
+    const { sent, notifier } = workingNotifier();
+    await fanOut(USER, [finding()], { ...SETTINGS, language: 'he' }, notifier, DAYTIME);
+    expect(sent[0]).toMatchObject({ title: 'VOO is 12pp above target', language: 'he' });
+  });
+});
+
 describe('settingsForNotification', () => {
   it('takes the timezone from the user, not from the settings row', async () => {
     // Quiet hours borrow users.timezone rather than storing a second copy that
@@ -225,6 +243,7 @@ describe('settingsForNotification', () => {
         quiet_hours_start: '23:00',
         quiet_hours_end: '06:00',
         muted_until: null,
+        language: 'he',
       },
       'America/New_York',
     );
@@ -234,6 +253,7 @@ describe('settingsForNotification', () => {
       quietHoursEnd: '06:00',
       mutedUntil: null,
       timezone: 'America/New_York',
+      language: 'he',
     });
   });
 });

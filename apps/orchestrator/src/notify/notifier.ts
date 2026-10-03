@@ -28,6 +28,11 @@ export interface OutboundNotification {
   /** Present when the user can act on it; a channel may offer inline buttons. */
   proposalId?: string;
   severity: string;
+  /**
+   * The user's interface language. The title and body arrive already in it; a
+   * channel uses it for whatever it adds itself, such as button labels.
+   */
+  language: string;
 }
 
 export interface DeliveryResult {

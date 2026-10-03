@@ -21,6 +21,7 @@
  */
 
 import { logger } from '../logger.js';
+import { messagesFor } from '../notify/messages.js';
 import type { DeliveryResult, Notifier, OutboundNotification } from '../notify/notifier.js';
 import {
   BUSY_CALLBACK_DATA,
@@ -35,23 +36,12 @@ export const MAX_MESSAGE_CHARS = 4096;
 /** Statuses worth exactly one more attempt. */
 const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 
-/** The buttons an actionable alert carries, in the order they are shown. */
-const ACTIONS: { action: CallbackAction; label: string }[] = [
-  { action: 'approve', label: 'Approve' },
-  { action: 'reject', label: 'Reject' },
-  { action: 'snooze', label: 'Snooze' },
-];
-
-/** The one button an approved alert carries. */
-const UNDO_LABEL = '\u21a9 Undo approval';
-
-/** What the placeholder button says while each action is being applied. */
-const WORKING_LABELS: Record<CallbackAction, string> = {
-  approve: '\u23f3 Approving\u2026',
-  reject: '\u23f3 Rejecting\u2026',
-  snooze: '\u23f3 Snoozing\u2026',
-  undo: '\u23f3 Undoing\u2026',
-};
+/**
+ * The buttons an actionable alert carries, in the order they are shown. Their
+ * labels, the Undo button's and the placeholder's are in `notify/messages.ts`,
+ * in the language of the user the message is for.
+ */
+const ACTIONS = ['approve', 'reject', 'snooze'] as const;
 
 /**
  * Which buttons a message should carry once a tap has been handled.
@@ -87,9 +77,6 @@ export interface TelegramClientOptions {
    */
   webBaseUrl?: string | null;
 }
-
-/** The label on the link from a Telegram proposal to its page in the web app. */
-export const OPEN_IN_APP_LABEL = 'Open in app';
 
 /**
  * The web app's origin if Telegram will accept a link to it, else null.
@@ -159,7 +146,9 @@ export class TelegramNotifier implements Notifier {
       text,
       ...(notification.proposalId === undefined
         ? {}
-        : { reply_markup: this.keyboardFor(notification.proposalId, 'decide') }),
+        : {
+            reply_markup: this.keyboardFor(notification.proposalId, 'decide', notification.language),
+          }),
     });
   }
 
@@ -174,7 +163,8 @@ export class TelegramNotifier implements Notifier {
    * Approve button that comes back after an undo must not carry the nonce the
    * first approval already spent.
    */
-  private keyboardFor(proposalId: string, keyboard: Keyboard) {
+  private keyboardFor(proposalId: string, keyboard: Keyboard, language: string) {
+    const messages = messagesFor(language);
     const button = (action: CallbackAction, label: string) => ({
       text: label,
       callback_data: encodeCallbackData(
@@ -186,15 +176,15 @@ export class TelegramNotifier implements Notifier {
     // where the audit trail is, and "what happened to this?" outlives the buttons.
     const base = this.options.webBaseUrl ?? null;
     const link = base
-      ? [[{ text: OPEN_IN_APP_LABEL, url: `${base}/proposals/${encodeURIComponent(proposalId)}` }]]
+      ? [[{ text: messages.openInApp, url: `${base}/proposals/${encodeURIComponent(proposalId)}` }]]
       : [];
     switch (keyboard) {
       case 'decide':
         return {
-          inline_keyboard: [ACTIONS.map(({ action, label }) => button(action, label)), ...link],
+          inline_keyboard: [ACTIONS.map((action) => button(action, messages.buttons[action])), ...link],
         };
       case 'undo':
-        return { inline_keyboard: [[button('undo', UNDO_LABEL)], ...link] };
+        return { inline_keyboard: [[button('undo', messages.undoButton)], ...link] };
       case 'none':
         // An empty keyboard removes it. Omitting `reply_markup` would leave the
         // old one in place, which is the opposite of what a terminal state needs.
@@ -217,12 +207,15 @@ export class TelegramNotifier implements Notifier {
     chatId: string,
     messageId: number,
     action: CallbackAction,
+    language: string,
   ): Promise<DeliveryResult> {
     return this.call('editMessageReplyMarkup', {
       chat_id: chatId,
       message_id: messageId,
       reply_markup: {
-        inline_keyboard: [[{ text: WORKING_LABELS[action], callback_data: BUSY_CALLBACK_DATA }]],
+        inline_keyboard: [
+          [{ text: messagesFor(language).working[action], callback_data: BUSY_CALLBACK_DATA }],
+        ],
       },
     });
   }
@@ -233,11 +226,12 @@ export class TelegramNotifier implements Notifier {
     messageId: number,
     proposalId: string,
     keyboard: Keyboard,
+    language: string,
   ): Promise<DeliveryResult> {
     return this.call('editMessageReplyMarkup', {
       chat_id: chatId,
       message_id: messageId,
-      reply_markup: this.keyboardFor(proposalId, keyboard),
+      reply_markup: this.keyboardFor(proposalId, keyboard, language),
     });
   }
 
@@ -270,13 +264,13 @@ export class TelegramNotifier implements Notifier {
     chatId: string,
     messageId: number,
     text: string,
-    { proposalId, keyboard }: { proposalId: string; keyboard: Keyboard },
+    { proposalId, keyboard, language }: { proposalId: string; keyboard: Keyboard; language: string },
   ): Promise<DeliveryResult> {
     return this.call('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
       text: clampMessage(text),
-      reply_markup: this.keyboardFor(proposalId, keyboard),
+      reply_markup: this.keyboardFor(proposalId, keyboard, language),
     });
   }
 

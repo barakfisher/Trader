@@ -22,7 +22,13 @@ const TODAY = '2026-09-27';
 
 const db = vi.hoisted(() => ({
   topics: [] as Record<string, unknown>[],
-  observations: [] as { subject_ref: string; severity: string; headline: string; created_at: Date }[],
+  observations: [] as {
+    subject_ref: string;
+    severity: string;
+    headline: string;
+    localized?: unknown;
+    created_at: Date;
+  }[],
   lastScan: null as { started_at: Date; status: string; stats: unknown } | null,
   rows: {} as Record<string, TopicSentimentRow[]>,
   pending: [] as { id: string; reason: string; ref_kind?: string; ref_id?: string }[],
@@ -49,6 +55,7 @@ vi.mock('../src/logger.js', () => ({ logger: () => ({ info: vi.fn(), warn: vi.fn
 
 const { gatherTopicDigest, renderTopicSection } = await import('../src/services/topicDigest.js');
 const { sendDigest } = await import('../src/services/notifications.js');
+const queries = await import('../src/db/queries.js');
 
 function topic(id: string, label: string, confirmedAt = '2026-09-20T00:00:00Z') {
   return {
@@ -223,6 +230,39 @@ describe('sendDigest', () => {
     );
     expect(result).toMatchObject({ entries: 3, delivered: true });
     expect(db.settled.map((entry) => entry.id)).toEqual(['n1', 'n2', 'n3']);
+  });
+
+  it('is written in the user’s language, quoting each move’s stored translation', async () => {
+    vi.mocked(queries.getOrCreateUserSettings).mockResolvedValueOnce({
+      muted_until: null,
+      language: 'he',
+    } as never);
+    const hebrewMove = '\u2068uranium\u2069: שינוי ממוצע של \u2066+3.4%\u2069';
+    db.observations = [
+      {
+        subject_ref: 'topic:t-u',
+        severity: 'info',
+        headline: 'uranium moved +3.4% on average',
+        localized: { he: { headline: hebrewMove, explanation: '' } },
+        created_at: NOW,
+      } as never,
+    ];
+    db.pending = [{ id: 'n1', reason: 'quiet_hours' }];
+    const channel = notifier();
+
+    await sendDigest(USER as never, channel as never, NOW);
+
+    const [message] = channel.send.mock.calls[0]! as unknown as [
+      { title: string; body: string; language: string },
+    ];
+    expect(message.language).toBe('he');
+    expect(message.title).toBe('סיכום יומי: ממצא אחד, \u20663\u2069 נושאים');
+    expect(message.body.startsWith(`\u20661\u2069 עוכבו בשעות השקט\n\nנושאים\n• ${hebrewMove}\n`)).toBe(
+      true,
+    );
+    // A topic with nothing to quote is framed in Hebrew, its label isolated.
+    expect(message.body).toContain('• \u2068gasoline\u2069: אין תנועה חריגה ביממה האחרונה');
+    expect(message.body).not.toContain('uranium moved');
   });
 
   it('sends a digest that holds only a narration change', async () => {

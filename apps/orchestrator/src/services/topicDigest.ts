@@ -25,7 +25,7 @@
  * kept rather than broken for the sake of a section.
  */
 
-import type { TopicSentimentResponse } from '@traders/shared';
+import type { LocalizedTexts, TopicSentimentResponse } from '@traders/shared';
 
 import {
   getLatestFinishedRun,
@@ -34,6 +34,7 @@ import {
   listTopics,
   type UserRow,
 } from '../db/queries.js';
+import { messagesFor, observationTextIn } from '../notify/messages.js';
 import { localDate } from './snapshot.js';
 import { summariseTopicSentiment } from './topicSentiment.js';
 
@@ -50,8 +51,11 @@ export type TopicMeasurement =
 
 export interface TopicDigestEntry {
   label: string;
-  /** Stored headlines of this topic's observations from the last day, most severe first. */
-  moves: string[];
+  /**
+   * This topic's observations from the last day, most severe first: the stored
+   * headline and its translations, chosen between when the section is rendered.
+   */
+  moves: { headline: string; localized: LocalizedTexts }[];
   measurement: TopicMeasurement;
   sentiment: TopicSentimentResponse;
   /** Articles dated today in the user's timezone. */
@@ -88,7 +92,7 @@ export async function gatherTopicDigest(user: UserRow, now = new Date()): Promis
       label: topic.label,
       moves: observations
         .filter((row) => row.subject_ref === `topic:${topic.id}`)
-        .map((row) => row.headline),
+        .map((row) => ({ headline: row.headline, localized: row.localized })),
       measurement,
       sentiment: summariseTopicSentiment(topic.id, TOPIC_DIGEST_NEWS_DAYS, rows),
       articlesToday: new Set(rows.filter((row) => row.local_day === today).map((row) => row.id))
@@ -112,10 +116,6 @@ export function topicsHaveNews(entries: TopicDigestEntry[]): boolean {
   return entries.some((entry) => entry.moves.length > 0 || entry.articlesToday > 0);
 }
 
-function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? '' : 's'}`;
-}
-
 /** "+0.14" from "0.1351": the tone, rounded once, for a sentence. */
 function tone(score: string): string {
   const value = Number(score);
@@ -123,40 +123,35 @@ function tone(score: string): string {
   return value > 0 && rounded !== '0.00' ? `+${rounded}` : rounded;
 }
 
-function newsLine(sentiment: TopicSentimentResponse, days: number): string {
-  const prefix = `News, last ${days} days:`;
-  const articles = sentiment.counts.articles;
-  switch (sentiment.gap) {
-    case 'no_articles':
-      return `${prefix} none collected`;
-    case 'not_scored':
-      return `${prefix} ${plural(articles, 'article')}, none scored for tone`;
-    case 'too_few_polarised':
-      return `${prefix} ${plural(articles, 'article')}, too few with a clear tone to score`;
-    default:
-      return `${prefix} ${plural(articles, 'article')}, tone ${tone(sentiment.score!)} (${sentiment.model})`;
-  }
-}
-
 /**
  * The section as plain text, or null when no topic has anything to report today.
  * Every active topic gets a line once the section exists, so a topic that could
  * not be measured is said to be unmeasured rather than left out.
  */
-export function renderTopicSection(entries: TopicDigestEntry[]): string | null {
+export function renderTopicSection(
+  entries: TopicDigestEntry[],
+  language: string = 'en',
+): string | null {
   if (!topicsHaveNews(entries)) return null;
-  const lines = ['Topics'];
+  const { digest } = messagesFor(language);
+  const lines = [digest.topicsHeading];
   for (const entry of entries) {
     if (entry.moves.length > 0) {
-      for (const move of entry.moves) lines.push(`• ${move}`);
+      for (const move of entry.moves) {
+        lines.push(`• ${observationTextIn({ ...move, explanation: null }, language).headline}`);
+      }
     } else if (entry.measurement.state === 'measured') {
-      lines.push(`• ${entry.label}: no unusual move in the last day`);
+      lines.push(`• ${digest.noUnusualMove(entry.label)}`);
     } else if (entry.measurement.state === 'skipped') {
-      lines.push(`• ${entry.label}: not measured (${entry.measurement.reason})`);
+      lines.push(`• ${digest.notMeasured(entry.label, entry.measurement.reason)}`);
     } else {
-      lines.push(`• ${entry.label}: not scanned yet`);
+      lines.push(`• ${digest.notScanned(entry.label)}`);
     }
-    lines.push(`  ${newsLine(entry.sentiment, entry.sentiment.days)}`);
+    const { sentiment } = entry;
+    const score = sentiment.gap === null && sentiment.score !== null ? tone(sentiment.score) : '';
+    lines.push(
+      `  ${digest.news(sentiment.days, sentiment.gap, sentiment.counts.articles, score, sentiment.model ?? '')}`,
+    );
   }
   return lines.join('\n');
 }

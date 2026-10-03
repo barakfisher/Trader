@@ -46,6 +46,7 @@ const SETTINGS = {
   quietHoursEnd: '07:00',
   mutedUntil: null,
   timezone: 'Asia/Jerusalem',
+  language: 'en',
 };
 
 const llm = { narration_source: 'llm', fallback_reason: 'none' };
@@ -129,6 +130,22 @@ describe('watchNarration', () => {
     expect(notifier.send).toHaveBeenCalledTimes(1);
     expect(notifier.send).toHaveBeenCalledWith(
       expect.objectContaining({ title: announcementFor('rejected').headline }),
+    );
+  });
+
+  it('pushes the notice in the user’s language', async () => {
+    db.provenance = [refused, refused, refused];
+    db.transition = { id: 'tr1', from_state: 'narrating', to_state: 'rejected' };
+    const notifier = channel();
+
+    await watchNarration(USER, ai() as never, notifier as never, { ...SETTINGS, language: 'he' }, 'run-1', undefined, DAYTIME);
+
+    expect(notifier.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: announcementFor('rejected', 'he').headline,
+        body: announcementFor('rejected', 'he').explanation,
+        language: 'he',
+      }),
     );
   });
 

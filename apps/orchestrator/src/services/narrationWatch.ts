@@ -38,7 +38,7 @@ import {
 import { logger } from '../logger.js';
 import type { Notifier } from '../notify/notifier.js';
 import { narrationStateFrom } from './narrationHealth.js';
-import { announcementFor, byModel } from './narrationNotice.js';
+import { announcementFor, byModel, localizedAnnouncement } from './narrationNotice.js';
 import { fanOut } from './notifications.js';
 import type { NotificationSettings } from './notificationPolicy.js';
 
@@ -97,7 +97,14 @@ export async function watchNarration(
     const notice = announcementFor(transition.to_state);
     await fanOut(
       userId,
-      [{ refKind: 'narration', refId: transition.id, ...notice }],
+      [
+        {
+          refKind: 'narration',
+          refId: transition.id,
+          ...notice,
+          localized: localizedAnnouncement(transition.to_state),
+        },
+      ],
       settings,
       notifier,
       now,

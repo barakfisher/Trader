@@ -37,6 +37,7 @@ export interface InsertedObservation {
   /** Carried so a notification can be rendered without re-reading the row. */
   headline: string;
   explanation: string | null;
+  localized: LocalizedTexts;
 }
 
 /**
@@ -91,7 +92,7 @@ export async function insertObservations(
         evidence, concept_refs, dedupe_key, narration_source, fallback_reason, localized)
      VALUES ${values.join(', ')}
      ON CONFLICT (dedupe_key) DO NOTHING
-     RETURNING id, kind, severity, subject_ref, evidence, headline, explanation`,
+     RETURNING id, kind, severity, subject_ref, evidence, headline, explanation, localized`,
     params,
   );
   return {
