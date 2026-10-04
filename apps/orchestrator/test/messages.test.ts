@@ -63,7 +63,7 @@ function everySentence(messages: Messages): string[] {
   ];
 }
 
-const ISOLATED = /[⁦⁨][^⁦⁨⁩]*⁩/g;
+const ISOLATED = /[\u2066\u2068][^\u2066\u2068\u2069]*\u2069/g;
 
 describe('the Hebrew', () => {
   it.each(everySentence(MESSAGES.he))('leaves nothing left-to-right outside an isolate: %s', (text) => {
