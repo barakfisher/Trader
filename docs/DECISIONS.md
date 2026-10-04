@@ -108,3 +108,5 @@ while this file is out of date.
 | 95 | react-i18next, with a CI parity test, not an in-house catalogue |
 | 96 | v1 translates the interface only; server-generated text stays English |
 | 97 | The language lives on `user_settings` and travels with the session |
+| 98 | Observations are translated when written, from the templates, never from the model |
+| 99 | The orchestrator's own sentences are a typed record, not i18next |
