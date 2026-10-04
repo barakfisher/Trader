@@ -607,6 +607,30 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('the workflow runtime', () => {
+    it('reads a run as the app role, issuing no DDL', async () => {
+      // CI runs this file as traders_app, which may use the mastra schema but
+      // not create in it (migration 0033). With `disableInit` on the inner
+      // store only, Mastra ran CREATE TABLE before every first call and this
+      // read failed with "permission denied for schema mastra".
+      const { PROPOSAL_LIFECYCLE_ID, proposalLifecycle } = await import(
+        '../src/mastra/proposalLifecycle.js'
+      );
+      const { closeWorkflowRuntime, initWorkflowRuntime } = await import(
+        '../src/mastra/workflowRuntime.js'
+      );
+      const runtime = initWorkflowRuntime({
+        workflows: { [PROPOSAL_LIFECYCLE_ID]: proposalLifecycle },
+      });
+      try {
+        const workflow = runtime.getWorkflow(PROPOSAL_LIFECYCLE_ID);
+        expect(await workflow.getWorkflowRunById(randomUUID())).toBeNull();
+      } finally {
+        await closeWorkflowRuntime();
+      }
+    });
+  });
+
   describe('the proposals history', () => {
     it('lists every terminal state, newest decision first, and nothing still open', async () => {
       const pool = getPool();

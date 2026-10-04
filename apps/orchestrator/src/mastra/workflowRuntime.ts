@@ -19,6 +19,16 @@
  * composite store routes only the `workflows` domain at it, so a future import
  * that quietly starts using Mastra memory or observability fails loudly instead
  * of silently writing to a table nobody migrated.
+ *
+ * **`disableInit` goes on both stores, and the composite's is the one that
+ * counts.** Mastra wraps the storage it is given - the composite - and checks
+ * *that* object's flag before every call; the inner store's flag only governs
+ * the inner store's own `init`. With it on the inner store alone, every first
+ * storage call ran `CREATE TABLE IF NOT EXISTS`. That was invisible while the
+ * services connected as the owner, and became "permission denied for schema
+ * mastra" on every call once migration 0033 moved them to `traders_app`, which
+ * may use the schema but not create in it (2026-10-01 to 2026-10-04). The
+ * Postgres integration test runs this runtime as `traders_app` for that reason.
  */
 
 import { Mastra } from '@mastra/core';
@@ -79,6 +89,8 @@ export function initWorkflowRuntime(options: {
     id: 'traders-workflow-domains',
     name: 'traders-workflow-domains',
     domains: { workflows: store.stores.workflows },
+    // The flag Mastra actually reads: see the module docstring.
+    disableInit: true,
   });
 
   return installRuntime(new Mastra({ storage, workflows: options.workflows }), async () => {
