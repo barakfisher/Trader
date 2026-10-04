@@ -374,7 +374,7 @@ enforced.
 | **1 — Isolation** | `agents` table, primary seeded + backfilled, `agent_id NOT NULL`, the six constraint replacements (§3.3, §11), the passive primary (D1) — tasks in §12 | — |
 | **2 — Deterministic agents** | Per-agent `AnalysisThresholds`, per-agent portfolios and observations, consolidated UI with filter and split figures | Stage 1 |
 | **3 — Budget, fills, scoring** | `agent_cash`, fees (D6), fills from a live quote inside the range (D3), TTL from the next open and the exchange calendar (D4), dashboard + Telegram approval, `manual_user_override`, 30/60/90-day scoring | Stage 2 |
-| **4 — LLM philosophy** | LangGraph reasoning in `services/ai` with no checkpointer (D10), judgement artifacts, per-agent budgets (D12), pre-open/post-close schedule, persona rationale behind the validator, urgent sells through quiet hours (D5) | Stage 3; a paid model (§11 — M3, M5 and GDELT news have since landed, and the workspace is funded) |
+| **4 — LLM philosophy** | Reasoning in `services/ai`, hand-written loop or core LangGraph by comparison, no checkpointer (D10), judgement artifacts, per-agent budgets (D12), pre-open/post-close schedule, persona rationale behind the validator, urgent sells through quiet hours (D5) | Stage 3; a paid model (§11 — M3, M5 and GDELT news have since landed, and the workspace is funded) |
 
 The PRD P2 amendment (§2) ships with stage 1, since it is the boundary the whole feature stands on.
 
@@ -439,21 +439,30 @@ imported instruments. `agents.domain` is stored and shown but not enforced until
 **D9 — Whole shares only.** Quantities still cross the wire as decimal strings (guideline 4); the
 rule is a validation, not a type change.
 
-**D10 — Reasoning runs in LangGraph, in `services/ai`, with no checkpointer.** The AI service already
-owns the LLM provider factory, the evidence validator and the LLM budget; running the reasoning
-anywhere else would duplicate all three. LangGraph owns the cyclic reasoning, tool calls (market
-data, news) and sub-agents (e.g. a sentiment analyst and a risk checker). **No LangGraph
+**D10 — Reasoning runs in `services/ai`; the framework is chosen by comparison in stage 4.** The AI
+service already owns the LLM provider factory, the evidence validator and the LLM budget; running the
+reasoning anywhere else would duplicate all three. The first stage-4 PR builds the same scan twice —
+a hand-written, step-bounded tool loop over the provider factory, and a LangGraph `StateGraph` using
+only the core graph (no prebuilt agents, no LangChain chat models, no LangSmith) — and keeps the one
+that is smaller and clearer. LangGraph earns its place if routing grows (conditional sub-agents,
+retry paths, parallel analysts); a nearly linear pipeline does not need it. **Either way, no
 checkpointer:** it would create and own Postgres tables, the trap Mastra set in migration 0008 and
-that cost an outage in #150. Each scan is one stateless graph run whose result is stored as the
-judgement artifact keyed by evidence hash (§6.1). The graph has a hard step limit, which is what
-makes a per-agent budget (D12) an actual bound.
+that cost an outage in #150. Each scan is one stateless run whose result is stored as the judgement
+artifact keyed by evidence hash (§6.1), with a hard step limit, which is what makes a per-agent
+budget (D12) an actual bound.
 
-**D11 — Mastra stays the suspension, and only that** (decision 11). A trade proposal's wait for the
-user is a Mastra suspend/resume, as `proposalLifecycle` is today. Every transition and the atomic
-write (cash lock, fill, intent) go through `applyDecision` and `src/db/queries/`; nothing under
-`mastra/` decides anything, and every entry point still falls back to the service when the runtime
-is absent. Telegram arrives by long-polling today; resume does not depend on the transport. The
-dashboard is a first-class approval path (§5.2).
+**D11 — Mastra is retired; waiting for the user is a database row and a sweep.** This reverses
+decision 11. Measured: nothing under `mastra/` decides anything; every entry point already falls
+back to the direct path; what runs after a resume is "terminate and report"; and a pending
+proposal survives a restart because the `proposals` row holds its state and `expires_at`, and the
+`proposal_sweep` run expires it — not because of the suspended snapshot. The approval flow ran
+broken through Mastra from 0033 to #150 without the product depending on it. Stage 3 gives it no new
+work: the fill must be written atomically with the approval inside `applyDecision` (D3's cash lock),
+never in a step after a resume, where a crash would leave an approval without a fill. A trade
+proposal therefore follows the same path as a rebalance: row, `applyDecision`, sweep. The dashboard is
+a first-class approval path (§5.2); Telegram arrives by long-polling, and nothing depends on the
+transport. Retiring Mastra is its own PR, outside Stage 1: remove the workflow and the dependency,
+keep the direct path, drop the `mastra` schema in a later migration once no suspended run remains.
 
 **D12 — Per-agent LLM budget: $0.25 a day by default, in integer micro-USD,** below the existing
 global `LLM_DAILY_BUDGET_USD` ($5), which stays as the ceiling over all agents. Derived in §11. A
@@ -529,7 +538,7 @@ their cap. The first stage-4 PR re-measures the token sizes on real scans and re
 
 ## 12. Stage 1 — implementation tasks
 
-Stage 1 ships no user-visible change. Its exit: the live database migrated (on a copy first), every
+Stage 1 ships no user-visible change and touches neither Mastra nor any reasoning framework (D10, D11). Its exit: the live database migrated (on a copy first), every
 existing row owned by "Main portfolio", and the next scheduled portfolio scan, snapshot, digest and
 proposal sweep behaving exactly as before — no duplicate observation, no repeated notification.
 
