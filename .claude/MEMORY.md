@@ -18,8 +18,9 @@ This session (grant: PR, merge on green, verify on `main` by content, rebuild co
   catalogue, `apps/orchestrator/src/notify/messages.ts`.
 Both environments run `main` at `42e927e`, migration `0035_observation_localized`. **The live
 account's language is `he`** - the user switched it. A startup warning seen while rebuilding,
-`proposal.lifecycle_close_failed` / "permission denied for schema mastra", predates this work and
-was offered to the user as a separate task (not investigated here).
+`proposal.lifecycle_close_failed` / "permission denied for schema mastra", turned out to be a real
+outage of the proposal workflow since 0033 - fixed in #150 (see the first entry under "Bugs that
+cost real time").
 
 Previous handoff, 2026-10-02 ~06:45 UTC - **Hebrew and RTL is complete (#142-#144); this is its closing
 handoff. Nothing is in flight. The next session starts by asking the user what comes next** - see
@@ -1660,6 +1661,24 @@ failure they prevent.
 
 ## Bugs that cost real time, and the lesson from each
 
+**A least-privilege change broke the proposal workflow for three days, silently (2026-10-01 to
+10-04, fixed in #150).** `disableInit: true` was set on the inner `PostgresStore`, but Mastra checks
+the flag on the `MastraCompositeStore` it is handed, so every first storage call ran
+`CREATE TABLE IF NOT EXISTS`. Harmless as the owner; once migration 0033 moved the services to
+`traders_app` (usage, no create), *every* Mastra storage call failed. `startProposalLifecycle` had
+no fallback, so the next new proposal would have thrown the whole portfolio scan - alerts included -
+and an Approve/Reject tap on a run would have failed; nobody hit either only because the one high
+finding (BTC-USD, 10-03) was rightly held by its open episode. One run stayed suspended. Found by
+reading the logs while rebuilding for something else. Lessons:
+- **A flag that disables something must be checked on the object that is consulted**, not on the
+  one it was configured on. The library's proxy read the composite; nothing read ours.
+- **A privilege reduction needs a test of every component that touches the database as the new
+  role**, not only the hand-written SQL. The app-role CI job ran `queries.ts` and never the
+  Mastra store; it now does (`the workflow runtime` in `queries.postgres.test.ts`, shown failing
+  with the production error before the fix).
+- **"Mastra is never a prerequisite" was a docstring, not a property.** Starting and deciding now
+  fall back to the direct path when the engine's storage fails, and tests make the engine throw.
+
 **The first real rescreen (kind, 2026-10-01) found four things every test had passed (M8 PR 8).**
 1. *A sample is not a run.* 100 `info` fetches in 8.9 s extrapolated to a 10-minute build; the
    real one met `YFRateLimitError` within two minutes, took 28 minutes and failed on 64 symbols.
@@ -2312,8 +2331,14 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
   again on 2026-10-02** (Hebrew server-text session): the live orchestrator logged 14 failed logins
   over a day, found only by reading its logs before the next rebuild. The memory note existed and
   was not read at the moment it mattered - check this section before any `TEST_DATABASE_URL` run.
-  The same scratch database then refused the orchestrator's integration file *as* `traders_app`
-  ("schema is not at head"); CI runs it correctly, so that is not worth re-deriving locally.
+  **Run the integration suites the way CI does, in a separate container** (worked 2026-10-04):
+  `docker run -d --name traders-mastra-ci -e POSTGRES_USER=traders -e POSTGRES_PASSWORD=traders
+  -e POSTGRES_DB=traders_ci -p 127.0.0.1:55433:5432 pgvector/pgvector:pg16`; the Python
+  integration suite as `traders` against it; then **`scripts/migrate.py` with
+  `APP_DB_PASSWORD=traders_app`** (the step whose absence made a 2026-10-02 attempt refuse with
+  "schema is not at head"); then the orchestrator file with
+  `TEST_DATABASE_URL=postgresql://traders_app:traders_app@127.0.0.1:55433/traders_ci`. Remove the
+  container afterwards.
 - **The Write tool turns `\u2066`-style escapes into the literal invisible characters.** Source
   that must hold bidi isolates (Python or TypeScript) was rewritten afterwards to use escapes so a
   reviewer can see them. macOS grep has no `-P`; this check works (and found one, fixed in #149):
@@ -2526,10 +2551,9 @@ with this handoff). The options as they stand:
    it together before anything is built** ("much bigger and should involve some planning on our
    side", 2026-10-02). So start with a planning conversation: re-read the proposal, measure the
    tables it touches read-only, and bring the open design questions - do not open a PR first.
-2. **The Mastra startup warning** (`proposal.lifecycle_close_failed`, "permission denied for schema
-   mastra" from `WorkflowsPG.init` -> `createTable` under `traders_app`, seen 2026-10-04 on compose):
-   offered as a separate task; measure whether lifecycles actually fail to close before choosing
-   between truly skipping Mastra's init and granting CREATE (which weakens 0033).
+2. ~~The Mastra startup warning~~ - fixed in #150 (2026-10-04, the user's request after the
+   handoff): `disableInit` on the composite store, fallbacks in start and decide, an app-role
+   test. The run left suspended since 10-01 is closed by the next sweep.
 3. **The debt table**, notably the owner's password in every container and the integration suite
    borrowing `traders_app`'s password (which is what bit this session twice - see Local environment).
 4. **A real deployment** (Telegram's webhook leg, ReadWriteMany storage) - a milestone the user

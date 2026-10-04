@@ -164,6 +164,26 @@ describe('startProposalLifecycle', () => {
     expect(await runStatus()).toBe('suspended');
   });
 
+  it.each(['getWorkflowRunById', 'createRun'] as const)(
+    'still raises the proposal when the engine’s storage fails (%s)',
+    async (method) => {
+      // 2026-10-01 to 2026-10-04: every storage call failed under the app role,
+      // and the next proposal would have thrown the whole scan, alerts and all.
+      const workflow = getWorkflowRuntime()!.getWorkflow(PROPOSAL_LIFECYCLE_ID);
+      vi.spyOn(workflow, method).mockRejectedValueOnce(
+        new Error('permission denied for schema mastra'),
+      );
+      try {
+        const started = await start();
+
+        expect(started.proposalId).toBe(proposalId);
+        expect(queries.createProposals).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.restoreAllMocks();
+      }
+    },
+  );
+
   it('still raises the proposal when there is no workflow engine at all', async () => {
     await closeWorkflowRuntime();
     try {
@@ -238,6 +258,25 @@ describe('decideProposal', () => {
 
     expect(outcome).toMatchObject({ outcome: 'applied', state: 'rejected' });
     expect(queries.applyProposalTransition).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies the decision anyway when the run cannot even be read', async () => {
+    await start();
+    const workflow = getWorkflowRuntime()!.getWorkflow(PROPOSAL_LIFECYCLE_ID);
+    vi.spyOn(workflow, 'getWorkflowRunById').mockRejectedValueOnce(
+      new Error('permission denied for schema mastra'),
+    );
+    try {
+      const outcome = await decideProposal(
+        { userId: USER, proposalId, action: 'reject', surface: 'telegram' },
+        NOW,
+      );
+
+      expect(outcome).toMatchObject({ outcome: 'applied', state: 'rejected' });
+      expect(row.state).toBe('rejected');
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   it('applies the decision anyway when the engine throws', async () => {

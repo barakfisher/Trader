@@ -252,17 +252,23 @@ export async function startProposalLifecycle(
   start: LifecycleStart,
 ): Promise<{ proposalId: string | null }> {
   const runtime = getWorkflowRuntime();
-  if (runtime === null) {
-    // No engine: raise the proposal anyway. The inbox is the product; the
-    // workflow is how the product waits.
-    const raised = await raiseProposals(start.userId, [start.finding], start.settings);
-    return { proposalId: raised.proposalIds[0] ?? null };
-  }
+  if (runtime === null) return raiseWithoutLifecycle(start);
 
   const workflow = runtime.getWorkflow(PROPOSAL_LIFECYCLE_ID);
   const runId = start.finding.id;
 
-  const existing = await workflow.getWorkflowRunById(runId);
+  let existing: Awaited<ReturnType<typeof workflow.getWorkflowRunById>>;
+  try {
+    existing = await workflow.getWorkflowRunById(runId);
+  } catch (error) {
+    // The engine's storage cannot be read, so nothing is known about a run and
+    // none can be started. Raise the proposal directly, as with no engine: a
+    // finding that deserved a question must not lose it - or take the scan, and
+    // every alert after it, down with it - over the coordinator. (Migration
+    // 0033's role met Mastra's DDL here for three days; see workflowRuntime.ts.)
+    logger().error({ err: error, runId }, 'proposal.lifecycle_storage_failed');
+    return raiseWithoutLifecycle(start);
+  }
   if (existing !== null && existing !== undefined) {
     // A previous scan already opened this lifecycle. Starting it again would
     // re-run the raise step against a proposal that exists, which is harmless,
@@ -271,14 +277,24 @@ export async function startProposalLifecycle(
     return { proposalId: null };
   }
 
-  const run = await workflow.createRun({ runId });
-  const result = await run.start({
-    inputData: {
-      userId: start.userId,
-      finding: start.finding,
-      settings: start.settings,
-    },
-  });
+  let result: Awaited<ReturnType<Awaited<ReturnType<typeof workflow.createRun>>['start']>>;
+  try {
+    const run = await workflow.createRun({ runId });
+    result = await run.start({
+      inputData: {
+        userId: start.userId,
+        finding: start.finding,
+        settings: start.settings,
+      },
+    });
+  } catch (error) {
+    // Same reasoning. If the raise step did run before the failure, the direct
+    // insert is suppressed by `proposals_one_per_observation` and reports no
+    // new proposal: the question exists, in the inbox, without buttons on the
+    // alert - the cost of a failure, never a second proposal.
+    logger().error({ err: error, runId }, 'proposal.lifecycle_start_failed');
+    return raiseWithoutLifecycle(start);
+  }
 
   const raised = stepOutput(result, RAISE_PROPOSAL_STEP);
   const proposalId = typeof raised?.proposalId === 'string' ? raised.proposalId : null;
@@ -287,6 +303,12 @@ export async function startProposalLifecycle(
     proposalId === null ? 'proposal.lifecycle_not_raised' : 'proposal.lifecycle_started',
   );
   return { proposalId };
+}
+
+/** Raise the proposal with no workflow around it: the inbox is the product. */
+async function raiseWithoutLifecycle(start: LifecycleStart): Promise<{ proposalId: string | null }> {
+  const raised = await raiseProposals(start.userId, [start.finding], start.settings);
+  return { proposalId: raised.proposalIds[0] ?? null };
 }
 
 /**
@@ -310,7 +332,15 @@ export async function decideProposal(
   if (runId === null) return applyDecision(input, now);
 
   const workflow = runtime.getWorkflow(PROPOSAL_LIFECYCLE_ID);
-  const state = await workflow.getWorkflowRunById(runId);
+  let state: Awaited<ReturnType<typeof workflow.getWorkflowRunById>>;
+  try {
+    state = await workflow.getWorkflowRunById(runId);
+  } catch (error) {
+    // The run cannot be read, so it cannot be resumed; the decision still
+    // lands. The sweep ends the run later, once the engine can read again.
+    logger().error({ err: error, runId }, 'proposal.lifecycle_storage_failed');
+    return applyDecision(input, now);
+  }
   if (state?.status !== 'suspended') {
     // Nothing is waiting: the proposal predates this workflow, or its run has
     // already ended. The decision still has to land, and `applyDecision` is
