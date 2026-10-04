@@ -47,6 +47,7 @@ import {
   type RefusalReason,
 } from '../services/proposalState.js';
 import { factsOf } from '../services/proposals.js';
+import { MESSAGES, messagesFor, observationTextIn, type Messages } from '../notify/messages.js';
 import { decodeBindToken } from './bindToken.js';
 import { BUSY_CALLBACK_DATA, decodeCallbackData } from './callbackToken.js';
 import { TelegramNotifier, type Keyboard } from './client.js';
@@ -103,40 +104,28 @@ const updateSchema = z
   })
   .passthrough();
 
-/** What the user is told after a tap. One line each; the chat is not a UI. */
-const DECISION_REPLIES: Record<string, string> = {
-  approved: 'Approved ✓ — recorded in your ledger. No order was placed.',
-  pending: 'Approval undone ✓ — the question is open again.',
-  rejected: 'Rejected ✓',
-  snoozed: `Snoozed for ${TELEGRAM_SNOOZE_HOURS}h`,
-  expired: 'This has expired — open the app for the refreshed view.',
-};
-
 /**
- * Refusals that need their own words. Everything else is answered with the
- * state the proposal is actually in, which is the more useful half of a "no".
- */
-const REFUSAL_REPLIES: Partial<Record<RefusalReason, string>> = {
-  not_undoable: 'Only an approval can be undone.',
-  already_decided: 'This was already decided — open the app to see how.',
-  undo_window_closed: `Too late to undo — approvals can be undone for ${UNDO_WINDOW_SECONDS} seconds.`,
-};
-
-/**
- * The line appended to the message itself once a decision is in.
+ * Every sentence below is in `notify/messages.ts`, in each interface language:
+ * the toast after a tap (`decisionReplies`, one line each - the chat is not a
+ * UI), the refusals that need their own words, and the outcome line appended
+ * to the message once a decision is in. The outcome line is separate from the
+ * toast because the two are read at different moments: the toast is seen now,
+ * the line is what the user finds when they scroll back tomorrow.
  *
- * Separate from DECISION_REPLIES because the two are read at different moments.
- * The reply is a toast the user sees now; this is what they find when they
- * scroll back tomorrow - so it records what happened and when, rather than
- * confirming an action they have just taken.
+ * A chat with no bound user is answered in English: nobody's language is known.
  */
-const OUTCOME_LINES: Record<string, string> = {
-  approved: '\u2705 Approved \u2014 recorded in your ledger. No order was placed.',
-  rejected: '\u274c Rejected',
-  snoozed: '\u23f8 Snoozed \u2014 still open; decide any time before it expires',
-  expired: '\u23f3 Expired \u2014 no longer answerable',
-  pending: '\u21a9 Approval undone \u2014 open again; nothing remains in your ledger',
-};
+
+/** The toast for arriving in `state`; a snooze names how long it lasts. */
+function decisionReply(messages: Messages, state: string): string | undefined {
+  return state === 'snoozed' ? messages.snoozedFor(TELEGRAM_SNOOZE_HOURS) : messages.decisionReplies[state];
+}
+
+/** A refusal that needs its own words; the rest are answered with the current state. */
+function refusalReply(messages: Messages, reason: RefusalReason): string | undefined {
+  return reason === 'undo_window_closed'
+    ? messages.undoTooLate(UNDO_WINDOW_SECONDS)
+    : messages.refusalReplies[reason];
+}
 
 /**
  * Which buttons a message carries once its proposal is in a given state.
@@ -166,14 +155,20 @@ async function undoIsOpen(userId: string, proposalId: string, now: Date): Promis
  */
 function scheduleUndoRemoval(
   telegram: TelegramNotifier,
-  target: { userId: string; proposalId: string; chatId: string; messageId: number },
+  target: { userId: string; proposalId: string; chatId: string; messageId: number; language: string },
 ): void {
   const timer = setTimeout(() => {
     void (async () => {
       try {
         const row = await findProposal(target.userId, target.proposalId);
         if (row === null || effectiveState(factsOf(row), new Date()) !== 'approved') return;
-        await telegram.setKeyboard(target.chatId, target.messageId, target.proposalId, 'none');
+        await telegram.setKeyboard(
+          target.chatId,
+          target.messageId,
+          target.proposalId,
+          'none',
+          target.language,
+        );
       } catch (error) {
         logger().warn({ err: error, proposalId: target.proposalId }, 'telegram.undo_removal_failed');
       }
@@ -184,10 +179,10 @@ function scheduleUndoRemoval(
 }
 
 /** A local wall-clock stamp for the outcome line, in the user's own timezone. */
-function stampedOutcome(state: string, timezone: string, now: Date): string {
-  const line = OUTCOME_LINES[state];
-  if (line === undefined) return `Now ${state}.`;
-  const at = new Intl.DateTimeFormat('en-GB', {
+function stampedOutcome(state: string, timezone: string, now: Date, messages: Messages): string {
+  const line = messages.outcomeLines[state];
+  if (line === undefined) return messages.nowState(state);
+  const at = new Intl.DateTimeFormat(messages.locale, {
     timeZone: timezone,
     hour: '2-digit',
     minute: '2-digit',
@@ -201,10 +196,15 @@ function stampedOutcome(state: string, timezone: string, now: Date): string {
  * later ones (an undo, then a second approval) stack directly beneath it, so
  * the history reads as one block rather than drifting down the message.
  */
+const OUTCOME_LINES = Object.values(MESSAGES).flatMap((messages) =>
+  Object.values(messages.outcomeLines).filter((line): line is string => line !== undefined),
+);
+
 export function appendOutcome(text: string, outcome: string): string {
   if (text === '') return outcome;
   const lastLine = text.slice(text.lastIndexOf('\n') + 1);
-  const followsOutcome = Object.values(OUTCOME_LINES).some((line) => lastLine.startsWith(line));
+  // Any language's: the user may have switched language between two taps.
+  const followsOutcome = OUTCOME_LINES.some((line) => lastLine.startsWith(line));
   return `${text}${followsOutcome ? '\n' : '\n\n'}${outcome}`;
 }
 
@@ -270,6 +270,9 @@ async function handleMessage(
     return;
   }
 
+  const settings = await getOrCreateUserSettings(binding.user_id);
+  const messages = messagesFor(settings.language);
+
   switch (command) {
     case '/pending': {
       const open = await listProposals(binding.user_id, { open: true, limit: 10 });
@@ -278,44 +281,38 @@ async function handleMessage(
       await telegram?.sendText(
         chatId,
         live.length === 0
-          ? 'Nothing waiting on you.'
-          : live.map((row) => `• ${row.headline}`).join('\n'),
+          ? messages.nothingPending
+          : live
+              .map((row) => `• ${observationTextIn(row, settings.language).headline}`)
+              .join('\n'),
       );
       return;
     }
     case '/mute': {
       const until = parseMuteDuration(argument);
       if (until === null) {
-        await telegram?.sendText(chatId, 'Try /mute 2h or /mute 30m.');
+        await telegram?.sendText(chatId, messages.muteUsage);
         return;
       }
       await muteUntil(binding.user_id, until);
-      await telegram?.sendText(
-        chatId,
-        `Muted until ${until.toISOString()}. Findings still reach your feed and the digest.`,
-      );
+      await telegram?.sendText(chatId, messages.mutedUntil(until.toISOString()));
       return;
     }
     case '/stop': {
       await deleteTelegramBinding(binding.user_id);
       // Said explicitly, because "disconnected" could reasonably be read as
       // "stopped watching my portfolio", and it does not mean that.
-      await telegram?.sendText(
-        chatId,
-        'Disconnected. Your portfolio is still being watched; nothing will be sent here.',
-      );
+      await telegram?.sendText(chatId, messages.disconnected);
       return;
     }
     case '/portfolio': {
-      const settings = await getOrCreateUserSettings(binding.user_id);
-      await telegram?.sendText(
-        chatId,
-        `Alerting on ${settings.notify_severity} and above. Open the app for the full portfolio.`,
-      );
+      await telegram?.sendText(chatId, messages.alertingFrom(
+          messages.severities[settings.notify_severity] ?? settings.notify_severity,
+        ));
       return;
     }
     default:
-      await telegram?.sendText(chatId, 'Commands: /portfolio /pending /mute /stop');
+      await telegram?.sendText(chatId, messages.commands);
   }
 }
 
@@ -336,7 +333,8 @@ async function handleStart(
     // One message for a missing, malformed, tampered or expired link. The
     // distinctions are only useful to somebody probing, and the remedy is the
     // same for all of them.
-    await telegram?.sendText(chatId, 'That link is not valid or has expired. Generate a new one.');
+    // English: no user is known yet, so neither is their language.
+    await telegram?.sendText(chatId, messagesFor('en').linkInvalid);
     return;
   }
 
@@ -347,15 +345,15 @@ async function handleStart(
     username,
   });
 
+  // The link names its user, so even a refusal can be in their language.
+  const messages = messagesFor((await getOrCreateUserSettings(payload.userId)).language);
   if (result.bound) {
-    await telegram?.sendText(chatId, 'Connected. Alerts will arrive here.');
+    await telegram?.sendText(chatId, messages.connected);
     return;
   }
   await telegram?.sendText(
     chatId,
-    result.reason === 'chat_taken'
-      ? 'This chat is already connected to another account.'
-      : 'That link has already been used. Generate a new one.',
+    result.reason === 'chat_taken' ? messages.chatTaken : messages.linkUsed,
   );
 }
 
@@ -370,12 +368,13 @@ async function handleCallback(
   if (callback.data === BUSY_CALLBACK_DATA) {
     // The placeholder shown while an earlier tap is applied. It carries nothing
     // and decides nothing; this answer is the whole of what it does.
-    await telegram?.answerCallback(callback.id, 'Still working on it\u2026');
+    // A busy tap arrives before any lookup; English, as for an unknown chat.
+    await telegram?.answerCallback(callback.id, messagesFor('en').stillWorking);
     return;
   }
 
   if (chatId === null || callback.data === undefined || !config.TELEGRAM_SIGNING_SECRET) {
-    await telegram?.answerCallback(callback.id, 'This button is no longer usable.');
+    await telegram?.answerCallback(callback.id, messagesFor('en').buttonUnusable);
     return;
   }
 
@@ -389,18 +388,20 @@ async function handleCallback(
     // chat and a tampered payload fails the MAC; telling them apart would only
     // help whoever is trying.
     logger().warn({ chatId, signed: payload !== null }, 'telegram.callback_rejected');
-    await telegram?.answerCallback(callback.id, 'This button is not valid for this chat.');
+    await telegram?.answerCallback(callback.id, messagesFor('en').buttonInvalid);
     return;
   }
 
   const message = callback.message;
+  const { language } = await getOrCreateUserSettings(binding.user_id);
+  const messages = messagesFor(language);
 
   // The tap registered: swap every button for one inert "Approving…" before
   // doing anything slow. This is both the visible acknowledgement and the lock -
   // nothing else on the message can be pressed until the outcome is known. A
   // failure here is cosmetic and must not stop the decision the user asked for.
   if (telegram !== null && message !== undefined) {
-    await telegram.showWorking(chatId, message.message_id, payload.action);
+    await telegram.showWorking(chatId, message.message_id, payload.action, language);
   }
 
   // Through the workflow, exactly as the web route does. Calling the service
@@ -424,12 +425,12 @@ async function handleCallback(
 
   const reply =
     result.outcome === 'not_found'
-      ? 'That proposal no longer exists.'
+      ? messages.proposalGone
       : result.outcome === 'refused'
-        ? (REFUSAL_REPLIES[result.reason] ??
-          DECISION_REPLIES[result.state] ??
-          'That can no longer be changed.')
-        : (DECISION_REPLIES[result.state] ?? `Now ${result.state}.`);
+        ? (refusalReply(messages, result.reason) ??
+          decisionReply(messages, result.state) ??
+          messages.cannotChange)
+        : (decisionReply(messages, result.state) ?? messages.nowState(result.state));
 
   // The toast first: it is what the user is waiting on, and Telegram stops
   // spinning the button the moment it lands.
@@ -438,7 +439,7 @@ async function handleCallback(
   if (telegram === null || message === undefined) return;
 
   if (result.outcome === 'not_found') {
-    await telegram.setKeyboard(chatId, message.message_id, payload.proposalId, 'none');
+    await telegram.setKeyboard(chatId, message.message_id, payload.proposalId, 'none', language);
     return;
   }
 
@@ -456,6 +457,7 @@ async function handleCallback(
         result.state === 'approved' &&
           (await undoIsOpen(binding.user_id, payload.proposalId, new Date())),
       ),
+      language,
     );
     return;
   }
@@ -469,14 +471,14 @@ async function handleCallback(
    * could not be rewritten is a cosmetic loss.
    */
   const user = await getUser(binding.user_id);
-  const outcome = stampedOutcome(result.state, user?.timezone ?? 'UTC', new Date());
+  const outcome = stampedOutcome(result.state, user?.timezone ?? 'UTC', new Date(), messages);
   const edited = await telegram.editMessage(
     chatId,
     message.message_id,
     appendOutcome(message.text ?? '', outcome),
     // A decision that has just been applied as an approval is, by definition,
     // at the start of its undo window.
-    { proposalId: payload.proposalId, keyboard: keyboardFor(result.state, true) },
+    { proposalId: payload.proposalId, keyboard: keyboardFor(result.state, true), language },
   );
   if (result.state === 'approved') {
     scheduleUndoRemoval(telegram, {
@@ -484,6 +486,7 @@ async function handleCallback(
       proposalId: payload.proposalId,
       chatId,
       messageId: message.message_id,
+      language,
     });
   }
   if (!edited.delivered) {

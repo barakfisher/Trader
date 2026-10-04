@@ -114,6 +114,7 @@ export async function runTopicScan(
     severity: observation.severity,
     headline: observation.headline,
     explanation: observation.explanation,
+    localized: observation.localized,
   }));
   const notified = await fanOut(
     user.id,

@@ -33,6 +33,8 @@ export interface NotificationSettings {
   mutedUntil: Date | null;
   /** IANA zone. Quiet hours are wall-clock, so they are meaningless without it. */
   timezone: string;
+  /** `user_settings.language`: what a message to this user is written in. */
+  language: string;
 }
 
 export interface RoutingDecision {

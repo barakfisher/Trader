@@ -17,7 +17,9 @@ and [docs/MILESTONES.md](docs/MILESTONES.md) before changing architecture.
    directions (`ms-`/`pe-`/`text-end`) so a right-to-left language mirrors it. Observations are
    stored with their template wording in every UI language (`observations.localized`, rendered
    when written); a model-written observation shows its template in a language other than
-   English. Other server-generated text (`/ask` answers, news, the concept corpus) stays English
+   English. Telegram and the digest speak `user_settings.language` through a typed catalogue
+   (`apps/orchestrator/src/notify/messages.ts`; a missing sentence is a compile error). Other
+   server-generated text (`/ask` answers, news, the concept corpus) stays English
    until a decision says otherwise, and is marked `lang="en"` where the UI shows it.
 2. **No order execution, ever.** Approvals write to the virtual ledger only. No broker API, no
    personalized investment advice; output is observation + explanation.

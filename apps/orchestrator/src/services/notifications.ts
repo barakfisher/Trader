@@ -28,6 +28,8 @@
  * must not look the same afterwards.
  */
 
+import type { LocalizedTexts } from '@traders/shared';
+
 import {
   claimNotification,
   getOrCreateUserSettings,
@@ -38,6 +40,7 @@ import {
   type UserRow,
 } from '../db/queries.js';
 import { logger } from '../logger.js';
+import { messagesFor, observationTextIn, type Messages } from '../notify/messages.js';
 import { announcementFor } from './narrationNotice.js';
 import { gatherTopicDigest, renderTopicSection } from './topicDigest.js';
 import type { Notifier, OutboundNotification } from '../notify/notifier.js';
@@ -59,6 +62,8 @@ export interface NotifiableFinding {
   severity: string;
   headline: string;
   explanation: string | null;
+  /** The same words in each translated language (`observations.localized`). */
+  localized: LocalizedTexts;
   /** Set when the user can act on this, so a channel can offer buttons. */
   proposalId?: string;
 }
@@ -83,16 +88,18 @@ function channelFor(route: NotificationRoute, notifier: Notifier): string | null
   return null;
 }
 
-function toOutbound(finding: NotifiableFinding, userId: string): OutboundNotification {
+function toOutbound(finding: NotifiableFinding, userId: string, language: string): OutboundNotification {
+  // The explanation is already evidence-validated prose from the scan, in
+  // every language it was stored in; a channel never composes its own, because
+  // a figure that did not come through the validator is a figure nobody checked.
+  const text = observationTextIn(finding, language);
   return {
     userId,
-    title: finding.headline,
-    // The explanation is already evidence-validated prose from the scan; a
-    // channel never composes its own, because a figure that did not come
-    // through the validator is a figure nobody checked.
-    body: finding.explanation ?? '',
+    title: text.headline,
+    body: text.explanation ?? '',
     proposalId: finding.proposalId,
     severity: finding.severity,
+    language,
   };
 }
 
@@ -152,7 +159,7 @@ export async function fanOut(
     }
 
     try {
-      const delivery = await notifier.send(toOutbound(finding, userId));
+      const delivery = await notifier.send(toOutbound(finding, userId, settings.language));
       if (delivery.delivered) {
         await settleNotification(claim.id, 'sent');
         result.pushed += 1;
@@ -192,6 +199,7 @@ export function settingsForNotification(
     quiet_hours_start: string | null;
     quiet_hours_end: string | null;
     muted_until: Date | null;
+    language: string;
   },
   timezone: string,
 ): NotificationSettings {
@@ -201,6 +209,7 @@ export function settingsForNotification(
     quietHoursEnd: settings.quiet_hours_end,
     mutedUntil: settings.muted_until,
     timezone,
+    language: settings.language,
   };
 }
 
@@ -240,6 +249,10 @@ export async function sendDigest(
   now: Date = new Date(),
 ): Promise<DigestResult> {
   const pending = await listPendingDigest(user.id);
+  // Read first, for the language every line below is written in. The mute it
+  // also carries is applied further down.
+  const settings = await getOrCreateUserSettings(user.id);
+  const messages = messagesFor(settings.language);
   // A narration notice is not a finding, and counting it as one would tell the
   // user something moved in the market. It gets its own line, naming the state.
   const findings = pending.filter((entry) => entry.ref_kind !== 'narration');
@@ -248,12 +261,13 @@ export async function sendDigest(
       user.id,
       pending.filter((entry) => entry.ref_kind === 'narration').map((entry) => entry.ref_id),
     ),
+    settings.language,
   );
   // The topic section is gathered even when nothing was deferred: a topic that
   // moved today is worth a digest on its own (FR-13), and a quiet day with no
   // topic news still sends nothing - see topicDigest.ts.
   const topicEntries = await gatherTopicDigest(user, now);
-  const topicSection = renderTopicSection(topicEntries);
+  const topicSection = renderTopicSection(topicEntries, settings.language);
   const topics = topicSection === null ? 0 : topicEntries.length;
   if (pending.length === 0 && topicSection === null) {
     return { entries: 0, topics: 0, delivered: false };
@@ -263,7 +277,6 @@ export async function sendDigest(
   // digest is the thing a deferred finding was deferred *into*. Applying the
   // window twice would defer the digest for being a notification, which is the
   // one message that must not be.
-  const settings = await getOrCreateUserSettings(user.id);
   const muted =
     settings.muted_until !== null && settings.muted_until.getTime() > Date.now();
 
@@ -272,20 +285,21 @@ export async function sendDigest(
     : await notifier
         .send({
           userId: user.id,
-          title: digestTitle(findings.length, topics, narrationLine !== null),
+          title: messages.digest.title(findings.length, topics, narrationLine !== null),
           // The digest names how many findings and of what kind. It does not
           // restate their figures: those were evidence-validated when the
           // observation was written, and re-rendering them here would be a
           // second place for a number to drift from the evidence behind it.
           // The topic section quotes stored headlines for the same reason.
           body: [
-            findings.length > 0 ? summariseDigest(findings) : null,
+            findings.length > 0 ? summariseDigest(findings, messages) : null,
             narrationLine,
             topicSection,
           ]
             .filter((part): part is string => part !== null)
             .join('\n\n'),
           severity: 'info',
+          language: settings.language,
         })
         .catch((error: Error) => ({ delivered: false, error: error.message }));
 
@@ -309,38 +323,28 @@ export async function sendDigest(
   };
 }
 
-function digestTitle(entries: number, topics: number, narration: boolean): string {
-  const parts: string[] = [];
-  if (entries > 0) parts.push(`${entries} finding${entries === 1 ? '' : 's'}`);
-  if (topics > 0) parts.push(`${topics} topic${topics === 1 ? '' : 's'}`);
-  if (narration) parts.push('explanations changed');
-  return `Daily digest: ${parts.join(', ')}`;
-}
-
 /**
  * The state explanations are in *now*, as of the last deferred transition. Only
  * the last one: two held notices that cancel out ("templates", then "model
  * again") would otherwise read as a history the user has to replay, when the
  * only thing they can act on is where it ended.
  */
-export function renderNarrationLine(transitions: { to_state: string }[]): string | null {
+export function renderNarrationLine(
+  transitions: { to_state: string }[],
+  language: string = 'en',
+): string | null {
   const last = transitions.at(-1);
-  return last === undefined ? null : announcementFor(last.to_state).headline;
+  return last === undefined ? null : announcementFor(last.to_state, language).headline;
 }
 
 /** One line per reason, so the digest says why each group was held back. */
-function summariseDigest(entries: { reason: string }[]): string {
+function summariseDigest(entries: { reason: string }[], messages: Messages): string {
   const counts = new Map<string, number>();
   for (const entry of entries) {
     counts.set(entry.reason, (counts.get(entry.reason) ?? 0) + 1);
   }
-  const labels: Record<string, string> = {
-    below_floor: 'below your alert threshold',
-    quiet_hours: 'held during quiet hours',
-    muted: 'held while muted',
-    above_floor: 'not delivered when first found',
-  };
+  const labels: Record<string, string> = messages.digest.reasons;
   return [...counts.entries()]
-    .map(([reason, count]) => `${count} ${labels[reason] ?? reason}`)
+    .map(([reason, count]) => messages.digest.reasonLine(count, labels[reason] ?? reason))
     .join('\n');
 }

@@ -9,7 +9,7 @@
  * constructor argument, so the whole adapter runs against a recorded fake.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const USER = '00000000-0000-0000-0000-000000000001';
 const PROPOSAL = '11111111-2222-3333-4444-555555555555';
@@ -75,6 +75,7 @@ const { BUSY_CALLBACK_DATA, decodeCallbackData, encodeCallbackData, mintNonce } 
   '../src/telegram/callbackToken.js'
 );
 const queries = await import('../src/db/queries.js');
+const { MESSAGES } = await import('../src/notify/messages.js');
 const proposals = await import('../src/services/proposals.js');
 const { UNDO_WINDOW_SECONDS } = await import('../src/services/proposalState.js');
 
@@ -650,6 +651,68 @@ describe('/start', () => {
   it('refuses a bare /start with no link', async () => {
     await post(messageUpdate('/start'));
     expect(queries.redeemTelegramBindToken).not.toHaveBeenCalled();
+  });
+});
+
+describe('a chat whose user reads Hebrew', () => {
+  beforeEach(() => {
+    bound();
+    vi.mocked(queries.getOrCreateUserSettings).mockResolvedValue({
+      notify_severity: 'high',
+      muted_until: null,
+      language: 'he',
+    } as never);
+  });
+  // `clearAllMocks` keeps an implementation, so the Hebrew user would outlive this block.
+  afterEach(() => {
+    vi.mocked(queries.getOrCreateUserSettings).mockResolvedValue({
+      notify_severity: 'high',
+      muted_until: null,
+      language: 'en',
+    } as never);
+  });
+
+  it('answers a tap, and labels the buttons it leaves, in Hebrew', async () => {
+    const data = encodeCallbackData(
+      { proposalId: PROPOSAL, action: 'approve', nonce: mintNonce() },
+      SIGNING_SECRET,
+    );
+    await post(callbackUpdate(data));
+
+    expect(toast()).toBe(MESSAGES.he.decisionReplies.approved);
+    expect(buttonsOf(sentCalls.find((call) => call.method === 'editMessageReplyMarkup'))).toEqual([
+      MESSAGES.he.working.approve,
+    ]);
+    const edited = sentCalls.find((call) => call.method === 'editMessageText');
+    expect(String(edited?.body.text)).toContain(MESSAGES.he.outcomeLines.approved);
+    expect(buttonsOf(edited)).toEqual([MESSAGES.he.undoButton]);
+  });
+
+  it('lists what is waiting by each proposal’s Hebrew headline', async () => {
+    vi.mocked(queries.listProposals).mockResolvedValueOnce([
+      {
+        id: PROPOSAL,
+        state: 'pending',
+        expires_at: new Date(Date.now() + 3_600_000),
+        snoozed_until: null,
+        headline: 'VOO is 12.3 percentage points below its 25.0% target',
+        explanation: null,
+        localized: { he: { headline: 'משקל \u2066VOO\u2069 נמוך', explanation: '' } },
+      },
+    ] as never);
+    await post(messageUpdate('/pending'));
+    expect(sentCalls[0]?.body.text).toBe('• משקל \u2066VOO\u2069 נמוך');
+  });
+
+  it('names the alert floor in Hebrew', async () => {
+    await post(messageUpdate('/portfolio'));
+    expect(sentCalls[0]?.body.text).toBe(MESSAGES.he.alertingFrom('גבוה'));
+  });
+
+  it('still answers an unbound chat in English: nobody’s language is known', async () => {
+    vi.mocked(queries.findTelegramBindingByChat).mockResolvedValue(null);
+    await post(callbackUpdate('not-a-signed-payload'));
+    expect(toast()).toBe(MESSAGES.en.buttonInvalid);
   });
 });
 

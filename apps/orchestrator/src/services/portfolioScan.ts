@@ -253,6 +253,7 @@ export async function runPortfolioScan(
       severity: observation.severity,
       headline: observation.headline,
       explanation: observation.explanation,
+      localized: observation.localized,
       // Only set when this finding actually became a question. A channel uses
       // it to render Approve/Reject inline, so attaching one to a finding with
       // no proposal behind it would put buttons on a message that cannot be

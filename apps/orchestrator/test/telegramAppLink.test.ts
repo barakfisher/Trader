@@ -9,7 +9,10 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { OPEN_IN_APP_LABEL, TelegramNotifier, proposalLinkBase } from '../src/telegram/client.js';
+import { MESSAGES } from '../src/notify/messages.js';
+import { TelegramNotifier, proposalLinkBase } from '../src/telegram/client.js';
+
+const OPEN_IN_APP_LABEL = MESSAGES.en.openInApp;
 
 type Button = { text: string; url?: string; callback_data?: string };
 
@@ -64,6 +67,7 @@ describe('a proposal message', () => {
       body: '',
       proposalId: PROPOSAL,
       severity: 'high',
+      language: 'en',
     });
 
     const keyboard = lastKeyboard(calls);
@@ -76,7 +80,7 @@ describe('a proposal message', () => {
 
   it('keeps only the link once the proposal is decided', async () => {
     const { notifier, calls } = notifierWith('https://traders.example.com');
-    await notifier.editMessage('42', 7, 'Rejected', { proposalId: PROPOSAL, keyboard: 'none' });
+    await notifier.editMessage('42', 7, 'Rejected', { proposalId: PROPOSAL, keyboard: 'none', language: 'en' });
     expect(lastKeyboard(calls)).toEqual([
       [{ text: OPEN_IN_APP_LABEL, url: `https://traders.example.com/proposals/${PROPOSAL}` }],
     ]);
@@ -84,9 +88,16 @@ describe('a proposal message', () => {
 
   it('is unchanged without an address: no link, and a decided message loses every button', async () => {
     const { notifier, calls } = notifierWith(null);
-    await notifier.send({ userId: 'u', title: 't', body: '', proposalId: PROPOSAL, severity: 'high' });
+    await notifier.send({
+      userId: 'u',
+      title: 't',
+      body: '',
+      proposalId: PROPOSAL,
+      severity: 'high',
+      language: 'en',
+    });
     expect(lastKeyboard(calls)).toHaveLength(1);
-    await notifier.editMessage('42', 7, 'Rejected', { proposalId: PROPOSAL, keyboard: 'none' });
+    await notifier.editMessage('42', 7, 'Rejected', { proposalId: PROPOSAL, keyboard: 'none', language: 'en' });
     expect(lastKeyboard(calls)).toEqual([]);
   });
 });

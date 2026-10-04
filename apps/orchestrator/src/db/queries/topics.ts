@@ -1,5 +1,5 @@
 import type { PoolClient } from 'pg';
-import type { AssetClass, ProposalBand, TopicEvidence } from '@traders/shared';
+import type { AssetClass, LocalizedTexts, ProposalBand, TopicEvidence } from '@traders/shared';
 import { query, queryOne } from '../pool.js';
 
 export type TopicStatus = 'active' | 'proposed' | 'rejected' | 'expired';
@@ -232,9 +232,11 @@ export function listActiveTopicInstruments(userId: string): Promise<ActiveTopicI
 export function listRecentTopicObservations(
   userId: string,
   hours: number,
-): Promise<{ subject_ref: string; severity: string; headline: string; created_at: Date }[]> {
+): Promise<
+  { subject_ref: string; severity: string; headline: string; localized: LocalizedTexts; created_at: Date }[]
+> {
   return query(
-    `SELECT subject_ref, severity, headline, created_at
+    `SELECT subject_ref, severity, headline, localized, created_at
        FROM observations
       WHERE user_id = $1
         AND subject_kind = 'topic'

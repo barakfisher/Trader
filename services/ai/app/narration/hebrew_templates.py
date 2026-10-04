@@ -7,7 +7,8 @@ the English. Only the phrasing differs, and it follows the web catalogue's
 vocabulary (`he.json`: "ירידה מהשיא", "משקל יעד", "סטיות תקן") so a term reads
 the same in a sentence as in the label beside it.
 
-Every figure and every symbol is wrapped in a left-to-right isolate. Inside a
+Every figure and every symbol is wrapped in a left-to-right isolate, and a
+topic label - the user's own text, in either script - in a first-strong one. Inside a
 right-to-left sentence, `-26.5%` without one is laid out by the Unicode bidi
 algorithm as `26.5%-`, and `SMR` followed by a Hebrew word can swap places
 with its neighbour. An isolate is understood by every surface this text
@@ -31,9 +32,19 @@ _LRI = "\u2066"
 _PDI = "\u2069"
 
 
+#: FIRST-STRONG ISOLATE: text whose direction is its own.
+_FSI = "\u2068"
+
+
 def _ltr(text: object) -> str:
     """A figure or a symbol, kept left to right inside a Hebrew sentence."""
     return f"{_LRI}{text}{_PDI}"
+
+
+def _own(text: str) -> str:
+    """Text the user wrote, such as a topic label: it may be in either script,
+    so its direction is taken from its first strong character."""
+    return f"{_FSI}{text}{_PDI}"
 
 
 def headline_for(finding: Finding) -> str:
@@ -67,7 +78,8 @@ def headline_for(finding: Finding) -> str:
 
     if finding.kind == "topic_move":
         return (
-            f"{symbol}: שינוי ממוצע של {_ltr(signed_pct(evidence['basket_change_pct']))}, "
+            f"{_own(symbol_of(finding))}: "
+            f"שינוי ממוצע של {_ltr(signed_pct(evidence['basket_change_pct']))}, "
             f"{_ltr(sigma_of(evidence['z_score']))} סטיות תקן מהממוצע האחרון"
         )
 
@@ -113,7 +125,7 @@ def explanation_for(finding: Finding) -> str:
         )
 
     if finding.kind == "topic_move":
-        return _topic_move_explanation(_ltr(symbol_of(finding)), evidence)
+        return _topic_move_explanation(_own(symbol_of(finding)), evidence)
 
     return headline_for(finding)
 

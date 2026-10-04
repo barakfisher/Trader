@@ -30,6 +30,7 @@ function settings(overrides: Partial<NotificationSettings> = {}): NotificationSe
     quietHoursEnd: '07:00',
     mutedUntil: null,
     timezone: JERUSALEM,
+    language: 'en',
     ...overrides,
   };
 }

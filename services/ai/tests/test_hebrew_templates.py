@@ -32,7 +32,7 @@ from app.narration.evidence_validator import unsourced_figures
 from app.narration.hebrew_templates import explanation_for, headline_for
 
 NOW = datetime(2026, 9, 16, 14, 0, tzinfo=UTC)
-ISOLATED = re.compile("\u2066[^\u2066\u2069]*\u2069")
+ISOLATED = re.compile("[\u2066\u2068][^\u2066\u2068\u2069]*\u2069")
 
 
 def series(closes: list[int], currency: str = "USD") -> list[PricePoint]:
@@ -108,7 +108,8 @@ def test_every_rule_has_its_own_hebrew_headline(finding: Finding):
 
 def test_a_topic_is_named_by_its_label_not_its_id():
     (finding,) = [finding for finding in FINDINGS if finding.kind == "topic_move"]
-    assert "\u2066uranium\u2069" in headline_for(finding)
+    # A label is the user's own text, in either script: first-strong, not forced LTR.
+    assert "\u2068uranium\u2069" in headline_for(finding)
     assert finding.subject_ref.split(":")[-1] not in headline_for(finding)
 
 
