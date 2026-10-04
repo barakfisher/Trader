@@ -4,7 +4,24 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-02 ~06:45 UTC - **Hebrew and RTL is complete (#142-#144); this is its closing
+Updated: 2026-10-04 ~08:45 UTC - **Hebrew for server-generated text is complete (#147-#148); this
+is its closing handoff (#149). Nothing is in flight. The next session starts by asking the user what
+comes next** - see "Next session: after Hebrew server text" in "Where to go next". The user chose
+this over the multi-agent sandbox because **the sandbox "is much bigger and should involve some
+planning on our side"** - so it starts as a planning conversation, not as a measurement-then-PR.
+This session (grant: PR, merge on green, verify on `main` by content, rebuild compose and kind -
+**it ends here; ask again**) measured first, brought four decisions (all accepted), then built:
+- #147 (decision 98): migration 0035 `observations.localized` jsonb, the Hebrew templates
+  (`app/narration/hebrew_templates.py`), rendered when an observation is written and backfilled
+  for the 78 live rows; the web picks the page language's text (`lib/observationText.ts`);
+- #148 (decision 99): Telegram and the digest in `user_settings.language` through a typed
+  catalogue, `apps/orchestrator/src/notify/messages.ts`.
+Both environments run `main` at `42e927e`, migration `0035_observation_localized`. **The live
+account's language is `he`** - the user switched it. A startup warning seen while rebuilding,
+`proposal.lifecycle_close_failed` / "permission denied for schema mastra", predates this work and
+was offered to the user as a separate task (not investigated here).
+
+Previous handoff, 2026-10-02 ~06:45 UTC - **Hebrew and RTL is complete (#142-#144); this is its closing
 handoff. Nothing is in flight. The next session starts by asking the user what comes next** - see
 "Next session: after Hebrew" in "Where to go next". This session (grant: PR, merge on green, verify
 on `main` by content, rebuild compose and kind - **it ends here; ask again**) measured first,
@@ -345,6 +362,7 @@ strings and left-to-right assumptions before designing it.
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
+| Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
 | M8 — Admin operations & observability | ✅ Complete | #120-#124, #126-#130: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel, on-demand profiles, the rescreen run and its CronJob. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event and profiled within one background fetch ✅ (#127, decision 89); rescreen button ✅ (#128, decision 90; shown in kind); button and CronJob are one run ✅ (#129, decision 91; shown in kind). Checked live 2026-10-01 - see "M8 is complete, and how it was verified" |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
@@ -1608,6 +1626,36 @@ failure they prevent.
     `localStorage` (one browser, no message, and an English flash on every load). The sign-in
     page is English: the language is unknown until someone signs in.
 
+98. **Observations are translated when written, from the templates, never from the model**
+    (Hebrew server text slice 1, #147, migration 0035; the user's decision 2026-10-02).
+    `observations.localized` is `{"he": {headline, explanation}}`, rendered by the AI service
+    (`app/narration/localized.py`) for every finding, whoever wrote the English. Rejected:
+    *rendering on read* - the feed is served by the TypeScript orchestrator, so it means a second
+    copy of the templates there (free to drift) or an AI call per page load; *a column per
+    language* - a language should be a catalogue and a CHECK, not a migration on the largest text
+    table; *asking the model for Hebrew* - double the cost, unmeasured quality on free routes, and
+    a translation nobody validated is what the evidence validator exists to prevent. Cost, kept on
+    purpose: a model-written finding (~30% of a measured week, 11 of 36) reads as its plainer
+    template in Hebrew. The validator was *not* the blocker decision 96 feared: Hebrew uses Western
+    digits and `1,234.5`, so the regex reads a Hebrew sentence unchanged. **Every figure and Latin
+    run sits in a Unicode isolate** (LRI…PDI; a topic label - the user's own text, either script -
+    in FSI…PDI, since #148). Markup cannot do this in Telegram's plain text, and without it
+    `-26.5%` renders `26.5%-` in a right-to-left line; `test_hebrew_templates.py` refuses any digit
+    or Latin letter outside an isolate. The 0035 backfill imports the templates - safe only
+    because a database created after it has no observations to backfill. Rows stored by #147 hold
+    LRI around topic labels; identical on screen for the English labels they carry.
+
+99. **The orchestrator's own sentences are a typed record, not i18next** (slice 2, #148).
+    `Record<UiLanguage, Messages>` in `notify/messages.ts`: ~50 sentences, several of them
+    functions of a count or a duration, so a Hebrew plural is just a function and a missing
+    sentence is a compile error - the web's rule, enforced by the compiler instead of a parity
+    test. The orchestrator never composes an observation's words; it chooses between stored
+    versions (`observationTextIn`), falling back to English, never to a blank. The language rides
+    on `NotificationSettings` and `OutboundNotification` (the policy layer already reads the
+    settings row); the Telegram client labels buttons from it. A chat with no bound user is
+    answered in English - nobody's language is known. `appendOutcome` recognises an outcome line
+    in any language, so a user who switches between an approval and its undo still gets one block.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -2184,7 +2232,7 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 
 | Item | Where | Impact |
 |---|---|---|
-| **A Hebrew page still shows English server text** | decision 96 | Observations, narration, `/ask` answers, news, the corpus, Telegram and the digest are English on a Hebrew page, marked `lang="en"` so they read correctly. Deliberate for v1. Next step if wanted: render `app/narration/templates.py` per language (the evidence validator's number regex would need Hebrew formats if the model narrates in Hebrew) |
+| **A Hebrew reader still meets some English server text** | decisions 96, 98 | `/ask` answers, news headlines and the concept corpus are English, marked `lang="en"`; a model-written observation reads as its template in Hebrew (its richer English prose is not shown). Next steps, each its own project: the corpus (4,253 words, translated and re-ingested per language); `/ask` (English intent rules and model); Hebrew narration by the model (the validator already reads Hebrew digits - the open question is quality on free routes, so measure it first) |
 | **The Hebrew wording was written by the model and merged without line-by-line corrections** | `apps/web/src/i18n/locales/he.json` | The user asked to merge after a side-by-side list was sent (17 strings flagged as least sure: "נ״א", "סטייה בפיזור", "ירידה מהשיא", "השהיה", "מוערך בחסר", "מכשיר", "יקום", the ד׳/ש׳/ימ׳ abbreviations). Instructions use the plural ("בחרו") and possessives "שלך" - the user was asked whether to change the form and did not answer. Corrections are edits to `he.json` only; the parity test keeps them complete |
 | **The sign-in page is always English** | `AuthStore` default | The language is per account and unknown before sign-in. `navigator.language` could choose the sign-in page's language; not done |
 | **Duration abbreviations have no plural forms** | `duration.*` in the catalogues | English needs none, so Hebrew cannot add `_one`/`_two` (parity refuses keys English lacks): "לפני 1 ימ׳" rather than "לפני יום". Adding plural forms to the English keys would allow it |
@@ -2260,7 +2308,16 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
   sets `traders_app`'s password to a test value - so the live services lose their login until the
   next `migrate` (any `dev-docker.sh` start) sets it back. It was done once this session, against a
   throwaway `*_ci` database on the compose server, and the rebuild that followed repaired it. Use a
-  separate Postgres container for local integration runs, or rebuild afterwards.
+  separate Postgres container for local integration runs, or rebuild afterwards. **It happened
+  again on 2026-10-02** (Hebrew server-text session): the live orchestrator logged 14 failed logins
+  over a day, found only by reading its logs before the next rebuild. The memory note existed and
+  was not read at the moment it mattered - check this section before any `TEST_DATABASE_URL` run.
+  The same scratch database then refused the orchestrator's integration file *as* `traders_app`
+  ("schema is not at head"); CI runs it correctly, so that is not worth re-deriving locally.
+- **The Write tool turns `\u2066`-style escapes into the literal invisible characters.** Source
+  that must hold bidi isolates (Python or TypeScript) was rewritten afterwards to use escapes so a
+  reviewer can see them. macOS grep has no `-P`; this check works (and found one, fixed in #149):
+  `git ls-files '*.py' '*.ts' '*.tsx' | xargs python3 -c "import sys; [print(f) for f in sys.argv[1:] if any(c in open(f, encoding='utf-8').read() for c in '\u2066\u2067\u2068\u2069')]"`
 - **A worktree has no `services/ai/.venv`.** This session symlinked the main checkout's
   (`ln -s /Users/a/projects/Traders/services/ai/.venv services/ai/.venv`; untracked, never commit)
   and ran scripts with `PYTHONPATH=.` so they import the worktree's `app`. Before `PYTHONPATH` was
@@ -2461,7 +2518,40 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 
 ## Where to go next
 
-### Next session: after Hebrew
+### Next session: after Hebrew server text
+
+**Ask the user what comes next, with a recommendation; then ask for a grant** (the last one ended
+with this handoff). The options as they stand:
+1. **The multi-agent sandbox** (`docs/PROPOSAL-MULTI-AGENT.md` stages 1-3). **The user wants to plan
+   it together before anything is built** ("much bigger and should involve some planning on our
+   side", 2026-10-02). So start with a planning conversation: re-read the proposal, measure the
+   tables it touches read-only, and bring the open design questions - do not open a PR first.
+2. **The Mastra startup warning** (`proposal.lifecycle_close_failed`, "permission denied for schema
+   mastra" from `WorkflowsPG.init` -> `createTable` under `traders_app`, seen 2026-10-04 on compose):
+   offered as a separate task; measure whether lifecycles actually fail to close before choosing
+   between truly skipping Mastra's init and granting CREATE (which weakens 0033).
+3. **The debt table**, notably the owner's password in every container and the integration suite
+   borrowing `traders_app`'s password (which is what bit this session twice - see Local environment).
+4. **A real deployment** (Telegram's webhook leg, ReadWriteMany storage) - a milestone the user
+   would write.
+5. **More Hebrew** (the debt row "A Hebrew reader still meets some English server text"), only if
+   asked. Hebrew wording corrections are edits to `he.json`, `hebrew_templates.py` or
+   `notify/messages.ts` alone; changed templates do not rewrite stored rows.
+
+### Hebrew server text is complete, and how it was verified
+
+- **Measured first** (2026-10-02, read-only): all 78 stored observations re-rendered from their
+  stored evidence with no error (the only diffs were 14 old drawdown rows written before a wording
+  fix, and the 12 model-written ones); the model wrote 11 of the last week's 36; ~30 fixed English
+  strings in the orchestrator.
+- **#147:** 0035 run on a copy of the live database first (78/78 rows got Hebrew), served on a
+  branch stack for the user to read; after merge both environments migrated (compose 78/78,
+  kind 5/5). CI's Postgres job, run as `traders_app`, passed.
+- **#148:** no message went through the real bot; Hebrew behaviour is pinned by tests (webhook
+  taps, `/pending`, `/portfolio`, fan-out, narration notice, digest). Compose and kind rebuilt at
+  `42e927e`; the user's live language is `he`, so the next real alert or digest is the live check.
+
+### Next session: after Hebrew (history - the user chose Hebrew server text, 2026-10-02)
 
 **Ask the user what comes next, with a recommendation; then ask for a grant** (the last one ended
 with this handoff). The options as they stand:
