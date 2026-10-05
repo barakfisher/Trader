@@ -20,6 +20,8 @@ import {
 } from '@tanstack/react-router';
 
 import { ConceptDialog } from './components/ConceptDialog.tsx';
+import { AgentPage } from './pages/AgentPage.tsx';
+import { AgentsPage } from './pages/AgentsPage.tsx';
 import { AdminPage } from './pages/AdminPage.tsx';
 import { AskPage } from './pages/AskPage.tsx';
 import { DashboardPage } from './pages/DashboardPage.tsx';
@@ -60,6 +62,12 @@ const routeTree = rootRoute.addChildren([
     component: ProposalPage,
   }),
   createRoute({ getParentRoute: () => rootRoute, path: '/targets', component: TargetsPage }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/agents', component: AgentsPage }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/agents/$agentId',
+    component: AgentPage,
+  }),
   createRoute({ getParentRoute: () => rootRoute, path: '/topics', component: TopicsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: '/admin', component: AdminPage }),

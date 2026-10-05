@@ -25,6 +25,9 @@ export const queryKeys = {
   telegramBinding: ['telegram', 'binding'] as const,
   settings: ['settings'] as const,
   targets: ['targets'] as const,
+  /** The list, and - under it, so a write that invalidates the list reaches them - each agent. */
+  agents: ['agents'] as const,
+  agent: (agentId: string) => ['agents', agentId] as const,
   /** The list, and - under it, so invalidating the list prefix reaches them - each topic. */
   topics: ['topics'] as const,
   topic: (topicId: string) => ['topics', topicId] as const,

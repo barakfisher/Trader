@@ -648,6 +648,7 @@
     "refresh": "Refresh",
     "import": "Import",
     "targets": "Targets",
+    "agents": "Agents",
     "topics": "Topics",
     "ask": "Ask",
     "proposals": "Proposals",
@@ -945,6 +946,64 @@
       "fx": "fx",
       "index": "index",
       "unknown": "unknown"
+    }
+  },
+  "agents": {
+    "title": "Agents",
+    "intro": "Your real portfolio, and simulated portfolios that each run on a paper budget. Agents can't trade yet: for now you can create them, give each a budget and a persona, and pause or archive them.",
+    "loading": "Loading agents…",
+    "loadFailed": "Could not load your agents.",
+    "primaryName": "Main portfolio",
+    "real": "Real",
+    "simulated": "Simulated",
+    "states": {
+      "active": "Active",
+      "paused": "Paused",
+      "archived": "Archived"
+    },
+    "holdingsCount_one": "{{count}} holding",
+    "holdingsCount_other": "{{count}} holdings",
+    "budgetLine": "Paper budget {{budget}}",
+    "backToAgents": "Back to agents",
+    "primaryNote": "This is your real portfolio. It is never simulated and never asked to buy or sell; it lives on the dashboard.",
+    "settings": "Settings",
+    "save": "Save",
+    "saveFailed": "Could not save the agent.",
+    "stateHint": "A paused agent keeps what it holds. An archived agent is kept, not deleted.",
+    "fields": {
+      "name": "Name",
+      "budget": "Paper budget (USD)",
+      "budgetHint": "Simulated money, not taken from your portfolio. Dollars and cents, e.g. 1000 or 1000.50.",
+      "persona": "Persona",
+      "personaHint": "How this agent should think. Agents don't act on it yet; it will guide their decisions once they start making them."
+    },
+    "create": {
+      "title": "New agent",
+      "submit": "Create agent",
+      "failed": "Could not create the agent."
+    },
+    "actions": {
+      "pause": "Pause",
+      "resume": "Resume",
+      "archive": "Archive",
+      "restore": "Restore"
+    },
+    "tabs": {
+      "holdings": "Holdings",
+      "activity": "Activity"
+    },
+    "holdingsEmpty": {
+      "title": "Nothing held yet",
+      "body": "Agents can't trade yet. When they can, this agent's simulated holdings will appear here."
+    },
+    "activityEmpty": {
+      "title": "No activity yet",
+      "body": "This agent's decisions and the reasoning behind them will be listed here once agents start deciding."
+    },
+    "errors": {
+      "nameTaken": "You already have an agent with that name.",
+      "budgetRange": "The budget must be more than $0 and at most $1,000,000,000.",
+      "invalid": "Check the fields: the name is required, and the budget is dollars with at most two decimals."
     }
   }
 }
