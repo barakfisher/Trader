@@ -4,9 +4,9 @@
 this document are settled. What follows is the agreed design and its four-stage execution plan,
 written against the system as it exists at PR #40.
 
-**Amended 2026-10-04/05** (at PR #150): further decisions D1–D20 (§10), the schema as measured that day
-(§11) and the exact Stage 1 task list (§12). Where §10 and an earlier section disagree, §10 wins, and
-the earlier section carries a pointer to it.
+**Amended 2026-10-04/05** (at PR #150): further decisions D1–D26 (§10), the schema as measured that day
+(§11), the exact Stage 1 task list (§12), and Stage 3's measurements and task list (§13). Where §10
+and an earlier section disagree, §10 wins, and the earlier section carries a pointer to it.
 
 A user creates several named **agents**, each with its own analysis philosophy, simulated budget and
 domain focus, each keeping its own paper portfolio and sending its own proposals. The user's real
@@ -259,6 +259,8 @@ because an approval can now be revoked — makes a second approval a no-op at th
 an idempotent double-tap cannot produce a second fill. That guarantee extends to fills, with one
 addition revocation forces: **revoking an approval whose fill has been written must not delete the
 fill.** It writes a reversing fill at the then-current quote, or it is refused — decided in stage 3.
+**Decided by §10 D23:** refused; a filled trade is reversed only by a counter-trade. **And moved by
+D26:** the trade proposal and its approval paths are built in Stage 4, with the agent that proposes.
 
 **Approval from the dashboard is a first-class path, not a fallback.** Telegram may be unbound,
 delayed or failing — per the current handoff, it is in fact unproven end to end — and a proposal that
@@ -271,6 +273,7 @@ A trade the user places directly into an agent's account is recorded with
 `source: 'manual_user_override'`, distinct from `source: 'agent'`. **Scoring excludes manual
 overrides.** Otherwise a user who rescues a losing agent by hand credits the rescue to the agent's
 philosophy, and the scoreboard stops measuring the thing it exists to measure.
+**Pricing and entry: §10 D21.**
 
 ### 5.4 Agent performance scoring
 
@@ -284,6 +287,10 @@ Every figure is computed from stored fills and stored quotes, and an unpriced po
 window's return **unavailable rather than partial** — the same refusal `allocation_drift` already
 makes, for the same reason: a systematically wrong comparison against a number the user is
 evaluating is worse than silence.
+
+**Amended (D24):** the benchmark is SPY, through a shadow portfolio that receives the agent's deposits
+on the same days; P&L versus the benchmark covers every trade, the 30/60/90-day score only the agent's
+own. The comparison with the real portfolio is deferred (D24).
 
 ---
 
@@ -345,6 +352,8 @@ Existing decision 1 rejected a market-status API on the pricing path and recorde
 would accept: *"If scheduled scans ever make holidays material, the answer is a static calendar
 applied at the scheduler, not a network call per quote."* A fixed pre-open/post-close schedule is
 exactly that trigger. A static exchange calendar at the scheduler is therefore part of this stage.
+**Amended (D4, D25):** the calendar arrives in Stage 3, because a manual trade at the live quote needs
+it before any scan does; it is a committed file, read by the AI service and asked by the orchestrator.
 
 Note also that "pre-market open" resolves against the **exchange's** calendar and timezone, not
 `APP_TIMEZONE` (`Asia/Jerusalem`). The user's timezone continues to govern "today" for digests and
@@ -385,8 +394,8 @@ enforced.
 |---|---|---|
 | **1 — Isolation** | `agents` table, primary seeded + backfilled, `agent_id NOT NULL`, the six constraint replacements (§3.3, §11), the passive primary (D1) — tasks in §12 | — |
 | **2 — Agents exist** | Create, name, budget, persona, pause, archive; an Agents page and a page per agent (D17-D20). No decisions (D16); the consolidated view moves to Stage 3 (D17) | Stage 1 |
-| **3 — Budget, fills, scoring** | the consolidated view with filter and split figures (D17), `agent_cash`, fees (D6), fills from a live quote inside the range (D3), TTL from the next open and the exchange calendar (D4), dashboard + Telegram approval, `manual_user_override`, 30/60/90-day scoring — all proven with manual trades (D16) | Stage 2 |
-| **4 — The deciding agent** | Persona + tools decide (D14), briefing then read-only tool calls with a step limit and a stored transcript (D15), tool calling in the provider, reasoning in `services/ai` with a hand-written loop or core LangGraph by comparison and no checkpointer (D10), per-agent budgets (D12), pre-open/post-close schedule, persona rationale behind the validator, urgent sells through quiet hours (D5) | Stage 3; a paid model (§11 — M3, M5 and GDELT news have since landed, and the workspace is funded) |
+| **3 — Budget, fills, scoring** | the consolidated view with filter and split figures (D17), `agent_cash` and recorded top-ups (D22), fees (D6), the fill function with D3's range and TTL checks, the exchange calendar and next open (D4, D25), manual trades at the live quote or a flagged typed price (D21), P&L against a shadow SPY and 30/60/90-day scoring (D24) — tasks in §13 | Stage 2 |
+| **4 — The deciding agent** | The trade proposal and its dashboard + Telegram approval (D26), persona + tools decide (D14), briefing then read-only tool calls with a step limit and a stored transcript (D15), tool calling in the provider, reasoning in `services/ai` with a hand-written loop or core LangGraph by comparison and no checkpointer (D10), per-agent budgets (D12), pre-open/post-close schedule, persona rationale behind the validator, urgent sells through quiet hours (D5) | Stage 3; a paid model (§11 — M3, M5 and GDELT news have since landed, and the workspace is funded) |
 
 The PRD P2 amendment (§2) ships with stage 1, since it is the boundary the whole feature stands on.
 
@@ -556,6 +565,70 @@ minor-unit count stays an exact integer in JavaScript; a budget can be edited in
 turns later changes into recorded top-ups); a name is unique per user (409 otherwise); the slug is
 random, so a rename keeps the agent's identity and a name in any script works.
 
+### Added 2026-10-05, opening Stage 3
+
+Measured first (§13): one agent exists, the primary; there is no cash or fill table; every instrument
+in the tradable universe is USD- and US-listed; quotes are Yahoo's, 15 minutes delayed; SPY is in the
+universe with no stored price; every proposal ever written is a `rebalance`.
+
+**D21 — A manual trade fills at the live quote by default; a typed price is allowed, and flagged.**
+The default takes the same path an approval will (D3): a quote fetched now, the exchange open, and the
+quote's time and delay stored on the fill — "live" here means the provider's delayed quote, and the
+form says so. The user may type a price instead: the fill records `price_source: 'user'`, skips the
+range and the open-market check, and still obeys everything else — the universe, USD, whole shares,
+fees, the cash check under the row lock, no selling more than is held. A manual trade is always
+recorded *now*; there is no backdating. *Rejected:* backdated entries — inserting a trade into the
+past rewrites the cash history and the benchmark comparison from that date, and can date a purchase
+before the cash existed.
+
+**D22 — Cash starts at the budget; raising the budget is a recorded top-up; lowering it is refused
+once the agent has traded.** An agent's cash row and its opening deposit are written when the agent
+is created (and backfilled for agents created before the ledger). Until the first fill, a budget
+edit replaces the opening deposit — nothing has been measured against it yet. After it, an increase
+is a deposit row of its own, dated, and a decrease is refused. *Rejected:* decreases as withdrawals
+— more flexible, but a withdrawal must also leave the shadow benchmark (D24) and be refused against
+cash already spent, for a case nobody asked for.
+
+**D23 — A recorded trade is final.** There is no undo of a fill and no free-form cash adjustment; a
+mistake is corrected by a counter-trade, which is itself recorded. This settles §5.2's open question
+for the approval path as well: revoking a filled approval is refused. The ledger is append-only, so
+every balance can be recomputed from its rows and checked against the stored one.
+
+**D24 — Two figures: P&L against a shadow SPY, and the score.** *P&L* is `net worth − deposits`
+(D6), over everything in the account, manual trades included. Beside it, a **shadow SPY portfolio**
+receives each deposit on the day it was made, bought at that trading day's SPY close (the next
+trading day's for a deposit on a closed day); both returns are `P&L / deposits`, so both lines are
+given the same money at the same times and a top-up is never mistaken for a gain. *The 30/60/90-day
+score* (§5.4) counts only `source: 'agent'` fills, so until Stage 4 it reads "no agent decisions
+yet" and its arithmetic is proven by tests. An unpriced position or a missing SPY close makes the
+figure unavailable, not partial. The comparison with the real portfolio is deferred: it has no cash
+and no deposit history, and an import replaces its holdings, so a percentage beside an agent's would
+not be like for like. *Rejected:* a simple percentage from the first budget — wrong at the first
+top-up; and scoring live-price manual trades — it would score the user's judgement and leave it in
+the agent's record.
+
+**D25 — The exchange calendar is a committed file from a generator of our own; no library.**
+`data/calendar/xnys.json` lists full closures and early closes for several years. A script in
+`services/ai/scripts/` computes them from NYSE's published rules (weekend observance, Easter for
+Good Friday, the fourth Thursday of November); closures no rule predicts (a national day of
+mourning) are added by hand and kept on regeneration. It is committed like the universe (decision
+90's stance: one fixed input that CI, the eval and production share, and a change that shows in a
+diff) but generated separately, because the universe comes from Yahoo, which publishes no holidays,
+and is rebuilt on a different cadence. The AI service reads it beside `market_sessions.py` and
+answers *is it open* and *when does it next open*; the orchestrator asks rather than re-implementing
+it. A test fails 90 days before the file's last year ends, so it cannot run out silently. NYSE and
+Nasdaq share the calendar, and every tradable instrument is listed on one or the other (§13).
+Quote caching (decision 1) is unchanged. *Rejected:* `exchange_calendars` as a dependency (the
+user's preference: no third-party calendar), bundling it into the universe build, and a hand-typed
+file (the same file with a person as its generator).
+
+**D26 — The trade proposal and its approval paths move to Stage 4.** Stage 3 builds what they stand
+on — the fill function with D3's range, TTL and cash checks, the calendar and the next open — and
+tests it with proposal-shaped input. The `BUY`/`SELL` proposal kind, the dashboard and Telegram
+approval buttons and D4's TTL arrive in Stage 4's first PR, with the agent that writes them.
+*Rejected:* building them now against proposals only tests create — D17's reasoning: build against
+real rows.
+
 ---
 
 ## 11. Measured, 2026-10-04 (read-only, live compose database)
@@ -684,3 +757,70 @@ row counts compared before and after, and `downgrade` exercised on the copy.
 **Then: handoff.** This amendment plus PRs 1–4 is five merged PRs, which is CLAUDE.md's handoff
 trigger as well as the stage boundary: `.claude/MEMORY.md` is updated, committed as its own PR, and
 the next session starts Stage 2.
+
+---
+
+## 13. Stage 3 — measured, and the implementation tasks
+
+### 13.1 Measured, 2026-10-05 (read-only, live compose database at `0039_retire_mastra`)
+
+- **One agent, the primary**, with 10 holdings: seven USD equities and ETFs, two crypto pairs
+  (`BTC-USD`, `ETH-USD`, exchange `CCC`) and `SAP.DE` in EUR. No simulated agent exists, so the
+  ledger migration backfills nothing on this installation; it still backfills cash for any agent
+  created before it lands.
+- **No cash, fill or transaction table.** `holdings` is one row per `(agent_id, instrument_id)` with
+  cost per unit (`cost_basis_minor`); `intents` (6 rows) records assent and holds no money.
+- **The tradable universe is entirely USD and US-listed:** 5,225 profiles, all `USD`, on `PCX` 1,513,
+  `NYQ` 1,501, `NMS` 833, `NGM` 713, `BTS` 549, `NCM` 83, `ASE` 26 and a handful under display names
+  (`NASDAQ`, `NYSE`, `NYSEARCA`). No crypto. One calendar (D25) covers every instrument an agent can
+  trade; the primary's crypto and EUR holdings are outside the universe and never traded (D1).
+- **Quotes are Yahoo's, 15 minutes delayed:** of 3,006 stored, 668 intraday rows carry
+  `delay_seconds = 900`, 2,290 are daily closes, 48 are old fixture rows. A "live" fill price is
+  therefore a delayed quote (D21).
+- **SPY is in the universe (`PCX`) with no stored price.** The daily backfill covers held and
+  followed instruments only (`listAnalysedInstruments`), so the benchmark must be added to it. It
+  stores about a year; the shadow portfolio (D24) needs closes only from each agent's first deposit.
+- **Proposals: 18, all `rebalance`** (4 approved, 14 expired). Nothing writes a trade proposal (D26).
+- **Snapshots are already per agent** (`portfolio_snapshots`, unique `(agent_id, as_of)`, 13 rows),
+  but value holdings only; an agent's net worth adds its cash.
+
+### 13.2 Tasks
+
+Each PR the size of a Stage 1 PR; every migration rehearsed on a copy of the live database first.
+
+**PR 1 — This amendment.** D21–D26 and §13.
+
+**PR 2 — The exchange calendar (D25).** The generator script and `data/calendar/xnys.json`; a
+calendar module in the AI service beside `market_sessions.py` (closed day, early close, *is open*,
+*next open*), exposed to the orchestrator through the generated client; tests for the rule-based
+dates against NYSE's published list, the hand-added closures surviving regeneration, and the expiry
+test. No migration.
+
+**PR 3 — The ledger (migration 0040).** `agent_cash` (one balance row per simulated agent, locked by
+every trade); an append-only cash-movement table (opening deposit, top-up, trade debit and credit,
+each with its fill where it has one); `fills` (side, whole-share quantity as `numeric(38, 18)`, price
+and fee in minor units, `price_source` `quote`/`user`, the quote's `as_of` and delay, `source`
+`manual_user_override`/`agent`, an optional `proposal_id` for Stage 4). A trigger refuses a fill or
+a cash row on a primary agent — D1's fourth layer. `fees.ts` and `fees.py` (D6). Agent creation
+writes the cash row and opening deposit; budget edits follow D22. A test recomputes every balance
+from its movements.
+
+**PR 4 — Manual trades.** `POST /agents/:id/trades`: buy or sell, whole shares, at the live quote
+(the exchange open) or a typed price (D21). One fill function, the one Stage 4's approval will call:
+cash row locked, fee added, refused and never resized, no selling more than is held, holdings updated
+in the same transaction (average cost per unit on a buy; a sell to zero removes the row). Paused
+agents may still be traded by hand; archived agents may not.
+
+**PR 5 — The agent page.** The trade form (quote, its time and delay, fee, cash after), the
+*Holdings* tab from real rows, the *Activity* tab as the ledger, the top-up control; English and
+Hebrew.
+
+**Then: handoff** (five merged PRs).
+
+**PR 6 — The consolidated holdings view (§4.3, D17, D18).** One row per instrument across agents,
+expanding to the per-agent split; the `All / Real only / per agent` filter; real and simulated never
+summed; paused badged, archived excluded.
+
+**PR 7 — Performance (D24, §5.4).** Daily net worth per simulated agent (cash + market value), SPY
+in the backfill, the shadow benchmark, P&L and return beside it on the agent page, and the
+30/60/90-day score over `agent` fills.
