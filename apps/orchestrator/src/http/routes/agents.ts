@@ -17,6 +17,7 @@ import { z } from 'zod';
 import type { AgentView, AgentsResponse } from '@traders/shared';
 
 import {
+  agentHasTraded,
   createAgent,
   getAgent,
   listAgents,
@@ -45,6 +46,7 @@ export const MAX_NAME_LENGTH = 60;
 const BUDGET_PATTERN = /^\d+(\.\d{1,2})?$/;
 
 const UNIQUE_VIOLATION = '23505';
+const CHECK_VIOLATION = '23514';
 
 const name = z.string().trim().min(1).max(MAX_NAME_LENGTH);
 const budget = z.string().trim().regex(BUDGET_PATTERN, 'budget must be an amount in dollars, at most two decimal places');
@@ -91,6 +93,22 @@ export function toAgentView(row: AgentRow): AgentView {
 function personaOf(value: string | null | undefined): string | null | undefined {
   if (value === undefined) return undefined;
   return value === null || value === '' ? null : value;
+}
+
+/**
+ * The database's own refusal of a lower budget after a trade (migration 0040),
+ * met only when a fill lands between the check below and the update.
+ */
+function isBudgetCutAfterTrade(error: unknown): boolean {
+  const pg = error as { code?: string; message?: string };
+  return pg.code === CHECK_VIOLATION && (pg.message ?? '').includes('budget_decrease_after_trade');
+}
+
+function budgetCutAfterTrade() {
+  return conflict(
+    'budget_decrease_after_trade',
+    'this agent has traded: its budget can be raised (a top-up), not lowered',
+  );
 }
 
 function isNameTaken(error: unknown): boolean {
@@ -160,17 +178,28 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
       );
     }
     const patch = parsed.data;
+    const budgetMinor = patch.budget === undefined ? undefined : budgetToMinor(patch.budget);
+    // D22: before the first fill a budget edit replaces the opening deposit; after
+    // it, a raise is a top-up and a cut is refused. The database enforces the same.
+    if (
+      budgetMinor !== undefined &&
+      budgetMinor < Number(existing.budget_minor) &&
+      (await agentHasTraded(userId, agentId))
+    ) {
+      throw budgetCutAfterTrade();
+    }
     try {
       const row = await updateAgent(userId, agentId, {
         name: patch.name,
         persona: personaOf(patch.persona),
-        budgetMinor: patch.budget === undefined ? undefined : budgetToMinor(patch.budget),
+        budgetMinor,
         state: patch.state,
       });
       if (!row) throw notFound('agent not found');
       return context.json(toAgentView(row));
     } catch (error) {
       if (isNameTaken(error)) throw nameTaken();
+      if (isBudgetCutAfterTrade(error)) throw budgetCutAfterTrade();
       throw error;
     }
   });

@@ -22,7 +22,7 @@ import { describe, expect, it } from 'vitest';
 
 const QUERIES = join(import.meta.dirname, '..', 'src', 'db', 'queries');
 
-/** The tables migration 0036 gave an `agent_id`. */
+/** The tables migration 0036 gave an `agent_id`, and those born with one since. */
 const OWNED_TABLES = [
   'holdings',
   'observations',
@@ -33,6 +33,10 @@ const OWNED_TABLES = [
   'target_weights',
   'notifications',
   'proposal_episodes',
+  // The ledger (migration 0040), agent-owned from its first row.
+  'agent_cash',
+  'cash_movements',
+  'fills',
 ];
 
 const TOUCHES_OWNED = new RegExp(`\\b(?:FROM|JOIN|INTO|UPDATE)\\s+(?:${OWNED_TABLES.join('|')})\\b`, 'i');

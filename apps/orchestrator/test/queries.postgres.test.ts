@@ -478,6 +478,31 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('the ledger (0040)', () => {
+    // No fill is written here: fills are append-only, and one would outlive this
+    // suite's cleanup of USER. The traded path is proven in test_ledger_sql.py.
+    it("reads a new agent's cash as its budget, and the real portfolio as having none", async () => {
+      const pool = getPool();
+      const simulated = (
+        await pool.query(
+          `INSERT INTO agents (user_id, slug, name, budget_minor)
+           VALUES ($1, 'ledger-test', 'Ledger test', 250000) RETURNING id`,
+          [USER],
+        )
+      ).rows[0].id as string;
+      expect(await queries.getAgentCash(USER, simulated)).toMatchObject({
+        balance_minor: '250000',
+        currency: 'USD',
+      });
+      expect(await queries.agentHasTraded(USER, simulated)).toBe(false);
+      expect(await queries.getAgentCash(USER, AGENT)).toBeNull();
+
+      await queries.updateAgent(USER, simulated, { budgetMinor: 300000 });
+      expect((await queries.getAgentCash(USER, simulated))?.balance_minor).toBe('300000');
+      await pool.query('DELETE FROM agents WHERE id = $1', [simulated]);
+    });
+  });
+
   describe('per-agent run keys (0037)', () => {
     it('lets two agents claim one key, and one agent claim it once', async () => {
       const pool = getPool();

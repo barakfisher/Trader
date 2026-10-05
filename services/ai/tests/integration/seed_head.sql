@@ -177,3 +177,13 @@ INSERT INTO proposal_episodes (user_id, agent_id, observation_kind, subject_ref,
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '0.150619', now(), 'worsened'),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '-0.150619', now(), 'reversed'),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '0.210000', NULL, NULL);
+
+-- The ledger (0040). The two simulated agents above were given their cash and
+-- opening deposits by the `agents_ledger_follows_budget` trigger. A buy at a
+-- quote by hand, a sell at a typed price by the agent, and a budget raised after
+-- trading (a top-up) cover every enumerated value - and make 0040's downgrade
+-- refuse, since it would discard them.
+INSERT INTO fills (user_id, agent_id, instrument_id, side, quantity, price_minor, notional_minor, fee_minor, price_source, quote_as_of, quote_delay_seconds, source, idempotency_key) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000001', 'buy', '10', 1000, 10000, 150, 'quote', now(), 900, 'manual_user_override', 'seed-buy'),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000001', 'sell', '2', 1100, 2200, 150, 'user', NULL, NULL, 'agent', 'seed-sell');
+UPDATE agents SET budget_minor = 150000 WHERE id = '90000000-0000-0000-0000-0000000000a1';

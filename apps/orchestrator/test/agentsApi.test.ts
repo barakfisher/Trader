@@ -45,6 +45,7 @@ vi.mock('../src/db/pool.js', () => ({
 
 vi.mock('../src/db/queries.js', () => ({
   getUser: vi.fn(async () => USER),
+  agentHasTraded: vi.fn(async () => false),
   listAgents: vi.fn(async () => [
     row({ id: PRIMARY, slug: 'primary-portfolio', name: 'Main portfolio', is_primary: true, budget_minor: null }),
     row(),
@@ -174,6 +175,33 @@ describe('the agents API', () => {
       expect(await response.json()).toMatchObject({ state });
     }
     expect((await send('PATCH', `/agents/${SIMULATED}`, { name: 'Value' })).status).toBe(200);
+  });
+
+  it('lets a budget fall before the first trade, and only rise after it (decision D22)', async () => {
+    expect((await send('PATCH', `/agents/${SIMULATED}`, { budget: '500' })).status).toBe(200);
+
+    vi.mocked(queries.agentHasTraded).mockResolvedValue(true);
+    vi.mocked(queries.updateAgent).mockClear();
+    const cut = await send('PATCH', `/agents/${SIMULATED}`, { budget: '500' });
+    expect(cut.status).toBe(409);
+    expect(await cut.json()).toMatchObject({ error: 'budget_decrease_after_trade' });
+    expect(queries.updateAgent).not.toHaveBeenCalled();
+
+    const raise = await send('PATCH', `/agents/${SIMULATED}`, { budget: '1500' });
+    expect(raise.status).toBe(200);
+    expect(await raise.json()).toMatchObject({ budgetMinor: 150000 });
+    vi.mocked(queries.agentHasTraded).mockResolvedValue(false);
+  });
+
+  it("answers the database's refusal of a cut after a racing trade with the same 409", async () => {
+    vi.mocked(queries.updateAgent).mockRejectedValueOnce(
+      Object.assign(new Error('budget_decrease_after_trade: an agent that has traded ...'), {
+        code: '23514',
+      }),
+    );
+    const response = await send('PATCH', `/agents/${SIMULATED}`, { budget: '500' });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: 'budget_decrease_after_trade' });
   });
 
   it('never changes the real portfolio (decision D1)', async () => {
