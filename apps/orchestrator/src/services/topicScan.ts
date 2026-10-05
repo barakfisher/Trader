@@ -81,7 +81,7 @@ export async function runTopicScan(
   // and the caller records it as one.
   if (topics.length === 0) return null;
 
-  const knownKeys = await listRecentDedupeKeys(user.id);
+  const knownKeys = await listRecentDedupeKeys(user.id, agentId);
   const response = await ai.topicScan(
     { user_id: user.id, topics, known_dedupe_keys: knownKeys },
     requestId,

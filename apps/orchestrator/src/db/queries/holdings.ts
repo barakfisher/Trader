@@ -18,28 +18,32 @@ export interface HoldingRow {
   instrument_currency: string;
 }
 
-export function listHoldings(userId: string): Promise<HoldingRow[]> {
+export function listHoldings(userId: string, agentId: string): Promise<HoldingRow[]> {
   return query<HoldingRow>(
     `SELECT h.id, h.user_id, h.instrument_id, h.quantity::text AS quantity,
             h.cost_basis_minor::text AS cost_basis_minor, h.currency, h.opened_at, h.notes,
             i.symbol, i.name, i.asset_class, i.exchange, i.currency AS instrument_currency
        FROM holdings h
        JOIN instruments i ON i.id = h.instrument_id
-      WHERE h.user_id = $1
+      WHERE h.user_id = $1 AND h.agent_id = $2
       ORDER BY i.symbol`,
-    [userId],
+    [userId, agentId],
   );
 }
 
-export function getHolding(userId: string, holdingId: string): Promise<HoldingRow | null> {
+export function getHolding(
+  userId: string,
+  agentId: string,
+  holdingId: string,
+): Promise<HoldingRow | null> {
   return queryOne<HoldingRow>(
     `SELECT h.id, h.user_id, h.instrument_id, h.quantity::text AS quantity,
             h.cost_basis_minor::text AS cost_basis_minor, h.currency, h.opened_at, h.notes,
             i.symbol, i.name, i.asset_class, i.exchange, i.currency AS instrument_currency
        FROM holdings h
        JOIN instruments i ON i.id = h.instrument_id
-      WHERE h.user_id = $1 AND h.id = $2`,
-    [userId, holdingId],
+      WHERE h.user_id = $1 AND h.agent_id = $2 AND h.id = $3`,
+    [userId, agentId, holdingId],
   );
 }
 
@@ -104,11 +108,12 @@ export interface UpdateHoldingPatch {
 
 export async function updateHolding(
   userId: string,
+  agentId: string,
   holdingId: string,
   patch: UpdateHoldingPatch,
 ): Promise<HoldingRow | null> {
   const sets: string[] = [];
-  const params: unknown[] = [userId, holdingId];
+  const params: unknown[] = [userId, agentId, holdingId];
   const push = (fragment: string, value: unknown) => {
     params.push(value);
     sets.push(`${fragment} = $${params.length}`);
@@ -118,30 +123,38 @@ export async function updateHolding(
   if (patch.currency !== undefined) push('currency', patch.currency.toUpperCase());
   if (patch.openedAt !== undefined) push('opened_at', patch.openedAt);
   if (patch.notes !== undefined) push('notes', patch.notes);
-  if (sets.length === 0) return getHolding(userId, holdingId);
+  if (sets.length === 0) return getHolding(userId, agentId, holdingId);
 
   const updated = await queryOne<{ id: string }>(
     `UPDATE holdings SET ${sets.join(', ')}, updated_at = now()
-      WHERE user_id = $1 AND id = $2 RETURNING id`,
+      WHERE user_id = $1 AND agent_id = $2 AND id = $3 RETURNING id`,
     params,
   );
-  return updated ? getHolding(userId, holdingId) : null;
+  return updated ? getHolding(userId, agentId, holdingId) : null;
 }
 
-export async function deleteHolding(userId: string, holdingId: string): Promise<boolean> {
+export async function deleteHolding(
+  userId: string,
+  agentId: string,
+  holdingId: string,
+): Promise<boolean> {
   const rows = await query<{ id: string }>(
-    'DELETE FROM holdings WHERE user_id = $1 AND id = $2 RETURNING id',
-    [userId, holdingId],
+    'DELETE FROM holdings WHERE user_id = $1 AND agent_id = $2 AND id = $3 RETURNING id',
+    [userId, agentId, holdingId],
   );
   return rows.length > 0;
 }
 
-export async function deleteAllHoldings(userId: string, client?: PoolClient): Promise<number> {
-  const sql = 'DELETE FROM holdings WHERE user_id = $1';
+export async function deleteAllHoldings(
+  userId: string,
+  agentId: string,
+  client?: PoolClient,
+): Promise<number> {
+  const sql = 'DELETE FROM holdings WHERE user_id = $1 AND agent_id = $2';
   if (client) {
-    const result = await client.query(sql, [userId]);
+    const result = await client.query(sql, [userId, agentId]);
     return result.rowCount ?? 0;
   }
-  const rows = await query<{ id: string }>(`${sql} RETURNING id`, [userId]);
+  const rows = await query<{ id: string }>(`${sql} RETURNING id`, [userId, agentId]);
   return rows.length;
 }

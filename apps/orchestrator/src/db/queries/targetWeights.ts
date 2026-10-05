@@ -13,14 +13,14 @@ export interface TargetWeightInput {
   weight: string;
 }
 
-export function listTargetWeights(userId: string): Promise<TargetWeightRow[]> {
+export function listTargetWeights(userId: string, agentId: string): Promise<TargetWeightRow[]> {
   return query<TargetWeightRow>(
     `SELECT t.instrument_id, t.weight::text AS weight, i.symbol, i.name
        FROM target_weights t
        JOIN instruments i ON i.id = t.instrument_id
-      WHERE t.user_id = $1
+      WHERE t.user_id = $1 AND t.agent_id = $2
       ORDER BY i.symbol`,
-    [userId],
+    [userId, agentId],
   );
 }
 
@@ -42,7 +42,10 @@ export async function replaceTargetWeights(
   targets: TargetWeightInput[],
 ): Promise<number> {
   return transaction(async (client) => {
-    await client.query('DELETE FROM target_weights WHERE user_id = $1', [userId]);
+    await client.query('DELETE FROM target_weights WHERE user_id = $1 AND agent_id = $2', [
+      userId,
+      agentId,
+    ]);
     if (targets.length === 0) return 0;
 
     const values: string[] = [];

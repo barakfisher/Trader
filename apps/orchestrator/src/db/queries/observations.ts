@@ -149,7 +149,8 @@ export interface AnalysedInstrumentRow {
 
 export function listAnalysedInstruments(userId: string): Promise<AnalysedInstrumentRow[]> {
   return query<AnalysedInstrumentRow>(
-    `SELECT i.id, i.symbol, i.name, i.asset_class
+    `-- agent-blind: shared ingestion fetches every agent's instruments once (§4.1).
+     SELECT i.id, i.symbol, i.name, i.asset_class
        FROM instruments i
       WHERE i.id IN (
               SELECT h.instrument_id FROM holdings h WHERE h.user_id = $1
@@ -164,13 +165,17 @@ export function listAnalysedInstruments(userId: string): Promise<AnalysedInstrum
   );
 }
 
-export async function listRecentDedupeKeys(userId: string, days = 2): Promise<string[]> {
+export async function listRecentDedupeKeys(
+  userId: string,
+  agentId: string,
+  days = 2,
+): Promise<string[]> {
   const rows = await query<{ dedupe_key: string }>(
     `SELECT dedupe_key
        FROM observations
-      WHERE user_id = $1
-        AND created_at > now() - ($2 || ' days')::interval`,
-    [userId, String(days)],
+      WHERE user_id = $1 AND agent_id = $2
+        AND created_at > now() - ($3 || ' days')::interval`,
+    [userId, agentId, String(days)],
   );
   return rows.map((row) => row.dedupe_key);
 }
@@ -188,8 +193,13 @@ export interface ObservationFilter {
   minRank?: number | null;
 }
 
-function observationWhere(filter: ObservationFilter, first: number): { sql: string; params: unknown[] } {
+/** `next` is the first placeholder after the filter's own two. */
+function observationWhere(
+  filter: ObservationFilter,
+  first: number,
+): { sql: string; params: unknown[]; next: number } {
   return {
+    next: first + 2,
     sql: `AND ($${first}::text[] IS NULL OR subject_ref = ANY($${first}::text[]))
           AND (${SEVERITY_RANK_SQL}) >= coalesce($${first + 1}::int, 0)`,
     params: [filter.subjectRefs ?? null, filter.minRank ?? null],
@@ -210,6 +220,7 @@ function observationWhere(filter: ObservationFilter, first: number): { sql: stri
  */
 export function listObservations(
   userId: string,
+  agentId: string,
   limit = 50,
   filter: ObservationFilter = {},
   before: string | null = null,
@@ -219,7 +230,7 @@ export function listObservations(
     `SELECT id, kind, severity, subject_kind, subject_ref, headline, explanation,
             evidence, concept_refs, narration_source, fallback_reason, localized, created_at
        FROM observations
-      WHERE user_id = $1
+      WHERE user_id = $1 AND agent_id = $${where.next}
         ${where.sql}
         AND ($3::uuid IS NULL OR (created_at, ${SEVERITY_RANK_SQL}, id) < (
               SELECT a.created_at,
@@ -229,16 +240,21 @@ export function listObservations(
                WHERE a.id = $3 AND a.user_id = $1))
       ORDER BY created_at DESC, ${SEVERITY_RANK_SQL} DESC, id DESC
       LIMIT $2`,
-    [userId, limit, before, ...where.params],
+    [userId, limit, before, ...where.params, agentId],
   );
 }
 
 /** How many findings the filter matches in all, so a page can say it is one. */
-export async function countObservations(userId: string, filter: ObservationFilter = {}): Promise<number> {
+export async function countObservations(
+  userId: string,
+  agentId: string,
+  filter: ObservationFilter = {},
+): Promise<number> {
   const where = observationWhere(filter, 2);
   const row = await queryOne<{ count: string }>(
-    `SELECT count(*)::text AS count FROM observations WHERE user_id = $1 ${where.sql}`,
-    [userId, ...where.params],
+    `SELECT count(*)::text AS count FROM observations
+      WHERE user_id = $1 AND agent_id = $${where.next} ${where.sql}`,
+    [userId, ...where.params, agentId],
   );
   return Number(row?.count ?? 0);
 }

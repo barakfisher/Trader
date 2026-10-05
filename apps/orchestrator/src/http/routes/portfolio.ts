@@ -14,6 +14,7 @@ import {
   listLatestNarrationProvenance,
   listObservations,
   listSnapshots,
+  primaryAgentId,
   recordQuotes,
 } from '../../db/queries.js';
 import { logger } from '../../logger.js';
@@ -40,7 +41,7 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
     const user = await getUser(userId);
     if (!user) throw notFound('user not found');
 
-    const rows = await listHoldings(userId);
+    const rows = await listHoldings(userId, await primaryAgentId(userId));
     const portfolio = await valuePortfolio(rows, {
       baseCurrency: user.base_currency,
       ai: context.get('ai'),
@@ -100,9 +101,10 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
       minRank: severity === undefined ? null : SEVERITY_RANK[severity]!,
     };
     // One more than a page, so whether another page exists is known, not guessed.
+    const agentId = await primaryAgentId(userId);
     const [rows, total] = await Promise.all([
-      listObservations(userId, limit + 1, filter, before ?? null),
-      countObservations(userId, filter),
+      listObservations(userId, agentId, limit + 1, filter, before ?? null),
+      countObservations(userId, agentId, filter),
     ]);
     const page = rows.slice(0, limit);
     return context.json({
@@ -168,7 +170,11 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
   app.get('/portfolio/snapshots', async (context) => {
     const userId = currentUserId(context);
     const limit = Number(context.req.query('limit') ?? 365);
-    const rows = await listSnapshots(userId, Number.isFinite(limit) ? Math.min(limit, 3650) : 365);
+    const rows = await listSnapshots(
+      userId,
+      await primaryAgentId(userId),
+      Number.isFinite(limit) ? Math.min(limit, 3650) : 365,
+    );
     const response: SnapshotsResponse = {
       snapshots: rows
         .map((row) => ({

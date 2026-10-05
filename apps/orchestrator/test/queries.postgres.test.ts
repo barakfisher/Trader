@@ -353,6 +353,73 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('agent scope (Stage 1, PR 2)', () => {
+    it("never shows a simulated agent's rows as the real portfolio's, or the reverse", async () => {
+      const pool = getPool();
+      const simulated = (
+        await pool.query(
+          `INSERT INTO agents (user_id, slug, name, budget_minor)
+           VALUES ($1, 'scope-test', 'Scope test', 100000) RETURNING id`,
+          [USER],
+        )
+      ).rows[0].id as string;
+      const [real, paper] = (
+        await pool.query(
+          `INSERT INTO instruments (symbol, asset_class)
+           VALUES ($1, 'equity'), ($2, 'equity') RETURNING id`,
+          [`REAL${randomUUID().slice(0, 6)}`, `PAPR${randomUUID().slice(0, 6)}`],
+        )
+      ).rows.map((row) => row.id as string);
+      const holding = (agentId: string, instrumentId: string) =>
+        queries.upsertHolding({
+          userId: USER,
+          agentId,
+          instrumentId: instrumentId!,
+          quantity: '1',
+          costBasisMinor: null,
+          currency: 'USD',
+          openedAt: null,
+          notes: null,
+        });
+      await holding(AGENT, real!);
+      await holding(simulated, paper!);
+      const finding = (agentId: string, dedupeKey: string) => ({
+        userId: USER,
+        agentId,
+        runId: null,
+        kind: 'price_move',
+        severity: 'info',
+        subjectKind: 'instrument',
+        subjectRef: 'instrument:SCOPE',
+        headline: 'h',
+        explanation: 'e',
+        evidence: {},
+        conceptRefs: [],
+        dedupeKey,
+        narrationSource: null,
+        fallbackReason: null,
+        localized: {},
+      });
+      const realKey = `scope-real-${randomUUID()}`;
+      const paperKey = `scope-paper-${randomUUID()}`;
+      await queries.insertObservations([finding(AGENT, realKey), finding(simulated, paperKey)]);
+
+      const symbolsOf = async (agentId: string) =>
+        (await queries.listHoldings(USER, agentId)).map((row) => row.instrument_id);
+      expect(await symbolsOf(AGENT)).toContain(real);
+      expect(await symbolsOf(AGENT)).not.toContain(paper);
+      expect(await symbolsOf(simulated)).toEqual([paper]);
+
+      expect(await queries.listRecentDedupeKeys(USER, AGENT)).toContain(realKey);
+      expect(await queries.listRecentDedupeKeys(USER, AGENT)).not.toContain(paperKey);
+      expect(await queries.listRecentDedupeKeys(USER, simulated)).toEqual([paperKey]);
+
+      await pool.query('DELETE FROM observations WHERE agent_id = $1', [simulated]);
+      await pool.query('DELETE FROM holdings WHERE agent_id = $1', [simulated]);
+      await pool.query('DELETE FROM agents WHERE id = $1', [simulated]);
+    });
+  });
+
   describe('listSnapshots', () => {
     it('returns the calendar date that was stored, whatever the process timezone', async () => {
       // East of UTC is where a DATE parsed to local midnight and printed in UTC
@@ -373,7 +440,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           pricedCount: 10,
           degraded: false,
         });
-        const [row] = await queries.listSnapshots(USER, 1);
+        const [row] = await queries.listSnapshots(USER, AGENT, 1);
         expect(row?.as_of).toBe('2026-09-14');
       } finally {
         process.env.TZ = zone;
@@ -452,7 +519,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       expect(recent[0]).toEqual({ narration_source: 'template', fallback_reason: 'no_provider' });
 
       // The translations come back as they went in, isolates included.
-      const [stored] = await queries.listObservations(USER, 1);
+      const [stored] = await queries.listObservations(USER, AGENT, 1);
       expect(stored!.localized).toEqual(observation.localized);
     });
   });
@@ -489,7 +556,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       const first = await queries.claimEpisode(episode);
       expect(first).not.toBeNull();
       expect(await queries.claimEpisode(episode)).toBeNull();
-      expect(await queries.listOpenEpisodes(USER, 'allocation_drift')).toEqual([
+      expect(await queries.listOpenEpisodes(USER, AGENT, 'allocation_drift')).toEqual([
         { id: first, subject_ref: 'portfolio:allocation:EPI', asked_magnitude: '0.150619000000000000' },
       ]);
 
@@ -511,7 +578,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       await insert('instrument:NVDAX', 'price_move');
       await insert('instrument:SMR', 'drawdown');
 
-      const nvda = await queries.listObservations(USER, 50, {
+      const nvda = await queries.listObservations(USER, AGENT, 50, {
         subjectRefs: ['instrument:NVDA', 'portfolio:allocation:NVDA'],
       });
       expect(nvda.map((row) => row.subject_ref).sort()).toEqual([
@@ -520,7 +587,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       ]);
       // The untyped null is what a driver and a planner can disagree about.
       // (An earlier test in this file left a finding too; only the superset matters.)
-      const all = (await queries.listObservations(USER, 50)).map((row) => row.subject_ref);
+      const all = (await queries.listObservations(USER, AGENT, 50)).map((row) => row.subject_ref);
       expect(all).toEqual(
         expect.arrayContaining(['instrument:NVDA', 'instrument:NVDAX', 'instrument:SMR']),
       );
@@ -564,10 +631,10 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       await article(5, other); // another instrument's news
       await article(24 * 8, instrument); // outside the week
 
-      const page = await queries.listHoldingArticles(USER, holding, 7, 2);
+      const page = await queries.listHoldingArticles(USER, AGENT, holding, 7, 2);
       expect(page.map((row) => row.id)).toEqual([newest, original]);
       expect(page[0]?.total).toBe('3');
-      expect(await queries.listHoldingArticles(randomUUID(), holding, 7, 2)).toEqual([]);
+      expect(await queries.listHoldingArticles(randomUUID(), AGENT, holding, 7, 2)).toEqual([]);
 
       await pool.query('DELETE FROM holdings WHERE id = $1', [holding]);
       // Instruments cascade to their links; the articles themselves are shared data.
@@ -679,6 +746,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       const pool = getPool();
       const user = randomUUID();
       await pool.query('INSERT INTO users (id) VALUES ($1)', [user]);
+      const agent = await queries.primaryAgentId(user);
       try {
         // One scan: one timestamp, microseconds included, three severities.
         const scan = '2026-09-30 07:06:52.090526+00';
@@ -694,19 +762,19 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         await insert('notable', scan);
         await insert('high', earlier);
 
-        const feed = await queries.listObservations(user, 10);
+        const feed = await queries.listObservations(user, agent, 10);
         expect(feed.map((row) => row.severity)).toEqual(['high', 'notable', 'info', 'high']);
 
-        const notable = await queries.listObservations(user, 10, { minRank: 1 });
+        const notable = await queries.listObservations(user, agent, 10, { minRank: 1 });
         expect(notable.map((row) => row.severity)).toEqual(['high', 'notable', 'high']);
-        expect(await queries.countObservations(user, { minRank: 1 })).toBe(3);
+        expect(await queries.countObservations(user, agent, { minRank: 1 })).toBe(3);
 
         // Page by page, two at a time, the same order with nothing lost or repeated.
-        const first = await queries.listObservations(user, 2);
-        const second = await queries.listObservations(user, 2, {}, first.at(-1)!.id);
+        const first = await queries.listObservations(user, agent, 2);
+        const second = await queries.listObservations(user, agent, 2, {}, first.at(-1)!.id);
         expect([...first, ...second].map((row) => row.id)).toEqual(feed.map((row) => row.id));
         // Another account's id is no cursor here.
-        expect(await queries.listObservations(USER, 2, {}, first.at(-1)!.id)).toEqual([]);
+        expect(await queries.listObservations(USER, AGENT, 2, {}, first.at(-1)!.id)).toEqual([]);
       } finally {
         await pool.query('DELETE FROM users WHERE id = $1', [user]);
       }

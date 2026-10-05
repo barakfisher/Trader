@@ -7,12 +7,16 @@ export interface OpenEpisodeRow {
   asked_magnitude: string;
 }
 
-export function listOpenEpisodes(userId: string, observationKind: string): Promise<OpenEpisodeRow[]> {
+export function listOpenEpisodes(
+  userId: string,
+  agentId: string,
+  observationKind: string,
+): Promise<OpenEpisodeRow[]> {
   return query<OpenEpisodeRow>(
     `SELECT id, subject_ref, asked_magnitude::text AS asked_magnitude
        FROM proposal_episodes
-      WHERE user_id = $1 AND observation_kind = $2 AND closed_at IS NULL`,
-    [userId, observationKind],
+      WHERE user_id = $1 AND agent_id = $2 AND observation_kind = $3 AND closed_at IS NULL`,
+    [userId, agentId, observationKind],
   );
 }
 
@@ -54,7 +58,8 @@ export async function closeEpisodes(
 ): Promise<number> {
   if (ids.length === 0) return 0;
   const closed = await query<{ id: string }>(
-    `UPDATE proposal_episodes
+    `-- agent-blind: addressed by the episodes' own ids, read per agent by listOpenEpisodes.
+     UPDATE proposal_episodes
         SET closed_at = now(), close_reason = $3
       WHERE user_id = $1 AND id = ANY($2::uuid[]) AND closed_at IS NULL
       RETURNING id`,

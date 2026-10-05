@@ -82,7 +82,8 @@ const PROPOSAL_COLUMNS = `p.id, p.user_id, p.observation_id, p.kind, p.payload, 
 
 export function findProposal(userId: string, proposalId: string): Promise<ProposalRow | null> {
   return queryOne<ProposalRow>(
-    `SELECT ${PROPOSAL_COLUMNS}
+    `-- agent-blind: addressed by the proposal's own id.
+     SELECT ${PROPOSAL_COLUMNS}
        FROM proposals p
        JOIN observations o ON o.id = p.observation_id
       WHERE p.user_id = $1 AND p.id = $2`,
@@ -123,7 +124,8 @@ export function listProposals(
     ? 'p.decided_at DESC NULLS LAST, p.created_at DESC'
     : 'p.expires_at ASC, p.created_at DESC';
   return query<ProposalRow>(
-    `SELECT ${PROPOSAL_COLUMNS}
+    `-- agent-blind: the inbox is the user's - every agent's questions in one place (§5.2).
+     SELECT ${PROPOSAL_COLUMNS}
        FROM proposals p
        JOIN observations o ON o.id = p.observation_id
       WHERE p.user_id = $1
@@ -137,7 +139,8 @@ export function listProposals(
 /** Proposals whose deadline has passed but whose row has not caught up yet. */
 export function listProposalsToExpire(limit = 500): Promise<ProposalRow[]> {
   return query<ProposalRow>(
-    `SELECT ${PROPOSAL_COLUMNS}
+    `-- agent-blind: the expiry sweep closes every account's and every agent's proposals.
+     SELECT ${PROPOSAL_COLUMNS}
        FROM proposals p
        JOIN observations o ON o.id = p.observation_id
       WHERE p.state IN ('pending','snoozed')
@@ -158,7 +161,8 @@ export function listProposalsToExpire(limit = 500): Promise<ProposalRow[]> {
  */
 export async function listLeftoverLifecycles(limit = 50): Promise<string[]> {
   const rows = await query<{ run_id: string }>(
-    `SELECT s.run_id
+    `-- agent-blind: the lifecycle sweep closes every agent's leftover runs.
+     SELECT s.run_id
        FROM mastra.mastra_workflow_snapshot s
        JOIN proposals p ON s.run_id = p.observation_id::text
       WHERE s.workflow_name = 'proposalLifecycle'
@@ -214,7 +218,8 @@ export interface TransitionResult {
 export function applyProposalTransition(transition: TransitionToApply): Promise<TransitionResult> {
   return transaction(async (client) => {
     const updated = await client.query(
-      `UPDATE proposals
+      `-- agent-blind: addressed by the proposal's own id.
+       UPDATE proposals
           SET state = $1,
               snoozed_until = $2,
               decided_at = now(),
@@ -257,7 +262,8 @@ export function applyProposalTransition(transition: TransitionToApply): Promise<
       // allows one *live* intent per proposal, so revoking this one is what
       // lets a later re-approval write its own row.
       await client.query(
-        `UPDATE intents
+        `-- agent-blind: addressed by the proposal's own id.
+         UPDATE intents
             SET revoked_at = now(), revoked_via = $3
           WHERE proposal_id = $1 AND user_id = $2 AND revoked_at IS NULL`,
         [transition.proposalId, transition.userId, transition.surface],

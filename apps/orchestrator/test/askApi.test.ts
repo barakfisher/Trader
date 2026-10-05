@@ -35,6 +35,7 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
+  primaryAgentId: vi.fn(async () => '90000000-0000-0000-0000-000000000001'),
   getUser: vi.fn(async () => USER),
   listHoldings: (...args: unknown[]) => listHoldings(...(args as [])),
   listTargetWeights: (...args: unknown[]) => listTargetWeights(...(args as [])),

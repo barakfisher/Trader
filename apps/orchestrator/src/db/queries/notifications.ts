@@ -74,7 +74,8 @@ export async function settleNotification(
   error?: string,
 ): Promise<void> {
   await query(
-    `UPDATE notifications
+    `-- agent-blind: addressed by the row's own id.
+     UPDATE notifications
         SET status = $2,
             sent_at = CASE WHEN $2 = 'sent' THEN now() ELSE NULL END,
             error = $3
@@ -86,7 +87,8 @@ export async function settleNotification(
 /** Everything deferred into the digest and not yet rolled up. */
 export function listPendingDigest(userId: string, limit = 100): Promise<NotificationRow[]> {
   return query<NotificationRow>(
-    `SELECT id, channel, ref_kind, ref_id, route, reason, status, dedupe_key,
+    `-- agent-blind: what is sent is the user's - one chat and one digest for every agent (§7.2).
+     SELECT id, channel, ref_kind, ref_id, route, reason, status, dedupe_key,
             sent_at, created_at
        FROM notifications
       WHERE user_id = $1
@@ -101,7 +103,8 @@ export function listPendingDigest(userId: string, limit = 100): Promise<Notifica
 /** The notification log, newest first: what the user was told, and what they were not. */
 export function listNotifications(userId: string, limit = 50): Promise<NotificationRow[]> {
   return query<NotificationRow>(
-    `SELECT id, channel, ref_kind, ref_id, route, reason, status, dedupe_key,
+    `-- agent-blind: what is sent is the user's - one chat and one digest for every agent (§7.2).
+     SELECT id, channel, ref_kind, ref_id, route, reason, status, dedupe_key,
             sent_at, created_at
        FROM notifications
       WHERE user_id = $1
@@ -133,7 +136,8 @@ const DIGEST_ENTRY_COLUMNS = `
 /** What the next daily digest will carry: every digest-channel row still pending, oldest first. */
 export function listPendingDigestEntries(userId: string): Promise<DigestEntryRow[]> {
   return query<DigestEntryRow>(
-    `SELECT ${DIGEST_ENTRY_COLUMNS}
+    `-- agent-blind: what is sent is the user's - one chat and one digest for every agent (§7.2).
+     SELECT ${DIGEST_ENTRY_COLUMNS}
        FROM notifications n
        LEFT JOIN observations o ON n.ref_kind = 'observation' AND o.id = n.ref_id
       WHERE n.user_id = $1 AND n.channel = 'digest' AND n.status = 'pending'
@@ -150,7 +154,8 @@ export function listPendingDigestEntries(userId: string): Promise<DigestEntryRow
  */
 export function listLastDigestEntries(userId: string): Promise<DigestEntryRow[]> {
   return query<DigestEntryRow>(
-    `WITH last AS (
+    `-- agent-blind: what is sent is the user's - one chat and one digest for every agent (§7.2).
+     WITH last AS (
        SELECT max(sent_at) AS at FROM notifications
         WHERE user_id = $1 AND channel = 'digest' AND status = 'sent')
      SELECT ${DIGEST_ENTRY_COLUMNS}

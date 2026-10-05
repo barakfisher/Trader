@@ -9,6 +9,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const AGENT = '90000000-0000-0000-0000-000000000001';
 const USER = {
   id: '00000000-0000-0000-0000-000000000001',
   email: null,
@@ -51,6 +52,7 @@ const queries = vi.hoisted(() => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
+  primaryAgentId: vi.fn(async () => '90000000-0000-0000-0000-000000000001'),
   getUser: vi.fn(async () => USER),
   ...queries,
 }));
@@ -112,7 +114,7 @@ describe('GET /holdings/:id/history', () => {
     const response = await get(`/holdings/${HOLDING_ID}/history`);
 
     expect(response.status).toBe(200);
-    expect(queries.getHolding).toHaveBeenCalledWith(USER.id, HOLDING_ID);
+    expect(queries.getHolding).toHaveBeenCalledWith(USER.id, AGENT, HOLDING_ID);
     expect(priceHistory).toHaveBeenCalledWith(
       HOLDING_ROW.instrument_id,
       HOLDING_HISTORY_DAYS,
@@ -171,6 +173,7 @@ describe('GET /holdings/:id/news', () => {
 
     expect(queries.listHoldingArticles).toHaveBeenCalledWith(
       USER.id,
+      AGENT,
       HOLDING_ID,
       HOLDING_NEWS_DAYS,
       HOLDING_NEWS_PAGE,
@@ -220,6 +223,7 @@ describe('GET /observations?symbol=', () => {
     await get('/observations?symbol=nvda');
     expect(queries.listObservations).toHaveBeenCalledWith(
       USER.id,
+      AGENT,
       51,
       { subjectRefs: ['instrument:NVDA', 'portfolio:allocation:NVDA'], minRank: null },
       null,
@@ -230,6 +234,7 @@ describe('GET /observations?symbol=', () => {
     await get('/observations');
     expect(queries.listObservations).toHaveBeenCalledWith(
       USER.id,
+      AGENT,
       51,
       { subjectRefs: null, minRank: null },
       null,
@@ -240,11 +245,12 @@ describe('GET /observations?symbol=', () => {
     await get('/observations?severity=notable&before=2d7c7f7e-8a55-4d5e-9d1a-3b1f0e9c6a11&limit=10');
     expect(queries.listObservations).toHaveBeenCalledWith(
       USER.id,
+      AGENT,
       11,
       { subjectRefs: null, minRank: 1 },
       '2d7c7f7e-8a55-4d5e-9d1a-3b1f0e9c6a11',
     );
-    expect(queries.countObservations).toHaveBeenCalledWith(USER.id, { subjectRefs: null, minRank: 1 });
+    expect(queries.countObservations).toHaveBeenCalledWith(USER.id, AGENT, { subjectRefs: null, minRank: 1 });
   });
 
   it.each(['severity=urgent', 'before=not-an-id'])('refuses %s', async (query) => {

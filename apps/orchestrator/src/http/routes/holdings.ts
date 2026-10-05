@@ -74,7 +74,8 @@ const patchSchema = z.object({
 
 export function registerHoldingsRoutes(app: Hono<AppEnv>): void {
   app.get('/holdings', async (context) => {
-    const rows = await listHoldings(currentUserId(context));
+    const userId = currentUserId(context);
+    const rows = await listHoldings(userId, await primaryAgentId(userId));
     return context.json({
       holdings: rows.map((row) => ({
         id: row.id,
@@ -98,7 +99,11 @@ export function registerHoldingsRoutes(app: Hono<AppEnv>): void {
    */
   app.get('/holdings/:id/history', async (context) => {
     const userId = currentUserId(context);
-    const holding = await getHolding(userId, parseHoldingId(context.req.param('id')));
+    const holding = await getHolding(
+      userId,
+      await primaryAgentId(userId),
+      parseHoldingId(context.req.param('id')),
+    );
     if (!holding) throw notFound('holding not found');
     try {
       const history = await context
@@ -131,10 +136,11 @@ export function registerHoldingsRoutes(app: Hono<AppEnv>): void {
    */
   app.get('/holdings/:id/news', async (context) => {
     const userId = currentUserId(context);
-    const holding = await getHolding(userId, parseHoldingId(context.req.param('id')));
+    const agentId = await primaryAgentId(userId);
+    const holding = await getHolding(userId, agentId, parseHoldingId(context.req.param('id')));
     if (!holding) throw notFound('holding not found');
     const [rows, lastRun] = await Promise.all([
-      listHoldingArticles(userId, holding.id, HOLDING_NEWS_DAYS, HOLDING_NEWS_PAGE),
+      listHoldingArticles(userId, agentId, holding.id, HOLDING_NEWS_DAYS, HOLDING_NEWS_PAGE),
       getLatestFinishedRun(userId, 'news_collect'),
     ]);
     const body: HoldingNewsResponse = {
@@ -205,6 +211,7 @@ export function registerHoldingsRoutes(app: Hono<AppEnv>): void {
 
   app.patch('/holdings/:id', async (context) => {
     const userId = currentUserId(context);
+    const agentId = await primaryAgentId(userId);
     const parsed = patchSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
       throw badRequest('invalid_body', 'patch failed validation', parsed.error.issues);
@@ -216,11 +223,11 @@ export function registerHoldingsRoutes(app: Hono<AppEnv>): void {
     // times the cost - whenever a client sent the amount alone.
     let costCurrency = currency;
     if (costBasis != null && costCurrency === undefined) {
-      const holding = await getHolding(userId, context.req.param('id'));
+      const holding = await getHolding(userId, agentId, context.req.param('id'));
       if (!holding) throw notFound('holding not found');
       costCurrency = holding.currency;
     }
-    const updated = await updateHolding(userId, context.req.param('id'), {
+    const updated = await updateHolding(userId, agentId, context.req.param('id'), {
       ...rest,
       ...(currency ? { currency } : {}),
       ...(costBasis === undefined
@@ -234,7 +241,8 @@ export function registerHoldingsRoutes(app: Hono<AppEnv>): void {
   });
 
   app.delete('/holdings/:id', async (context) => {
-    const removed = await deleteHolding(currentUserId(context), context.req.param('id'));
+    const userId = currentUserId(context);
+    const removed = await deleteHolding(userId, await primaryAgentId(userId), context.req.param('id'));
     if (!removed) throw notFound('holding not found');
     return context.json({ ok: true });
   });

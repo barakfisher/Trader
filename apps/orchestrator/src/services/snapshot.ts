@@ -48,7 +48,7 @@ export async function takeSnapshot(
   requestId?: string,
 ): Promise<SnapshotResult> {
   const asOf = localDate(user.timezone);
-  const rows = await listHoldings(user.id);
+  const rows = await listHoldings(user.id, agentId);
 
   if (rows.length === 0) {
     return {

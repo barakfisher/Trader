@@ -17,7 +17,8 @@ export function listLatestNarrationProvenance(
   userId: string,
 ): Promise<{ narration_source: string; fallback_reason: string | null }[]> {
   return query(
-    `SELECT narration_source, fallback_reason
+    `-- agent-blind: narration health is the provider's, judged over every agent's findings.
+     SELECT narration_source, fallback_reason
        FROM observations
       WHERE user_id = $1
         AND narration_source IS NOT NULL
@@ -45,7 +46,8 @@ export function listRecentNarrationProvenance(
   limit: number,
 ): Promise<{ narration_source: string; fallback_reason: string | null }[]> {
   return query(
-    `SELECT narration_source, fallback_reason
+    `-- agent-blind: narration health is the provider's, judged over every agent's findings.
+     SELECT narration_source, fallback_reason
        FROM observations
       WHERE user_id = $1 AND narration_source IS NOT NULL
       ORDER BY created_at DESC, id DESC

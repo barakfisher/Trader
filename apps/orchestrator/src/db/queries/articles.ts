@@ -74,6 +74,7 @@ export interface InstrumentArticleRow extends TopicArticleRow {
  */
 export function listHoldingArticles(
   userId: string,
+  agentId: string,
   holdingId: string,
   days: number,
   limit = 20,
@@ -97,12 +98,12 @@ export function listHoldingArticles(
        JOIN instruments i ON i.id = h.instrument_id
        JOIN article_entities ae ON ae.instrument_id = h.instrument_id
        JOIN articles a ON a.id = ae.article_id
-      WHERE h.user_id = $1 AND h.id = $2
+      WHERE h.user_id = $1 AND h.agent_id = $2 AND h.id = $3
         AND a.duplicate_of_id IS NULL
-        AND coalesce(a.published_at, a.fetched_at) > now() - ($3 || ' days')::interval
+        AND coalesce(a.published_at, a.fetched_at) > now() - ($4 || ' days')::interval
       ORDER BY coalesce(a.published_at, a.fetched_at) DESC, a.id
-      LIMIT $4`,
-    [userId, holdingId, String(days), limit],
+      LIMIT $5`,
+    [userId, agentId, holdingId, String(days), limit],
   );
 }
 

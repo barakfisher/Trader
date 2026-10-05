@@ -98,7 +98,8 @@ export function countNarrationFallbacks(
   since: Date,
 ): Promise<{ fallback_reason: string; count: number }[]> {
   return query(
-    `SELECT fallback_reason, count(*)::int AS count
+    `-- agent-blind: the admin panel counts every account's and every agent's explanations.
+     SELECT fallback_reason, count(*)::int AS count
        FROM observations
       WHERE created_at >= $1 AND narration_source IS NOT NULL AND fallback_reason IS NOT NULL
       GROUP BY fallback_reason`,
