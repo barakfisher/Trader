@@ -74,6 +74,47 @@ export interface PortfolioSummary {
   asOf: string;
 }
 
+/**
+ * An agent: the user's real portfolio (the primary, "Main portfolio") or a
+ * simulated one with a paper budget (`docs/PROPOSAL-MULTI-AGENT.md`).
+ *
+ * `name` is the stored name; a client renders the primary through its own
+ * catalogue instead, so the real portfolio is named in the reader's language.
+ */
+export type AgentState = 'active' | 'paused' | 'archived';
+
+export interface AgentView {
+  id: string;
+  name: string;
+  isPrimary: boolean;
+  /** Free text the agent will decide by from Stage 4 (decision D20); stored now, read by nothing yet. */
+  persona: string | null;
+  /** The notional starting budget (decision D2), integer minor units. Null for the primary. */
+  budgetMinor: number | null;
+  currency: string;
+  state: AgentState;
+  holdingsCount: number;
+  createdAt: string;
+}
+
+export interface AgentsResponse {
+  agents: AgentView[];
+}
+
+/** A new simulated agent. `budget` is a decimal string, like every amount a user types. */
+export interface AgentInput {
+  name: string;
+  budget: string;
+  persona?: string | null;
+}
+
+export interface AgentPatchInput {
+  name?: string;
+  budget?: string;
+  persona?: string | null;
+  state?: AgentState;
+}
+
 export interface PortfolioResponse {
   summary: PortfolioSummary;
   holdings: HoldingView[];

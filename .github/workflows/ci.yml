@@ -231,10 +231,15 @@ jobs:
       - name: Deploy with the one command
         run: bash scripts/k8s-up.sh
       - name: The front door serves the page and the API, and refuses /internal
+        # Retried briefly: `rollout status` returns once a pod passes readiness,
+        # and the Service's endpoint reaches the proxy a moment later - a 502 in
+        # that second is the cluster settling, not a fault (seen on #158: ready
+        # at :36, 502 at :37). A real outage still fails after the retries.
         run: |
           H='--resolve traders.localhost:80:127.0.0.1 http://traders.localhost'
-          curl -fsS -o /dev/null $H/
-          curl -fsS $H/api/readyz | tee /dev/stderr | grep -q '"postgres":"ok"'
+          R='--retry 10 --retry-delay 2 --retry-all-errors'
+          curl -fsS $R -o /dev/null $H/
+          curl -fsS $R $H/api/readyz | tee /dev/stderr | grep -q '"postgres":"ok"'
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST $H/api/internal/runs)" = 404
       - name: The admin surface refuses no session, admits an admin, and refuses a demoted one
         # M8's guard against the real stack: the cookie, the migration that

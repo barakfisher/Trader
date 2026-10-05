@@ -353,6 +353,36 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('agents (Stage 2)', () => {
+    it('creates, lists, renames and pauses a simulated agent, and never changes the primary', async () => {
+      const agent = await queries.createAgent({
+        userId: USER,
+        slug: `agent-${randomUUID().slice(0, 8)}`,
+        name: `Momentum ${randomUUID().slice(0, 4)}`,
+        persona: 'Buys strength.',
+        budgetMinor: 100050,
+        currency: 'USD',
+      });
+      expect(agent).toMatchObject({ is_primary: false, budget_minor: '100050', state: 'active', holdings_count: 0 });
+
+      const listed = await queries.listAgents(USER);
+      expect(listed[0]).toMatchObject({ id: AGENT, is_primary: true });
+      expect(listed.map((row) => row.id)).toContain(agent.id);
+
+      const paused = await queries.updateAgent(USER, agent.id, { state: 'paused', name: `${agent.name} II` });
+      expect(paused).toMatchObject({ state: 'paused', name: `${agent.name} II` });
+      expect(await queries.updateAgent(USER, AGENT, { name: 'Mine' })).toBeNull();
+
+      // The route maps this to 409 by the constraint's name, so pin the name.
+      const duplicate = await queries
+        .createAgent({ userId: USER, slug: 'agent-dup00000', name: `${agent.name} II`, persona: null, budgetMinor: 1, currency: 'USD' })
+        .catch((error: { code?: string; constraint?: string }) => error);
+      expect(duplicate).toMatchObject({ code: '23505', constraint: 'agents_user_id_name_key' });
+
+      await getPool().query('DELETE FROM agents WHERE id = $1', [agent.id]);
+    });
+  });
+
   describe('agent scope (Stage 1, PR 2)', () => {
     it("never shows a simulated agent's rows as the real portfolio's, or the reverse", async () => {
       const pool = getPool();

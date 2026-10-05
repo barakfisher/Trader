@@ -1,4 +1,4 @@
-import { queryOne } from '../pool.js';
+import { query, queryOne } from '../pool.js';
 
 /**
  * The agent that owns a user's real portfolio ("Main portfolio", migration 0036).
@@ -21,4 +21,100 @@ export async function primaryAgentId(userId: string): Promise<string> {
   );
   if (row === null) throw new Error(`user ${userId} has no primary agent`);
   return row.id;
+}
+
+export type AgentState = 'active' | 'paused' | 'archived';
+
+export interface AgentRow {
+  id: string;
+  slug: string;
+  name: string;
+  persona: string | null;
+  is_primary: boolean;
+  /** `bigint` comes back from `pg` as text; the route converts it once, checked. */
+  budget_minor: string | null;
+  currency: string;
+  state: AgentState;
+  created_at: Date;
+  holdings_count: number;
+}
+
+const AGENT_COLUMNS = `a.id, a.slug, a.name, a.persona, a.is_primary, a.budget_minor::text AS budget_minor,
+       a.currency, a.state, a.created_at,
+       (SELECT count(*)::int FROM holdings h WHERE h.agent_id = a.id) AS holdings_count`;
+
+/** The user's agents: the primary first, then the rest oldest first. */
+export function listAgents(userId: string): Promise<AgentRow[]> {
+  return query<AgentRow>(
+    `SELECT ${AGENT_COLUMNS}
+       FROM agents a
+      WHERE a.user_id = $1
+      ORDER BY a.is_primary DESC, a.created_at, a.id`,
+    [userId],
+  );
+}
+
+export function getAgent(userId: string, agentId: string): Promise<AgentRow | null> {
+  return queryOne<AgentRow>(
+    `SELECT ${AGENT_COLUMNS} FROM agents a WHERE a.user_id = $1 AND a.id = $2`,
+    [userId, agentId],
+  );
+}
+
+export interface AgentToCreate {
+  userId: string;
+  slug: string;
+  name: string;
+  persona: string | null;
+  budgetMinor: number;
+  currency: string;
+}
+
+/** A simulated agent. A primary is made only by the trigger on `users` (migration 0036). */
+export async function createAgent(agent: AgentToCreate): Promise<AgentRow> {
+  const row = await queryOne<{ id: string }>(
+    `INSERT INTO agents (user_id, slug, name, persona, budget_minor, currency)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id`,
+    [agent.userId, agent.slug, agent.name, agent.persona, agent.budgetMinor, agent.currency],
+  );
+  return (await getAgent(agent.userId, row!.id))!;
+}
+
+export interface AgentPatch {
+  name?: string;
+  persona?: string | null;
+  budgetMinor?: number;
+  state?: AgentState;
+}
+
+/**
+ * Change a simulated agent. The primary is never matched (`NOT is_primary`):
+ * it is the real portfolio and passive (decision D1), and the database's own
+ * CHECK would refuse a budget, a persona or a pause on it anyway - this makes
+ * the refusal a "no such agent" the route can name, rather than an error.
+ */
+export async function updateAgent(
+  userId: string,
+  agentId: string,
+  patch: AgentPatch,
+): Promise<AgentRow | null> {
+  const sets: string[] = [];
+  const params: unknown[] = [userId, agentId];
+  const push = (column: string, value: unknown) => {
+    params.push(value);
+    sets.push(`${column} = $${params.length}`);
+  };
+  if (patch.name !== undefined) push('name', patch.name);
+  if (patch.persona !== undefined) push('persona', patch.persona);
+  if (patch.budgetMinor !== undefined) push('budget_minor', patch.budgetMinor);
+  if (patch.state !== undefined) push('state', patch.state);
+  if (sets.length === 0) return getAgent(userId, agentId);
+  const updated = await queryOne<{ id: string }>(
+    `UPDATE agents SET ${sets.join(', ')}
+      WHERE user_id = $1 AND id = $2 AND NOT is_primary
+      RETURNING id`,
+    params,
+  );
+  return updated ? getAgent(userId, agentId) : null;
 }

@@ -185,6 +185,32 @@ describe('API', () => {
     expect(await response.json()).toMatchObject({ error: 'unauthorized' });
   });
 
+  it('puts every route behind a session, except the ones that must be public', async () => {
+    // The gate is a prefix list, so a new route is public unless someone adds
+    // its prefix - which is how /agents nearly shipped readable by anyone. This
+    // walks every route Hono registered, so the next one fails here instead.
+    const PUBLIC = new Set([
+      '/healthz',
+      '/readyz',
+      '/auth/login',
+      '/auth/logout',
+      '/auth/session',
+      // Telegram calls it; it proves itself with the secret header instead.
+      '/telegram/webhook',
+    ]);
+    const routes = app.routes.filter(
+      (route) => route.method !== 'ALL' && !PUBLIC.has(route.path) && !route.path.includes('*'),
+    );
+    expect(routes.length).toBeGreaterThan(40);
+    const open: string[] = [];
+    for (const route of routes) {
+      const path = route.path.replace(/:[^/]+/g, '00000000-0000-0000-0000-0000000000ff');
+      const response = await app.request(path, { method: route.method, headers: ORIGIN });
+      if (response.status !== 401) open.push(`${route.method} ${route.path} -> ${response.status}`);
+    }
+    expect(open).toEqual([]);
+  });
+
   it('rejects a wrong passphrase without revealing anything', async () => {
     const response = await app.request('/auth/login', {
       method: 'POST',
