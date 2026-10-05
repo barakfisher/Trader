@@ -20,6 +20,15 @@ INSERT INTO user_settings (user_id, proposal_severity, notify_severity, quiet_ho
   ('00000000-0000-0000-0000-00000000000b', 'high', 'notable', NULL, NULL, 'he'),
   ('00000000-0000-0000-0000-00000000000c', 'info', 'high', NULL, NULL, 'en');
 
+-- Agents (0036). The users' primaries were made by the `users_seed_primary_agent`
+-- trigger; they are given known ids here so the rows below can name them. The
+-- two simulated agents carry the states a primary may not, and make 0036's
+-- downgrade refuse (it would fold their rows into the real portfolio).
+UPDATE agents SET id = ('90000000-0000-0000-0000-00000000000' || right(user_id::text, 1))::uuid;
+INSERT INTO agents (id, user_id, slug, name, persona, budget_minor, state) VALUES
+  ('90000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-00000000000a', 'paused-agent', 'Paused agent', 'Cautious.', 100000, 'paused'),
+  ('90000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-00000000000a', 'archived-agent', 'Archived agent', NULL, 50000, 'archived');
+
 INSERT INTO instruments (id, symbol, asset_class) VALUES
   ('10000000-0000-0000-0000-000000000001', 'EQTY', 'equity'),
   ('10000000-0000-0000-0000-000000000002', 'FUND', 'etf'),
@@ -28,14 +37,14 @@ INSERT INTO instruments (id, symbol, asset_class) VALUES
   ('10000000-0000-0000-0000-000000000005', '^IDX', 'index'),
   ('10000000-0000-0000-0000-000000000006', 'MYST', 'unknown');
 
-INSERT INTO holdings (user_id, instrument_id, quantity)
-VALUES ('00000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000001', '1.5');
-INSERT INTO target_weights (user_id, instrument_id, weight)
-VALUES ('00000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000001', '0.5');
+INSERT INTO holdings (user_id, agent_id, instrument_id, quantity)
+VALUES ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000001', '1.5');
+INSERT INTO target_weights (user_id, agent_id, instrument_id, weight)
+VALUES ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000001', '0.5');
 INSERT INTO quotes (instrument_id, as_of, price_minor, currency, source)
 VALUES ('10000000-0000-0000-0000-000000000001', '2026-09-01T20:00:00Z', 12345, 'USD', 'fixture');
-INSERT INTO portfolio_snapshots (user_id, as_of, total_minor, currency)
-VALUES ('00000000-0000-0000-0000-00000000000a', '2026-09-01', 18517, 'USD');
+INSERT INTO portfolio_snapshots (user_id, agent_id, as_of, total_minor, currency)
+VALUES ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '2026-09-01', 18517, 'USD');
 
 INSERT INTO runs (id, kind, run_key, status)
 SELECT ('20000000-0000-0000-0000-0000000000' || lpad(n::text, 2, '0'))::uuid, kind, 'seed:' || kind || ':' || status, status
@@ -48,33 +57,33 @@ SELECT ('20000000-0000-0000-0000-0000000000' || lpad(n::text, 2, '0'))::uuid, ki
 INSERT INTO runs (id, kind, run_key, status, heartbeat_at) VALUES
   ('20000000-0000-0000-0000-000000000099', 'universe_rescreen', 'universe-rescreen:2026-10-01', 'running', now());
 
-INSERT INTO observations (id, user_id, run_id, kind, severity, subject_kind, subject_ref, headline, dedupe_key, narration_source, fallback_reason) VALUES
-  ('30000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-000000000002',
+INSERT INTO observations (id, user_id, agent_id, run_id, kind, severity, subject_kind, subject_ref, headline, dedupe_key, narration_source, fallback_reason) VALUES
+  ('30000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-000000000002',
    'price_move', 'info', 'instrument', 'instrument:EQTY', 'EQTY moved', 'seed-obs-1', 'llm', 'none'),
-  ('30000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-000000000002',
+  ('30000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-000000000002',
    'allocation_drift', 'notable', 'portfolio', 'portfolio', 'EQTY drifted', 'seed-obs-2', 'template', 'unsourced_figures'),
-  ('30000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-000000000003',
+  ('30000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '20000000-0000-0000-0000-000000000003',
    'topic_move', 'high', 'topic', 'topic:40000000-0000-0000-0000-000000000001', 'uranium moved', 'seed-obs-3', NULL, NULL);
 
-INSERT INTO proposals (id, user_id, observation_id, kind, state, expires_at, decided_via, decided_at) VALUES
-  ('50000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-000000000001', 'rebalance', 'pending',  '2026-09-02T00:00:00Z', NULL, NULL),
-  ('50000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-000000000002', 'rebalance', 'approved', '2026-09-02T00:00:00Z', 'web', '2026-09-01T12:00:00Z'),
-  ('50000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-000000000003', 'rebalance', 'rejected', '2026-09-02T00:00:00Z', 'telegram', '2026-09-01T12:00:00Z');
+INSERT INTO proposals (id, user_id, agent_id, observation_id, kind, state, expires_at, decided_via, decided_at) VALUES
+  ('50000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-000000000001', 'rebalance', 'pending',  '2026-09-02T00:00:00Z', NULL, NULL),
+  ('50000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-000000000002', 'rebalance', 'approved', '2026-09-02T00:00:00Z', 'web', '2026-09-01T12:00:00Z'),
+  ('50000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-000000000003', 'rebalance', 'rejected', '2026-09-02T00:00:00Z', 'telegram', '2026-09-01T12:00:00Z');
 -- The remaining states, each needing its own observation (one proposal per observation).
-INSERT INTO observations (id, user_id, kind, headline, dedupe_key)
-SELECT ('30000000-0000-0000-0000-00000000001' || n)::uuid, '00000000-0000-0000-0000-00000000000a', 'allocation_drift', 'drift', 'seed-obs-1' || n
+INSERT INTO observations (id, user_id, agent_id, kind, headline, dedupe_key)
+SELECT ('30000000-0000-0000-0000-00000000001' || n)::uuid, '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'allocation_drift', 'drift', 'seed-obs-1' || n
   FROM generate_series(1, 2) AS n;
-INSERT INTO proposals (id, user_id, observation_id, kind, state, expires_at, snoozed_until, decided_via, decided_at) VALUES
-  ('50000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-000000000011', 'rebalance', 'snoozed', '2026-09-02T00:00:00Z', '2026-09-01T18:00:00Z', NULL, NULL),
-  ('50000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-000000000012', 'rebalance', 'expired', '2026-09-02T00:00:00Z', NULL, 'system', '2026-09-02T00:00:00Z');
+INSERT INTO proposals (id, user_id, agent_id, observation_id, kind, state, expires_at, snoozed_until, decided_via, decided_at) VALUES
+  ('50000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-000000000011', 'rebalance', 'snoozed', '2026-09-02T00:00:00Z', '2026-09-01T18:00:00Z', NULL, NULL),
+  ('50000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '30000000-0000-0000-0000-000000000012', 'rebalance', 'expired', '2026-09-02T00:00:00Z', NULL, 'system', '2026-09-02T00:00:00Z');
 INSERT INTO proposal_transitions (proposal_id, user_id, from_state, to_state, surface) VALUES
   ('50000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000a', 'pending', 'approved', 'web'),
   ('50000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-00000000000a', 'pending', 'rejected', 'telegram'),
   ('50000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-00000000000a', 'pending', 'expired', 'system');
-INSERT INTO intents (user_id, proposal_id, kind, revoked_at, revoked_via) VALUES
-  ('00000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-000000000002', 'rebalance', '2026-09-01T13:00:00Z', 'web'),
-  ('00000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-000000000002', 'rebalance', '2026-09-01T14:00:00Z', 'telegram'),
-  ('00000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-000000000002', 'rebalance', NULL, NULL);
+INSERT INTO intents (user_id, agent_id, proposal_id, kind, revoked_at, revoked_via) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-000000000002', 'rebalance', '2026-09-01T13:00:00Z', 'web'),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-000000000002', 'rebalance', '2026-09-01T14:00:00Z', 'telegram'),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-000000000002', 'rebalance', NULL, NULL);
 
 INSERT INTO narration_transitions (id, user_id, from_state, to_state) VALUES
   ('60000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', NULL, 'off'),
@@ -84,12 +93,12 @@ INSERT INTO narration_transitions (id, user_id, from_state, to_state) VALUES
   ('60000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-00000000000a', 'exhausted', 'rejected'),
   ('60000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-00000000000a', 'rejected', 'narrating');
 
-INSERT INTO notifications (user_id, channel, ref_kind, ref_id, route, reason, status, sent_at, dedupe_key) VALUES
-  ('00000000-0000-0000-0000-00000000000a', 'telegram', 'observation', '30000000-0000-0000-0000-000000000001', 'push',      'above_floor', 'sent',       '2026-09-01T12:00:00Z', 'seed-n-1'),
-  ('00000000-0000-0000-0000-00000000000a', 'digest',   'proposal',    '50000000-0000-0000-0000-000000000001', 'digest',    'quiet_hours', 'pending',    NULL, 'seed-n-2'),
-  ('00000000-0000-0000-0000-00000000000a', 'telegram', 'narration',   '60000000-0000-0000-0000-000000000003', 'push',      'above_floor', 'failed',     NULL, 'seed-n-3'),
-  ('00000000-0000-0000-0000-00000000000a', 'digest',   'observation', '30000000-0000-0000-0000-000000000002', 'feed_only', 'below_floor', 'suppressed', NULL, 'seed-n-4'),
-  ('00000000-0000-0000-0000-00000000000a', 'digest',   'narration',   '60000000-0000-0000-0000-000000000002', 'digest',    'muted',       'pending',    NULL, 'seed-n-5');
+INSERT INTO notifications (user_id, agent_id, channel, ref_kind, ref_id, route, reason, status, sent_at, dedupe_key) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'telegram', 'observation', '30000000-0000-0000-0000-000000000001', 'push',      'above_floor', 'sent',       '2026-09-01T12:00:00Z', 'seed-n-1'),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'digest',   'proposal',    '50000000-0000-0000-0000-000000000001', 'digest',    'quiet_hours', 'pending',    NULL, 'seed-n-2'),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'telegram', 'narration',   '60000000-0000-0000-0000-000000000003', 'push',      'above_floor', 'failed',     NULL, 'seed-n-3'),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'digest',   'observation', '30000000-0000-0000-0000-000000000002', 'feed_only', 'below_floor', 'suppressed', NULL, 'seed-n-4'),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'digest',   'narration',   '60000000-0000-0000-0000-000000000002', 'digest',    'muted',       'pending',    NULL, 'seed-n-5');
 
 INSERT INTO telegram_bindings (user_id, chat_id) VALUES ('00000000-0000-0000-0000-00000000000a', 4242);
 INSERT INTO telegram_bind_tokens (nonce, user_id, chat_id) VALUES ('seed-nonce', '00000000-0000-0000-0000-00000000000a', 4242);
@@ -163,8 +172,8 @@ INSERT INTO llm_calls (user_id, agent, provider, model, outcome, verdict, latenc
   (NULL, 'narration', 'null', NULL, 'no_provider', NULL, 0, 'p');
 
 -- Proposal episodes (0032): one closed by each reason, and one still open.
-INSERT INTO proposal_episodes (user_id, observation_kind, subject_ref, observation_id, asked_magnitude, closed_at, close_reason) VALUES
-  ('00000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '0.150619', now(), 'resolved'),
-  ('00000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '0.150619', now(), 'worsened'),
-  ('00000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '-0.150619', now(), 'reversed'),
-  ('00000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '0.210000', NULL, NULL);
+INSERT INTO proposal_episodes (user_id, agent_id, observation_kind, subject_ref, observation_id, asked_magnitude, closed_at, close_reason) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '0.150619', now(), 'resolved'),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '0.150619', now(), 'worsened'),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '-0.150619', now(), 'reversed'),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '0.210000', NULL, NULL);

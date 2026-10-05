@@ -38,6 +38,7 @@ export function listTargetWeights(userId: string): Promise<TargetWeightRow[]> {
  */
 export async function replaceTargetWeights(
   userId: string,
+  agentId: string,
   targets: TargetWeightInput[],
 ): Promise<number> {
   return transaction(async (client) => {
@@ -45,13 +46,13 @@ export async function replaceTargetWeights(
     if (targets.length === 0) return 0;
 
     const values: string[] = [];
-    const params: unknown[] = [userId];
+    const params: unknown[] = [userId, agentId];
     targets.forEach((target) => {
       params.push(target.instrumentId, target.weight);
-      values.push(`($1, $${params.length - 1}, $${params.length}::numeric)`);
+      values.push(`($1, $2, $${params.length - 1}, $${params.length}::numeric)`);
     });
     await client.query(
-      `INSERT INTO target_weights (user_id, instrument_id, weight) VALUES ${values.join(', ')}`,
+      `INSERT INTO target_weights (user_id, agent_id, instrument_id, weight) VALUES ${values.join(', ')}`,
       params,
     );
     return targets.length;

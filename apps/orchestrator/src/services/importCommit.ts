@@ -13,6 +13,7 @@ import { logger } from '../logger.js';
 
 export async function commitImport(
   userId: string,
+  agentId: string,
   preview: ImportPreview,
   request: ImportCommitRequest,
 ): Promise<ImportCommitResult> {
@@ -74,6 +75,7 @@ export async function commitImport(
       const upserted = await upsertHolding(
         {
           userId,
+          agentId,
           instrumentId: instrumentRow.id,
           quantity: item.row.quantity as string,
           costBasisMinor: item.row.costBasisMinor,

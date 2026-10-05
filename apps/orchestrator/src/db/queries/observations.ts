@@ -3,6 +3,8 @@ import { query, queryOne } from '../pool.js';
 
 export interface ObservationToStore {
   userId: string;
+  /** The agent that owns the row (migration 0036); the primary's in Stage 1. */
+  agentId: string;
   runId: string | null;
   kind: string;
   severity: string;
@@ -65,6 +67,7 @@ export async function insertObservations(
     const base = params.length;
     params.push(
       observation.userId,
+      observation.agentId,
       observation.runId,
       observation.kind,
       observation.severity,
@@ -81,14 +84,14 @@ export async function insertObservations(
     );
     values.push(
       `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, ` +
-        `$${base + 7}, $${base + 8}, $${base + 9}::jsonb, $${base + 10}::text[], $${base + 11}, ` +
-        `$${base + 12}, $${base + 13}, $${base + 14}::jsonb)`,
+        `$${base + 7}, $${base + 8}, $${base + 9}, $${base + 10}::jsonb, $${base + 11}::text[], ` +
+        `$${base + 12}, $${base + 13}, $${base + 14}, $${base + 15}::jsonb)`,
     );
   });
 
   const inserted = await query<InsertedObservation>(
     `INSERT INTO observations
-       (user_id, run_id, kind, severity, subject_kind, subject_ref, headline, explanation,
+       (user_id, agent_id, run_id, kind, severity, subject_kind, subject_ref, headline, explanation,
         evidence, concept_refs, dedupe_key, narration_source, fallback_reason, localized)
      VALUES ${values.join(', ')}
      ON CONFLICT (dedupe_key) DO NOTHING

@@ -37,6 +37,8 @@ const { announcementFor, BREAK_SEVERITY, RECOVERY_SEVERITY } = await import(
   '../src/services/narrationNotice.js'
 );
 
+/** The user's primary agent; its id is opaque to everything under test. */
+const AGENT = '90000000-0000-0000-0000-000000000001';
 const USER = '00000000-0000-0000-0000-000000000001';
 /** Noon in Jerusalem: outside the 22:00-07:00 quiet window. */
 const DAYTIME = new Date('2026-09-17T09:00:00Z');
@@ -62,7 +64,7 @@ function channel() {
 }
 
 async function watch(aiClient = ai(), notifier = channel()) {
-  return watchNarration(USER, aiClient as never, notifier as never, SETTINGS, 'run-1', undefined, DAYTIME);
+  return watchNarration(USER, AGENT, aiClient as never, notifier as never, SETTINGS, 'run-1', undefined, DAYTIME);
 }
 
 beforeEach(() => {
@@ -138,7 +140,7 @@ describe('watchNarration', () => {
     db.transition = { id: 'tr1', from_state: 'narrating', to_state: 'rejected' };
     const notifier = channel();
 
-    await watchNarration(USER, ai() as never, notifier as never, { ...SETTINGS, language: 'he' }, 'run-1', undefined, DAYTIME);
+    await watchNarration(USER, AGENT, ai() as never, notifier as never, { ...SETTINGS, language: 'he' }, 'run-1', undefined, DAYTIME);
 
     expect(notifier.send).toHaveBeenCalledWith(
       expect.objectContaining({

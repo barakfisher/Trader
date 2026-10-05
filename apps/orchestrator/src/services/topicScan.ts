@@ -70,6 +70,7 @@ export function groupTopics(rows: ActiveTopicInstrumentRow[]): TopicScanRequest[
 
 export async function runTopicScan(
   user: UserRow,
+  agentId: string,
   ai: AiClient,
   notifier: Notifier,
   runId: string | null,
@@ -88,6 +89,7 @@ export async function runTopicScan(
 
   const toStore: ObservationToStore[] = response.observations.map((observation) => ({
     userId: user.id,
+    agentId,
     runId,
     kind: observation.kind,
     severity: observation.severity,
@@ -118,6 +120,7 @@ export async function runTopicScan(
   }));
   const notified = await fanOut(
     user.id,
+    agentId,
     notifiable,
     settingsForNotification(settings, user.timezone),
     notifier,
@@ -129,6 +132,7 @@ export async function runTopicScan(
     created > 0 && toStore.some((observation) => observation.narrationSource !== null)
       ? await watchNarration(
           user.id,
+          agentId,
           ai,
           notifier,
           settingsForNotification(settings, user.timezone),

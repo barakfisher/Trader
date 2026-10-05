@@ -112,6 +112,7 @@ function toOutbound(finding: NotifiableFinding, userId: string, language: string
  */
 export async function fanOut(
   userId: string,
+  agentId: string,
   findings: NotifiableFinding[],
   settings: NotificationSettings,
   notifier: Notifier,
@@ -132,6 +133,7 @@ export async function fanOut(
 
     const record: NotificationToRecord = {
       userId,
+      agentId,
       channel,
       refKind: finding.refKind,
       refId: finding.refId,

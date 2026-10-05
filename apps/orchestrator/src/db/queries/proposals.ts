@@ -57,11 +57,16 @@ export async function createProposals(proposals: ProposalToCreate[]): Promise<st
       JSON.stringify(proposal.payload ?? {}),
       proposal.expiresAt,
     );
-    values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}::jsonb, $${base + 5})`);
+    // The agent is the observation's, read rather than passed: a proposal is
+    // about a finding, so it cannot belong to anyone the finding does not.
+    values.push(
+      `($${base + 1}, (SELECT agent_id FROM observations WHERE id = $${base + 2}::uuid), ` +
+        `$${base + 2}::uuid, $${base + 3}, $${base + 4}::jsonb, $${base + 5})`,
+    );
   });
 
   const inserted = await query<{ id: string }>(
-    `INSERT INTO proposals (user_id, observation_id, kind, payload, expires_at)
+    `INSERT INTO proposals (user_id, agent_id, observation_id, kind, payload, expires_at)
      VALUES ${values.join(', ')}
      ON CONFLICT (observation_id) DO NOTHING
      RETURNING id`,
@@ -262,8 +267,9 @@ export function applyProposalTransition(transition: TransitionToApply): Promise<
     let intentId: string | null = null;
     if (transition.intent !== null) {
       const intent = await client.query<{ id: string }>(
-        `INSERT INTO intents (user_id, proposal_id, kind, payload)
-         VALUES ($1, $2, $3, $4::jsonb)
+        // The intent is the proposal's agent's, read in the same transaction.
+        `INSERT INTO intents (user_id, agent_id, proposal_id, kind, payload)
+         VALUES ($1, (SELECT agent_id FROM proposals WHERE id = $2::uuid), $2::uuid, $3, $4::jsonb)
          RETURNING id`,
         [
           transition.userId,

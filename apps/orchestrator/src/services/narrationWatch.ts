@@ -72,6 +72,7 @@ export function shouldAnnounce(
  */
 export async function watchNarration(
   userId: string,
+  agentId: string,
   ai: AiClient,
   notifier: Notifier,
   settings: NotificationSettings,
@@ -97,6 +98,7 @@ export async function watchNarration(
     const notice = announcementFor(transition.to_state);
     await fanOut(
       userId,
+      agentId,
       [
         {
           refKind: 'narration',

@@ -37,6 +37,8 @@ const UNIQUE_VIOLATION = '23505';
 export interface ClaimRunInput {
   /** Null for the installation's own work, which belongs to no account. */
   userId: string | null;
+  /** The agent the run works for; null exactly when `userId` is (0036's `runs_agent_follows_user`). */
+  agentId: string | null;
   kind: string;
   runKey: string;
   trigger: string;
@@ -62,11 +64,11 @@ export async function claimRun(
 ): Promise<{ claimed: boolean; runId: string | null; existingStatus?: string }> {
   const insert = () =>
     queryOne<{ id: string }>(
-      `INSERT INTO runs (user_id, kind, run_key, trigger, status)
-       VALUES ($1, $2, $3, $4, 'running')
+      `INSERT INTO runs (user_id, agent_id, kind, run_key, trigger, status)
+       VALUES ($1, $2, $3, $4, $5, 'running')
        ON CONFLICT (run_key) DO NOTHING
        RETURNING id`,
-      [input.userId, input.kind, input.runKey, input.trigger],
+      [input.userId, input.agentId, input.kind, input.runKey, input.trigger],
     );
   let inserted: { id: string } | null;
   try {

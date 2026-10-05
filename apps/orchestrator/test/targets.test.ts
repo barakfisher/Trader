@@ -50,6 +50,7 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
+  primaryAgentId: vi.fn(async () => '90000000-0000-0000-0000-000000000001'),
   getUser: vi.fn(async () => USER),
   // Proposal episodes (decision 92): none open, every claim succeeds.
   listOpenEpisodes: vi.fn(async () => []),
@@ -85,7 +86,7 @@ vi.mock('../src/db/queries.js', () => ({
   findInstrumentsBySymbols: vi.fn(async (symbols: string[]) =>
     symbols.map((symbol) => INSTRUMENTS[symbol.toUpperCase()]).filter(Boolean),
   ),
-  replaceTargetWeights: vi.fn(async (_userId: string, targets: unknown[]) => targets.length),
+  replaceTargetWeights: vi.fn(async (_userId: string, _agentId: string, targets: unknown[]) => targets.length),
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
 }));
 
@@ -187,7 +188,7 @@ describe('target weights', () => {
     expect(await response.json()).toMatchObject({ count: 2, sum: '1.0000' });
     // The write receives every target in one call: the set is the unit, so no
     // intermediate state can exist in which only half of it has been applied.
-    expect(queries.replaceTargetWeights).toHaveBeenCalledWith(USER.id, [
+    expect(queries.replaceTargetWeights).toHaveBeenCalledWith(USER.id, '90000000-0000-0000-0000-000000000001', [
       { instrumentId: 'instrument-aapl', weight: '0.4' },
       { instrumentId: 'instrument-voo', weight: '0.6' },
     ]);
@@ -197,7 +198,7 @@ describe('target weights', () => {
     const response = await putTargets(app, cookie, []);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ count: 0, targets: [] });
-    expect(queries.replaceTargetWeights).toHaveBeenCalledWith(USER.id, []);
+    expect(queries.replaceTargetWeights).toHaveBeenCalledWith(USER.id, '90000000-0000-0000-0000-000000000001', []);
   });
 
   it('rejects a weight above 1', async () => {
@@ -282,7 +283,7 @@ describe('target weights', () => {
     // drift rule reports it as a real drift.
     const response = await putTargets(app, cookie, [{ symbol: 'VOO', weight: '0.2' }]);
     expect(response.status).toBe(200);
-    expect(queries.replaceTargetWeights).toHaveBeenCalledWith(USER.id, [
+    expect(queries.replaceTargetWeights).toHaveBeenCalledWith(USER.id, '90000000-0000-0000-0000-000000000001', [
       { instrumentId: 'instrument-voo', weight: '0.2' },
     ]);
   });

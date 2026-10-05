@@ -45,6 +45,8 @@ export function getHolding(userId: string, holdingId: string): Promise<HoldingRo
 
 export interface UpsertHoldingInput {
   userId: string;
+  /** The agent that owns the row (migration 0036); the primary's in Stage 1. */
+  agentId: string;
   instrumentId: string;
   quantity: string;
   costBasisMinor: number | null;
@@ -62,8 +64,8 @@ export function upsertHolding(
   client?: PoolClient,
 ): Promise<{ id: string; inserted: boolean }> {
   const sql = `
-    INSERT INTO holdings (user_id, instrument_id, quantity, cost_basis_minor, currency, opened_at, notes)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    INSERT INTO holdings (user_id, agent_id, instrument_id, quantity, cost_basis_minor, currency, opened_at, notes)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     ON CONFLICT (user_id, instrument_id) DO UPDATE SET
       quantity         = EXCLUDED.quantity,
       cost_basis_minor = COALESCE(EXCLUDED.cost_basis_minor, holdings.cost_basis_minor),
@@ -75,6 +77,7 @@ export function upsertHolding(
   `;
   const params = [
     input.userId,
+    input.agentId,
     input.instrumentId,
     input.quantity,
     input.costBasisMinor,

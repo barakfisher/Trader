@@ -41,7 +41,12 @@ export interface SnapshotResult {
   reason?: string;
 }
 
-export async function takeSnapshot(user: UserRow, ai: AiClient, requestId?: string): Promise<SnapshotResult> {
+export async function takeSnapshot(
+  user: UserRow,
+  agentId: string,
+  ai: AiClient,
+  requestId?: string,
+): Promise<SnapshotResult> {
   const asOf = localDate(user.timezone);
   const rows = await listHoldings(user.id);
 
@@ -93,6 +98,7 @@ export async function takeSnapshot(user: UserRow, ai: AiClient, requestId?: stri
   // recomputed, so the marker is the only chance to say the total is incomplete.
   await upsertSnapshot({
     userId: user.id,
+    agentId,
     asOf,
     totalMinor: portfolio.summary.totalValueMinor,
     costMinor: portfolio.summary.totalCostMinor,

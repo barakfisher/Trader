@@ -21,6 +21,7 @@ import {
   getUser,
   listHoldingArticles,
   listHoldings,
+  primaryAgentId,
   updateHolding,
   upsertHolding,
   upsertInstrument,
@@ -189,6 +190,8 @@ export function registerHoldingsRoutes(app: Hono<AppEnv>): void {
 
     const result = await upsertHolding({
       userId,
+      // A holding entered by hand is the real portfolio's (Stage 1: the only one).
+      agentId: await primaryAgentId(userId),
       instrumentId: instrument.id,
       quantity: input.quantity,
       costBasisMinor: input.costBasis ? parseToMinor(input.costBasis, currency) : null,
