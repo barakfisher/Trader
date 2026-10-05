@@ -4,7 +4,34 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-04 ~08:45 UTC - **Hebrew for server-generated text is complete (#147-#148); this
+Updated: 2026-10-05 ~10:30 UTC - **Multi-agent Stage 1 (isolation) is complete (#151-#155); this
+is its closing handoff (#156). Nothing is in flight. The next session starts Stage 2** - see "Next
+session: multi-agent Stage 2" in "Where to go next". **The grant continues across the feature's
+stages** (the user, 2026-10-04: PR, merge on green, verify on `main` by content, rebuild compose and
+kind; **every migration rehearsed on a copy of the live database first, strictly**); ask again only
+if the work leaves the feature. Read `docs/PROPOSAL-MULTI-AGENT.md` §10-§12 before anything: its
+decisions D1-D16 are the user's, argued in a long planning conversation, and they **override** the
+spec's earlier sections where they disagree. The ones that change what gets built:
+- **D14-D16: the agent decides by persona + tools (an LLM, non-deterministic); the code enforces
+  limits only.** No deterministic strategies: Stage 2 = agents exist and decide nothing; Stage 3 =
+  the ledger (cash, fees, fills, approval, scoring) proven with *manual* trades; Stage 4 = the
+  deciding agent (a code-built briefing, then read-only tools the model picks, step limit 12, the
+  transcript stored as the decision log).
+- **D1: "Main portfolio" (the primary agent, the real imported portfolio) is passive** - never a
+  trade proposal; `rebalance` (an acknowledgement) stays. Three layers now enforce it (#155).
+- **D11: Mastra is to be retired** (reverses decision 11; its own PR, not started); **D10: Stage 4
+  builds one scan both as a hand-written loop and as core-only LangGraph, keeps the smaller; no
+  checkpointer either way.**
+- The user is learning; when they ask in Hebrew, explain in Hebrew, from first principles.
+Stage 1 as built: #151 the spec amendment (D1-D16, measurements, Stage 1 tasks); #152 migration
+0036 (`agents`, a primary per user by trigger, `agent_id` on nine tables, expand); #153 every read
+agent-scoped + `test/agentScopeContract.test.ts`; #154 migration 0037 (per-user uniques dropped,
+`ON CONFLICT` per agent); #155 migration 0038 (the passive-primary trigger). Each migration was
+rehearsed on a copy of the live database (counts, downgrade, then this branch's orchestrator running
+a snapshot and a scan against the copy) before merge. Compose and kind run `main` with migration
+`0038` (deployed and checked 2026-10-05) - check `alembic_version` before assuming it still is.
+
+Previous handoff, 2026-10-04 ~08:45 UTC - **Hebrew for server-generated text is complete (#147-#148); this
 is its closing handoff (#149). Nothing is in flight. The next session starts by asking the user what
 comes next** - see "Next session: after Hebrew server text" in "Where to go next". The user chose
 this over the multi-agent sandbox because **the sandbox "is much bigger and should involve some
@@ -364,6 +391,7 @@ strings and left-to-right assumptions before designing it.
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
+| Multi-agent sandbox, Stage 1 — isolation (no M-number; `docs/PROPOSAL-MULTI-AGENT.md`) | ✅ Complete | #151 spec amendment D1-D16; #152 `agents` + `agent_id` (0036); #153 agent-scoped reads + contract; #154 per-agent uniques (0037); #155 passive primary (0038). Nothing user-visible, by design. Stages 2-4 to come - see "Next session: multi-agent Stage 2" |
 | M8 — Admin operations & observability | ✅ Complete | #120-#124, #126-#130: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel, on-demand profiles, the rescreen run and its CronJob. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event and profiled within one background fetch ✅ (#127, decision 89); rescreen button ✅ (#128, decision 90; shown in kind); button and CronJob are one run ✅ (#129, decision 91; shown in kind). Checked live 2026-10-01 - see "M8 is complete, and how it was verified" |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
@@ -1657,9 +1685,78 @@ failure they prevent.
     answered in English - nobody's language is known. `appendOutcome` recognises an outcome line
     in any language, so a user who switches between an approval and its undo still gets one block.
 
+100. **`agent_id` is NOT NULL with no default, and the primary is a row, not a NULL** (#152, 0036).
+    A nullable discriminator is one forgotten `WHERE agent_id IS NULL` from showing simulated
+    shares as real; a default of "the primary" is the same trap - a writer that forgot the column
+    would write to the real portfolio silently. With neither, forgetting it is an INSERT error, and
+    the TypeScript input types make it a compile error first (the compiler listed every writer).
+    **The one exception is `runs`**: `runs.user_id` was already nullable for the installation's
+    universe rescreen (`claimRun({ userId: null })`), and an installation has no primary, so
+    `runs.agent_id` follows it exactly (`runs_agent_follows_user`). A composite FK
+    `(user_id, agent_id) → agents (user_id, id)` stops a row naming another user's agent. Every
+    user gets a primary **by trigger on `users`** (`users_seed_primary_agent`), not by a writer
+    remembering. Child rows read their agent from their parent in the same SQL (a proposal from its
+    observation, an intent from its proposal, an episode from its observation) so they cannot
+    disagree; root writes take it explicitly, resolved once at the edge by `primaryAgentId()`.
+    Rejected from the spec: `philosophy` (D14/D16 leave it one value), and `domain`,
+    `scan_cadence`, `thresholds` until a stage reads them.
+
+101. **Expand, then contract: 0036 added the per-agent unique indexes beside the per-user
+    constraints; 0037 dropped the old ones in the PR that moved every `ON CONFLICT`** (#152, #154).
+    Each per-user constraint backed an `ON CONFLICT` target, and Postgres rejects an `ON CONFLICT`
+    with no matching constraint at runtime - so dropping them in 0036 would have broken every
+    insert in the window between the migration job and the new pods (kind rolls them seconds
+    apart). The spec listed three such constraints; measuring found six (`portfolio_snapshots`,
+    `target_weights`' primary key and `proposal_episodes`' open index had been added since the
+    spec was written at #40).
+
+102. **Uniqueness is per agent by a composite key, never by rewriting the key** (D13, #154).
+    `observations UNIQUE (agent_id, dedupe_key)`, `runs (agent_id, run_key) NULLS NOT DISTINCT`
+    (so the installation's null-agent rescreen keys stay unique among themselves), hash and key
+    format unchanged. The spec's original "add agent_id to the hash" cannot be backfilled - a stored
+    key is a digest whose inputs are gone - so the first scan after the deploy would have re-emitted
+    the day's findings under new keys and **notified the user again**. Shown on the live copy:
+    today's default run keys, claimed on live, were still refused after 0037.
+
+103. **Every statement on an owned table names `agent_id` or argues `-- agent-blind: <why>` inside
+    the SQL** (#153). `test/agentScopeContract.test.ts` reads every SQL literal under
+    `src/db/queries/` and fails otherwise (the reason must be on the comment's own line; it also
+    checks it found >40 statements). The rule that sorts them: **what the user sees about a
+    portfolio is per agent** (holdings, the feed, snapshots, targets, episodes, and the dedupe keys
+    a scan sends); **what is sent to the user is per user** (notifications, the digest, the inbox -
+    one chat for every agent, §7.2), as are narration health (the provider's), shared ingestion's
+    instrument list (§4.1), topic findings, and the run history (until Stage 2's views, which must
+    then leave out the agent-blind run kinds, §3.3c); rows addressed by their own id and the
+    installation sweeps are exempt. Rejected: an allowlist file in the test - the reason belongs
+    where the next reader of the query is. The run claim was scoped in the same PR, before 0037
+    made keys per agent: reclaiming by `run_key` alone would have reached another agent's run.
+
+104. **The passive primary is an allowlist in two places, not a denylist** (D1, #155, 0038).
+    `PRIMARY_PROPOSAL_KINDS = {'rebalance'}` in `services/proposals.ts` (refused before writing,
+    `PrimaryAgentIsPassiveError`; a unit test fails if `PROPOSABLE_KINDS` could ever produce a kind
+    outside it) and the trigger `proposals_primary_rebalance_only`, on insert or change of
+    kind/agent. Added before any trade kind exists - the only moment it costs no backfill. A future
+    kind is refused on the real portfolio until a migration argues otherwise.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
+
+**An approved spec was executed against a schema that had moved under it (multi-agent Stage 1,
+2026-10-04).** `PROPOSAL-MULTI-AGENT.md` was written at #40 and approved; by #150 three more per-user
+unique constraints existed, `runs.user_id` had become nullable for the rescreen, the intents index
+had become `intents_one_live_per_proposal` (revocation), and `llm_calls` had grown a column named
+`agent` meaning the calling component. Each would have failed a migration or quietly mis-designed a
+table. **Lesson: an approved document is a statement about the schema on the day it was written.
+Before executing one, measure the live schema it touches** (`pg_constraint`, nullability, every
+`ON CONFLICT`) and amend the document first - §11 is that measurement.
+
+**Rehearsing on a copy can test nothing while looking green (Stage 1, PR 3).** Run against a fresh
+copy of the live database, the branch orchestrator's default run keys were already claimed - the
+copy carries live's `runs` rows - so every run "succeeded" by skipping, and no insert through the
+new `ON CONFLICT` targets ran. **Lesson: a rehearsal must pass explicit fresh run keys** (and, in
+zsh, not `$RANDOM` inside one command line - it expanded to the same value twice, which is how the
+repeat-key refusal got tested by accident).
 
 **A least-privilege change broke the proposal workflow for three days, silently (2026-10-01 to
 10-04, fixed in #150).** `disableInit: true` was set on the inner `PostgresStore`, but Mastra checks
@@ -2251,6 +2348,10 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 
 | Item | Where | Impact |
 |---|---|---|
+| **Mastra is decided-retired but still runs** | `apps/orchestrator/src/mastra/`, migration 0008 | D11 (the user, 2026-10-04): waiting for a decision is the `proposals` row plus `proposal_sweep`, which already handle it whenever Mastra is absent. Its own PR, outside the stages: remove the workflow and dependency, keep the direct path, drop the `mastra` schema in a later migration once no suspended run remains. Until then every cost in decision 11's row stands |
+| **The primary's stored name is English** | `agents.name` = 'Main portfolio' (0036 trigger) | It is data, but it is the one agent name the product chose rather than the user. Stage 2's UI must render the primary through the i18n catalogue (`is_primary` → `t('agents.primary')`), never the stored string, or a Hebrew reader sees English |
+| **The inbox, the digest, notifications and the run history are user-wide** | `-- agent-blind` reads in `queries/` (decision 103) | Correct while only the primary exists. When Stage 2 adds simulated agents, each entry must carry its agent's name and the simulation label (P2 amendment), and `GET /runs` filtered to an agent must leave out the agent-blind kinds (§3.3c) |
+| **`llm_calls.agent` means the calling component** | `llm_calls` (0029) | `narration` / `ask`. Stage 4 adds per-agent spend: rename it `purpose` first, or every query touching both will confuse them (§11) |
 | **A Hebrew reader still meets some English server text** | decisions 96, 98 | `/ask` answers, news headlines and the concept corpus are English, marked `lang="en"`; a model-written observation reads as its template in Hebrew (its richer English prose is not shown). Next steps, each its own project: the corpus (4,253 words, translated and re-ingested per language); `/ask` (English intent rules and model); Hebrew narration by the model (the validator already reads Hebrew digits - the open question is quality on free routes, so measure it first) |
 | **The Hebrew wording was written by the model and merged without line-by-line corrections** | `apps/web/src/i18n/locales/he.json` | The user asked to merge after a side-by-side list was sent (17 strings flagged as least sure: "נ״א", "סטייה בפיזור", "ירידה מהשיא", "השהיה", "מוערך בחסר", "מכשיר", "יקום", the ד׳/ש׳/ימ׳ abbreviations). Instructions use the plural ("בחרו") and possessives "שלך" - the user was asked whether to change the form and did not answer. Corrections are edits to `he.json` only; the parity test keeps them complete |
 | **The sign-in page is always English** | `AuthStore` default | The language is per account and unknown before sign-in. `navigator.language` could choose the sign-in page's language; not done |
@@ -2321,6 +2422,29 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 ---
 
 ## Local environment (this machine)
+
+- **The migration rehearsal on a live copy, as Stage 1 did it five times** (the user's standing
+  rule): `docker exec traders-postgres-1 createdb -U traders traders_review`, then
+  `pg_dump -U traders traders | psql -q -U traders -d traders_review` inside the container; record
+  the nine owned tables' counts; `alembic upgrade head` from the worktree with
+  `DATABASE_URL=postgresql://traders:traders@127.0.0.1:55432/traders_review` (and `PYTHONPATH=.`);
+  compare counts; `downgrade -1`, check, `upgrade head`. Then run the **branch's orchestrator**
+  against the copy: `npx tsx src/server.ts` with `DATABASE_URL` = the copy as `traders_app`,
+  `AI_SERVICE_URL=http://127.0.0.1:8001` (the compose AI service), `ORCHESTRATOR_PORT=8082`,
+  `SCHEDULER_ENABLED=false`, every `TELEGRAM_*` empty with `TELEGRAM_UPDATES=webhook` (so it does
+  not poll the real bot), and `APP_PASSPHRASE`/`SESSION_SECRET`/`INTERNAL_API_KEY` taken from
+  `.env` without printing them; `POST /internal/runs` with `x-internal-key` and **explicit fresh run
+  keys** (see Bugs). Stop it **by its port** (`kill $(lsof -nP -tiTCP:8082 -sTCP:LISTEN)`), never
+  `pkill -f src/server.ts`: that pattern matches any orchestrator on the machine, and on 2026-10-05
+  it may have stopped the stray `m3-slice-2` one on 8081 (nothing listens there now). Drop the copy.
+- **Throwaway Postgres for the integration suites, used throughout Stage 1:**
+  `docker run -d --name traders-agents-ci ... -p 127.0.0.1:55434:5432 pgvector/pgvector:pg16`, the
+  Python integration suite as `traders`, `scripts/migrate.py` with `APP_DB_PASSWORD=traders_app`,
+  then `queries.postgres.test.ts` as `traders_app`. Removed after each use.
+- **Deployed state at this handoff:** compose and kind were rebuilt from the main checkout after
+  #152 (0036) and #154 (0037); #155 (0038) was deployed the same way (verified: both run `0038`, the trigger present, the orchestrator ready with no errors) by the same two commands
+  (`bash scripts/dev-docker.sh`, `bash scripts/k8s-up.sh`, both outside the sandbox). Every
+  scheduled run after 0036 finished `ok` and is owned by "Main portfolio".
 
 - **Never point the Python integration suite at the compose Postgres while the stack runs.**
   Roles are per Postgres server, not per database, and `test_admin_audit_sql.py`'s `as_app` fixture
@@ -2543,7 +2667,25 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 
 ## Where to go next
 
-### Next session: after Hebrew server text
+### Next session: multi-agent Stage 2
+
+**Stage 2 = agents exist, and decide nothing** (D16; spec §4 as amended). Under the standing grant,
+in PRs of the Stage 1 size, each migration rehearsed on a live copy (recipe in Local environment).
+What it covers, from the spec: creating, naming, pausing and archiving an agent (notional
+`budget_minor`, D2; USD only, D7); per-agent portfolios and observations (per-agent
+`AnalysisThresholds` from an `agents.thresholds` column, §4.2); the consolidated holdings view (one
+row per instrument, expanding to the per-agent split, **real and simulated never summed into one
+figure**, §4.3) with the `All / Real only / per agent` filter; the primary's name through i18n
+(debt table). **Measure first** (the user's rule): read-only counts of what a second agent would
+change, and the UI surfaces that read holdings. **Open design questions to bring to the user before
+building:** how a simulated agent gets holdings in Stage 2 at all (it cannot trade until Stage 3 -
+an empty agent, or manual entry recorded as `manual_user_override`?); whether a paused agent's
+holdings show in the consolidated view; and where agent management lives in the UI.
+
+Also available, outside the stages: **retiring Mastra** (D11, debt table) - small, and removes the
+library that caused #150.
+
+### Next session: after Hebrew server text (history - the user chose the multi-agent sandbox, 2026-10-04)
 
 **Ask the user what comes next, with a recommendation; then ask for a grant** (the last one ended
 with this handoff). The options as they stand:

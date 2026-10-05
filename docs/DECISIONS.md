@@ -110,3 +110,8 @@ while this file is out of date.
 | 97 | The language lives on `user_settings` and travels with the session |
 | 98 | Observations are translated when written, from the templates, never from the model |
 | 99 | The orchestrator's own sentences are a typed record, not i18next |
+| 100 | `agent_id` is NOT NULL with no default, and the primary is a row, not a NULL |
+| 101 | Expand, then contract: 0036 added the per-agent unique indexes beside the per-user constraints; 0037 dropped the old ones in the PR that moved every `ON CONFLICT` |
+| 102 | Uniqueness is per agent by a composite key, never by rewriting the key |
+| 103 | Every statement on an owned table names `agent_id` or argues `-- agent-blind: <why>` inside the SQL |
+| 104 | The passive primary is an allowlist in two places, not a denylist |
