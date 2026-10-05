@@ -4,7 +4,7 @@
 this document are settled. What follows is the agreed design and its four-stage execution plan,
 written against the system as it exists at PR #40.
 
-**Amended 2026-10-04/05** (at PR #150): further decisions D1–D16 (§10), the schema as measured that day
+**Amended 2026-10-04/05** (at PR #150): further decisions D1–D20 (§10), the schema as measured that day
 (§11) and the exact Stage 1 task list (§12). Where §10 and an earlier section disagree, §10 wins, and
 the earlier section carries a pointer to it.
 
@@ -384,8 +384,8 @@ enforced.
 | Stage | Contents | Gated on |
 |---|---|---|
 | **1 — Isolation** | `agents` table, primary seeded + backfilled, `agent_id NOT NULL`, the six constraint replacements (§3.3, §11), the passive primary (D1) — tasks in §12 | — |
-| **2 — Agents exist** | Create, name, pause; per-agent portfolios, observations and `AnalysisThresholds`; consolidated UI with filter and split figures. No decisions (D16) | Stage 1 |
-| **3 — Budget, fills, scoring** | `agent_cash`, fees (D6), fills from a live quote inside the range (D3), TTL from the next open and the exchange calendar (D4), dashboard + Telegram approval, `manual_user_override`, 30/60/90-day scoring — all proven with manual trades (D16) | Stage 2 |
+| **2 — Agents exist** | Create, name, budget, persona, pause, archive; an Agents page and a page per agent (D17-D20). No decisions (D16); the consolidated view moves to Stage 3 (D17) | Stage 1 |
+| **3 — Budget, fills, scoring** | the consolidated view with filter and split figures (D17), `agent_cash`, fees (D6), fills from a live quote inside the range (D3), TTL from the next open and the exchange calendar (D4), dashboard + Telegram approval, `manual_user_override`, 30/60/90-day scoring — all proven with manual trades (D16) | Stage 2 |
 | **4 — The deciding agent** | Persona + tools decide (D14), briefing then read-only tool calls with a step limit and a stored transcript (D15), tool calling in the provider, reasoning in `services/ai` with a hand-written loop or core LangGraph by comparison and no checkpointer (D10), per-agent budgets (D12), pre-open/post-close schedule, persona rationale behind the validator, urgent sells through quiet hours (D5) | Stage 3; a paid model (§11 — M3, M5 and GDELT news have since landed, and the workspace is funded) |
 
 The PRD P2 amendment (§2) ships with stage 1, since it is the boundary the whole feature stands on.
@@ -524,6 +524,37 @@ own portfolios and observations, the consolidated view) and decide nothing. Stag
 the agent that decides (D14, D15). Stage 1 is unchanged. *Rejected:* keeping deterministic agents as
 a stage — it would mean designing trading rules (when to buy, how much) that the product does not
 want, only to test a ledger that manual trades test as well.
+
+### Added 2026-10-05, opening Stage 2
+
+Measured first: one agent exists (the primary); a simulated agent cannot trade until Stage 3, so in
+Stage 2 it would hold nothing, and the consolidated view (§4.3) would have nothing to consolidate.
+
+**D17 — Stage 2 is agent management; the consolidated view moves to Stage 3.** Create, rename,
+budget, persona, pause, archive. The consolidated holdings view, the `All / Real only / per agent`
+filter and the real/simulated split arrive with Stage 3's ledger, when agents hold something - built
+against real rows rather than fixtures. *Rejected:* seeding an agent with a copy of the real
+holdings (they would sit outside its cash budget, which Stage 3 would then have to reconcile), and
+building the view against fixture agents (nothing visible until Stage 3 either way).
+
+**D18 — A paused agent still owns what it holds.** Pause stops scanning and proposing (Stage 4); its
+holdings stay in the consolidated view, badged *Paused*. An archived agent leaves the consolidated
+view and stays readable on its own page. Agents are archived, never deleted: their history is the
+record scoring (§5.4) is computed from.
+
+**D19 — Agents get their own page.** An *Agents* item in the navigation: a list (status, budget,
+value) with a create form, and `/agents/:id` with settings, the persona editor, and *Holdings* and
+*Activity* tabs - the management panel of the original brief. The primary appears in the list,
+named through the UI catalogue, and links to the dashboard; it has no settings (D1).
+
+**D20 — The persona is stored and editable now, labelled as unused until Stage 4.** Up to 4,000
+characters; an empty persona is stored as none. Nothing reads it before the deciding agent.
+
+Also settled while building the API, not needing a decision: budgets are typed in dollars with at
+most two decimals and refused - not rounded - otherwise; the ceiling is $1,000,000,000, so a
+minor-unit count stays an exact integer in JavaScript; a budget can be edited in Stage 2 (Stage 3
+turns later changes into recorded top-ups); a name is unique per user (409 otherwise); the slug is
+random, so a rename keeps the agent's identity and a name in any script works.
 
 ---
 

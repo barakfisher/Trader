@@ -23,6 +23,7 @@ import { getUser, insertAdminAudit } from '../db/queries.js';
 import { auditEntry } from './adminAudit.js';
 import { forbidden, toErrorResponse, unauthorized, ApiProblem } from './errors.js';
 import { registerAdminRoutes } from './routes/admin.js';
+import { registerAgentsRoutes } from './routes/agents.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAskRoutes } from './routes/ask.js';
 import { registerConceptsRoutes } from './routes/concepts.js';
@@ -54,6 +55,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const PROTECTED_PREFIXES = [
   '/portfolio',
   '/holdings',
+  '/agents',
   '/imports',
   '/runs',
   '/observations',
@@ -225,6 +227,7 @@ export function createApp(
   registerAuthRoutes(app);
   registerPortfolioRoutes(app);
   registerHoldingsRoutes(app);
+  registerAgentsRoutes(app);
   registerTargetsRoutes(app);
   registerProposalsRoutes(app);
   registerNotificationsRoutes(app);
