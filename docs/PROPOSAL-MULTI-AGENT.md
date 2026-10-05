@@ -604,7 +604,11 @@ row counts compared before and after, and `downgrade` exercised on the copy.
   the price-range setting arrive with the stage that reads them. Seed one primary per user
   (`slug = 'primary-portfolio'`, `name = 'Main portfolio'`); add `agent_id` to the nine
   tables (§3.2), backfill to the primary, then `SET NOT NULL` and the composite foreign key
-  `(user_id, agent_id) → agents (user_id, id)`, in one transaction. **No column default:** a
+  `(user_id, agent_id) → agents (user_id, id)`, in one transaction. **One exception, `runs`:** its
+  `user_id` is already nullable because the universe rescreen is the installation's work, not an
+  account's (`claimRun({ userId: null })`), and an installation has no primary agent. So
+  `runs.agent_id` is nullable under `CHECK ((user_id IS NULL) = (agent_id IS NULL))`: a null there
+  means "no account", never "real", and a run that has a user cannot lack an agent. **No column default:** a
   default of "the primary" would make a forgotten `agent_id` mean "real" — §3.2's trap in another
   form. The new per-agent unique indexes (§11 table) are **added beside** the old ones, not yet in
   place of them (expand now, contract in PR 3), so this PR's deploy cannot break an `ON CONFLICT`.
