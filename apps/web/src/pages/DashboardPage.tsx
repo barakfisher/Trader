@@ -1,6 +1,7 @@
 import { observer } from 'mobx-react-lite';
 import { Link, useNavigate, useSearch } from '@tanstack/react-router';
 import {
+  Bot,
   FileUp,
   Inbox,
   LineChart,
@@ -117,6 +118,12 @@ export const DashboardPage = observer(function DashboardPage() {
             <span className="flex items-center gap-1">
               <Target className="size-4" aria-hidden />
               {t('nav.targets')}
+            </span>
+          </Link>
+          <Link to="/agents" className={buttonClass('secondary')}>
+            <span className="flex items-center gap-1">
+              <Bot className="size-4" aria-hidden />
+              {t('nav.agents')}
             </span>
           </Link>
           <Link to="/topics" className={buttonClass('secondary')}>
