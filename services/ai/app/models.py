@@ -116,6 +116,31 @@ class PriceHistoryResponse(BaseModel):
     closes: list[DailyClosePoint]
 
 
+class MarketCalendarStatus(BaseModel):
+    """Whether an instrument's exchange is open now, and when it next opens (D25).
+
+    Read from the committed exchange calendar, holidays and early closes
+    included. The orchestrator asks before a fill at the live quote (D21) rather
+    than keeping a second copy of the calendar.
+    """
+
+    exchange: str
+    calendar: str = Field(description="The calendar's ISO 10383 code, e.g. 'XNYS'.")
+    as_of: datetime = Field(description="The instant the answer describes.")
+    is_open: bool
+    session_closes_at: datetime | None = Field(
+        description="When the current session closes; null while closed."
+    )
+    early_close: bool = Field(description="Whether the current session closes early.")
+    next_open: datetime = Field(
+        description=(
+            "The next session's opening strictly after `as_of` - tomorrow's while "
+            "open, so a TTL start is `as_of` when open and this otherwise (D4)."
+        )
+    )
+    covered_until: date = Field(description="The last day the committed calendar covers.")
+
+
 class QuoteMarket(BaseModel):
     """Where an instrument trades, as the caller's instruments table records it."""
 

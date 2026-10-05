@@ -909,6 +909,72 @@
         "title": "LocalizedTextOut",
         "type": "object"
       },
+      "MarketCalendarStatus": {
+        "description": "Whether an instrument's exchange is open now, and when it next opens (D25).\n\nRead from the committed exchange calendar, holidays and early closes\nincluded. The orchestrator asks before a fill at the live quote (D21) rather\nthan keeping a second copy of the calendar.",
+        "properties": {
+          "as_of": {
+            "description": "The instant the answer describes.",
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "calendar": {
+            "description": "The calendar's ISO 10383 code, e.g. 'XNYS'.",
+            "title": "Calendar",
+            "type": "string"
+          },
+          "covered_until": {
+            "description": "The last day the committed calendar covers.",
+            "format": "date",
+            "title": "Covered Until",
+            "type": "string"
+          },
+          "early_close": {
+            "description": "Whether the current session closes early.",
+            "title": "Early Close",
+            "type": "boolean"
+          },
+          "exchange": {
+            "title": "Exchange",
+            "type": "string"
+          },
+          "is_open": {
+            "title": "Is Open",
+            "type": "boolean"
+          },
+          "next_open": {
+            "description": "The next session's opening strictly after `as_of` - tomorrow's while open, so a TTL start is `as_of` when open and this otherwise (D4).",
+            "format": "date-time",
+            "title": "Next Open",
+            "type": "string"
+          },
+          "session_closes_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the current session closes; null while closed.",
+            "title": "Session Closes At"
+          }
+        },
+        "required": [
+          "exchange",
+          "calendar",
+          "as_of",
+          "is_open",
+          "session_closes_at",
+          "early_close",
+          "next_open",
+          "covered_until"
+        ],
+        "title": "MarketCalendarStatus",
+        "type": "object"
+      },
       "NarrationConfigResponse": {
         "description": "How narration is configured, for a UI that must not guess.\n\n`tier` is what a reader needs and the model id only implies: `free` is a\nroute that bills nothing and is served from a shared pool, `paid` bills per\ntoken, `none` means no provider was asked for at all. The last is a\nconfiguration rather than a failure, and the three are kept distinct so a UI\ncannot report \"deliberately off\" as \"broken\".",
         "properties": {
@@ -2645,6 +2711,69 @@
         "summary": "Healthz",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/market/calendar": {
+      "get": {
+        "description": "Is `exchange` open now, and when does it next open - holidays included.\n\n422 for an exchange with no calendar: only the US exchanges have one, and a\ntrade on a guessed calendar is a wrong fill. 503 when the calendar cannot\nanswer (the file missing, or `now` past the years it covers) - never a guess.",
+        "operationId": "market_calendar_market_calendar_get",
+        "parameters": [
+          {
+            "description": "Exchange name or code",
+            "in": "query",
+            "name": "exchange",
+            "required": true,
+            "schema": {
+              "description": "Exchange name or code",
+              "maxLength": 32,
+              "minLength": 1,
+              "title": "Exchange",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketCalendarStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Market Calendar",
+        "tags": [
+          "market"
         ]
       }
     },

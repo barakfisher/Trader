@@ -25,6 +25,7 @@ import {
   backfillResponseSchema,
   priceHistoryResponseSchema,
   instrumentResolutionSchema,
+  marketCalendarStatusSchema,
   narrationConfigSchema,
   portfolioScanResponseSchema,
   profileRequestResponseSchema,
@@ -54,6 +55,7 @@ export type ObservationOut = components['schemas']['ObservationOut'];
 export type BackfillRequest = components['schemas']['BackfillRequest'];
 export type BackfillResponse = components['schemas']['BackfillResponse'];
 export type PriceHistoryResponse = components['schemas']['PriceHistoryResponse'];
+export type MarketCalendarStatus = components['schemas']['MarketCalendarStatus'];
 export type ConceptDocument = components['schemas']['ConceptDocumentResponse'];
 export type ConceptSection = components['schemas']['ConceptSection'];
 export type ConceptSearchResponse = components['schemas']['ConceptSearchResponse'];
@@ -294,6 +296,21 @@ export class AiClient {
       requestId,
       timeoutMs: SCAN_TIMEOUT_MS,
     });
+  }
+
+  /**
+   * Whether `exchange` is open now and when it next opens, holidays and early
+   * closes included (decision D25). Asked of the AI service, which holds the
+   * committed calendar, rather than kept here as a second copy. A 422 means no
+   * calendar is held for that exchange - only the US ones have one - and a 503
+   * that the calendar cannot answer; a caller about to fill refuses on either.
+   */
+  marketCalendar(exchange: string, requestId?: string): Promise<MarketCalendarStatus> {
+    return this.request<MarketCalendarStatus>(
+      `/market/calendar?exchange=${encodeURIComponent(exchange)}`,
+      marketCalendarStatusSchema,
+      { method: 'GET', requestId },
+    );
   }
 
   /**

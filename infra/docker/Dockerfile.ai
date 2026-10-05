@@ -45,6 +45,9 @@ COPY data/universe /app/data/universe
 # Each news outlet's home country (decision 61), for telling a theme from one
 # country's local news. `outlets_dir` resolves to this path inside the image.
 COPY data/outlets /app/data/outlets
+# The exchange calendar (decision D25): holidays and early closes, committed.
+# `calendar_dir` resolves to this path inside the image.
+COPY data/calendar /app/data/calendar
 
 RUN pip install --no-cache-dir --no-deps -e .
 

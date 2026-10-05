@@ -13,6 +13,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.analysis.backfill import backfill_history
 from app.analysis.quote_history import load_daily_closes
+from app.core.exchange_calendar import (
+    CalendarNotCovered,
+    ExchangeCalendar,
+    calendar_name_for,
+    load_calendar,
+)
 from app.core.logging import get_logger
 from app.db import get_engine
 from app.deps import MarketDataDep, SettingsDep, UniverseMembershipDep, require_internal_key
@@ -22,6 +28,7 @@ from app.models import (
     DailyClosePoint,
     FxRate,
     InstrumentResolution,
+    MarketCalendarStatus,
     PriceHistoryResponse,
     QuoteRequest,
     QuoteResponse,
@@ -40,6 +47,48 @@ async def get_quotes(payload: QuoteRequest, market: MarketDataDep) -> QuoteRespo
         "market.quotes", requested=len(payload.symbols), returned=len(quotes), missing=len(missing)
     )
     return QuoteResponse(quotes=quotes, missing=missing)
+
+
+def calendar_status(
+    calendar: ExchangeCalendar, exchange: str, now: datetime
+) -> MarketCalendarStatus:
+    """The calendar's answer for `exchange` at `now`. Raises `CalendarNotCovered`."""
+    session = calendar.current_session(now)
+    return MarketCalendarStatus(
+        exchange=exchange,
+        calendar=calendar.name,
+        as_of=now,
+        is_open=session is not None,
+        session_closes_at=session.closes_at if session else None,
+        early_close=session.early_close if session else False,
+        next_open=calendar.next_session(now).opens_at,
+        covered_until=calendar.last_day,
+    )
+
+
+@router.get("/calendar", response_model=MarketCalendarStatus)
+async def market_calendar(
+    settings: SettingsDep,
+    exchange: str = Query(min_length=1, max_length=32, description="Exchange name or code"),
+) -> MarketCalendarStatus:
+    """Is `exchange` open now, and when does it next open - holidays included.
+
+    422 for an exchange with no calendar: only the US exchanges have one, and a
+    trade on a guessed calendar is a wrong fill. 503 when the calendar cannot
+    answer (the file missing, or `now` past the years it covers) - never a guess.
+    """
+    if calendar_name_for(exchange) is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, f"no exchange calendar is held for {exchange}"
+        )
+    try:
+        calendar = load_calendar(settings.calendar_dir)
+        return calendar_status(calendar, exchange, datetime.now(UTC))
+    except (OSError, CalendarNotCovered) as error:
+        log.error("market.calendar_unavailable", exchange=exchange, error=str(error))
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "the exchange calendar cannot answer"
+        ) from error
 
 
 @router.get("/instruments/resolve", response_model=InstrumentResolution)

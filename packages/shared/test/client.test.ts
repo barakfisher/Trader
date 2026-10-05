@@ -111,6 +111,40 @@ describe('AiClient valid responses', () => {
   });
 });
 
+describe('AiClient market calendar', () => {
+  const status = {
+    exchange: 'NYQ',
+    calendar: 'XNYS',
+    as_of: '2026-11-25T22:00:00Z',
+    is_open: false,
+    session_closes_at: null,
+    early_close: false,
+    next_open: '2026-11-27T14:30:00Z',
+    covered_until: '2030-12-31',
+  };
+
+  it('asks for the exchange it was given and parses the answer', async () => {
+    const fetchMock = vi.fn(async (_url: string) => new Response(JSON.stringify(status), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const result = await new AiClient(OPTIONS).marketCalendar('NYQ');
+    expect(result.is_open).toBe(false);
+    expect(result.next_open).toBe(status.next_open);
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('http://ai.test/market/calendar?exchange=NYQ');
+  });
+
+  it('rejects an answer without is_open rather than reading it as closed', async () => {
+    const { is_open: _omitted, ...withoutOpen } = status;
+    respondWith(withoutOpen);
+    await captureError(new AiClient(OPTIONS).marketCalendar('NYQ'));
+  });
+
+  it('surfaces an exchange without a calendar as the service status', async () => {
+    respondWith({ detail: 'no exchange calendar is held for XETRA' }, 422);
+    const error = await captureError(new AiClient(OPTIONS).marketCalendar('XETRA'));
+    expect(error.status).toBe(422);
+  });
+});
+
 describe('AiClient health', () => {
   afterEach(() => {
     vi.useRealTimers();

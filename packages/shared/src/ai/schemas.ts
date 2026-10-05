@@ -244,6 +244,17 @@ export const priceHistoryResponseSchema = z.object({
   closes: z.array(dailyClosePointSchema),
 });
 
+export const marketCalendarStatusSchema = z.object({
+  exchange: z.string(),
+  calendar: z.string(),
+  as_of: z.string(),
+  is_open: z.boolean(),
+  session_closes_at: z.string().nullable(),
+  early_close: z.boolean(),
+  next_open: z.string(),
+  covered_until: z.string(),
+});
+
 export const backfillResponseSchema = z.object({
   written: z.number().int(),
   already_present: z.number().int(),
@@ -288,6 +299,9 @@ export type _AssertObservation = Expect<
 export type _AssertScanStats = Expect<Equal<z.infer<typeof scanStatsSchema>, Schemas['ScanStatsOut']>>;
 export type _AssertPriceHistory = Expect<
   Equal<z.infer<typeof priceHistoryResponseSchema>, Schemas['PriceHistoryResponse']>
+>;
+export type _AssertMarketCalendar = Expect<
+  Equal<z.infer<typeof marketCalendarStatusSchema>, Schemas['MarketCalendarStatus']>
 >;
 export type _AssertBackfill = Expect<
   Equal<z.infer<typeof backfillResponseSchema>, Schemas['BackfillResponse']>
