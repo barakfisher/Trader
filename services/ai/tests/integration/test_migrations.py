@@ -49,6 +49,13 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "agents holds non-primary agents",
         "DELETE FROM agents WHERE NOT is_primary",
     ),
+    # Fills and top-ups are the ledger's history (D23); opening deposits are
+    # re-derived from budgets, so only the other two block the downgrade.
+    "0040_ledger": (
+        "the ledger holds fills or top-ups",
+        "ALTER TABLE cash_movements DISABLE TRIGGER USER; ALTER TABLE fills DISABLE TRIGGER USER; "
+        "DELETE FROM cash_movements WHERE kind <> 'opening_deposit'; DELETE FROM fills",
+    ),
 }
 
 #: `col = ANY (ARRAY['a'::text, 'b'::text])` as `pg_get_constraintdef` prints it.
