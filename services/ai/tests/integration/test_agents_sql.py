@@ -220,3 +220,36 @@ def test_the_app_role_reads_and_writes_agents(as_app: Engine) -> None:
         ).scalar_one()
         assert count == 2
         transaction.rollback()
+
+
+def _propose(connection: Connection, agent: str, kind: str) -> None:
+    observation = connection.execute(
+        text(
+            "INSERT INTO observations (user_id, agent_id, kind, headline, dedupe_key) "
+            "VALUES (CAST(:user AS uuid), CAST(:agent AS uuid), 'allocation_drift', 'h', "
+            "'agents-test-' || gen_random_uuid()) RETURNING id"
+        ),
+        {"user": SEED_USER, "agent": agent},
+    ).scalar_one()
+    connection.execute(
+        text(
+            "INSERT INTO proposals (user_id, agent_id, observation_id, kind, expires_at) "
+            "VALUES (CAST(:user AS uuid), CAST(:agent AS uuid), :observation, :kind, now())"
+        ),
+        {"user": SEED_USER, "agent": agent, "observation": observation, "kind": kind},
+    )
+
+
+def test_the_primary_is_asked_to_acknowledge_never_to_trade(connection: Connection) -> None:
+    """0038, decision D1: only `rebalance` may be raised against the real portfolio."""
+    primary = _primary(connection, SEED_USER)
+    _propose(connection, primary, "rebalance")
+    savepoint = connection.begin_nested()
+    with pytest.raises(DBAPIError) as refusal:
+        _propose(connection, primary, "trade")
+    savepoint.rollback()
+    assert "the primary agent is passive" in str(refusal.value.orig)
+
+
+def test_a_simulated_agent_may_receive_other_kinds(connection: Connection) -> None:
+    _propose(connection, _simulated(connection), "trade")
