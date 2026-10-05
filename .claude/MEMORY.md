@@ -4,7 +4,22 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-05 ~15:30 UTC - **Multi-agent Stage 2 (agent management) is complete (#158-#159),
+Updated: 2026-10-05 ~17:30 UTC - **Multi-agent Stage 3 is half done: five PRs merged (#161-#165),
+which is CLAUDE.md's handoff trigger; this is that handoff (#166). Nothing is in flight. The next
+session continues Stage 3 with PR 6 (the consolidated holdings view) and PR 7 (performance against
+a shadow SPY, and the 30/60/90 score)** - see "Next session: multi-agent Stage 3, continued". The
+user answered every open question before each PR (D21-D31, all recommendations except the calendar,
+which they re-cut). Built: #161 spec (D21-D26, §13 measurements and tasks); #162 the exchange
+calendar (`data/calendar/xnys.json` from our own NYSE-rules generator, `GET /market/calendar`);
+#163 the ledger, migration **0040** (`agent_cash`, `cash_movements`, `fills`, every invariant a
+trigger); #164 manual trades (`services/fills.ts` - the one fill path, preview then confirm,
+D27-D30); #165 the agent page (account, Trade panel, Activity timeline, Add cash; en/he, D31).
+Both environments run `main` at `793a4c3`, migration `0040_ledger`; neither holds a simulated agent
+yet - the user can now create one at `/agents` and trade into it. **The grant continues** (PR, merge
+when the user says "merge" - they have said it per PR all session - verify by content, redeploy;
+every migration rehearsed on a live copy).
+
+Previous handoff, 2026-10-05 ~15:30 UTC - **Multi-agent Stage 2 (agent management) is complete (#158-#159),
 and Mastra is retired (#157); this is the Stage 2 handoff (#160). Nothing is in flight. The next
 session starts Stage 3** - see "Next session: multi-agent Stage 3" in "Where to go next". Stage 2 as
 the user re-cut it (D17-D20, asked and answered 2026-10-05): **management only** - `/agents` API and
@@ -400,6 +415,7 @@ strings and left-to-right assumptions before designing it.
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
+| Multi-agent sandbox, Stage 3 — the ledger | 🟡 5 of 7 PRs | #161 spec D21-D26 + §13; #162 exchange calendar; #163 ledger (0040); #164 manual trades (D27-D30); #165 the agent page (D31). Left: PR 6 the consolidated view, PR 7 performance and scoring. Trade proposals and their approval moved to Stage 4 (D26) |
 | Multi-agent sandbox, Stage 2 — agent management | ✅ Complete | #158 `/agents` API + the every-route-behind-a-session test; #159 the Agents page and a page per agent (en/he). D17-D20. The consolidated view moved to Stage 3 (D17) |
 | Mastra retired (D11) | ✅ Complete | #157, migration 0039: proposals are the row, `applyDecision` and `proposal_sweep` |
 | Multi-agent sandbox, Stage 1 — isolation (no M-number; `docs/PROPOSAL-MULTI-AGENT.md`) | ✅ Complete | #151 spec amendment D1-D16; #152 `agents` + `agent_id` (0036); #153 agent-scoped reads + contract; #154 per-agent uniques (0037); #155 passive primary (0038). Nothing user-visible, by design. Stages 2-4 to come - see "Next session: multi-agent Stage 2" |
@@ -1766,9 +1782,71 @@ failure they prevent.
     preview: an English persona rendered ".Buys strength…" with its full stop on the wrong side.
     The primary's name is never the stored English: `agentName()` renders it from the catalogue.
 
+107. **The ledger's rules are the database's, and the app may only insert a fill** (#163, 0040).
+    Cash moves by trigger alone: a deposit follows `agents.budget_minor`, a trade's debit or credit
+    follows its fill (`−(notional+fee)` / `notional−fee`), the balance follows the movements, and
+    `CHECK (balance_minor >= 0)` refuses an overspend that slipped past the application's check
+    under the row lock. Fills and movements are append-only by trigger, even for the owner.
+    `traders_app` holds INSERT on `fills` and `UPDATE (updated_at)` on `agent_cash` - the latter
+    only because `SELECT ... FOR UPDATE` needs an UPDATE privilege - and nothing else; the writing
+    triggers are `SECURITY DEFINER` with a pinned `search_path`. Rejected: an app-maintained
+    balance (one forgotten code path and cash disagrees with its history, silently).
+    Consequence for tests: a committed fill can never be deleted, so it blocks a suite's cleanup -
+    orchestrator tests write fills inside a transaction they roll back, and an agent that has traded
+    cannot be deleted at all (FK without cascade; D18 says archive). An untraded agent still can,
+    its cash row and opening deposit cascading - existing tests delete agents.
+
+108. **The budget is the sum of deposits, always** (D22, #163/#165). Before the first fill a budget
+    edit rewrites the opening deposit (the one UPDATE the movement guard allows); after it a raise
+    is a dated `top_up` and a cut is refused - in the trigger, and first in the route with a 409
+    `budget_decrease_after_trade`. *Add cash* is `budget_minor = budget_minor + $amount` in one
+    statement, so two additions never read the same old budget. Rejected: withdrawals (they would
+    also have to leave the shadow benchmark, for a case nobody asked for).
+
+109. **One fill path, previewed then confirmed** (D26-D30, #164). `services/fills.ts:executeFill`
+    is the only writer of fills; Stage 4's approval of an agent's proposal must call it, not copy
+    it. The preview writes nothing; the confirm re-fetches the quote and fills only within ±50 bps
+    (D3) of the price the preview showed, else 409 `price_moved` with the new price. A live quote
+    may be ≤30 min old and not stale (D28) and needs the exchange open (calendar). A typed price
+    (`price_source: 'user'`) skips both and warns at ≥5% from the last quote, never blocks (D29).
+    The web mints the idempotency key per preview, so a double-click on Confirm is one fill.
+
+110. **The exchange calendar is a committed file from our own generator; an unknown exchange is
+    never assumed American** (D25, #162). `scripts/generate_exchange_calendar.py` writes
+    `data/calendar/xnys.json` from `app/core/nyse_holiday_rules.py`, keeping `"source": "manual"`
+    rows (2025-01-09, Carter). Its test pins the rules to NYSE's published 2026-2028 list and fails
+    90 days before the file ends. `calendar_name_for()` returns None for an exchange
+    `market_sessions` does not know, unlike `session_for()`, which falls back to US: a wrong cache
+    TTL costs a request, a wrong fill is a wrong ledger. Quote caching (decision 1) still ignores
+    holidays. Rejected: `exchange_calendars` (the user's no-third-party preference), bundling it
+    into the universe build (Yahoo publishes no holidays; different refresh cadence).
+
+111. **An agent's net worth and P&L are null when any holding is unpriced** (#165). P&L is net
+    worth minus deposits (D6); fees already left cash and are never subtracted again. A total that
+    silently skipped a position would read as complete - guideline 7 - so the card names the
+    unpriced symbols instead. The same rule will govern PR 7's returns (§5.4: unavailable, not
+    partial).
+
+112. **The real portfolio has no ledger - D1's fourth layer** (#163). A trigger refuses any
+    `agent_cash`, `cash_movements` or `fills` row for a primary; the trade and account routes
+    answer 409 `primary_agent_is_passive` before it. With 0036's CHECK, the proposals allowlist and
+    0038's trigger, that is four layers.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
+
+**A converter that trusts its caller was handed unvalidated input (#165, caught by its test).**
+`budgetToMinor` assumes its string already passed the agents API's regex; the new top-up schema
+was a plain string, so `1.234` became 124 cents instead of a refusal. **Lesson: reuse the
+validator, not the converter** - `BUDGET_PATTERN` is now exported and the top-up schema applies it;
+a test sends a third decimal. A function whose doc says "from a validated string" is a promise the
+next caller will not read.
+
+**A summarising fetch invented a holiday (#162 research).** WebFetch's summary of NYSE's holiday
+page listed "Monday, July 3, 2026" as an early close; July 3, 2026 is a Friday and the observed
+Independence Day. The raw page's footnotes said 2028. **Lesson: for a fact a test will pin, read
+the source text** (curl + strip tags), never a model's summary of it.
 
 **The kind job's front door met the second after `rollout status` (#158, fixed there).**
 `rollout status` returns once a pod passes readiness; the Service's endpoint reaches the proxy a
@@ -2382,6 +2460,11 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 
 | Item | Where | Impact |
 |---|---|---|
+| **A simulated agent has no stored daily value yet** | `portfolio_snapshots`, the snapshot run (owned by the primary) | The account card values an agent live; nothing records it per day, so a return over 30/60/90 days cannot be computed. PR 7 must snapshot each simulated agent (cash + market value) - and decide whether the run is per agent or one run over all |
+| **SPY has no stored prices** | `listAnalysedInstruments` (backfill scope) | The shadow benchmark (D24) needs SPY's daily closes from each agent's first deposit; the backfill covers held and followed instruments only. PR 7 adds the benchmark to it |
+| **An `agent` fill does not yet require its proposal** | `fills_manual_has_no_proposal` (0040) | Only the manual direction is checked. Stage 4, when the BUY/SELL kind exists, should add `CHECK (source <> 'agent' OR proposal_id IS NOT NULL)` and add the trade kinds to proposals - never to the primary's allowlist |
+| **The trading strings in Hebrew were written by the model** | `he.json` `agents.trade`, `agents.account`, `agents.activity` | Read in the preview and laid out correctly, but not reviewed by the user line by line - the same standing as the earlier Hebrew row |
+| **The exchange calendar ends 2030-12-31** | `data/calendar/xnys.json` | Its test fails from 2030-10-02; the fix is one generator command (RUNBOOK §4). A closure no rule predicts must be added by hand when announced |
 | ~~Mastra is decided-retired but still runs~~ | — | **Resolved 2026-10-05**: Mastra retired (D11), schema dropped in 0039; `test/mastraSchemaOwnership.test.ts` went with it |
 | **The primary's stored name is English** | `agents.name` = 'Main portfolio' (0036 trigger) | It is data, but it is the one agent name the product chose rather than the user. Stage 2's UI must render the primary through the i18n catalogue (`is_primary` → `t('agents.primary')`), never the stored string, or a Hebrew reader sees English |
 | **The inbox, the digest, notifications and the run history are user-wide** | `-- agent-blind` reads in `queries/` (decision 103) | Correct while only the primary exists. When Stage 2 adds simulated agents, each entry must carry its agent's name and the simulation label (P2 amendment), and `GET /runs` filtered to an agent must leave out the agent-blind kinds (§3.3c) |
@@ -2456,6 +2539,20 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 ---
 
 ## Local environment (this machine)
+
+- **Deployed at the Stage 3 mid-handoff (2026-10-05):** compose and kind run `main` at `793a4c3`,
+  migration `0040_ledger`, from the main checkout (`bash scripts/dev-docker.sh`, `bash
+  scripts/k8s-up.sh`, outside the sandbox). No simulated agent exists on either; live `fills` is 0.
+- **Scripting the orchestrator's API:** a POST with an `Origin` the server does not allow is
+  refused 403 - send **no** Origin from scripts (curl/urllib), or exactly the allowed one. The
+  trade rehearsals used urllib with a cookie jar against a branch orchestrator on 8082 (live copy).
+- **The preview recipe worked again** (8083 orchestrator on a live copy, `vite` on 5179, scripts in
+  the scratchpad, `.claude/launch.json` in `info/exclude` and deleted after). The in-app browser's
+  existing session carried over, so no passphrase was typed; the preview orchestrator was still
+  given a throwaway `APP_PASSPHRASE` so the real one never left `.env`. The live account is Hebrew,
+  so the preview opens in Hebrew - check English through the tests.
+- **The market-hours check is real now:** a live-price trade is refused while NYSE is closed
+  (16:00 New York = 23:00 Israel). Rehearse live-price trades in US hours; typed prices work any time.
 
 - **The migration rehearsal on a live copy, as Stage 1 did it five times** (the user's standing
   rule): `docker exec traders-postgres-1 createdb -U traders traders_review`, then
@@ -2701,7 +2798,31 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 
 ## Where to go next
 
-### Next session: multi-agent Stage 3
+### Next session: multi-agent Stage 3, continued
+
+**Two PRs left in Stage 3**, under the standing grant (the user says "merge" per PR; verify by
+content; redeploy compose and kind; any migration rehearsed on a live copy first). Read
+`docs/PROPOSAL-MULTI-AGENT.md` §10 D21-D31 and §13 before anything. **Measure first, then bring
+these questions to the user with recommendations** (the user asks for plain explanations with a
+concrete example, and wants questions asked before work starts):
+
+- **PR 6 - the consolidated holdings view** (§4.3, D17, D18). One row per instrument across the real
+  portfolio and every non-archived agent, expanding to the per-agent split; the `All / Real only /
+  per agent` filter; real and simulated **never summed into one figure**; a paused agent badged.
+  Questions: does it replace the dashboard's holdings table or sit beside it (recommend: a filter on
+  the dashboard, `Real only` as today's default so nothing changes for a user without agents); what
+  the headline shows under `All` (recommend: two figures, real and simulated, never a sum).
+- **PR 7 - performance** (D24, §5.4). A daily value per simulated agent (cash + market value), SPY in
+  the backfill, the shadow SPY (each deposit buys SPY at that trading day's close), P&L and return
+  beside it, and the 30/60/90-day score over `source = 'agent'` fills (reads "no agent decisions
+  yet" until Stage 4). Questions: one snapshot run over all agents or one per agent (recommend: the
+  existing run, looping agents, one row each - `portfolio_snapshots` is already per agent); what
+  "win rate over closed positions" means under average cost (recommend: a sell whose price beats
+  the average cost at that moment is a win; measure on a worked example first).
+- **Then: Stage 3's closing handoff**, and Stage 4 (the deciding agent: trade proposals and their
+  approval through `executeFill`, D26; the tool loop vs core LangGraph, D10).
+
+### Next session: multi-agent Stage 3 (history - questions answered as D21-D31, PRs 1-5 merged as #161-#165)
 
 **Stage 3 = the ledger: cash, fees, fills, approval and scoring, proven with manual trades** (D16,
 D17; spec §5 as amended by D3-D6), and **the consolidated holdings view** moved here by D17. Under the
