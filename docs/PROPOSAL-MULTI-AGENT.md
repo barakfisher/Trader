@@ -595,9 +595,14 @@ before it is merged (the method in `.claude/MEMORY.md`, "A review copy of the li
 row counts compared before and after, and `downgrade` exercised on the copy.
 
 **PR 1 — The `agents` table, and `agent_id` written on every row.**
-- Migration `0036_agents`: `agents` as in §3.1, plus `UNIQUE (user_id, id)` for the composite
-  foreign key; seed one primary per user (`slug = 'primary-portfolio'`, `name = 'Main portfolio'`,
-  `philosophy = 'deterministic'`, `scan_cadence` = today's 30-minute scan); add `agent_id` to the nine
+- Migration `0036_agents`: `agents` with only the columns something reads in stage 1 — `id`,
+  `user_id`, `slug`, `name`, `persona`, `is_primary`, `budget_minor`, `currency`, `state`,
+  `created_at`, the two uniques and the one-primary index of §3.1, `agents_primary_is_real` reduced
+  to `NOT is_primary OR (budget_minor IS NULL AND persona IS NULL)`, plus `UNIQUE (user_id, id)` for
+  the composite foreign key. **`philosophy` is dropped** (D14, D16: every non-primary agent is a
+  deciding agent, so the column would hold one value); `domain`, `scan_cadence`, `thresholds` and
+  the price-range setting arrive with the stage that reads them. Seed one primary per user
+  (`slug = 'primary-portfolio'`, `name = 'Main portfolio'`); add `agent_id` to the nine
   tables (§3.2), backfill to the primary, then `SET NOT NULL` and the composite foreign key
   `(user_id, agent_id) → agents (user_id, id)`, in one transaction. **No column default:** a
   default of "the primary" would make a forgotten `agent_id` mean "real" — §3.2's trap in another
