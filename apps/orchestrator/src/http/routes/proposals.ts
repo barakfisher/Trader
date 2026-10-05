@@ -20,8 +20,7 @@ import {
   listProposals,
   type ProposalRow,
 } from '../../db/queries.js';
-import { decideProposal } from '../../mastra/proposalLifecycle.js';
-import { factsOf } from '../../services/proposals.js';
+import { applyDecision, factsOf } from '../../services/proposals.js';
 import {
   effectiveState,
   undoableUntil,
@@ -146,15 +145,9 @@ export function registerProposalsRoutes(app: Hono<AppEnv>): void {
       throw badRequest('snooze_until_required', 'a snooze must say when it ends');
     }
 
-    /**
-     * Through the workflow rather than straight to `applyDecision`: the run
-     * suspended on this proposal is what wakes, and the step it wakes into is
-     * what applies the transition. The route sees the same `DecisionOutcome`
-     * either way, because `decideProposal` falls back to the service whenever
-     * there is no run to resume - which is what keeps the engine out of the
-     * critical path of a decision somebody is waiting on.
-     */
-    const result = await decideProposal({
+    // The state machine is the whole lifecycle: the row holds the question,
+    // `applyDecision` answers it, and the sweep expires it (decision D11).
+    const result = await applyDecision({
       userId: currentUserId(context),
       proposalId: context.req.param('id'),
       action,

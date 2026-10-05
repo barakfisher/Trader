@@ -9,8 +9,8 @@
 ```
                       ┌──────────────────────────┐
   Telegram  ◄────────►│  telegram webhook route  │
-                      │        (Mastra)          │
-  Browser   ◄────────►│  REST API (Hono/Mastra)  │
+                      │                          │
+  Browser   ◄────────►│  REST API (Hono)         │
                       └────────┬─────────────────┘
                                │  orchestrator: workflows, cron, HITL
                                │  state machine, notification fan-out
@@ -27,7 +27,7 @@
                                        (shared, schema-separated)
 ```
 
-Three deployables: `web` (static SPA), `orchestrator` (Node/TS, Mastra), `ai-service` (Python).
+Three deployables: `web` (static SPA), `orchestrator` (Node/TS, Hono), `ai-service` (Python).
 One datastore: Postgres. One cache/queue: Redis.
 
 ## 2. Decisions (and what was rejected)
@@ -38,8 +38,8 @@ One datastore: Postgres. One cache/queue: Redis.
 | Service RPC | **REST + OpenAPI**, TS client generated from FastAPI's schema | gRPC adds toolchain cost for two services with no streaming need; we get types for free from FastAPI |
 | Vector store | **pgvector inside Postgres** behind a `VectorStore` interface | one fewer container, transactional writes with the rest of the domain; Qdrant remains a drop-in swap if hybrid search outgrows pgvector |
 | Relational store | **Postgres** (not SQLite) | concurrent writers (cron + API + webhook), JSONB evidence blobs, pgvector |
-| Ownership of schedule | **Mastra owns workflow logic; the *trigger* is external** — local: Mastra cron; K8s: CronJob → `POST /internal/runs` | two schedulers (Mastra cron *and* K8s CronJob) would double-fire; one trigger path, dedupe on run key |
-| HITL mechanism | Mastra workflow `suspend`/`resume` + a durable `proposals` table as source of truth | never trust in-memory suspension across restarts |
+| Ownership of schedule | **The orchestrator owns run logic; the *trigger* is external** — local: an in-process timer; K8s: CronJob → `POST /internal/runs` | two schedulers (a local timer *and* a K8s CronJob) would double-fire; one trigger path, dedupe on run key |
+| HITL mechanism | A durable `proposals` row is the question and its deadline; `applyDecision` answers it, `proposal_sweep` expires it. (Mastra `suspend`/`resume` sat beside it from M4 and was retired in 0039, decision D11: every path already fell back to the row.) | never trust in-memory suspension across restarts |
 | LLM access | single gateway module, provider-agnostic (OpenRouter / Anthropic / OpenAI / local Ollama fallback) | keys already present in `.env`; model choice must not leak into business logic |
 | Auth (v1) | single account, session cookie from a passphrase login; `user_id` present on every table | real multi-user auth deferred but not designed out |
 | Money | integer minor units + explicit currency; `Decimal` in Python, never float | float drift in P&L is unacceptable |
@@ -173,10 +173,10 @@ could not be priced.
 - **Retrieval:** hybrid — pgvector cosine + Postgres full-text, reciprocal-rank fused, then a small reranker. Namespace filter (`concepts` vs `news`) chosen by query intent.
 - **Answering:** portfolio questions get structured portfolio context injected (not retrieved); concept questions get retrieved chunks. Answers cite chunk sources; below a relevance floor the answer is "I don't have that indexed".
 
-## 7. Orchestrator (Mastra)
+## 7. Orchestrator
 
-- **Workflows:** `portfolioScan`, `topicScan`, `dailyDigest`, `proposalLifecycle`, `onboardImport`.
-- **HITL:** `proposalLifecycle` suspends after emitting the proposal; UI/Telegram decision resumes it by proposal id. On process restart, pending proposals are recovered from Postgres, not from memory.
+- **Run kinds:** `portfolio_scan`, `topic_scan`, `daily_digest`, `proposal_sweep` and the rest, all entering through `POST /internal/runs` with a run key.
+- **HITL:** a proposal is a row with a deadline. The UI and Telegram both call `applyDecision`; the sweep expires what nobody answered. A restart loses nothing, because nothing waits in memory.
 - **Notification fan-out:** channel adapters (`ui`, `telegram`) behind one interface; `notifications.dedupe_key` makes resend safe.
 - **Telegram:** webhook with secret-token validation; `callback_data` carries `{proposal_id, action, nonce}` HMAC-signed, single-use (nonce burned in Redis), TTL-checked against `proposals.expires_at`.
 
@@ -187,7 +187,7 @@ Traders/
 ├─ docs/                  PRD.md · DESIGN.md · FLOWS.md · MILESTONES.md
 ├─ apps/
 │  ├─ web/                Vite + React + MobX + Tailwind
-│  └─ orchestrator/       Mastra (Node/TS): API, workflows, cron, telegram
+│  └─ orchestrator/       Node/TS: API, runs, proposals, telegram
 ├─ services/
 │  └─ ai/                 FastAPI + LangChain: providers, pipeline, RAG
 ├─ packages/

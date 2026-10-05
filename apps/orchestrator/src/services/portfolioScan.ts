@@ -20,11 +20,11 @@ import {
   type UserRow,
 } from '../db/queries.js';
 import { logger } from '../logger.js';
-import { mayRaiseProposal, startProposalLifecycle } from '../mastra/proposalLifecycle.js';
 import type { Notifier } from '../notify/notifier.js';
 import { admitCandidates, settleEpisodes } from './proposalEpisodes.js';
 import { watchNarration, type NarrationWatchOutcome } from './narrationWatch.js';
 import { fanOut, settingsForNotification, type NotifiableFinding } from './notifications.js';
+import { mayRaiseProposal, raiseProposals } from './proposals.js';
 import { valuePortfolio } from './valuation.js';
 
 export interface ScanResult {
@@ -168,16 +168,6 @@ export async function runPortfolioScan(
     proposalTtlHours: settings.proposal_ttl_hours,
   };
 
-  /**
-   * One lifecycle per candidate, rather than one batch insert for all of them.
-   *
-   * The raise itself still happens inside `raiseProposals`, called by the
-   * workflow's first step - what changed is that a proposal is now raised *by*
-   * the run that will wait for its answer, so there is no window in which a
-   * question exists and nothing is holding it open. The cost is one INSERT per
-   * proposal instead of one for the batch, which at the current policy (one
-   * proposable kind, one finding at a time) is the same INSERT.
-   */
   const selected = inserted
     .map((observation) => ({
       id: observation.id,
@@ -208,11 +198,13 @@ export async function runPortfolioScan(
     settings.proposal_severity,
   );
 
+  // One raise per candidate, so each proposal id lines up with its finding for
+  // the alert's buttons below. A re-scan's repeat is suppressed by
+  // `proposals_one_per_observation` and reports no id.
   const raised: { proposalId: string | null }[] = [];
   for (const finding of candidates) {
-    raised.push(
-      await startProposalLifecycle({ userId: user.id, finding, settings: proposalSettings }),
-    );
+    const { proposalIds } = await raiseProposals(user.id, [finding], proposalSettings);
+    raised.push({ proposalId: proposalIds[0] ?? null });
   }
 
   const skipped: string[] = [];
@@ -239,7 +231,7 @@ export async function runPortfolioScan(
   /**
    * Which findings became answerable questions, by observation.
    *
-   * Zipped by index against `candidates` because the lifecycle reports only the
+   * Zipped by index against `candidates` because each raise reports only the
    * proposal it raised - the loop above walks the candidates in order, so the
    * positions correspond. A proposal id of null means this scan did not raise
    * one (an earlier run already had), and that finding gets no buttons.

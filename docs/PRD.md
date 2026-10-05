@@ -77,7 +77,7 @@ These shape the whole architecture, so they are stated as requirements, not opin
 - NFR-1 A scheduled run for a 50-holding portfolio completes in < 90 s.
 - NFR-2 LLM/API spend cap per day, enforced in code; on breach, degrade to rule-based observations without LLM narration and log it.
 - NFR-3 Market-data and news providers sit behind interfaces with per-provider rate limiting, caching and a documented fallback order.
-- NFR-4 Traces for every run and every LLM call (LangSmith), request-id propagated Mastra → Python.
+- NFR-4 Traces for every run and every LLM call (LangSmith), request-id propagated orchestrator → Python.
 - NFR-5 Secrets only via env/K8s Secrets; no secret ever reaches the browser or a log line.
 - NFR-6 Local `docker compose up` brings the whole system up with seeded demo data and no paid API key required (fixture provider).
 

@@ -38,7 +38,6 @@ import {
   redeemTelegramBindToken,
 } from '../db/queries.js';
 import { logger } from '../logger.js';
-import { decideProposal } from '../mastra/proposalLifecycle.js';
 import type { Notifier } from '../notify/notifier.js';
 import {
   effectiveState,
@@ -46,7 +45,7 @@ import {
   UNDO_WINDOW_SECONDS,
   type RefusalReason,
 } from '../services/proposalState.js';
-import { factsOf } from '../services/proposals.js';
+import { applyDecision, factsOf } from '../services/proposals.js';
 import { MESSAGES, messagesFor, observationTextIn, type Messages } from '../notify/messages.js';
 import { decodeBindToken } from './bindToken.js';
 import { BUSY_CALLBACK_DATA, decodeCallbackData } from './callbackToken.js';
@@ -404,11 +403,9 @@ async function handleCallback(
     await telegram.showWorking(chatId, message.message_id, payload.action, language);
   }
 
-  // Through the workflow, exactly as the web route does. Calling the service
-  // directly would apply the decision and leave the run suspended on it until
-  // the next sweep - the one path in the product where the lifecycle and the
-  // proposal disagreed about whether the question was still open.
-  const result = await decideProposal({
+  // The same transition the web route applies, so a tap and a click can never
+  // disagree about whether the question is still open.
+  const result = await applyDecision({
     userId: binding.user_id,
     proposalId: payload.proposalId,
     action: payload.action,

@@ -39,8 +39,8 @@ export interface ProposalToCreate {
  * survives but its proposal was created by an earlier run. Two suppression
  * schemes would eventually disagree; this one defers to the first.
  *
- * The ids are returned rather than counted because a raised proposal is now the
- * start of something - a workflow run waits on it - and a caller that only
+ * The ids are returned rather than counted because a raised proposal is the
+ * start of something - an alert carries its buttons - and a caller that only
  * learns *how many* were raised cannot address any of them.
  */
 export async function createProposals(proposals: ProposalToCreate[]): Promise<string[]> {
@@ -149,30 +149,6 @@ export function listProposalsToExpire(limit = 500): Promise<ProposalRow[]> {
       LIMIT $1`,
     [limit],
   );
-}
-
-/**
- * Workflow runs still waiting on a proposal that is already decided (task 14).
- *
- * The run id is the observation id. A run is left like this when a resume
- * failed and `decideProposal` fell back to writing the decision directly: the
- * answer landed, and nothing told the waiting run. Bounded, because the sweep
- * closes them one resume at a time.
- */
-export async function listLeftoverLifecycles(limit = 50): Promise<string[]> {
-  const rows = await query<{ run_id: string }>(
-    `-- agent-blind: the lifecycle sweep closes every agent's leftover runs.
-     SELECT s.run_id
-       FROM mastra.mastra_workflow_snapshot s
-       JOIN proposals p ON s.run_id = p.observation_id::text
-      WHERE s.workflow_name = 'proposalLifecycle'
-        AND s.snapshot->>'status' = 'suspended'
-        AND p.state IN ('approved', 'rejected', 'expired')
-      ORDER BY p.decided_at NULLS LAST
-      LIMIT $1`,
-    [limit],
-  );
-  return rows.map((row) => row.run_id);
 }
 
 export interface TransitionToApply {

@@ -57,6 +57,10 @@ demoable, with explicit exit criteria.
 - Notification fan-out: severity routing, quiet hours, digest batching, `notifications.dedupe_key`.
 - Cron trigger local (Mastra) with the same entrypoint K8s will call.
 
+*As built:* Mastra was adopted for `proposalLifecycle` only (decision 11) and retired in migration
+0039 (decision D11): the `proposals` row, `applyDecision` and the `proposal_sweep` run are the whole
+lifecycle, and the local trigger is an in-process timer calling the same entrypoint.
+
 **Exit:** scheduled runs go 72 h unattended with no duplicate alerts; a Telegram approval is visible in the UI within 2 s; a replayed callback is a no-op.
 
 ---
