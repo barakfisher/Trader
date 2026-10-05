@@ -16,7 +16,14 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
 
-import { claimRun, finishRun, getUser, listAnalysedInstruments, listRuns } from '../../db/queries.js';
+import {
+  claimRun,
+  finishRun,
+  getUser,
+  listAnalysedInstruments,
+  listRuns,
+  primaryAgentId,
+} from '../../db/queries.js';
 import { sweepAndCloseLifecycles } from '../../mastra/proposalLifecycle.js';
 import { backfillInstrumentNames } from '../../services/instrumentMetadata.js';
 import { runPortfolioScan } from '../../services/portfolioScan.js';
@@ -141,12 +148,17 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
     const userId = parsed.data.userId ?? config.SINGLE_USER_ID;
     const user = await getUser(userId);
     if (!user) throw notFound('user not found');
+    // Resolved once, here at the edge, and passed down. Every run kind is the
+    // primary's in Stage 1 - the agent-blind ones (backfill, news, topics,
+    // digest) by convention, since they are no agent's work (§3.3c).
+    const agentId = await primaryAgentId(userId);
 
     const runKey =
       parsed.data.runKey ??
       `${parsed.data.kind}:${userId}:${runBucket(parsed.data.kind, localDate(user.timezone))}`;
     const claim = await claimRun({
       userId,
+      agentId,
       kind: parsed.data.kind,
       runKey,
       trigger: parsed.data.trigger ?? 'unknown',
@@ -296,6 +308,7 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
       if (parsed.data.kind === 'topic_scan') {
         const scan = await runTopicScan(
           user,
+          agentId,
           context.get('ai'),
           context.get('notifier'),
           runId,
@@ -313,6 +326,7 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
       if (parsed.data.kind === 'portfolio_scan') {
         const scan = await runPortfolioScan(
           user,
+          agentId,
           context.get('ai'),
           context.get('notifier'),
           runId,
@@ -331,7 +345,7 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
         });
       }
 
-      const result = await takeSnapshot(user, context.get('ai'), context.get('requestId'));
+      const result = await takeSnapshot(user, agentId, context.get('ai'), context.get('requestId'));
       const status = result.skipped ? 'skipped' : result.degraded ? 'degraded' : 'ok';
       await finishRun(runId, status, result);
       return context.json({ kind: parsed.data.kind, runKey, runId, status, result });

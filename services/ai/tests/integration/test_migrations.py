@@ -43,6 +43,12 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "admin_audit holds rows; downgrading would discard the audit",
         "ALTER TABLE admin_audit DISABLE TRIGGER USER; DELETE FROM admin_audit",
     ),
+    # Removing `agent_id` would fold a simulated agent's rows into the real
+    # portfolio, so 0036 refuses while one exists.
+    "0036_agents": (
+        "agents holds non-primary agents",
+        "DELETE FROM agents WHERE NOT is_primary",
+    ),
 }
 
 #: `col = ANY (ARRAY['a'::text, 'b'::text])` as `pg_get_constraintdef` prints it.

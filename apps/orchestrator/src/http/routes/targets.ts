@@ -17,6 +17,7 @@ import { z } from 'zod';
 import {
   findInstrumentsBySymbols,
   listTargetWeights,
+  primaryAgentId,
   replaceTargetWeights,
 } from '../../db/queries.js';
 import { currentUserId, type AppEnv } from '../app.js';
@@ -169,6 +170,7 @@ export function registerTargetsRoutes(app: Hono<AppEnv>): void {
      */
     const stored = await replaceTargetWeights(
       userId,
+      await primaryAgentId(userId),
       requested.map((target) => ({
         instrumentId: bySymbol.get(target.symbol)!.id,
         weight: target.weight,

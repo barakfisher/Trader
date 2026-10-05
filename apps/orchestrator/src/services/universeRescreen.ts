@@ -84,6 +84,7 @@ export async function startRescreen(
   // the usual cause, measured on the first real run).
   const claim = await claimRun({
     userId: null,
+    agentId: null,
     kind: RESCREEN_KIND,
     runKey,
     trigger: options.trigger,

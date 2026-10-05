@@ -3,6 +3,8 @@ import { query, queryOne } from '../pool.js';
 
 export interface NotificationToRecord {
   userId: string;
+  /** The agent that owns the row (migration 0036); the primary's in Stage 1. */
+  agentId: string;
   channel: string;
   refKind: string;
   refId: string;
@@ -41,12 +43,13 @@ export async function claimNotification(
 ): Promise<{ id: string } | null> {
   return queryOne<{ id: string }>(
     `INSERT INTO notifications
-       (user_id, channel, ref_kind, ref_id, route, reason, status, dedupe_key)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (user_id, agent_id, channel, ref_kind, ref_id, route, reason, status, dedupe_key)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (dedupe_key) DO NOTHING
      RETURNING id`,
     [
       notification.userId,
+      notification.agentId,
       notification.channel,
       notification.refKind,
       notification.refId,

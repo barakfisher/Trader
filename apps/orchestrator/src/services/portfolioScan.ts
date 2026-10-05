@@ -56,6 +56,7 @@ export interface ScanResult {
 
 export async function runPortfolioScan(
   user: UserRow,
+  agentId: string,
   ai: AiClient,
   notifier: Notifier,
   runId: string | null,
@@ -127,6 +128,7 @@ export async function runPortfolioScan(
 
   const toStore: ObservationToStore[] = response.observations.map((observation) => ({
     userId: user.id,
+    agentId,
     runId,
     kind: observation.kind,
     severity: observation.severity,
@@ -263,6 +265,7 @@ export async function runPortfolioScan(
   });
   const notified = await fanOut(
     user.id,
+    agentId,
     notifiable,
     settingsForNotification(settings, user.timezone),
     notifier,
@@ -274,6 +277,7 @@ export async function runPortfolioScan(
     created > 0 && toStore.some((observation) => observation.narrationSource !== null)
       ? await watchNarration(
           user.id,
+          agentId,
           ai,
           notifier,
           settingsForNotification(settings, user.timezone),

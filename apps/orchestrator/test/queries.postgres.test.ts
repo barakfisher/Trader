@@ -27,6 +27,8 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
   const { getPool, initPool } = await import('../src/db/pool.js');
   const queries = await import('../src/db/queries.js');
   const USER = randomUUID();
+  /** USER's primary agent, made by the trigger on `users` (migration 0036). */
+  let AGENT = '';
 
   beforeAll(async () => {
     const name = new URL(DATABASE_URL).pathname.slice(1);
@@ -39,6 +41,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       throw new Error('the schema is not at head: run the Python integration suite first');
     }
     await getPool().query('INSERT INTO users (id) VALUES ($1)', [USER]);
+    AGENT = await queries.primaryAgentId(USER);
   });
 
   afterAll(async () => {
@@ -164,7 +167,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       return runKey;
     };
     const claim = (runKey: string) =>
-      queries.claimRun({ userId: null, kind: 'universe_rescreen', runKey, trigger: 'test' });
+      queries.claimRun({ userId: null, agentId: null, kind: 'universe_rescreen', runKey, trigger: 'test' });
 
     afterAll(async () => {
       await getPool().query('DELETE FROM runs WHERE run_key = ANY($1)', [keys]);
@@ -258,6 +261,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       expect((await claim(runKey)).claimed).toBe(false);
       const retried = await queries.claimRun({
         userId: null,
+        agentId: null,
         kind: 'universe_rescreen',
         runKey,
         trigger: 'test',
@@ -268,6 +272,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       // A finished one is never claimed again, retry or not.
       const again = await queries.claimRun({
         userId: null,
+        agentId: null,
         kind: 'universe_rescreen',
         runKey,
         trigger: 'test',
@@ -303,10 +308,10 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         [LLM_USER],
       );
       await getPool().query(
-        `INSERT INTO observations (user_id, kind, subject_ref, headline, dedupe_key,
+        `INSERT INTO observations (user_id, agent_id, kind, subject_ref, headline, dedupe_key,
                                    narration_source, fallback_reason, created_at)
-         VALUES ($1, 'price_move', 'X', 'h', $2, 'llm', 'none', now() + interval '1 day'),
-                ($1, 'price_move', 'X', 'h', $3, 'template', 'provider_error', now() + interval '1 day')`,
+         VALUES ($1, (SELECT id FROM agents WHERE user_id = $1 AND is_primary), 'price_move', 'X', 'h', $2, 'llm', 'none', now() + interval '1 day'),
+                ($1, (SELECT id FROM agents WHERE user_id = $1 AND is_primary), 'price_move', 'X', 'h', $3, 'template', 'provider_error', now() + interval '1 day')`,
         [LLM_USER, `llm-panel-1-${LLM_USER}`, `llm-panel-2-${LLM_USER}`],
       );
     });
@@ -358,6 +363,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       try {
         await queries.upsertSnapshot({
           userId: USER,
+          agentId: AGENT,
           asOf: '2026-09-14',
           totalMinor: 7259674,
           costMinor: 5881582,
@@ -404,6 +410,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       const refId = randomUUID();
       const notice = {
         userId: USER,
+        agentId: AGENT,
         channel: 'telegram',
         refKind: 'narration',
         refId,
@@ -421,6 +428,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     it('suppresses a finding the feed already holds, by dedupe key', async () => {
       const observation = {
         userId: USER,
+        agentId: AGENT,
         runId: null,
         kind: 'price_move',
         severity: 'info',
@@ -454,6 +462,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       const { inserted } = await queries.insertObservations([
         {
           userId: USER,
+          agentId: AGENT,
           runId: null,
           kind: 'allocation_drift',
           severity: 'high',
@@ -493,8 +502,8 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     it("reads one holding's findings under both subject formats, and the whole feed without one", async () => {
       const insert = (ref: string, kind: string) =>
         getPool().query(
-          `INSERT INTO observations (user_id, kind, subject_kind, subject_ref, headline, dedupe_key)
-           VALUES ($1, $2, 'instrument', $3, 'h', $4)`,
+          `INSERT INTO observations (user_id, agent_id, kind, subject_kind, subject_ref, headline, dedupe_key)
+           VALUES ($1, (SELECT id FROM agents WHERE user_id = $1 AND is_primary), $2, 'instrument', $3, 'h', $4)`,
           [USER, kind, ref, randomUUID()],
         );
       await insert('instrument:NVDA', 'price_move');
@@ -529,7 +538,8 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         `O${other.slice(0, 6)}`,
       ]);
       await pool.query(
-        `INSERT INTO holdings (id, user_id, instrument_id, quantity, currency) VALUES ($1, $2, $3, 1, 'USD')`,
+        `INSERT INTO holdings (id, user_id, agent_id, instrument_id, quantity, currency)
+         VALUES ($1, $2, (SELECT id FROM agents WHERE user_id = $2 AND is_primary), $3, 1, 'USD')`,
         [holding, USER, instrument],
       );
       const article = async (hoursAgo: number, linkedTo: string, duplicateOf: string | null = null) => {
@@ -571,14 +581,14 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       const proposalWithRun = async (state: string, workflowStatus: string) => {
         const observationId = (
           await pool.query(
-            `INSERT INTO observations (user_id, kind, subject_ref, headline, dedupe_key)
-             VALUES ($1, 'allocation_drift', 'portfolio:allocation:W', 'h', $2) RETURNING id`,
+            `INSERT INTO observations (user_id, agent_id, kind, subject_ref, headline, dedupe_key)
+             VALUES ($1, (SELECT id FROM agents WHERE user_id = $1 AND is_primary), 'allocation_drift', 'portfolio:allocation:W', 'h', $2) RETURNING id`,
             [USER, randomUUID()],
           )
         ).rows[0].id as string;
         await pool.query(
-          `INSERT INTO proposals (user_id, observation_id, kind, state, expires_at, decided_at)
-           VALUES ($1, $2, 'rebalance', $3, now() + interval '1 day',
+          `INSERT INTO proposals (user_id, agent_id, observation_id, kind, state, expires_at, decided_at)
+           VALUES ($1, (SELECT id FROM agents WHERE user_id = $1 AND is_primary), $2, 'rebalance', $3, now() + interval '1 day',
                    CASE WHEN $3 IN ('pending', 'snoozed') THEN NULL ELSE now() END)`,
           [USER, observationId, state],
         );
@@ -637,16 +647,16 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       const observation = async () =>
         (
           await pool.query(
-            `INSERT INTO observations (user_id, kind, subject_ref, headline, dedupe_key)
-             VALUES ($1, 'allocation_drift', 'portfolio:allocation:X', 'h', $2) RETURNING id`,
+            `INSERT INTO observations (user_id, agent_id, kind, subject_ref, headline, dedupe_key)
+             VALUES ($1, (SELECT id FROM agents WHERE user_id = $1 AND is_primary), 'allocation_drift', 'portfolio:allocation:X', 'h', $2) RETURNING id`,
             [USER, randomUUID()],
           )
         ).rows[0].id as string;
       const proposal = async (state: string, decidedHoursAgo: number | null) =>
         (
           await pool.query(
-            `INSERT INTO proposals (user_id, observation_id, kind, state, expires_at, decided_at, decided_via)
-             VALUES ($1, $2, 'rebalance', $3, now() + interval '1 day',
+            `INSERT INTO proposals (user_id, agent_id, observation_id, kind, state, expires_at, decided_at, decided_via)
+             VALUES ($1, (SELECT id FROM agents WHERE user_id = $1 AND is_primary), $2, 'rebalance', $3, now() + interval '1 day',
                      CASE WHEN $4::int IS NULL THEN NULL ELSE now() - ($4::int * interval '1 hour') END,
                      CASE WHEN $4::int IS NULL THEN NULL ELSE 'web' END)
              RETURNING id`,
@@ -675,8 +685,8 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         const earlier = '2026-09-29 07:06:52.090526+00';
         const insert = (severity: string, at: string) =>
           pool.query(
-            `INSERT INTO observations (user_id, kind, severity, subject_ref, headline, dedupe_key, created_at)
-             VALUES ($1, 'drawdown', $2, 'instrument:X', $2, $3, $4) RETURNING id`,
+            `INSERT INTO observations (user_id, agent_id, kind, severity, subject_ref, headline, dedupe_key, created_at)
+             VALUES ($1, (SELECT id FROM agents WHERE user_id = $1 AND is_primary), 'drawdown', $2, 'instrument:X', $2, $3, $4) RETURNING id`,
             [user, severity, randomUUID(), at],
           );
         await insert('info', scan);
@@ -711,16 +721,16 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         const finding = async (headline: string) =>
           (
             await pool.query(
-              `INSERT INTO observations (user_id, kind, subject_ref, headline, dedupe_key)
-               VALUES ($1, 'drawdown', 'instrument:X', $2, $3) RETURNING id`,
+              `INSERT INTO observations (user_id, agent_id, kind, subject_ref, headline, dedupe_key)
+               VALUES ($1, (SELECT id FROM agents WHERE user_id = $1 AND is_primary), 'drawdown', 'instrument:X', $2, $3) RETURNING id`,
               [user, headline, randomUUID()],
             )
           ).rows[0].id as string;
         const note = (ref: string, status: string, sentAt: string | null, reason = 'below_floor') =>
           pool.query(
-            `INSERT INTO notifications (user_id, channel, ref_kind, ref_id, route, reason, status,
+            `INSERT INTO notifications (user_id, agent_id, channel, ref_kind, ref_id, route, reason, status,
                                         dedupe_key, sent_at)
-             VALUES ($1, 'digest', 'observation', $2, 'digest', $3, $4, $5, $6)`,
+             VALUES ($1, (SELECT id FROM agents WHERE user_id = $1 AND is_primary), 'digest', 'observation', $2, 'digest', $3, $4, $5, $6)`,
             [user, ref, reason, status, randomUUID(), sentAt],
           );
         await note(await finding('older digest'), 'sent', '2026-09-29 05:23:07.1+00');

@@ -12,6 +12,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { HoldingRow } from '../src/db/queries.js';
 
+/** The user's primary agent; its id is opaque to everything under test. */
+const AGENT = '90000000-0000-0000-0000-000000000001';
 const USER = {
   id: '00000000-0000-0000-0000-000000000001',
   email: null,
@@ -64,7 +66,7 @@ describe('takeSnapshot integrity', () => {
   it('stores a fully priced portfolio as complete', async () => {
     holdings.push(holding('AAPL', '10'), holding('VOO', '5', 'etf'));
 
-    const result = await takeSnapshot(USER, createFakeAi());
+    const result = await takeSnapshot(USER, AGENT, createFakeAi());
 
     // 10 x 232.14 + 5 x 512.08 = 4881.80
     expect(result.totalMinor).toBe(488180);
@@ -81,7 +83,7 @@ describe('takeSnapshot integrity', () => {
   it('stores a partially priced portfolio, marked, rather than silently understating it', async () => {
     holdings.push(holding('AAPL', '10'), holding('VOO', '5', 'etf'));
 
-    const result = await takeSnapshot(USER, createFakeAi({ unpriceable: ['VOO'] }));
+    const result = await takeSnapshot(USER, AGENT, createFakeAi({ unpriceable: ['VOO'] }));
 
     // The total is what could be priced - the VOO position is simply absent from
     // it - which is exactly why the row has to say so.
@@ -96,7 +98,7 @@ describe('takeSnapshot integrity', () => {
   it('marks the snapshot degraded when a quote was served stale', async () => {
     holdings.push(holding('AAPL', '10'), holding('VOO', '5', 'etf'));
 
-    const result = await takeSnapshot(USER, createFakeAi({ stale: ['VOO'] }));
+    const result = await takeSnapshot(USER, AGENT, createFakeAi({ stale: ['VOO'] }));
 
     // Every holding priced, so the counts match; the total is still approximate.
     expect(result.degraded).toBe(true);
@@ -106,7 +108,7 @@ describe('takeSnapshot integrity', () => {
   it('refuses to write when no holding could be priced', async () => {
     holdings.push(holding('AAPL', '10'), holding('VOO', '5', 'etf'));
 
-    const result = await takeSnapshot(USER, createFakeAi({ unpriceable: ['AAPL', 'VOO'] }));
+    const result = await takeSnapshot(USER, AGENT, createFakeAi({ unpriceable: ['AAPL', 'VOO'] }));
 
     expect(result.skipped).toBe(true);
     expect(result.reason).toBe('no holding could be priced');
@@ -114,7 +116,7 @@ describe('takeSnapshot integrity', () => {
   });
 
   it('writes nothing for a user with no holdings', async () => {
-    const result = await takeSnapshot(USER, createFakeAi());
+    const result = await takeSnapshot(USER, AGENT, createFakeAi());
 
     expect(result.skipped).toBe(true);
     expect(result.reason).toBe('no holdings');

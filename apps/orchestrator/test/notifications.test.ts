@@ -25,6 +25,8 @@ const queries = await import('../src/db/queries.js');
 const { fanOut, settingsForNotification } = await import('../src/services/notifications.js');
 const { NullNotifier } = await import('../src/notify/notifier.js');
 
+/** The user's primary agent; its id is opaque to everything under test. */
+const AGENT = '90000000-0000-0000-0000-000000000001';
 const USER = '00000000-0000-0000-0000-000000000001';
 /** Noon in Jerusalem: outside the default 22:00-07:00 quiet window. */
 const DAYTIME = new Date('2026-09-17T09:00:00Z');
@@ -93,13 +95,13 @@ describe('fanOut', () => {
       order.push('settle');
     });
 
-    await fanOut(USER, [finding()], SETTINGS, notifier, DAYTIME);
+    await fanOut(USER, AGENT, [finding()], SETTINGS, notifier, DAYTIME);
     expect(order).toEqual(['claim', 'send', 'settle']);
   });
 
   it('pushes a finding above the floor, outside quiet hours', async () => {
     const { notifier, sent } = workingNotifier();
-    const result = await fanOut(USER, [finding()], SETTINGS, notifier, DAYTIME);
+    const result = await fanOut(USER, AGENT, [finding()], SETTINGS, notifier, DAYTIME);
 
     expect(result).toMatchObject({ pushed: 1, deferred: 0, failed: 0, duplicate: 0 });
     expect(sent[0]).toMatchObject({ userId: USER, title: 'VOO is 12pp above target' });
@@ -108,7 +110,7 @@ describe('fanOut', () => {
 
   it('defers into the digest during quiet hours without touching the channel', async () => {
     const { notifier } = workingNotifier();
-    const result = await fanOut(USER, [finding()], SETTINGS, notifier, NIGHT);
+    const result = await fanOut(USER, AGENT, [finding()], SETTINGS, notifier, NIGHT);
 
     expect(result).toMatchObject({ pushed: 0, deferred: 1 });
     expect(result.reasons).toEqual({ quiet_hours: 1 });
@@ -122,7 +124,7 @@ describe('fanOut', () => {
     // collapse into each other, and the user hears about it exactly once -
     // whichever way round that happens to fall.
     const { notifier } = workingNotifier();
-    await fanOut(USER, [finding()], SETTINGS, notifier, NIGHT);
+    await fanOut(USER, AGENT, [finding()], SETTINGS, notifier, NIGHT);
 
     const [record] = vi.mocked(queries.claimNotification).mock.calls[0]!;
     expect(record).toMatchObject({ channel: 'digest', route: 'digest', status: 'pending' });
@@ -134,7 +136,7 @@ describe('fanOut', () => {
     // losing the claim stops the send, rather than merely not recording it.
     vi.mocked(queries.claimNotification).mockResolvedValueOnce(null);
     const { notifier } = workingNotifier();
-    const result = await fanOut(USER, [finding()], SETTINGS, notifier, DAYTIME);
+    const result = await fanOut(USER, AGENT, [finding()], SETTINGS, notifier, DAYTIME);
 
     expect(result).toMatchObject({ duplicate: 1, pushed: 0 });
     expect(notifier.send).not.toHaveBeenCalled();
@@ -142,7 +144,7 @@ describe('fanOut', () => {
 
   it('records a channel that declines, with its reason on the row', async () => {
     const notifier = new NullNotifier('TELEGRAM_BOT_TOKEN is not set');
-    const result = await fanOut(USER, [finding()], SETTINGS, notifier, DAYTIME);
+    const result = await fanOut(USER, AGENT, [finding()], SETTINGS, notifier, DAYTIME);
 
     expect(result).toMatchObject({ failed: 1, pushed: 0 });
     expect(queries.settleNotification).toHaveBeenCalledWith(
@@ -160,7 +162,7 @@ describe('fanOut', () => {
       }),
     } satisfies Notifier;
 
-    const result = await fanOut(USER, [finding()], SETTINGS, notifier, DAYTIME);
+    const result = await fanOut(USER, AGENT, [finding()], SETTINGS, notifier, DAYTIME);
     expect(result.failed).toBe(1);
     expect(queries.settleNotification).toHaveBeenCalledWith(
       'notification-1',
@@ -183,6 +185,7 @@ describe('fanOut', () => {
 
     const result = await fanOut(
       USER,
+      AGENT,
       [finding({ refId: 'a' }), finding({ refId: 'b' })],
       SETTINGS,
       notifier,
@@ -195,6 +198,7 @@ describe('fanOut', () => {
     const { notifier } = workingNotifier();
     const result = await fanOut(
       USER,
+      AGENT,
       [
         finding({ refId: 'a', severity: 'high' }),
         finding({ refId: 'b', severity: 'info' }),
@@ -211,7 +215,7 @@ describe('fanOut', () => {
 
   it('sends nothing at all when there is nothing to send', async () => {
     const { notifier } = workingNotifier();
-    const result = await fanOut(USER, [], SETTINGS, notifier, DAYTIME);
+    const result = await fanOut(USER, AGENT, [], SETTINGS, notifier, DAYTIME);
     expect(result).toMatchObject({ pushed: 0, deferred: 0, duplicate: 0, failed: 0 });
     expect(queries.claimNotification).not.toHaveBeenCalled();
   });
@@ -222,13 +226,13 @@ describe('fanOut in the user’s language', () => {
 
   it('sends the stored translation, and says which language it is in', async () => {
     const { sent, notifier } = workingNotifier();
-    await fanOut(USER, [finding({ localized: { he: hebrew } })], { ...SETTINGS, language: 'he' }, notifier, DAYTIME);
+    await fanOut(USER, AGENT, [finding({ localized: { he: hebrew } })], { ...SETTINGS, language: 'he' }, notifier, DAYTIME);
     expect(sent[0]).toMatchObject({ title: hebrew.headline, body: hebrew.explanation, language: 'he' });
   });
 
   it('sends the English when a finding has no translation, rather than nothing', async () => {
     const { sent, notifier } = workingNotifier();
-    await fanOut(USER, [finding()], { ...SETTINGS, language: 'he' }, notifier, DAYTIME);
+    await fanOut(USER, AGENT, [finding()], { ...SETTINGS, language: 'he' }, notifier, DAYTIME);
     expect(sent[0]).toMatchObject({ title: 'VOO is 12pp above target', language: 'he' });
   });
 });

@@ -7,6 +7,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+/** The user's primary agent; its id is opaque to everything under test. */
+const AGENT = '90000000-0000-0000-0000-000000000001';
 const USER = {
   id: '00000000-0000-0000-0000-000000000001',
   timezone: 'Asia/Jerusalem',
@@ -41,7 +43,7 @@ vi.mock('../src/db/queries.js', () => ({
 }));
 
 const fanOut = vi.hoisted(() =>
-  vi.fn(async (_u: string, findings: unknown[]) => ({
+  vi.fn(async (_u: string, _a: string, findings: unknown[]) => ({
     pushed: findings.length,
     deferred: 0,
     duplicate: 0,
@@ -121,14 +123,14 @@ describe('runTopicScan', () => {
   it('is null when there are no active topics, so the run is recorded as skipped', async () => {
     db.rows = [];
     const ai = aiReturning([]);
-    expect(await runTopicScan(USER as never, ai as never, {} as never, 'run-1')).toBeNull();
+    expect(await runTopicScan(USER as never, AGENT, ai as never, {} as never, 'run-1')).toBeNull();
     expect(ai.topicScan).not.toHaveBeenCalled();
   });
 
   it('sends the known keys and stores each finding as a topic observation', async () => {
     const ai = aiReturning([observation('t1')]);
 
-    const result = await runTopicScan(USER as never, ai as never, {} as never, 'run-1');
+    const result = await runTopicScan(USER as never, AGENT, ai as never, {} as never, 'run-1');
 
     expect(ai.topicScan).toHaveBeenCalledWith(
       expect.objectContaining({ known_dedupe_keys: ['topic_move:already'] }),
@@ -142,9 +144,9 @@ describe('runTopicScan', () => {
 
   it('never offers buttons: a topic moving is not a question to approve', async () => {
     const ai = aiReturning([observation('t1')]);
-    await runTopicScan(USER as never, ai as never, {} as never, 'run-1');
+    await runTopicScan(USER as never, AGENT, ai as never, {} as never, 'run-1');
 
-    const [, findings] = fanOut.mock.calls[0]!;
+    const [, , findings] = fanOut.mock.calls[0]!;
     expect(findings).toHaveLength(1);
     expect(findings[0]).not.toHaveProperty('proposalId');
   });
@@ -152,7 +154,7 @@ describe('runTopicScan', () => {
   it('is degraded when a topic could not be measured, and says which and why', async () => {
     const ai = aiReturning([], { nuclear: '1 confirmed instrument; a basket needs 2' });
 
-    const result = await runTopicScan(USER as never, ai as never, {} as never, 'run-1');
+    const result = await runTopicScan(USER as never, AGENT, ai as never, {} as never, 'run-1');
 
     expect(result?.degraded).toBe(true);
     expect(result?.skipped).toEqual({ nuclear: '1 confirmed instrument; a basket needs 2' });

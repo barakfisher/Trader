@@ -143,6 +143,7 @@ describe('the admin audit', () => {
     // No account owns the universe; the trigger says who asked.
     expect(queries.claimRun).toHaveBeenCalledWith({
       userId: null,
+      agentId: null,
       kind: 'universe_rescreen',
       runKey: expect.stringMatching(/^universe-rescreen:\d{4}-\d{2}-\d{2}$/),
       trigger: 'admin',

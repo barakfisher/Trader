@@ -11,7 +11,7 @@ import { z } from 'zod';
 
 import type { ImportCommitRequest } from '@traders/shared';
 
-import { getUser } from '../../db/queries.js';
+import { getUser, primaryAgentId } from '../../db/queries.js';
 import { recordMissingTicker } from '../../services/universeGaps.js';
 import { commitImport } from '../../services/importCommit.js';
 import { ImportParseError, buildImportRows, countByStatus } from '../../services/importer.js';
@@ -90,7 +90,8 @@ export function registerImportRoutes(app: Hono<AppEnv>): void {
         : undefined,
     };
 
-    const result = await commitImport(userId, preview, request);
+    // Imports land in the real portfolio (PROPOSAL-MULTI-AGENT.md §3.3b).
+    const result = await commitImport(userId, await primaryAgentId(userId), preview, request);
     deletePreview(parsed.data.previewId);
     return context.json(result);
   });
