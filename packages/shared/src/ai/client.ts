@@ -26,6 +26,7 @@ import {
   priceHistoryResponseSchema,
   instrumentResolutionSchema,
   marketCalendarStatusSchema,
+  marketSessionsSchema,
   narrationConfigSchema,
   portfolioScanResponseSchema,
   profileRequestResponseSchema,
@@ -56,6 +57,8 @@ export type BackfillRequest = components['schemas']['BackfillRequest'];
 export type BackfillResponse = components['schemas']['BackfillResponse'];
 export type PriceHistoryResponse = components['schemas']['PriceHistoryResponse'];
 export type MarketCalendarStatus = components['schemas']['MarketCalendarStatus'];
+export type MarketSessions = components['schemas']['MarketSessions'];
+export type MarketSession = components['schemas']['MarketSession'];
 export type ConceptDocument = components['schemas']['ConceptDocumentResponse'];
 export type ConceptSection = components['schemas']['ConceptSection'];
 export type ConceptSearchResponse = components['schemas']['ConceptSearchResponse'];
@@ -311,6 +314,20 @@ export class AiClient {
       marketCalendarStatusSchema,
       { method: 'GET', requestId },
     );
+  }
+
+  /**
+   * Every session of `exchange` from `start` to `end` (YYYY-MM-DD, inclusive),
+   * with its closing instant - holidays left out, early closes marked (D25).
+   * An agent's daily value is measured on these days, and a deposit buys the
+   * shadow SPY at the first close after it (Stage 3, PR 7).
+   */
+  marketSessions(exchange: string, start: string, end: string, requestId?: string): Promise<MarketSessions> {
+    const query = new URLSearchParams({ exchange, start, end });
+    return this.request<MarketSessions>(`/market/sessions?${query}`, marketSessionsSchema, {
+      method: 'GET',
+      requestId,
+    });
   }
 
   /**

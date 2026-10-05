@@ -30,11 +30,11 @@ import { Card, ErrorNote, Spinner } from './ui.tsx';
  * separation and contrast all pass. The app's grey would have read as "no
  * data", and its green and red are gain and loss.
  */
-const VALUE_COLOUR = '#6d8bff';
-const COST_COLOUR = '#8f9b2f';
+export const VALUE_COLOUR = '#6d8bff';
+export const COST_COLOUR = '#8f9b2f';
 
 /** Dates are calendar dates, so they are formatted as such: in UTC, where no offset moves them. */
-const formatDay = (date: string) =>
+export const formatDay = (date: string) =>
   formatDate(new Date(`${date}T00:00:00Z`), { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 /**

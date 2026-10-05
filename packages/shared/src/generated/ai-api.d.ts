@@ -275,6 +275,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/market/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Market Sessions
+         * @description Every session of `exchange` from `start` to `end`, with its close (D25).
+         *
+         *     The orchestrator reads its trading days and closing instants from here
+         *     rather than keeping a copy of the calendar. 422 for an exchange with no
+         *     calendar or a reversed or over-long span; 503 when the span reaches outside
+         *     the committed file - never a guess about days it does not cover.
+         */
+        get: operations["market_sessions_market_sessions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/narration/config": {
         parameters: {
             query?: never;
@@ -914,6 +939,46 @@ export interface components {
              * @description When the current session closes; null while closed.
              */
             session_closes_at: string | null;
+        };
+        /**
+         * MarketSession
+         * @description One trading day's regular session, as instants in UTC (D25).
+         */
+        MarketSession: {
+            /**
+             * Closes At
+             * Format: date-time
+             * @description 16:00 New York, or 13:00 on an early close.
+             */
+            closes_at: string;
+            /**
+             * Day
+             * Format: date
+             * @description The session's date in the exchange's own timezone.
+             */
+            day: string;
+            /** Early Close */
+            early_close: boolean;
+            /**
+             * Opens At
+             * Format: date-time
+             */
+            opens_at: string;
+        };
+        /**
+         * MarketSessions
+         * @description Every session between two dates, holidays left out (D25).
+         *
+         *     What an agent's performance is measured on (Stage 3, PR 7): the trading days
+         *     of its daily value, and the close each deposit buys the shadow SPY at.
+         */
+        MarketSessions: {
+            /** Calendar */
+            calendar: string;
+            /** Exchange */
+            exchange: string;
+            /** Sessions */
+            sessions: components["schemas"]["MarketSession"][];
         };
         /**
          * NarrationConfigResponse
@@ -2062,6 +2127,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuoteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    market_sessions_market_sessions_get: {
+        parameters: {
+            query: {
+                /** @description Exchange name or code */
+                exchange: string;
+                /** @description First day, inclusive (YYYY-MM-DD) */
+                start: string;
+                /** @description Last day, inclusive (YYYY-MM-DD) */
+                end: string;
+            };
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketSessions"];
                 };
             };
             /** @description Validation Error */

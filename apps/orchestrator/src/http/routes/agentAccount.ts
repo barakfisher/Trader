@@ -9,22 +9,40 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
 
-import type { ActivityEntry, ActivityResponse, TopUpInput } from '@traders/shared';
+import type { ActivityEntry, ActivityResponse, AgentPerformanceResponse, TopUpInput } from '@traders/shared';
+import { AiServiceError } from '@traders/shared/ai';
 
 import {
+  findInstrumentsBySymbols,
   getAgent,
   getUser,
   listCashActivity,
+  listCashTimeline,
   listFillsByIds,
+  listFillsOldestFirst,
   listHoldings,
   topUpAgent,
   type AgentRow,
 } from '../../db/queries.js';
 import { valueAgentAccount } from '../../services/agentAccount.js';
 import { toFillView } from '../../services/fills.js';
+import { BENCHMARK_SYMBOL, agentPerformance, type ClosesByInstrument } from '../../services/performance.js';
 import { currentUserId, type AppEnv } from '../app.js';
-import { badRequest, conflict, notFound, unprocessable } from '../errors.js';
+import { badRequest, conflict, notFound, unprocessable, upstreamFailure } from '../errors.js';
 import { BUDGET_PATTERN, MAX_BUDGET_MINOR, agentIdFrom, budgetToMinor, toAgentView } from './agents.js';
+
+/** The exchange whose calendar an agent's days are counted on: the benchmark's (D25, D37). */
+const BENCHMARK_EXCHANGE = 'PCX';
+
+/** A day as New York names it - the calendar's and the closes' dates. */
+function newYorkDay(at: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(at);
+}
 
 /** How many movements the activity timeline returns. */
 export const ACTIVITY_PAGE = 200;
@@ -76,6 +94,61 @@ export function registerAgentAccountRoutes(app: Hono<AppEnv>): void {
       fill: row.fill_id ? (fills.get(row.fill_id) ?? null) : null,
     }));
     const body: ActivityResponse = { currency: agent.currency, entries };
+    return context.json(body);
+  });
+
+  /**
+   * The agent against the same deposits held in SPY, day by day, and the score
+   * of its own decisions (D24, D36-D42). Computed from the ledger and stored
+   * closes on each request; nothing is stored.
+   */
+  app.get('/agents/:id/performance', async (context) => {
+    const userId = currentUserId(context);
+    const agent = simulated(await getAgent(userId, agentIdFrom(context.req.param('id'))));
+    const [movements, fills, [benchmark]] = await Promise.all([
+      listCashTimeline(userId, agent.id),
+      listFillsOldestFirst(userId, agent.id),
+      findInstrumentsBySymbols([BENCHMARK_SYMBOL]),
+    ]);
+    const now = new Date();
+    const closes: ClosesByInstrument = new Map();
+    let sessions: { day: string; closesAt: Date }[] = [];
+    const first = movements[0];
+    if (first) {
+      const ai = context.get('ai');
+      const requestId = context.get('requestId');
+      const start = newYorkDay(new Date(first.created_at));
+      // A week of slack, so the first session's close is inside what is asked for.
+      const days = Math.ceil((now.getTime() - new Date(first.created_at).getTime()) / 86_400_000) + 7;
+      const instrumentIds = [...new Set([...fills.map((fill) => fill.instrument_id), ...(benchmark ? [benchmark.id] : [])])];
+      try {
+        const [calendar, histories] = await Promise.all([
+          ai.marketSessions(BENCHMARK_EXCHANGE, start, newYorkDay(now), requestId),
+          Promise.all(instrumentIds.map((id) => ai.priceHistory(id, Math.min(days, 3650), requestId))),
+        ]);
+        sessions = calendar.sessions.map((session) => ({ day: session.day, closesAt: new Date(session.closes_at) }));
+        histories.forEach((history) =>
+          closes.set(
+            history.instrument_id,
+            new Map(history.closes.map((close) => [close.day, BigInt(close.price_minor)])),
+          ),
+        );
+      } catch (error) {
+        if (error instanceof AiServiceError) {
+          throw upstreamFailure(error.status, 'The calendar or the price history could not be read.');
+        }
+        throw error;
+      }
+    }
+    const body: AgentPerformanceResponse = agentPerformance({
+      currency: agent.currency,
+      movements,
+      fills,
+      sessions,
+      closes,
+      benchmarkId: benchmark?.id ?? null,
+      now,
+    });
     return context.json(body);
   });
 

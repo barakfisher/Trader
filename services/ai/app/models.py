@@ -141,6 +141,27 @@ class MarketCalendarStatus(BaseModel):
     covered_until: date = Field(description="The last day the committed calendar covers.")
 
 
+class MarketSession(BaseModel):
+    """One trading day's regular session, as instants in UTC (D25)."""
+
+    day: date = Field(description="The session's date in the exchange's own timezone.")
+    opens_at: datetime
+    closes_at: datetime = Field(description="16:00 New York, or 13:00 on an early close.")
+    early_close: bool
+
+
+class MarketSessions(BaseModel):
+    """Every session between two dates, holidays left out (D25).
+
+    What an agent's performance is measured on (Stage 3, PR 7): the trading days
+    of its daily value, and the close each deposit buys the shadow SPY at.
+    """
+
+    exchange: str
+    calendar: str
+    sessions: list[MarketSession]
+
+
 class QuoteMarket(BaseModel):
     """Where an instrument trades, as the caller's instruments table records it."""
 

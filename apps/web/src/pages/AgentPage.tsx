@@ -5,6 +5,7 @@ import { Archive, ArrowLeft, ArrowLeftRight, Pause, Play, RotateCcw, Save } from
 import type { AgentState, AgentView, TradeSide } from '@traders/shared';
 
 import { AccountSummary, AgentActivity, AgentHoldings } from '../components/AgentAccount.tsx';
+import { AgentPerformance } from '../components/AgentPerformance.tsx';
 import { TradePanel } from '../components/TradePanel.tsx';
 import { AgentField } from '../components/AgentField.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
@@ -102,6 +103,7 @@ function SimulatedAgent({ agent }: { agent: AgentView }) {
         )}
       </div>
       <AccountSummary agent={agent} />
+      <AgentPerformance agentId={agent.id} />
       <StateControls agent={agent} />
       <div role="tablist" className="flex gap-2 border-b border-border-subtle">
         {(['holdings', 'activity'] as const).map((name) => (

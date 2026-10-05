@@ -18,6 +18,7 @@ import { createMemoryHistory } from '@tanstack/react-router';
 import type {
   ActivityResponse,
   AgentAccountResponse,
+  AgentPerformanceResponse,
   AgentView,
   HoldingView,
   TradePreview,
@@ -164,11 +165,36 @@ function serve(routes: Record<string, unknown>) {
   });
 }
 
+/** $10,000 deposited, at one close: the agent up $100, SPY up $250 on the same money. */
+const PERFORMANCE: AgentPerformanceResponse = {
+  currency: 'USD',
+  benchmarkSymbol: 'SPY',
+  series: [{ day: '2026-10-02', netWorthMinor: 1_010_000, benchmarkMinor: 1_025_000, depositsMinor: 1_000_000 }],
+  comparison: {
+    day: '2026-10-02',
+    depositsMinor: 1_000_000,
+    netWorthMinor: 1_010_000,
+    pnlMinor: 10_000,
+    returnPct: 1,
+    benchmarkMinor: 1_025_000,
+    benchmarkPnlMinor: 25_000,
+    benchmarkReturnPct: 2.5,
+    differencePts: -1.5,
+  },
+  pendingDepositsMinor: 0,
+  score: {
+    agentDecisions: 0,
+    windows: [30, 60, 90].map((days) => ({ days, decisions: 0, sells: 0, wins: 0, winRatePct: null, realisedPnlMinor: 0 })),
+    unrealisedPnlMinor: 0,
+  },
+};
+
 function serveAgent(agent: AgentView = AGENT, accountBody: AgentAccountResponse = account()) {
   serve({
     [`/agents/${AGENT_ID}`]: agent,
     [`/agents/${AGENT_ID}/account`]: accountBody,
     [`/agents/${AGENT_ID}/activity`]: ACTIVITY,
+    [`/agents/${AGENT_ID}/performance`]: PERFORMANCE,
   });
 }
 
@@ -191,6 +217,12 @@ async function openTrade() {
 
 describe('AgentPage with the ledger', () => {
   beforeEach(() => {
+    // jsdom has no layout, so no ResizeObserver; the performance chart's container needs one to mount.
+    globalThis.ResizeObserver ??= class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
     vi.clearAllMocks();
     serveAgent();
   });
@@ -204,6 +236,14 @@ describe('AgentPage with the ledger', () => {
     expect(screen.getByText(/Net worth minus everything deposited \(\$10,000\.00\)/)).toBeTruthy();
     expect(screen.getByText('AAPL')).toBeTruthy();
     expect(screen.getByText('5 shares · average cost $334.58')).toBeTruthy();
+  });
+
+  it('compares the agent with SPY on the same deposits, and has no score before the agent decides (D24, D42)', async () => {
+    renderAgent();
+    expect(await screen.findByText('SPY with the same deposits')).toBeTruthy();
+    expect(screen.getByText('-1.50 pts')).toBeTruthy();
+    expect(screen.getByText(/Each deposit buys SPY at the first market close after it, without fees/)).toBeTruthy();
+    expect(screen.getByText(/No agent decisions yet/)).toBeTruthy();
   });
 
   it('shows no totals when a holding is unpriced, and names it', async () => {

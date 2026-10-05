@@ -255,6 +255,19 @@ export const marketCalendarStatusSchema = z.object({
   covered_until: z.string(),
 });
 
+export const marketSessionSchema = z.object({
+  day: z.string(),
+  opens_at: z.string(),
+  closes_at: z.string(),
+  early_close: z.boolean(),
+});
+
+export const marketSessionsSchema = z.object({
+  exchange: z.string(),
+  calendar: z.string(),
+  sessions: z.array(marketSessionSchema),
+});
+
 export const backfillResponseSchema = z.object({
   written: z.number().int(),
   already_present: z.number().int(),
@@ -302,6 +315,9 @@ export type _AssertPriceHistory = Expect<
 >;
 export type _AssertMarketCalendar = Expect<
   Equal<z.infer<typeof marketCalendarStatusSchema>, Schemas['MarketCalendarStatus']>
+>;
+export type _AssertMarketSessions = Expect<
+  Equal<z.infer<typeof marketSessionsSchema>, Schemas['MarketSessions']>
 >;
 export type _AssertBackfill = Expect<
   Equal<z.infer<typeof backfillResponseSchema>, Schemas['BackfillResponse']>

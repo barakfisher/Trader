@@ -225,6 +225,68 @@ export interface FillsResponse {
   fills: FillView[];
 }
 
+// --- Agent performance (Stage 3, PR 7; D24, D36-D42) ----------------------------
+
+/**
+ * One trading day's close: the agent's net worth and what the same deposits
+ * would be worth in SPY. Either is null when a price that day is missing - an
+ * unavailable figure, never a partial one (§5.4).
+ */
+export interface PerformancePoint {
+  /** The session's date, New York (YYYY-MM-DD). */
+  day: string;
+  netWorthMinor: number | null;
+  benchmarkMinor: number | null;
+  /** Every deposit made before this close - what both lines were given. */
+  depositsMinor: number;
+}
+
+/** The agent against the shadow SPY at the latest close (D24): both returns are P&L over deposits. */
+export interface PerformanceComparison {
+  day: string;
+  depositsMinor: number;
+  netWorthMinor: number | null;
+  pnlMinor: number | null;
+  returnPct: number | null;
+  benchmarkMinor: number | null;
+  benchmarkPnlMinor: number | null;
+  benchmarkReturnPct: number | null;
+  /** The agent's return minus SPY's, in percentage points. */
+  differencePts: number | null;
+}
+
+/** The agent's own decisions over one rolling window (D39-D41). */
+export interface ScoreWindow {
+  days: number;
+  /** Agent fills, buys and sells, inside the window. */
+  decisions: number;
+  /** Agent sells inside the window that sold shares the agent itself bought. */
+  sells: number;
+  /** Of those, the ones with a profit after fees. Break-even is not a win. */
+  wins: number;
+  winRatePct: number | null;
+  realisedPnlMinor: number;
+}
+
+export interface AgentScore {
+  /** Every fill the agent decided, ever. Zero until Stage 4: manual trades are never scored. */
+  agentDecisions: number;
+  windows: ScoreWindow[];
+  /** What the agent's own book still holds, at the latest close; null when unpriced. */
+  unrealisedPnlMinor: number | null;
+}
+
+export interface AgentPerformanceResponse {
+  currency: string;
+  benchmarkSymbol: string;
+  series: PerformancePoint[];
+  /** Null until the first close after the opening deposit. */
+  comparison: PerformanceComparison | null;
+  /** Deposits made after the latest close: in neither line until the next one. */
+  pendingDepositsMinor: number;
+  score: AgentScore;
+}
+
 /** A new simulated agent. `budget` is a decimal string, like every amount a user types. */
 export interface AgentInput {
   name: string;

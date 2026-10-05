@@ -6,7 +6,7 @@ be added later as `text/event-stream` without changing these payloads.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -29,6 +29,8 @@ from app.models import (
     FxRate,
     InstrumentResolution,
     MarketCalendarStatus,
+    MarketSession,
+    MarketSessions,
     PriceHistoryResponse,
     QuoteRequest,
     QuoteResponse,
@@ -89,6 +91,56 @@ async def market_calendar(
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "the exchange calendar cannot answer"
         ) from error
+
+
+#: The longest span `/market/sessions` lists: about ten years, the history ceiling.
+MAX_SESSION_SPAN_DAYS = 3660
+
+
+@router.get("/sessions", response_model=MarketSessions)
+async def market_sessions(
+    settings: SettingsDep,
+    exchange: str = Query(min_length=1, max_length=32, description="Exchange name or code"),
+    start: date = Query(description="First day, inclusive (YYYY-MM-DD)"),
+    end: date = Query(description="Last day, inclusive (YYYY-MM-DD)"),
+) -> MarketSessions:
+    """Every session of `exchange` from `start` to `end`, with its close (D25).
+
+    The orchestrator reads its trading days and closing instants from here
+    rather than keeping a copy of the calendar. 422 for an exchange with no
+    calendar or a reversed or over-long span; 503 when the span reaches outside
+    the committed file - never a guess about days it does not cover.
+    """
+    if calendar_name_for(exchange) is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, f"no exchange calendar is held for {exchange}"
+        )
+    if end < start or (end - start).days > MAX_SESSION_SPAN_DAYS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"start must not be after end, and the span at most {MAX_SESSION_SPAN_DAYS} days",
+        )
+    try:
+        calendar = load_calendar(settings.calendar_dir)
+        sessions = calendar.sessions_between(start, end)
+    except (OSError, CalendarNotCovered) as error:
+        log.error("market.sessions_unavailable", exchange=exchange, error=str(error))
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "the exchange calendar cannot answer"
+        ) from error
+    return MarketSessions(
+        exchange=exchange,
+        calendar=calendar.name,
+        sessions=[
+            MarketSession(
+                day=session.day,
+                opens_at=session.opens_at,
+                closes_at=session.closes_at,
+                early_close=session.early_close,
+            )
+            for session in sessions
+        ],
+    )
 
 
 @router.get("/instruments/resolve", response_model=InstrumentResolution)

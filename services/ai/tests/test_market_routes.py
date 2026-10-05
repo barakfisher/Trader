@@ -258,3 +258,41 @@ class TestPriceHistory:
         async with client:
             response = await client.get(path)
         assert response.status_code == 422
+
+
+def week(exchange: str, start: str, end: str) -> dict[str, str]:
+    return {"exchange": exchange, "start": start, "end": end}
+
+
+async def test_sessions_list_the_trading_days_with_their_closes(client):
+    # Thanksgiving week 2026: Thursday closed, Friday closes at 13:00 New York.
+    async with client:
+        response = await client.get(
+            "/market/sessions", params=week("NMS", "2026-11-23", "2026-11-29")
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["calendar"] == "XNYS"
+    days = [(s["day"], s["closes_at"], s["early_close"]) for s in body["sessions"]]
+    assert days == [
+        ("2026-11-23", "2026-11-23T21:00:00Z", False),
+        ("2026-11-24", "2026-11-24T21:00:00Z", False),
+        ("2026-11-25", "2026-11-25T21:00:00Z", False),
+        ("2026-11-27", "2026-11-27T18:00:00Z", True),
+    ]
+
+
+async def test_sessions_refuse_what_the_calendar_cannot_answer(client):
+    async with client:
+        unknown = await client.get(
+            "/market/sessions", params=week("XETRA", "2026-11-23", "2026-11-29")
+        )
+        reversed_span = await client.get(
+            "/market/sessions", params=week("NMS", "2026-11-29", "2026-11-23")
+        )
+        uncovered = await client.get(
+            "/market/sessions", params=week("NMS", "2026-11-23", "2031-06-01")
+        )
+    assert unknown.status_code == 422
+    assert reversed_span.status_code == 422
+    assert uncovered.status_code == 503

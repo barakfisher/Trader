@@ -262,6 +262,50 @@ export function listCashActivity(
   );
 }
 
+/**
+ * Every movement of the agent's cash, oldest first, with the balance it left -
+ * the whole history, unpaged: an agent's value on a past day is read from it
+ * (Stage 3, PR 7). Ordered as `listCashActivity` orders it.
+ */
+export function listCashTimeline(userId: string, agentId: string): Promise<CashActivityRow[]> {
+  return query<CashActivityRow>(
+    `SELECT m.id, m.kind, m.amount_minor::text AS amount_minor,
+            (sum(m.amount_minor) OVER (
+              ORDER BY m.created_at, (m.kind IN ('opening_deposit', 'top_up')) DESC, m.id
+            ))::text AS balance_after_minor,
+            m.created_at, m.fill_id
+       FROM cash_movements m
+      WHERE m.user_id = $1 AND m.agent_id = $2
+      ORDER BY m.created_at, (m.kind IN ('opening_deposit', 'top_up')) DESC, m.id`,
+    [userId, agentId],
+  );
+}
+
+/** Every fill of the agent, oldest first - the replay performance and the score are built from. */
+export function listFillsOldestFirst(userId: string, agentId: string): Promise<FillRow[]> {
+  return query<FillRow>(
+    `SELECT ${FILL_COLUMNS} FROM fills f JOIN instruments i ON i.id = f.instrument_id
+      WHERE f.user_id = $1 AND f.agent_id = $2
+      ORDER BY f.created_at, f.id`,
+    [userId, agentId],
+  );
+}
+
+/**
+ * Every instrument any of the user's agents has ever traded. The daily backfill
+ * keeps their closes, so a past day stays valued after a position is sold.
+ */
+export function listTradedInstruments(userId: string): Promise<{ id: string; symbol: string }[]> {
+  return query<{ id: string; symbol: string }>(
+    `-- agent-blind: shared ingestion fetches every agent's instruments once (§4.1).
+     SELECT DISTINCT i.id, i.symbol
+       FROM fills f JOIN instruments i ON i.id = f.instrument_id
+      WHERE f.user_id = $1
+      ORDER BY i.symbol`,
+    [userId],
+  );
+}
+
 /** The fills behind a set of movements, by id. */
 export function listFillsByIds(userId: string, agentId: string, ids: string[]): Promise<FillRow[]> {
   if (ids.length === 0) return Promise.resolve([]);

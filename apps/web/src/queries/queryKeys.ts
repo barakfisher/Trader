@@ -33,6 +33,7 @@ export const queryKeys = {
   /** Under the agent, so a trade's or a top-up's invalidation of `['agents']` refreshes them. */
   agentAccount: (agentId: string) => ['agents', agentId, 'account'] as const,
   agentActivity: (agentId: string) => ['agents', agentId, 'activity'] as const,
+  agentPerformance: (agentId: string) => ['agents', agentId, 'performance'] as const,
   /** The list, and - under it, so invalidating the list prefix reaches them - each topic. */
   topics: ['topics'] as const,
   topic: (topicId: string) => ['topics', topicId] as const,

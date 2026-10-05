@@ -1091,6 +1091,36 @@
         "invalidPrice": "Enter a price in dollars, with at most two decimals.",
         "archived": "This agent is archived. Restore it to trade or add cash."
       }
+    },
+    "performance": {
+      "title": "Performance",
+      "loading": "Loading performance…",
+      "loadFailed": "Could not load this agent's performance.",
+      "noCloseYet": "Nothing to compare yet: the first market close after the opening deposit has not been recorded.",
+      "agent": "This agent",
+      "benchmark": "{{symbol}} with the same deposits",
+      "difference": "Agent minus {{symbol}}",
+      "points": "{{points}} pts",
+      "hint": "At the close of {{day}}, over {{deposits}} deposited. Each deposit buys {{symbol}} at the first market close after it, without fees.",
+      "pending": "{{amount}} deposited since then is in neither figure until the next close.",
+      "agentLine": "Agent net worth",
+      "benchmarkLine": "{{symbol}}, same deposits",
+      "chartLabel_one": "{{count}} market close: the agent's net worth and the same deposits in {{symbol}}",
+      "chartLabel_other": "{{count}} market closes: the agent's net worth and the same deposits in {{symbol}}",
+      "tooltipAgent": "Agent: {{value}}",
+      "tooltipBenchmark": "{{symbol}}: {{value}}",
+      "tooltipDeposits": "Deposited: {{value}}",
+      "unavailable": "unavailable (a price is missing)",
+      "scoreTitle": "The agent's own decisions",
+      "noDecisions": "No agent decisions yet. Trades you place by hand count in the figures above, never in this score.",
+      "window": "Window",
+      "decisions": "Decisions",
+      "winRate": "Win rate",
+      "realised": "Realised",
+      "days_one": "{{count}} day",
+      "days_other": "{{count}} days",
+      "winRateValue": "{{rate}} ({{wins}} of {{sells}})",
+      "unrealised": "Still held from the agent's own buys, at the latest close: {{value}}."
     }
   },
   "consolidated": {

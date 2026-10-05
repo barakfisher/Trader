@@ -98,6 +98,26 @@ class ExchangeCalendar:
             early_close=early,
         )
 
+    def sessions_between(self, start: date, end: date) -> list[TradingSession]:
+        """Every session from `start` to `end`, both included, oldest first.
+
+        Raises `CalendarNotCovered` when either end is outside the file: a
+        partial list would read as "no trading" on the days it left out.
+        """
+        for day in (start, end):
+            if not self.covers(day):
+                raise CalendarNotCovered(
+                    f"{self.name} calendar covers {self.first_day}..{self.last_day}, not {day}"
+                )
+        sessions: list[TradingSession] = []
+        day = start
+        while day <= end:
+            session = self.session_on(day)
+            if session is not None:
+                sessions.append(session)
+            day += timedelta(days=1)
+        return sessions
+
     def local_day(self, now: datetime) -> date:
         return now.astimezone(ZoneInfo(self.timezone)).date()
 
