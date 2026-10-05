@@ -10,6 +10,8 @@
 export const queryKeys = {
   portfolio: ['portfolio'] as const,
   snapshots: ['portfolio', 'snapshots'] as const,
+  /** Under the portfolio, so a holding's edit refreshes it; agent writes invalidate it too. */
+  consolidated: ['portfolio', 'consolidated'] as const,
   observations: ['observations'] as const,
   /** The dashboard's feed, per filter. Under `observations`, so a refresh of the feed reaches it. */
   feed: (severity: string | null, symbol: string | null) =>

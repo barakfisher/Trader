@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft, Bot, Plus } from 'lucide-react';
 
-import type { AgentView } from '@traders/shared';
+import type { AgentView, SimulatedAgentStanding } from '@traders/shared';
 
 import { AgentField } from '../components/AgentField.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
@@ -13,6 +13,7 @@ import { formatMoney } from '../i18n/format.ts';
 import { BUDGET_INPUT, agentErrorMessage, agentName, agentStateWord } from '../lib/agentPresentation.ts';
 import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import { useAgentsQuery, useCreateAgent } from '../queries/agents.ts';
+import { useConsolidatedQuery } from '../queries/portfolio.ts';
 
 /**
  * Agents: the user's real portfolio and their simulated ones (multi-agent
@@ -22,6 +23,12 @@ import { useAgentsQuery, useCreateAgent } from '../queries/agents.ts';
 export function AgentsPage() {
   const { t } = useTranslation();
   const agents = useAgentsQuery();
+  // Each simulated agent's net worth (D19), valued as its own page values it.
+  // An archived agent is not valued here; its page still is.
+  const hasSimulated = (agents.data ?? []).some((agent) => !agent.isPrimary && agent.state !== 'archived');
+  const standings = new Map(
+    (useConsolidatedQuery(hasSimulated).data?.agents ?? []).map((standing) => [standing.agentId, standing]),
+  );
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
@@ -51,7 +58,7 @@ export function AgentsPage() {
         <ul className="space-y-2">
           {agents.data.map((agent) => (
             <li key={agent.id}>
-              <AgentRow agent={agent} />
+              <AgentRow agent={agent} standing={standings.get(agent.id) ?? null} />
             </li>
           ))}
         </ul>
@@ -63,7 +70,7 @@ export function AgentsPage() {
   );
 }
 
-function AgentRow({ agent }: { agent: AgentView }) {
+function AgentRow({ agent, standing }: { agent: AgentView; standing: SimulatedAgentStanding | null }) {
   const { t } = useTranslation();
   return (
     <Link
@@ -83,7 +90,12 @@ function AgentRow({ agent }: { agent: AgentView }) {
       <span className="text-sm text-text-muted">
         {agent.isPrimary
           ? t('agents.holdingsCount', { count: agent.holdingsCount })
-          : t('agents.budgetLine', { budget: formatMoney(agent.budgetMinor, agent.currency) })}
+          : standing
+            ? t('agents.netWorthLine', {
+                netWorth: formatMoney(standing.netWorthMinor, standing.currency),
+                budget: formatMoney(agent.budgetMinor, agent.currency),
+              })
+            : t('agents.budgetLine', { budget: formatMoney(agent.budgetMinor, agent.currency) })}
       </span>
     </Link>
   );

@@ -5,11 +5,12 @@
  */
 
 import type { Hono } from 'hono';
-import type { SnapshotsResponse } from '@traders/shared';
+import type { ConsolidatedHoldingsResponse, SnapshotsResponse } from '@traders/shared';
 
 import {
   countObservations,
   getUser,
+  listAgents,
   listHoldings,
   listLatestNarrationProvenance,
   listObservations,
@@ -18,6 +19,8 @@ import {
   recordQuotes,
 } from '../../db/queries.js';
 import { logger } from '../../logger.js';
+import { valueAgentAccount } from '../../services/agentAccount.js';
+import { consolidate } from '../../services/consolidation.js';
 import { narrationStateFrom } from '../../services/narrationHealth.js';
 import { SEVERITY_RANK } from '../../services/notificationPolicy.js';
 import { valuePortfolio } from '../../services/valuation.js';
@@ -65,6 +68,41 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
     );
 
     return context.json(portfolio);
+  });
+
+  /**
+   * Every holding across the real portfolio and the non-archived simulated
+   * agents, one row per instrument with the per-agent split (spec §4.3, D32-D35).
+   * Real and simulated are reported side by side and never summed. A paused
+   * agent is included and says so (D18); an archived one is not.
+   */
+  app.get('/portfolio/consolidated', async (context) => {
+    const userId = currentUserId(context);
+    const user = await getUser(userId);
+    if (!user) throw notFound('user not found');
+    const agents = await listAgents(userId);
+    const primary = agents.find((agent) => agent.is_primary);
+    if (!primary) throw new Error(`user ${userId} has no primary agent`);
+    const valuation = { ai: context.get('ai'), requestId: context.get('requestId') };
+
+    const [real, simulated] = await Promise.all([
+      listHoldings(userId, primary.id).then((rows) =>
+        valuePortfolio(rows, { ...valuation, baseCurrency: user.base_currency }),
+      ),
+      Promise.all(
+        agents
+          .filter((agent) => !agent.is_primary && agent.state !== 'archived')
+          .map(async (agent) => ({
+            agent,
+            account: await valueAgentAccount(agent, await listHoldings(userId, agent.id), {
+              ...valuation,
+              baseCurrency: agent.currency,
+            }),
+          })),
+      ),
+    ]);
+    const body: ConsolidatedHoldingsResponse = consolidate(user.base_currency, primary, real, simulated);
+    return context.json(body);
   });
 
   /**
