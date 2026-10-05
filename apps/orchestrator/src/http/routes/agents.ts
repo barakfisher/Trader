@@ -43,7 +43,7 @@ export const MAX_PERSONA_LENGTH = 4000;
 export const MAX_NAME_LENGTH = 60;
 
 /** Dollars and cents, no more: a third decimal would round on the way in. */
-const BUDGET_PATTERN = /^\d+(\.\d{1,2})?$/;
+export const BUDGET_PATTERN = /^\d+(\.\d{1,2})?$/;
 
 const UNIQUE_VIOLATION = '23505';
 const CHECK_VIOLATION = '23514';
@@ -82,6 +82,7 @@ export function toAgentView(row: AgentRow): AgentView {
     isPrimary: row.is_primary,
     persona: row.persona,
     budgetMinor: row.budget_minor === null ? null : Number(row.budget_minor),
+    cashMinor: row.cash_minor == null ? null : Number(row.cash_minor),
     currency: row.currency,
     state: row.state,
     holdingsCount: row.holdings_count,

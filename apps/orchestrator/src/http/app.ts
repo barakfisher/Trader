@@ -23,6 +23,7 @@ import { getUser, insertAdminAudit } from '../db/queries.js';
 import { auditEntry } from './adminAudit.js';
 import { forbidden, toErrorResponse, unauthorized, ApiProblem } from './errors.js';
 import { registerAdminRoutes } from './routes/admin.js';
+import { registerAgentAccountRoutes } from './routes/agentAccount.js';
 import { registerAgentsRoutes } from './routes/agents.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAskRoutes } from './routes/ask.js';
@@ -230,6 +231,7 @@ export function createApp(
   registerHoldingsRoutes(app);
   registerAgentsRoutes(app);
   registerTradesRoutes(app);
+  registerAgentAccountRoutes(app);
   registerTargetsRoutes(app);
   registerProposalsRoutes(app);
   registerNotificationsRoutes(app);

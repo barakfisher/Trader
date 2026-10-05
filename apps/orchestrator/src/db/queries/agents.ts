@@ -37,11 +37,14 @@ export interface AgentRow {
   state: AgentState;
   created_at: Date;
   holdings_count: number;
+  /** The agent's cash (migration 0040), as text; null for the primary, which has none. */
+  cash_minor: string | null;
 }
 
 const AGENT_COLUMNS = `a.id, a.slug, a.name, a.persona, a.is_primary, a.budget_minor::text AS budget_minor,
        a.currency, a.state, a.created_at,
-       (SELECT count(*)::int FROM holdings h WHERE h.agent_id = a.id) AS holdings_count`;
+       (SELECT count(*)::int FROM holdings h WHERE h.agent_id = a.id) AS holdings_count,
+       (SELECT c.balance_minor::text FROM agent_cash c WHERE c.agent_id = a.id) AS cash_minor`;
 
 /** The user's agents: the primary first, then the rest oldest first. */
 export function listAgents(userId: string): Promise<AgentRow[]> {

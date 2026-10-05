@@ -8,7 +8,18 @@
 
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import type { AgentInput, AgentPatchInput, AgentView, AgentsResponse } from '@traders/shared';
+import type {
+  ActivityResponse,
+  AgentAccountResponse,
+  AgentInput,
+  AgentPatchInput,
+  AgentView,
+  AgentsResponse,
+  TopUpInput,
+  TradeInput,
+  TradePreview,
+  TradeResult,
+} from '@traders/shared';
 
 import { api } from '../api/client.ts';
 import { queryKeys } from './queryKeys.ts';
@@ -46,6 +57,49 @@ export function useUpdateAgent(agentId: string) {
   const invalidate = useInvalidateAgents();
   return useMutation({
     mutationFn: (patch: AgentPatchInput) => api.patch<AgentView>(`/agents/${agentId}`, patch),
+    onSuccess: invalidate,
+  });
+}
+
+/** A simulated agent's cash, holdings and standing (Stage 3). Not asked of the primary. */
+export function useAgentAccountQuery(agentId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.agentAccount(agentId),
+    queryFn: () => api.get<AgentAccountResponse>(`/agents/${agentId}/account`),
+    enabled,
+  });
+}
+
+/** Every movement of the agent's cash, newest first, with the balance after each (D31). */
+export function useAgentActivityQuery(agentId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.agentActivity(agentId),
+    queryFn: () => api.get<ActivityResponse>(`/agents/${agentId}/activity`),
+    enabled,
+  });
+}
+
+/** What a trade would do. A mutation, not a query: it is asked for, and never cached. */
+export function usePreviewTrade(agentId: string) {
+  return useMutation({
+    mutationFn: (input: TradeInput) => api.post<TradePreview>(`/agents/${agentId}/trades/preview`, input),
+  });
+}
+
+/** Record a trade. Cash, holdings and the timeline all live under the agent's key. */
+export function useTrade(agentId: string) {
+  const invalidate = useInvalidateAgents();
+  return useMutation({
+    mutationFn: (input: TradeInput) => api.post<TradeResult>(`/agents/${agentId}/trades`, input),
+    onSuccess: invalidate,
+  });
+}
+
+/** Add cash: the server raises the budget by the amount, in one statement (D22, D31). */
+export function useTopUp(agentId: string) {
+  const invalidate = useInvalidateAgents();
+  return useMutation({
+    mutationFn: (input: TopUpInput) => api.post<AgentView>(`/agents/${agentId}/top-ups`, input),
     onSuccess: invalidate,
   });
 }

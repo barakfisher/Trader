@@ -223,3 +223,72 @@ export async function setAgentHolding(
     ],
   );
 }
+
+export interface CashActivityRow {
+  id: string;
+  kind: 'opening_deposit' | 'top_up' | 'buy' | 'sell';
+  amount_minor: string;
+  balance_after_minor: string;
+  created_at: Date;
+  fill_id: string | null;
+}
+
+/**
+ * Every movement of the agent's cash, newest first, each with the balance it
+ * left - one timeline of deposits, top-ups and trades (D31). The running sum
+ * is taken in movement order, oldest first; within one instant a deposit
+ * precedes a trade.
+ */
+export function listCashActivity(
+  userId: string,
+  agentId: string,
+  limit: number,
+): Promise<CashActivityRow[]> {
+  return query<CashActivityRow>(
+    `SELECT id, kind, amount_minor::text AS amount_minor, balance_after_minor::text AS balance_after_minor,
+            created_at, fill_id
+       FROM (
+         SELECT m.id, m.kind, m.amount_minor, m.created_at, m.fill_id,
+                sum(m.amount_minor) OVER (
+                  ORDER BY m.created_at, (m.kind IN ('opening_deposit', 'top_up')) DESC, m.id
+                ) AS balance_after_minor,
+                (m.kind IN ('opening_deposit', 'top_up')) AS is_deposit
+           FROM cash_movements m
+          WHERE m.user_id = $1 AND m.agent_id = $2
+       ) timeline
+      ORDER BY created_at DESC, is_deposit, id DESC
+      LIMIT $3`,
+    [userId, agentId, limit],
+  );
+}
+
+/** The fills behind a set of movements, by id. */
+export function listFillsByIds(userId: string, agentId: string, ids: string[]): Promise<FillRow[]> {
+  if (ids.length === 0) return Promise.resolve([]);
+  return query<FillRow>(
+    `SELECT ${FILL_COLUMNS} FROM fills f JOIN instruments i ON i.id = f.instrument_id
+      WHERE f.user_id = $1 AND f.agent_id = $2 AND f.id = ANY($3::uuid[])`,
+    [userId, agentId, ids],
+  );
+}
+
+/**
+ * Add cash: raise the budget by `amountMinor` in one statement, so two top-ups
+ * never read the same old budget (D22, D31). The trigger on `agents` records
+ * the top-up - or, before the first trade, raises the opening deposit. Null
+ * when no active or paused simulated agent matched, or the ceiling would be passed.
+ */
+export async function topUpAgent(
+  userId: string,
+  agentId: string,
+  amountMinor: number,
+  ceilingMinor: number,
+): Promise<{ budget_minor: string } | null> {
+  return queryOne<{ budget_minor: string }>(
+    `UPDATE agents SET budget_minor = budget_minor + $3
+      WHERE user_id = $1 AND id = $2 AND NOT is_primary AND state <> 'archived'
+        AND budget_minor + $3 <= $4
+      RETURNING budget_minor::text AS budget_minor`,
+    [userId, agentId, amountMinor, ceilingMinor],
+  );
+}

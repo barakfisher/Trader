@@ -25,6 +25,7 @@ const PRIMARY: AgentView = {
   isPrimary: true,
   persona: null,
   budgetMinor: null,
+  cashMinor: null,
   currency: 'USD',
   state: 'active',
   holdingsCount: 10,

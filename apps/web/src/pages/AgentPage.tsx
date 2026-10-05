@@ -1,12 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams } from '@tanstack/react-router';
-import { Archive, ArrowLeft, Pause, Play, RotateCcw, Save } from 'lucide-react';
+import { Archive, ArrowLeft, ArrowLeftRight, Pause, Play, RotateCcw, Save } from 'lucide-react';
 
-import type { AgentState, AgentView } from '@traders/shared';
+import type { AgentState, AgentView, TradeSide } from '@traders/shared';
 
+import { AccountSummary, AgentActivity, AgentHoldings } from '../components/AgentAccount.tsx';
+import { TradePanel } from '../components/TradePanel.tsx';
 import { AgentField } from '../components/AgentField.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
-import { Button, Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
+import { Button, Card, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import { errorMessage } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { formatMoney } from '../i18n/format.ts';
@@ -19,10 +21,12 @@ import { KindBadge } from './AgentsPage.tsx';
 type Tab = 'holdings' | 'activity';
 
 /**
- * One agent (decision D19): its settings, its persona, and the Holdings and
- * Activity tabs that Stage 3's ledger and Stage 4's decisions will fill. The
- * primary has no settings - it is the real portfolio, and passive (D1) - so its
- * page points to the dashboard, where the real portfolio lives.
+ * One agent (decision D19): its account, its settings and persona, and the
+ * Holdings and Activity tabs filled by Stage 3's ledger - trades placed by
+ * hand from the Trade panel (D21), cash added (D22), every movement listed
+ * with the balance it left (D31). The primary has no account or settings - it
+ * is the real portfolio, and passive (D1) - so its page points to the
+ * dashboard, where the real portfolio lives.
  */
 export function AgentPage() {
   const { agentId } = useParams({ from: '/agents/$agentId' });
@@ -80,13 +84,25 @@ function PrimaryNote() {
 function SimulatedAgent({ agent }: { agent: AgentView }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('holdings');
+  const [trading, setTrading] = useState<{ symbol: string; side: TradeSide } | null>(null);
+  const canTrade = agent.state !== 'archived';
   return (
     <>
-      <p className="text-sm text-text-muted">
-        {t('agents.budgetLine', { budget: formatMoney(agent.budgetMinor, agent.currency) })}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-text-muted">
+          {t('agents.budgetLine', { budget: formatMoney(agent.budgetMinor, agent.currency) })}
+        </p>
+        {canTrade && (
+          <Button onClick={() => setTrading({ symbol: '', side: 'buy' })}>
+            <span className="flex items-center gap-1">
+              <ArrowLeftRight className="size-4" aria-hidden />
+              {t('agents.trade.open')}
+            </span>
+          </Button>
+        )}
+      </div>
+      <AccountSummary agent={agent} />
       <StateControls agent={agent} />
-      <SettingsForm agent={agent} />
       <div role="tablist" className="flex gap-2 border-b border-border-subtle">
         {(['holdings', 'activity'] as const).map((name) => (
           <button
@@ -104,9 +120,18 @@ function SimulatedAgent({ agent }: { agent: AgentView }) {
         ))}
       </div>
       {tab === 'holdings' ? (
-        <EmptyState title={t('agents.holdingsEmpty.title')} body={t('agents.holdingsEmpty.body')} />
+        <AgentHoldings agent={agent} onSell={(symbol) => setTrading({ symbol, side: 'sell' })} />
       ) : (
-        <EmptyState title={t('agents.activityEmpty.title')} body={t('agents.activityEmpty.body')} />
+        <AgentActivity agent={agent} />
+      )}
+      <SettingsForm agent={agent} />
+      {trading && (
+        <TradePanel
+          agentId={agent.id}
+          initialSymbol={trading.symbol}
+          initialSide={trading.side}
+          onClose={() => setTrading(null)}
+        />
       )}
     </>
   );
@@ -190,7 +215,7 @@ function SettingsForm({ agent }: { agent: AgentView }) {
             className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2"
           />
         </AgentField>
-        <AgentField label={t('agents.fields.budget')} hint={t('agents.fields.budgetHint')}>
+        <AgentField label={t('agents.fields.budget')} hint={t('agents.fields.budgetEditHint')}>
           <input
             value={budget}
             onChange={(event) => setBudget(event.target.value)}
