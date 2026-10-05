@@ -135,6 +135,7 @@ export function compareWithAsked(asked: bigint, now: bigint, step: bigint): Epis
  */
 export async function settleEpisodes(
   userId: string,
+  agentId: string,
   seen: SeenFinding[],
   ruleRan: Record<string, boolean>,
   floor: string,
@@ -142,7 +143,7 @@ export async function settleEpisodes(
   let closed = 0;
   for (const kind of Object.keys(EPISODE_KINDS)) {
     if (!ruleRan[kind]) continue;
-    const open = await listOpenEpisodes(userId, kind);
+    const open = await listOpenEpisodes(userId, agentId, kind);
     if (open.length === 0) continue;
     const current = new Map<string, string>();
     for (const finding of seen) {
@@ -172,6 +173,7 @@ export async function settleEpisodes(
  */
 export async function admitCandidates<T extends EpisodeCandidate>(
   userId: string,
+  agentId: string,
   candidates: T[],
   floor: string,
 ): Promise<{ admitted: T[]; held: number }> {
@@ -196,7 +198,7 @@ export async function admitCandidates<T extends EpisodeCandidate>(
     let open = openByKind.get(candidate.kind);
     if (!open) {
       open = new Map(
-        (await listOpenEpisodes(userId, candidate.kind)).map((row) => [row.subject_ref, row]),
+        (await listOpenEpisodes(userId, agentId, candidate.kind)).map((row) => [row.subject_ref, row]),
       );
       openByKind.set(candidate.kind, open);
     }

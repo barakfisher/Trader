@@ -81,7 +81,8 @@ function fromScaledWeight(scaled: number): string {
 
 export function registerTargetsRoutes(app: Hono<AppEnv>): void {
   app.get('/targets', async (context) => {
-    const rows = await listTargetWeights(currentUserId(context));
+    const userId = currentUserId(context);
+    const rows = await listTargetWeights(userId, await primaryAgentId(userId));
     return context.json({
       targets: rows.map((row) => ({
         symbol: row.symbol,

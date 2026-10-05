@@ -103,7 +103,7 @@ export async function claimRun(
     `UPDATE runs
         SET status = 'running', started_at = now(), finished_at = NULL, trigger = $2,
             heartbeat_at = CASE WHEN heartbeat_at IS NULL THEN NULL ELSE now() END
-      WHERE run_key = $1
+      WHERE run_key = $1 AND agent_id IS NOT DISTINCT FROM $6::uuid
         AND ((status = 'failed' AND $5::boolean)
              OR (status = 'running'
                  AND CASE WHEN heartbeat_at IS NULL
@@ -116,6 +116,7 @@ export async function claimRun(
       String(STALE_RUN_MINUTES),
       String(HEARTBEAT_STALE_MINUTES),
       input.retryFailed ?? false,
+      input.agentId,
     ],
   );
   if (reclaimed) {
@@ -124,8 +125,8 @@ export async function claimRun(
   }
 
   const existing = await queryOne<{ status: string }>(
-    'SELECT status FROM runs WHERE run_key = $1',
-    [input.runKey],
+    'SELECT status FROM runs WHERE run_key = $1 AND agent_id IS NOT DISTINCT FROM $2::uuid',
+    [input.runKey, input.agentId],
   );
   return { claimed: false, runId: null, existingStatus: existing?.status };
 }
@@ -139,7 +140,8 @@ export async function claimRun(
  */
 async function abandonDeadRuns(kind: string, supersededBy: string): Promise<number> {
   const rows = await query<{ run_key: string }>(
-    `UPDATE runs
+    `-- agent-blind: a kind-wide sweep for the installation's rescreen, which has no agent.
+     UPDATE runs
         SET status = 'failed', finished_at = now(),
             stats = COALESCE(stats, '{}'::jsonb) || jsonb_build_object(
               'error', 'abandoned: its process stopped before finishing',
@@ -160,7 +162,8 @@ async function abandonDeadRuns(kind: string, supersededBy: string): Promise<numb
 /** Whether any run, in any state, holds `runKey`. */
 export async function runKeyExists(runKey: string): Promise<boolean> {
   const row = await queryOne<{ exists: boolean }>(
-    'SELECT EXISTS (SELECT 1 FROM runs WHERE run_key = $1) AS exists',
+    `-- agent-blind: asked only of the installation's rescreen key, which has no agent.
+     SELECT EXISTS (SELECT 1 FROM runs WHERE run_key = $1) AS exists`,
     [runKey],
   );
   return row?.exists ?? false;
@@ -171,17 +174,19 @@ export async function finishRun(
   status: 'ok' | 'degraded' | 'failed' | 'skipped',
   stats: unknown = {},
 ): Promise<void> {
-  await query(`UPDATE runs SET status = $2, finished_at = now(), stats = $3::jsonb WHERE id = $1`, [
-    runId,
-    status,
-    JSON.stringify(stats),
-  ]);
+  await query(
+    `-- agent-blind: addressed by the run's own id.
+     UPDATE runs SET status = $2, finished_at = now(), stats = $3::jsonb WHERE id = $1`,
+    [runId, status, JSON.stringify(stats)],
+  );
 }
 
 /** Most recent runs, newest first. Backs the "did anything run today?" check. */
 export function listRuns(userId: string, kind?: string, limit = 50): Promise<RunRow[]> {
   return query<RunRow>(
-    `SELECT id, kind, run_key, status, started_at, finished_at
+    `-- agent-blind: the run history is the user's, every kind; an agent filter arrives with
+     -- Stage 2's views, and must then leave out the agent-blind kinds (§3.3c).
+     SELECT id, kind, run_key, status, started_at, finished_at
        FROM runs
       WHERE user_id = $1 AND ($2::text IS NULL OR kind = $2)
       ORDER BY started_at DESC
@@ -202,7 +207,8 @@ export interface AdminRunRow extends RunRow {
  */
 export function listAllRuns(kind?: string, limit = 100): Promise<AdminRunRow[]> {
   return query<AdminRunRow>(
-    `SELECT id, user_id, kind, run_key, trigger, status, started_at, finished_at
+    `-- agent-blind: the admin's view of every account's and the installation's runs.
+     SELECT id, user_id, kind, run_key, trigger, status, started_at, finished_at
        FROM runs
       WHERE ($1::text IS NULL OR kind = $1)
       ORDER BY started_at DESC
@@ -223,7 +229,8 @@ export function getLatestFinishedRun(
   kind: string,
 ): Promise<{ started_at: Date; status: string; stats: unknown } | null> {
   return queryOne(
-    `SELECT started_at, status, stats
+    `-- agent-blind: asked only of agent-blind kinds (news_collect, topic_scan), §3.3c.
+     SELECT started_at, status, stats
        FROM runs
       WHERE user_id = $1 AND kind = $2 AND finished_at IS NOT NULL
       ORDER BY started_at DESC

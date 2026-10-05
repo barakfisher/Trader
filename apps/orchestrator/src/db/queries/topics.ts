@@ -236,7 +236,8 @@ export function listRecentTopicObservations(
   { subject_ref: string; severity: string; headline: string; localized: LocalizedTexts; created_at: Date }[]
 > {
   return query(
-    `SELECT subject_ref, severity, headline, localized, created_at
+    `-- agent-blind: topic findings are about the user's topics, which every agent shares (§3.3c).
+     SELECT subject_ref, severity, headline, localized, created_at
        FROM observations
       WHERE user_id = $1
         AND subject_kind = 'topic'

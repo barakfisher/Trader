@@ -25,7 +25,7 @@ import type { Hono } from 'hono';
 
 import { AiServiceError } from '@traders/shared/ai';
 
-import { getUser, listHoldings, listTargetWeights } from '../../db/queries.js';
+import { getUser, listHoldings, listTargetWeights, primaryAgentId } from '../../db/queries.js';
 import { valuePortfolio } from '../../services/valuation.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, notFound, upstreamFailure } from '../errors.js';
@@ -55,8 +55,10 @@ export function registerAskRoutes(app: Hono<AppEnv>): void {
     const user = await getUser(userId);
     if (!user) throw notFound('user not found');
 
-    const rows = await listHoldings(userId);
-    const targets = await listTargetWeights(userId);
+    // `/ask` answers about the real portfolio.
+    const agentId = await primaryAgentId(userId);
+    const rows = await listHoldings(userId, agentId);
+    const targets = await listTargetWeights(userId, agentId);
 
     // An empty portfolio is a legitimate state, not an error: a new account can
     // still ask what a drawdown is. It sends no holdings, and a portfolio

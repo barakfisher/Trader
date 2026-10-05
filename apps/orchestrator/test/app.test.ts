@@ -341,7 +341,7 @@ describe('API', () => {
     });
     expect(response.status).toBe(200);
     // 1500 yen, not 150000: JPY has no minor unit.
-    expect(queries.updateHolding).toHaveBeenLastCalledWith(USER.id, 'holding-1', {
+    expect(queries.updateHolding).toHaveBeenLastCalledWith(USER.id, '90000000-0000-0000-0000-000000000001', 'holding-1', {
       costBasisMinor: 1500,
     });
   });
@@ -354,7 +354,7 @@ describe('API', () => {
       body: JSON.stringify({ quantity: '12', costBasis: '185.40', currency: 'usd' }),
     });
     expect(response.status).toBe(200);
-    expect(queries.updateHolding).toHaveBeenLastCalledWith(USER.id, 'holding-1', {
+    expect(queries.updateHolding).toHaveBeenLastCalledWith(USER.id, '90000000-0000-0000-0000-000000000001', 'holding-1', {
       quantity: '12',
       currency: 'USD',
       costBasisMinor: 18540,

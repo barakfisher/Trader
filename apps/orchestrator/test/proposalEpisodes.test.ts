@@ -22,7 +22,7 @@ interface Episode {
 const store: Episode[] = [];
 
 vi.mock('../src/db/queries.js', () => ({
-  listOpenEpisodes: vi.fn(async (userId: string, kind: string) =>
+  listOpenEpisodes: vi.fn(async (userId: string, _agentId: string, kind: string) =>
     store
       .filter((row) => row.userId === userId && row.kind === kind && row.closedReason === null)
       .map((row) => ({ id: row.id, subject_ref: row.subjectRef, asked_magnitude: row.asked })),
@@ -71,6 +71,7 @@ const { admitCandidates, bandStep, compareWithAsked, isResolved, settleEpisodes,
   await import('../src/services/proposalEpisodes.js');
 
 const USER = '00000000-0000-0000-0000-000000000001';
+const AGENT = '90000000-0000-0000-0000-000000000001';
 const SUBJECT = 'portfolio:allocation:BTC-USD';
 const BANDS = { high: 0.15, notable: 0.1, info: 0.05 };
 const DRIFT_RAN = { allocation_drift: true };
@@ -103,12 +104,13 @@ async function scan(drift: string, options: { isNew?: boolean; ruleRan?: boolean
     severity === null ? [] : [{ kind: 'allocation_drift', subject_ref: SUBJECT, severity }];
   await settleEpisodes(
     USER,
+    AGENT,
     seen,
     { allocation_drift: options.ruleRan ?? true },
     'high',
   );
   if (severity !== 'high' || options.isNew === false) return 0;
-  const { admitted } = await admitCandidates(USER, [candidate(drift)], 'high');
+  const { admitted } = await admitCandidates(USER, AGENT, [candidate(drift)], 'high');
   return admitted.length;
 }
 
@@ -216,6 +218,7 @@ describe('what passes through untouched', () => {
   it('a finding whose evidence cannot be read is asked about, as before', async () => {
     const { admitted } = await admitCandidates(
       USER,
+      AGENT,
       [candidate('0.16', { evidence: { thresholds_weight: BANDS } })],
       'high',
     );
@@ -226,6 +229,7 @@ describe('what passes through untouched', () => {
   it('a kind with no episode policy is asked about, as before', async () => {
     const { admitted } = await admitCandidates(
       USER,
+      AGENT,
       [candidate('0.16', { kind: 'price_move' })],
       'high',
     );
@@ -235,6 +239,7 @@ describe('what passes through untouched', () => {
   it('two candidates for one subject in one scan raise one question', async () => {
     const { admitted, held } = await admitCandidates(
       USER,
+      AGENT,
       [candidate('0.16'), candidate('0.17')],
       'high',
     );
@@ -252,14 +257,14 @@ describe('what passes through untouched', () => {
       asked: '0.16',
       closedReason: null,
     });
-    const { admitted, held } = await admitCandidates(USER, [candidate('0.16')], 'high');
+    const { admitted, held } = await admitCandidates(USER, AGENT, [candidate('0.16')], 'high');
     expect(admitted).toHaveLength(0);
     expect(held).toBe(1);
   });
 
   it('settles nothing for a kind whose rule did not run', async () => {
     await scan('0.16');
-    expect(await settleEpisodes(USER, [], { allocation_drift: false }, 'high')).toBe(0);
-    expect(await settleEpisodes(USER, [], DRIFT_RAN, 'high')).toBe(1);
+    expect(await settleEpisodes(USER, AGENT, [], { allocation_drift: false }, 'high')).toBe(0);
+    expect(await settleEpisodes(USER, AGENT, [], DRIFT_RAN, 'high')).toBe(1);
   });
 });

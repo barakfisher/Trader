@@ -64,14 +64,14 @@ export async function upsertSnapshot(input: SnapshotInput): Promise<void> {
   );
 }
 
-export function listSnapshots(userId: string, limit = 365): Promise<SnapshotRow[]> {
+export function listSnapshots(userId: string, agentId: string, limit = 365): Promise<SnapshotRow[]> {
   return query<SnapshotRow>(
     `SELECT as_of::text AS as_of, total_minor::text AS total_minor, cost_minor::text AS cost_minor, currency,
             holdings_count, priced_count, degraded
        FROM portfolio_snapshots
-      WHERE user_id = $1
+      WHERE user_id = $1 AND agent_id = $2
       ORDER BY as_of DESC
-      LIMIT $2`,
-    [userId, limit],
+      LIMIT $3`,
+    [userId, agentId, limit],
   );
 }

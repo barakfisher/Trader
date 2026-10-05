@@ -57,7 +57,7 @@ export async function commitImport(
 
   await transaction(async (client) => {
     if (request.mode === 'replace') {
-      const removed = await deleteAllHoldings(userId, client);
+      const removed = await deleteAllHoldings(userId, agentId, client);
       logger().info({ removed }, 'import replace mode cleared existing holdings');
     }
 

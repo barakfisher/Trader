@@ -62,7 +62,7 @@ export async function runPortfolioScan(
   runId: string | null,
   requestId?: string,
 ): Promise<ScanResult> {
-  const rows = await listHoldings(user.id);
+  const rows = await listHoldings(user.id, agentId);
   if (rows.length === 0) {
     return {
       holdings: 0,
@@ -87,9 +87,9 @@ export async function runPortfolioScan(
   // The user's own statement of the allocation they meant to hold. Read here
   // rather than defaulted to `{}`: until this call existed the drift rule had
   // nothing to compare against and every scan reported it as skipped.
-  const targets = await listTargetWeights(user.id);
+  const targets = await listTargetWeights(user.id, agentId);
 
-  const knownKeys = await listRecentDedupeKeys(user.id);
+  const knownKeys = await listRecentDedupeKeys(user.id, agentId);
 
   const portfolio = await valuePortfolio(rows, {
     baseCurrency: user.base_currency,
@@ -196,12 +196,14 @@ export async function runPortfolioScan(
    */
   const episodesResolved = await settleEpisodes(
     user.id,
+    agentId,
     response.stats.seen ?? [],
     { allocation_drift: !response.stats.drift_skipped_reason },
     settings.proposal_severity,
   );
   const { admitted: candidates, held: proposalsHeld } = await admitCandidates(
     user.id,
+    agentId,
     selected,
     settings.proposal_severity,
   );
