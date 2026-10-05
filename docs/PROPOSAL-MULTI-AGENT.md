@@ -4,7 +4,7 @@
 this document are settled. What follows is the agreed design and its four-stage execution plan,
 written against the system as it exists at PR #40.
 
-**Amended 2026-10-04** (at PR #150): twelve further decisions (§10), the schema as measured that day
+**Amended 2026-10-04/05** (at PR #150): further decisions D1–D16 (§10), the schema as measured that day
 (§11) and the exact Stage 1 task list (§12). Where §10 and an earlier section disagree, §10 wins, and
 the earlier section carries a pointer to it.
 
@@ -166,10 +166,14 @@ a row id, so it separates per agent for free.
 
 ---
 
-## 4. Stage 2 — Deterministic agents
+## 4. Stage 2 — Agents exist (amended by §10 D16)
 
 Own portfolio, own observations, own thresholds, consolidated UI. No LLM, no budget, no proposals.
-This stage is cheap and proves the isolation with zero cost exposure.
+This stage is cheap and proves the isolation with zero cost exposure. **Amended (D16):** there are no
+"deterministic agents" as a product — an agent's decisions come from its persona and tools in stage
+4 (D14). What stage 2 keeps is everything that is not a decision: agents can be created, named and
+paused, own a portfolio and observations (per-agent `AnalysisThresholds` still apply to the findings
+an agent is briefed with, §4.2), and appear in the consolidated view.
 
 ### 4.1 Shared ingestion, independent interpretation
 
@@ -220,7 +224,10 @@ Pending proposals never affect holdings or portfolio value. They are visible, an
 
 ## 5. Stage 3 — Budget, fills and scoring
 
-Still deterministic. This is the first point at which an agent can be right or wrong, and it is the
+**Amended (D16):** no agent decides anything yet. The ledger — cash, fees, fills, approval and
+scoring — is built and proven with **manual trades** the user places into an agent's account
+(§5.3), so every money path is tested before a model is allowed to propose through it. This is the
+point at which the ledger can be right or wrong, and it is the
 largest genuinely new subsystem: the system has no cash concept today. `intents` records what the
 user assented to and holds no balance, no fill price and no position accounting.
 
@@ -290,6 +297,11 @@ Guideline 8 says runs are idempotent. [sentiment.py](../services/ai/app/news/sen
 refused an LLM scorer for exactly this reason: *"a model's score is not reproducible, so a re-run
 over unchanged data could produce a different opinion and therefore a different observation."* An
 LLM-philosophy agent is that argument at the centre of the product.
+
+**Superseded by §10 D15.** An agent that chooses its own tool calls cannot have its evidence hashed
+before it runs, so the cache below cannot be keyed in advance. Idempotency is kept instead by the
+run key (a scan of a bucket runs once) and by storing each decision with the full transcript of the
+tools it called; a re-run of the same bucket is skipped, not re-asked. The original text follows.
 
 **Resolution: detection stays deterministic and shared; the agent's judgement becomes a stored
 artifact keyed `(agent_id, finding_set_hash, date_bucket)`**, where `finding_set_hash` covers the
@@ -372,9 +384,9 @@ enforced.
 | Stage | Contents | Gated on |
 |---|---|---|
 | **1 — Isolation** | `agents` table, primary seeded + backfilled, `agent_id NOT NULL`, the six constraint replacements (§3.3, §11), the passive primary (D1) — tasks in §12 | — |
-| **2 — Deterministic agents** | Per-agent `AnalysisThresholds`, per-agent portfolios and observations, consolidated UI with filter and split figures | Stage 1 |
-| **3 — Budget, fills, scoring** | `agent_cash`, fees (D6), fills from a live quote inside the range (D3), TTL from the next open and the exchange calendar (D4), dashboard + Telegram approval, `manual_user_override`, 30/60/90-day scoring | Stage 2 |
-| **4 — LLM philosophy** | Reasoning in `services/ai`, hand-written loop or core LangGraph by comparison, no checkpointer (D10), judgement artifacts, per-agent budgets (D12), pre-open/post-close schedule, persona rationale behind the validator, urgent sells through quiet hours (D5) | Stage 3; a paid model (§11 — M3, M5 and GDELT news have since landed, and the workspace is funded) |
+| **2 — Agents exist** | Create, name, pause; per-agent portfolios, observations and `AnalysisThresholds`; consolidated UI with filter and split figures. No decisions (D16) | Stage 1 |
+| **3 — Budget, fills, scoring** | `agent_cash`, fees (D6), fills from a live quote inside the range (D3), TTL from the next open and the exchange calendar (D4), dashboard + Telegram approval, `manual_user_override`, 30/60/90-day scoring — all proven with manual trades (D16) | Stage 2 |
+| **4 — The deciding agent** | Persona + tools decide (D14), briefing then read-only tool calls with a step limit and a stored transcript (D15), tool calling in the provider, reasoning in `services/ai` with a hand-written loop or core LangGraph by comparison and no checkpointer (D10), per-agent budgets (D12), pre-open/post-close schedule, persona rationale behind the validator, urgent sells through quiet hours (D5) | Stage 3; a paid model (§11 — M3, M5 and GDELT news have since landed, and the workspace is funded) |
 
 The PRD P2 amendment (§2) ships with stage 1, since it is the boundary the whole feature stands on.
 
@@ -474,6 +486,42 @@ becomes `UNIQUE (agent_id, dedupe_key)` and `runs` `UNIQUE (agent_id, run_key)`,
 and the primary's run-key format unchanged. Rewriting the hash (§3.3a as first written) cannot be
 backfilled — a stored key is a digest, and its inputs are gone — so the first scan after the deploy
 would re-emit every observation of the day under a new key and notify the user again.
+
+### Added 2026-10-05
+
+**D14 — The decision is the model's; the limits are the code's.** The goal is an agent that uses its
+persona and its tools to reach a good judgement, not a rule set. The model chooses which instruments
+to look into, what to ask for, whether to buy, sell or do nothing ("nothing" is the expected outcome
+of most scans), how many shares, and the thesis. The code enforces, after the model has answered and
+whatever it said: USD-listed, in the universe, whole shares (D7–D9); cash covers cost plus fee, or the
+proposal is rejected (D3, D6); every figure in the thesis appears in what the tools returned (§6.2);
+price, range, TTL and calendar computed by the server (D3, D4); and the user's approval, always. A
+persona changes the decisions, never the limits. *Rejected:* deterministic strategies (mean
+reversion, momentum) as the decision-maker — they are not what the product is for, and they would be
+designed, built and scored only to be replaced.
+
+**D15 — A briefing from the code, then read-only tools the model chooses.** Each scan opens with a
+briefing the code assembles: cash, holdings with cost basis, today's findings on those holdings, the
+day's largest market movers and instruments from the user's followed topics — so an agent never
+starts blind and never misses that its own holding collapsed. Then the model investigates with tools
+that wrap existing components, all read-only: `search_universe` (topic resolution), `get_quote` and
+`get_price_history` (the market-data registry, with its cache and rate limiter), `get_findings` (the
+analysis rules), `get_news` (GDELT articles with sentiment), `get_position`, and optionally
+`explain_concept` (the corpus). It ends with one answer: a proposal or nothing. **No tool writes**;
+submitting is the answer itself, validated by the server. Bounds: a step limit per scan (default 12
+tool calls) and the per-agent budget (D12). Every tool call and its result is stored with the
+decision — this is the brief's Activity & Decision Log, and it is the evidence the validator checks
+the thesis against. Text inside news results that tries to instruct the model is harmless by
+construction: nothing it could persuade the model to do passes the server's checks. Consequences:
+the provider gains tool calling (`openai_compatible.py` has none today), §6.1's pre-computed cache
+is superseded (above), and the framework comparison of D10 now tests the case LangGraph is built for.
+
+**D16 — The stages are re-cut around the deciding agent.** Stage 2: agents exist (create, pause,
+own portfolios and observations, the consolidated view) and decide nothing. Stage 3: the ledger
+(cash, fees, fills, approval, scoring), proven with manual trades into an agent's account. Stage 4:
+the agent that decides (D14, D15). Stage 1 is unchanged. *Rejected:* keeping deterministic agents as
+a stage — it would mean designing trading rules (when to buy, how much) that the product does not
+want, only to test a ledger that manual trades test as well.
 
 ---
 
