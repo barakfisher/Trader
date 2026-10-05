@@ -62,6 +62,26 @@ export function isProposableKind(kind: string): boolean {
   return kind in PROPOSABLE_KINDS;
 }
 
+/**
+ * The proposal kinds the real portfolio may be asked - acknowledgements, never
+ * trades (decision D1, `docs/PROPOSAL-MULTI-AGENT.md` §10).
+ *
+ * "Main portfolio" is passive. `raiseProposals` raises against it today, so
+ * every kind it can raise must be one of these, and it refuses otherwise before
+ * the database's own trigger (migration 0038) has to. An allowlist, matching
+ * the trigger: a new kind is refused on the real portfolio until someone argues
+ * here, and in a migration, that it belongs there.
+ */
+export const PRIMARY_PROPOSAL_KINDS: ReadonlySet<string> = new Set(['rebalance']);
+
+/** Raised instead of writing a proposal the primary agent may never receive. */
+export class PrimaryAgentIsPassiveError extends Error {
+  constructor(readonly kind: string) {
+    super(`the primary agent is passive: a ${kind} proposal cannot be raised against the real portfolio`);
+    this.name = 'PrimaryAgentIsPassiveError';
+  }
+}
+
 export function meetsSeverity(severity: string, floor: string): boolean {
   const rank = SEVERITY_RANK[severity];
   const floorRank = SEVERITY_RANK[floor];
@@ -115,6 +135,11 @@ export async function raiseProposals(
       payload: { observationKind: finding.kind, subjectRef: finding.subjectRef },
       expiresAt,
     }));
+
+  // Every proposal raised here is the real portfolio's (Stage 1: findings come
+  // from the primary's scan), so each must be a kind the primary may receive.
+  const refused = selected.find((proposal) => !PRIMARY_PROPOSAL_KINDS.has(proposal.kind));
+  if (refused) throw new PrimaryAgentIsPassiveError(refused.kind);
 
   const proposalIds = await createProposals(selected);
   return { selected: selected.length, created: proposalIds.length, proposalIds };

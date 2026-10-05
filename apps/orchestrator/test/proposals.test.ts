@@ -22,9 +22,14 @@ vi.mock('../src/logger.js', () => ({
 }));
 
 const queries = await import('../src/db/queries.js');
-const { applyDecision, meetsSeverity, raiseProposals, sweepExpiredProposals } = await import(
-  '../src/services/proposals.js'
-);
+const {
+  applyDecision,
+  meetsSeverity,
+  PRIMARY_PROPOSAL_KINDS,
+  PROPOSABLE_KINDS,
+  raiseProposals,
+  sweepExpiredProposals,
+} = await import('../src/services/proposals.js');
 
 const USER = '00000000-0000-0000-0000-000000000001';
 const NOW = new Date('2026-09-16T12:00:00.000Z');
@@ -94,6 +99,14 @@ describe('meetsSeverity', () => {
 });
 
 describe('raiseProposals', () => {
+  it('can only ever raise kinds the passive primary may receive (decision D1)', () => {
+    // raiseProposals raises against the real portfolio, so a proposable kind
+    // the primary may not receive would be refused at run time - here, at review.
+    for (const kind of Object.values(PROPOSABLE_KINDS)) {
+      expect(PRIMARY_PROPOSAL_KINDS.has(kind), kind).toBe(true);
+    }
+  });
+
   it('raises a proposal for an actionable finding at or above the floor', async () => {
     const result = await raiseProposals(USER, [finding()], SETTINGS, NOW);
     expect(result).toEqual({ selected: 1, created: 1, proposalIds: ['proposal-1'] });
