@@ -448,6 +448,27 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('per-agent run keys (0037)', () => {
+    it('lets two agents claim one key, and one agent claim it once', async () => {
+      const pool = getPool();
+      const simulated = (
+        await pool.query(
+          `INSERT INTO agents (user_id, slug, name, budget_minor)
+           VALUES ($1, 'run-key-test', 'Run key test', 100000) RETURNING id`,
+          [USER],
+        )
+      ).rows[0].id as string;
+      const runKey = `portfolio_scan:test-${randomUUID()}`;
+      const claim = (agentId: string) =>
+        queries.claimRun({ userId: USER, agentId, kind: 'portfolio_scan', runKey, trigger: 'test' });
+      expect((await claim(AGENT)).claimed).toBe(true);
+      expect((await claim(simulated)).claimed).toBe(true);
+      expect((await claim(AGENT)).claimed).toBe(false);
+      await pool.query('DELETE FROM runs WHERE run_key = $1', [runKey]);
+      await pool.query('DELETE FROM agents WHERE id = $1', [simulated]);
+    });
+  });
+
   describe('recordNarrationState', () => {
     it('records a baseline, ignores a repeat, and records a change', async () => {
       const baseline = await queries.recordNarrationState(USER, 'narrating', null, null);

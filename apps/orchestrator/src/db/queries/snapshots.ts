@@ -38,7 +38,7 @@ export async function upsertSnapshot(input: SnapshotInput): Promise<void> {
        (user_id, agent_id, as_of, total_minor, cost_minor, currency, breakdown,
         holdings_count, priced_count, degraded)
      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10)
-     ON CONFLICT (user_id, as_of) DO UPDATE SET
+     ON CONFLICT (agent_id, as_of) DO UPDATE SET
        total_minor    = EXCLUDED.total_minor,
        cost_minor     = EXCLUDED.cost_minor,
        currency       = EXCLUDED.currency,

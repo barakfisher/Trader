@@ -54,7 +54,8 @@ export interface ClaimRunInput {
 /**
  * Claim a run, or report that someone already has it.
  *
- * The claim is the INSERT itself: `run_key` is unique, so exactly one caller can
+ * The claim is the INSERT itself: `run_key` is unique per agent (the
+ * installation's runs, with no agent, count as one), so exactly one caller can
  * succeed no matter how many fire at once, across processes and replicas. A
  * previous attempt that died mid-flight is reclaimed after STALE_RUN_MINUTES;
  * anything else already claimed returns `claimed: false` and the caller stops.
@@ -66,7 +67,7 @@ export async function claimRun(
     queryOne<{ id: string }>(
       `INSERT INTO runs (user_id, agent_id, kind, run_key, trigger, status)
        VALUES ($1, $2, $3, $4, $5, 'running')
-       ON CONFLICT (run_key) DO NOTHING
+       ON CONFLICT (agent_id, run_key) DO NOTHING
        RETURNING id`,
       [input.userId, input.agentId, input.kind, input.runKey, input.trigger],
     );
@@ -74,7 +75,7 @@ export async function claimRun(
   try {
     inserted = await insert();
   } catch (error) {
-    // `ON CONFLICT (run_key)` covers the run key only. A second rescreen under
+    // `ON CONFLICT (agent_id, run_key)` covers the run key only. A second rescreen under
     // another key - yesterday's still running past midnight - meets the
     // partial unique index instead. A live one is a refusal, not a failure.
     if ((error as { code?: string }).code !== UNIQUE_VIOLATION) throw error;
