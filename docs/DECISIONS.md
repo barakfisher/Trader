@@ -115,3 +115,5 @@ while this file is out of date.
 | 102 | Uniqueness is per agent by a composite key, never by rewriting the key |
 | 103 | Every statement on an owned table names `agent_id` or argues `-- agent-blind: <why>` inside the SQL |
 | 104 | The passive primary is an allowlist in two places, not a denylist |
+| 105 | Every route is behind a session unless a test's public list says otherwise |
+| 106 | A user's own text takes the direction of what is typed |

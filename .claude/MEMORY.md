@@ -4,7 +4,15 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-05 ~10:30 UTC - **Multi-agent Stage 1 (isolation) is complete (#151-#155); this
+Updated: 2026-10-05 ~15:30 UTC - **Multi-agent Stage 2 (agent management) is complete (#158-#159),
+and Mastra is retired (#157); this is the Stage 2 handoff (#160). Nothing is in flight. The next
+session starts Stage 3** - see "Next session: multi-agent Stage 3" in "Where to go next". Stage 2 as
+the user re-cut it (D17-D20, asked and answered 2026-10-05): **management only** - `/agents` API and
+an Agents page, a page per agent with settings, persona, pause/resume/archive/restore, and Holdings /
+Activity tabs that are empty until Stage 3/4; the consolidated holdings view moved to Stage 3. Both
+environments run `main` at `600b116`, migration `0039_retire_mastra`.
+
+Previous handoff, 2026-10-05 ~10:30 UTC - **Multi-agent Stage 1 (isolation) is complete (#151-#155); this
 is its closing handoff (#156). Nothing is in flight. The next session starts Stage 2** - see "Next
 session: multi-agent Stage 2" in "Where to go next". **The grant continues across the feature's
 stages** (the user, 2026-10-04: PR, merge on green, verify on `main` by content, rebuild compose and
@@ -392,6 +400,8 @@ strings and left-to-right assumptions before designing it.
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
+| Multi-agent sandbox, Stage 2 — agent management | ✅ Complete | #158 `/agents` API + the every-route-behind-a-session test; #159 the Agents page and a page per agent (en/he). D17-D20. The consolidated view moved to Stage 3 (D17) |
+| Mastra retired (D11) | ✅ Complete | #157, migration 0039: proposals are the row, `applyDecision` and `proposal_sweep` |
 | Multi-agent sandbox, Stage 1 — isolation (no M-number; `docs/PROPOSAL-MULTI-AGENT.md`) | ✅ Complete | #151 spec amendment D1-D16; #152 `agents` + `agent_id` (0036); #153 agent-scoped reads + contract; #154 per-agent uniques (0037); #155 passive primary (0038). Nothing user-visible, by design. Stages 2-4 to come - see "Next session: multi-agent Stage 2" |
 | M8 — Admin operations & observability | ✅ Complete | #120-#124, #126-#130: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel, on-demand profiles, the rescreen run and its CronJob. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event and profiled within one background fetch ✅ (#127, decision 89); rescreen button ✅ (#128, decision 90; shown in kind); button and CronJob are one run ✅ (#129, decision 91; shown in kind). Checked live 2026-10-01 - see "M8 is complete, and how it was verified" |
 
@@ -1741,9 +1751,30 @@ failure they prevent.
     kind/agent. Added before any trade kind exists - the only moment it costs no backfill. A future
     kind is refused on the real portfolio until a migration argues otherwise.
 
+105. **Every route is behind a session unless a test's public list says otherwise** (#158). The
+    gate is `PROTECTED_PREFIXES` in `http/app.ts`, so a new route is **public by default** -
+    `/agents` was written and tested without being added, and only a re-read caught it. `app.test.ts`
+    now walks every route Hono registered and fails on any that answers without a session, outside
+    `/healthz`, `/readyz`, `/auth/*` and `/telegram/webhook`; shown failing on `/agents` (500)
+    before the prefix went in. Rejected: inverting the gate to protect-by-default in the same PR -
+    the right end state, but it changes every route's middleware order, and the test already makes
+    forgetting impossible to merge.
+
+106. **A user's own text takes the direction of what is typed** (#159). An agent's name and persona
+    can be in either script: their inputs are `dir="auto"` and a displayed name is isolated in
+    `<bdi>` - the topic-label rule (decision 98's FSI) applied to the web. Found in the Hebrew
+    preview: an English persona rendered ".Buys strength…" with its full stop on the wrong side.
+    The primary's name is never the stored English: `agentName()` renders it from the catalogue.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
+
+**The kind job's front door met the second after `rollout status` (#158, fixed there).**
+`rollout status` returns once a pod passes readiness; the Service's endpoint reaches the proxy a
+moment later, and a curl in that second gets a 502 through nginx (ready at :36, 502 at :37). A
+re-run would have passed by luck. **Lesson: a check that runs straight after a rollout must
+tolerate the settle** - the front-door curls now retry 10× at 2 s; a real outage still fails.
 
 **An approved spec was executed against a schema that had moved under it (multi-agent Stage 1,
 2026-10-04).** `PROPOSAL-MULTI-AGENT.md` was written at #40 and approved; by #150 three more per-user
@@ -2670,7 +2701,33 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 
 ## Where to go next
 
-### Next session: multi-agent Stage 2
+### Next session: multi-agent Stage 3
+
+**Stage 3 = the ledger: cash, fees, fills, approval and scoring, proven with manual trades** (D16,
+D17; spec §5 as amended by D3-D6), and **the consolidated holdings view** moved here by D17. Under the
+standing grant; each migration rehearsed on a live copy. The decided rules to build to: notional
+budgets (D2); fees 10 bps, $1.50 minimum, rounded up, both sides, `bigint` / `Decimal` (D6); USD
+only (D7); whole shares (D9); a fill uses a live quote at approval inside a server-computed ±50 bps
+range, within the TTL, with the exchange open, cash re-checked under a row lock in the same
+transaction, rejected never resized (D3); the TTL starts at the next market open and a static
+exchange calendar is part of this stage (D4); `manual_user_override` trades are excluded from
+scoring (§5.3); net worth = cash + market value, fees shown but never subtracted twice (D6); the
+consolidated view never sums real and simulated into one figure (§4.3), and a paused agent's
+holdings stay in it, badged (D18). **Measure first, then bring these open questions to the user
+before building:**
+1. **How a manual trade is entered** - a form on the agent page; at what price: the live quote
+   (the same path an approval will take - recommended) or a price the user types?
+2. **Cash and budget edits** - an `agent_cash` row from `budget_minor` at creation (recommended) or
+   at the first trade; once an agent has traded, is a budget change a recorded top-up (recommended)
+   or refused?
+3. **Undoing an approval whose fill is written** (spec §5.2 left it open) - refuse the undo once
+   filled (recommended: simplest, and the ledger never rewrites), or write a reversing fill?
+4. **The scoring benchmark** (§5.4) - which instrument (e.g. SPY), and is its price history already
+   held?
+5. **The exchange calendar's source** - a committed static file of NYSE holidays per year
+   (recommended, decision 1's stance) and who refreshes it.
+
+### Next session: multi-agent Stage 2 (history - done by #158-#159; the user's answers are D17-D20)
 
 **Stage 2 = agents exist, and decide nothing** (D16; spec §4 as amended). Under the standing grant,
 in PRs of the Stage 1 size, each migration rehearsed on a live copy (recipe in Local environment).
