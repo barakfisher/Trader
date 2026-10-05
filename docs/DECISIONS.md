@@ -117,3 +117,9 @@ while this file is out of date.
 | 104 | The passive primary is an allowlist in two places, not a denylist |
 | 105 | Every route is behind a session unless a test's public list says otherwise |
 | 106 | A user's own text takes the direction of what is typed |
+| 107 | The ledger's rules are the database's, and the app may only insert a fill |
+| 108 | The budget is the sum of deposits, always |
+| 109 | One fill path, previewed then confirmed |
+| 110 | The exchange calendar is a committed file from our own generator; an unknown exchange is never assumed American |
+| 111 | An agent's net worth and P&L are null when any holding is unpriced |
+| 112 | The real portfolio has no ledger - D1's fourth layer |
