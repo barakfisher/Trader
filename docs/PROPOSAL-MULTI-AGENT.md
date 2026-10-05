@@ -4,7 +4,7 @@
 this document are settled. What follows is the agreed design and its four-stage execution plan,
 written against the system as it exists at PR #40.
 
-**Amended 2026-10-04/05** (at PR #150): further decisions D1–D26 (§10), the schema as measured that day
+**Amended 2026-10-04/05** (at PR #150): further decisions D1–D30 (§10), the schema as measured that day
 (§11), the exact Stage 1 task list (§12), and Stage 3's measurements and task list (§13). Where §10
 and an earlier section disagree, §10 wins, and the earlier section carries a pointer to it.
 
@@ -629,6 +629,32 @@ approval buttons and D4's TTL arrive in Stage 4's first PR, with the agent that 
 *Rejected:* building them now against proposals only tests create — D17's reasoning: build against
 real rows.
 
+### Added 2026-10-05, building manual trades (Stage 3, PR 4)
+
+Asked and answered before the trade path was written. Each applies to Stage 4's approvals unchanged,
+because they run through the same function (`services/fills.ts`).
+
+**D27 — A trade is previewed, then confirmed; the confirm re-checks the live price against the one
+shown.** The preview computes price, fee, cash and holding after, and writes nothing. The confirm
+fetches the quote again and fills only within D3's ±50 bps of the price the preview showed;
+otherwise it is refused with the new price, and the user previews again. *Rejected:* filling at the
+previewed price — it may be minutes old by the confirm, and it would be a second path beside the one
+approvals take.
+
+**D28 — A live price may be at most 30 minutes old.** Yahoo's quotes run 15 minutes behind and the
+quote cache may add one cycle; a quote whose own `as_of` is older than 30 minutes, or that the
+provider marks stale, is refused ("try again or type a price"). The fill records the quote's time
+and delay. *Rejected:* bypassing the cache for every trade — always ~15 minutes behind, but a Yahoo
+request for every preview and confirm, and Yahoo rate-limits.
+
+**D29 — A typed price is warned about, never blocked.** When it is 5% or more from the last known
+price, the preview says by how much; the trade still fills, recorded as `price_source: 'user'`.
+*Rejected:* refusing beyond ±20% — it catches a typo, but it also blocks a genuine price exactly
+when the override is needed (a stale or missing quote).
+
+**D30 — A paused agent may be traded by hand; an archived one may not.** Pause stops the agent
+scanning and proposing (D18), not its owner managing the account. Archived is read-only history.
+
 ---
 
 ## 11. Measured, 2026-10-04 (read-only, live compose database)
@@ -805,11 +831,13 @@ a cash row on a primary agent — D1's fourth layer. `fees.ts` and `fees.py` (D6
 writes the cash row and opening deposit; budget edits follow D22. A test recomputes every balance
 from its movements.
 
-**PR 4 — Manual trades.** `POST /agents/:id/trades`: buy or sell, whole shares, at the live quote
-(the exchange open) or a typed price (D21). One fill function, the one Stage 4's approval will call:
-cash row locked, fee added, refused and never resized, no selling more than is held, holdings updated
-in the same transaction (average cost per unit on a buy; a sell to zero removes the row). Paused
-agents may still be traded by hand; archived agents may not.
+**PR 4 — Manual trades.** `POST /agents/:id/trades/preview` and `POST /agents/:id/trades`: buy or
+sell, whole shares, at the live quote (the exchange open, D28's age, D27's range against the price
+shown) or a typed price (D21, D29). One fill function, the one Stage 4's approval will call: cash
+row locked, fee added, refused and never resized, no selling more than is held, holdings updated in
+the same transaction (average cost per unit on a buy; a sell to zero removes the row), one fill per
+idempotency key. Paused agents may still be traded by hand; archived agents may not (D30).
+`GET /agents/:id/fills` lists the ledger for PR 5's Activity tab.
 
 **PR 5 — The agent page.** The trade form (quote, its time and delay, fee, cash after), the
 *Holdings* tab from real rows, the *Activity* tab as the ledger, the top-up control; English and

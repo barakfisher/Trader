@@ -99,3 +99,22 @@ export async function setInstrumentName(instrumentId: string, name: string): Pro
   );
   return rows.length > 0;
 }
+
+export interface TradableInstrumentRow extends InstrumentRow {
+  /** `instrument_profiles.membership`, or null when the universe does not hold it. */
+  membership: 'screened' | 'on_demand' | 'dropped' | null;
+}
+
+/**
+ * An instrument by symbol with its universe membership - what a trade checks
+ * before anything else (D7, D8): only the universe is tradable, and only in USD.
+ */
+export function findTradableInstrument(symbol: string): Promise<TradableInstrumentRow | null> {
+  return queryOne<TradableInstrumentRow>(
+    `SELECT i.id, i.symbol, i.name, i.asset_class, i.exchange, i.currency, p.membership
+       FROM instruments i
+       LEFT JOIN instrument_profiles p ON p.instrument_id = i.id
+      WHERE i.symbol = $1`,
+    [symbol.trim().toUpperCase()],
+  );
+}
