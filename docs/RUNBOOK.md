@@ -173,5 +173,12 @@ ORDER BY p.created_at DESC LIMIT 20;
 | Why did a run fail? | `docker logs traders-orchestrator-1` | `kubectl ... logs job/<job>` (the orchestrator's answer), `kubectl ... logs deploy/orchestrator` |
 | Are prices real and fresh? | the dashboard's price age, per holding | the same, at http://traders.localhost |
 | Is the corpus in step with the files? | `cd services/ai && .venv/bin/python scripts/ingest_corpus.py --dry-run` | `kubectl ... logs job/corpus` after a deploy |
+| Does the exchange calendar cover the next 90 days? | `cd services/ai && .venv/bin/python scripts/generate_exchange_calendar.py --check`; the test `test_calendar_covers_the_next_90_days` fails first | the same file is in the image |
+
+**Extending the exchange calendar** (once a year, when that test fails): `cd services/ai &&
+PYTHONPATH=. .venv/bin/python scripts/generate_exchange_calendar.py --last-year <year + 1>`, compare
+the new year's dates with [NYSE's published list](https://www.nyse.com/markets/hours-calendars),
+commit the diff. A closure no rule predicts (a national day of mourning) is added to
+`data/calendar/xnys.json` by hand with `"source": "manual"`; regeneration keeps it.
 
 More on the cluster: [infra/k8s/README.md](../infra/k8s/README.md).

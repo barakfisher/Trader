@@ -151,6 +151,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/market/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Market Calendar
+         * @description Is `exchange` open now, and when does it next open - holidays included.
+         *
+         *     422 for an exchange with no calendar: only the US exchanges have one, and a
+         *     trade on a guessed calendar is a wrong fill. 503 when the calendar cannot
+         *     answer (the file missing, or `now` past the years it covers) - never a guess.
+         */
+        get: operations["market_calendar_market_calendar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/market/fx": {
         parameters: {
             query?: never;
@@ -843,6 +867,53 @@ export interface components {
             explanation: string;
             /** Headline */
             headline: string;
+        };
+        /**
+         * MarketCalendarStatus
+         * @description Whether an instrument's exchange is open now, and when it next opens (D25).
+         *
+         *     Read from the committed exchange calendar, holidays and early closes
+         *     included. The orchestrator asks before a fill at the live quote (D21) rather
+         *     than keeping a second copy of the calendar.
+         */
+        MarketCalendarStatus: {
+            /**
+             * As Of
+             * Format: date-time
+             * @description The instant the answer describes.
+             */
+            as_of: string;
+            /**
+             * Calendar
+             * @description The calendar's ISO 10383 code, e.g. 'XNYS'.
+             */
+            calendar: string;
+            /**
+             * Covered Until
+             * Format: date
+             * @description The last day the committed calendar covers.
+             */
+            covered_until: string;
+            /**
+             * Early Close
+             * @description Whether the current session closes early.
+             */
+            early_close: boolean;
+            /** Exchange */
+            exchange: string;
+            /** Is Open */
+            is_open: boolean;
+            /**
+             * Next Open
+             * Format: date-time
+             * @description The next session's opening strictly after `as_of` - tomorrow's while open, so a TTL start is `as_of` when open and this otherwise (D4).
+             */
+            next_open: string;
+            /**
+             * Session Closes At
+             * @description When the current session closes; null while closed.
+             */
+            session_closes_at: string | null;
         };
         /**
          * NarrationConfigResponse
@@ -1793,6 +1864,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    market_calendar_market_calendar_get: {
+        parameters: {
+            query: {
+                /** @description Exchange name or code */
+                exchange: string;
+            };
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarketCalendarStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

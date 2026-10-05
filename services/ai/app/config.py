@@ -23,6 +23,7 @@ _CONTAINER_FIXTURES_DIR = "/app/data/fixtures"
 #: Where the container copies the concept corpus to (same Dockerfile).
 _CONTAINER_CORPUS_DIR = "/app/data/corpus"
 _CONTAINER_OUTLETS_DIR = "/app/data/outlets"
+_CONTAINER_CALENDAR_DIR = "/app/data/calendar"
 
 
 def _default_fixtures_dir() -> str:
@@ -67,6 +68,19 @@ def _default_outlets_dir() -> str:
     except IndexError:  # pragma: no cover - only when the path is unusually short
         return _CONTAINER_OUTLETS_DIR
     return str(checkout) if checkout.is_dir() else _CONTAINER_OUTLETS_DIR
+
+
+def _default_calendar_dir() -> str:
+    """Locate `data/calendar`, in both places this service runs, as the outlets are.
+
+    Guessing wrong is loud: the calendar endpoint answers 503 rather than
+    calling every weekday a trading day.
+    """
+    try:
+        checkout = Path(__file__).resolve().parents[3] / "data" / "calendar"
+    except IndexError:  # pragma: no cover - only when the path is unusually short
+        return _CONTAINER_CALENDAR_DIR
+    return str(checkout) if checkout.is_dir() else _CONTAINER_CALENDAR_DIR
 
 
 #: Placeholder shipped in .env.example. Usable in development because both
@@ -187,6 +201,7 @@ class Settings(BaseSettings):
     # Absolute path to the outlet-country table (`data/outlets`, decision 61).
     # Resolved for the current runtime; OUTLETS_DIR in the environment always wins.
     outlets_dir: str = Field(default_factory=_default_outlets_dir)
+    calendar_dir: str = Field(default_factory=_default_calendar_dir)
 
     # Which embedder turns corpus text into vectors. One gateway module
     # (app/corpus/embedder_factory.py) reads this; no call site names a

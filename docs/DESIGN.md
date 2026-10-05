@@ -109,6 +109,11 @@ resolved in `America/New_York`, not a fixed UTC window, because the session shif
 a year and a stale window silently serves hour-old prices through the last hour of a winter trading
 day. Public holidays are deliberately ignored: the cost is a handful of extra requests roughly ten
 days a year, against a calendar that is either a dependency or a table that rots.
+A fill is different - a closed Thanksgiving read as an open Thursday fills at a price nobody could
+trade at - so trades ask the **exchange calendar** instead (`app/core/exchange_calendar.py`,
+decision D25 of `PROPOSAL-MULTI-AGENT.md`): a committed `data/calendar/xnys.json` written from
+NYSE's rules by `scripts/generate_exchange_calendar.py`, with a test that fails 90 days before it
+runs out. The cache keeps ignoring holidays; only the trading path pays for knowing them.
 
 **Quota accounting**: the rate limiter is charged what a call actually costs - `len(symbols)` for a
 provider that issues one request per symbol, 1 for one with a multi-symbol endpoint
