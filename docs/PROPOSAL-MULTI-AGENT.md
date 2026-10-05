@@ -475,6 +475,8 @@ proposal therefore follows the same path as a rebalance: row, `applyDecision`, s
 a first-class approval path (§5.2); Telegram arrives by long-polling, and nothing depends on the
 transport. Retiring Mastra is its own PR, outside Stage 1: remove the workflow and the dependency,
 keep the direct path, drop the `mastra` schema in a later migration once no suspended run remains.
+**Done 2026-10-05** in one PR with migration 0039: no run was suspended on either installation (17
+`success` on compose, none on kind), so the schema went in the same change.
 
 **D12 — Per-agent LLM budget: $0.25 a day by default, in integer micro-USD,** below the existing
 global `LLM_DAILY_BUDGET_USD` ($5), which stays as the ceiling over all agents. Derived in §11. A

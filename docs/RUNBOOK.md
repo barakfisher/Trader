@@ -145,16 +145,14 @@ missing - the `stats` column says what), `skipped` (nothing to do, with a reason
 
 ## 3. Recover a stuck proposal
 
-A proposal is a question with a deadline; its row in `proposals` is the source of truth, and a
-durable workflow (`proposalLifecycle`, Mastra) waits on it. The design makes most "stuck" states
-impossible, so start by telling which one you are looking at:
+A proposal is a question with a deadline, and its row in `proposals` is the whole of it: the web
+and Telegram both answer it through `applyDecision`, and the `proposal_sweep` run records expiries.
+(A Mastra workflow used to wait beside it; it was retired in migration 0039.) Start by telling
+which state you are looking at:
 
 ```sql
-SELECT p.id, p.state, p.expires_at, p.decided_at, p.decided_via,
-       s.snapshot->>'status' AS workflow
+SELECT p.id, p.state, p.expires_at, p.decided_at, p.decided_via
 FROM proposals p
-LEFT JOIN mastra.mastra_workflow_snapshot s
-       ON s.workflow_name = 'proposalLifecycle' AND s.run_id = p.observation_id::text
 ORDER BY p.created_at DESC LIMIT 20;
 ```
 
@@ -162,27 +160,7 @@ ORDER BY p.created_at DESC LIMIT 20;
 |---|---|---|
 | `pending`, `expires_at` in the past | the sweep has not recorded the expiry yet | nothing: expiry is computed on every read, so it already cannot be approved. If it persists, check the sweep runs (section 2, kind `proposal_sweep`) |
 | `pending`, deadline ahead, no Telegram message | it was raised, but the notification did not reach the chat | answer it in the app (**Proposals**); check `SELECT * FROM notifications ORDER BY created_at DESC LIMIT 5` for the delivery's status |
-| a decision in the app did not "take" | a resume of the workflow failed | nothing: a failed resume falls back to writing the decision directly (`proposalLifecycle.ts`), and deciding again answers `unchanged` rather than writing twice |
-| `approved`/`rejected`/`expired`, workflow `suspended` | the decision is recorded; only the waiting workflow was not closed yet | nothing: the next `proposal_sweep` (every 15 minutes) closes it and counts it in `stats.closed`. If one survives several sweeps, see below |
-
-**Closing a leftover workflow.** The sweep closes the workflows of proposals it expires, and -
-since independent task 14 - any left `suspended` beside an already-*decided* proposal (what a
-failed resume leaves behind), by resuming it with `refresh`. One that survives several sweeps is
-failing to resume: the sweep logs `proposal.lifecycle_close_failed` for it. It occupies one row in
-`mastra.mastra_workflow_snapshot` and affects nothing else. To remove such rows by hand - a deletion, so take a backup first (`docker exec traders-postgres-1 pg_dump -U traders
-traders > backup.sql`) - delete only those whose proposal is terminal:
-
-```sql
-DELETE FROM mastra.mastra_workflow_snapshot s
-USING proposals p
-WHERE s.workflow_name = 'proposalLifecycle'
-  AND s.run_id = p.observation_id::text
-  AND s.snapshot->>'status' = 'suspended'
-  AND p.state IN ('approved', 'rejected', 'expired');
-```
-
-Never delete a row whose proposal is still `pending` or `snoozed`: that workflow is the one
-waiting for the answer.
+| a decision did not "take" | the request failed before the transition was written | decide again: a transition is conditional on the state that was read, so a repeat answers `unchanged` rather than writing twice |
 
 ---
 

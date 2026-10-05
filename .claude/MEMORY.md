@@ -19,7 +19,8 @@ spec's earlier sections where they disagree. The ones that change what gets buil
   transcript stored as the decision log).
 - **D1: "Main portfolio" (the primary agent, the real imported portfolio) is passive** - never a
   trade proposal; `rebalance` (an acknowledgement) stays. Three layers now enforce it (#155).
-- **D11: Mastra is to be retired** (reverses decision 11; its own PR, not started); **D10: Stage 4
+- **D11: Mastra is retired** (reverses decision 11; done 2026-10-05, migration 0039 - the
+  `proposals` row, `applyDecision` and `proposal_sweep` are the whole lifecycle); **D10: Stage 4
   builds one scan both as a hand-written loop and as core-only LangGraph, keeps the smaller; no
   checkpointer either way.**
 - The user is learning; when they ask in Hebrew, explain in Hebrew, from first principles.
@@ -554,7 +555,9 @@ failure they prevent.
 10. **Cost basis is stored per unit, not as a position total.** Editing quantity would otherwise
     leave a total nobody paid, and the system could not tell a correction from a purchase.
 
-11. **Mastra is adopted for `proposalLifecycle` only** — and this **diverges from MILESTONES.md
+11. **Mastra is adopted for `proposalLifecycle` only** (**retired 2026-10-05, decision D11 /
+    migration 0039**: every entry point already fell back to the direct path, and nothing it ran
+    after a resume was needed; kept here for the reasoning) — and this **diverges from MILESTONES.md
     M4**, which lists four workflows (`portfolioScan`, `topicScan`, `dailyDigest`,
     `proposalLifecycle`). The scheduling half already works: run kinds, run keys, the half-hour
     bucket and the claim in the `runs` table. Porting it would buy a different spelling of the
@@ -2348,7 +2351,7 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 
 | Item | Where | Impact |
 |---|---|---|
-| **Mastra is decided-retired but still runs** | `apps/orchestrator/src/mastra/`, migration 0008 | D11 (the user, 2026-10-04): waiting for a decision is the `proposals` row plus `proposal_sweep`, which already handle it whenever Mastra is absent. Its own PR, outside the stages: remove the workflow and dependency, keep the direct path, drop the `mastra` schema in a later migration once no suspended run remains. Until then every cost in decision 11's row stands |
+| ~~Mastra is decided-retired but still runs~~ | — | **Resolved 2026-10-05**: Mastra retired (D11), schema dropped in 0039; `test/mastraSchemaOwnership.test.ts` went with it |
 | **The primary's stored name is English** | `agents.name` = 'Main portfolio' (0036 trigger) | It is data, but it is the one agent name the product chose rather than the user. Stage 2's UI must render the primary through the i18n catalogue (`is_primary` → `t('agents.primary')`), never the stored string, or a Hebrew reader sees English |
 | **The inbox, the digest, notifications and the run history are user-wide** | `-- agent-blind` reads in `queries/` (decision 103) | Correct while only the primary exists. When Stage 2 adds simulated agents, each entry must carry its agent's name and the simulation label (P2 amendment), and `GET /runs` filtered to an agent must leave out the agent-blind kinds (§3.3c) |
 | **`llm_calls.agent` means the calling component** | `llm_calls` (0029) | `narration` / `ask`. Stage 4 adds per-agent spend: rename it `purpose` first, or every query touching both will confuse them (§11) |
@@ -2367,7 +2370,7 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 | **The integration suite changes a cluster-wide role's password** | `tests/integration/test_admin_audit_sql.py` | `as_app` sets `traders_app`'s password to a test value, and a role belongs to the whole Postgres server. Harmless in CI (its own server); against a server that also hosts a running stack, the services lose their login until `migrate` runs. A fix: create a per-run role for the test (`traders_app_test_<random>`, granted like `traders_app`) instead of borrowing the real one |
 | **Telegram's inbound delivery is unproven** | deployment | Still true after M7, deliberately: the cluster runs with Telegram off (decision 79). **The user decided (2026-09-30) to prove the webhook in a real cloud deployment with HTTPS**, not through a tunnel from the laptop; `setWebhook` on the real bot stops the compose stack's polling, so it waits for that deployment. Everything else was exercised against a real bot, but `setWebhook` needs a public HTTPS URL. The handler has only ever been driven by replaying genuine payloads at it locally. **The first real deployment is the first real test of that leg** — check `getWebhookInfo` for `last_error_message` immediately after |
 | ~~`queries.ts` conflicts on every parallel PR~~ | — | **Resolved** (independent task 15, decided by the user 2026-10-01): 21 modules under `src/db/queries/`, one per concept, and `queries.ts` is an index of `export *` lines, so no call site and no `vi.mock('../src/db/queries.js')` changed. A pure move, checked as one: every non-blank, non-import line of the old file appears in the new ones exactly as often (bar `export` prefixes and the section banners the file names replaced). One private helper, `LIVE_TOPIC`, is exported now because topics and topic proposals share it. CLAUDE.md's rule reads "all SQL lives under `src/db/queries/`". **A new module needs its `export *` line in the index** - typecheck catches a caller of a function that is not re-exported, but not a module nobody calls yet |
-| **Migration 0008 hard-codes a table Mastra owns** | `0008_mastra_workflow_state.py` | The library would create `mastra_workflow_snapshot` itself; Alembic creates it instead (`disableInit: true`), because CLAUDE.md says the AI service owns the schema. An upgrade that changes the shape breaks suspended runs — so `test/mastraSchemaOwnership.test.ts` compares the migration against `WorkflowsPG.getExportDDL()` and fails the build first. Two other things cost time to find: `PostgresStore` creates **43** tables for 24 storage domains unless you route only `workflows`, and `@mastra/core` posts feature-usage telemetry to PostHog unless `MASTRA_TELEMETRY_DISABLED` is set (it is, in `workflowRuntime.ts`, in code rather than `.env`) |
+| ~~Migration 0008 hard-codes a table Mastra owns~~ | — | **Resolved 2026-10-05**: Mastra retired (D11), schema dropped in 0039; `test/mastraSchemaOwnership.test.ts` went with it |
 | ~~Concept chips point nowhere~~ | — | **Resolved in M3 slice 1.** Kept as a line rather than deleted because it stood here from M2 to M4 and its absence would otherwise read as an oversight |
 | ~~Retrieval is exact-match only~~ | — | **Resolved in M3 slice 2.** Hybrid retrieval exists and `GET /concepts/search` serves it. What is still missing is the *answer*: there is no `/ask`, no intent routing, no citations and no relevance floor, so a nonsense query still returns the three least-bad chunks rather than a refusal. That is slice 3 |
 | ~~No test executes a line of retrieval SQL~~ | — | **Resolved** (independent task 4): the `postgres (integration)` CI job - see "Orientation". It found a real bug on its first run: 0019's upgrade could not follow its own downgrade (below) |
@@ -2682,8 +2685,7 @@ building:** how a simulated agent gets holdings in Stage 2 at all (it cannot tra
 an empty agent, or manual entry recorded as `manual_user_override`?); whether a paused agent's
 holdings show in the consolidated view; and where agent management lives in the UI.
 
-Also available, outside the stages: **retiring Mastra** (D11, debt table) - small, and removes the
-library that caused #150.
+Mastra was retired after this handoff, at the user's request (D11, migration 0039).
 
 ### Next session: after Hebrew server text (history - the user chose the multi-agent sandbox, 2026-10-04)
 

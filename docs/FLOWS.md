@@ -36,7 +36,7 @@ merge-or-replace rather than duplicating holdings.
 ```mermaid
 sequenceDiagram
   participant T as Trigger (cron / K8s CronJob)
-  participant O as Orchestrator (Mastra)
+  participant O as Orchestrator
   participant A as ai-service
   participant DB as Postgres
   participant N as Notifier

@@ -82,6 +82,11 @@ export class PrimaryAgentIsPassiveError extends Error {
   }
 }
 
+/** Would this finding become a question at all? The same two predicates `raiseProposals` applies. */
+export function mayRaiseProposal(finding: { kind: string; severity: string }, severityFloor: string): boolean {
+  return isProposableKind(finding.kind) && meetsSeverity(finding.severity, severityFloor);
+}
+
 export function meetsSeverity(severity: string, floor: string): boolean {
   const rank = SEVERITY_RANK[severity];
   const floorRank = SEVERITY_RANK[floor];
@@ -107,9 +112,8 @@ export interface FindingForProposal {
  * Returns the number actually created, which is less than the number selected
  * whenever a previous run already raised one - see `createProposals` for why
  * that suppression defers to the observation layer's `dedupe_key` rather than
- * inventing a second identity scheme. The ids come back too, because a proposal
- * is now something a workflow run waits on and the caller has to be able to
- * name the one it just raised.
+ * inventing a second identity scheme. The ids come back too, because an alert
+ * puts Approve/Reject on the proposal it raised, and has to be able to name it.
  */
 export async function raiseProposals(
   userId: string,
@@ -300,9 +304,8 @@ export interface ExpiredProposal {
  * stored state, and an audit trail that says when each proposal died rather
  * than leaving the reader to infer it from a timestamp.
  *
- * What was expired is returned rather than counted, because something else is
- * now waiting on these: a suspended workflow run per proposal, which has to be
- * told that the question it is holding open is over.
+ * What was expired is returned rather than counted, so a caller can say which
+ * questions closed; the sweep run records the count.
  */
 export async function sweepExpiredProposals(now: Date = new Date()): Promise<ExpiredProposal[]> {
   const due = await listProposalsToExpire();

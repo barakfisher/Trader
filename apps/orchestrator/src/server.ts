@@ -2,9 +2,8 @@
  * Orchestrator entrypoint.
  *
  * Milestone 1: REST API, valuation, import and the daily snapshot timer.
- * Milestone 4 adds the proposal state machine, the Mastra workflow that waits
- * on it (see src/mastra/README.md), and the Telegram bot - whose updates are
- * long-polled here until a webhook URL exists.
+ * Milestone 4 adds the proposal state machine and the Telegram bot - whose
+ * updates are long-polled here until a webhook URL exists.
  */
 
 import { serve } from '@hono/node-server';
@@ -15,8 +14,6 @@ import { loadConfig } from './config.js';
 import { closePool, initPool } from './db/pool.js';
 import { createApp } from './http/app.js';
 import { initLogger, logger } from './logger.js';
-import { PROPOSAL_LIFECYCLE_ID, proposalLifecycle } from './mastra/proposalLifecycle.js';
-import { closeWorkflowRuntime, initWorkflowRuntime } from './mastra/workflowRuntime.js';
 import { buildNotifier } from './notify/factory.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
 import { TelegramNotifier } from './telegram/client.js';
@@ -32,10 +29,6 @@ function main(): void {
   );
 
   initPool(config.DATABASE_URL);
-  // After the pool, because the workflow store borrows it rather than opening
-  // connections of its own.
-  initWorkflowRuntime({ workflows: { [PROPOSAL_LIFECYCLE_ID]: proposalLifecycle } });
-
   const ai = new AiClient({
     baseUrl: config.AI_SERVICE_URL,
     internalApiKey: config.INTERNAL_API_KEY,
@@ -67,7 +60,6 @@ function main(): void {
     stopScheduler();
     poller?.stop();
     server.close(async () => {
-      await closeWorkflowRuntime();
       await closePool();
       process.exit(0);
     });

@@ -92,7 +92,7 @@ flowchart LR
     telegram([Telegram]) <-.-> orchestrator
     subgraph app [Traders]
         web["web<br/>nginx: the built app,<br/>/api/* forwarded"] --> orchestrator
-        orchestrator["orchestrator<br/>Node/TS, Hono, Mastra<br/>sessions, holdings, import, valuation,<br/>runs, proposals, notifications"] -->|REST, typed client| ai
+        orchestrator["orchestrator<br/>Node/TS, Hono<br/>sessions, holdings, import, valuation,<br/>runs, proposals, notifications"] -->|REST, typed client| ai
         ai["ai-service<br/>Python, FastAPI<br/>market data, analysis, narration,<br/>retrieval, news, topics"]
         scheduler["scheduled runs<br/>in-process timer, or<br/>Kubernetes CronJobs"] -->|POST /internal/runs| orchestrator
         orchestrator --> pg[("Postgres + pgvector<br/>schema owned by Alembic")]
@@ -120,7 +120,7 @@ flowchart LR
 
 ```
 apps/web            React + MobX + Tailwind dashboard (Vite)
-apps/orchestrator   REST API, valuation, import, runs, proposals (Mastra), Telegram
+apps/orchestrator   REST API, valuation, import, runs, proposals, Telegram
 packages/shared     Shared types, money helpers, generated AI-service client
 services/ai         FastAPI service: market data, analysis, narration, RAG, news, topics;
                     owns the database schema (Alembic)

@@ -24,7 +24,6 @@ import {
   listRuns,
   primaryAgentId,
 } from '../../db/queries.js';
-import { sweepAndCloseLifecycles } from '../../mastra/proposalLifecycle.js';
 import { backfillInstrumentNames } from '../../services/instrumentMetadata.js';
 import { runPortfolioScan } from '../../services/portfolioScan.js';
 import { marketRetentionDays, runTopicDiscovery } from '../../services/topicDiscovery.js';
@@ -241,16 +240,14 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
         // everybody, and a sweep that only expired the triggering user's
         // proposals would leave every other account's inbox stale for as long
         // as that account stayed quiet.
-        // The sweep also ends the workflow runs suspended on what it expired;
-        // a deadline nobody is told about leaves a run waiting forever.
-        const { expired, closed } = await sweepAndCloseLifecycles();
-        await finishRun(runId, 'ok', { expired, closed });
+        const expired = (await sweepExpiredProposals()).length;
+        await finishRun(runId, 'ok', { expired });
         return context.json({
           kind: parsed.data.kind,
           runKey,
           runId,
           status: 'ok',
-          result: { expired, closed },
+          result: { expired },
         });
       }
 
