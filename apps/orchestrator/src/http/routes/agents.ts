@@ -117,7 +117,7 @@ function isNameTaken(error: unknown): boolean {
 }
 
 /** An id that is not a uuid names no agent; asked of Postgres it would be an error, not a 404. */
-function agentIdFrom(raw: string): string {
+export function agentIdFrom(raw: string): string {
   if (!z.string().uuid().safeParse(raw).success) throw notFound('agent not found');
   return raw;
 }

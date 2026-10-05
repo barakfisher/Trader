@@ -101,6 +101,88 @@ export interface AgentsResponse {
   agents: AgentView[];
 }
 
+export type TradeSide = 'buy' | 'sell';
+
+/**
+ * A trade the user places by hand into a simulated agent's account (D21).
+ *
+ * `quantity` is a whole number of shares as a decimal string (guideline 4, D9).
+ * Without `price` the trade fills at the live quote; with it, at that typed
+ * price, flagged. `shownPriceMinor` is the live price the preview showed, which
+ * the fill must stay within D3's range of; `idempotencyKey` makes a repeated
+ * submit one fill.
+ */
+export interface TradeInput {
+  symbol: string;
+  side: TradeSide;
+  quantity: string;
+  /** A typed price in dollars, at most two decimals - the override of D21. */
+  price?: string;
+  shownPriceMinor?: number;
+  idempotencyKey?: string;
+}
+
+/** Something the user should see before confirming, which does not block the trade. */
+export interface TradeWarning {
+  kind: 'typed_price_far_from_quote';
+  /** Signed distance of the typed price from the reference, in basis points. */
+  deviationBps: number;
+  referencePriceMinor: number;
+  referenceAsOf: string;
+}
+
+/** What a trade would do, computed exactly as the fill would be. Nothing is written. */
+export interface TradePreview {
+  symbol: string;
+  name: string | null;
+  side: TradeSide;
+  quantity: string;
+  priceSource: 'quote' | 'user';
+  priceMinor: number;
+  /** When the quote was observed, and its provider delay; null for a typed price. */
+  quoteAsOf: string | null;
+  quoteDelaySeconds: number | null;
+  notionalMinor: number;
+  feeMinor: number;
+  /** The signed change to cash: negative on a buy. */
+  cashChangeMinor: number;
+  cashMinor: number;
+  cashAfterMinor: number;
+  heldQuantity: string;
+  heldAfterQuantity: string;
+  currency: string;
+  warnings: TradeWarning[];
+}
+
+/** One recorded trade, as the ledger holds it. */
+export interface FillView {
+  id: string;
+  symbol: string;
+  side: TradeSide;
+  quantity: string;
+  priceMinor: number;
+  notionalMinor: number;
+  feeMinor: number;
+  currency: string;
+  priceSource: 'quote' | 'user';
+  quoteAsOf: string | null;
+  quoteDelaySeconds: number | null;
+  source: 'manual_user_override' | 'agent';
+  createdAt: string;
+}
+
+export interface TradeResult {
+  fill: FillView;
+  /** False when this idempotency key had already filled: the same fill, returned again. */
+  created: boolean;
+  cashMinor: number;
+  heldQuantity: string;
+}
+
+export interface FillsResponse {
+  fills: FillView[];
+}
+
 /** A new simulated agent. `budget` is a decimal string, like every amount a user types. */
 export interface AgentInput {
   name: string;

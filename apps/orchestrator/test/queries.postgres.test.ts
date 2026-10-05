@@ -503,6 +503,79 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('a fill and its holding (0040), rolled back', () => {
+    it('writes a fill under the cash lock, moves cash and the holding, and reads it back by key', async () => {
+      const pool = getPool();
+      const instrument = (
+        await pool.query(
+          `INSERT INTO instruments (symbol, asset_class) VALUES ($1, 'equity') RETURNING id`,
+          [`FILL${randomUUID().slice(0, 8)}`.toUpperCase()],
+        )
+      ).rows[0].id as string;
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const simulated = (
+          await client.query(
+            `INSERT INTO agents (user_id, slug, name, budget_minor)
+             VALUES ($1, 'fill-test', 'Fill test', 100000) RETURNING id`,
+            [USER],
+          )
+        ).rows[0].id as string;
+        expect(await queries.lockAgentCash(client, USER, simulated)).toBe(100000n);
+        expect(await queries.lockAgentHolding(client, USER, simulated, instrument)).toBeNull();
+        await queries.insertFill(client, {
+          userId: USER,
+          agentId: simulated,
+          instrumentId: instrument,
+          side: 'buy',
+          quantity: 3n,
+          priceMinor: 20000n,
+          notionalMinor: 60000n,
+          feeMinor: 150n,
+          priceSource: 'quote',
+          quoteAsOf: new Date().toISOString(),
+          quoteDelaySeconds: 900,
+          source: 'manual_user_override',
+          proposalId: null,
+          idempotencyKey: 'pg-key',
+        });
+        await queries.setAgentHolding(client, {
+          userId: USER,
+          agentId: simulated,
+          instrumentId: instrument,
+          quantity: 3n,
+          costBasisMinor: 20000n,
+          openedAt: '2026-10-05',
+        });
+        expect(await queries.lockAgentCash(client, USER, simulated)).toBe(100000n - 60150n);
+        expect(await queries.lockAgentHolding(client, USER, simulated, instrument)).toMatchObject({
+          quantity: '3.000000000000000000',
+          cost_basis_minor: '20000',
+        });
+        expect(await queries.findFillByKey(USER, simulated, 'pg-key', client)).toMatchObject({
+          side: 'buy',
+          price_minor: '20000',
+          price_source: 'quote',
+          source: 'manual_user_override',
+        });
+        await queries.setAgentHolding(client, {
+          userId: USER,
+          agentId: simulated,
+          instrumentId: instrument,
+          quantity: 0n,
+          costBasisMinor: 20000n,
+          openedAt: '2026-10-05',
+        });
+        expect(await queries.lockAgentHolding(client, USER, simulated, instrument)).toBeNull();
+      } finally {
+        await client.query('ROLLBACK');
+        client.release();
+        await pool.query('DELETE FROM instruments WHERE id = $1', [instrument]);
+      }
+    });
+  });
+
   describe('per-agent run keys (0037)', () => {
     it('lets two agents claim one key, and one agent claim it once', async () => {
       const pool = getPool();

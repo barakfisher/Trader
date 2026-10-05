@@ -37,6 +37,7 @@ import { registerProposalsRoutes } from './routes/proposals.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerTelegramRoutes } from '../telegram/webhook.js';
 import { registerTargetsRoutes } from './routes/targets.js';
+import { registerTradesRoutes } from './routes/trades.js';
 import { registerTopicsRoutes } from './routes/topics.js';
 
 export interface AppEnv {
@@ -228,6 +229,7 @@ export function createApp(
   registerPortfolioRoutes(app);
   registerHoldingsRoutes(app);
   registerAgentsRoutes(app);
+  registerTradesRoutes(app);
   registerTargetsRoutes(app);
   registerProposalsRoutes(app);
   registerNotificationsRoutes(app);
