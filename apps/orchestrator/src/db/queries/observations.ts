@@ -94,7 +94,7 @@ export async function insertObservations(
        (user_id, agent_id, run_id, kind, severity, subject_kind, subject_ref, headline, explanation,
         evidence, concept_refs, dedupe_key, narration_source, fallback_reason, localized)
      VALUES ${values.join(', ')}
-     ON CONFLICT (dedupe_key) DO NOTHING
+     ON CONFLICT (agent_id, dedupe_key) DO NOTHING
      RETURNING id, kind, severity, subject_ref, evidence, headline, explanation, localized`,
     params,
   );

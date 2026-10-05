@@ -123,27 +123,46 @@ def test_a_holding_cannot_name_another_users_agent(connection: Connection) -> No
     assert "holdings_agent_fkey" in refusal
 
 
-def test_two_agents_may_hold_the_same_instrument_by_the_new_index_alone(
-    connection: Connection,
-) -> None:
-    """The per-agent index admits it; only the per-user constraint, dropped in 0037, refuses."""
-    simulated = connection.execute(
+def _simulated(connection: Connection) -> str:
+    return connection.execute(
         text(
             "INSERT INTO agents (user_id, slug, name, budget_minor) "
             "VALUES (CAST(:user AS uuid), 'sim', 'Sim', 100000) RETURNING id"
         ),
         {"user": SEED_USER},
     ).scalar_one()
+
+
+def test_two_agents_may_hold_the_same_instrument_but_one_agent_holds_it_once(
+    connection: Connection,
+) -> None:
+    """0037: the per-user constraint is gone; the per-agent index is the rule."""
+    primary, simulated = _primary(connection, SEED_USER), _simulated(connection)
     insert = (
         "INSERT INTO holdings (user_id, agent_id, instrument_id, quantity) "
         "VALUES (CAST(:user AS uuid), CAST(:agent AS uuid), CAST(:instrument AS uuid), '1')"
     )
-    connection.execute(
-        text(insert),
-        {"user": SEED_USER, "agent": _primary(connection, SEED_USER), "instrument": INSTRUMENT},
+    for agent in (primary, simulated):
+        connection.execute(
+            text(insert), {"user": SEED_USER, "agent": agent, "instrument": INSTRUMENT}
+        )
+    refusal = _refused(connection, insert, user=SEED_USER, agent=primary, instrument=INSTRUMENT)
+    assert "holdings_agent_instrument_key" in refusal
+
+
+def test_two_agents_may_notice_the_same_finding_under_one_dedupe_key(
+    connection: Connection,
+) -> None:
+    """Decision D13: the hash is unchanged, and uniqueness is per agent."""
+    primary, simulated = _primary(connection, SEED_USER), _simulated(connection)
+    insert = (
+        "INSERT INTO observations (user_id, agent_id, kind, headline, dedupe_key) "
+        "VALUES (CAST(:user AS uuid), CAST(:agent AS uuid), 'price_move', 'h', 'agents-test-key')"
     )
-    refusal = _refused(connection, insert, user=SEED_USER, agent=simulated, instrument=INSTRUMENT)
-    assert "holdings_user_id_instrument_id_key" in refusal
+    for agent in (primary, simulated):
+        connection.execute(text(insert), {"user": SEED_USER, "agent": agent})
+    refusal = _refused(connection, insert, user=SEED_USER, agent=simulated)
+    assert "observations_agent_dedupe_key" in refusal
 
 
 def test_a_run_carries_an_agent_exactly_when_it_carries_a_user(connection: Connection) -> None:

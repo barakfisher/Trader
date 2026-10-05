@@ -38,7 +38,7 @@ export async function claimEpisode(episode: {
     `INSERT INTO proposal_episodes
             (user_id, agent_id, observation_kind, subject_ref, observation_id, asked_magnitude)
      VALUES ($1, (SELECT agent_id FROM observations WHERE id = $4::uuid), $2, $3, $4::uuid, $5::numeric)
-     ON CONFLICT (user_id, observation_kind, subject_ref) WHERE closed_at IS NULL DO NOTHING
+     ON CONFLICT (agent_id, observation_kind, subject_ref) WHERE closed_at IS NULL DO NOTHING
      RETURNING id`,
     [
       episode.userId,

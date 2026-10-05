@@ -70,7 +70,7 @@ export function upsertHolding(
   const sql = `
     INSERT INTO holdings (user_id, agent_id, instrument_id, quantity, cost_basis_minor, currency, opened_at, notes)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    ON CONFLICT (user_id, instrument_id) DO UPDATE SET
+    ON CONFLICT (agent_id, instrument_id) DO UPDATE SET
       quantity         = EXCLUDED.quantity,
       cost_basis_minor = COALESCE(EXCLUDED.cost_basis_minor, holdings.cost_basis_minor),
       currency         = EXCLUDED.currency,
