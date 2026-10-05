@@ -91,6 +91,8 @@ export interface AgentView {
   persona: string | null;
   /** The notional starting budget (decision D2), integer minor units. Null for the primary. */
   budgetMinor: number | null;
+  /** Cash on hand (migration 0040), integer minor units. Null for the primary, which has none (D1). */
+  cashMinor: number | null;
   currency: string;
   state: AgentState;
   holdingsCount: number;
@@ -169,6 +171,46 @@ export interface FillView {
   quoteDelaySeconds: number | null;
   source: 'manual_user_override' | 'agent';
   createdAt: string;
+}
+
+/**
+ * A simulated agent's account: cash, what it holds, and how it stands (D6).
+ * `netWorthMinor` is cash plus market value; `pnlMinor` is net worth minus
+ * every deposit. Both are null when any holding is unpriced - never a partial
+ * figure that reads as complete (guideline 7).
+ */
+export interface AgentAccountResponse {
+  currency: string;
+  cashMinor: number;
+  /** The opening deposit and every top-up: what the agent was given. Equals its budget. */
+  depositsMinor: number;
+  holdingsValueMinor: number | null;
+  netWorthMinor: number | null;
+  pnlMinor: number | null;
+  pnlPct: number | null;
+  portfolio: PortfolioResponse;
+}
+
+/** One movement of an agent's cash, with the balance it left (D31). */
+export interface ActivityEntry {
+  id: string;
+  kind: 'opening_deposit' | 'top_up' | 'buy' | 'sell';
+  /** Signed: a buy is negative, its fee included. */
+  amountMinor: number;
+  balanceAfterMinor: number;
+  createdAt: string;
+  /** The trade behind a buy or sell; null for a deposit. */
+  fill: FillView | null;
+}
+
+export interface ActivityResponse {
+  currency: string;
+  entries: ActivityEntry[];
+}
+
+/** Add cash to an agent: `amount` in dollars, at most two decimals, like a budget. */
+export interface TopUpInput {
+  amount: string;
 }
 
 export interface TradeResult {

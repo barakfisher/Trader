@@ -576,6 +576,35 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('added cash and the timeline (D22, D31)', () => {
+    it('raises the budget in one statement, stops at the ceiling and an archive, and lists the balance', async () => {
+      const pool = getPool();
+      const simulated = (
+        await pool.query(
+          `INSERT INTO agents (user_id, slug, name, budget_minor)
+           VALUES ($1, 'top-up-test', 'Top-up test', 100000) RETURNING id`,
+          [USER],
+        )
+      ).rows[0].id as string;
+      try {
+        expect(await queries.topUpAgent(USER, simulated, 25000, 1_000_000)).toMatchObject({ budget_minor: '125000' });
+        expect((await queries.getAgentCash(USER, simulated))?.balance_minor).toBe('125000');
+        expect(await queries.topUpAgent(USER, simulated, 900000, 1_000_000)).toBeNull();
+        expect(await queries.topUpAgent(USER, AGENT, 100, 1_000_000)).toBeNull();
+        // Before the first trade, added cash raises the opening deposit: one row.
+        const timeline = await queries.listCashActivity(USER, simulated, 10);
+        expect(timeline.map((row) => [row.kind, row.amount_minor, row.balance_after_minor])).toEqual([
+          ['opening_deposit', '125000', '125000'],
+        ]);
+        await pool.query(`UPDATE agents SET state = 'archived' WHERE id = $1`, [simulated]);
+        expect(await queries.topUpAgent(USER, simulated, 100, 1_000_000)).toBeNull();
+        expect((await queries.getAgent(USER, simulated))?.cash_minor).toBe('125000');
+      } finally {
+        await pool.query('DELETE FROM agents WHERE id = $1', [simulated]);
+      }
+    });
+  });
+
   describe('per-agent run keys (0037)', () => {
     it('lets two agents claim one key, and one agent claim it once', async () => {
       const pool = getPool();

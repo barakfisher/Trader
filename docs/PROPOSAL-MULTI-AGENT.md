@@ -4,7 +4,7 @@
 this document are settled. What follows is the agreed design and its four-stage execution plan,
 written against the system as it exists at PR #40.
 
-**Amended 2026-10-04/05** (at PR #150): further decisions D1–D30 (§10), the schema as measured that day
+**Amended 2026-10-04/05** (at PR #150): further decisions D1–D31 (§10), the schema as measured that day
 (§11), the exact Stage 1 task list (§12), and Stage 3's measurements and task list (§13). Where §10
 and an earlier section disagree, §10 wins, and the earlier section carries a pointer to it.
 
@@ -655,6 +655,17 @@ when the override is needed (a stale or missing quote).
 **D30 — A paused agent may be traded by hand; an archived one may not.** Pause stops the agent
 scanning and proposing (D18), not its owner managing the account. Archived is read-only history.
 
+**D31 — The agent page: a Trade panel, one timeline, and Add cash.** A *Trade* button (and *Sell* on
+each holding) opens a side panel - symbol, side, whole shares, market or typed price - that previews
+before it confirms (D27). The *Activity* tab is one timeline of every cash movement - the opening
+deposit, added cash, each buy and sell with its price, fee and price source - each showing the
+balance it left, so every dollar can be traced. *Add cash* takes an amount and raises the budget by
+it in one statement (`budget_minor = budget_minor + amount`), so two additions never read the same
+old budget; the budget field in Settings stays, and after the first trade only rises (D22).
+*Rejected:* an always-visible form (it occupies the page on every visit); trades-only activity
+(deposits would be missing, and the cash figure could not be traced back); top-ups only by editing
+the budget ("1,000 to 1,500" is a less direct way to say "add $500").
+
 ---
 
 ## 11. Measured, 2026-10-04 (read-only, live compose database)
@@ -839,9 +850,11 @@ the same transaction (average cost per unit on a buy; a sell to zero removes the
 idempotency key. Paused agents may still be traded by hand; archived agents may not (D30).
 `GET /agents/:id/fills` lists the ledger for PR 5's Activity tab.
 
-**PR 5 — The agent page.** The trade form (quote, its time and delay, fee, cash after), the
-*Holdings* tab from real rows, the *Activity* tab as the ledger, the top-up control; English and
-Hebrew.
+**PR 5 — The agent page (D31).** The account (cash, holdings at market, net worth, P&L against
+deposits - none of them when a holding is unpriced), the Trade panel (quote, its time and delay,
+fee, cash after; preview, then confirm), *Holdings* with *Sell* from real rows, *Activity* as one
+timeline with the balance after each movement, and *Add cash* (`POST /agents/:id/top-ups`);
+English and Hebrew.
 
 **Then: handoff** (five merged PRs).
 

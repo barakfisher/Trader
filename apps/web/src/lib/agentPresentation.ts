@@ -10,7 +10,9 @@
 import type { AgentState, AgentView } from '@traders/shared';
 
 import { ApiRequestError } from '../api/client.ts';
+import { formatMoney, formatNumber } from '../i18n/format.ts';
 import { t } from '../i18n/index.ts';
+import { formatExactTime } from './relativeTime.ts';
 
 export function agentName(agent: Pick<AgentView, 'isPrimary' | 'name'>): string {
   return agent.isPrimary ? t('agents.primaryName') : agent.name;
@@ -34,6 +36,8 @@ export function agentErrorMessage(error: unknown, fallback: string): string {
         return t('agents.errors.nameTaken');
       case 'budget_out_of_range':
         return t('agents.errors.budgetRange');
+      case 'budget_decrease_after_trade':
+        return t('agents.errors.budgetDecrease');
       case 'invalid_body':
         return t('agents.errors.invalid');
       default:
@@ -41,4 +45,61 @@ export function agentErrorMessage(error: unknown, fallback: string): string {
     }
   }
   return fallback;
+}
+
+/** Whole shares, as the trade form and the server accept them (D9). */
+export const QUANTITY_INPUT = /^[1-9]\d{0,9}$/;
+
+function detail<T>(error: ApiRequestError, key: string): T | undefined {
+  const details = error.details as Record<string, unknown> | undefined;
+  return details?.[key] as T | undefined;
+}
+
+/**
+ * The sentence for a refused trade or preview (Stage 3, D21 and D27-D30), with
+ * the figures the server sent: the next open, the moved price, the cash short.
+ */
+export function tradeErrorMessage(error: unknown, fallback: string, currency = 'USD'): string {
+  if (!(error instanceof ApiRequestError)) return fallback;
+  switch (error.code) {
+    case 'market_closed': {
+      const nextOpen = detail<string>(error, 'nextOpen');
+      return t('agents.trade.errors.marketClosed', { time: formatExactTime(nextOpen) });
+    }
+    case 'quote_too_old':
+      return t('agents.trade.errors.quoteTooOld');
+    case 'quote_unavailable':
+      return t('agents.trade.errors.quoteUnavailable');
+    case 'price_moved':
+      return t('agents.trade.errors.priceMoved', {
+        price: formatMoney(detail<number>(error, 'livePriceMinor'), currency),
+      });
+    case 'insufficient_cash':
+      return t('agents.trade.errors.insufficientCash', {
+        required: formatMoney(detail<number>(error, 'requiredMinor'), currency),
+        cash: formatMoney(detail<number>(error, 'cashMinor'), currency),
+      });
+    case 'insufficient_holding':
+      return t('agents.trade.errors.insufficientHolding', {
+        held: formatNumber(Number(detail<string>(error, 'heldQuantity') ?? 0)),
+      });
+    case 'not_tradable': {
+      const reason = detail<string>(error, 'reason');
+      if (reason === 'not_usd') return t('agents.trade.errors.notUsd');
+      if (reason === 'no_calendar') return t('agents.trade.errors.noCalendar');
+      return t('agents.trade.errors.outsideUniverse');
+    }
+    case 'not_found':
+      return t('agents.trade.errors.unknownSymbol');
+    case 'invalid_quantity':
+      return t('agents.trade.errors.invalidQuantity');
+    case 'invalid_price':
+      return t('agents.trade.errors.invalidPrice');
+    case 'agent_archived':
+      return t('agents.trade.errors.archived');
+    case 'budget_out_of_range':
+      return t('agents.errors.budgetRange');
+    default:
+      return error.message;
+  }
 }

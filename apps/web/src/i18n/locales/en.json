@@ -950,7 +950,7 @@
   },
   "agents": {
     "title": "Agents",
-    "intro": "Your real portfolio, and simulated portfolios that each run on a paper budget. Agents can't trade yet: for now you can create them, give each a budget and a persona, and pause or archive them.",
+    "intro": "Your real portfolio, and simulated portfolios that each run on a paper budget. You can trade into a simulated agent by hand; agents don't make decisions themselves yet.",
     "loading": "Loading agents…",
     "loadFailed": "Could not load your agents.",
     "primaryName": "Main portfolio",
@@ -975,7 +975,8 @@
       "budget": "Paper budget (USD)",
       "budgetHint": "Simulated money, not taken from your portfolio. Dollars and cents, e.g. 1000 or 1000.50.",
       "persona": "Persona",
-      "personaHint": "How this agent should think. Agents don't act on it yet; it will guide their decisions once they start making them."
+      "personaHint": "How this agent should think. Agents don't act on it yet; it will guide their decisions once they start making them.",
+      "budgetEditHint": "Before the first trade this is the agent's starting cash. After it, the budget can only rise: use Add cash."
     },
     "create": {
       "title": "New agent",
@@ -994,16 +995,101 @@
     },
     "holdingsEmpty": {
       "title": "Nothing held yet",
-      "body": "Agents can't trade yet. When they can, this agent's simulated holdings will appear here."
+      "body": "Use Trade to buy into this agent's paper account."
     },
     "activityEmpty": {
       "title": "No activity yet",
-      "body": "This agent's decisions and the reasoning behind them will be listed here once agents start deciding."
+      "body": "Deposits, added cash and trades appear here, each with the cash it left."
     },
     "errors": {
       "nameTaken": "You already have an agent with that name.",
       "budgetRange": "The budget must be more than $0 and at most $1,000,000,000.",
-      "invalid": "Check the fields: the name is required, and the budget is dollars with at most two decimals."
+      "invalid": "Check the fields: the name is required, and the budget is dollars with at most two decimals.",
+      "budgetDecrease": "This agent has traded, so its budget can be raised but not lowered."
+    },
+    "account": {
+      "title": "Account",
+      "loading": "Loading the account…",
+      "loadFailed": "Could not load this agent's account.",
+      "cash": "Cash",
+      "holdingsValue": "Holdings at market",
+      "netWorth": "Net worth",
+      "pnl": "Profit / loss",
+      "pnlHint": "Net worth minus everything deposited ({{deposits}}). Fees have already left cash.",
+      "unpriced": "Totals unavailable: {{symbols}} could not be priced."
+    },
+    "addCash": {
+      "button": "Add cash",
+      "label": "Amount (USD)",
+      "submit": "Add",
+      "cancel": "Cancel",
+      "failed": "Could not add cash."
+    },
+    "holdings": {
+      "line": "{{quantity}} shares · average cost {{cost}}",
+      "unpriced": "Unpriced",
+      "sell": "Sell"
+    },
+    "activity": {
+      "loading": "Loading activity…",
+      "loadFailed": "Could not load the activity.",
+      "kinds": {
+        "openingDeposit": "Opening deposit",
+        "topUp": "Cash added"
+      },
+      "buy": "Bought {{quantity}} {{symbol}} at {{price}}",
+      "sell": "Sold {{quantity}} {{symbol}} at {{price}}",
+      "marketPrice": "market price as of {{time}}",
+      "typedPrice": "price you typed",
+      "fee": "fee {{fee}}",
+      "balance": "Cash after: {{balance}}"
+    },
+    "trade": {
+      "open": "Trade",
+      "title": "New trade",
+      "close": "Close",
+      "symbol": "Symbol",
+      "symbolHint": "A US-listed stock or fund in the universe, e.g. AAPL or VOO.",
+      "side": "Side",
+      "buy": "Buy",
+      "sell": "Sell",
+      "quantity": "Shares (whole)",
+      "priceMode": "Price",
+      "market": "Market price",
+      "typed": "My price",
+      "marketHint": "The latest quote, about 15 minutes behind the market. Only while the market is open.",
+      "typedHint": "Recorded as typed by you, at any time. You'll see how far it is from the last quote.",
+      "typedPrice": "Price per share (USD)",
+      "preview": "Preview",
+      "previewTitle": "If you confirm",
+      "previewFailed": "Could not preview the trade.",
+      "confirmBuy": "Confirm buy",
+      "confirmSell": "Confirm sell",
+      "failed": "The trade could not be recorded.",
+      "price": "Price",
+      "typedTag": "typed by you",
+      "quoteTag": "quote of {{time}}, {{minutes}} min delayed",
+      "notional": "Shares × price",
+      "fee": "Fee",
+      "cashChange": "Cash change",
+      "cashAfter": "Cash after",
+      "heldAfter": "Shares held after",
+      "farFromQuote": "Your price is {{deviation}} from the last quote ({{reference}} at {{time}}). It will be recorded as typed.",
+      "errors": {
+        "marketClosed": "The market is closed. It opens {{time}}. Trade at the market price then, or type a price.",
+        "quoteTooOld": "The latest price is more than 30 minutes old. Try again in a moment, or type a price.",
+        "quoteUnavailable": "No price is available right now. Try again in a moment, or type a price.",
+        "priceMoved": "The price moved to {{price}} since the preview. Preview again to see the new figures.",
+        "insufficientCash": "Not enough cash: this needs {{required}} with the fee, and the agent has {{cash}}.",
+        "insufficientHolding": "The agent holds {{held}} shares, fewer than this sells.",
+        "outsideUniverse": "That instrument is not in the tradable universe.",
+        "notUsd": "Only instruments priced in US dollars can be traded.",
+        "noCalendar": "Only instruments listed on US exchanges can be traded.",
+        "unknownSymbol": "No instrument with that symbol is known.",
+        "invalidQuantity": "Enter a whole number of shares.",
+        "invalidPrice": "Enter a price in dollars, with at most two decimals.",
+        "archived": "This agent is archived. Restore it to trade or add cash."
+      }
     }
   }
 }
