@@ -42,7 +42,13 @@ export function useAgentQuery(agentId: string) {
 
 function useInvalidateAgents() {
   const client = useQueryClient();
-  return () => client.invalidateQueries({ queryKey: queryKeys.agents });
+  // The consolidated view lives under the portfolio's key, not the agents':
+  // a trade, a top-up or a pause changes what it shows as well.
+  return () =>
+    Promise.all([
+      client.invalidateQueries({ queryKey: queryKeys.agents }),
+      client.invalidateQueries({ queryKey: queryKeys.consolidated }),
+    ]);
 }
 
 export function useCreateAgent() {

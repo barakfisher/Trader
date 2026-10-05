@@ -246,6 +246,90 @@ export interface PortfolioResponse {
   allocationByAssetClass: AllocationSlice[];
 }
 
+// --- Consolidated holdings (multi-agent Stage 3, PR 6) -------------------------
+
+/**
+ * One agent's holding of one instrument, inside a consolidated row. The real
+ * portfolio's carries its holding id (it can be edited); a simulated agent's
+ * changes only by a trade, on its own page (D35).
+ */
+export interface ConsolidatedPosition {
+  agentId: string;
+  /** The stored name; a client names the primary from its own catalogue. */
+  agentName: string;
+  isPrimary: boolean;
+  state: AgentState;
+  holdingId: string;
+  quantity: string;
+  /** Per unit, in `costCurrency`. */
+  costBasisMinor: number | null;
+  costCurrency: string;
+  valueMinor: number | null;
+  costMinor: number | null;
+  pnlMinor: number | null;
+  pnlPct: number | null;
+}
+
+/** What one side - real or simulated - holds of an instrument. Never summed with the other. */
+export interface ConsolidatedSide {
+  quantity: string;
+  /** Null when the instrument is unpriced: a value is never invented (guideline 7). */
+  valueMinor: number | null;
+}
+
+/** One instrument across the real portfolio and every non-archived agent (§4.3). */
+export interface ConsolidatedRow {
+  instrument: Instrument;
+  quote: QuoteInfo | null;
+  /** Null when the real portfolio does not hold it. */
+  real: ConsolidatedSide | null;
+  /** Every simulated agent's holding of it together; null when none holds it. */
+  simulated: ConsolidatedSide | null;
+  /** The real portfolio first, then the agents in the order the agents list shows them. */
+  positions: ConsolidatedPosition[];
+}
+
+/**
+ * A simulated agent's standing, as the account endpoint computes it (D6): net
+ * worth and P&L are null when any of its holdings is unpriced (decision 111).
+ */
+export interface SimulatedAgentStanding {
+  agentId: string;
+  name: string;
+  state: AgentState;
+  currency: string;
+  cashMinor: number;
+  depositsMinor: number;
+  holdingsValueMinor: number | null;
+  netWorthMinor: number | null;
+  pnlMinor: number | null;
+  pnlPct: number | null;
+  unpricedSymbols: string[];
+}
+
+/**
+ * Every simulated agent together: one figure for paper money, shown beside the
+ * real one and never added to it (§4.3, D34). Null when any agent's net worth
+ * is - a total that left a position out would read as complete.
+ */
+export interface SimulatedTotals {
+  agentCount: number;
+  cashMinor: number;
+  holdingsValueMinor: number | null;
+  netWorthMinor: number | null;
+  unpricedSymbols: string[];
+}
+
+export interface ConsolidatedHoldingsResponse {
+  currency: string;
+  /** The real portfolio's summary, exactly as `/portfolio` computes it. */
+  real: PortfolioSummary;
+  simulated: SimulatedTotals;
+  /** Non-archived simulated agents; a paused one is here, badged (D18). */
+  agents: SimulatedAgentStanding[];
+  rows: ConsolidatedRow[];
+}
+
 // --- Snapshots ---------------------------------------------------------------
 
 /**

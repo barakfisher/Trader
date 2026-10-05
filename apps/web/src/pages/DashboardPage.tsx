@@ -16,6 +16,13 @@ import {
 
 import { AddHoldingForm } from '../components/AddHoldingForm.tsx';
 import { AllocationChart } from '../components/AllocationChart.tsx';
+import {
+  AgentHeadline,
+  AgentScopeHoldings,
+  ConsolidatedHeadline,
+  ConsolidatedHoldings,
+  HoldingsScopePicker,
+} from '../components/ConsolidatedHoldings.tsx';
 import { EquityCurve } from '../components/EquityCurve.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { HoldingsTable } from '../components/HoldingsTable.tsx';
@@ -30,7 +37,9 @@ import { useTranslation } from '../i18n/index.ts';
 import { hasStaleQuotes, pricesAsOf } from '../lib/portfolioView.ts';
 import { formatAge, formatClockTime, formatExactTime } from '../lib/relativeTime.ts';
 import { feedFiltersFrom } from '../lib/feedFilters.ts';
-import { usePortfolioQuery } from '../queries/portfolio.ts';
+import { REAL_SCOPE, holdingsScopeFrom, holdingsSearchValue, type HoldingsScope } from '../lib/holdingsScope.ts';
+import { useAgentsQuery } from '../queries/agents.ts';
+import { useConsolidatedQuery, usePortfolioQuery } from '../queries/portfolio.ts';
 import { openProposals, useProposalsQuery } from '../queries/proposals.ts';
 import { queryKeys } from '../queries/queryKeys.ts';
 import { useStore } from '../stores/context.tsx';
@@ -47,7 +56,32 @@ export const DashboardPage = observer(function DashboardPage() {
   // The feed's filters live in the address (`/?severity=high&symbol=NVDA`), so
   // a filtered view survives a reload and can be sent. Read loosely: this page
   // also renders for unknown addresses, where the '/' route is not matched.
-  const feedFilters = feedFiltersFrom(useSearch({ strict: false }));
+  const search = useSearch({ strict: false });
+  const feedFilters = feedFiltersFrom(search);
+  // Which holdings the holdings card and the headline show (D32, D33): the
+  // real portfolio unless the address asks for more. An agent the user does
+  // not have - or has archived - is the default view, once the list is known.
+  const agents = useAgentsQuery();
+  const simulatedAgents = (agents.data ?? []).filter((agent) => !agent.isPrimary && agent.state !== 'archived');
+  const requestedScope = holdingsScopeFrom(search);
+  const scope: HoldingsScope =
+    requestedScope.kind === 'agent' &&
+    agents.data !== undefined &&
+    !simulatedAgents.some((agent) => agent.id === requestedScope.agentId)
+      ? REAL_SCOPE
+      : requestedScope;
+  const consolidated = useConsolidatedQuery(scope.kind !== 'real');
+  const standing =
+    scope.kind === 'agent'
+      ? (consolidated.data?.agents.find((agent) => agent.agentId === scope.agentId) ?? null)
+      : null;
+  const setScope = (next: HoldingsScope) =>
+    void navigate({
+      to: '/',
+      search: { severity: feedFilters.severity, symbol: feedFilters.symbol, holdings: holdingsSearchValue(next) },
+      // A view of this page, not a place: Back leaves the page.
+      replace: true,
+    });
   // Read here, not only in the inbox: the badge in the header is how a user
   // learns a question is waiting, and an inbox nobody knows has items is the
   // PUT /targets mistake again.
@@ -92,6 +126,8 @@ export const DashboardPage = observer(function DashboardPage() {
             variant="secondary"
             onClick={() => {
               void portfolio.refetch();
+              // The consolidated view and the equity curve live under the portfolio's key.
+              void queryClient.invalidateQueries({ queryKey: queryKeys.consolidated });
               // Every filtered view of the feed, not only the one on screen.
               void queryClient.invalidateQueries({ queryKey: queryKeys.observations });
               void queryClient.invalidateQueries({ queryKey: queryKeys.proposals });
@@ -193,7 +229,18 @@ export const DashboardPage = observer(function DashboardPage() {
         />
       )}
 
-      {portfolio.data?.holdings.length === 0 ? (
+      {simulatedAgents.length > 0 && (
+        <HoldingsScopePicker scope={scope} agents={simulatedAgents} onChange={setScope} />
+      )}
+      {scope.kind !== 'real' && consolidated.isPending && <Spinner label={t('consolidated.loading')} />}
+      {scope.kind !== 'real' && consolidated.error && (
+        <ErrorNote
+          message={errorMessage(consolidated.error, t('consolidated.loadFailed'))}
+          onRetry={() => void consolidated.refetch()}
+        />
+      )}
+
+      {scope.kind === 'real' && portfolio.data?.holdings.length === 0 ? (
         <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
           <div className="rounded-xl border border-border-subtle bg-surface-raised">
             <EmptyState
@@ -206,10 +253,14 @@ export const DashboardPage = observer(function DashboardPage() {
         </div>
       ) : (
         <>
-          <SummaryCards />
+          {scope.kind === 'real' && <SummaryCards />}
+          {scope.kind === 'all' && consolidated.data && <ConsolidatedHeadline data={consolidated.data} />}
+          {standing && <AgentHeadline standing={standing} />}
           <EquityCurve />
           <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-            <HoldingsTable />
+            {scope.kind === 'real' && <HoldingsTable />}
+            {scope.kind === 'all' && consolidated.data && <ConsolidatedHoldings data={consolidated.data} />}
+            {standing && consolidated.data && <AgentScopeHoldings data={consolidated.data} standing={standing} />}
             <div className="space-y-4">
               <AllocationChart />
               <AddHoldingForm />
@@ -224,7 +275,7 @@ export const DashboardPage = observer(function DashboardPage() {
             onFiltersChange={(next) =>
               void navigate({
                 to: '/',
-                search: { severity: next.severity, symbol: next.symbol },
+                search: { severity: next.severity, symbol: next.symbol, holdings: holdingsSearchValue(scope) },
                 // A filter is a view of this page, not a place: Back leaves the page.
                 replace: true,
               })

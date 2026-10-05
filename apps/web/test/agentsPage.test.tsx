@@ -44,7 +44,11 @@ const MOMENTUM: AgentView = {
 describe('AgentsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    get.mockResolvedValue({ agents: [PRIMARY, MOMENTUM] });
+    get.mockImplementation(async (path: string) =>
+      path === '/portfolio/consolidated'
+        ? { agents: [{ agentId: MOMENTUM.id, name: 'Momentum', state: 'paused', currency: 'USD', netWorthMinor: 123456 }] }
+        : { agents: [PRIMARY, MOMENTUM] },
+    );
   });
   afterEach(cleanup);
 
@@ -55,7 +59,8 @@ describe('AgentsPage', () => {
     expect(screen.getByText('Real')).toBeTruthy();
     expect(screen.getByText('Simulated')).toBeTruthy();
     expect(screen.getByText('Paused')).toBeTruthy();
-    expect(screen.getByText('Paper budget $1,000.50')).toBeTruthy();
+    // A simulated agent's net worth, valued as its own page values it (D19).
+    expect(await screen.findByText('Net worth $1,234.56 · paper budget $1,000.50')).toBeTruthy();
   });
 
   it('lets a name and a persona take the direction of what is typed in them', async () => {

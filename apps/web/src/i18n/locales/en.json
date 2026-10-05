@@ -964,6 +964,7 @@
     "holdingsCount_one": "{{count}} holding",
     "holdingsCount_other": "{{count}} holdings",
     "budgetLine": "Paper budget {{budget}}",
+    "netWorthLine": "Net worth {{netWorth}} · paper budget {{budget}}",
     "backToAgents": "Back to agents",
     "primaryNote": "This is your real portfolio. It is never simulated and never asked to buy or sell; it lives on the dashboard.",
     "settings": "Settings",
@@ -1091,5 +1092,32 @@
         "archived": "This agent is archived. Restore it to trade or add cash."
       }
     }
+  },
+  "consolidated": {
+    "showing": "Showing",
+    "scopes": {
+      "real": "Real portfolio only",
+      "all": "All: real and simulated",
+      "agent": "Simulated: {{name}}",
+      "agentPaused": "Simulated: {{name}} (paused)"
+    },
+    "loading": "Loading every holding…",
+    "loadFailed": "Could not load the consolidated holdings.",
+    "realValue": "Real portfolio",
+    "realHint_one": "{{count}} holding, at market",
+    "realHint_other": "{{count}} holdings, at market",
+    "realPartial": "Partial: {{symbols}} could not be priced and are left out.",
+    "simulatedNetWorth": "Simulated agents, net worth",
+    "simulatedHint_one": "{{count}} agent · of which cash {{cash}}",
+    "simulatedHint_other": "{{count}} agents · of which cash {{cash}}",
+    "simulatedUnpriced": "Not shown: {{symbols}} could not be priced, and a total without them would read as complete.",
+    "neverSummed": "Real and simulated money are never added together: one is yours, the other is paper.",
+    "belowIsReal": "The chart, allocation and findings below are your real portfolio's.",
+    "title": "All holdings ({{count}})",
+    "empty": "Nothing is held, real or simulated.",
+    "shares": "{{quantity}} sh",
+    "positionLine": "{{quantity}} sh · {{value}}",
+    "agentTitle": "{{name}} ({{count}})",
+    "openAgent": "Open the agent's page to trade"
   }
 }

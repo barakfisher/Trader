@@ -9,7 +9,7 @@
 
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import type { HoldingInput, PortfolioResponse } from '@traders/shared';
+import type { ConsolidatedHoldingsResponse, HoldingInput, PortfolioResponse } from '@traders/shared';
 
 import { api } from '../api/client.ts';
 import { queryKeys } from './queryKeys.ts';
@@ -21,6 +21,19 @@ export const portfolioQuery = queryOptions({
 
 export function usePortfolioQuery() {
   return useQuery(portfolioQuery);
+}
+
+/**
+ * Every holding across the real portfolio and the simulated agents (D32-D35).
+ * Fetched only when a view needs it: the default dashboard shows the real
+ * portfolio alone and never asks.
+ */
+export function useConsolidatedQuery(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.consolidated,
+    queryFn: () => api.get<ConsolidatedHoldingsResponse>('/portfolio/consolidated'),
+    enabled,
+  });
 }
 
 function useInvalidatePortfolio() {

@@ -666,6 +666,41 @@ old budget; the budget field in Settings stays, and after the first trade only r
 (deposits would be missing, and the cash figure could not be traced back); top-ups only by editing
 the budget ("1,000 to 1,500" is a less direct way to say "add $500").
 
+### Added 2026-10-05, building the consolidated view (Stage 3, PR 6)
+
+Measured first: the dashboard - summary, holdings table, equity curve, allocation, findings - is
+entirely the real portfolio's; no simulated agent existed on either installation. Asked and
+answered before the view was written; every answer was the recommendation.
+
+**D32 - The filter switches the holdings card and the headline, nothing else.** `Real only / All /
+<agent>` sits above the headline. The equity curve, the allocation chart, targets and the findings
+feed stay the real portfolio's, and a scoped headline says so. *Rejected:* the whole dashboard
+following the filter - an allocation chart over real and paper shares together is the blended
+figure §4.3 forbids, and every card would need its own split; a separate page - the view belongs
+where the holdings already are.
+
+**D33 - `Real only` is the default, and the choice lives in the address** (`?holdings=all`,
+`?holdings=<agent id>`). Nothing changes for a user who does not ask, and the view matches the
+real-only cards around it; a chosen view survives a reload and can be sent. The picker appears
+only when a non-archived simulated agent exists. An unknown or archived agent in the address is
+the default view. *Rejected:* `All` as the default (§4.3 as first written) - a glance at "NVDA 40"
+must mean the real 40.
+
+**D34 - Under `All` the headline is two figures: the real portfolio's value and the simulated
+agents' net worth** (cash + holdings, "of which cash" beneath it), never their sum. Each keeps its
+own rule for a missing price: the real one is partial and marked, as the dashboard always was; the
+simulated one is withheld and names the unpriced symbols (decision 111). One agent's view shows
+its cash, holdings value, net worth and P&L, as its own page does. *Rejected:* holdings value
+only - an agent's cash is most of what it has before it trades.
+
+**D35 - Simulated rows are read-only and link to the agent's page; pending proposals are not
+shown until Stage 4.** An agent's shares change only through a fill (decision 109), so the view
+offers no edit or remove on them; a row expands to each holder with a *Paused* badge where it
+applies (D18) and links to the real holding's page or the agent's. Agents write no proposals
+until Stage 4, so §4.3's "pending proposals on that ticker" arrives with them. The Agents list
+gains each simulated agent's net worth (D19). *Rejected:* a *Sell* on the dashboard row - a
+second entry to the trade panel for no case the agent page does not already serve.
+
 ---
 
 ## 11. Measured, 2026-10-04 (read-only, live compose database)
@@ -858,9 +893,10 @@ English and Hebrew.
 
 **Then: handoff** (five merged PRs).
 
-**PR 6 — The consolidated holdings view (§4.3, D17, D18).** One row per instrument across agents,
-expanding to the per-agent split; the `All / Real only / per agent` filter; real and simulated never
-summed; paused badged, archived excluded.
+**PR 6 — The consolidated holdings view (§4.3, D17, D18, D32-D35).** One row per instrument across
+agents, expanding to the per-agent split; the `All / Real only / per agent` filter; real and
+simulated never summed; paused badged, archived excluded. `GET /portfolio/consolidated` values each
+agent as its own page does (`valueAgentAccount`) and the real portfolio as `/portfolio` does.
 
 **PR 7 — Performance (D24, §5.4).** Daily net worth per simulated agent (cash + market value), SPY
 in the backfill, the shadow benchmark, P&L and return beside it on the agent page, and the

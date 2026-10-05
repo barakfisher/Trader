@@ -981,6 +981,7 @@
     "holdingsCount_two": "שתי אחזקות",
     "holdingsCount_other": "{{count}} אחזקות",
     "budgetLine": "תקציב מדומה {{budget}}",
+    "netWorthLine": "שווי נקי {{netWorth}} · תקציב מדומה {{budget}}",
     "backToAgents": "חזרה לסוכנים",
     "primaryNote": "זה התיק האמיתי שלך. הוא אף פעם לא מדומה ואף פעם לא מתבקש לקנות או למכור; הוא נמצא בלוח הראשי.",
     "settings": "הגדרות",
@@ -1108,5 +1109,34 @@
         "archived": "הסוכן הזה בארכיון. יש לשחזר אותו כדי לסחור או להוסיף מזומן."
       }
     }
+  },
+  "consolidated": {
+    "showing": "מוצג",
+    "scopes": {
+      "real": "התיק האמיתי בלבד",
+      "all": "הכול: אמיתי ומדומה",
+      "agent": "מדומה: {{name}}",
+      "agentPaused": "מדומה: {{name}} (מושהה)"
+    },
+    "loading": "טוען את כל האחזקות…",
+    "loadFailed": "לא ניתן לטעון את האחזקות המאוחדות.",
+    "realValue": "התיק האמיתי",
+    "realHint_one": "אחזקה אחת, לפי שווי שוק",
+    "realHint_two": "{{count}} אחזקות, לפי שווי שוק",
+    "realHint_other": "{{count}} אחזקות, לפי שווי שוק",
+    "realPartial": "חלקי: לא ניתן לתמחר את {{symbols}}, והם אינם נכללים.",
+    "simulatedNetWorth": "סוכנים מדומים, שווי נקי",
+    "simulatedHint_one": "סוכן אחד · מתוכו מזומן {{cash}}",
+    "simulatedHint_two": "{{count}} סוכנים · מתוכו מזומן {{cash}}",
+    "simulatedHint_other": "{{count}} סוכנים · מתוכו מזומן {{cash}}",
+    "simulatedUnpriced": "לא מוצג: לא ניתן לתמחר את {{symbols}}, וסכום בלעדיהם ייראה שלם.",
+    "neverSummed": "כסף אמיתי וכסף מדומה לעולם אינם מחוברים יחד: האחד שלך, השני על הנייר.",
+    "belowIsReal": "הגרף, הפיזור והממצאים שלמטה הם של התיק האמיתי שלך.",
+    "title": "כל האחזקות ({{count}})",
+    "empty": "אין אחזקות, לא אמיתיות ולא מדומות.",
+    "shares": "{{quantity}} יח׳",
+    "positionLine": "{{quantity}} יח׳ · {{value}}",
+    "agentTitle": "{{name}} ({{count}})",
+    "openAgent": "לדף הסוכן כדי לסחור"
   }
 }
