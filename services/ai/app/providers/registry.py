@@ -30,8 +30,8 @@ from app.core.cache_policy import quote_ttl
 from app.core.logging import get_logger
 from app.core.observation_time import at_last_close
 from app.core.ratelimit import RateLimiter
-from app.models import DailyClose, FxRate, InstrumentResolution, Quote, QuoteMarket
-from app.providers.base import MarketDataProvider, ProviderError
+from app.models import DailyClose, FxRate, InstrumentResolution, Mover, Quote, QuoteMarket
+from app.providers.base import MarketDataProvider, MoversProvider, ProviderError
 from app.providers.fixture import FixtureProvider
 from app.providers.price_provenance import admissible_chain
 from app.providers.yfinance_provider import YFinanceProvider
@@ -68,6 +68,11 @@ def build_providers(settings: Settings) -> list[MarketDataProvider]:
         raise ValueError("MARKET_DATA_PROVIDERS resolved to an empty chain")
     log.info("providers.chain", chain=[p.name for p in providers])
     return providers
+
+
+#: The movers lists a provider is asked for, and the cache key the day's answer is kept under.
+MOVER_LISTS = ("gainers", "losers", "most_active")
+MOVERS_CACHE_KEY = "movers"
 
 
 class MarketDataService:
@@ -235,6 +240,39 @@ class MarketDataService:
                 return closes
 
         log.info("providers.no_history", symbol=symbol)
+        return []
+
+    async def movers(self) -> list[Mover]:
+        """The day's movers from the first provider that publishes any.
+
+        Cached for the quote cache's news TTL (15 minutes): every agent's
+        briefing in a scheduled slot reads one fetch, and the list is about as
+        fresh as the delayed quotes it summarises. [] when no provider in the
+        chain has a list - the briefing says so rather than inventing one.
+        """
+        cached = await self._cache.get(MOVERS_CACHE_KEY)
+        if cached is not None:
+            return [Mover.model_validate(item) for item in cached]
+        for provider in self._providers:
+            if not isinstance(provider, MoversProvider):
+                continue
+            if provider.makes_external_requests and not await self._limiter.allow(
+                provider.name, self._settings.provider_rate_limit_per_minute, len(MOVER_LISTS)
+            ):
+                log.warning("providers.skipped_rate_limited", provider=provider.name)
+                continue
+            try:
+                movers = await provider.movers()
+            except ProviderError as exc:
+                log.warning("providers.movers_failed", provider=provider.name, error=str(exc))
+                continue
+            if movers:
+                await self._cache.set(
+                    MOVERS_CACHE_KEY,
+                    [mover.model_dump(mode="json") for mover in movers],
+                    self._settings.cache_ttl_news,
+                )
+                return movers
         return []
 
     async def resolve(self, query: str) -> InstrumentResolution:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from app.models import DailyClose, FxRate, InstrumentResolution, Quote
+from app.models import DailyClose, FxRate, InstrumentResolution, Mover, Quote
 
 
 class ProviderError(RuntimeError):
@@ -18,6 +18,22 @@ class ProviderError(RuntimeError):
     def __init__(self, provider: str, message: str) -> None:
         super().__init__(f"{provider}: {message}")
         self.provider = provider
+
+
+@runtime_checkable
+class MoversProvider(Protocol):
+    """A provider that publishes the day's movers (gainers, losers, most active).
+
+    Separate from `MarketDataProvider` because most sources have no such list,
+    and a provider is not obliged to invent one: the service asks only those
+    that implement it, and an agent's briefing says "unavailable" when none do.
+    """
+
+    name: str
+
+    async def movers(self) -> list[Mover]:
+        """Today's lists, or [] when the provider has none. Raises ProviderError."""
+        ...
 
 
 @runtime_checkable

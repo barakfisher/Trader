@@ -171,10 +171,15 @@ INSERT INTO llm_calls (user_id, purpose, provider, model, outcome, verdict, late
   ('00000000-0000-0000-0000-00000000000a', 'ask', 'openrouter', 'm', 'provider_error', NULL, 30000, 'p'),
   (NULL, 'narration', 'openrouter', NULL, 'budget_exhausted', NULL, 0, 'p'),
   (NULL, 'narration', 'null', NULL, 'no_provider', NULL, 0, 'p');
--- A call made for a simulated agent (0041; written by an agent's scan from Stage 4's PR 3).
+-- A call made by a simulated agent's scan (0041's agent_id, 0042's purpose).
 INSERT INTO llm_calls (user_id, agent_id, purpose, provider, model, outcome, latency_ms, prompt) VALUES
-  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'ask',
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'agent_scan',
    'openrouter', 'm', 'ok', 900, 'p');
+-- Every schedule an agent may choose (0042).
+UPDATE agents SET scan_schedule = 'pre_open_post_close' WHERE id = '90000000-0000-0000-0000-0000000000a1';
+UPDATE agents SET scan_schedule = 'intraday_twice', llm_budget_micro_usd = 250000
+ WHERE id = '90000000-0000-0000-0000-0000000000a2';
+UPDATE agents SET scan_schedule = 'intraday_once' WHERE id = '90000000-0000-0000-0000-00000000000b';
 -- The models chosen on the Admin page (0041).
 INSERT INTO llm_model_choices (scope, model, updated_by) VALUES
   ('explain', 'anthropic/claude-sonnet-5.5', '00000000-0000-0000-0000-00000000000a'),

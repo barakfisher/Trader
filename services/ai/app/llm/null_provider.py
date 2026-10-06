@@ -14,8 +14,17 @@ say, when in fact nothing was ever asked.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from app.core.logging import get_logger
-from app.llm.base import Caller, LLMCompletion, LLMUnavailableError, Verdict
+from app.llm.base import (
+    Caller,
+    LLMCompletion,
+    LLMUnavailableError,
+    Message,
+    ToolSpec,
+    Verdict,
+)
 
 log = get_logger("llm.null")
 
@@ -45,6 +54,21 @@ class NullProvider:
     ) -> LLMCompletion:
         # Logged on every refusal rather than once at startup: a run that quietly
         # produced no narration for a month is the outcome this line prevents.
+        log.info("llm.unavailable", reason=self._reason)
+        raise LLMUnavailableError(self._reason)
+
+    async def converse(
+        self,
+        *,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSpec],
+        max_output_tokens: int | None = None,
+        temperature: float | None = None,
+        reasoning_effort: str | None = None,
+        caller: Caller | None = None,
+        model: str | None = None,
+    ) -> LLMCompletion:
         log.info("llm.unavailable", reason=self._reason)
         raise LLMUnavailableError(self._reason)
 

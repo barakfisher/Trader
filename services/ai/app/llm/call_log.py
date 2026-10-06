@@ -19,6 +19,7 @@ can take down narration is the wrong way round.
 from __future__ import annotations
 
 import time
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Literal, Protocol
 
@@ -27,12 +28,17 @@ from sqlalchemy.engine import Engine
 
 from app.core.logging import get_logger
 from app.llm.base import (
+    AssistantMessage,
     Caller,
     LLMBudgetExceededError,
     LLMCompletion,
     LLMError,
     LLMProvider,
     LLMUnavailableError,
+    Message,
+    ToolResultMessage,
+    ToolSpec,
+    UserMessage,
     Verdict,
 )
 
@@ -144,6 +150,39 @@ def _prompt(system: str | None, user: str) -> str:
     return f"[system]\n{system}\n\n[user]\n{user}" if system else f"[user]\n{user}"
 
 
+def _render(message: Message) -> str:
+    if isinstance(message, UserMessage):
+        return f"[user]\n{message.text}"
+    if isinstance(message, AssistantMessage):
+        calls = "".join(f"\n-> {call.name}({call.arguments})" for call in message.tool_calls)
+        return f"[assistant]\n{message.text}{calls}"
+    if isinstance(message, ToolResultMessage):
+        return f"[tool {message.call_id}]\n{message.content}"
+    return repr(message)
+
+
+def _conversation_prompt(system: str, messages: Sequence[Message]) -> str:
+    """What this turn added: the whole opening, then only what followed the model's last turn.
+
+    Every turn re-sends the conversation, and storing each turn's full prompt
+    would keep a scan's briefing twelve times over. The scan's own transcript
+    (D50) holds the conversation once; a row here holds what is new in it.
+    """
+    last_assistant = max(
+        (index for index, message in enumerate(messages) if isinstance(message, AssistantMessage)),
+        default=None,
+    )
+    if last_assistant is None:
+        return "\n\n".join([f"[system]\n{system}", *(_render(m) for m in messages)])
+    tail = messages[last_assistant + 1 :]
+    return "\n\n".join([f"[{last_assistant + 1} earlier messages]", *(_render(m) for m in tail)])
+
+
+def _completion_text(completion: LLMCompletion) -> str:
+    calls = "".join(f"\n-> {call.name}({call.arguments})" for call in completion.tool_calls)
+    return f"{completion.text}{calls}"
+
+
 class RecordingProvider:
     """Records every call to `inner`, whatever becomes of it."""
 
@@ -166,9 +205,8 @@ class RecordingProvider:
         caller: Caller | None = None,
         model: str | None = None,
     ) -> LLMCompletion:
-        started = time.monotonic()
-        try:
-            completion = await self._inner.complete(
+        return await self._recorded(
+            lambda: self._inner.complete(
                 system=system,
                 user=user,
                 max_output_tokens=max_output_tokens,
@@ -176,7 +214,51 @@ class RecordingProvider:
                 reasoning_effort=reasoning_effort,
                 caller=caller,
                 model=model,
-            )
+            ),
+            caller=caller,
+            model=model,
+            prompt=_prompt(system, user),
+        )
+
+    async def converse(
+        self,
+        *,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSpec],
+        max_output_tokens: int | None = None,
+        temperature: float | None = None,
+        reasoning_effort: str | None = None,
+        caller: Caller | None = None,
+        model: str | None = None,
+    ) -> LLMCompletion:
+        return await self._recorded(
+            lambda: self._inner.converse(
+                system=system,
+                messages=messages,
+                tools=tools,
+                max_output_tokens=max_output_tokens,
+                temperature=temperature,
+                reasoning_effort=reasoning_effort,
+                caller=caller,
+                model=model,
+            ),
+            caller=caller,
+            model=model,
+            prompt=_conversation_prompt(system, messages),
+        )
+
+    async def _recorded(
+        self,
+        call: Callable[[], Awaitable[LLMCompletion]],
+        *,
+        caller: Caller | None,
+        model: str | None,
+        prompt: str,
+    ) -> LLMCompletion:
+        started = time.monotonic()
+        try:
+            completion = await call()
         except BaseException as error:
             self._record(
                 caller,
@@ -184,7 +266,7 @@ class RecordingProvider:
                 outcome=_outcome(error),
                 error=f"{type(error).__name__}: {error}"[:500],
                 started=started,
-                prompt=_prompt(system, user),
+                prompt=prompt,
                 cost=error.metered_micro_usd if isinstance(error, LLMError) else 0,
             )
             raise
@@ -193,7 +275,7 @@ class RecordingProvider:
             model=model,
             outcome="ok",
             started=started,
-            prompt=_prompt(system, user),
+            prompt=prompt,
             completion=completion,
         )
         return replace(completion, call_id=call_id)
@@ -236,7 +318,7 @@ class RecordingProvider:
             completion_tokens=completion.usage.completion_tokens if completion else 0,
             cost_micro_usd=completion.estimated_cost_micro_usd if completion else cost,
             prompt=prompt,
-            completion=completion.text if completion else None,
+            completion=_completion_text(completion) if completion else None,
         )
         try:
             return self._log.record(entry)

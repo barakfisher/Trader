@@ -45,6 +45,25 @@ class Quote(BaseModel):
     )
 
 
+MoverList = Literal["gainers", "losers", "most_active"]
+
+
+class Mover(BaseModel):
+    """One name on a provider's list of the day's movers (an agent's briefing, D15).
+
+    Unfiltered: whether it is in the tradable universe (D7, D8) is decided by
+    whoever reads the list, not by the provider.
+    """
+
+    symbol: str
+    list: MoverList
+    change_pct: float = Field(description="The day's change in percent, as the provider states it.")
+    price_minor: int
+    currency: str
+    exchange: str | None = None
+    source: str
+
+
 class DailyClose(BaseModel):
     """One day's closing price.
 

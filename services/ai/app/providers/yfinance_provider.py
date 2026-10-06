@@ -19,10 +19,28 @@ from decimal import Decimal, InvalidOperation
 from app.core.logging import get_logger
 from app.core.money import to_minor
 from app.core.observation_time import observed_at
-from app.models import AssetClass, DailyClose, FxRate, Instrument, InstrumentResolution, Quote
+from app.models import (
+    AssetClass,
+    DailyClose,
+    FxRate,
+    Instrument,
+    InstrumentResolution,
+    Mover,
+    MoverList,
+    Quote,
+)
 from app.providers.base import ProviderError
 
 log = get_logger("provider.yfinance")
+
+#: Yahoo's predefined screeners and the list each fills.
+_MOVER_SCREENS: tuple[tuple[str, MoverList], ...] = (
+    ("day_gainers", "gainers"),
+    ("day_losers", "losers"),
+    ("most_actives", "most_active"),
+)
+#: Per list. More than a briefing shows, so the universe filter still leaves enough.
+_MOVERS_PER_LIST = 25
 
 #: Daily closes are dated to 20:00 UTC, matching the fixture provider so the two
 #: interleave in one series without reordering.
@@ -251,6 +269,48 @@ class YFinanceProvider:
             )
             for day, price, currency in raw
         ]
+
+    def _movers_blocking(self) -> list[Mover]:
+        """Yahoo's predefined day screeners. Runs in a worker thread.
+
+        One request per list (three a day per cache period). The endpoint is
+        undocumented like the rest of Yahoo's; a row missing a symbol, a price
+        or a change is skipped, never filled in.
+        """
+        import yfinance as yf
+
+        movers: list[Mover] = []
+        for screen, kind in _MOVER_SCREENS:
+            result = yf.screen(screen, count=_MOVERS_PER_LIST)
+            for row in result.get("quotes") or []:
+                symbol = row.get("symbol")
+                price = _as_decimal(row.get("regularMarketPrice"))
+                change = row.get("regularMarketChangePercent")
+                currency = row.get("currency")
+                if not symbol or price is None or change is None or not currency:
+                    continue
+                movers.append(
+                    Mover(
+                        symbol=str(symbol).upper(),
+                        list=kind,
+                        change_pct=round(float(change), 4),
+                        price_minor=to_minor(price, str(currency)),
+                        currency=str(currency),
+                        exchange=row.get("exchange"),
+                        source=self.name,
+                    )
+                )
+        return movers
+
+    async def movers(self) -> list[Mover]:
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(self._movers_blocking), timeout=self._timeout * 2
+            )
+        except TimeoutError as exc:
+            raise ProviderError(self.name, "movers timed out") from exc
+        except Exception as exc:  # noqa: BLE001
+            raise ProviderError(self.name, str(exc)) from exc
 
     async def resolve(self, query: str) -> InstrumentResolution:
         candidate = query.strip().upper()

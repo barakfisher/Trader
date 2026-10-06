@@ -40,6 +40,7 @@ scheduled run.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
 
@@ -47,11 +48,17 @@ import httpx
 
 from app.core.logging import get_logger
 from app.llm.base import (
+    AssistantMessage,
     Caller,
     LLMCompletion,
     LLMRequestError,
     LLMTimeoutError,
+    Message,
     TokenUsage,
+    ToolCall,
+    ToolResultMessage,
+    ToolSpec,
+    UserMessage,
     Verdict,
 )
 from app.llm.pricing import (
@@ -71,6 +78,36 @@ _RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504, 529})
 #: minutes is asking us to hold a scheduled run open; we would rather skip
 #: narration for this finding and let the next run try.
 _MAX_RETRY_AFTER_SECONDS = 10.0
+
+#: Models whose gateway honours `cache_control` on a content part. Anthropic's
+#: do through OpenRouter: the marked prefix is billed at a tenth on every later
+#: turn of the same conversation, which is most of an agent's scan (§14.1).
+#: Other models ignore the field or reject the part shape, so it is not sent.
+_PROMPT_CACHING_PREFIXES = ("anthropic/",)
+
+
+def _cached_text(text: str) -> list[dict[str, Any]]:
+    return [{"type": "text", "text": text, "cache_control": {"type": "ephemeral"}}]
+
+
+def _wire_message(message: Message, *, cache: bool) -> dict[str, Any]:
+    if isinstance(message, UserMessage):
+        return {"role": "user", "content": _cached_text(message.text) if cache else message.text}
+    if isinstance(message, AssistantMessage):
+        wire: dict[str, Any] = {"role": "assistant", "content": message.text or None}
+        if message.tool_calls:
+            wire["tool_calls"] = [
+                {
+                    "id": call.id,
+                    "type": "function",
+                    "function": {"name": call.name, "arguments": call.arguments},
+                }
+                for call in message.tool_calls
+            ]
+        return wire
+    if isinstance(message, ToolResultMessage):
+        return {"role": "tool", "tool_call_id": message.call_id, "content": message.content}
+    raise TypeError(f"not a message: {message!r}")
 
 
 class OpenAICompatibleProvider:
@@ -144,6 +181,80 @@ class OpenAICompatibleProvider:
         )
         response = await self._post_with_one_retry(payload)
         return self._parse(response, requested=payload["model"])
+
+    async def converse(
+        self,
+        *,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSpec],
+        max_output_tokens: int | None = None,
+        temperature: float | None = None,
+        reasoning_effort: str | None = None,
+        caller: Caller | None = None,
+        model: str | None = None,
+    ) -> LLMCompletion:
+        payload = self._build_conversation_payload(
+            system=system,
+            messages=messages,
+            tools=tools,
+            max_output_tokens=max_output_tokens,
+            temperature=temperature,
+            reasoning_effort=reasoning_effort,
+            model=model,
+        )
+        response = await self._post_with_one_retry(payload)
+        return self._parse(response, requested=payload["model"], tools_offered=True)
+
+    def _build_conversation_payload(
+        self,
+        *,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSpec],
+        max_output_tokens: int | None = None,
+        temperature: float | None = None,
+        reasoning_effort: str | None = None,
+        model: str | None = None,
+    ) -> dict[str, Any]:
+        """A tool-calling turn's body, built without sending it (for tests).
+
+        The system prompt and the first user message - the instructions and the
+        briefing, which every turn of a scan repeats unchanged - are marked for
+        prompt caching where the model supports it. The growing tail of tool
+        results is not: OpenRouter's support for marking a tool message is not
+        something this code has seen work, and an unsupported field must not be
+        what fails a scan.
+        """
+        chosen = model or self._model
+        cache = chosen.startswith(_PROMPT_CACHING_PREFIXES)
+        wire: list[dict[str, Any]] = [
+            {"role": "system", "content": _cached_text(system) if cache else system}
+        ]
+        for index, message in enumerate(messages):
+            first_user = index == 0 and isinstance(message, UserMessage)
+            wire.append(_wire_message(message, cache=cache and first_user))
+        payload = self._build_payload(
+            system=None,
+            user="",
+            max_output_tokens=max_output_tokens,
+            temperature=temperature,
+            reasoning_effort=reasoning_effort,
+            model=chosen,
+        )
+        payload["messages"] = wire
+        payload["tools"] = [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": dict(tool.parameters),
+                },
+            }
+            for tool in tools
+        ]
+        return payload
 
     def _build_payload(
         self,
@@ -267,7 +378,9 @@ class OpenAICompatibleProvider:
                 pass
         return self._retry_backoff_seconds
 
-    def _parse(self, response: httpx.Response, *, requested: str) -> LLMCompletion:
+    def _parse(
+        self, response: httpx.Response, *, requested: str, tools_offered: bool = False
+    ) -> LLMCompletion:
         try:
             body = response.json()
         except ValueError as exc:
@@ -299,10 +412,10 @@ class OpenAICompatibleProvider:
         )
 
         choices = body.get("choices") or []
-        text = ""
-        if choices:
-            text = str((choices[0].get("message") or {}).get("content") or "").strip()
-        if not text:
+        message = (choices[0].get("message") or {}) if choices else {}
+        text = str(message.get("content") or "").strip()
+        tool_calls = _tool_calls(message) if tools_offered else ()
+        if not text and not tool_calls:
             # A 200 with no content still consumed prompt tokens, so the charge
             # travels with the error and the budget guard records it.
             raise LLMRequestError(
@@ -318,7 +431,30 @@ class OpenAICompatibleProvider:
             usage=usage,
             estimated_cost_micro_usd=cost,
             provider=self.name,
+            tool_calls=tool_calls,
         )
+
+
+def _tool_calls(message: dict[str, Any]) -> tuple[ToolCall, ...]:
+    """The tool calls in an assistant message, skipping any without a name.
+
+    Arguments stay the text the model wrote; a call with none gets "{}" so the
+    caller's parser sees an empty object rather than a missing field.
+    """
+    calls = []
+    for raw in message.get("tool_calls") or []:
+        function = raw.get("function") or {}
+        name = function.get("name")
+        if not name:
+            continue
+        calls.append(
+            ToolCall(
+                id=str(raw.get("id") or f"call_{len(calls)}"),
+                name=str(name),
+                arguments=str(function.get("arguments") or "{}"),
+            )
+        )
+    return tuple(calls)
 
 
 def _short_body(response: httpx.Response) -> str:
