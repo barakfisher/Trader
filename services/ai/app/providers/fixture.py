@@ -15,7 +15,7 @@ from pathlib import Path
 from app.core.logging import get_logger
 from app.core.money import to_minor
 from app.core.observation_time import observed_at
-from app.models import DailyClose, FxRate, Instrument, InstrumentResolution, Quote
+from app.models import DailyClose, FxRate, Instrument, InstrumentResolution, Mover, Quote
 
 log = get_logger("provider.fixture")
 
@@ -75,6 +75,30 @@ class FixtureProvider:
             prices=len(self._prices),
             history_series=len(self._history),
         )
+
+    async def movers(self) -> list[Mover]:
+        """The fixture's instruments by their day change: the largest rise and
+        fall, so a briefing built offline has movers to show. Nothing invented:
+        each is a fixture quote's own change from its previous close."""
+        quotes = [quote for quote in await self.quotes(list(self._prices)) if quote.day_change_pct]
+        ranked = sorted(quotes, key=lambda quote: quote.day_change_pct or 0.0)
+        movers = []
+        for kind, picked in (("gainers", ranked[::-1][:3]), ("losers", ranked[:3])):
+            for quote in picked:
+                if (kind == "gainers") != ((quote.day_change_pct or 0.0) > 0):
+                    continue
+                movers.append(
+                    Mover(
+                        symbol=quote.symbol,
+                        list=kind,
+                        change_pct=quote.day_change_pct or 0.0,
+                        price_minor=quote.price_minor,
+                        currency=quote.currency,
+                        exchange=None,
+                        source=self.name,
+                    )
+                )
+        return movers
 
     async def quotes(self, symbols: list[str]) -> list[Quote]:
         as_of = observed_at(datetime.now(UTC), self.quote_granularity_seconds)

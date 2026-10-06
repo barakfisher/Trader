@@ -21,20 +21,25 @@ before any reply named a model.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.core.logging import get_logger
-from app.llm.base import Caller, LLMCompletion, LLMProvider, Purpose, Verdict
+from app.llm.base import Caller, LLMCompletion, LLMProvider, Message, Purpose, ToolSpec, Verdict
 from app.llm.catalogue import Scope
 
 log = get_logger("llm.model_choice")
 
 #: Which choice each purpose follows. Narration and `/ask` are both explanations
 #: of figures the system computed, and share one model (D43).
-SCOPE_FOR_PURPOSE: dict[Purpose, Scope] = {"narration": "explain", "ask": "explain"}
+SCOPE_FOR_PURPOSE: dict[Purpose, Scope] = {
+    "narration": "explain",
+    "ask": "explain",
+    "agent_scan": "agent",
+}
 
 
 class ModelChoices(Protocol):
@@ -93,6 +98,29 @@ class ChoosingProvider:
         return await self._inner.complete(
             system=system,
             user=user,
+            max_output_tokens=max_output_tokens,
+            temperature=temperature,
+            reasoning_effort=reasoning_effort,
+            caller=caller,
+            model=model or self._model_for(caller),
+        )
+
+    async def converse(
+        self,
+        *,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSpec],
+        max_output_tokens: int | None = None,
+        temperature: float | None = None,
+        reasoning_effort: str | None = None,
+        caller: Caller | None = None,
+        model: str | None = None,
+    ) -> LLMCompletion:
+        return await self._inner.converse(
+            system=system,
+            messages=messages,
+            tools=tools,
             max_output_tokens=max_output_tokens,
             temperature=temperature,
             reasoning_effort=reasoning_effort,

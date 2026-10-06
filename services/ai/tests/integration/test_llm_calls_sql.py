@@ -49,8 +49,9 @@ def test_the_insert_deletes_calls_past_the_retention_window(migrated: Engine) ->
     with migrated.begin() as connection:
         connection.execute(
             text(
-                "INSERT INTO llm_calls (agent, provider, outcome, latency_ms, prompt, started_at) "
-                "VALUES ('ask', 'openrouter', 'ok', 1, 'expired', now() - interval '31 days'), "
+                "INSERT INTO llm_calls "
+                "(purpose, provider, outcome, latency_ms, prompt, started_at) VALUES"
+                " ('ask', 'openrouter', 'ok', 1, 'expired', now() - interval '31 days'), "
                 "       ('ask', 'openrouter', 'ok', 1, 'kept', now() - interval '29 days')"
             )
         )
@@ -68,48 +69,59 @@ def test_the_insert_deletes_calls_past_the_retention_window(migrated: Engine) ->
     assert prompts == {"kept", "fresh"}
 
 
-# 0041: `agent` becomes `purpose`, expand then contract. Until the contract, a pod
-# still running the old code names `agent` and the new code names `purpose`; the
-# trigger makes either insert carry both, so neither can break the other.
+# 0042: only an agent's scan names an agent, and it always does - so an agent's
+# spend (D45) is one purpose's sum, and no scan's call can lose its agent.
 
 
-def test_an_old_writer_naming_agent_gets_purpose_too(migrated: Engine) -> None:
-    with migrated.begin() as connection:
-        row = connection.execute(
-            text(
-                "INSERT INTO llm_calls (agent, provider, outcome, latency_ms, prompt) "
-                "VALUES ('ask', 'openrouter', 'ok', 1, 'old-writer') RETURNING agent, purpose"
-            )
-        ).one()
-        connection.execute(text("DELETE FROM llm_calls WHERE prompt = 'old-writer'"))
-    assert (row.agent, row.purpose) == ("ask", "ask")
-
-
-def test_a_new_writer_naming_purpose_gets_agent_too(migrated: Engine) -> None:
-    call_id = DatabaseCallLog(migrated, retention_days=30).record(_entry("new-writer"))
-    with migrated.begin() as connection:
-        row = connection.execute(
-            text("SELECT agent, purpose FROM llm_calls WHERE id = :id"), {"id": call_id}
-        ).one()
-        connection.execute(text("DELETE FROM llm_calls WHERE id = :id"), {"id": call_id})
-    assert (row.agent, row.purpose) == ("narration", "narration")
-
-
-def test_agent_and_purpose_cannot_disagree(migrated: Engine) -> None:
+def _refused(migrated: Engine, sql: str, params: dict, constraint: str) -> None:
     with migrated.connect() as connection:
         try:
-            connection.execute(
-                text(
-                    "INSERT INTO llm_calls (agent, purpose, provider, outcome, latency_ms, prompt) "
-                    "VALUES ('ask', 'narration', 'openrouter', 'ok', 1, 'disagree')"
-                )
-            )
+            connection.execute(text(sql), params)
         except Exception as error:  # noqa: BLE001 - the refusal is the assertion
-            assert "llm_calls_purpose_is_agent" in str(error)
+            assert constraint in str(error)
         else:
-            raise AssertionError("a row whose agent and purpose disagree was accepted")
+            raise AssertionError(f"{constraint} did not refuse the row")
         finally:
             connection.rollback()
+
+
+def _simulated_agent(migrated: Engine) -> str:
+    with migrated.begin() as connection:
+        return connection.execute(
+            text(
+                "INSERT INTO agents (user_id, slug, name, budget_minor) "
+                "VALUES (:user, 'scan-calls', 'Scan calls', 100000) RETURNING id::text"
+            ),
+            {"user": SEED_USER},
+        ).scalar_one()
+
+
+def test_a_scan_call_must_name_its_agent_and_nothing_else_may(migrated: Engine) -> None:
+    agent = _simulated_agent(migrated)
+    insert = (
+        "INSERT INTO llm_calls (user_id, agent_id, purpose, provider, outcome, latency_ms, prompt) "
+        "VALUES (:user, CAST(:agent AS uuid), :purpose, 'openrouter', 'ok', 1, 'p')"
+    )
+    _refused(
+        migrated,
+        insert,
+        {"user": SEED_USER, "agent": None, "purpose": "agent_scan"},
+        "llm_calls_scan_names_its_agent",
+    )
+    _refused(
+        migrated,
+        insert,
+        {"user": SEED_USER, "agent": agent, "purpose": "narration"},
+        "llm_calls_scan_names_its_agent",
+    )
+    with migrated.begin() as connection:
+        connection.execute(
+            text(insert), {"user": SEED_USER, "agent": agent, "purpose": "agent_scan"}
+        )
+        connection.execute(
+            text("DELETE FROM llm_calls WHERE agent_id = CAST(:a AS uuid)"), {"a": agent}
+        )
+        connection.execute(text("DELETE FROM agents WHERE id = CAST(:a AS uuid)"), {"a": agent})
 
 
 def test_an_agent_id_needs_its_user(migrated: Engine) -> None:
@@ -121,7 +133,8 @@ def test_an_agent_id_needs_its_user(migrated: Engine) -> None:
             connection.execute(
                 text(
                     "INSERT INTO llm_calls (agent_id, purpose, provider, outcome, latency_ms, "
-                    "prompt) VALUES (CAST(:agent AS uuid), 'ask', 'openrouter', 'ok', 1, 'orphan')"
+                    "prompt) VALUES (CAST(:agent AS uuid), 'agent_scan', 'openrouter', 'ok', 1, "
+                    "'orphan')"
                 ),
                 {"agent": agent_id},
             )

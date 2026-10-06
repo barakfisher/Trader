@@ -56,6 +56,11 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "ALTER TABLE cash_movements DISABLE TRIGGER USER; ALTER TABLE fills DISABLE TRIGGER USER; "
         "DELETE FROM cash_movements WHERE kind <> 'opening_deposit'; DELETE FROM fills",
     ),
+    # 0041's `agent` column names only narration and ask; a scan's call has no value there.
+    "0042_agent_scan_inputs": (
+        "llm_calls holds agent_scan calls",
+        "DELETE FROM llm_calls WHERE purpose = 'agent_scan'",
+    ),
 }
 
 #: `col = ANY (ARRAY['a'::text, 'b'::text])` as `pg_get_constraintdef` prints it.

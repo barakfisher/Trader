@@ -27,9 +27,10 @@ not happen" catches one type.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Literal, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 #: Accounting unit for LLM spend. Money in this system is integer minor units
 #: (cents for USD), but a single narration call costs a small fraction of a
@@ -88,6 +89,9 @@ class LLMCompletion:
     #: The `llm_calls` row this completion was recorded as, for the caller's
     #: verdict (`record_verdict`); None when nothing recorded it.
     call_id: int | None = None
+    #: The tools the model asked for, in order (`converse` only). A turn may
+    #: carry tool calls and no text; `complete` never returns one without text.
+    tool_calls: tuple[ToolCall, ...] = ()
 
     @property
     def estimated_cost_usd(self) -> Decimal:
@@ -111,7 +115,55 @@ NO_REASONING = "none"
 #: which purpose is slow, costly or failing - and never has to guess from a
 #: prompt. Called `agent` until migration 0041: Stage 4 brought real agents
 #: (`Caller.agent_id`), and one word for both would confuse every reader.
-Purpose = Literal["narration", "ask"]
+Purpose = Literal["narration", "ask", "agent_scan"]
+
+
+@dataclass(frozen=True)
+class ToolSpec:
+    """A tool the model may call in `converse`: a name, what it does, and a
+    JSON Schema for its arguments. The provider only describes it; the caller
+    runs it (D15)."""
+
+    name: str
+    description: str
+    parameters: Mapping[str, Any]
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    """A tool call the model made. `arguments` is the JSON text exactly as the
+    model wrote it - parsing and validating it is the caller's, because a model
+    can write anything there and the caller decides what that means."""
+
+    id: str
+    name: str
+    arguments: str
+
+
+@dataclass(frozen=True)
+class UserMessage:
+    text: str
+
+
+@dataclass(frozen=True)
+class AssistantMessage:
+    """A turn the model took, replayed so it sees its own tool calls."""
+
+    text: str
+    tool_calls: tuple[ToolCall, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ToolResultMessage:
+    """What running `call_id` returned, as the text the model will read."""
+
+    call_id: str
+    content: str
+
+
+#: One message of a conversation after the system prompt.
+Message = UserMessage | AssistantMessage | ToolResultMessage
+
 
 #: A call site's judgement of a completion it received: used, or why not.
 Verdict = Literal[
@@ -177,6 +229,27 @@ class LLMProvider(Protocol):
         Never returns a partial or placeholder answer. Narration is optional in
         this product; a fabricated one is not an acceptable substitute for its
         absence (guideline 7).
+        """
+        ...
+
+    async def converse(
+        self,
+        *,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSpec],
+        max_output_tokens: int | None = None,
+        temperature: float | None = None,
+        reasoning_effort: str | None = None,
+        caller: Caller | None = None,
+        model: str | None = None,
+    ) -> LLMCompletion:
+        """One turn of a conversation in which the model may call `tools`.
+
+        The model's turn comes back as text, tool calls, or both. Nothing here
+        runs a tool or loops: the caller (an agent's scan, D15) runs what was
+        asked, appends the results and calls again, and decides when to stop.
+        Every turn is one recorded, budgeted call, exactly like `complete`.
         """
         ...
 

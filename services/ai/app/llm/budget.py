@@ -34,6 +34,7 @@ the rate limiter skips a provider with no upstream quota to protect.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 from decimal import ROUND_FLOOR, Decimal
 
@@ -47,6 +48,8 @@ from app.llm.base import (
     LLMCompletion,
     LLMError,
     LLMProvider,
+    Message,
+    ToolSpec,
     Verdict,
 )
 
@@ -161,8 +164,8 @@ class BudgetedProvider:
         caller: Caller | None = None,
         model: str | None = None,
     ) -> LLMCompletion:
-        if not self.charges_per_token:
-            return await self._inner.complete(
+        return await self._metered(
+            lambda: self._inner.complete(
                 system=system,
                 user=user,
                 max_output_tokens=max_output_tokens,
@@ -171,18 +174,41 @@ class BudgetedProvider:
                 caller=caller,
                 model=model,
             )
+        )
+
+    async def converse(
+        self,
+        *,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSpec],
+        max_output_tokens: int | None = None,
+        temperature: float | None = None,
+        reasoning_effort: str | None = None,
+        caller: Caller | None = None,
+        model: str | None = None,
+    ) -> LLMCompletion:
+        return await self._metered(
+            lambda: self._inner.converse(
+                system=system,
+                messages=messages,
+                tools=tools,
+                max_output_tokens=max_output_tokens,
+                temperature=temperature,
+                reasoning_effort=reasoning_effort,
+                caller=caller,
+                model=model,
+            )
+        )
+
+    async def _metered(self, call: Callable[[], Awaitable[LLMCompletion]]) -> LLMCompletion:
+        """Check the cap, make the call, and record what it cost - even a failed one."""
+        if not self.charges_per_token:
+            return await call()
 
         await self._guard.ensure_within_budget()
         try:
-            completion = await self._inner.complete(
-                system=system,
-                user=user,
-                max_output_tokens=max_output_tokens,
-                temperature=temperature,
-                reasoning_effort=reasoning_effort,
-                caller=caller,
-                model=model,
-            )
+            completion = await call()
         except LLMError as exc:
             if exc.metered_micro_usd > 0:
                 total = await self._guard.record(exc.metered_micro_usd)

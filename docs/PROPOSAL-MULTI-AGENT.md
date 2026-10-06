@@ -1107,14 +1107,22 @@ other listed models; a tool-calling flag per listed model. The Admin page: two p
 estimate per day and month, the OpenRouter balance; each change audited. **Then the user funds the
 account and chooses.**
 
-**PR 3 — The scan (migration 0042; D10, D14, D15, D45, D50).** Tool calling in the provider; the
-read-only tools (§10 D15); the briefing; the per-agent budget (`agents.llm_budget_micro_usd`,
-default $0.50) checked before each call; the step limit; `agent_scans` holding each scan's outcome,
-cost, steps and full transcript. Built twice - a hand-written loop and core-only LangGraph, no
-checkpointer - measured on real scans of a test agent on a live copy, and the smaller kept. The
-answer is validated and stored; it proposes nothing yet. `POST /agents/:id/scans` runs one.
+**PR 3 — The scan's inputs (migration 0042; D15, D45).** *Split from the planned scan on
+2026-10-06: the loop cannot be measured until the account is funded, and its inputs can be built and
+tested without a model.* The migration contracts PR 2's rename (drops `llm_calls.agent`, its CHECK
+and trigger; `purpose` gains `agent_scan`, which alone names an agent) and gives each agent its LLM
+budget (`agents.llm_budget_micro_usd`, default $0.50) and schedule (`agents.scan_schedule`, default
+pre-open). Tool calling in the provider; the day's movers behind `MarketDataProvider` (Yahoo's
+day-gainers, day-losers and most-active screens - one request each, cached for every agent in a
+slot); the seven read-only tools (§10 D15); the briefing. Nothing calls a model yet.
 
-**PR 4 — The trade proposal and its approval (migration 0043; D26, D47-D49, D51).** `buy` / `sell`
+**PR 4 — The scan (migration 0043; D10, D14, D50).** The per-agent budget checked before each call;
+the step limit; `agent_scans` holding each scan's outcome, cost, steps and full transcript. Built
+twice - a hand-written loop and core-only LangGraph, no checkpointer - measured on real scans of a
+test agent on a live copy, and the smaller kept. The answer is validated and stored; it proposes
+nothing yet. `POST /agents/:id/scans` runs one. **Needs the funded account.**
+
+**PR 5 — The trade proposal and its approval (migration 0044; D26, D47-D49, D51).** `buy` / `sell`
 proposal kinds, never on the primary (decision 104's allowlist and trigger unchanged);
 `CHECK (source <> 'agent' OR proposal_id IS NOT NULL)` on `fills`. A scan's answer becomes an
 observation with the thesis in the user's language and a proposal with the agent's quote, TTL from
@@ -1123,12 +1131,12 @@ Confirm fills through `executeFill` in the approval's transaction; Approve and R
 refused attempt leaves it pending and is recorded. Dashboard and Telegram; the consolidated view's
 pending proposals (D35). `CLAUDE.md` guideline 1 amended for the thesis.
 
-**PR 5 — The agent page (D45, D46, D50, D52).** The *Decisions* tab; on Settings the schedule
+**Then: handoff** (five merged PRs).
+
+**PR 6 — The agent page (D45, D46, D50, D52).** The *Decisions* tab; on Settings the schedule
 (`agents.scan_schedule`, default pre-open) with its cost per run, the LLM budget, *Run a scan now*,
 and the waiting-for-a-persona state; English and Hebrew.
 
-**Then: handoff** (five merged PRs).
-
-**PR 6 — The schedule.** Each agent's scans entered through `POST /internal/runs` at its chosen
+**PR 7 — The schedule.** Each agent's scans entered through `POST /internal/runs` at its chosen
 times on the exchange calendar, with a run key per agent and slot; the kind CronJob and its
 contract test; a high-severity `SELL` of a held position delivered through quiet hours (D5).
