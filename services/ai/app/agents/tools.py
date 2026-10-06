@@ -37,7 +37,7 @@ from app.analysis.price_move import price_move_findings
 from app.analysis.quote_history import load_daily_closes, load_price_series
 from app.analysis.sigma_move import sigma_move_findings
 from app.analysis.thresholds import AnalysisThresholds
-from app.core.money import from_minor
+from app.core.money import minor_unit_exponent
 from app.corpus.embeddings import BaseEmbedder
 from app.corpus.retrieval import hybrid_search
 from app.corpus.vector_store import VectorStore
@@ -92,8 +92,9 @@ class Tool:
 
 
 def money(minor: int, currency: str) -> str:
-    """Minor units as the decimal string a thesis would quote."""
-    return str(from_minor(minor, currency))
+    """Minor units as the decimal string a thesis would quote: every minor digit,
+    never an exponent ("1000.00", not `from_minor`'s normalised "1E+3")."""
+    return f"{Decimal(minor).scaleb(-minor_unit_exponent(currency)):f}"
 
 
 def _symbol(arguments: Mapping[str, Any], key: str = "symbol") -> str | None:
@@ -356,7 +357,7 @@ async def get_news(context: ToolContext, arguments: Mapping[str, Any]) -> dict[s
                 "title": row.title,
                 "source": row.source,
                 "published": row.published_at.isoformat(),
-                "sentiment": None if row.score is None else str(row.score),
+                "sentiment": None if row.score is None else f"{row.score.normalize():f}",
             }
             for row in articles
         ],
@@ -399,7 +400,7 @@ async def get_position(context: ToolContext, arguments: Mapping[str, Any]) -> di
         "holdings": [
             {
                 "symbol": row.symbol,
-                "quantity": str(Decimal(row.quantity).normalize()),
+                "quantity": f"{Decimal(row.quantity).normalize():f}",
                 "cost_per_share": (
                     money(row.cost_basis_minor, row.currency)
                     if row.cost_basis_minor is not None
