@@ -5,7 +5,9 @@ this document are settled. What follows is the agreed design and its four-stage 
 written against the system as it exists at PR #40.
 
 **Amended 2026-10-04/05** (at PR #150): further decisions D1–D31 (§10), the schema as measured that day
-(§11), the exact Stage 1 task list (§12), and Stage 3's measurements and task list (§13). Where §10
+(§11), the exact Stage 1 task list (§12), and Stage 3's measurements and task list (§13).
+**Amended 2026-10-06** (at PR #170): decisions D32–D52 (§10) and Stage 4's measurements and task list
+(§14). Where §10
 and an earlier section disagree, §10 wins, and the earlier section carries a pointer to it.
 
 A user creates several named **agents**, each with its own analysis philosophy, simulated budget and
@@ -335,6 +337,7 @@ degradation.
 `LLM_DAILY_BUDGET_USD` is a **single global guard**. N agents scanning daily race for one pot and
 whichever runs last silently gets nothing, non-deterministically. Per-agent budgets are required and
 belong in the existing budget module, with the global cap retained above them as a ceiling.
+**Amended (D12, D45):** $0.50 a day per agent by default, editable per agent.
 
 ---
 
@@ -342,7 +345,8 @@ belong in the existing budget module, with the global cap retained above them as
 
 ### 7.1 Fixed daily scans, off-peak
 
-LLM agents scan twice daily: **pre-market open and post-market close**. Both enter through
+LLM agents scan twice daily: **pre-market open and post-market close**. **Amended (D46):** the
+schedule is each agent's choice, pre-open once a day by default. Both enter through
 `POST /internal/runs` with a run key, like all scheduled work, and take their own
 `RUN_BUCKET_MINUTES` entry. Deterministic agents may keep the existing 30-minute cadence; their cost
 is a database read.
@@ -366,7 +370,8 @@ UNIQUE`, one chat per user. Agents do not get their own chats — N agents × N 
 volume problem wearing an architecture costume.
 
 - **`agent_id` is included in the signed callback payload.** Without it, a signed callback minted for
-  one agent's proposal can be replayed against another's.
+  one agent's proposal can be replayed against another's. **Amended (§10, opening Stage 4):** not
+  needed - the HMAC already covers the proposal id, which names one agent.
 - **The agent's name and persona badge appear in the message body**, so the sender is unambiguous in
   a single shared chat.
 - **Per-agent severity floors default higher than the primary's.** Five agents on a daily cadence is
@@ -395,7 +400,7 @@ enforced.
 | **1 — Isolation** | `agents` table, primary seeded + backfilled, `agent_id NOT NULL`, the six constraint replacements (§3.3, §11), the passive primary (D1) — tasks in §12 | — |
 | **2 — Agents exist** | Create, name, budget, persona, pause, archive; an Agents page and a page per agent (D17-D20). No decisions (D16); the consolidated view moves to Stage 3 (D17) | Stage 1 |
 | **3 — Budget, fills, scoring** | the consolidated view with filter and split figures (D17), `agent_cash` and recorded top-ups (D22), fees (D6), the fill function with D3's range and TTL checks, the exchange calendar and next open (D4, D25), manual trades at the live quote or a flagged typed price (D21), P&L against a shadow SPY and 30/60/90-day scoring (D24) — tasks in §13 | Stage 2 |
-| **4 — The deciding agent** | The trade proposal and its dashboard + Telegram approval (D26), persona + tools decide (D14), briefing then read-only tool calls with a step limit and a stored transcript (D15), tool calling in the provider, reasoning in `services/ai` with a hand-written loop or core LangGraph by comparison and no checkpointer (D10), per-agent budgets (D12), pre-open/post-close schedule, persona rationale behind the validator, urgent sells through quiet hours (D5) | Stage 3; a paid model (§11 — M3, M5 and GDELT news have since landed, and the workspace is funded) |
+| **4 — The deciding agent** | The trade proposal and its dashboard + Telegram approval (D26), persona + tools decide (D14), briefing then read-only tool calls with a step limit and a stored transcript (D15), tool calling in the provider, reasoning in `services/ai` with a hand-written loop or core LangGraph by comparison and no checkpointer (D10), per-agent budgets (D12), pre-open/post-close schedule, persona rationale behind the validator, urgent sells through quiet hours (D5) | Stage 3; a paid model (§11 — M3, M5 and GDELT news have since landed; the workspace is **not** funded, §14.1) |
 
 The PRD P2 amendment (§2) ships with stage 1, since it is the boundary the whole feature stands on.
 
@@ -430,6 +435,8 @@ inside its TTL, the exchange is open, and — in the same transaction, with the 
 locked — the recomputed cost plus fee is within cash. Any failure cancels with the reason; nothing is
 resized (§5.1). Two-sided because a sharp move in the user's favour can also mean the thesis changed.
 The confirmation states the price shown and the price filled.
+**Amended (D47):** the range is centred on the live price an approval's preview shows, and the
+preview is refused beyond 300 bps of the agent's price.
 
 **D4 — The TTL starts at the next market open.** `expires_at = max(created_at, next_open) + TTL`
 (P4's 60 minutes). Without it every post-close proposal (~23:00 Israel time) would expire before the
@@ -750,6 +757,105 @@ agent's P&L and return, SPY's on the same deposits and the difference in points,
 recorded close; a chart of the agent's net worth and the shadow at each close; and the score,
 which reads "no agent decisions yet" until Stage 4.
 
+### Added 2026-10-06, opening Stage 4
+
+Measured first (§14.1): the OpenRouter account holds no credit and is on the free tier, so the
+"funded workspace" §9 assumed does not exist yet; every recorded call used the free route, whose
+narrations were accepted 16 times in 49; a tool loop re-sends its whole conversation at every step,
+so a scan is several times D12's estimate. Asked one at a time; the user chose every
+recommendation, and added three things of their own: both models editable on the Admin page with a
+cost estimate (D43, D44), the schedule a per-agent choice with pre-open as the default and a cost per
+run beside it (D46), and the scan's cost made visible wherever it is chosen.
+
+**D43 - One model for narration and `/ask`, one for agents, both chosen on the Admin page from a
+list of priced models.** The default for both is `anthropic/claude-sonnet-5.5` (OpenRouter, $2 / $10
+per million tokens). The choice is installation-wide, stored in the database and read by the AI
+service on each call, so switching needs no redeploy; `LLM_MODEL` remains the value before anyone
+has chosen. The list holds only models with a price in `app/llm/pricing.py` (or
+`LLM_MODEL_PRICES`), and the agents' list only those that support tool calling. Every change is an
+`admin_audit` row. The API key stays in `.env` (guideline 9). *Rejected:* a typed model id (an
+unpriced model is charged the pessimistic $20 per million tokens, so a $5 day ends after about five
+scans for no visible reason); narration staying on the free route (rejected two times in three, for
+about $0.02 a day saved); an environment variable per purpose (a redeploy to try a model).
+
+**D44 - The Admin page says what the choice will cost.** Beside each picker: an estimate per day
+and per month, labelled as an estimate - the last 7 days of recorded narration and `/ask` tokens
+re-priced at the chosen model, plus each scanning agent's average scan cost (D46) times its
+scheduled scans - and the OpenRouter credit balance, read from OpenRouter's own `/credits` with the
+existing key. The question it answers is "how much should I add to the account". Funding it is the
+user's act, not the system's.
+
+**D45 - Each agent's LLM budget is $0.50 a day by default, editable on its Settings.** Amends D12's
+$0.25, which assumed a 10,000-token scan. Integer micro-USD; the day is the global guard's UTC day;
+spend is summed from the agent's own `llm_calls` rows. Before each model call the scan checks the
+agent's budget and the global ceiling (`LLM_DAILY_BUDGET_USD`, unchanged) and stops with
+"budget reached" when either is spent, so a scan overruns by at most one call. It never borrows
+another agent's allowance. *Rejected:* $0.25 (a long scan is cut short most days); a fixed default
+for every agent (a persona that researches widely costs more, by design).
+
+**D46 - Each agent's schedule is a choice on its Settings; pre-open once a day is the default.**
+The choices: *pre-open only* (default), *pre-open and post-close*, *10:00 and 14:00 New York*,
+*10:00 New York only*. Times are the exchange's (§7.1), from the calendar (D25): no scan on a closed
+day, and a post-close scan follows an early close. Beside the choice, the estimated cost per run:
+the agent's average over its recent scans, or, before it has one, the installation's agents'
+average, or, before any, §14.1's assumption - labelled as such. Amends §7.1, which fixed two scans
+for every agent. *Rejected:* intraday scans as the default (recommended for D3's sake; the user
+preferred pre-open, and D47 makes it work).
+
+**D47 - Approving a trade proposal shows the live price, then confirms it.** Amends D3. A proposal
+stores the quote the agent saw; at a pre-open scan that is the previous close, and an overnight gap
+larger than 0.5% would otherwise refuse every approval. So *Approve* is D27's preview: the agent's
+price, the live price now and the distance between them, cost with fee and the cash after; then
+*Confirm* fills within ±50 bps of the live price that preview showed, through `executeFill`, with the
+exchange open, the quote fresh (D28) and the cash checked under the lock. **The preview is refused
+when the live price is more than 300 bps from the agent's price**: the thesis was formed at a price
+that no longer holds. In Telegram, *Approve* replies with the preview and a *Confirm* button. The
+server still computes every bound; the model supplies none.
+
+**D48 - A trade proposal has Approve and Reject, and nothing else.** No snooze - its life is an hour
+from the open (D4) and its price an hour old by the time a snooze ends - and no undo, which would
+delete a fill (D23). The server refuses both for the trade kinds whatever the surface sends;
+`rebalance` keeps all four.
+
+**D49 - A refused approval leaves the proposal pending.** Price outside the range, more than 300 bps
+from the agent's price, the exchange closed, a stale quote, not enough cash: nothing is written to
+the ledger, the reason and both prices are shown, and the attempt is recorded with the proposal so
+its history shows it. The user may try again until it expires, or reject it. No new state (§5.2).
+*Rejected:* closing the proposal on the first refusal (a brief spike would end one the user wanted).
+
+**D50 - Every scan is shown, on a *Decisions* tab.** One row per scan - time, outcome (*proposed*,
+*no trade*, *budget reached*, *step limit*, *failed*), cost and steps - expanding to the briefing,
+each tool call with its result, and the answer with its thesis. A proposal links to the scan that
+made it, and a fill to its proposal. This is D15's stored transcript, made readable. *Rejected:*
+showing only scans that proposed (the money spent on "no trade" would be invisible, and so would the
+reasoning behind an agent that never acts).
+
+**D51 - The thesis is written in the user's language.** The model writes it in
+`user_settings.language`; tickers and figures are unchanged, and the evidence validator checks them
+the same way. Tool results are stored as returned. The frame around it - side, quantity, prices,
+range, expiry - comes from the UI catalogue and the Telegram catalogue. This amends guideline 1 for
+the thesis only; `CLAUDE.md` changes with the PR that writes the first thesis. *Rejected:* an English
+thesis under a Hebrew frame - the paragraph read before approving is the one that most needs to be
+in the reader's language.
+
+**D52 - An agent scans only with a persona; it can be asked to scan now.** An active agent with no
+persona is shown as waiting for one and is never billed. *Run a scan now* on its page starts one
+scan outside the schedule, against its daily budget; it is refused for a paused or archived agent,
+without a persona, or with the budget spent. *Rejected:* a neutral default persona (an agent the
+user has not described spending money on decisions nobody asked it to make).
+
+Also settled while measuring, not needing a decision:
+- **A scan proposes at most once** (D15: "a proposal or nothing"). Its answer becomes an observation
+  carrying the thesis and evidence, and the proposal hangs from it - `proposals.observation_id` is
+  `NOT NULL` and unique, so a proposal without an observation cannot exist.
+- **The Telegram callback does not gain an agent id** (amends §7.2). It signs the proposal id with an
+  HMAC, and a proposal belongs to one agent, so a callback cannot be replayed against another
+  agent's proposal; a second UUID would also not fit Telegram's 64 bytes.
+- **The fill is written in the approval's transaction** (D11): `executeFill` takes the caller's
+  transaction, so an approval without its fill, or a fill without its approval, cannot be committed.
+- **`llm_calls.agent` becomes `purpose` before it gains `agent_id`** (§11), expand then contract
+  (decision 101 of `.claude/MEMORY.md`), so the pods running during the migration keep writing.
+
 ---
 
 ## 11. Measured, 2026-10-04 (read-only, live compose database)
@@ -952,3 +1058,77 @@ value) computed from the ledger and stored closes, SPY and every traded instrume
 the shadow benchmark, P&L and return beside it on the agent page, and the 30/60/90-day score over
 `agent` fills. `GET /market/sessions` (AI service) lists the calendar's sessions with their closes;
 `GET /agents/:id/performance` computes the rest on each request.
+
+---
+
+## 14. Stage 4 — measured, and the implementation tasks
+
+### 14.1 Measured, 2026-10-06 (read-only, live compose database at `0040_ledger`)
+
+- **One agent, the primary; no fills; 18 proposals, all `rebalance`** (14 expired, 4 approved).
+  Neither installation holds a simulated agent.
+- **The model is not funded.** OpenRouter's `/key` reports `is_free_tier: true` and `/credits`
+  `total_credits: 0`; `ANTHROPIC_API_KEY` is empty. Every one of the 52 recorded calls used
+  `nvidia/nemotron-3.5-lightning:free` at $0. Narration: 16 accepted, 32 `unsourced_figures`,
+  1 `malformed`; `/ask`: 2 accepted, 1 `unsourced_figures`. A paid model is a precondition (§11),
+  and buying credit is the user's act (D44).
+- **Prices, read from OpenRouter's model list that day** (USD per million tokens, input / output /
+  cached input): `anthropic/claude-sonnet-5.5` 2 / 10 / 0.20, `anthropic/claude-haiku-4.5`
+  1 / 5 / 0.10, `anthropic/claude-opus-5.5` 4 / 20 / 0.20, `google/gemini-3.5-flash-lite`
+  0.30 / 2.50; all four support tool calling. `app/llm/pricing.py`'s defaults stop at the 4.x
+  generation, so Sonnet 5.5 would today be charged the pessimistic unknown-model rate.
+- **A tool loop costs more than §11 estimated.** Each step re-sends the conversation so far. With a
+  ~4,000-token system prompt and briefing and ~1,500 tokens per tool result, a scan of five tool
+  calls sends ~45,000 prompt tokens and one of twelve ~170,000, with ~300 completion tokens per step.
+  On Sonnet 5.5: ~$0.11 and ~$0.38 uncached; with the repeated prefix cached, ~$0.04 for the typical
+  scan. **An assumption until PR 3 measures real scans**, and the figure D44 and D46 show until then.
+- **The provider has no tool calling** (`openai_compatible.py` sends one system and one user
+  message); LangGraph is not installed. The global spend guard is a Redis counter per UTC day
+  (`app/llm/budget.py`); nothing is per agent.
+- **`llm_calls.agent`** is `CHECK (agent IN ('narration', 'ask'))`, read by the Admin page's LLM card
+  (`services/llmPanel.ts`), which is read-only. There is no installation-wide settings table, only
+  `user_settings`.
+- **Approval today** (`services/proposals.ts:applyDecision`) writes an intent and offers approve,
+  reject, snooze and undo; `executeFill` opens its own transaction. **Proposals require an
+  observation** (`observation_id NOT NULL`, unique). The Telegram callback carries proposal id,
+  action and nonce under a 16-byte HMAC, inside 64 bytes.
+
+### 14.2 Tasks
+
+One PR at a time off `main`; every migration rehearsed on a copy of the live database first.
+
+**PR 1 — This amendment.** D43–D52 and §14.
+
+**PR 2 — The models, on the Admin page (migration 0041; D43, D44).** An installation settings table
+for the narration/`/ask` model and the agents' model; the AI service resolves the model per purpose
+from it, falling back to `LLM_MODEL`. `llm_calls` gains `purpose` (expand: written beside `agent`,
+which a later migration drops) and a nullable `agent_id`. Prices for the 5.x generation and the
+other listed models; a tool-calling flag per listed model. The Admin page: two pickers, the
+estimate per day and month, the OpenRouter balance; each change audited. **Then the user funds the
+account and chooses.**
+
+**PR 3 — The scan (migration 0042; D10, D14, D15, D45, D50).** Tool calling in the provider; the
+read-only tools (§10 D15); the briefing; the per-agent budget (`agents.llm_budget_micro_usd`,
+default $0.50) checked before each call; the step limit; `agent_scans` holding each scan's outcome,
+cost, steps and full transcript. Built twice - a hand-written loop and core-only LangGraph, no
+checkpointer - measured on real scans of a test agent on a live copy, and the smaller kept. The
+answer is validated and stored; it proposes nothing yet. `POST /agents/:id/scans` runs one.
+
+**PR 4 — The trade proposal and its approval (migration 0043; D26, D47-D49, D51).** `buy` / `sell`
+proposal kinds, never on the primary (decision 104's allowlist and trigger unchanged);
+`CHECK (source <> 'agent' OR proposal_id IS NOT NULL)` on `fills`. A scan's answer becomes an
+observation with the thesis in the user's language and a proposal with the agent's quote, TTL from
+the next open (D4). Approve previews at the live price (refused beyond 300 bps of the agent's),
+Confirm fills through `executeFill` in the approval's transaction; Approve and Reject only; a
+refused attempt leaves it pending and is recorded. Dashboard and Telegram; the consolidated view's
+pending proposals (D35). `CLAUDE.md` guideline 1 amended for the thesis.
+
+**PR 5 — The agent page (D45, D46, D50, D52).** The *Decisions* tab; on Settings the schedule
+(`agents.scan_schedule`, default pre-open) with its cost per run, the LLM budget, *Run a scan now*,
+and the waiting-for-a-persona state; English and Hebrew.
+
+**Then: handoff** (five merged PRs).
+
+**PR 6 — The schedule.** Each agent's scans entered through `POST /internal/runs` at its chosen
+times on the exchange calendar, with a run key per agent and slot; the kind CronJob and its
+contract test; a high-severity `SELL` of a held position delivered through quiet hours (D5).
