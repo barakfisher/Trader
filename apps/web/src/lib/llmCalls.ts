@@ -4,7 +4,7 @@
  */
 
 import type {
-  LlmAgentSummary,
+  LlmPurposeSummary,
   LlmCallOutcome,
   LlmCallSummary,
   LlmCallVerdict,
@@ -58,20 +58,35 @@ export function formatMicroUsd(micro: number): string {
   return usd(units / TEN_THOUSANDTHS_PER_DOLLAR, 2, 4);
 }
 
+/**
+ * A USD amount the server sent as a decimal string ("9.89709208"), in integer
+ * micro-USD, rounded half up at the sixth place - parsed digit by digit, so no
+ * float ever holds the money (guideline 3). Null for anything else.
+ */
+export function decimalUsdToMicro(text: string): number | null {
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(text.trim());
+  if (!match) return null;
+  const [, sign, whole, fraction = ''] = match;
+  const kept = Number((fraction + '000000').slice(0, 6));
+  const roundUp = Number(fraction.charAt(6) || '0') >= 5 ? 1 : 0;
+  const micro = Number(whole) * 1_000_000 + kept + roundUp;
+  return sign === '-' ? -micro : micro;
+}
+
 function usd(dollars: number, minimumFractionDigits: number, maximumFractionDigits: number): string {
   return formatNumber(dollars, { style: 'currency', currency: 'USD', minimumFractionDigits, maximumFractionDigits });
 }
 
 /**
- * An agent's cost, saying "free route" when every call went to one: there a
+ * A purpose's cost, saying "free route" when every call went to one: there a
  * zero is the price, where for a paid model it would be a missing figure.
  */
-export function agentCost(agent: Pick<LlmAgentSummary, 'costMicroUsd' | 'models'>): string {
-  const reached = agent.models.filter((model) => model.model !== null);
-  if (agent.costMicroUsd === 0 && reached.length > 0 && reached.every((model) => model.free)) {
+export function purposeCost(summary: Pick<LlmPurposeSummary, 'costMicroUsd' | 'models'>): string {
+  const reached = summary.models.filter((model) => model.model !== null);
+  if (summary.costMicroUsd === 0 && reached.length > 0 && reached.every((model) => model.free)) {
     return t('llm.freeRoute');
   }
-  return formatMicroUsd(agent.costMicroUsd);
+  return formatMicroUsd(summary.costMicroUsd);
 }
 
 /** One call's cost; a free route's zero is its price, so it says so. */

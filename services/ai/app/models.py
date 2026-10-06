@@ -831,3 +831,79 @@ class TopicDiscoverResponse(BaseModel):
     min_stories: int
     min_sources: int
     phrases: list[DiscoveredPhrase] = Field(default_factory=list)
+
+
+LlmScope = Literal["explain", "agent"]
+
+
+class LlmCostEstimate(BaseModel):
+    """A choice's cost, estimated (D44): integer micro-USD, rounded up."""
+
+    daily_micro_usd: int
+    monthly_micro_usd: int
+
+
+class LlmOfferedModel(BaseModel):
+    """A model the Admin page may choose, with what it would cost (D43, D44)."""
+
+    id: str = Field(description="OpenRouter's id, e.g. 'anthropic/claude-sonnet-5.5'.")
+    label: str
+    prompt_usd_per_mtok: str = Field(description="USD per million input tokens, a decimal.")
+    completion_usd_per_mtok: str = Field(description="USD per million output tokens, a decimal.")
+    supports_tools: bool
+    free: bool = Field(description="An OpenRouter `:free` route: unbilled, and slow.")
+    scopes: list[LlmScope] = Field(description="What it may be chosen for.")
+    explain_estimate: LlmCostEstimate
+    agent_estimate: LlmCostEstimate | None = Field(
+        description="Null when the model may not be chosen for agents."
+    )
+    scan_estimate_micro_usd: int | None = Field(
+        description="One agent scan at the agent basis; null when not offered for agents."
+    )
+
+
+class LlmScopeChoice(BaseModel):
+    scope: LlmScope
+    chosen: str | None = Field(description="The model chosen on the Admin page; null if none.")
+    effective: str | None = Field(
+        description="What calls use now: the choice, else the configured LLM_MODEL."
+    )
+
+
+class LlmExplainBasis(BaseModel):
+    window_days: int
+    prompt_tokens_per_day: int
+    completion_tokens_per_day: int
+
+
+class LlmAgentBasis(BaseModel):
+    scanning_agents: int = Field(description="Simulated, active, with a persona (D52).")
+    scans_per_day: int
+    prompt_tokens_per_scan: int
+    completion_tokens_per_scan: int
+    source: Literal["assumed", "measured"]
+
+
+class LlmCredits(BaseModel):
+    """The provider account's balance in USD, decimals as strings."""
+
+    purchased_usd: str
+    used_usd: str
+    remaining_usd: str
+
+
+class LlmModelsResponse(BaseModel):
+    """What the Admin page's model pickers show (D43, D44)."""
+
+    provider: str
+    choosable: bool = Field(
+        description="False unless LLM_PROVIDER is openrouter: the offered ids are OpenRouter's."
+    )
+    configured_model: str | None
+    choices: list[LlmScopeChoice]
+    models: list[LlmOfferedModel]
+    explain_basis: LlmExplainBasis
+    agent_basis: LlmAgentBasis
+    credits: LlmCredits | None = Field(
+        description="Null when the provider reports no balance or it could not be read."
+    )

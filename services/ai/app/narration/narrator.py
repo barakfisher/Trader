@@ -146,7 +146,7 @@ async def narrate(
             # its retrieved context supports an answer at all - should pass its
             # own value, or none and inherit the deployment default.
             reasoning_effort=NO_REASONING,
-            caller=Caller(agent="narration", user_id=user_id),
+            caller=Caller(purpose="narration", user_id=user_id),
         )
     except LLMError as error:
         # The null provider raises Unavailable, so "no LLM configured" arrives

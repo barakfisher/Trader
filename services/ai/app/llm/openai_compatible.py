@@ -58,6 +58,7 @@ from app.llm.pricing import (
     DEFAULT_UNKNOWN_MODEL_PRICE_USD_PER_MTOK,
     ModelPrice,
     estimate_cost_micro_usd,
+    price_for,
 )
 
 log = get_logger("llm.openai_compatible")
@@ -131,6 +132,7 @@ class OpenAICompatibleProvider:
         temperature: float | None = None,
         reasoning_effort: str | None = None,
         caller: Caller | None = None,
+        model: str | None = None,
     ) -> LLMCompletion:
         payload = self._build_payload(
             system=system,
@@ -138,9 +140,10 @@ class OpenAICompatibleProvider:
             max_output_tokens=max_output_tokens,
             temperature=temperature,
             reasoning_effort=reasoning_effort,
+            model=model,
         )
         response = await self._post_with_one_retry(payload)
-        return self._parse(response)
+        return self._parse(response, requested=payload["model"])
 
     def _build_payload(
         self,
@@ -150,6 +153,7 @@ class OpenAICompatibleProvider:
         max_output_tokens: int | None = None,
         temperature: float | None = None,
         reasoning_effort: str | None = None,
+        model: str | None = None,
     ) -> dict[str, Any]:
         """The request body, built without sending it.
 
@@ -164,7 +168,8 @@ class OpenAICompatibleProvider:
         messages.append({"role": "user", "content": user})
 
         payload: dict[str, Any] = {
-            "model": self._model,
+            # The model chosen for this call's purpose (D43), else the configured one.
+            "model": model or self._model,
             "messages": messages,
             "max_tokens": max_output_tokens or self._max_output_tokens,
             "temperature": self._temperature if temperature is None else temperature,
@@ -220,7 +225,7 @@ class OpenAICompatibleProvider:
                     log.warning(
                         "llm.timeout",
                         provider=self.name,
-                        model=self._model,
+                        model=payload["model"],
                         timeout_seconds=self._timeout_seconds,
                     )
                     raise LLMTimeoutError(self.name, self._timeout_seconds) from exc
@@ -234,7 +239,7 @@ class OpenAICompatibleProvider:
                 log.warning(
                     "llm.http_error",
                     provider=self.name,
-                    model=self._model,
+                    model=payload["model"],
                     status=response.status_code,
                     attempt=attempt,
                     will_retry=retryable and attempt == 1,
@@ -262,7 +267,7 @@ class OpenAICompatibleProvider:
                 pass
         return self._retry_backoff_seconds
 
-    def _parse(self, response: httpx.Response) -> LLMCompletion:
+    def _parse(self, response: httpx.Response, *, requested: str) -> LLMCompletion:
         try:
             body = response.json()
         except ValueError as exc:
@@ -275,9 +280,18 @@ class OpenAICompatibleProvider:
         )
         # The model the gateway actually served, which OpenRouter may resolve to
         # something other than what we asked for. Priced and logged on what ran.
-        model = str(body.get("model") or self._model)
+        model = str(body.get("model") or requested)
+        # A gateway may name a dated variant of what was asked for; when that
+        # spelling has no price and the requested one does, the requested price
+        # is the honest estimate, not the pessimistic unknown-model rate.
+        priced_as = (
+            requested
+            if price_for(model, self._prices) is None
+            and price_for(requested, self._prices) is not None
+            else model
+        )
         cost = estimate_cost_micro_usd(
-            model,
+            priced_as,
             usage,
             self._prices,
             unknown_price_usd_per_mtok=self._unknown_price,

@@ -161,7 +161,8 @@ INSERT INTO ops_events (kind, user_id, detail, dedupe_key) VALUES
    'low_confidence:a:quantum:2026-10-01');
 
 -- Model calls covering every agent, outcome and verdict.
-INSERT INTO llm_calls (user_id, agent, provider, model, outcome, verdict, latency_ms, prompt) VALUES
+-- `purpose` since 0041; the trigger fills the old `agent` column from it.
+INSERT INTO llm_calls (user_id, purpose, provider, model, outcome, verdict, latency_ms, prompt) VALUES
   ('00000000-0000-0000-0000-00000000000a', 'narration', 'openrouter', 'm', 'ok', 'accepted', 900, 'p'),
   ('00000000-0000-0000-0000-00000000000a', 'narration', 'openrouter', 'm', 'ok', 'malformed', 900, 'p'),
   ('00000000-0000-0000-0000-00000000000a', 'narration', 'openrouter', 'm', 'ok', 'unsourced_figures', 900, 'p'),
@@ -170,6 +171,14 @@ INSERT INTO llm_calls (user_id, agent, provider, model, outcome, verdict, latenc
   ('00000000-0000-0000-0000-00000000000a', 'ask', 'openrouter', 'm', 'provider_error', NULL, 30000, 'p'),
   (NULL, 'narration', 'openrouter', NULL, 'budget_exhausted', NULL, 0, 'p'),
   (NULL, 'narration', 'null', NULL, 'no_provider', NULL, 0, 'p');
+-- A call made for a simulated agent (0041; written by an agent's scan from Stage 4's PR 3).
+INSERT INTO llm_calls (user_id, agent_id, purpose, provider, model, outcome, latency_ms, prompt) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'ask',
+   'openrouter', 'm', 'ok', 900, 'p');
+-- The models chosen on the Admin page (0041).
+INSERT INTO llm_model_choices (scope, model, updated_by) VALUES
+  ('explain', 'anthropic/claude-sonnet-5.5', '00000000-0000-0000-0000-00000000000a'),
+  ('agent', 'anthropic/claude-sonnet-5.5', NULL);
 
 -- Proposal episodes (0032): one closed by each reason, and one still open.
 INSERT INTO proposal_episodes (user_id, agent_id, observation_kind, subject_ref, observation_id, asked_magnitude, closed_at, close_reason) VALUES

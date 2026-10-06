@@ -151,6 +151,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/llm/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Llm Models */
+        get: operations["llm_models_llm_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/market/calendar": {
         parameters: {
             query?: never;
@@ -882,6 +899,140 @@ export interface components {
             member: boolean;
             /** Outside Screen */
             outside_screen?: ("asset_class" | "exchange") | null;
+        };
+        /** LlmAgentBasis */
+        LlmAgentBasis: {
+            /** Completion Tokens Per Scan */
+            completion_tokens_per_scan: number;
+            /** Prompt Tokens Per Scan */
+            prompt_tokens_per_scan: number;
+            /**
+             * Scanning Agents
+             * @description Simulated, active, with a persona (D52).
+             */
+            scanning_agents: number;
+            /** Scans Per Day */
+            scans_per_day: number;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "assumed" | "measured";
+        };
+        /**
+         * LlmCostEstimate
+         * @description A choice's cost, estimated (D44): integer micro-USD, rounded up.
+         */
+        LlmCostEstimate: {
+            /** Daily Micro Usd */
+            daily_micro_usd: number;
+            /** Monthly Micro Usd */
+            monthly_micro_usd: number;
+        };
+        /**
+         * LlmCredits
+         * @description The provider account's balance in USD, decimals as strings.
+         */
+        LlmCredits: {
+            /** Purchased Usd */
+            purchased_usd: string;
+            /** Remaining Usd */
+            remaining_usd: string;
+            /** Used Usd */
+            used_usd: string;
+        };
+        /** LlmExplainBasis */
+        LlmExplainBasis: {
+            /** Completion Tokens Per Day */
+            completion_tokens_per_day: number;
+            /** Prompt Tokens Per Day */
+            prompt_tokens_per_day: number;
+            /** Window Days */
+            window_days: number;
+        };
+        /**
+         * LlmModelsResponse
+         * @description What the Admin page's model pickers show (D43, D44).
+         */
+        LlmModelsResponse: {
+            agent_basis: components["schemas"]["LlmAgentBasis"];
+            /** Choices */
+            choices: components["schemas"]["LlmScopeChoice"][];
+            /**
+             * Choosable
+             * @description False unless LLM_PROVIDER is openrouter: the offered ids are OpenRouter's.
+             */
+            choosable: boolean;
+            /** Configured Model */
+            configured_model: string | null;
+            /** @description Null when the provider reports no balance or it could not be read. */
+            credits: components["schemas"]["LlmCredits"] | null;
+            explain_basis: components["schemas"]["LlmExplainBasis"];
+            /** Models */
+            models: components["schemas"]["LlmOfferedModel"][];
+            /** Provider */
+            provider: string;
+        };
+        /**
+         * LlmOfferedModel
+         * @description A model the Admin page may choose, with what it would cost (D43, D44).
+         */
+        LlmOfferedModel: {
+            /** @description Null when the model may not be chosen for agents. */
+            agent_estimate: components["schemas"]["LlmCostEstimate"] | null;
+            /**
+             * Completion Usd Per Mtok
+             * @description USD per million output tokens, a decimal.
+             */
+            completion_usd_per_mtok: string;
+            explain_estimate: components["schemas"]["LlmCostEstimate"];
+            /**
+             * Free
+             * @description An OpenRouter `:free` route: unbilled, and slow.
+             */
+            free: boolean;
+            /**
+             * Id
+             * @description OpenRouter's id, e.g. 'anthropic/claude-sonnet-5.5'.
+             */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Prompt Usd Per Mtok
+             * @description USD per million input tokens, a decimal.
+             */
+            prompt_usd_per_mtok: string;
+            /**
+             * Scan Estimate Micro Usd
+             * @description One agent scan at the agent basis; null when not offered for agents.
+             */
+            scan_estimate_micro_usd: number | null;
+            /**
+             * Scopes
+             * @description What it may be chosen for.
+             */
+            scopes: ("explain" | "agent")[];
+            /** Supports Tools */
+            supports_tools: boolean;
+        };
+        /** LlmScopeChoice */
+        LlmScopeChoice: {
+            /**
+             * Chosen
+             * @description The model chosen on the Admin page; null if none.
+             */
+            chosen: string | null;
+            /**
+             * Effective
+             * @description What calls use now: the choice, else the configured LLM_MODEL.
+             */
+            effective: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "explain" | "agent";
         };
         /**
          * LocalizedTextOut
@@ -1929,6 +2080,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    llm_models_llm_models_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmModelsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

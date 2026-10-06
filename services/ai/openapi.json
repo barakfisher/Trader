@@ -890,6 +890,306 @@
         "title": "InstrumentUniverse",
         "type": "object"
       },
+      "LlmAgentBasis": {
+        "properties": {
+          "completion_tokens_per_scan": {
+            "title": "Completion Tokens Per Scan",
+            "type": "integer"
+          },
+          "prompt_tokens_per_scan": {
+            "title": "Prompt Tokens Per Scan",
+            "type": "integer"
+          },
+          "scanning_agents": {
+            "description": "Simulated, active, with a persona (D52).",
+            "title": "Scanning Agents",
+            "type": "integer"
+          },
+          "scans_per_day": {
+            "title": "Scans Per Day",
+            "type": "integer"
+          },
+          "source": {
+            "enum": [
+              "assumed",
+              "measured"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scanning_agents",
+          "scans_per_day",
+          "prompt_tokens_per_scan",
+          "completion_tokens_per_scan",
+          "source"
+        ],
+        "title": "LlmAgentBasis",
+        "type": "object"
+      },
+      "LlmCostEstimate": {
+        "description": "A choice's cost, estimated (D44): integer micro-USD, rounded up.",
+        "properties": {
+          "daily_micro_usd": {
+            "title": "Daily Micro Usd",
+            "type": "integer"
+          },
+          "monthly_micro_usd": {
+            "title": "Monthly Micro Usd",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "daily_micro_usd",
+          "monthly_micro_usd"
+        ],
+        "title": "LlmCostEstimate",
+        "type": "object"
+      },
+      "LlmCredits": {
+        "description": "The provider account's balance in USD, decimals as strings.",
+        "properties": {
+          "purchased_usd": {
+            "title": "Purchased Usd",
+            "type": "string"
+          },
+          "remaining_usd": {
+            "title": "Remaining Usd",
+            "type": "string"
+          },
+          "used_usd": {
+            "title": "Used Usd",
+            "type": "string"
+          }
+        },
+        "required": [
+          "purchased_usd",
+          "used_usd",
+          "remaining_usd"
+        ],
+        "title": "LlmCredits",
+        "type": "object"
+      },
+      "LlmExplainBasis": {
+        "properties": {
+          "completion_tokens_per_day": {
+            "title": "Completion Tokens Per Day",
+            "type": "integer"
+          },
+          "prompt_tokens_per_day": {
+            "title": "Prompt Tokens Per Day",
+            "type": "integer"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "window_days",
+          "prompt_tokens_per_day",
+          "completion_tokens_per_day"
+        ],
+        "title": "LlmExplainBasis",
+        "type": "object"
+      },
+      "LlmModelsResponse": {
+        "description": "What the Admin page's model pickers show (D43, D44).",
+        "properties": {
+          "agent_basis": {
+            "$ref": "#/components/schemas/LlmAgentBasis"
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/LlmScopeChoice"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "choosable": {
+            "description": "False unless LLM_PROVIDER is openrouter: the offered ids are OpenRouter's.",
+            "title": "Choosable",
+            "type": "boolean"
+          },
+          "configured_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Configured Model"
+          },
+          "credits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LlmCredits"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when the provider reports no balance or it could not be read."
+          },
+          "explain_basis": {
+            "$ref": "#/components/schemas/LlmExplainBasis"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/LlmOfferedModel"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "choosable",
+          "configured_model",
+          "choices",
+          "models",
+          "explain_basis",
+          "agent_basis",
+          "credits"
+        ],
+        "title": "LlmModelsResponse",
+        "type": "object"
+      },
+      "LlmOfferedModel": {
+        "description": "A model the Admin page may choose, with what it would cost (D43, D44).",
+        "properties": {
+          "agent_estimate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LlmCostEstimate"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when the model may not be chosen for agents."
+          },
+          "completion_usd_per_mtok": {
+            "description": "USD per million output tokens, a decimal.",
+            "title": "Completion Usd Per Mtok",
+            "type": "string"
+          },
+          "explain_estimate": {
+            "$ref": "#/components/schemas/LlmCostEstimate"
+          },
+          "free": {
+            "description": "An OpenRouter `:free` route: unbilled, and slow.",
+            "title": "Free",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "OpenRouter's id, e.g. 'anthropic/claude-sonnet-5.5'.",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "prompt_usd_per_mtok": {
+            "description": "USD per million input tokens, a decimal.",
+            "title": "Prompt Usd Per Mtok",
+            "type": "string"
+          },
+          "scan_estimate_micro_usd": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One agent scan at the agent basis; null when not offered for agents.",
+            "title": "Scan Estimate Micro Usd"
+          },
+          "scopes": {
+            "description": "What it may be chosen for.",
+            "items": {
+              "enum": [
+                "explain",
+                "agent"
+              ],
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "supports_tools": {
+            "title": "Supports Tools",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "prompt_usd_per_mtok",
+          "completion_usd_per_mtok",
+          "supports_tools",
+          "free",
+          "scopes",
+          "explain_estimate",
+          "agent_estimate",
+          "scan_estimate_micro_usd"
+        ],
+        "title": "LlmOfferedModel",
+        "type": "object"
+      },
+      "LlmScopeChoice": {
+        "properties": {
+          "chosen": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The model chosen on the Admin page; null if none.",
+            "title": "Chosen"
+          },
+          "effective": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What calls use now: the choice, else the configured LLM_MODEL.",
+            "title": "Effective"
+          },
+          "scope": {
+            "enum": [
+              "explain",
+              "agent"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "chosen",
+          "effective"
+        ],
+        "title": "LlmScopeChoice",
+        "type": "object"
+      },
       "LocalizedTextOut": {
         "description": "An observation's headline and explanation in one language.",
         "properties": {
@@ -2772,6 +3072,55 @@
         "summary": "Healthz",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/llm/models": {
+      "get": {
+        "operationId": "llm_models_llm_models_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmModelsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Llm Models",
+        "tags": [
+          "llm"
         ]
       }
     },

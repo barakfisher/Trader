@@ -159,6 +159,7 @@ class BudgetedProvider:
         temperature: float | None = None,
         reasoning_effort: str | None = None,
         caller: Caller | None = None,
+        model: str | None = None,
     ) -> LLMCompletion:
         if not self.charges_per_token:
             return await self._inner.complete(
@@ -168,6 +169,7 @@ class BudgetedProvider:
                 temperature=temperature,
                 reasoning_effort=reasoning_effort,
                 caller=caller,
+                model=model,
             )
 
         await self._guard.ensure_within_budget()
@@ -179,6 +181,7 @@ class BudgetedProvider:
                 temperature=temperature,
                 reasoning_effort=reasoning_effort,
                 caller=caller,
+                model=model,
             )
         except LLMError as exc:
             if exc.metered_micro_usd > 0:

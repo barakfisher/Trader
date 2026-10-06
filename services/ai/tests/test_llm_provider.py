@@ -268,3 +268,33 @@ async def test_the_null_provider_refuses_with_a_typed_error_and_a_reason():
 
 def test_the_null_provider_is_never_billed():
     assert NullProvider().charges_per_token is False
+
+
+# -- the model chosen per call (D43) -------------------------------------------
+
+
+async def test_a_model_passed_to_the_call_is_the_one_requested_and_priced():
+    chosen = "anthropic/claude-haiku-4.5"
+    prices = {**PRICES, chosen: ModelPrice(Decimal("1"), Decimal("5"))}
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["model"] = httpx.Response(200, content=request.content).json()["model"]
+        return httpx.Response(200, json={**_body(), "model": chosen})
+
+    result = await _provider(handler, prices=prices).complete(
+        system=None, user="finding", model=chosen
+    )
+
+    assert seen["model"] == chosen
+    assert result.estimated_cost_micro_usd == estimate_cost_micro_usd(chosen, result.usage, prices)
+
+
+async def test_a_dated_variant_the_gateway_names_is_priced_as_the_model_requested():
+    served = f"{MODEL}-20260930"
+    provider = _provider(lambda request: httpx.Response(200, json={**_body(), "model": served}))
+
+    result = await provider.complete(system=None, user="finding")
+
+    assert result.model == served
+    assert result.estimated_cost_micro_usd == estimate_cost_micro_usd(MODEL, result.usage, PRICES)

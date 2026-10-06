@@ -112,7 +112,7 @@ def test_a_looping_model_answer_falls_back_to_the_passages(monkeypatch: pytest.M
         verdicts: typing.ClassVar[list[tuple[object, ...]]] = []
 
         async def complete(self, **kwargs: object) -> object:
-            assert kwargs["caller"] == Caller(agent="ask", user_id=None)
+            assert kwargs["caller"] == Caller(purpose="ask", user_id=None)
 
             class Completion:
                 text = LOOP

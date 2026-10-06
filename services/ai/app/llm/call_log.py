@@ -43,8 +43,9 @@ Outcome = Literal["ok", "provider_error", "budget_exhausted", "no_provider"]
 
 @dataclass(frozen=True)
 class CallEntry:
-    agent: str
+    purpose: str
     user_id: str | None
+    agent_id: str | None
     provider: str
     model: str | None
     outcome: Outcome
@@ -93,10 +94,12 @@ class DatabaseCallLog:
                     text(
                         """
                         INSERT INTO llm_calls (
-                            user_id, agent, provider, model, outcome, error, latency_ms,
-                            prompt_tokens, completion_tokens, cost_micro_usd, prompt, completion
+                            user_id, agent_id, purpose, provider, model, outcome, error,
+                            latency_ms, prompt_tokens, completion_tokens, cost_micro_usd, prompt,
+                            completion
                         ) VALUES (
-                            CAST(:user_id AS uuid), :agent, :provider, :model, :outcome, :error,
+                            CAST(:user_id AS uuid), CAST(:agent_id AS uuid), :purpose, :provider,
+                            :model, :outcome, :error,
                             :latency_ms, :prompt_tokens, :completion_tokens, :cost_micro_usd,
                             :prompt, :completion
                         )
@@ -105,7 +108,8 @@ class DatabaseCallLog:
                     ),
                     {
                         "user_id": entry.user_id,
-                        "agent": entry.agent,
+                        "agent_id": entry.agent_id,
+                        "purpose": entry.purpose,
                         "provider": entry.provider,
                         "model": entry.model,
                         "outcome": entry.outcome,
@@ -160,6 +164,7 @@ class RecordingProvider:
         temperature: float | None = None,
         reasoning_effort: str | None = None,
         caller: Caller | None = None,
+        model: str | None = None,
     ) -> LLMCompletion:
         started = time.monotonic()
         try:
@@ -170,10 +175,12 @@ class RecordingProvider:
                 temperature=temperature,
                 reasoning_effort=reasoning_effort,
                 caller=caller,
+                model=model,
             )
         except BaseException as error:
             self._record(
                 caller,
+                model=model,
                 outcome=_outcome(error),
                 error=f"{type(error).__name__}: {error}"[:500],
                 started=started,
@@ -183,6 +190,7 @@ class RecordingProvider:
             raise
         call_id = self._record(
             caller,
+            model=model,
             outcome="ok",
             started=started,
             prompt=_prompt(system, user),
@@ -202,6 +210,7 @@ class RecordingProvider:
         self,
         caller: Caller | None,
         *,
+        model: str | None,
         outcome: Outcome,
         started: float,
         prompt: str,
@@ -211,14 +220,15 @@ class RecordingProvider:
     ) -> int | None:
         if caller is None:
             # Every call site names itself; one that does not is a bug worth a
-            # log line, not a row with a guessed agent.
+            # log line, not a row with a guessed purpose.
             log.error("llm.call_without_caller", provider=self.name)
             return None
         entry = CallEntry(
-            agent=caller.agent,
+            purpose=caller.purpose,
             user_id=caller.user_id,
+            agent_id=caller.agent_id,
             provider=completion.provider if completion else self.name,
-            model=completion.model if completion else self._model,
+            model=completion.model if completion else (model or self._model),
             outcome=outcome,
             error=error,
             latency_ms=max(0, round((time.monotonic() - started) * 1000)),
@@ -231,5 +241,5 @@ class RecordingProvider:
         try:
             return self._log.record(entry)
         except Exception as error:  # noqa: BLE001 - never fail the caller
-            log.warning("llm.call_not_recorded", agent=entry.agent, error=str(error))
+            log.warning("llm.call_not_recorded", purpose=entry.purpose, error=str(error))
             return None

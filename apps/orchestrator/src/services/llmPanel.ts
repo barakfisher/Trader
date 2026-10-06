@@ -1,6 +1,6 @@
 /**
  * The LLM panel for the admin page: every model call the AI service recorded
- * (decision 87), per agent, and narration's fallback reasons beside them.
+ * (decision 87), per purpose, and narration's fallback reasons beside them.
  *
  * Two records, deliberately both. `llm_calls` is complete but young and kept
  * for `LLM_PANEL_MAX_DAYS`; `observations.fallback_reason` is older and
@@ -18,7 +18,7 @@
  */
 
 import type {
-  LlmAgentSummary,
+  LlmPurposeSummary,
   LlmCallOutcome,
   LlmCallVerdict,
   LlmPanelResponse,
@@ -32,8 +32,8 @@ export const LLM_PANEL_MAX_DAYS = 30;
 export const LLM_PANEL_DEFAULT_DAYS = 7;
 export const LLM_PANEL_RECENT_LIMIT = 20;
 
-/** Every agent `llm_calls` accepts, listed even when idle: "no calls" is an answer. */
-const AGENTS = ['narration', 'ask'] as const;
+/** Every purpose `llm_calls` accepts, listed even when idle: "no calls" is an answer. */
+const PURPOSES = ['narration', 'ask'] as const;
 const OUTCOMES: readonly LlmCallOutcome[] = ['ok', 'provider_error', 'budget_exhausted', 'no_provider'];
 const VERDICTS: readonly LlmCallVerdict[] = [
   'accepted',
@@ -85,11 +85,11 @@ function verdictOf(verdict: string | null): LlmCallVerdict {
   return verdict === null ? 'not_judged' : (verdict as LlmCallVerdict);
 }
 
-function summariseAgent(
-  agent: string,
+function summarisePurpose(
+  purpose: string,
   groups: LlmCallGroupRow[],
   latency: LlmLatencyRow | undefined,
-): LlmAgentSummary {
+): LlmPurposeSummary {
   const outcomes = zeroes(OUTCOMES);
   const verdicts = zeroes(VERDICTS);
   const models = new Map<string | null, number>();
@@ -109,7 +109,7 @@ function summariseAgent(
     models.set(row.model, (models.get(row.model) ?? 0) + row.calls);
   }
   return {
-    agent,
+    purpose,
     calls,
     outcomes,
     verdicts,
@@ -129,7 +129,7 @@ function reconcileNarration(
   groups: LlmCallGroupRow[],
   explanations: { fallback_reason: string; count: number }[],
 ): NarrationReconciliationRow[] {
-  const narration = groups.filter((row) => row.agent === 'narration');
+  const narration = groups.filter((row) => row.purpose === 'narration');
   const stored = new Map(explanations.map((row) => [row.fallback_reason, row.count]));
   const rows: NarrationReconciliationRow[] = NARRATION_REASONS.map(([reason, matches]) => ({
     reason,
@@ -171,16 +171,16 @@ export function reconciliationSince(since: Date, firstCallAt: Date | null): Date
 }
 
 export function llmPanel(input: LlmPanelInput): LlmPanelResponse {
-  const agents = [...new Set([...AGENTS, ...input.groups.map((row) => row.agent)])];
+  const purposes = [...new Set([...PURPOSES, ...input.groups.map((row) => row.purpose)])];
   const overlap = reconciliationSince(input.since, input.firstCallAt);
   return {
     window: { days: input.days, since: input.since.toISOString() },
     firstCallAt: input.firstCallAt ? input.firstCallAt.toISOString() : null,
-    agents: agents.map((agent) =>
-      summariseAgent(
-        agent,
-        input.groups.filter((row) => row.agent === agent),
-        input.latencies.find((row) => row.agent === agent),
+    purposes: purposes.map((purpose) =>
+      summarisePurpose(
+        purpose,
+        input.groups.filter((row) => row.purpose === purpose),
+        input.latencies.find((row) => row.purpose === purpose),
       ),
     ),
     narrationFallbacks: input.fallbacks
@@ -194,7 +194,7 @@ export function llmPanel(input: LlmPanelInput): LlmPanelResponse {
       : null,
     recent: input.recent.map((row) => ({
       id: row.id,
-      agent: row.agent,
+      purpose: row.purpose,
       model: row.model,
       outcome: row.outcome as LlmCallOutcome,
       verdict: row.outcome === 'ok' ? verdictOf(row.verdict) : null,

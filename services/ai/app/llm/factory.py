@@ -25,6 +25,7 @@ from app.core.logging import get_logger
 from app.llm.base import LLMProvider
 from app.llm.budget import BudgetedProvider, DailySpendGuard
 from app.llm.call_log import CallLog, RecordingProvider
+from app.llm.model_choice import ChoosingProvider, ModelChoices
 from app.llm.null_provider import NullProvider
 from app.llm.openai_compatible import OpenAICompatibleProvider
 
@@ -44,6 +45,7 @@ def build_llm(
     *,
     transport: object | None = None,
     call_log: CallLog | None = None,
+    choices: ModelChoices | None = None,
 ) -> LLMProvider:
     """The configured provider, recorded call by call when given a `call_log`.
 
@@ -51,14 +53,25 @@ def build_llm(
     `NullProvider` alike, so a call refused for budget or for want of a model
     is recorded as well as one that reached a model (decision 87). Tests that
     pass no log get the provider exactly as before.
+
+    Given `choices`, the Admin page's model for each purpose (D43) is passed to
+    every call, outermost of all so the recorder sees the model chosen. Only
+    for OpenRouter: the offered models are OpenRouter ids (`catalogue.py`).
     """
     provider = _build_provider(settings, redis, transport=transport)
-    if call_log is None:
-        return provider
-    return RecordingProvider(provider, call_log, model=_configured_model(settings))
+    if call_log is not None:
+        provider = RecordingProvider(provider, call_log, model=configured_model(settings))
+    if choices is not None and models_are_choosable(settings):
+        provider = ChoosingProvider(provider, choices)
+    return provider
 
 
-def _configured_model(settings: Settings) -> str | None:
+def models_are_choosable(settings: Settings) -> bool:
+    """Whether the Admin page's choice applies: the catalogue holds OpenRouter ids."""
+    return settings.llm_provider.strip().lower() == "openrouter"
+
+
+def configured_model(settings: Settings) -> str | None:
     """The model a failed call was meant for - none when narration is off."""
     name = settings.llm_provider.strip().lower()
     if name in _DISABLED_NAMES:

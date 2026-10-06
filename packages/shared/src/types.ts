@@ -679,8 +679,9 @@ export interface LlmModelUsage {
 }
 
 /** One agent's calls over the window. Money is integer micro-USD (guideline 3). */
-export interface LlmAgentSummary {
-  agent: string;
+export interface LlmPurposeSummary {
+  /** What the calls were for: `narration` or `ask` (`llm_calls.purpose`). */
+  purpose: string;
   calls: number;
   outcomes: Record<LlmCallOutcome, number>;
   verdicts: Record<LlmCallVerdict, number>;
@@ -706,7 +707,7 @@ export interface NarrationReconciliationRow {
 
 export interface LlmCallSummary {
   id: string;
-  agent: string;
+  purpose: string;
   model: string | null;
   outcome: LlmCallOutcome;
   /** Null when the call returned nothing to judge (any outcome but `ok`). */
@@ -724,12 +725,69 @@ export interface LlmPanelResponse {
   window: { days: number; since: string };
   /** The oldest call still held (they are kept for a limited time); null when none is. */
   firstCallAt: string | null;
-  agents: LlmAgentSummary[];
+  purposes: LlmPurposeSummary[];
   /** Stored explanations over the whole window, by fallback reason - the longer record. */
   narrationFallbacks: { reason: string; count: number }[];
   /** From whichever is later, the window's start or the first recorded call; null with no calls. */
   reconciliation: { since: string; rows: NarrationReconciliationRow[] } | null;
   recent: LlmCallSummary[];
+}
+
+/** What a model choice is for: `explain` is narration and `/ask`, `agent` an agent's scan (D43). */
+export type LlmScope = 'explain' | 'agent';
+
+/** Estimated cost in integer micro-USD, rounded up (D44). */
+export interface LlmCostEstimate {
+  dailyMicroUsd: number;
+  monthlyMicroUsd: number;
+}
+
+/** A model the Admin page may choose. Prices are USD per million tokens, as decimal strings. */
+export interface LlmOfferedModelView {
+  id: string;
+  label: string;
+  promptUsdPerMtok: string;
+  completionUsdPerMtok: string;
+  supportsTools: boolean;
+  free: boolean;
+  scopes: LlmScope[];
+  estimates: { explain: LlmCostEstimate; agent: LlmCostEstimate | null };
+  /** One agent scan at the agent basis; null when not offered for agents. */
+  scanEstimateMicroUsd: number | null;
+}
+
+export interface LlmScopeChoiceView {
+  scope: LlmScope;
+  /** Chosen on the Admin page; null when nothing has been. */
+  chosen: string | null;
+  /** What calls use now: the choice, else the configured `LLM_MODEL`. */
+  effective: string | null;
+}
+
+/** `GET /admin/llm/models` (D43, D44). */
+export interface AdminLlmModelsResponse {
+  provider: string;
+  /** False unless the provider is OpenRouter: the offered ids are OpenRouter's. */
+  choosable: boolean;
+  configuredModel: string | null;
+  choices: LlmScopeChoiceView[];
+  models: LlmOfferedModelView[];
+  explainBasis: { windowDays: number; promptTokensPerDay: number; completionTokensPerDay: number };
+  agentBasis: {
+    scanningAgents: number;
+    scansPerDay: number;
+    promptTokensPerScan: number;
+    completionTokensPerScan: number;
+    /** `assumed` until real scans are recorded. */
+    source: 'assumed' | 'measured';
+  };
+  /** The provider account in USD, decimal strings; null when it reports none or could not be read. */
+  credits: { purchasedUsd: string; usedUsd: string; remainingUsd: string } | null;
+}
+
+/** `PUT /admin/llm/models/:scope`. */
+export interface LlmModelChoiceInput {
+  model: string;
 }
 
 export interface ApiError {

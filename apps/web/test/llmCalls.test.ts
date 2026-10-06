@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { agentCost, callCost, formatLatency, formatMicroUsd, nonZero, reasonLabel } from '../src/lib/llmCalls.ts';
+import { purposeCost, callCost, formatLatency, formatMicroUsd, nonZero, reasonLabel } from '../src/lib/llmCalls.ts';
 
 describe('cost', () => {
   it('shows fractions of a cent to four places, rounding once', () => {
@@ -18,12 +18,12 @@ describe('cost', () => {
 
   it('says free route only when every model reached was free', () => {
     const free = { model: 'm:free', calls: 1, free: true };
-    expect(agentCost({ costMicroUsd: 0, models: [free] })).toBe('free route');
-    expect(agentCost({ costMicroUsd: 0, models: [free, { model: 'paid', calls: 1, free: false }] })).toBe(
+    expect(purposeCost({ costMicroUsd: 0, models: [free] })).toBe('free route');
+    expect(purposeCost({ costMicroUsd: 0, models: [free, { model: 'paid', calls: 1, free: false }] })).toBe(
       '$0',
     );
     // Refused before any model was chosen: nothing was free, nothing was billed.
-    expect(agentCost({ costMicroUsd: 0, models: [{ model: null, calls: 1, free: false }] })).toBe('$0');
+    expect(purposeCost({ costMicroUsd: 0, models: [{ model: null, calls: 1, free: false }] })).toBe('$0');
   });
 });
 
@@ -51,5 +51,16 @@ describe('wording', () => {
   it('shows latency in ms below a second', () => {
     expect(formatLatency(999)).toBe('999 ms');
     expect(formatLatency(14_292)).toBe('14.3 s');
+  });
+});
+
+describe('decimalUsdToMicro', () => {
+  it('reads a decimal string into integer micro-USD without a float, rounding once', async () => {
+    const { decimalUsdToMicro } = await import('../src/lib/llmCalls.ts');
+    expect(decimalUsdToMicro('10')).toBe(10_000_000);
+    expect(decimalUsdToMicro('9.89709208')).toBe(9_897_092);
+    expect(decimalUsdToMicro('0.0000005')).toBe(1);
+    expect(decimalUsdToMicro('-0.25')).toBe(-250_000);
+    expect(decimalUsdToMicro('1e3')).toBeNull();
   });
 });

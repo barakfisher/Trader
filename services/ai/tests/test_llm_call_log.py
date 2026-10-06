@@ -14,19 +14,22 @@ import pytest
 
 from app.llm import call_log as call_log_module
 from app.llm.base import (
-    Agent,
     Caller,
     LLMBudgetExceededError,
     LLMCompletion,
     LLMRequestError,
     LLMUnavailableError,
+    Purpose,
     TokenUsage,
     Verdict,
 )
 from app.llm.call_log import CallEntry, Outcome, RecordingProvider
+from app.llm.catalogue import Scope
 from app.llm.factory import build_llm
 
-MIGRATION = Path(__file__).parents[1] / "alembic" / "versions" / "0029_llm_calls.py"
+VERSIONS = Path(__file__).parents[1] / "alembic" / "versions"
+MIGRATION = VERSIONS / "0029_llm_calls.py"
+PURPOSE_MIGRATION = VERSIONS / "0041_llm_models.py"
 
 
 class MemoryLog:
@@ -69,7 +72,7 @@ class Provider:
         return None
 
 
-CALLER = Caller(agent="narration", user_id="00000000-0000-0000-0000-000000000001")
+CALLER = Caller(purpose="narration", user_id="00000000-0000-0000-0000-000000000001")
 
 
 async def _call(provider: RecordingProvider, caller: Caller | None = CALLER) -> LLMCompletion:
@@ -81,7 +84,7 @@ async def test_a_completed_call_is_recorded_whole_and_handed_back_with_its_id() 
     completion = await _call(RecordingProvider(Provider(), log, model="configured"))
     assert completion.call_id == 1
     [entry] = log.entries
-    assert entry.agent == "narration"
+    assert entry.purpose == "narration"
     assert entry.user_id == CALLER.user_id
     assert (entry.provider, entry.model, entry.outcome) == ("stub", "stub-model-2026", "ok")
     assert (entry.prompt_tokens, entry.completion_tokens, entry.cost_micro_usd) == (120, 40, 231)
@@ -138,9 +141,9 @@ async def test_the_factory_records_even_a_call_no_model_could_take(settings) -> 
     log = MemoryLog()
     llm = build_llm(settings.model_copy(update={"llm_provider": "null"}), call_log=log)
     with pytest.raises(LLMUnavailableError):
-        await llm.complete(system=None, user="q", caller=Caller(agent="ask"))
+        await llm.complete(system=None, user="q", caller=Caller(purpose="ask"))
     [entry] = log.entries
-    assert (entry.agent, entry.outcome, entry.model, entry.provider) == (
+    assert (entry.purpose, entry.outcome, entry.model, entry.provider) == (
         "ask",
         "no_provider",
         None,
@@ -148,15 +151,21 @@ async def test_the_factory_records_even_a_call_no_model_could_take(settings) -> 
     )
 
 
-def test_the_database_accepts_exactly_the_values_the_code_can_write() -> None:
-    """The CHECKs in 0029 and the Literals in code are one list each, twice."""
+def _migration(path: Path):
     import importlib.util
 
-    spec = importlib.util.spec_from_file_location("m0029", MIGRATION)
+    spec = importlib.util.spec_from_file_location(path.stem, path)
     assert spec and spec.loader
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
-    assert set(migration.AGENTS) == set(typing.get_args(Agent))
+    return migration
+
+
+def test_the_database_accepts_exactly_the_values_the_code_can_write() -> None:
+    """The CHECKs in 0029 and 0041 and the Literals in code are one list each, twice."""
+    migration = _migration(MIGRATION)
+    assert set(_migration(PURPOSE_MIGRATION).PURPOSES) == set(typing.get_args(Purpose))
+    assert set(_migration(PURPOSE_MIGRATION).SCOPES) == set(typing.get_args(Scope))
     assert set(migration.OUTCOMES) == set(typing.get_args(Outcome))
     assert set(migration.VERDICTS) == set(typing.get_args(Verdict))
     assert call_log_module.RecordingProvider is RecordingProvider
