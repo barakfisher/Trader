@@ -1,4 +1,4 @@
-"""An agent's read-only tools (D15), through the real SQL.
+"""An agent's read-only tools and its briefing (D15), through the real SQL.
 
 Every tool but one is a query over tables the hermetic suite never sees, and the
 one that is not (`get_quote`) still reads the universe to say whether a symbol is
@@ -21,6 +21,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from app.agents.briefing import build_briefing, movers_section
 from app.agents.tools import (
     MAX_HISTORY_POINTS,
     MAX_QUOTE_SYMBOLS,
@@ -40,7 +41,7 @@ from app.agents.tools import (
 from app.analysis.thresholds import AnalysisThresholds
 from app.corpus.hashed_embedder import HashedEmbedder
 from app.corpus.vector_store import PgVectorStore
-from app.models import DailyClose, Quote
+from app.models import DailyClose, Mover, Quote
 from tests.integration.conftest import REPO_ROOT, run_script
 
 FIXTURE_EMBEDDER = {"EMBEDDINGS_PROVIDER": "fixture"}
@@ -395,3 +396,97 @@ def test_the_minimum_stored_closes_is_below_what_the_backfill_fetches() -> None:
     from app.agents.tools import FINDINGS_DAYS
 
     assert MIN_STORED_CLOSES < FINDINGS_DAYS
+
+
+# -- the briefing ----------------------------------------------------------------
+
+
+def _mover(symbol: str, kind: str, change: float, price: int = 10_000) -> Mover:
+    return Mover(
+        symbol=symbol,
+        list=kind,  # type: ignore[arg-type]
+        change_pct=change,
+        price_minor=price,
+        currency="USD",
+        source="fixture",
+    )
+
+
+async def test_the_briefing_carries_holdings_with_findings_movers_and_topics(
+    loaded: Engine,
+) -> None:
+    with loaded.begin() as connection:
+        user = connection.execute(
+            text("INSERT INTO users (role) VALUES ('user') RETURNING id::text")
+        ).scalar_one()
+        agent = connection.execute(
+            text(
+                "INSERT INTO agents (user_id, slug, name, budget_minor) "
+                "VALUES (CAST(:u AS uuid), 'briefed', 'Briefed', 250000) RETURNING id::text"
+            ),
+            {"u": user},
+        ).scalar_one()
+        connection.execute(
+            text(
+                "INSERT INTO holdings "
+                "(user_id, agent_id, instrument_id, quantity, cost_basis_minor) VALUES"
+                " (CAST(:u AS uuid), CAST(:a AS uuid), CAST(:i AS uuid), 4, 3000)"
+            ),
+            {"u": user, "a": agent, "i": _instrument(loaded, "UEC")},
+        )
+        topic = connection.execute(
+            text(
+                "INSERT INTO topics (user_id, label, status, created_by, confirmed_at) "
+                "VALUES (CAST(:u AS uuid), 'uranium', 'active', 'user', now()) RETURNING id"
+            ),
+            {"u": user},
+        ).scalar_one()
+        for symbol in ("CCJ", "LEU"):
+            connection.execute(
+                text(
+                    "INSERT INTO topic_instruments (topic_id, user_id, instrument_id, source) "
+                    "VALUES (:t, CAST(:u AS uuid), CAST(:i AS uuid), 'user')"
+                ),
+                {"t": topic, "u": user, "i": _instrument(loaded, symbol)},
+            )
+    market = ScriptedMarket()
+    # The holding fell by a third over the last week: the briefing must say so.
+    market.closes = {"UEC": _daily("UEC", [3_000] * 60 + [2_700, 2_400, 2_200, 2_000])}
+    context = _context(loaded, (user, agent, agent), market)
+    movers = [
+        _mover("CCJ", "gainers", 3.1),
+        _mover("NXE", "gainers", 9.87654),
+        _mover("TSLA", "gainers", 12.0),  # not in the fixture universe
+        _mover("LEU", "losers", -4.2),
+        _mover("XOM", "most_active", 0.5),
+    ]
+
+    briefing = await build_briefing(context, movers)
+
+    assert briefing["cash"] == "2500.00"
+    [holding] = briefing["holdings"]
+    assert (holding["symbol"], holding["quantity"], holding["cost_per_share"]) == (
+        "UEC",
+        "4",
+        "30.00",
+    )
+    assert "drawdown" in {finding["kind"] for finding in holding["findings"]}
+    assert [m["symbol"] for m in briefing["movers"]["gainers"]] == ["NXE", "CCJ"]
+    assert briefing["movers"]["gainers"][0] == {
+        "symbol": "NXE",
+        "change_pct": "9.88",
+        "price": "100.00",
+    }
+    assert [m["symbol"] for m in briefing["movers"]["losers"]] == ["LEU"]
+    assert [m["symbol"] for m in briefing["movers"]["most_active"]] == ["XOM"]
+    assert briefing["followed_topics"] == [{"topic": "uranium", "symbols": ["CCJ", "LEU"]}]
+    json.dumps(briefing)  # stored with the transcript as JSON
+
+
+async def test_the_briefing_says_when_there_are_no_movers(
+    loaded: Engine, owner: tuple[str, str, str]
+) -> None:
+    context = _context(loaded, owner, ScriptedMarket())
+    assert "note" in movers_section(context, [])
+    outside = movers_section(context, [_mover("TSLA", "gainers", 12.0)])
+    assert outside["gainers"] == [] and "universe" in outside["note"]
