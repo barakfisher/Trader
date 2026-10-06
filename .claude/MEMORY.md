@@ -4,7 +4,23 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-05 ~17:30 UTC - **Multi-agent Stage 3 is half done: five PRs merged (#161-#165),
+Updated: 2026-10-06 ~06:45 UTC - **Multi-agent Stage 3 (the ledger) is complete: seven PRs
+(#161-#165, #167, #168); this is its closing handoff (#169). Nothing is in flight. The next session
+starts Stage 4 - the agent that decides** - see "Next session: multi-agent Stage 4". This session
+built PR 6, the consolidated holdings view (#167, D32-D35: a `Real only / All / <agent>` picker on
+the dashboard's holdings card and headline, real and simulated never summed), and PR 7, performance
+(#168, D36-D42: each agent's value at every close computed from the ledger and stored closes, a
+shadow SPY given the same deposits, and the 30/60/90-day score of the agent's own decisions). The
+user answered every question one at a time ("please ask me one by one"), each with a recommendation
+and a concrete example; every answer was the recommendation, **D38 with a reservation: the shadow
+SPY pays no fees for now, and the user will add them - a debt row says what changes.** Both
+environments run `main` at `c73a163`, migration `0040_ledger` (PR 6 and 7 have no migration);
+neither holds a simulated agent. **SPY's closes arrive with the first backfill of 2026-10-07 Israel
+time** (~21:00 UTC on 2026-10-06): the day's backfill had already run when PR 7 was deployed. **The
+grant continues** into Stage 4 (the user says "merge" per PR; verify by content; redeploy; every
+migration rehearsed on a live copy) - confirm it when Stage 4 opens, since it is a new stage.
+
+Previous handoff, 2026-10-05 ~17:30 UTC - **Multi-agent Stage 3 is half done: five PRs merged (#161-#165),
 which is CLAUDE.md's handoff trigger; this is that handoff (#166). Nothing is in flight. The next
 session continues Stage 3 with PR 6 (the consolidated holdings view) and PR 7 (performance against
 a shadow SPY, and the 30/60/90 score)** - see "Next session: multi-agent Stage 3, continued". The
@@ -415,7 +431,7 @@ strings and left-to-right assumptions before designing it.
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
-| Multi-agent sandbox, Stage 3 — the ledger | 🟡 5 of 7 PRs | #161 spec D21-D26 + §13; #162 exchange calendar; #163 ledger (0040); #164 manual trades (D27-D30); #165 the agent page (D31). Left: PR 6 the consolidated view, PR 7 performance and scoring. Trade proposals and their approval moved to Stage 4 (D26) |
+| Multi-agent sandbox, Stage 3 — the ledger | ✅ Complete | #161 spec D21-D26 + §13; #162 exchange calendar; #163 ledger (0040); #164 manual trades (D27-D30); #165 the agent page (D31); #167 the consolidated holdings view (D32-D35); #168 performance against a shadow SPY and the score (D36-D42). Trade proposals and their approval moved to Stage 4 (D26). Handoff #169 |
 | Multi-agent sandbox, Stage 2 — agent management | ✅ Complete | #158 `/agents` API + the every-route-behind-a-session test; #159 the Agents page and a page per agent (en/he). D17-D20. The consolidated view moved to Stage 3 (D17) |
 | Mastra retired (D11) | ✅ Complete | #157, migration 0039: proposals are the row, `applyDecision` and `proposal_sweep` |
 | Multi-agent sandbox, Stage 1 — isolation (no M-number; `docs/PROPOSAL-MULTI-AGENT.md`) | ✅ Complete | #151 spec amendment D1-D16; #152 `agents` + `agent_id` (0036); #153 agent-scoped reads + contract; #154 per-agent uniques (0037); #155 passive primary (0038). Nothing user-visible, by design. Stages 2-4 to come - see "Next session: multi-agent Stage 2" |
@@ -1832,9 +1848,63 @@ failure they prevent.
     answer 409 `primary_agent_is_passive` before it. With 0036's CHECK, the proposals allowlist and
     0038's trigger, that is four layers.
 
+113. **The consolidated view values each agent with the function its own page uses, and never adds
+    real to simulated** (#167, D32-D35). `GET /portfolio/consolidated` calls `valuePortfolio` for the
+    real portfolio and `valueAgentAccount` for each non-archived agent, then groups by instrument
+    (`services/consolidation.ts`), so the dashboard and the agent page cannot disagree about a figure.
+    Every row has a `real` and a `simulated` side; the headline is two figures. The two sides keep
+    different rules for a missing price **on purpose**: the real total stays partial and marked (the
+    dashboard's rule since M1), the simulated total is withheld (decision 111). The filter switches
+    only the holdings card and the headline; the equity curve, allocation and findings stay real, and
+    a scoped headline says so - added after the preview showed an agent's figures directly above the
+    real portfolio's chart. Quantities are added as exact decimal strings (`addQuantities`).
+
+114. **Performance is computed on each request, never stored** (#168, D36). An agent's value at a
+    session close = cash after the last movement made by that instant + each holding (fills replayed)
+    × that day's stored close. Rejected: a nightly snapshot per agent (gaps whenever the machine is
+    off - the real portfolio has 13 rows in 21 days - a midnight price rather than the close, and a
+    migration). **The series ends at the last session SPY has a stored close for**: a session that
+    has closed but whose close the next backfill has not fetched is *not recorded*, not *unpriced*;
+    without that rule every evening would show "unavailable". The trading days and closing instants
+    come from `GET /market/sessions` (AI service), never a copy of the calendar (D25).
+
+115. **The shadow SPY buys at the first session close at or after each deposit, fractionally, with
+    no fees** (#168, D37, D38). After hours or on a closed day, the next session's close; until it is
+    recorded the deposit is *pending* and in neither figure. Its value is one exact fraction
+    (`Σ deposit × close(day) / close(bought)`) rounded once. **No fees is a stated debt, not a
+    finding** - the user will add them.
+
+116. **The score replays the agent's own book** (#168, D39-D41). Only `source = 'agent'` fills, as
+    if the user had never traded by hand; a sell scores only shares the agent itself bought, at their
+    share of its cost (buy fees included); a win is a profit after fees (break-even is not); each sell
+    counts once, in the 30/60/90 windows its date falls in; unrealised P&L is capped at what is still
+    actually held (the book can claim shares the user sold by hand). Proven only by worked examples
+    until Stage 4 writes an `agent` fill.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
+
+**CI "failed" twice on a GitHub outage, not on the code (#167, #168).** Every job but kind ended
+`cancelled` after exactly 15 minutes with no step run; the annotation said *"The job was not
+acquired by Runner of type hosted"* and githubstatus.com had an open Actions incident. **Lesson:
+before reading a red CI as a code failure, check the job conclusion (`cancelled` with no steps) and
+the annotation** - `gh run view <id> --json jobs`. Both PRs were merged on the user's word with the
+gate run locally, the new SQL exercised against a live copy, and the compose smoke test run against
+the redeployed stack instead of in CI.
+
+**A route test dated tomorrow saw nothing (#168).** The performance route reads the real clock; a
+fixture deposit dated 2026-10-06 on 2026-10-05 had no closed session, so the series was empty and
+the test looked like a logic bug. **Lesson: a test that goes through a route which reads `new Date()`
+must date its fixtures in the past**; pure functions take `now` as a parameter, and their tests pin it.
+
+**Adding a query under an invalidated key hung another page's test (#168).** A trade's `onSuccess`
+awaits the invalidation of everything under `['agents', id]`; the agent page test served no answer
+for the new `/performance` request, so the refetch never settled and the trade panel never closed
+- a failure in a test about trading, caused by a chart. **Lesson: when a new query joins an
+invalidated key, every page test rendering it must serve it.** The same PR met jsdom's missing
+`ResizeObserver` (recharts' container needs one): any page test that renders a chart needs the stub
+`holdingPage.test.tsx` already had.
 
 **A converter that trusts its caller was handed unvalidated input (#165, caught by its test).**
 `budgetToMinor` assumes its string already passed the agents API's regex; the new top-up schema
@@ -2541,9 +2611,24 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 
 ## Local environment (this machine)
 
-- **Deployed at the Stage 3 mid-handoff (2026-10-05):** compose and kind run `main` at `793a4c3`,
+- **Deployed at the Stage 3 close (2026-10-06):** compose and kind run `main` at `c73a163`,
   migration `0040_ledger`, from the main checkout (`bash scripts/dev-docker.sh`, `bash
-  scripts/k8s-up.sh`, outside the sandbox). No simulated agent exists on either; live `fills` is 0.
+  scripts/k8s-up.sh`, outside the sandbox); the compose smoke test passed after each deploy. No
+  simulated agent exists on either; live `fills` is 0. SPY has no stored close until the backfill
+  of 2026-10-07 (Israel day): the backfill claims one run per Israel day, and the 10-06 run had
+  already happened when PR 7 deployed - **a deploy that adds an instrument to the backfill waits
+  for the next day's run** unless a backfill is triggered with its own `runKey`.
+- **Previewing something whose data comes from the AI service needs the AI service on the copy
+  too** (PR 7): price history and the backfill read and write the database *the AI service* points
+  at, so a branch orchestrator on a live copy with the compose AI service would read live data. What
+  worked: a native AI service from the worktree on **8002** (`PYTHONPATH=<worktree>/services/ai`
+  with the main checkout's venv `uvicorn`, `.env` sourced, `DATABASE_URL` → `traders_review`,
+  `REDIS_URL=redis://127.0.0.1:6379/0`, `UNIVERSE_SNAPSHOT_DIR` → the main checkout's
+  `data/universe`), the 8083 orchestrator's `AI_SERVICE_URL` pointed at it, then a backfill run
+  with its own `runKey` through 8083. To give a chart history, the test agent's ledger rows were
+  backdated **on the copy only** (`ALTER TABLE cash_movements|fills DISABLE TRIGGER USER` inside one
+  transaction, re-enabled before commit) - never on live, where those triggers are the ledger's
+  guarantee (decision 107).
 - **Scripting the orchestrator's API:** a POST with an `Origin` the server does not allow is
   refused 403 - send **no** Origin from scripts (curl/urllib), or exactly the allowed one. The
   trade rehearsals used urllib with a cookie jar against a branch orchestrator on 8082 (live copy).
@@ -2799,7 +2884,32 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 
 ## Where to go next
 
-### Next session: multi-agent Stage 3, continued
+### Next session: multi-agent Stage 4 - the agent that decides
+
+**Stage 3 is complete; Stage 4 builds the deciding agent** (D14-D16, D10, D12, D26 in
+`docs/PROPOSAL-MULTI-AGENT.md` §10 - read them, and §6, before anything). **Confirm with the user
+that the grant continues into Stage 4** (the user says "merge" per PR; verify by content; redeploy
+compose and kind; every migration rehearsed on a live copy first), then **measure first and ask one
+question at a time, each with a recommendation and a concrete example** - the user asked for this
+form explicitly and answered every Stage 3 question that way. What Stage 4 has to settle, as
+measured or decided so far:
+- **The trade proposal kind and its approval** (D26): `BUY`/`SELL` proposals on simulated agents
+  only (the primary's allowlist stays `{'rebalance'}`, decision 104), approval on the dashboard and
+  Telegram through `services/fills.ts:executeFill` (decision 109 - never a copy), D3's range and
+  D4's TTL starting at the next open (`marketCalendar` already answers it). Add `CHECK (source <>
+  'agent' OR proposal_id IS NOT NULL)` on `fills` (debt row) in the same migration.
+- **The scan** (D14, D15): a code-built briefing, then read-only tools the model picks, step limit
+  12, the transcript stored as the decision log, evidence-validated thesis. **D10: build it once as a
+  hand-written tool loop and once as core-only LangGraph, keep the smaller; no checkpointer.** The
+  provider has no tool calling yet (`openai_compatible.py`).
+- **Per-agent LLM budget** (D12, $0.25/day default, micro-USD): rename `llm_calls.agent` to
+  `purpose` before adding `agent_id` (debt row). The free route cannot run an agent (§11: 70% of
+  narrations rejected), so a paid model is a precondition - ask the user which.
+- **What Stage 3 left for it:** the score (D39-D41) has only ever seen worked examples - the first
+  `agent` fill is its first real input; the consolidated rows (D35) gain the agent's pending
+  proposals; the shadow SPY's fees (debt row) whenever the user asks.
+
+### Next session: multi-agent Stage 3, continued (history - PR 6 and 7 done as #167, #168; answers D32-D42)
 
 **Two PRs left in Stage 3**, under the standing grant (the user says "merge" per PR; verify by
 content; redeploy compose and kind; any migration rehearsed on a live copy first). Read
