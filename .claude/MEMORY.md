@@ -1885,6 +1885,12 @@ failure they prevent.
 
 ## Bugs that cost real time, and the lesson from each
 
+**A handoff that added decisions turned `main` red (#169, fixed by #170).** `docs/DECISIONS.md` is
+generated from this file's numbered decisions, and `tests/test_decision_index.py` fails when they
+disagree; #169 added decisions 113-116 without regenerating it, and CI - back after an outage -
+caught it only after the merge. **Lesson: a PR that adds or renumbers a decision here runs
+`python3 scripts/build_decision_index.py` and commits `docs/DECISIONS.md` with it.**
+
 **CI "failed" twice on a GitHub outage, not on the code (#167, #168).** Every job but kind ended
 `cancelled` after exactly 15 minutes with no step run; the annotation said *"The job was not
 acquired by Runner of type hosted"* and githubstatus.com had an open Actions incident. **Lesson:

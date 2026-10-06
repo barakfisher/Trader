@@ -123,3 +123,7 @@ while this file is out of date.
 | 110 | The exchange calendar is a committed file from our own generator; an unknown exchange is never assumed American |
 | 111 | An agent's net worth and P&L are null when any holding is unpriced |
 | 112 | The real portfolio has no ledger - D1's fourth layer |
+| 113 | The consolidated view values each agent with the function its own page uses, and never adds real to simulated |
+| 114 | Performance is computed on each request, never stored |
+| 115 | The shadow SPY buys at the first session close at or after each deposit, fractionally, with no fees |
+| 116 | The score replays the agent's own book |
