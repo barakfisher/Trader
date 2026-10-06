@@ -12,6 +12,7 @@ import type {
   ActivityResponse,
   AgentAccountResponse,
   AgentInput,
+  AgentPerformanceResponse,
   AgentPatchInput,
   AgentView,
   AgentsResponse,
@@ -82,6 +83,14 @@ export function useAgentActivityQuery(agentId: string, enabled: boolean) {
     queryKey: queryKeys.agentActivity(agentId),
     queryFn: () => api.get<ActivityResponse>(`/agents/${agentId}/activity`),
     enabled,
+  });
+}
+
+/** The agent against the shadow SPY, and its score (D24, D36-D42). Under the agent's key, so a trade refreshes it. */
+export function useAgentPerformanceQuery(agentId: string) {
+  return useQuery({
+    queryKey: queryKeys.agentPerformance(agentId),
+    queryFn: () => api.get<AgentPerformanceResponse>(`/agents/${agentId}/performance`),
   });
 }
 

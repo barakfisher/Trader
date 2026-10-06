@@ -18,9 +18,11 @@ import { z } from 'zod';
 
 import {
   claimRun,
+  findInstrumentsBySymbols,
   finishRun,
   getUser,
   listAnalysedInstruments,
+  listTradedInstruments,
   listRuns,
   primaryAgentId,
 } from '../../db/queries.js';
@@ -30,6 +32,7 @@ import { marketRetentionDays, runTopicDiscovery } from '../../services/topicDisc
 import { HISTORY_BACKFILL_DAYS, runTopicScan } from '../../services/topicScan.js';
 import { sendDigest } from '../../services/notifications.js';
 import { RESCREEN_KIND, startRescreen } from '../../services/universeRescreen.js';
+import { BENCHMARK_SYMBOL } from '../../services/performance.js';
 import { sweepExpiredProposals } from '../../services/proposals.js';
 import { logger } from '../../logger.js';
 import { localDate, takeSnapshot } from '../../services/snapshot.js';
@@ -176,7 +179,17 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
     const runId = claim.runId as string;
     try {
       if (parsed.data.kind === 'backfill') {
-        const instruments = await listAnalysedInstruments(userId);
+        // Beside what is held and followed: every instrument an agent has ever
+        // traded, so a past day stays valued after a sale, and the benchmark,
+        // always, so its closes are there before the first agent is (PR 7, D24).
+        const [analysed, traded, benchmark] = await Promise.all([
+          listAnalysedInstruments(userId),
+          listTradedInstruments(userId),
+          findInstrumentsBySymbols([BENCHMARK_SYMBOL]),
+        ]);
+        const instruments = [
+          ...new Map([...analysed, ...traded, ...benchmark].map((row) => [row.id, row])).values(),
+        ];
         if (instruments.length === 0) {
           await finishRun(runId, 'skipped', { reason: 'no holdings and no topics' });
           return context.json({ kind: parsed.data.kind, runKey, runId, status: 'skipped' });

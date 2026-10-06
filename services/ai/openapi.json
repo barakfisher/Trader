@@ -975,6 +975,67 @@
         "title": "MarketCalendarStatus",
         "type": "object"
       },
+      "MarketSession": {
+        "description": "One trading day's regular session, as instants in UTC (D25).",
+        "properties": {
+          "closes_at": {
+            "description": "16:00 New York, or 13:00 on an early close.",
+            "format": "date-time",
+            "title": "Closes At",
+            "type": "string"
+          },
+          "day": {
+            "description": "The session's date in the exchange's own timezone.",
+            "format": "date",
+            "title": "Day",
+            "type": "string"
+          },
+          "early_close": {
+            "title": "Early Close",
+            "type": "boolean"
+          },
+          "opens_at": {
+            "format": "date-time",
+            "title": "Opens At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "day",
+          "opens_at",
+          "closes_at",
+          "early_close"
+        ],
+        "title": "MarketSession",
+        "type": "object"
+      },
+      "MarketSessions": {
+        "description": "Every session between two dates, holidays left out (D25).\n\nWhat an agent's performance is measured on (Stage 3, PR 7): the trading days\nof its daily value, and the close each deposit buys the shadow SPY at.",
+        "properties": {
+          "calendar": {
+            "title": "Calendar",
+            "type": "string"
+          },
+          "exchange": {
+            "title": "Exchange",
+            "type": "string"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/MarketSession"
+            },
+            "title": "Sessions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "exchange",
+          "calendar",
+          "sessions"
+        ],
+        "title": "MarketSessions",
+        "type": "object"
+      },
       "NarrationConfigResponse": {
         "description": "How narration is configured, for a UI that must not guess.\n\n`tier` is what a reader needs and the model id only implies: `free` is a\nroute that bills nothing and is served from a shared pool, `paid` bills per\ntoken, `none` means no provider was asked for at all. The last is a\nconfiguration rather than a failure, and the three are kept distinct so a UI\ncannot report \"deliberately off\" as \"broken\".",
         "properties": {
@@ -3096,6 +3157,93 @@
           }
         },
         "summary": "Get Quotes",
+        "tags": [
+          "market"
+        ]
+      }
+    },
+    "/market/sessions": {
+      "get": {
+        "description": "Every session of `exchange` from `start` to `end`, with its close (D25).\n\nThe orchestrator reads its trading days and closing instants from here\nrather than keeping a copy of the calendar. 422 for an exchange with no\ncalendar or a reversed or over-long span; 503 when the span reaches outside\nthe committed file - never a guess about days it does not cover.",
+        "operationId": "market_sessions_market_sessions_get",
+        "parameters": [
+          {
+            "description": "Exchange name or code",
+            "in": "query",
+            "name": "exchange",
+            "required": true,
+            "schema": {
+              "description": "Exchange name or code",
+              "maxLength": 32,
+              "minLength": 1,
+              "title": "Exchange",
+              "type": "string"
+            }
+          },
+          {
+            "description": "First day, inclusive (YYYY-MM-DD)",
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "description": "First day, inclusive (YYYY-MM-DD)",
+              "format": "date",
+              "title": "Start",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Last day, inclusive (YYYY-MM-DD)",
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "description": "Last day, inclusive (YYYY-MM-DD)",
+              "format": "date",
+              "title": "End",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketSessions"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Market Sessions",
         "tags": [
           "market"
         ]

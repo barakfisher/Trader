@@ -701,6 +701,55 @@ until Stage 4, so §4.3's "pending proposals on that ticker" arrives with them. 
 gains each simulated agent's net worth (D19). *Rejected:* a *Sell* on the dashboard row - a
 second entry to the trade panel for no case the agent page does not already serve.
 
+### Added 2026-10-05, building performance (Stage 3, PR 7)
+
+Measured first: daily closes are kept indefinitely (about 191 per held symbol since 2025-12-29, one
+per trading day, nothing prunes them); SPY had none; the real portfolio's snapshot has gaps whenever
+the machine was off (13 rows in 21 days) and values holdings at midnight Israel time, not at the
+close. Asked one at a time; every answer was the recommendation, D38's with a reservation.
+
+**D36 - An agent's daily value is computed, not stored.** At each session's close: cash after the
+last movement made by that instant, plus each holding (replayed from the fills) at that day's
+stored close. The ledger is append-only and closes are kept, so any past day can be recomputed,
+with no gaps and on the same closes the benchmark uses. No migration. The series ends at the last
+session whose SPY close is stored: a session that has closed but whose close the next backfill
+has not fetched yet is *not recorded*, which is different from *unpriced*. *Rejected:* a nightly
+snapshot per agent - gaps when the machine is off, a midnight price, and a column for cash.
+
+**D37 - A deposit buys the shadow SPY at the first session close at or after it**, read from the
+exchange calendar (`GET /market/sessions`), early closes included: during a session, that day's
+close; after the close or on a closed day, the next session's. Until that close is recorded the
+deposit is *pending* and in neither figure. *Rejected:* the deposit's calendar date even after
+hours (it would buy at a price from before the money existed), and the previous close.
+
+**D38 - The shadow holds fractional shares and pays no fees.** It is an index line, not a trade:
+every dollar deposited is in SPY at that close, exactly, and the agent's own fees remain a cost it
+has to beat. **Recorded as debt at the user's request:** fees on the benchmark will be added later
+(`.claude/MEMORY.md`, "Current technical debt"). *Rejected for now:* whole shares with fees (the
+benchmark would start ~3% behind on a $10,000 deposit for reasons that are not SPY's).
+
+**D39 - The score replays the agent's own book.** Only `source = 'agent'` fills, as if the user
+had never traded by hand: a sell is scored against the shares the agent itself bought, at their
+share of its cost; a sell beyond what the agent bought scores only the part it did. Unrealised P&L
+values what the book still holds, capped at what is actually still held. Manual trades count in
+P&L against SPY (D24), never in the score. *Rejected:* scoring against the real position (the
+user's intervention would change the agent's record), and skipping mixed holdings.
+
+**D40 - A win is a sell with a profit after fees**: its own fee and its share of the buy fees.
+Break-even is not a win. Example: 10 bought at $100.00 and sold at $100.10, $1.50 each way, is a
+$2.00 loss. *Rejected:* price above average cost, fees ignored.
+
+**D41 - Each sell is one decision, counted in the windows its date falls in.** The 30/60/90-day
+windows count the agent's fills (decisions), its scored sells, wins, the win rate and realised
+P&L by the sell's date; unrealised P&L is one figure for now, not repeated per window. *Rejected:*
+a position counted only on its round trip to zero (a position trimmed for months shows nothing),
+and counting only positions opened inside the window.
+
+**D42 - The agent page shows a Performance card: the figures, both lines and the score.** The
+agent's P&L and return, SPY's on the same deposits and the difference in points, at the latest
+recorded close; a chart of the agent's net worth and the shadow at each close; and the score,
+which reads "no agent decisions yet" until Stage 4.
+
 ---
 
 ## 11. Measured, 2026-10-04 (read-only, live compose database)
@@ -898,6 +947,8 @@ agents, expanding to the per-agent split; the `All / Real only / per agent` filt
 simulated never summed; paused badged, archived excluded. `GET /portfolio/consolidated` values each
 agent as its own page does (`valueAgentAccount`) and the real portfolio as `/portfolio` does.
 
-**PR 7 — Performance (D24, §5.4).** Daily net worth per simulated agent (cash + market value), SPY
-in the backfill, the shadow benchmark, P&L and return beside it on the agent page, and the
-30/60/90-day score over `agent` fills.
+**PR 7 — Performance (D24, §5.4, D36-D42).** Daily net worth per simulated agent (cash + market
+value) computed from the ledger and stored closes, SPY and every traded instrument in the backfill,
+the shadow benchmark, P&L and return beside it on the agent page, and the 30/60/90-day score over
+`agent` fills. `GET /market/sessions` (AI service) lists the calendar's sessions with their closes;
+`GET /agents/:id/performance` computes the rest on each request.
