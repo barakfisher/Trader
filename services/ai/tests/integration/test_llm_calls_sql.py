@@ -49,8 +49,9 @@ def test_the_insert_deletes_calls_past_the_retention_window(migrated: Engine) ->
     with migrated.begin() as connection:
         connection.execute(
             text(
-                "INSERT INTO llm_calls (purpose, provider, outcome, latency_ms, prompt, started_at) "
-                "VALUES ('ask', 'openrouter', 'ok', 1, 'expired', now() - interval '31 days'), "
+                "INSERT INTO llm_calls "
+                "(purpose, provider, outcome, latency_ms, prompt, started_at) VALUES"
+                " ('ask', 'openrouter', 'ok', 1, 'expired', now() - interval '31 days'), "
                 "       ('ask', 'openrouter', 'ok', 1, 'kept', now() - interval '29 days')"
             )
         )
@@ -114,8 +115,12 @@ def test_a_scan_call_must_name_its_agent_and_nothing_else_may(migrated: Engine) 
         "llm_calls_scan_names_its_agent",
     )
     with migrated.begin() as connection:
-        connection.execute(text(insert), {"user": SEED_USER, "agent": agent, "purpose": "agent_scan"})
-        connection.execute(text("DELETE FROM llm_calls WHERE agent_id = CAST(:a AS uuid)"), {"a": agent})
+        connection.execute(
+            text(insert), {"user": SEED_USER, "agent": agent, "purpose": "agent_scan"}
+        )
+        connection.execute(
+            text("DELETE FROM llm_calls WHERE agent_id = CAST(:a AS uuid)"), {"a": agent}
+        )
         connection.execute(text("DELETE FROM agents WHERE id = CAST(:a AS uuid)"), {"a": agent})
 
 
