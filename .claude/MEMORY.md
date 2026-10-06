@@ -2748,8 +2748,11 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 - Other processes on this machine hold ports 5432, `127.0.0.1:8000` and `[::1]:5173`/`[::1]:5174`.
   Every published port is configurable; this machine uses `POSTGRES_HOST_PORT=55432`,
   `WEB_HOST_PORT=5174`, `AI_SERVICE_HOST_PORT=8001`.
-- **Reach the dashboard at `http://127.0.0.1:5174`, not `localhost`** — macOS resolves `localhost`
-  to IPv6 first, where a different project is listening.
+- **Prefer `http://127.0.0.1:5174` to `localhost`** — macOS may resolve `localhost` to IPv6 first,
+  where a different project is listening. Either name now keeps the sign-in: the web app calls
+  `/api` on its own origin (Vite proxy in dev, nginx in the image). Before that, compose baked
+  `VITE_API_BASE_URL=http://127.0.0.1:8080` into the page, the cookie landed on `127.0.0.1`, and a
+  page opened as `localhost` signed in with 200 and then got 401 on every call.
 - The database currently holds ~1,800 real daily closes from Yahoo and a real portfolio scan's
   observations. Nothing synthetic remains in `quotes`.
 - **A git worktree has no Python venv and no `.env`** — both live in the main checkout only, and

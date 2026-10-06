@@ -140,10 +140,16 @@ WEB_PORT="${WEB_HOST_PORT:-5173}"
 API_URL="http://127.0.0.1:${API_PORT}"
 export ALLOWED_ORIGINS="http://127.0.0.1:${WEB_PORT},http://localhost:${WEB_PORT},${ALLOWED_ORIGINS:-}"
 
-# Vite only reads VITE_* variables from .env files next to the app, so write the
-# API URL where it will definitely be picked up. The file is git-ignored.
-printf '# Written by scripts/dev-local.sh. Safe to delete.\nVITE_API_BASE_URL=%s\n' "$API_URL" \
-  > "$REPO_ROOT/apps/web/.env.local"
+# The web dev server forwards /api/* to the orchestrator (apps/web/vite.config.ts),
+# so the page calls the API on its own address. An older .env still carrying
+# VITE_API_BASE_URL would put an absolute address back into the bundle - and a
+# page opened as localhost would then lose its cookie to 127.0.0.1 - so drop it,
+# along with the .env.local earlier versions of this script wrote.
+export API_PROXY_TARGET="$API_URL"
+unset VITE_API_BASE_URL
+if grep -qs '^# Written by scripts/dev-local.sh' "$REPO_ROOT/apps/web/.env.local"; then
+  rm -f "$REPO_ROOT/apps/web/.env.local"
+fi
 
 require_free_port "$AI_PORT" "the AI service"
 require_free_port "$API_PORT" "the orchestrator"
