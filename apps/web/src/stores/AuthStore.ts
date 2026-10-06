@@ -4,7 +4,7 @@ import type { SessionUser, UiLanguage } from '@traders/shared';
 
 import { ApiRequestError, api } from '../api/client.ts';
 import { setDisplayTimeZone } from '../lib/relativeTime.ts';
-import { DEFAULT_LANGUAGE, applyLanguage, t } from '../i18n/index.ts';
+import { applyLanguage, signedOutLanguage, t } from '../i18n/index.ts';
 import type { RootStore } from './RootStore.ts';
 
 export class AuthStore {
@@ -27,9 +27,10 @@ export class AuthStore {
     );
     // And in the user's language, by the same reasoning: `App` draws nothing
     // until the session is known, so the first screen is already in it. Signed
-    // out - the sign-in page - is English, the default.
+    // out - the sign-in page - the account's setting is unknown, so the
+    // browser's language stands in for it.
     reaction(
-      () => this.user?.language ?? DEFAULT_LANGUAGE,
+      () => this.user?.language ?? signedOutLanguage(),
       (language) => applyLanguage(language),
       { fireImmediately: true },
     );

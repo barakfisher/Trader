@@ -4,7 +4,15 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 import { formatMoney, formatNumber, formatPercent, formatShare } from '../src/i18n/format.ts';
-import { CATALOGUES, DEFAULT_LANGUAGE, LANGUAGES, i18n, t } from '../src/i18n/index.ts';
+import {
+  CATALOGUES,
+  DEFAULT_LANGUAGE,
+  LANGUAGES,
+  browserLanguage,
+  i18n,
+  signedOutLanguage,
+  t,
+} from '../src/i18n/index.ts';
 import { catalogueProblems, flatten, slots } from '../src/i18n/parity.ts';
 
 const english = CATALOGUES[DEFAULT_LANGUAGE].translation;
@@ -160,5 +168,26 @@ describe('no interface text is written into a component', () => {
       visit(tree);
     }
     expect(found).toEqual([]);
+  });
+});
+
+describe("the sign-in page speaks the browser's language", () => {
+  it('takes the first preferred language the interface is written in', () => {
+    expect(browserLanguage(['he-IL', 'en-US'])).toBe('he');
+    expect(browserLanguage(['fr-FR', 'he', 'en'])).toBe('he');
+    expect(browserLanguage(['en-GB', 'he'])).toBe('en');
+  });
+
+  it("reads Hebrew's withdrawn code as Hebrew", () => {
+    expect(browserLanguage(['iw-IL'])).toBe('he');
+  });
+
+  it('falls back to the default when nothing preferred is supported', () => {
+    expect(browserLanguage(['fr-FR', 'de'])).toBe(DEFAULT_LANGUAGE);
+    expect(browserLanguage([])).toBe(DEFAULT_LANGUAGE);
+  });
+
+  it("is the default outside a browser, whatever the machine's locale", () => {
+    expect(signedOutLanguage()).toBe(DEFAULT_LANGUAGE);
   });
 });
