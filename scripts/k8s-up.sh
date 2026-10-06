@@ -172,6 +172,52 @@ images:
     newTag: "$IMAGE_TAG"
 EOF
 
+# The phone's way in (docs/PHONE-ACCESS.md): this Mac's Tailscale name, e.g.
+# mac.tail1234.ts.net. `tailscale serve` hands https://<name> to 127.0.0.1:80
+# keeping that name as the Host, so the Ingress needs a rule for it, and the
+# orchestrator must accept the page's Origin. Per machine, so it is added here,
+# in the git-ignored per-deploy file, never in the committed base. Without
+# Tailscale (or with TAILNET_HOST=none) nothing is added and only
+# traders.localhost answers.
+TAILNET_HOST="${TAILNET_HOST:-}"
+if [ -z "$TAILNET_HOST" ] && command -v tailscale > /dev/null 2>&1; then
+  TAILNET_HOST="$(tailscale status --json 2> /dev/null | python3 -c '
+import json, sys
+try:
+    print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))
+except Exception:
+    pass
+' || true)"
+fi
+if [ -n "$TAILNET_HOST" ] && [ "$TAILNET_HOST" != "none" ]; then
+  ok "phone access: https://$TAILNET_HOST (Tailscale)"
+  cat >> "$DEPLOY_DIR/kustomization.yaml" << EOF
+configMapGenerator:
+  - name: traders-config
+    behavior: merge
+    literals:
+      - ALLOWED_ORIGINS=http://traders.localhost,https://$TAILNET_HOST
+patches:
+  - target:
+      kind: Ingress
+      name: traders
+    patch: |-
+      - op: add
+        path: /spec/rules/-
+        value:
+          host: $TAILNET_HOST
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: web
+                    port:
+                      name: http
+EOF
+fi
+
 say "Applying manifests for $IMAGE_TAG"
 # A Job cannot be edited after creation, and each deploy should run them again.
 kc delete job migrate corpus universe --ignore-not-found --wait=true > /dev/null 2>&1 || true
@@ -228,4 +274,11 @@ say "Cluster state"
 kc get pods
 echo
 ok "Traders is running in the cluster: http://traders.localhost"
+if [ -n "$TAILNET_HOST" ] && [ "$TAILNET_HOST" != "none" ]; then
+  echo "     on your phone (Tailscale): https://$TAILNET_HOST"
+  # `serve` is set once and kept across restarts; say so if it never was.
+  if ! tailscale serve status 2> /dev/null | grep -q '127.0.0.1:80'; then
+    warn "tailscale serve is not forwarding to the cluster yet - run once: tailscale serve --bg http://127.0.0.1:80"
+  fi
+fi
 echo "     sign in with: grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.env"
