@@ -382,13 +382,19 @@
     }
   },
   "duration": {
-    "minutes": "{{count}} ד׳",
-    "hours": "{{count}} ש׳",
-    "days": "{{count}} ימ׳",
-    "hoursAndMinutes": "{{hours}} {{minutes}}"
+    "minutes_one": "דקה",
+    "minutes_two": "שתי דקות",
+    "minutes_other": "{{count}} דקות",
+    "hours_one": "שעה",
+    "hours_two": "שעתיים",
+    "hours_other": "{{count}} שעות",
+    "days_one": "יום",
+    "days_two": "יומיים",
+    "days_other": "{{count}} ימים",
+    "hoursAndMinutes": "{{hours}} ו-{{minutes}}"
   },
   "countdown": {
-    "left": "נותרו {{duration}}",
+    "left": "עוד {{duration}}",
     "expiringNow": "פג עכשיו",
     "snoozedUntil": "מושהה, חוזר בעוד {{duration}}",
     "wakingNow": "חוזר עכשיו",

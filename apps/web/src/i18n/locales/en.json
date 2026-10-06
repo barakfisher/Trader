@@ -371,9 +371,12 @@
     }
   },
   "duration": {
-    "minutes": "{{count}}m",
-    "hours": "{{count}}h",
-    "days": "{{count}}d",
+    "minutes_one": "{{count}}m",
+    "minutes_other": "{{count}}m",
+    "hours_one": "{{count}}h",
+    "hours_other": "{{count}}h",
+    "days_one": "{{count}}d",
+    "days_other": "{{count}}d",
     "hoursAndMinutes": "{{hours}} {{minutes}}"
   },
   "countdown": {

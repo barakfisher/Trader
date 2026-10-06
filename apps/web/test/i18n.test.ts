@@ -1,13 +1,16 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import ts from 'typescript';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { formatMoney, formatNumber, formatPercent, formatShare } from '../src/i18n/format.ts';
+import { formatDuration } from '../src/lib/notificationSchedule.ts';
+import { formatAge } from '../src/lib/relativeTime.ts';
 import {
   CATALOGUES,
   DEFAULT_LANGUAGE,
   LANGUAGES,
+  applyLanguage,
   browserLanguage,
   i18n,
   signedOutLanguage,
@@ -189,5 +192,30 @@ describe("the sign-in page speaks the browser's language", () => {
 
   it("is the default outside a browser, whatever the machine's locale", () => {
     expect(signedOutLanguage()).toBe(DEFAULT_LANGUAGE);
+  });
+});
+
+describe('a Hebrew duration is said in words, with its dual', () => {
+  afterEach(() => applyLanguage(DEFAULT_LANGUAGE, null));
+
+  it('names one and two in words, and counts from three', () => {
+    applyLanguage('he', null);
+    expect(t('duration.days', { count: 1 })).toBe('יום');
+    expect(t('duration.days', { count: 2 })).toBe('יומיים');
+    expect(t('duration.days', { count: 5 })).toBe('5 ימים');
+    expect(t('duration.hours', { count: 2 })).toBe('שעתיים');
+    expect(t('duration.minutes', { count: 1 })).toBe('דקה');
+  });
+
+  it('reads "a day ago" rather than "1 d. ago", and joins hours and minutes', () => {
+    applyLanguage('he', null);
+    const now = new Date('2026-10-06T12:00:00.000Z');
+    expect(formatAge('2026-10-05T12:00:00.000Z', now)).toBe('לפני יום');
+    expect(formatDuration(90)).toBe('שעה ו-30 דקות');
+  });
+
+  it('leaves English as it was', () => {
+    expect(t('duration.days', { count: 1 })).toBe('1d');
+    expect(formatDuration(90)).toBe('1h 30m');
   });
 });
