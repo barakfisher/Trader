@@ -75,6 +75,32 @@ export function applyLanguage(
   applyDocumentDirection(directionOf(language), root);
 }
 
+/**
+ * The language to show before anyone signs in, when the account's own setting
+ * is not known yet: the first of the browser's preferred languages the
+ * interface is written in, or the default. Only the primary subtag counts
+ * ("he-IL" is Hebrew), and "iw" - Hebrew's withdrawn code, which older
+ * browsers still send - counts as Hebrew.
+ */
+export function browserLanguage(preferred: readonly string[]): Language {
+  for (const tag of preferred) {
+    const primary = tag.split('-')[0]!.toLowerCase();
+    const code = primary === 'iw' ? 'he' : primary;
+    if ((LANGUAGES as readonly string[]).includes(code)) return code as Language;
+  }
+  return DEFAULT_LANGUAGE;
+}
+
+/**
+ * The signed-out language for this page. Outside a browser (a store test) it
+ * is the default, so no test depends on the machine's locale - which Node
+ * exposes as its own `navigator.languages`.
+ */
+export function signedOutLanguage(): Language {
+  if (typeof document === 'undefined' || typeof navigator === 'undefined') return DEFAULT_LANGUAGE;
+  return browserLanguage(navigator.languages?.length ? navigator.languages : [navigator.language]);
+}
+
 /** The active language; anything i18next reports that is not one of ours is the default. */
 export function currentLanguage(): Language {
   const active = i18n.resolvedLanguage ?? i18n.language;
