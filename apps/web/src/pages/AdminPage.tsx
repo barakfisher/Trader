@@ -5,8 +5,11 @@ import { ArrowLeft, ShieldCheck } from 'lucide-react';
 
 import type {
   AdminAuditEntry,
+  AdminLlmModelsResponse,
+  LlmOfferedModelView,
+  LlmScope,
   AdminRun,
-  LlmAgentSummary,
+  LlmPurposeSummary,
   LlmCallSummary,
   LlmPanelResponse,
   UniverseGap,
@@ -21,9 +24,11 @@ import {
   LLM_WINDOWS,
   OUTCOME_LABEL,
   VERDICT_LABEL,
-  agentCost,
+  purposeCost,
   callCost,
+  decimalUsdToMicro,
   formatLatency,
+  formatMicroUsd,
   nonZero,
   reasonLabel,
 } from '../lib/llmCalls.ts';
@@ -33,9 +38,11 @@ import { gapExplanation, gapProfile, gapSubject, isRealGap } from '../lib/univer
 import {
   useAdminAuditQuery,
   useAdminGapsQuery,
+  useAdminLlmModelsQuery,
   useAdminLlmQuery,
   useAdminRunsQuery,
   useAdminUniverseQuery,
+  useChooseLlmModel,
   useRescreen,
 } from '../queries/admin.ts';
 import { useStore } from '../stores/context.tsx';
@@ -81,6 +88,7 @@ export const AdminPage = observer(function AdminPage() {
         <>
           <UniverseCard />
           <GapsCard />
+          <ModelsCard />
           <LlmCard />
           <RunsCard />
           <AuditCard />
@@ -351,10 +359,211 @@ function GapItem({ gap }: { gap: UniverseGap }) {
 }
 
 /**
- * Every model call, per agent, and narration's fallback reasons counted
+ * Every model call, per purpose, and narration's fallback reasons counted
  * against the calls behind them (decision 87). Cost says "free route" where a
  * zero is the price. What is not measured is said, not shown as zero.
  */
+/**
+ * Which model narration, `/ask` and agents use, and what each choice would cost
+ * (D43, D44). Changing the selection shows that model's estimate before anything
+ * is saved; saving is an audited admin action. The balance beside the totals
+ * answers "how much should I add to the account".
+ */
+function ModelsCard() {
+  const models = useAdminLlmModelsQuery();
+  const { t } = useTranslation();
+  return (
+    <Card title={t('admin.models.title')}>
+      {models.isPending && <Spinner label={t('admin.models.loading')} />}
+      {models.error && (
+        <ErrorNote message={errorMessage(models.error, t('admin.models.failed'))} onRetry={() => void models.refetch()} />
+      )}
+      {models.data && <ModelsPanel data={models.data} />}
+    </Card>
+  );
+}
+
+const SCOPES: readonly LlmScope[] = ['explain', 'agent'];
+
+function initialSelection(data: AdminLlmModelsResponse, scope: LlmScope): string {
+  const choice = data.choices.find((candidate) => candidate.scope === scope);
+  const offered = data.models.filter((model) => model.scopes.includes(scope));
+  const current = choice?.chosen ?? choice?.effective ?? null;
+  return offered.find((model) => model.id === current)?.id ?? offered[0]?.id ?? '';
+}
+
+function estimateFor(model: LlmOfferedModelView | undefined, scope: LlmScope) {
+  return model ? (scope === 'explain' ? model.estimates.explain : model.estimates.agent) : null;
+}
+
+function ModelsPanel({ data }: { data: AdminLlmModelsResponse }) {
+  const { t } = useTranslation();
+  const [selected, setSelected] = useState<Record<LlmScope, string>>(() => ({
+    explain: initialSelection(data, 'explain'),
+    agent: initialSelection(data, 'agent'),
+  }));
+  const pick = (scope: LlmScope) => data.models.find((model) => model.id === selected[scope]);
+  const totals = SCOPES.map((scope) => estimateFor(pick(scope), scope));
+  const daily = totals.reduce((sum, estimate) => sum + (estimate?.dailyMicroUsd ?? 0), 0);
+  const monthly = totals.reduce((sum, estimate) => sum + (estimate?.monthlyMicroUsd ?? 0), 0);
+
+  return (
+    <div className="space-y-4 text-sm">
+      {!data.choosable && <p className="text-warn">{t('admin.models.notChoosable', { provider: data.provider })}</p>}
+      {SCOPES.map((scope) => (
+        <ScopePicker
+          key={scope}
+          data={data}
+          scope={scope}
+          value={selected[scope]}
+          onChange={(model) => setSelected((current) => ({ ...current, [scope]: model }))}
+        />
+      ))}
+      <div className="rounded border border-border-subtle p-3">
+        <div className="font-medium">
+          {t('admin.models.total', { daily: formatMicroUsd(daily), monthly: formatMicroUsd(monthly) })}
+        </div>
+        <Credits credits={data.credits} monthlyMicroUsd={monthly} />
+        <p className="mt-1 text-xs text-text-muted">{t('admin.models.estimateNote')}</p>
+      </div>
+    </div>
+  );
+}
+
+function ScopePicker({
+  data,
+  scope,
+  value,
+  onChange,
+}: {
+  data: AdminLlmModelsResponse;
+  scope: LlmScope;
+  value: string;
+  onChange: (model: string) => void;
+}) {
+  const { t } = useTranslation();
+  const choose = useChooseLlmModel();
+  const choice = data.choices.find((candidate) => candidate.scope === scope);
+  const offered = data.models.filter((model) => model.scopes.includes(scope));
+  const model = offered.find((candidate) => candidate.id === value);
+  const estimate = estimateFor(model, scope);
+  const unchanged = value === choice?.chosen;
+  const id = `model-${scope}`;
+
+  return (
+    <section className="space-y-1">
+      <label htmlFor={id} className="block font-medium">
+        {t(`admin.models.scope.${scope}`)}
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          id={id}
+          value={value}
+          disabled={!data.choosable || offered.length === 0}
+          onChange={(event) => onChange(event.target.value)}
+          className="input w-auto"
+        >
+          {offered.map((candidate) => (
+            <option key={candidate.id} value={candidate.id}>
+              {candidate.label}
+            </option>
+          ))}
+        </select>
+        <Button
+          variant="secondary"
+          disabled={!data.choosable || !value || unchanged || choose.isPending}
+          onClick={() => choose.mutate({ scope, model: value })}
+        >
+          {t('admin.models.save')}
+        </Button>
+      </div>
+      <p className="text-xs text-text-muted">
+        {choice?.chosen
+          ? t('admin.models.inUse', { model: choice.chosen })
+          : t('admin.models.inUseDefault', { model: choice?.effective ?? t('admin.noModel') })}
+      </p>
+      {model && (
+        <p className="text-xs text-text-muted">
+          {model.free
+            ? t('admin.models.freeRoute')
+            : t('admin.models.price', {
+                input: formatPerMtok(model.promptUsdPerMtok),
+                output: formatPerMtok(model.completionUsdPerMtok),
+              })}
+        </p>
+      )}
+      {estimate && (
+        <p>
+          {t('admin.models.estimate', {
+            daily: formatMicroUsd(estimate.dailyMicroUsd),
+            monthly: formatMicroUsd(estimate.monthlyMicroUsd),
+          })}
+        </p>
+      )}
+      <p className="text-xs text-text-muted">
+        {scope === 'explain'
+          ? t('admin.models.explainBasis', {
+              days: data.explainBasis.windowDays,
+              prompt: count.format(data.explainBasis.promptTokensPerDay),
+              completion: count.format(data.explainBasis.completionTokensPerDay),
+            })
+          : t(
+              data.agentBasis.source === 'assumed' ? 'admin.models.agentBasisAssumed' : 'admin.models.agentBasis',
+              {
+                count: data.agentBasis.scanningAgents,
+                scans: data.agentBasis.scansPerDay,
+                tokens: count.format(data.agentBasis.promptTokensPerScan + data.agentBasis.completionTokensPerScan),
+                scan: model?.scanEstimateMicroUsd != null ? formatMicroUsd(model.scanEstimateMicroUsd) : '-',
+              },
+            )}
+      </p>
+      {choose.error && <ErrorNote message={errorMessage(choose.error, t('admin.models.saveFailed'))} />}
+    </section>
+  );
+}
+
+function formatPerMtok(text: string): string {
+  const micro = decimalUsdToMicro(text);
+  return micro === null ? text : formatMicroUsd(micro);
+}
+
+function Credits({
+  credits,
+  monthlyMicroUsd,
+}: {
+  credits: AdminLlmModelsResponse['credits'];
+  monthlyMicroUsd: number;
+}) {
+  const { t } = useTranslation();
+  if (credits === null) return <p className="text-text-muted">{t('admin.models.balanceUnavailable')}</p>;
+  const remaining = decimalUsdToMicro(credits.remainingUsd);
+  const used = decimalUsdToMicro(credits.usedUsd);
+  const purchased = decimalUsdToMicro(credits.purchasedUsd);
+  if (remaining === null || used === null || purchased === null) {
+    return <p className="text-text-muted">{t('admin.models.balanceUnavailable')}</p>;
+  }
+  return (
+    <>
+      <p>
+        {t('admin.models.balance', {
+          remaining: formatMicroUsd(Math.max(remaining, 0)),
+          used: formatMicroUsd(used),
+          purchased: formatMicroUsd(purchased),
+        })}
+      </p>
+      {remaining <= 0 ? (
+        <p className="text-loss">{t('admin.models.noCredit')}</p>
+      ) : (
+        monthlyMicroUsd > 0 && (
+          <p className="text-text-muted">
+            {t('admin.models.lasts', { count: Math.floor((remaining * 30) / monthlyMicroUsd) })}
+          </p>
+        )
+      )}
+    </>
+  );
+}
+
 function LlmCard() {
   const [days, setDays] = useState<number>(7);
   const llm = useAdminLlmQuery(days);
@@ -407,7 +616,7 @@ function LlmPanel({ data }: { data: LlmPanelResponse }) {
         <table className="w-full text-start text-sm">
           <thead className="text-xs text-text-muted">
             <tr>
-              <th className="py-2 pe-3 font-medium">{t('admin.llmColumns.agent')}</th>
+              <th className="py-2 pe-3 font-medium">{t('admin.llmColumns.purpose')}</th>
               <th className="py-2 pe-3 font-medium">{t('admin.llmColumns.calls')}</th>
               <th className="py-2 pe-3 font-medium">{t('admin.llmColumns.outcomes')}</th>
               <th className="py-2 pe-3 font-medium">{t('admin.llmColumns.verdicts')}</th>
@@ -417,8 +626,8 @@ function LlmPanel({ data }: { data: LlmPanelResponse }) {
             </tr>
           </thead>
           <tbody>
-            {data.agents.map((agent) => (
-              <AgentRow key={agent.agent} agent={agent} />
+            {data.purposes.map((summary) => (
+              <PurposeRow key={summary.purpose} summary={summary} />
             ))}
           </tbody>
         </table>
@@ -433,9 +642,9 @@ function LlmPanel({ data }: { data: LlmPanelResponse }) {
   );
 }
 
-function AgentRow({ agent }: { agent: LlmAgentSummary }) {
-  const outcomes = nonZero(agent.outcomes, OUTCOME_LABEL);
-  const verdicts = nonZero(agent.verdicts, VERDICT_LABEL);
+function PurposeRow({ summary }: { summary: LlmPurposeSummary }) {
+  const outcomes = nonZero(summary.outcomes, OUTCOME_LABEL);
+  const verdicts = nonZero(summary.verdicts, VERDICT_LABEL);
   const { t } = useTranslation();
   const counted = (rows: { count: number; label: string }[]) =>
     rows.map((row) => t('admin.countLabel', { count: row.count, label: row.label })).join(t('common.listSeparator')) ||
@@ -443,31 +652,31 @@ function AgentRow({ agent }: { agent: LlmAgentSummary }) {
   return (
     <tr className="border-t border-border-subtle align-top">
       <td className="py-2 pe-3">
-        <div className="font-medium">{agent.agent}</div>
-        {agent.models.map((model) => (
+        <div className="font-medium">{summary.purpose}</div>
+        {summary.models.map((model) => (
           <div key={model.model ?? 'none'} className="break-all font-mono text-xs text-text-muted">
             {t('admin.modelCalls', { model: model.model ?? t('admin.noModel'), value: count.format(model.calls) })}
           </div>
         ))}
       </td>
-      <td className="py-2 pe-3">{count.format(agent.calls)}</td>
+      <td className="py-2 pe-3">{count.format(summary.calls)}</td>
       <td className="py-2 pe-3">{counted(outcomes)}</td>
       <td className="py-2 pe-3">{counted(verdicts)}</td>
       <td className="py-2 pe-3 whitespace-nowrap">
-        {agent.latency
+        {summary.latency
           ? t('admin.latencyPair', {
-              p50: formatLatency(agent.latency.p50Ms),
-              p95: formatLatency(agent.latency.p95Ms),
+              p50: formatLatency(summary.latency.p50Ms),
+              p95: formatLatency(summary.latency.p95Ms),
             })
           : '-'}
       </td>
       <td className="py-2 pe-3 whitespace-nowrap">
         {t('admin.tokensPair', {
-          prompt: count.format(agent.promptTokens),
-          completion: count.format(agent.completionTokens),
+          prompt: count.format(summary.promptTokens),
+          completion: count.format(summary.completionTokens),
         })}
       </td>
-      <td className="py-2 whitespace-nowrap">{agent.calls === 0 ? '-' : agentCost(agent)}</td>
+      <td className="py-2 whitespace-nowrap">{summary.calls === 0 ? '-' : purposeCost(summary)}</td>
     </tr>
   );
 }
@@ -541,7 +750,7 @@ function RecentCalls({ calls }: { calls: LlmCallSummary[] }) {
           <li key={call.id} className="py-2">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <span>
-                {t('admin.callOutcome', { agent: call.agent, outcome: OUTCOME_LABEL[call.outcome] ?? call.outcome })}
+                {t('admin.callOutcome', { purpose: call.purpose, outcome: OUTCOME_LABEL[call.outcome] ?? call.outcome })}
                 {call.verdict && t('admin.callVerdict', { verdict: VERDICT_LABEL[call.verdict] ?? call.verdict })}
               </span>
               <span className="text-xs text-text-muted" title={formatExactTime(call.startedAt)}>

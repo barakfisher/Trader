@@ -322,7 +322,7 @@ class TestVerdicts:
 
         llm.complete = spying  # type: ignore[method-assign]
         await narrate(finding, [], llm, user_id="u-1")
-        assert captured["caller"] == Caller(agent="narration", user_id="u-1")
+        assert captured["caller"] == Caller(purpose="narration", user_id="u-1")
         assert llm.verdicts == [(7, "accepted")]
 
     async def test_a_reply_it_could_not_use_is_recorded_with_why(self) -> None:

@@ -55,13 +55,18 @@ class ModelPrice:
     completion_usd_per_mtok: Decimal
 
 
-#: Published list prices in USD per million tokens, read in September 2026.
+#: Published list prices in USD per million tokens, read in September 2026,
+#: and the 5.x generation and the Admin page's other models from OpenRouter's
+#: list on 2026-10-06 (docs/PROPOSAL-MULTI-AGENT.md §14.1, D43).
 #: These are defaults, not facts: override them in LLM_MODEL_PRICES when a
 #: vendor reprices, rather than editing this table and redeploying. Keys are
 #: spelled the way the configured provider spells them - OpenRouter prefixes a
 #: vendor ("anthropic/claude-sonnet-4.5"), the vendors' own APIs do not - and
 #: lookup falls back across that prefix, so one entry usually covers both.
 DEFAULT_MODEL_PRICES: dict[str, ModelPrice] = {
+    "anthropic/claude-opus-5.5": ModelPrice(Decimal("4"), Decimal("20")),
+    "anthropic/claude-sonnet-5.5": ModelPrice(Decimal("2"), Decimal("10")),
+    "google/gemini-3.5-flash-lite": ModelPrice(Decimal("0.3"), Decimal("2.5")),
     "anthropic/claude-opus-4.1": ModelPrice(Decimal("15"), Decimal("75")),
     "anthropic/claude-sonnet-4.5": ModelPrice(Decimal("3"), Decimal("15")),
     "anthropic/claude-haiku-4.5": ModelPrice(Decimal("1"), Decimal("5")),

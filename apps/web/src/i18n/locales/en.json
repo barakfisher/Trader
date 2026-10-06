@@ -837,6 +837,35 @@
     "etf": "ETF"
   },
   "admin": {
+    "models": {
+      "title": "Models",
+      "loading": "Loading the models…",
+      "failed": "Could not load the models.",
+      "scope": {
+        "explain": "Narration and questions",
+        "agent": "Agents"
+      },
+      "save": "Use this model",
+      "saveFailed": "Could not save the model.",
+      "inUse": "In use: {{model}}",
+      "inUseDefault": "In use: {{model}} (the configured default; nothing chosen here yet)",
+      "price": "{{input}} per million input tokens, {{output}} per million output tokens",
+      "freeRoute": "Free route: unbilled, slow, and often rejected for unsourced figures",
+      "estimate": "About {{daily}} a day, {{monthly}} a month",
+      "explainBasis": "From the last {{days}} days: about {{prompt}} input and {{completion}} output tokens a day.",
+      "agentBasis_one": "{{count}} agent scanning, {{scans}} scan a day, about {{tokens}} tokens a scan; one scan about {{scan}}.",
+      "agentBasis_other": "{{count}} agents scanning, {{scans}} scan a day each, about {{tokens}} tokens a scan; one scan about {{scan}}.",
+      "agentBasisAssumed_one": "{{count}} agent scanning, {{scans}} scan a day, about {{tokens}} tokens a scan (assumed until real scans are recorded); one scan about {{scan}}.",
+      "agentBasisAssumed_other": "{{count}} agents scanning, {{scans}} scan a day each, about {{tokens}} tokens a scan (assumed until real scans are recorded); one scan about {{scan}}.",
+      "total": "Together: about {{daily}} a day, {{monthly}} a month",
+      "balance": "OpenRouter balance: {{remaining}} left ({{used}} used of {{purchased}})",
+      "balanceUnavailable": "The account balance could not be read.",
+      "noCredit": "No credit left: paid models will fail until credit is added at openrouter.ai.",
+      "lasts_one": "At this rate the balance lasts about {{count}} day.",
+      "lasts_other": "At this rate the balance lasts about {{count}} days.",
+      "estimateNote": "Estimates, rounded up, at list prices and without prompt caching; the real bill is usually lower.",
+      "notChoosable": "Models are chosen here only with OpenRouter; this installation uses {{provider}}."
+    },
     "title": "Admin",
     "onlyTitle": "Administrators only",
     "onlyBody": "This account is not an administrator, so there is nothing to show here.",
@@ -889,7 +918,7 @@
     "recordedSince": "Calls are recorded since {{when}} and kept for a limited time.",
     "noCalls": "No model call has been recorded yet. Every call is recorded from the moment it is made.",
     "llmColumns": {
-      "agent": "Agent",
+      "purpose": "Purpose",
       "calls": "Calls",
       "outcomes": "Outcomes",
       "verdicts": "Verdicts",
@@ -913,7 +942,7 @@
     "none": "None.",
     "fallbackShare": "{{reason}}: {{value}} of {{total}}",
     "latestCalls": "Latest calls",
-    "callOutcome": "{{agent}}: {{outcome}}",
+    "callOutcome": "{{purpose}}: {{outcome}}",
     "callVerdict": ", {{verdict}}",
     "callDetail": " · {{latency}} · {{prompt}} / {{completion}} tokens · {{cost}}",
     "audit": "Admin actions",

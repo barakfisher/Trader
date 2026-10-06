@@ -10,6 +10,9 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/r
 
 import type {
   AdminAuditResponse,
+  AdminLlmModelsResponse,
+  LlmModelChoiceInput,
+  LlmScope,
   AdminRunsResponse,
   LlmPanelResponse,
   RescreenStartResponse,
@@ -65,6 +68,28 @@ export function adminLlmQuery(days: number) {
 
 export function useAdminLlmQuery(days: number) {
   return useQuery(adminLlmQuery(days));
+}
+
+export const adminLlmModelsQuery = queryOptions({
+  queryKey: queryKeys.adminLlmModels,
+  queryFn: () => api.get<AdminLlmModelsResponse>('/admin/llm/models'),
+});
+
+export function useAdminLlmModelsQuery() {
+  return useQuery(adminLlmModelsQuery);
+}
+
+/** Choose a scope's model (D43). The answer is the page afresh; the audit list gains its row. */
+export function useChooseLlmModel() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ scope, model }: { scope: LlmScope; model: string }) =>
+      api.put<AdminLlmModelsResponse>(`/admin/llm/models/${scope}`, { model } satisfies LlmModelChoiceInput),
+    onSuccess: (body) => {
+      client.setQueryData(queryKeys.adminLlmModels, body);
+      void client.invalidateQueries({ queryKey: queryKeys.adminAudit });
+    },
+  });
 }
 
 /**

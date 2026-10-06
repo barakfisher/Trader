@@ -1,5 +1,5 @@
 /**
- * The LLM panel counts calls per agent and reconciles narration's fallback
+ * The LLM panel counts calls per purpose and reconciles narration's fallback
  * reasons against the calls behind them. The shapes are the ones measured on
  * compose on 2026-09-30: a free route that bills nothing, and verdicts that
  * refuse most of what it writes.
@@ -23,7 +23,7 @@ const FIRST_CALL = new Date('2026-09-30T22:00:00Z');
 
 function group(overrides: Partial<LlmCallGroupRow>): LlmCallGroupRow {
   return {
-    agent: 'narration',
+    purpose: 'narration',
     model: FREE,
     outcome: 'ok',
     verdict: 'accepted',
@@ -65,11 +65,11 @@ describe('the window', () => {
   });
 });
 
-describe('per agent', () => {
-  it('lists every agent, idle ones included, so "no calls" is an answer', () => {
+describe('per purpose', () => {
+  it('lists every purpose, idle ones included, so "no calls" is an answer', () => {
     const response = panel([]);
-    expect(response.agents.map((agent) => agent.agent)).toEqual(['narration', 'ask']);
-    expect(response.agents[1]).toMatchObject({ calls: 0, latency: null, costMicroUsd: 0 });
+    expect(response.purposes.map((summary) => summary.purpose)).toEqual(['narration', 'ask']);
+    expect(response.purposes[1]).toMatchObject({ calls: 0, latency: null, costMicroUsd: 0 });
   });
 
   it('sums outcomes, verdicts, tokens and cost, and marks a free route', () => {
@@ -79,7 +79,7 @@ describe('per agent', () => {
       group({ outcome: 'provider_error', verdict: null, calls: 4 }),
       group({ model: 'openai/gpt-x', verdict: 'accepted', cost_micro_usd: '1250' }),
     ]);
-    const narration = response.agents.find((agent) => agent.agent === 'narration')!;
+    const narration = response.purposes.find((summary) => summary.purpose === 'narration')!;
     expect(narration).toMatchObject({
       calls: 10,
       promptTokens: 900,
@@ -110,7 +110,7 @@ describe('narration reconciliation', () => {
         group({ verdict: 'degenerate_completion' }),
         group({ verdict: 'malformed' }),
         group({ outcome: 'provider_error', verdict: null }),
-        group({ agent: 'ask', verdict: 'unsourced_figures' }),
+        group({ purpose: 'ask', verdict: 'unsourced_figures' }),
       ],
       [
         { fallback_reason: 'none', count: 2 },

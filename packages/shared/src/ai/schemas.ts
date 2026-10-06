@@ -268,6 +268,50 @@ export const marketSessionsSchema = z.object({
   sessions: z.array(marketSessionSchema),
 });
 
+const llmScopeSchema = z.enum(['explain', 'agent']);
+const llmCostEstimateSchema = z.object({
+  daily_micro_usd: z.number().int(),
+  monthly_micro_usd: z.number().int(),
+});
+
+export const llmModelsResponseSchema = z.object({
+  provider: z.string(),
+  choosable: z.boolean(),
+  configured_model: z.string().nullable(),
+  choices: z.array(
+    z.object({ scope: llmScopeSchema, chosen: z.string().nullable(), effective: z.string().nullable() }),
+  ),
+  models: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      prompt_usd_per_mtok: z.string(),
+      completion_usd_per_mtok: z.string(),
+      supports_tools: z.boolean(),
+      free: z.boolean(),
+      scopes: z.array(llmScopeSchema),
+      explain_estimate: llmCostEstimateSchema,
+      agent_estimate: llmCostEstimateSchema.nullable(),
+      scan_estimate_micro_usd: z.number().int().nullable(),
+    }),
+  ),
+  explain_basis: z.object({
+    window_days: z.number().int(),
+    prompt_tokens_per_day: z.number().int(),
+    completion_tokens_per_day: z.number().int(),
+  }),
+  agent_basis: z.object({
+    scanning_agents: z.number().int(),
+    scans_per_day: z.number().int(),
+    prompt_tokens_per_scan: z.number().int(),
+    completion_tokens_per_scan: z.number().int(),
+    source: z.enum(['assumed', 'measured']),
+  }),
+  credits: z
+    .object({ purchased_usd: z.string(), used_usd: z.string(), remaining_usd: z.string() })
+    .nullable(),
+});
+
 export const backfillResponseSchema = z.object({
   written: z.number().int(),
   already_present: z.number().int(),
@@ -318,6 +362,9 @@ export type _AssertMarketCalendar = Expect<
 >;
 export type _AssertMarketSessions = Expect<
   Equal<z.infer<typeof marketSessionsSchema>, Schemas['MarketSessions']>
+>;
+export type _AssertLlmModels = Expect<
+  Equal<z.infer<typeof llmModelsResponseSchema>, Schemas['LlmModelsResponse']>
 >;
 export type _AssertBackfill = Expect<
   Equal<z.infer<typeof backfillResponseSchema>, Schemas['BackfillResponse']>

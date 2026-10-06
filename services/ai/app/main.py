@@ -24,8 +24,20 @@ from app.corpus.vector_store import PgVectorStore
 from app.db import get_engine
 from app.llm.call_log import DatabaseCallLog
 from app.llm.factory import build_llm
+from app.llm.model_choice import DatabaseModelChoices
 from app.providers.registry import MarketDataService, build_providers
-from app.routers import analysis, ask, concepts, health, market, narration, news, topics, universe
+from app.routers import (
+    analysis,
+    ask,
+    concepts,
+    health,
+    llm,
+    market,
+    narration,
+    news,
+    topics,
+    universe,
+)
 from app.universe.profile_source import build_profile_source
 
 settings = get_settings()
@@ -49,6 +61,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings,
         redis,
         call_log=DatabaseCallLog(get_engine(), settings.llm_call_retention_days),
+        choices=DatabaseModelChoices(get_engine()),
     )
     # Unlike the LLM above, a misconfigured embedder raises here in every
     # environment and stops the service starting. There is no honest null
@@ -105,3 +118,4 @@ app.include_router(ask.router)
 app.include_router(topics.router)
 app.include_router(news.router)
 app.include_router(universe.router)
+app.include_router(llm.router)

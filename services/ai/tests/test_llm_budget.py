@@ -42,6 +42,7 @@ class _StubProvider:
         temperature=None,
         reasoning_effort=None,
         caller=None,
+        model=None,
     ):
         self.calls += 1
         if self._error is not None:

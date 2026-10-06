@@ -282,6 +282,19 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('the model choices (D43)', () => {
+    it("writes a scope's choice, replaces it, and may never delete it", async () => {
+      await queries.chooseLlmModel('explain', 'anthropic/claude-haiku-4.5', USER);
+      await queries.chooseLlmModel('explain', 'anthropic/claude-sonnet-5.5', USER);
+      const { rows } = await getPool().query(
+        `SELECT model, updated_by::text AS updated_by FROM llm_model_choices WHERE scope = 'explain'`,
+      );
+      expect(rows).toEqual([{ model: 'anthropic/claude-sonnet-5.5', updated_by: USER }]);
+      // A choice is replaced, never removed: no row means "use LLM_MODEL", which only a migration may restore.
+      await expect(getPool().query(`DELETE FROM llm_model_choices`)).rejects.toThrow(/permission denied/);
+    });
+  });
+
   describe('the LLM panel', () => {
     // Dated a day ahead so a window starting tomorrow sees only these rows,
     // whatever else the database holds.
@@ -292,7 +305,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     beforeAll(async () => {
       await getPool().query('INSERT INTO users (id) VALUES ($1)', [LLM_USER]);
       await getPool().query(
-        `INSERT INTO llm_calls (user_id, agent, provider, model, outcome, verdict, latency_ms,
+        `INSERT INTO llm_calls (user_id, purpose, provider, model, outcome, verdict, latency_ms,
                                 prompt_tokens, completion_tokens, cost_micro_usd, prompt, completion,
                                 started_at)
          VALUES ($1, 'narration', 'openrouter', 'm:free', 'ok', 'accepted', 100, 10, 20, 0, 'p', 'c',
@@ -322,7 +335,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
     it('groups calls with sums that survive past 32 bits', async () => {
       const groups = await queries.groupLlmCalls(TOMORROW);
-      expect(groups.find((row) => row.agent === 'ask')).toMatchObject({
+      expect(groups.find((row) => row.purpose === 'ask')).toMatchObject({
         calls: 1,
         cost_micro_usd: '3000000000',
       });
@@ -331,9 +344,9 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
 
     it('takes latency percentiles over calls that reached a provider only', async () => {
-      const narration = (await queries.llmLatencies(TOMORROW)).find((row) => row.agent === 'narration');
+      const narration = (await queries.llmLatencies(TOMORROW)).find((row) => row.purpose === 'narration');
       // 100, 300, 900 - the no_provider call's 0 is not among them.
-      expect(narration).toEqual({ agent: 'narration', sample: 3, p50_ms: 300, p95_ms: 900 });
+      expect(narration).toEqual({ purpose: 'narration', sample: 3, p50_ms: 300, p95_ms: 900 });
     });
 
     it('lists calls without their prompt or completion, and counts fallbacks', async () => {

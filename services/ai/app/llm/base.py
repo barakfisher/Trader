@@ -107,9 +107,11 @@ class LLMCompletion:
 NO_REASONING = "none"
 
 
-#: Who is asking. Every call site names itself, so the admin page can say which
-#: agent is slow, costly or failing - and never has to guess from a prompt.
-Agent = Literal["narration", "ask"]
+#: What a call is for. Every call site names itself, so the admin page can say
+#: which purpose is slow, costly or failing - and never has to guess from a
+#: prompt. Called `agent` until migration 0041: Stage 4 brought real agents
+#: (`Caller.agent_id`), and one word for both would confuse every reader.
+Purpose = Literal["narration", "ask"]
 
 #: A call site's judgement of a completion it received: used, or why not.
 Verdict = Literal[
@@ -119,15 +121,17 @@ Verdict = Literal[
 
 @dataclass(frozen=True)
 class Caller:
-    """The agent making a call, and the user it is for (None for none).
+    """What a call is for, the user it is for (None for none), and the agent.
 
-    Carried to the recording wrapper (`call_log.py`); adapters ignore it. The
-    user is recorded because prompts and completions contain portfolio data
-    (guideline 5).
+    Carried to the model chooser (`model_choice.py`) and the recording wrapper
+    (`call_log.py`); adapters ignore it. The user is recorded because prompts
+    and completions contain portfolio data (guideline 5); the agent, so an
+    agent's spend can be summed against its own budget (D45).
     """
 
-    agent: Agent
+    purpose: Purpose
     user_id: str | None = None
+    agent_id: str | None = None
 
 
 @runtime_checkable
@@ -152,8 +156,14 @@ class LLMProvider(Protocol):
         temperature: float | None = None,
         reasoning_effort: str | None = None,
         caller: Caller | None = None,
+        model: str | None = None,
     ) -> LLMCompletion:
         """Produce one completion, or raise an `LLMError` subclass.
+
+        `model` overrides the configured model for this call - the choice made
+        on the Admin page for the call's purpose (D43), passed down by
+        `model_choice.ChoosingProvider`. None means the configured model; a
+        call site never names one.
 
         `reasoning_effort` is per call, and None means "no opinion - use whatever
         this deployment configured". It is on the call rather than only on the

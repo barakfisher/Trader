@@ -169,7 +169,7 @@ async def _generated(
             system=_SYSTEM_PROMPT,
             user=f"Passages:\n\n{passages}\n\nQuestion: {question}",
             reasoning_effort=None,
-            caller=Caller(agent="ask", user_id=user_id),
+            caller=Caller(purpose="ask", user_id=user_id),
         )
     except LLMError as error:
         return None, type(error).__name__

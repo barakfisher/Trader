@@ -1,12 +1,12 @@
 import { query, queryOne } from '../pool.js';
 
 /**
- * Model calls since `since`, counted per agent, model, outcome and verdict.
+ * Model calls since `since`, counted per purpose, model, outcome and verdict.
  * Sums arrive as text: `bigint` is how Postgres sums, and a string is how `pg`
  * returns one rather than rounding it.
  */
 export interface LlmCallGroupRow {
-  agent: string;
+  purpose: string;
   model: string | null;
   outcome: string;
   verdict: string | null;
@@ -18,38 +18,38 @@ export interface LlmCallGroupRow {
 
 export function groupLlmCalls(since: Date): Promise<LlmCallGroupRow[]> {
   return query<LlmCallGroupRow>(
-    `SELECT agent, model, outcome, verdict, count(*)::int AS calls,
+    `SELECT purpose, model, outcome, verdict, count(*)::int AS calls,
             sum(prompt_tokens)::text AS prompt_tokens,
             sum(completion_tokens)::text AS completion_tokens,
             sum(cost_micro_usd)::text AS cost_micro_usd
        FROM llm_calls
       WHERE started_at >= $1
-      GROUP BY agent, model, outcome, verdict`,
+      GROUP BY purpose, model, outcome, verdict`,
     [since],
   );
 }
 
 export interface LlmLatencyRow {
-  agent: string;
+  purpose: string;
   sample: number;
   p50_ms: number;
   p95_ms: number;
 }
 
 /**
- * Latency per agent over the calls that reached a provider. A call refused for
+ * Latency per purpose over the calls that reached a provider. A call refused for
  * want of a provider or of budget took no time worth measuring, and averaging
  * its zero in would flatter the model. `percentile_disc` answers with a latency
  * that was actually observed, not one interpolated between two.
  */
 export function llmLatencies(since: Date): Promise<LlmLatencyRow[]> {
   return query<LlmLatencyRow>(
-    `SELECT agent, count(*)::int AS sample,
+    `SELECT purpose, count(*)::int AS sample,
             percentile_disc(0.5) WITHIN GROUP (ORDER BY latency_ms) AS p50_ms,
             percentile_disc(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95_ms
        FROM llm_calls
       WHERE started_at >= $1 AND outcome IN ('ok', 'provider_error')
-      GROUP BY agent`,
+      GROUP BY purpose`,
     [since],
   );
 }
@@ -62,7 +62,7 @@ export async function firstLlmCallAt(): Promise<Date | null> {
 
 export interface LlmCallRow {
   id: string;
-  agent: string;
+  purpose: string;
   model: string | null;
   outcome: string;
   verdict: string | null;
@@ -80,7 +80,7 @@ export interface LlmCallRow {
  */
 export function listLlmCalls(limit: number): Promise<LlmCallRow[]> {
   return query<LlmCallRow>(
-    `SELECT id::text, agent, model, outcome, verdict, left(error, 300) AS error, latency_ms,
+    `SELECT id::text, purpose, model, outcome, verdict, left(error, 300) AS error, latency_ms,
             prompt_tokens, completion_tokens, cost_micro_usd::text, started_at
        FROM llm_calls
       ORDER BY started_at DESC, id DESC

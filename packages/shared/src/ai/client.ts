@@ -26,6 +26,7 @@ import {
   priceHistoryResponseSchema,
   instrumentResolutionSchema,
   marketCalendarStatusSchema,
+  llmModelsResponseSchema,
   marketSessionsSchema,
   narrationConfigSchema,
   portfolioScanResponseSchema,
@@ -58,6 +59,9 @@ export type BackfillResponse = components['schemas']['BackfillResponse'];
 export type PriceHistoryResponse = components['schemas']['PriceHistoryResponse'];
 export type MarketCalendarStatus = components['schemas']['MarketCalendarStatus'];
 export type MarketSessions = components['schemas']['MarketSessions'];
+export type LlmModelsResponse = components['schemas']['LlmModelsResponse'];
+export type LlmOfferedModel = components['schemas']['LlmOfferedModel'];
+export type LlmScope = components['schemas']['LlmScopeChoice']['scope'];
 export type MarketSession = components['schemas']['MarketSession'];
 export type ConceptDocument = components['schemas']['ConceptDocumentResponse'];
 export type ConceptSection = components['schemas']['ConceptSection'];
@@ -325,6 +329,18 @@ export class AiClient {
   marketSessions(exchange: string, start: string, end: string, requestId?: string): Promise<MarketSessions> {
     const query = new URLSearchParams({ exchange, start, end });
     return this.request<MarketSessions>(`/market/sessions?${query}`, marketSessionsSchema, {
+      method: 'GET',
+      requestId,
+    });
+  }
+
+  /**
+   * The models the Admin page may choose, what each would cost, and the
+   * provider account's balance (D43, D44). The choice itself is written by the
+   * orchestrator; this service reads it on every call.
+   */
+  llmModels(requestId?: string): Promise<LlmModelsResponse> {
+    return this.request<LlmModelsResponse>('/llm/models', llmModelsResponseSchema, {
       method: 'GET',
       requestId,
     });

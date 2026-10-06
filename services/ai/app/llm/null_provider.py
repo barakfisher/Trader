@@ -41,6 +41,7 @@ class NullProvider:
         temperature: float | None = None,
         reasoning_effort: str | None = None,
         caller: Caller | None = None,
+        model: str | None = None,
     ) -> LLMCompletion:
         # Logged on every refusal rather than once at startup: a run that quietly
         # produced no narration for a month is the outcome this line prevents.
