@@ -790,6 +790,30 @@ export interface LlmModelChoiceInput {
   model: string;
 }
 
+/**
+ * What a reset may erase, one checkbox each (migration 0045, task 18). The
+ * migration's `RESET_GROUPS` is tested against this list.
+ */
+export const ACCOUNT_RESET_GROUPS = ['main_portfolio', 'agents_trading', 'followed_topics'] as const;
+export type AccountResetGroup = (typeof ACCOUNT_RESET_GROUPS)[number];
+
+/** Typed to confirm a reset; the same word in every language, so it never depends on a translation. */
+export const ACCOUNT_RESET_CONFIRMATION = 'RESET';
+
+/** `POST /admin/account/reset`. */
+export interface AccountResetInput {
+  groups: AccountResetGroup[];
+  confirm: string;
+}
+
+export interface AccountResetResponse {
+  /** The backup's id in `account_resets`. */
+  resetId: string;
+  groups: AccountResetGroup[];
+  /** Rows erased, per table. */
+  erased: Record<string, number>;
+}
+
 export interface ApiError {
   error: string;
   message: string;

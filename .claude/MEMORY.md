@@ -394,7 +394,7 @@ job, approved by the user 2026-09-28) in #76, and task 5 (quotes carry asset cla
 the PR after that. Task 7 (server state in TanStack Query) was done across #90-#92 and the topics PR
 that closed it, and task 6 (a screen for `/ask`) in M6 PR 10. That queue emptied at M8's close.
 
-**The post-M8 sweep (2026-10-01)** refilled it as tasks 8-15 - **all done by #140**; tasks 16-18 were added 2026-10-07 (task 8, one question per standing
+**The post-M8 sweep (2026-10-01)** refilled it as tasks 8-15 - **all done by #140**; tasks 16-18 were added 2026-10-07, and task 18 (reset account) left it in the PR that added migration 0045 (task 8, one question per standing
 finding, became decision 92 when measured; task 9 is decision 93; task 10 found a latent cost-currency bug), approved by the user in that order,
 with the same grant as M8 (PR, merge on green, verify on `main` by content, rebuild compose and
 kind). It was measured on compose before it was written: the BTC-USD drift was proposed **7 days
@@ -408,7 +408,6 @@ strings and left-to-right assumptions before designing it.
 |---|---|---|---|---|
 | 16 | **Scan frequency that follows the market, set on the Admin page** (the user, 2026-10-07) | — | M | **Measure first:** from `runs` and `observations`, how many findings each scan kind produces in US market hours, outside them and at weekends; that decides whether a change is worth making. The proposal measured against: every 15 minutes while NYSE is open (the exchange calendar), hourly otherwise (crypto, late data). **Then the Admin page setting**, audited like the model choice (D43): the interval in and out of market hours. Design question to settle first: the schedule lives in two places - the kind CronJobs (`infra/k8s/base/cronjobs.yaml`, fixed cron strings) and the orchestrator's in-process scheduler on compose - so a setting means the trigger fires often and the run decides from the setting whether it is due (idempotent by run key, guideline 8), rather than rewriting cron strings. Done when both environments follow the setting and a test pins in-hours and out-of-hours |
 | 17 | **Narration: why two of three model texts are rejected, fixed on the free model** (the user, 2026-10-07) | — | S | **Measured 2026-10-07** over the 38 `unsourced_figures` rejections on compose (all `nvidia/nemotron-3.5-lightning:free`, the validator re-run on each): **34 of 38 mention a threshold** ("crossed the 25% high threshold") that is true but refused, because `thresholds_pct` / `thresholds_weight` are nested and their keys (`info`, `notable`, `high`) carry no ratio marker - **5 were refused for that alone**; **30 of 38 copy a price in minor units** ("fell to 790" for $7.90), rightly refused, but the evidence invites it by handing the model `*_minor` integers; **3 are real inventions** ("$10.14M" for $101,427.80). **One error passed:** "the 0.03% information threshold" for 0.03 = 3%, accepted because the bare digits are in the evidence. **Fixes, one PR:** (1) the validator reads values under a `thresholds_*` key as ratios; (2) narration's evidence gives money as decimal strings ("7.90"), as the agent tools do since #177; (3) a ratio's bare digits followed by `%` are refused ("0.03%" for 0.03), while "0.03%" for a true 0.0003 stays accepted. **Then measure again on the free model** - the user's choice, because a paid model costs money and the fixes may make it unnecessary for narration (estimated at $0.03-0.07 a week on Flash-Lite or Haiku, against the agents' $0.04-0.38 a scan; the Admin page already sets narration's model separately). **The three fixes landed in the PR after #178; what remains is the re-measurement** on the free model once compose and kind run it - re-run the 2026-10-07 export (`llm_calls` where `purpose = 'narration'`) over the narrations written after the deploy. Done when that rate is recorded here, and this row is then removed |
-| 18 | **Reset account, by group** (the user, 2026-10-07) | — | M | A button on the Admin or Settings page opens a form of checkboxes, **each shown as its group and what it erases**, all ticked by default (a full reset); the user unticks what to keep. **Groups**, chosen so every combination is consistent: **Main portfolio** - holdings, target weights, daily values (snapshots), observations, proposals and their history; **Agents' trading** - every simulated agent's fills, holdings, cash (to **$0**, the user's choice: an agent then waits for a deposit) and performance, one box for all agents (resetting one agent is a later button on its own page); **Followed topics** - topics and their instruments. **Always kept, shown but not tickable:** user settings (Telegram, language, quiet hours, model choices), the agents' configuration (name, persona, budget settings, schedule), market data and the universe. **Safety:** the user types RESET to confirm; a backup of the user's rows is written just before; the reset is recorded in `admin_audit`. **The ledger is append-only by design** (`fills_append_only`, `fills_no_truncate`): the reset is the one sanctioned exception - one recorded operation, never a general delete path. Never touches market data, the universe or another user's rows (guideline 5). Done when a reset leaves a fresh-looking account and a test pins each group alone and all together |
 
 **Not in the queue, and why** - so they are not added back by the next sweep:
 - *Everyday-word company names* ("Apple" the fruit): the user deferred it to a dedicated PR after
@@ -1891,6 +1890,26 @@ failure they prevent.
     counts once, in the 30/60/90 windows its date falls in; unrealised P&L is capped at what is still
     actually held (the book can claim shares the user sold by hand). Proven only by worked examples
     until Stage 4 writes an `agent` fill.
+
+117. **Reset account is one `SECURITY DEFINER` function, `reset_account(user, groups)`, and the
+    ledger's only way to lose a row** (task 18, migration 0045, the user's choice 2026-10-07).
+    Every service connects as `traders_app`, which holds no DELETE on `fills` or `cash_movements`;
+    the function runs as the owner and raises the transaction-local `traders.account_reset`, which
+    the two append-only triggers accept for a DELETE only. The flag is worthless to the app role on
+    its own - it still has no DELETE - and `test_account_reset_sql.py` proves that. *Rejected:*
+    granting DELETE to the app (any query could then erase the ledger, what D22/D23 forbid); an
+    offline script (no form). **The backup is `account_resets`**, every erased row as JSON, written
+    in the same transaction - a crash between "back up" and "erase" cannot leave an account erased
+    with no copy. *Rejected:* a browser download (lost download, lost data). Restore is by hand.
+    **Groups split by owner, not by table:** the primary's non-topic observations are the main
+    portfolio's, a simulated agent's rows are its trading, topic observations are topics'. **Always
+    kept:** `runs` (the idempotency keys - erased, today's digest would be sent again),
+    `llm_calls`, `ops_events`, `admin_audit`. **A reset agent has cash and budget $0** (the user's
+    choice), which needed two changes the user did not see coming: `agents_simulated_has_budget`
+    now allows `>= 0` (creating at $0 is still refused, by the API and by `cash_movements_sign`), and
+    `agents_ledger_follows_budget` inserts the opening deposit when none exists - before it, the
+    first *Add cash* after a reset would have updated no row and moved no cash, silently. On the
+    Admin page, last card; the typed word is `RESET` in every language and checked by the server too.
 
 ---
 

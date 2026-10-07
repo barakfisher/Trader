@@ -1001,7 +1001,34 @@
     "stillRunning": "still running",
     "underASecond": "<1 s",
     "seconds": "{{count}} s",
-    "minutes": "{{count}} min"
+    "minutes": "{{count}} min",
+    "reset": {
+      "title": "Reset account",
+      "intro": "Erase parts of this account and start them again. Everything erased is kept as a backup in the database first, in the same step, so a reset either completes with its backup or does nothing.",
+      "groupsLegend": "What to erase",
+      "group": {
+        "main_portfolio": {
+          "label": "Main portfolio",
+          "erases": "Holdings, target weights, daily values, findings, proposals and their history, and the notifications about them."
+        },
+        "agents_trading": {
+          "label": "Agents' trading",
+          "erases": "Every simulated agent's trades, holdings, daily values, scans and proposals. Each agent's cash and budget go to $0; it keeps its name, persona and schedule, and waits for Add cash."
+        },
+        "followed_topics": {
+          "label": "Followed topics",
+          "erases": "Topics, their instruments, and what was found about them."
+        }
+      },
+      "kept": "Always kept: your settings and Telegram, the agents' configuration, market data and the universe, and the logs of runs, model calls and admin actions.",
+      "confirmLabel": "Type {{word}} to confirm",
+      "nothingTicked": "Nothing is ticked, so there is nothing to erase.",
+      "submit": "Erase the ticked groups",
+      "running": "Resetting…",
+      "failed": "The reset did not run; nothing was erased.",
+      "done_one": "Done: {{count}} row erased. Backup {{id}}.",
+      "done_other": "Done: {{count}} rows erased. Backup {{id}}."
+    }
   },
   "languages": {
     "en": "English",
