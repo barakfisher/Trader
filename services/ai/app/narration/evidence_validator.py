@@ -61,6 +61,9 @@ _RATIO_MARKERS = ("pct", "ratio", "weight", "drift")
 #: 30 and 0, and admitting those would quietly whitelist most small integers -
 #: enough for "fallen 30% this year" to read as sourced. A narration may quote
 #: the day something happened; it has no business quoting the minute.
+#: A percent sign after a number, allowing one space ("3 %").
+_PERCENT_AFTER = re.compile(r" ?%")
+
 _ISO_DATE_PREFIX = re.compile(r"^(\d{4})-(\d{2})-(\d{2})(?:[T ]|$)")
 
 
@@ -74,7 +77,9 @@ def _to_decimal(value: object) -> Decimal | None:
     return None
 
 
-def _forms_for(key: str, value: Decimal, currency: str | None) -> set[Decimal]:
+def _forms_for(
+    key: str, value: Decimal, currency: str | None, percent: bool = False
+) -> set[Decimal]:
     """Every value a writer could legitimately render this evidence entry as.
 
     A minor-unit figure's major form depends on its currency: 15000 JPY is
@@ -87,18 +92,28 @@ def _forms_for(key: str, value: Decimal, currency: str | None) -> set[Decimal]:
     read as sourced because the digits were in the evidence. For a currency
     with no minor unit (JPY) the two forms coincide, so nothing is lost there.
     """
+    is_ratio = any(marker in key for marker in _RATIO_MARKERS)
     if key.endswith(_MINOR_SUFFIX):
         forms = {value.scaleb(-minor_unit_exponent(currency or ""))}
+    elif is_ratio and percent:
+        # A ratio written with "%" is its hundredfold: 0.03 is "3%". Its bare
+        # digits with a percent sign ("0.03%") state a figure a hundred times
+        # too small, and were accepted because the digits were in the evidence.
+        forms = set()
     else:
         forms = {value}
-    if any(marker in key for marker in _RATIO_MARKERS):
+    if is_ratio:
         forms.add(value * 100)
     # A writer may drop the sign: "fell 8.5%" rather than "changed by -8.5%".
     return {form for base in list(forms) for form in (base, -base)}
 
 
 def sourced_values(
-    evidence: Mapping[str, object], _key: str = "", _currency: str | None = None
+    evidence: Mapping[str, object],
+    _key: str = "",
+    _currency: str | None = None,
+    *,
+    percent: bool = False,
 ) -> set[Decimal]:
     """Collect every figure the evidence supports, in each renderable form.
 
@@ -109,6 +124,16 @@ def sourced_values(
 
     A mapping's `currency` applies to the minor-unit figures inside it, nested
     ones included, until a nested mapping declares its own.
+
+    A mapping nested directly under a key passes that key's meaning down: the
+    values of `thresholds_pct: {"high": 0.25}` are ratios, so "the 25% high
+    threshold" is sourced. Measured 2026-10-07: 34 of 38 rejected narrations
+    quoted a threshold, true and refused, because `high` names no ratio. A
+    mapping inside a list starts afresh - a list of positions is not itself a
+    ratio, whatever it is called.
+
+    `percent` asks for the values a figure followed by "%" may take: a ratio's
+    hundredfold, never its bare digits.
     """
     found: set[Decimal] = set()
 
@@ -117,7 +142,8 @@ def sourced_values(
         if isinstance(declared, str) and declared:
             _currency = declared
         for key, value in evidence.items():
-            found |= sourced_values(value, str(key), _currency)  # type: ignore[arg-type]
+            child = f"{_key}.{key}" if _key else str(key)
+            found |= sourced_values(value, child, _currency, percent=percent)  # type: ignore[arg-type]
         return found
 
     if isinstance(evidence, str):
@@ -128,7 +154,7 @@ def sourced_values(
         # meaning and leave a correct template failing its own check.
         whole = _parse(evidence.strip())
         if whole is not None:
-            return _forms_for(_key, whole, _currency)
+            return _forms_for(_key, whole, _currency, percent)
 
         iso = _ISO_DATE_PREFIX.match(evidence)
         tokens = iso.groups() if iso else _NUMBER_PATTERN.findall(evidence)
@@ -140,12 +166,14 @@ def sourced_values(
 
     if isinstance(evidence, Iterable) and not isinstance(evidence, str | bytes):
         for item in evidence:
-            found |= sourced_values(item, _key, _currency)  # type: ignore[arg-type]
+            # A mapping in a list names its own fields: "positions" is not a ratio.
+            key = "" if isinstance(item, Mapping) else _key
+            found |= sourced_values(item, key, _currency, percent=percent)  # type: ignore[arg-type]
         return found
 
     number = _to_decimal(evidence)
     if number is not None:
-        found |= _forms_for(_key, number, _currency)
+        found |= _forms_for(_key, number, _currency, percent)
     return found
 
 
@@ -175,14 +203,17 @@ def _supported(written: Decimal, places: int, sourced: set[Decimal]) -> bool:
 def unsourced_figures(text: str, evidence: Mapping[str, object]) -> list[str]:
     """Figures in `text` that the evidence does not support, in order of appearance."""
     sourced = sourced_values(evidence)
+    as_percent = sourced_values(evidence, percent=True)
     offenders: list[str] = []
 
-    for token in _NUMBER_PATTERN.findall(text):
+    for match in _NUMBER_PATTERN.finditer(text):
+        token = match.group()
         written = _parse(token)
         if written is None:
             continue
         places = -written.as_tuple().exponent if written.as_tuple().exponent < 0 else 0
-        if not _supported(written, places, sourced):
+        is_percent = _PERCENT_AFTER.match(text, match.end()) is not None
+        if not _supported(written, places, as_percent if is_percent else sourced):
             offenders.append(token)
 
     return offenders

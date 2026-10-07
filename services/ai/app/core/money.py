@@ -29,3 +29,10 @@ def from_minor(minor: int, currency: str) -> Decimal:
     """Convert integer minor units back to a Decimal amount."""
     scale = Decimal(10) ** minor_unit_exponent(currency)
     return (Decimal(minor) / scale).normalize()
+
+
+def minor_to_decimal_string(minor: int, currency: str) -> str:
+    """Minor units as the decimal string a person would write: every minor digit, never an
+    exponent ("1000.00", not `from_minor`'s normalised "1E+3"). The form a model is shown
+    money in, so the form it quotes back."""
+    return f"{Decimal(minor).scaleb(-minor_unit_exponent(currency)):f}"

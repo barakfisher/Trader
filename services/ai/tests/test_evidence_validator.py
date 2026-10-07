@@ -116,3 +116,49 @@ def test_text_without_figures_is_always_supported():
 def test_sourced_values_walks_nested_evidence():
     values = sourced_values({"outer": {"inner": [{"deep": 42}]}})
     assert any(value == 42 for value in values)
+
+
+# -- measured 2026-10-07 over 38 rejected narrations ------------------------------
+
+
+DRAWDOWN = {
+    "symbol": "SMR",
+    "currency": "USD",
+    "price_minor": 790,
+    "high_price_minor": 1118,
+    "drawdown_pct": -0.29338103756708406,
+    "thresholds_pct": {"info": 0.1, "notable": 0.15, "high": 0.25},
+}
+
+
+def test_a_threshold_is_a_percentage_like_the_block_it_sits_in():
+    # 34 of 38 rejections quoted a true threshold: `high` names no ratio, the block does.
+    text = "SMR is 29.3% below its high, past the 25% high threshold."
+    assert unsourced_figures(text, DRAWDOWN) == []
+    weights = {"thresholds_weight": {"info": 0.05}}
+    assert unsourced_figures("beyond the 5% information band", weights) == []
+
+
+def test_a_mapping_in_a_list_does_not_inherit_the_lists_name():
+    # "weights" is a list of positions, not a ratio: their dollar values stay dollars.
+    evidence = {"currency": "USD", "weights": [{"value_minor": 832550}]}
+    assert unsourced_figures("worth $8,325.50", evidence) == []
+    assert unsourced_figures("worth 832550", evidence) == ["832550"]
+
+
+def test_a_ratios_bare_digits_with_a_percent_sign_are_a_hundredfold_too_small():
+    # Passed before: "the 0.03% information threshold" for a threshold of 3%.
+    evidence = {"change_pct": -0.036, "thresholds_pct": {"info": 0.03}}
+    assert unsourced_figures("past the 0.03% threshold", evidence) == ["0.03"]
+    assert unsourced_figures("past the 0.03 % threshold", evidence) == ["0.03"]
+    assert unsourced_figures("past the 3% threshold", evidence) == []
+
+
+def test_a_genuinely_small_percentage_is_still_accepted():
+    assert unsourced_figures("moved 0.03%", {"change_pct": 0.0003}) == []
+
+
+def test_a_copied_minor_unit_price_is_still_refused():
+    # 30 of 38 rejections wrote "fell to 790" for $7.90; that stays wrong.
+    assert unsourced_figures("fell to 790 from 1118", DRAWDOWN) == ["790", "1118"]
+    assert unsourced_figures("fell to $7.90 from $11.18", DRAWDOWN) == []

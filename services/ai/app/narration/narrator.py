@@ -20,6 +20,7 @@ from typing import Literal
 
 from app.analysis.findings import Finding
 from app.core.logging import get_logger
+from app.core.money import minor_to_decimal_string
 from app.llm.base import (
     NO_REASONING,
     Caller,
@@ -102,11 +103,50 @@ def _template(finding: Finding, evidence: dict[str, object], reason: FallbackRea
     )
 
 
+_MINOR_SUFFIX = "_minor"
+
+
+def prompt_evidence(evidence: object, currency: str | None = None) -> object:
+    """The evidence as the model is shown it: money as the decimal string a sentence quotes.
+
+    Stored evidence keeps integer minor units (guideline 3); the model is shown
+    `"price": "7.90"` for `"price_minor": 790`. Measured 2026-10-07: 30 of 38
+    rejected narrations had copied a minor-unit figure into prose ("fell to 790"
+    for $7.90) - rightly refused, but invited by the form they were shown. The
+    validator still checks against the stored evidence, whose minor figures it
+    already reads in their major form, so both forms agree by construction.
+
+    A mapping's `currency` applies to the money inside it, nested ones included,
+    as it does in the validator. A key whose plain name is already taken keeps
+    its minor-unit name and value, so nothing is overwritten.
+    """
+    if isinstance(evidence, dict):
+        declared = evidence.get("currency") or evidence.get("base_currency")
+        if isinstance(declared, str) and declared:
+            currency = declared
+        shown: dict[str, object] = {}
+        for key, value in evidence.items():
+            plain = key[: -len(_MINOR_SUFFIX)] if key.endswith(_MINOR_SUFFIX) else None
+            if (
+                plain
+                and plain not in evidence
+                and isinstance(value, int)
+                and not isinstance(value, bool)
+            ):
+                shown[plain] = minor_to_decimal_string(value, currency or "USD")
+            else:
+                shown[key] = prompt_evidence(value, currency)
+        return shown
+    if isinstance(evidence, list):
+        return [prompt_evidence(item, currency) for item in evidence]
+    return evidence
+
+
 def _user_prompt(finding: Finding, evidence: dict[str, object]) -> str:
     return (
         f"Finding: {finding.kind} (severity {finding.severity}) for {finding.subject_ref}, "
         f"observed {finding.as_of.isoformat()}.\n\n"
-        f"Evidence:\n{json.dumps(evidence, indent=2, default=str)}\n\n"
+        f"Evidence:\n{json.dumps(prompt_evidence(evidence), indent=2, default=str)}\n\n"
         "Write the headline and explanation."
     )
 
