@@ -73,6 +73,11 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "ALTER TABLE cash_movements ENABLE TRIGGER USER; ALTER TABLE fills ENABLE TRIGGER USER; "
         "DELETE FROM proposals WHERE kind IN ('buy', 'sell')",
     ),
+    # A reset's backup is the only copy of what it erased (task 18).
+    "0045_account_reset": (
+        "account_resets holds backups",
+        "DELETE FROM account_resets",
+    ),
 }
 
 #: `col = ANY (ARRAY['a'::text, 'b'::text])` as `pg_get_constraintdef` prints it.

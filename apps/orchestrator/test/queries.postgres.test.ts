@@ -1036,4 +1036,46 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       }
     });
   });
+
+  describe('the account reset (task 18)', () => {
+    // An account of its own: a reset of USER would erase what the tests above wrote.
+    const OWNER = randomUUID();
+
+    afterAll(async () => {
+      // `agent_cash` names the user without a cascade; the agent's own delete takes it.
+      await getPool().query('DELETE FROM agents WHERE user_id = $1 AND NOT is_primary', [OWNER]);
+      await getPool().query('DELETE FROM users WHERE id = $1', [OWNER]);
+    });
+
+    it('erases the chosen groups through the one function this role may call, and backs them up', async () => {
+      await getPool().query('INSERT INTO users (id) VALUES ($1)', [OWNER]);
+      const { rows } = await getPool().query<{ id: string }>(
+        `INSERT INTO agents (user_id, slug, name, budget_minor)
+         VALUES ($1, 'resettable', 'Resettable', 250000) RETURNING id`,
+        [OWNER],
+      );
+      const agent = rows[0]!.id;
+      await getPool().query(
+        `INSERT INTO topics (user_id, label, status, created_by, confirmed_at)
+         VALUES ($1, 'robots', 'active', 'user', now())`,
+        [OWNER],
+      );
+
+      const reset = await queries.resetAccount(OWNER, ['agents_trading', 'followed_topics']);
+
+      expect(reset.counts).toMatchObject({ topics: 1, cash_movements: 1, fills: 0 });
+      const after = await getPool().query<{ budget: string; cash: string; topics: string }>(
+        `SELECT a.budget_minor::text AS budget, c.balance_minor::text AS cash,
+                (SELECT count(*)::text FROM topics WHERE user_id = $1) AS topics
+           FROM agents a JOIN agent_cash c ON c.agent_id = a.id WHERE a.id = $2`,
+        [OWNER, agent],
+      );
+      expect(after.rows[0]).toEqual({ budget: '0', cash: '0', topics: '0' });
+      const backup = await getPool().query<{ groups: string[] }>(
+        'SELECT groups FROM account_resets WHERE id = $1',
+        [reset.reset_id],
+      );
+      expect(backup.rows[0]!.groups).toEqual(['agents_trading', 'followed_topics']);
+    });
+  });
 });

@@ -379,6 +379,44 @@ describe('the admin page', () => {
     expect(await screen.findByText('Not started: this run key was already claimed (ok).')).toBeTruthy();
   });
 
+  it('resets only the ticked groups, and only once the word is typed', async () => {
+    post.mockResolvedValue({
+      resetId: 'b-42',
+      groups: ['main_portfolio', 'agents_trading'],
+      erased: { holdings: 2, observations: 104, topics: 0 },
+    });
+    renderAt('/admin', ADMIN);
+    const submit = (await screen.findByRole('button', { name: 'Erase the ticked groups' })) as HTMLButtonElement;
+    // Every group starts ticked: the default is a full reset.
+    for (const label of ['Main portfolio', "Agents' trading", 'Followed topics']) {
+      expect((screen.getByRole('checkbox', { name: new RegExp(label) }) as HTMLInputElement).checked).toBe(true);
+    }
+    fireEvent.click(screen.getByRole('checkbox', { name: /Followed topics/ }));
+    const word = screen.getByLabelText('Type RESET to confirm');
+    fireEvent.change(word, { target: { value: 'reset' } });
+    expect(submit.disabled).toBe(true);
+    fireEvent.change(word, { target: { value: 'RESET' } });
+    expect(submit.disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(submit);
+    });
+    expect(post).toHaveBeenCalledWith('/admin/account/reset', {
+      groups: ['main_portfolio', 'agents_trading'],
+      confirm: 'RESET',
+    });
+    expect(await screen.findByText('Done: 106 rows erased. Backup b-42.')).toBeTruthy();
+  });
+
+  it('cannot reset with nothing ticked', async () => {
+    renderAt('/admin', ADMIN);
+    for (const label of ['Main portfolio', "Agents' trading", 'Followed topics']) {
+      fireEvent.click(await screen.findByRole('checkbox', { name: new RegExp(label) }));
+    }
+    fireEvent.change(screen.getByLabelText('Type RESET to confirm'), { target: { value: 'RESET' } });
+    expect(screen.getByText('Nothing is ticked, so there is nothing to erase.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Erase the ticked groups' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('asks the server for nothing when the account is not an admin', async () => {
     renderAt('/admin', USER);
     expect(await screen.findByText('Administrators only')).toBeTruthy();

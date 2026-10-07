@@ -11,13 +11,17 @@ import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 
 import { AiServiceError, type LlmModelsResponse } from '@traders/shared/ai';
-import type {
-  AdminAuditResponse,
-  AdminLlmModelsResponse,
-  LlmModelChoiceInput,
-  AdminRunsResponse,
-  RescreenStartResponse,
-  UniverseGapsResponse,
+import {
+  ACCOUNT_RESET_CONFIRMATION,
+  ACCOUNT_RESET_GROUPS,
+  type AccountResetInput,
+  type AccountResetResponse,
+  type AdminAuditResponse,
+  type AdminLlmModelsResponse,
+  type LlmModelChoiceInput,
+  type AdminRunsResponse,
+  type RescreenStartResponse,
+  type UniverseGapsResponse,
 } from '@traders/shared';
 
 import {
@@ -32,6 +36,7 @@ import {
   listLlmCalls,
   listOpsEvents,
   llmLatencies,
+  resetAccount,
   type OpsEventKind,
 } from '../../db/queries.js';
 import {
@@ -55,6 +60,13 @@ const GAP_KINDS: readonly OpsEventKind[] = [
   'universe_gap_missing_ticker',
   'universe_gap_low_confidence',
 ];
+
+const resetSchema = z
+  .object({
+    groups: z.array(z.enum(ACCOUNT_RESET_GROUPS)).min(1),
+    confirm: z.string(),
+  })
+  .strict() satisfies z.ZodType<AccountResetInput>;
 
 const modelChoiceSchema = z
   .object({ model: z.string().trim().min(1).max(200) })
@@ -201,6 +213,27 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
     }
     await chooseLlmModel(scope, parsed.data.model, currentUserId(context));
     const body: AdminLlmModelsResponse = toAdminLlmModels(await llmCatalogue(context));
+    return context.json(body);
+  });
+
+  /**
+   * Reset the account, by group (task 18). Erases the chosen groups of the
+   * signed-in account and keeps a backup of every erased row, in one
+   * transaction inside the database (`reset_account`, migration 0045). Audited
+   * by the gate before this runs (decision 84). The typed word is checked here
+   * as well as on the page: a request that skipped the page has not confirmed.
+   */
+  app.post('/admin/account/reset', async (context) => {
+    const parsed = resetSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) {
+      throw badRequest('invalid_body', `expected { groups: (${ACCOUNT_RESET_GROUPS.join(' | ')})[], confirm }`, parsed.error.issues);
+    }
+    if (parsed.data.confirm !== ACCOUNT_RESET_CONFIRMATION) {
+      throw unprocessable('reset_not_confirmed', `type ${ACCOUNT_RESET_CONFIRMATION} to confirm a reset`);
+    }
+    const groups = ACCOUNT_RESET_GROUPS.filter((group) => parsed.data.groups.includes(group));
+    const reset = await resetAccount(currentUserId(context), groups);
+    const body: AccountResetResponse = { resetId: reset.reset_id, groups, erased: reset.counts };
     return context.json(body);
   });
 
