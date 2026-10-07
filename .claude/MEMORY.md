@@ -388,7 +388,7 @@ job, approved by the user 2026-09-28) in #76, and task 5 (quotes carry asset cla
 the PR after that. Task 7 (server state in TanStack Query) was done across #90-#92 and the topics PR
 that closed it, and task 6 (a screen for `/ask`) in M6 PR 10. That queue emptied at M8's close.
 
-**The post-M8 sweep (2026-10-01)** refilled it as tasks 8-15 - **all done by #140; the queue is empty again** (task 8, one question per standing
+**The post-M8 sweep (2026-10-01)** refilled it as tasks 8-15 - **all done by #140**; tasks 16-17 were added 2026-10-07 (task 8, one question per standing
 finding, became decision 92 when measured; task 9 is decision 93; task 10 found a latent cost-currency bug), approved by the user in that order,
 with the same grant as M8 (PR, merge on green, verify on `main` by content, rebuild compose and
 kind). It was measured on compose before it was written: the BTC-USD drift was proposed **7 days
@@ -400,6 +400,8 @@ strings and left-to-right assumptions before designing it.
 
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
+| 16 | **Scan frequency that follows the market, set on the Admin page** (the user, 2026-10-07) | — | M | **Measure first:** from `runs` and `observations`, how many findings each scan kind produces in US market hours, outside them and at weekends; that decides whether a change is worth making. The proposal measured against: every 15 minutes while NYSE is open (the exchange calendar), hourly otherwise (crypto, late data). **Then the Admin page setting**, audited like the model choice (D43): the interval in and out of market hours. Design question to settle first: the schedule lives in two places - the kind CronJobs (`infra/k8s/base/cronjobs.yaml`, fixed cron strings) and the orchestrator's in-process scheduler on compose - so a setting means the trigger fires often and the run decides from the setting whether it is due (idempotent by run key, guideline 8), rather than rewriting cron strings. Done when both environments follow the setting and a test pins in-hours and out-of-hours |
+| 17 | **Narration: why two of three model texts are rejected, fixed on the free model** (the user, 2026-10-07) | — | S | **Measured 2026-10-07** over the 38 `unsourced_figures` rejections on compose (all `nvidia/nemotron-3.5-lightning:free`, the validator re-run on each): **34 of 38 mention a threshold** ("crossed the 25% high threshold") that is true but refused, because `thresholds_pct` / `thresholds_weight` are nested and their keys (`info`, `notable`, `high`) carry no ratio marker - **5 were refused for that alone**; **30 of 38 copy a price in minor units** ("fell to 790" for $7.90), rightly refused, but the evidence invites it by handing the model `*_minor` integers; **3 are real inventions** ("$10.14M" for $101,427.80). **One error passed:** "the 0.03% information threshold" for 0.03 = 3%, accepted because the bare digits are in the evidence. **Fixes, one PR:** (1) the validator reads values under a `thresholds_*` key as ratios; (2) narration's evidence gives money as decimal strings ("7.90"), as the agent tools do since #177; (3) a ratio's bare digits followed by `%` are refused ("0.03%" for 0.03), while "0.03%" for a true 0.0003 stays accepted. **Then measure again on the free model** - the user's choice, because a paid model costs money and the fixes may make it unnecessary for narration (estimated at $0.03-0.07 a week on Flash-Lite or Haiku, against the agents' $0.04-0.38 a scan; the Admin page already sets narration's model separately). Done when the rejection rate is re-measured and recorded here |
 
 **Not in the queue, and why** - so they are not added back by the next sweep:
 - *Everyday-word company names* ("Apple" the fruit): the user deferred it to a dedicated PR after
@@ -429,6 +431,7 @@ strings and left-to-right assumptions before designing it.
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
+| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 📋 Planned | After Stage 4. `/ask` becomes a tool-using assistant: web search, tickers, the user's account, "what can I ask you?". See "Planned: the assistant" |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
 | Multi-agent sandbox, Stage 3 — the ledger | ✅ Complete | #161 spec D21-D26 + §13; #162 exchange calendar; #163 ledger (0040); #164 manual trades (D27-D30); #165 the agent page (D31); #167 the consolidated holdings view (D32-D35); #168 performance against a shadow SPY and the score (D36-D42). Trade proposals and their approval moved to Stage 4 (D26). Handoff #169 |
@@ -2545,7 +2548,8 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 | ~~Mastra is decided-retired but still runs~~ | — | **Resolved 2026-10-05**: Mastra retired (D11), schema dropped in 0039; `test/mastraSchemaOwnership.test.ts` went with it |
 | **The primary's stored name is English** | `agents.name` = 'Main portfolio' (0036 trigger) | It is data, but it is the one agent name the product chose rather than the user. Stage 2's UI must render the primary through the i18n catalogue (`is_primary` → `t('agents.primary')`), never the stored string, or a Hebrew reader sees English |
 | **The inbox, the digest, notifications and the run history are user-wide** | `-- agent-blind` reads in `queries/` (decision 103) | Correct while only the primary exists. When Stage 2 adds simulated agents, each entry must carry its agent's name and the simulation label (P2 amendment), and `GET /runs` filtered to an agent must leave out the agent-blind kinds (§3.3c) |
-| **`llm_calls.agent` is still there, beside `purpose`** | `llm_calls` (0041), trigger `llm_calls_purpose_follows_agent` | Expanded in Stage 4 PR 2: every reader and writer now names `purpose`, and a trigger fills `agent` from it (and back) so pods running the older code kept writing during the rollout; `CHECK (purpose = agent)` keeps them equal. **The contract is owed:** Stage 4 PR 3's migration drops `agent`, its CHECK and the trigger, and widens `purpose` to the agent's scan. Until then a new purpose cannot be added without widening both CHECKs |
+| ~~`llm_calls.agent` is still there, beside `purpose`~~ | — | **Resolved by #177 (0042)**: `agent`, its CHECK and the trigger are dropped; `purpose` admits `agent_scan`, which alone names an agent |
+| **The LLM and embeddings clients are hand-written over `httpx`** (scheduled: the assistant milestone moves both to the `openai` package) | `services/ai/app/llm/openai_compatible.py` (469 lines), `services/ai/app/corpus/openrouter_embedder.py` (244 lines) | Added 2026-10-07 at the user's request. The official `openai` Python package, pointed at OpenRouter's base URL, could replace the request half of both (building the body, posting, the retry, parsing the reply, its tool calls, its vectors). The other half stays ours whatever happens: models that spend their allowance thinking and return no answer, `NO_REASONING` versus unset, the model chosen per purpose, the cost per call; for embeddings, `dimensions` deliberately not sent and the vectors checked. **Switch both together or neither** - one client, one key, one base URL, one dependency; half a switch leaves two styles. Nothing breaks today; the cost is ours to maintain, and it grows with every API feature we add by hand. **Revisit before adding streaming or another API feature.** The swap stays inside these two files (guideline 6): no call site changes. Not candidates: `llm/credits.py` (OpenRouter's own `/credits`, unknown to the package) and `news/gdelt.py` (not a model API) |
 | **A Hebrew reader still meets some English server text** | decisions 96, 98 | `/ask` answers, news headlines and the concept corpus are English, marked `lang="en"`; a model-written observation reads as its template in Hebrew (its richer English prose is not shown). Next steps, each its own project: the corpus (4,253 words, translated and re-ingested per language); `/ask` (English intent rules and model); Hebrew narration by the model (the validator already reads Hebrew digits - the open question is quality on free routes, so measure it first) |
 | **The Hebrew wording was written by the model and merged without line-by-line corrections** | `apps/web/src/i18n/locales/he.json` | The user asked to merge after a side-by-side list was sent (17 strings flagged as least sure: "נ״א", "סטייה בפיזור", "ירידה מהשיא", "השהיה", "מוערך בחסר", "מכשיר", "יקום", the ד׳/ש׳/ימ׳ abbreviations). Instructions use the plural ("בחרו") and possessives "שלך" - the user was asked whether to change the form and did not answer. Corrections are edits to `he.json` only; the parity test keeps them complete |
 | ~~The sign-in page is always English~~ | — | **Resolved**: signed out, the page takes the first of the browser's preferred languages the interface has (`signedOutLanguage` in `i18n/index.ts`; "iw" counts as Hebrew), else English. Outside a browser it is always English, because Node exposes the machine's locale as `navigator.languages` and a test must not depend on it |
@@ -2892,6 +2896,68 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 ---
 
 ## Where to go next
+
+### Planned: the assistant - `/ask` with tools (after Stage 4)
+
+**Agreed with the user 2026-10-07, one question at a time.** Today `/ask` routes a question with
+fixed rules, answers from glossary passages, and lets the model write one checked paragraph; it
+works with no model. The user wants an assistant instead: it chooses tools the way an agent's scan
+does (Stage 4, D15), and shares that loop and its read-only tools rather than building a second one.
+
+**Tools:** web search; tickers (the agent's quote, history, findings and news tools); the user's
+account (agents, their proposals, performance, holdings); the product's capabilities, so it can
+answer "what can I ask you?".
+
+**Decided:**
+- **A model is required.** No no-model path: a tool-using assistant cannot work without one, and
+  keeping today's extractive path beside it would double the work. Without a configured model the
+  page says the assistant needs one.
+- **Conversation memory in Postgres** (`user_id` on every row, guideline 5), not S3: small text that
+  must be listed and searched; S3 is for files. Each question sends the last few turns of the same
+  conversation. **Kept 90 days, then deleted; a "delete this conversation" control.**
+- **Guardrails:** read-only (it explains and links, never trades, approves or changes settings); no
+  personalised advice - "should I buy X?" gets facts and context, never a yes or no (guideline 2);
+  **its domain only** (markets, investing, the user's account, the product), anything else is
+  declined politely; a daily spend limit like an agent's.
+- **Prompt-injection defence, in layers:** web and news text is passed as labelled data the model
+  is told never to obey; every tool is read-only, so a persuaded model can do nothing harmful;
+  figures are checked against tool results (guideline 7); web results are reduced to plain text
+  and trimmed before the model sees them; every conversation is logged for review.
+
+**Order (the user's):**
+1. Follow-up questions (conversation memory), sources on every answer, suggested next questions.
+2. Answers in the user's language - needs a decision amending guideline 1, which keeps `/ask` English.
+3. `/ask` in Telegram.
+
+**Web search is in question (the user, 2026-10-07):** the universe, its profiles, stored news and
+the agents' tools may already answer most questions. Decide by measuring - run the test set below
+with and without web search and keep it only if it answers questions the rest cannot. Without it,
+the largest prompt-injection surface goes too.
+
+**Before building:**
+- **A test set for the assistant**, like `/ask`'s 35-case set (#47) and run in CI: ordinary
+  questions, follow-ups, and attack cases - off-domain questions, "ignore your rules", a web page or
+  news text carrying instructions, "should I buy X?". It is how the guardrails are shown to hold.
+- **A cost measurement** on a few real questions once the account is funded; the assistant's daily
+  spend limit is set from it, not guessed.
+
+**Future task, not in the first version: long-term memory** - what the assistant keeps across
+conversations (preferences, what the user follows). Scope and storage to be decided when it starts.
+
+**Open when it starts:** the web-search provider (behind an interface, guideline 6, and per
+CLAUDE.md convention 5 a package is proposed to the user before anything is hand-written); how
+many turns of history each question sends.
+
+**Framework - decided with the user 2026-10-07: plain Python and the official `openai` package.**
+The loop is our own (~25 lines, the same loop an agent's scan runs); the client becomes the `openai`
+package pointed at OpenRouter's base URL, for chat and embeddings together - **this milestone pays
+the "hand-written clients" debt row.** *Rejected:* LangGraph - the one feature the assistant would
+use is streaming progress ("searching the web..."), which the `openai` package also gives; its
+Postgres checkpointer stores opaque state, which makes the 90-day deletion, the delete control and
+a readable history harder than two plain tables; and it adds `langgraph`, its checkpointer package
+and `langchain-core`. LangChain - it would make its own model calls around the wrapper that records
+each call, checks the budget and applies the Admin page's model choice. *Reopen if:* the assistant
+grows into separate stages or several cooperating agents.
 
 ### Next session: multi-agent Stage 4 - the agent that decides
 
