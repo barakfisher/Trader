@@ -2983,6 +2983,57 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 
 ## Where to go next
 
+### Planned: the UI/UX sprint - the dashboard, the app bar, Insights (agreed 2026-10-07)
+
+**Agreed with the user 2026-10-07**, item by item. Not started; no grant yet - the user says "merge"
+per PR, as in Stage 4. One branch off `main` per PR, in this order (each stands alone).
+
+**What was decided, and why:**
+- **The dashboard becomes summary -> two charts -> the holdings table.** Value over time and
+  Allocation share a row (Allocation keeps its size; Value over time shrinks to the width the
+  holdings table has today); the holdings card gets a row of its own, because a table needs width.
+  On mobile everything stacks. Do not add cards back to it - that is the point of the sprint.
+- **The holdings card owns its actions:** *Add holding* (primary button, opens a **drawer** on
+  desktop, a full-screen sheet on mobile - the form is too long for a modal), *Targets* (a button;
+  today a top-bar link to `/targets`), and *Import* / *Export* in a "⋯" overflow menu. Import and
+  Targets leave the top bar.
+- **Export is JSON only** (the user), in the **same shape the import wizard reads**, so an export
+  re-imports cleanly. Quantities as decimal strings, money as minor units + currency - the stored
+  values, never the displayed (rounded) ones.
+- **Allocation:** default view **by holding** (not by class), the last choice remembered; no focus
+  frame after a mouse click (it is the browser's outline on the SVG - keep a ring for keyboard
+  focus, `:focus-visible`); the tooltip was black text on dark blue, the same blue as a slice.
+- **One tooltip across the app** (the user): the one `EquityCurve` (`DayTooltip`) and `PriceChart`
+  (`CloseTooltip`) already draw - `rounded-lg border bg-surface-raised shadow-lg`. Extract it once
+  and use it in every recharts `Tooltip` (Allocation, AgentPerformance, the two above).
+- **Observations and the digest leave the dashboard entirely** (the user: no observations on the
+  main page, not even a count). They move to one **Insights** page in the app bar, two tabs
+  (Observations, Digest) - one bar slot instead of two.
+- **The digest is announced, not shown in a card:** a dismissible banner at the top of the
+  dashboard when a new digest exists ("Today's digest is ready" -> Insights/Digest). Chosen over a
+  modal on entry: a modal every morning gets dismissed unread. **"Seen" is stored on the server**
+  (per user, the last digest id seen), not in `localStorage` - otherwise it returns on the phone.
+- **The app bar is shared, not the dashboard's:** today every nav button is rendered inside
+  `DashboardPage.tsx`. On mobile it collapses into a hamburger menu; **Sign out is separated** from
+  the actions (bottom of the menu behind a divider on mobile, a user menu with Settings / Admin /
+  Sign out on desktop).
+- The empty state for no holdings already exists (Add / Import) - the user checked; keep it.
+
+**The PRs:**
+
+| # | PR | Size | Done when |
+|---|---|---|---|
+| UX1 | **Chart tooltip + Allocation fixes** - one shared tooltip component used by all four charts; Allocation defaults to by-holding and remembers the choice (per-viewer convenience, `localStorage` wrapped in try/catch is fine here); no focus frame on click | S | every chart shows the same tooltip in light and dark; a test pins the by-holding default |
+| UX2 | **Shared app bar** - extract the bar from `DashboardPage` into the root route's layout so every page has it; hamburger below `md`; user menu with Sign out separated; Import and Targets removed from it (they reappear in UX5 - until then Import stays reachable from the empty state and the bar keeps Targets, so nothing is lost between PRs) | M | every route renders the bar once; mobile menu works by keyboard; RTL mirrors it |
+| UX3 | **Insights page** - `/insights` with Observations and Digest tabs (the tab in the URL, so it can be linked); `ObservationsFeed` and the digest content move there; both leave the dashboard | M | dashboard shows neither; Telegram/digest links that point at observations still land somewhere sensible |
+| UX4 | **The digest banner + "seen" on the server** - Alembic migration (a `digest_seen_id` / `_at` on `user_settings`, `user_id` as always), an endpoint to mark it seen, the banner on the dashboard | S-M | banner appears once per new digest, disappears after dismiss or opening it, on every device |
+| UX5 | **Dashboard layout + the holdings card** - charts share a row, holdings full width; Add holding drawer (replaces the inline `AddHoldingForm`); Targets button; "⋯" menu with Import (opens `ImportWizard`) and Export (disabled until UX6) | M | layout matches the order above at desktop and phone width |
+| UX6 | **Export holdings as JSON** - the same shape the import wizard reads; built from stored values | S | export -> reset -> import round-trips to identical holdings (a test) |
+
+**Open, to settle in the PR that meets it:** whether Targets opens the `/targets` page or a drawer
+(UX5); the export's filename and whether it carries cost basis per lot or per holding (UX6 - read
+the import parser first and match it).
+
 ### Planned: the assistant - `/ask` with tools (after Stage 4)
 
 **Agreed with the user 2026-10-07, one question at a time.** Today `/ask` routes a question with
