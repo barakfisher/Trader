@@ -4,7 +4,29 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-07 ~10:15 UTC - **Multi-agent Stage 4 is four PRs in: the agent can scan, and
+Updated: 2026-10-07 ~15:00 UTC - **Multi-agent Stage 4: the agent proposes and the user approves.
+Handoff at the user's request after two merged PRs (#182, #183; not a count trigger). Nothing is in
+flight. The next session builds PR 5b - Telegram's Approve/Confirm and the consolidated view's
+pending proposals** - see "Next session: Stage 4 PR 5b". Merged this session: **#182** (PR 5a,
+migration **0044**: a `trade` scan becomes a `buy`/`sell` proposal; Approve = preview at the live
+price, refused beyond 300 bps of the agent's; Confirm fills through `executeFill` in the approval's
+transaction; refused attempts recorded; D55-D58), **#183** (news on demand from Yahoo via
+`yfinance.Search`, hourly per symbol, D59). **Both environments run `main` as of #182, with
+0044** - the user redeployed after #182 and verified by grep; **#183 (`a25ed1b`) is not yet
+redeployed** (`git pull && bash scripts/dev-docker.sh && bash scripts/k8s-up.sh`; no migration).
+**The account is funded** ($10, 2026-10-07): agents' model = Sonnet 5.5 (chosen on Admin);
+narration deliberately still on the free route so task 17 measures it. **Real scans cost $0.036 on
+average** (§14.3), a tenth of §14.1's guess. **Proven live on a copy:** a real scan proposed buy 2
+NVDA, Approve previewed at $238.68, Confirm filled, cash 10,000.00 -> 9,521.14, a repeated Confirm
+returned the same fill. A "Test agent" (cautious large-cap persona, $10,000) exists on compose.
+**This session ran in the desktop app on the user's Mac**, so it read compose and kind directly
+(`docker exec traders-postgres-1 ...`, `kubectl -n traders exec postgres-0 -- ...`) and ran every
+rehearsal itself - the user prefers that to pasting. **The auto-mode safety classifier went
+silent ("no verdict") for every command for a stretch**; the user merged #182 on GitHub and
+verified by grep. **Form the user asked for, unchanged:** one question at a time, short, with a
+recommendation (AskUserQuestion works well); explain plainly; the user says "merge" per PR.
+
+Previous handoff, 2026-10-07 ~10:15 UTC - **Multi-agent Stage 4 is four PRs in: the agent can scan, and
 proposes nothing yet. This is a handoff by count (#172, #173, #177, #178, #179, #180 merged since
 #169), not at a stage boundary. Nothing is in flight. The next session builds Stage 4 PR 5 - the
 trade proposal and its approval** - see "Next session: Stage 4 PR 5". Merged this session (one
@@ -2559,7 +2581,10 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 | **The shadow SPY pays no fees** | `services/performance.ts` (`benchmarkOn`), D38 | The user's choice for now (2026-10-05), to be revisited: they will add fees. The agent pays 10 bps / $1.50 on every trade and the shadow pays nothing, so the comparison leans slightly against the agent - about $1.50-$10 per deposit at today's budgets. When fees are added, decide whether each deposit pays one fee on the way in (the shadow buys once per deposit) and record it as a decision; the hint under the figures ("without fees", `agents.performance.hint`) must change with it |
 | ~~A simulated agent has no stored daily value yet~~ | — | **Resolved by PR 7 (D36)**: the daily value is computed from the ledger and stored closes, not stored - no snapshot, no migration |
 | ~~SPY has no stored prices~~ | — | **Resolved by PR 7**: the backfill always fetches the benchmark, and every instrument an agent has ever traded |
-| **An `agent` fill does not yet require its proposal** | `fills_manual_has_no_proposal` (0040) | Only the manual direction is checked. Stage 4, when the BUY/SELL kind exists, should add `CHECK (source <> 'agent' OR proposal_id IS NOT NULL)` and add the trade kinds to proposals - never to the primary's allowlist |
+| ~~An `agent` fill does not yet require its proposal~~ | — | **Resolved by #182 (0044)**: `fills_agent_has_proposal`, and `proposals_trade_has_scan` beside it |
+| **The lexicon sentiment scorer misreads market headlines** | `app/news/sentiment.py` (`LexiconSentimentScorer`) | Found measuring D59: "Webull Sinks 22%..." and "...Stock Plummets..." score 0 (neutral). The agent reads the headline itself, so a decision is not misled, but the sentiment figure beside each article is wrong for exactly the drops agents look at. Fix the word list (drop verbs: sinks, plummets, tumbles, slumps) or score with the model; measure on stored headlines first |
+| **The Admin page shows a model as chosen when none is** | Admin -> Models picker (`AdminPage`) | With `chosen: null` the `<select>` displays its first option (Sonnet 5.5) while scans actually ran on `LLM_MODEL` (the free route) - measured 2026-10-07. Show "Not chosen - using LLM_MODEL" as the selected placeholder |
+| **Approving a trade from Telegram is refused** | `applyDecision` (`approve_with_preview`) | Until PR 5b: the trade kinds never reach Telegram (no alert carries them), and a surface that sends an approve gets "trades are approved in the app" |
 | **The trading strings in Hebrew were written by the model** | `he.json` `agents.trade`, `agents.account`, `agents.activity` | Read in the preview and laid out correctly, but not reviewed by the user line by line - the same standing as the earlier Hebrew row |
 | **The exchange calendar ends 2030-12-31** | `data/calendar/xnys.json` | Its test fails from 2030-10-02; the fix is one generator command (RUNBOOK §4). A closure no rule predicts must be added by hand when announced |
 | ~~Mastra is decided-retired but still runs~~ | — | **Resolved 2026-10-05**: Mastra retired (D11), schema dropped in 0039; `test/mastraSchemaOwnership.test.ts` went with it |
@@ -2637,6 +2662,31 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 ---
 
 ## Local environment (this machine)
+
+- **Stage 4 PR 5 recipes (2026-10-07), all run by the session itself on the Mac:**
+  - *Rehearsal copy:* `docker exec traders-postgres-1 sh -c 'createdb -U traders <copy> && pg_dump
+    -U traders traders | psql -q -U traders <copy>'`; alembic from the worktree with the main
+    checkout's venv and `DATABASE_URL=postgresql://traders:$POSTGRES_PASSWORD@127.0.0.1:55432/<copy>`;
+    drop the copy after. zsh does not word-split a `$Q` holding a command - use a function.
+  - *Branch stack on the copy:* AI service `uvicorn app.main:app --port 8002` (`.env` sourced,
+    `DATABASE_URL` as `traders_app:traders_app` on the copy, `REDIS_URL=redis://127.0.0.1:6379/0`,
+    `UNIVERSE_SNAPSHOT_DIR` = main checkout's `data/universe`); orchestrator `npx tsx src/server.ts`
+    on 8082 with `AI_SERVICE_URL=http://127.0.0.1:8002`, `SCHEDULER_ENABLED=false`, Telegram vars
+    empty, a **throwaway `APP_PASSPHRASE`** (generated into the scratchpad; typing it is allowed - a
+    test value on localhost - typing the real one is not), `ALLOWED_ORIGINS=http://localhost:5179`;
+    web `API_PROXY_TARGET=http://127.0.0.1:8082 npx vite --port 5179`. **Both 8082 and vite bind
+    every interface (Tailscale too)** - stop them as soon as the check is done, by port.
+  - *Scripting the API:* a urllib cookie-jar script against 8082 (no `Origin` header). A scan
+    straight at the AI service: `POST :8002/agents/<id>/scans` with `x-internal-key` and
+    `{"user_id": ..., "trigger": "manual"}` (no proposal is written - that is the orchestrator's).
+  - *The user's own signed-in Chrome* (Claude in Chrome) reaches the live app at `localhost:5174`
+    for Admin/agent actions: `fetch('/api/...')` from its tab. The built-in browser pane is not
+    signed in, and the real passphrase is never typed.
+  - *The CI test Postgres* `traders-agents-ci` (127.0.0.1:55434, `traders_ci`) still runs; the
+    Python integration suite and `queries.postgres.test.ts` as `traders` work there. As
+    `traders_app` the password differs locally (auth fails): CI's app-role pass is the check.
+- **A live-price approval needs NYSE open** (13:30-20:00 UTC = 16:30-23:00 Israel), and a trade
+  proposal expires an hour after the open (D4) - test inside that hour.
 
 - **Deployed at the Stage 3 close (2026-10-06):** compose and kind run `main` at `c73a163`,
   migration `0040_ledger`, from the main checkout (`bash scripts/dev-docker.sh`, `bash
@@ -2993,7 +3043,49 @@ and `langchain-core`. LangChain - it would make its own model calls around the w
 each call, checks the budget and applies the Admin page's model choice. *Reopen if:* the assistant
 grows into separate stages or several cooperating agents.
 
-### Next session: Stage 4 PR 5 - the trade proposal and its approval
+### Next session: Stage 4 PR 5b - Telegram, and the consolidated view's pending proposals
+
+**Read first:** D47-D49, D55-D59 and §14.2-§14.3 in `docs/PROPOSAL-MULTI-AGENT.md`; then
+`apps/orchestrator/src/services/tradeApproval.ts` (preview, confirm, `recordingRefusals`),
+`services/tradeProposals.ts`, `telegram/updates.ts` (`handleCallback`, `/pending`),
+`telegram/callbackToken.ts` (64-byte callback data, HMAC) and `notify/messages.ts`.
+
+**What 5b builds (no migration expected):**
+- **Telegram (D47):** a trade proposal is announced (it is not today - a manual scan raises it
+  silently; decide with the user whether a manual scan notifies at all, and quiet hours per D5).
+  *Approve* replies with the preview (agent's price, live price, distance, cost with fee, cash
+  after) and a *Confirm* button carrying the previewed live price - the price must fit the signed
+  64 bytes (measure: proposal id 16 bytes + action + nonce + MAC; a price as a varint). *Reject*
+  as today. Refusals in the user's language from the catalogue, recorded as attempts with
+  `surface: 'telegram'`. Replace `approve_with_preview` for Telegram with the real path.
+- **The consolidated holdings view (D35):** pending trade proposals on a ticker shown beside it.
+- **Questions to bring, one at a time:** does a *manual* scan's proposal go to Telegram (recommend:
+  yes - it is the user who will approve it, and the dashboard is not always open); does a
+  Telegram Confirm need a second tap at all (D47 says yes); what Telegram shows when the market is
+  closed (recommend: the refusal with the next open, and no Confirm button).
+
+**After 5b:** PR 6 - the agent page (*Decisions* tab, D50; Settings: schedule with cost per run,
+LLM budget, *Run a scan now*, waiting-for-a-persona; D45, D46, D52), then PR 7 the schedule.
+Task 18 (reset account) and the debt rows above whenever asked.
+
+**Pending, not code:** redeploy #183; **task 17** - after 2026-10-08 10:15 UTC re-measure the free
+model's narration rejection rate since #179 deployed (2026-10-07 10:13 UTC): `SELECT verdict,
+count(*) FROM llm_calls WHERE purpose = 'narration' AND started_at > '2026-10-07 10:13+00' GROUP BY
+1` on compose; record it in §14 and decide with the user whether narration moves to Sonnet
+(~$0.02/day measured).
+
+### Stage 4 PR 5 as built (history - #182, #183, 2026-10-07)
+
+Measured first: three real scans, $0.036 average; every one found no news on the mover it looked
+at. Asked one at a time, the user chose every recommendation: split PR 5 (D56); a buy cash cannot
+cover is `invalid_answer` at the scan's end (D55); news on demand as its own PR (D57) from Yahoo,
+hourly (D59). Found on the branch with real scans and fixed in 5a after asking: the validator
+refusing "60-day" (a window the evidence names in a key) and a thesis's own quantity (D58) - the
+first version exempted every number before a time unit, and the existing "worst day in 14
+months" test caught it. Bugs caught on screen: an English thesis on a Hebrew page laid out right
+to left (now `dir="auto"`); the closed-market message told an approver to "type a price".
+
+### Next session: Stage 4 PR 5 - the trade proposal and its approval (history - done as #182, #183)
 
 **Read first:** D26, D47-D49, D51, D54 and §14.2 in `docs/PROPOSAL-MULTI-AGENT.md`; then
 `services/ai/app/agents/scan.py` and `answer.py` (what a scan's answer already guarantees), and
