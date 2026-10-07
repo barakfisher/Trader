@@ -24,6 +24,8 @@
  * already spent. Errors are logged; the user hears through the callback answer.
  */
 
+import { isTradeProposalKind } from '@traders/shared';
+import type { AiClient } from '@traders/shared/ai';
 import { z } from 'zod';
 
 import type { Config } from '../config.js';
@@ -50,11 +52,14 @@ import { MESSAGES, messagesFor, observationTextIn, type Messages } from '../noti
 import { decodeBindToken } from './bindToken.js';
 import { BUSY_CALLBACK_DATA, decodeCallbackData } from './callbackToken.js';
 import { TelegramNotifier, type Keyboard } from './client.js';
+import { handleTradeCallback } from './tradeApproval.js';
 
 /** What handling an update needs, whichever transport delivered it. */
 export interface UpdateDeps {
   config: Config;
   notifier: Notifier;
+  /** Prices a trade's preview and fill (`tradeApproval.ts`). */
+  ai: AiClient;
 }
 
 /** How long a `/mute` lasts when the user names no duration. */
@@ -128,9 +133,11 @@ function refusalReply(messages: Messages, reason: RefusalReason): string | undef
 
 /**
  * Which buttons a message carries once its proposal is in a given state.
- * An approval carries Undo only while its window is open.
+ * An approval carries Undo only while its window is open; a trade has
+ * Approve and Reject while pending, and nothing after (D48).
  */
-function keyboardFor(state: string, undoOpen: boolean): Keyboard {
+function keyboardFor(state: string, undoOpen: boolean, trade = false): Keyboard {
+  if (trade) return state === 'pending' ? 'trade' : 'none';
   if (state === 'pending' || state === 'snoozed') return 'decide';
   if (state === 'approved' && undoOpen) return 'undo';
   return 'none';
@@ -395,6 +402,33 @@ async function handleCallback(
   const { language } = await getOrCreateUserSettings(binding.user_id);
   const messages = messagesFor(language);
 
+  // A trade's Approve previews and its Confirm fills (D47); only its Reject is
+  // the shared transition below. Read once to know which this is.
+  const row = await findProposal(binding.user_id, payload.proposalId);
+  const trade = row !== null && isTradeProposalKind(row.kind);
+  if (payload.action === 'approve' || payload.action === 'confirm') {
+    if (trade) {
+      await handleTradeCallback({
+        telegram,
+        ai: deps.ai,
+        userId: binding.user_id,
+        language,
+        callbackId: callback.id,
+        chatId,
+        ...(message === undefined ? {} : { message }),
+        payload: { ...payload, action: payload.action },
+      });
+      return;
+    }
+    if (payload.action === 'confirm') {
+      // Only a trade is ever rendered with Confirm; a signed one on anything
+      // else is a bug, answered rather than applied.
+      await telegram?.answerCallback(callback.id, messages.buttonUnusable);
+      return;
+    }
+  }
+  const decisionAction = payload.action;
+
   // The tap registered: swap every button for one inert "Approving…" before
   // doing anything slow. This is both the visible acknowledgement and the lock -
   // nothing else on the message can be pressed until the outcome is known. A
@@ -408,14 +442,14 @@ async function handleCallback(
   const result = await applyDecision({
     userId: binding.user_id,
     proposalId: payload.proposalId,
-    action: payload.action,
+    action: decisionAction,
     surface: 'telegram',
     // Burning the nonce and applying the decision are the same write. A replay
     // loses the unique index on proposal_transitions.idempotency_key, so it
     // cannot decide twice - and it is answered with the current state rather
     // than with an error, which is what F3 asks for.
     idempotencyKey: payload.nonce,
-    ...(payload.action === 'snooze'
+    ...(decisionAction === 'snooze'
       ? { snoozeUntil: new Date(Date.now() + TELEGRAM_SNOOZE_HOURS * 3_600_000) }
       : {}),
   });
@@ -453,6 +487,7 @@ async function handleCallback(
         result.state,
         result.state === 'approved' &&
           (await undoIsOpen(binding.user_id, payload.proposalId, new Date())),
+        trade,
       ),
       language,
     );
@@ -475,9 +510,9 @@ async function handleCallback(
     appendOutcome(message.text ?? '', outcome),
     // A decision that has just been applied as an approval is, by definition,
     // at the start of its undo window.
-    { proposalId: payload.proposalId, keyboard: keyboardFor(result.state, true), language },
+    { proposalId: payload.proposalId, keyboard: keyboardFor(result.state, true, trade), language },
   );
-  if (result.state === 'approved') {
+  if (result.state === 'approved' && !trade) {
     scheduleUndoRemoval(telegram, {
       userId: binding.user_id,
       proposalId: payload.proposalId,

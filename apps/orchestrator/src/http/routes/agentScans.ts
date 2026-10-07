@@ -68,6 +68,7 @@ export function registerAgentScanRoutes(app: Hono<AppEnv>): void {
     }
     const proposalId = await proposeFromScan(userId, agent, scan, {
       ai: context.get('ai'),
+      notifier: context.get('notifier'),
       requestId: context.get('requestId'),
     });
     return context.json({ ...scan, proposal_id: proposalId });

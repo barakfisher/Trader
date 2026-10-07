@@ -382,6 +382,24 @@ export interface SimulatedTotals {
   unpricedSymbols: string[];
 }
 
+/**
+ * An agent's buy or sell waiting for the user, shown beside its ticker in the
+ * consolidated view (D35, D63) - or, when nobody holds the ticker yet, in a
+ * list above it. Only a simulated agent proposes trades (D1).
+ */
+export interface ConsolidatedPendingTrade {
+  proposalId: string;
+  agentId: string;
+  agentName: string;
+  side: 'buy' | 'sell';
+  symbol: string;
+  quantity: string;
+  /** The price the agent decided at (D47); the live one is shown by *Approve*. */
+  agentPriceMinor: number;
+  currency: string;
+  expiresAt: string;
+}
+
 export interface ConsolidatedHoldingsResponse {
   currency: string;
   /** The real portfolio's summary, exactly as `/portfolio` computes it. */
@@ -390,6 +408,8 @@ export interface ConsolidatedHoldingsResponse {
   /** Non-archived simulated agents; a paused one is here, badged (D18). */
   agents: SimulatedAgentStanding[];
   rows: ConsolidatedRow[];
+  /** Pending trade proposals of the agents above, soonest to expire first. */
+  pendingTrades: ConsolidatedPendingTrade[];
 }
 
 // --- Snapshots ---------------------------------------------------------------

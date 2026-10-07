@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 import type {
   AgentView,
   ConsolidatedHoldingsResponse,
+  ConsolidatedPendingTrade,
   ConsolidatedPosition,
   ConsolidatedRow,
   SimulatedAgentStanding,
@@ -15,6 +16,8 @@ import { formatMoney, formatNumber, formatPercent } from '../i18n/format.ts';
 import { agentName, agentStateWord } from '../lib/agentPresentation.ts';
 import { assetClassName } from '../lib/assetClass.ts';
 import type { HoldingsScope } from '../lib/holdingsScope.ts';
+import { isUrgent, timeLeft } from '../lib/proposalCountdown.ts';
+import { formatExactTime } from '../lib/relativeTime.ts';
 import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import { Card, Delta } from './ui.tsx';
 
@@ -203,6 +206,69 @@ function PositionLine({ position, currency }: { position: ConsolidatedPosition; 
   );
 }
 
+/**
+ * Pending trade proposals by ticker (D35, D63): what the agents want to do,
+ * beside what they hold. A buy is often of something nobody holds yet; those
+ * have no row to sit beside and are listed above the table instead.
+ */
+function pendingBySymbol(trades: ConsolidatedPendingTrade[]): Map<string, ConsolidatedPendingTrade[]> {
+  const bySymbol = new Map<string, ConsolidatedPendingTrade[]>();
+  for (const trade of trades) bySymbol.set(trade.symbol, [...(bySymbol.get(trade.symbol) ?? []), trade]);
+  return bySymbol;
+}
+
+function PendingBadge({ count }: { count: number }) {
+  const { t } = useTranslation();
+  return (
+    <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-medium text-accent">
+      {t('consolidated.pending.badge', { count })}
+    </span>
+  );
+}
+
+/** One proposal: whose, what, at the agent's price, and how long it stays answerable. */
+function PendingTradeLine({ trade }: { trade: ConsolidatedPendingTrade }) {
+  const { t } = useTranslation();
+  const remaining = timeLeft(trade.expiresAt);
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-xs">
+      <span>
+        {t('consolidated.pending.line', {
+          agent: trade.agentName,
+          side: t(`consolidated.pending.sides.${trade.side}`),
+          quantity: quantityText(trade.quantity),
+          symbol: trade.symbol,
+          price: formatMoney(trade.agentPriceMinor, trade.currency),
+        })}
+      </span>
+      <span className="flex items-center gap-2">
+        <span className={isUrgent(trade.expiresAt) ? 'text-loss' : 'text-text-muted'} title={formatExactTime(trade.expiresAt)}>
+          {remaining ?? t('countdown.expired')}
+        </span>
+        <Link to="/proposals/$proposalId" params={{ proposalId: trade.proposalId }} className="font-medium text-accent hover:underline">
+          {t('consolidated.pending.open')}
+        </Link>
+      </span>
+    </li>
+  );
+}
+
+/** The trades on tickers the list below does not show; nothing when there are none. */
+export function PendingTradesStrip({ trades }: { trades: ConsolidatedPendingTrade[] }) {
+  const { t } = useTranslation();
+  if (trades.length === 0) return null;
+  return (
+    <Card title={t('consolidated.pending.title', { count: trades.length })}>
+      <p className="text-xs text-text-muted">{t('consolidated.pending.hint')}</p>
+      <ul className="mt-2 divide-y divide-border-subtle/50">
+        {trades.map((trade) => (
+          <PendingTradeLine key={trade.proposalId} trade={trade} />
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 function Side({ label, side, currency }: { label: string; side: ConsolidatedRow['real']; currency: string }) {
   const { t } = useTranslation();
   return (
@@ -222,7 +288,15 @@ function Side({ label, side, currency }: { label: string; side: ConsolidatedRow[
   );
 }
 
-function ConsolidatedRowItem({ row, currency }: { row: ConsolidatedRow; currency: string }) {
+function ConsolidatedRowItem({
+  row,
+  currency,
+  pending,
+}: {
+  row: ConsolidatedRow;
+  currency: string;
+  pending: ConsolidatedPendingTrade[];
+}) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
@@ -240,8 +314,11 @@ function ConsolidatedRowItem({ row, currency }: { row: ConsolidatedRow; currency
             <ChevronRight className={`size-4 shrink-0 text-text-muted ${MIRROR_IN_RTL}`} aria-hidden />
           )}
           <span className="min-w-0">
-            <span className="font-medium text-accent">
-              <bdi>{row.instrument.symbol}</bdi>
+            <span className="flex items-center gap-2">
+              <span className="font-medium text-accent">
+                <bdi>{row.instrument.symbol}</bdi>
+              </span>
+              {pending.length > 0 && <PendingBadge count={pending.length} />}
             </span>
             <span className="block truncate text-xs text-text-muted">
               <bdi>{row.instrument.name ?? assetClassName(row.instrument.assetClass)}</bdi>
@@ -265,6 +342,9 @@ function ConsolidatedRowItem({ row, currency }: { row: ConsolidatedRow; currency
           {row.positions.map((position) => (
             <PositionLine key={`${position.agentId}-${position.holdingId}`} position={position} currency={currency} />
           ))}
+          {pending.map((trade) => (
+            <PendingTradeLine key={trade.proposalId} trade={trade} />
+          ))}
         </ul>
       )}
     </li>
@@ -274,18 +354,28 @@ function ConsolidatedRowItem({ row, currency }: { row: ConsolidatedRow; currency
 /** One row per instrument, expanding to the agents that hold it (§4.3). */
 export function ConsolidatedHoldings({ data }: { data: ConsolidatedHoldingsResponse }) {
   const { t } = useTranslation();
+  const pending = pendingBySymbol(data.pendingTrades);
+  const held = new Set(data.rows.map((row) => row.instrument.symbol));
   return (
-    <Card title={t('consolidated.title', { count: data.rows.length })}>
-      {data.rows.length === 0 ? (
-        <p className="text-sm text-text-muted">{t('consolidated.empty')}</p>
-      ) : (
-        <ul className="divide-y divide-border-subtle/60">
-          {data.rows.map((row) => (
-            <ConsolidatedRowItem key={row.instrument.id} row={row} currency={data.currency} />
-          ))}
-        </ul>
-      )}
-    </Card>
+    <>
+      <PendingTradesStrip trades={data.pendingTrades.filter((trade) => !held.has(trade.symbol))} />
+      <Card title={t('consolidated.title', { count: data.rows.length })}>
+        {data.rows.length === 0 ? (
+          <p className="text-sm text-text-muted">{t('consolidated.empty')}</p>
+        ) : (
+          <ul className="divide-y divide-border-subtle/60">
+            {data.rows.map((row) => (
+              <ConsolidatedRowItem
+                key={row.instrument.id}
+                row={row}
+                currency={data.currency}
+                pending={pending.get(row.instrument.symbol) ?? []}
+              />
+            ))}
+          </ul>
+        )}
+      </Card>
+    </>
   );
 }
 
@@ -303,7 +393,12 @@ export function AgentScopeHoldings({
       .filter((position) => position.agentId === standing.agentId)
       .map((position) => ({ row, position })),
   );
+  const trades = data.pendingTrades.filter((trade) => trade.agentId === standing.agentId);
+  const pending = pendingBySymbol(trades);
+  const held = new Set(positions.map(({ row }) => row.instrument.symbol));
   return (
+    <>
+    <PendingTradesStrip trades={trades.filter((trade) => !held.has(trade.symbol))} />
     <Card
       title={t('consolidated.agentTitle', { name: standing.name, count: positions.length })}
       action={
@@ -319,8 +414,13 @@ export function AgentScopeHoldings({
           {positions.map(({ row, position }) => (
             <li key={position.holdingId} className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm">
               <span>
-                <span className="font-medium">
-                  <bdi>{row.instrument.symbol}</bdi>
+                <span className="flex items-center gap-2">
+                  <span className="font-medium">
+                    <bdi>{row.instrument.symbol}</bdi>
+                  </span>
+                  {pending.has(row.instrument.symbol) && (
+                    <PendingBadge count={pending.get(row.instrument.symbol)!.length} />
+                  )}
                 </span>
                 <span className="block text-xs text-text-muted">
                   {t('agents.holdings.line', {
@@ -349,5 +449,6 @@ export function AgentScopeHoldings({
         </ul>
       )}
     </Card>
+    </>
   );
 }

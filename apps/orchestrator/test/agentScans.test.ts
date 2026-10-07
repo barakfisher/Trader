@@ -50,8 +50,17 @@ vi.mock('../src/db/queries.js', () => ({
   findTradableInstrument: vi.fn(async () => ({
     id: 'i-intc', symbol: 'INTC', name: 'Intel', asset_class: 'equity', exchange: 'NMS', currency: 'USD', membership: 'screened',
   })),
-  createTradeProposal: vi.fn(async () => 'p-trade'),
+  createTradeProposal: vi.fn(async () => ({ proposalId: 'p-trade', observationId: 'o-trade' })),
   getUser: vi.fn(async () => USER),
+  getOrCreateUserSettings: vi.fn(async () => ({
+    notify_severity: 'high',
+    quiet_hours_start: null,
+    quiet_hours_end: null,
+    muted_until: null,
+    language: 'en',
+  })),
+  claimNotification: vi.fn(async () => ({ id: 'n-1' })),
+  settleNotification: vi.fn(async () => undefined),
   getAgent: vi.fn(async (_u: string, id: string) =>
     id === PRIMARY ? agentRow({ id: PRIMARY, is_primary: true }) : id === AGENT ? agent : null,
   ),

@@ -55,6 +55,22 @@ function holding(agent: string, symbol: string, quantity: string, cost: string |
 }
 
 let agents: ReturnType<typeof agentRow>[] = [];
+let openProposals: Record<string, unknown>[] = [];
+
+function tradeProposal(id: string, agent: string, symbol: string, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    kind: 'buy',
+    agent_id: agent,
+    agent_name: agent === MOMENTUM ? 'Momentum' : agent,
+    payload: { symbol, quantity: '2', priceMinor: 23_868, priceAsOf: null, currency: 'USD' },
+    state: 'pending',
+    expires_at: new Date(Date.now() + 3_600_000),
+    snoozed_until: null,
+    decided_at: null,
+    ...overrides,
+  };
+}
 let holdingsByAgent: Record<string, ReturnType<typeof holding>[]> = {};
 
 vi.mock('../src/db/pool.js', () => ({
@@ -71,6 +87,7 @@ vi.mock('../src/db/queries.js', () => ({
   listAgents: vi.fn(async () => agents),
   listHoldings: vi.fn(async (_user: string, agentId: string) => holdingsByAgent[agentId] ?? []),
   recordQuotes: vi.fn(async () => undefined),
+  listProposals: vi.fn(async () => openProposals),
 }));
 
 const queries = await import('../src/db/queries.js');
@@ -110,6 +127,7 @@ const VOO = 51208;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  openProposals = [];
   agents = [
     agentRow(PRIMARY, { name: 'Main portfolio', is_primary: true, budget_minor: null, cash_minor: null }),
     agentRow(MOMENTUM, { name: 'Momentum' }),
@@ -186,5 +204,30 @@ describe('addQuantities', () => {
     expect(addQuantities(['0.1', '0.2'])).toBe('0.300000000000000000');
     expect(addQuantities(['12345678901234567890.000000000000000001', '1'])).toBe('12345678901234567891.000000000000000001');
     expect(addQuantities([])).toBe('0.000000000000000000');
+  });
+});
+
+describe('pending trade proposals (D35, D63)', () => {
+  it("lists the shown agents' answerable trades, soonest first, held or not", async () => {
+    openProposals = [
+      tradeProposal('p-later', MOMENTUM, 'NVDA', { expires_at: new Date(Date.now() + 7_200_000) }),
+      tradeProposal('p-sooner', MOMENTUM, 'AAPL'),
+      // Past its deadline but not yet swept: no longer answerable.
+      tradeProposal('p-expired', MOMENTUM, 'AAPL', { expires_at: new Date(Date.now() - 1000) }),
+      // An archived agent's is not shown, as its holdings are not (D18).
+      tradeProposal('p-archived', OLD, 'AAPL'),
+      // A rebalance is the real portfolio's question, not a trade.
+      tradeProposal('p-rebalance', PRIMARY, 'VOO', { kind: 'rebalance' }),
+    ];
+    const body = await consolidated();
+    expect(queries.listProposals).toHaveBeenCalledWith(USER.id, { open: true });
+    expect(body.pendingTrades).toEqual([
+      expect.objectContaining({ proposalId: 'p-sooner', agentId: MOMENTUM, agentName: 'Momentum', side: 'buy', symbol: 'AAPL', quantity: '2', agentPriceMinor: 23_868, currency: 'USD' }),
+      expect.objectContaining({ proposalId: 'p-later', symbol: 'NVDA' }),
+    ]);
+  });
+
+  it('is empty when nothing is waiting', async () => {
+    expect((await consolidated()).pendingTrades).toEqual([]);
   });
 });

@@ -142,6 +142,7 @@ export function routeFinding(
   severity: string,
   settings: NotificationSettings,
   now: Date,
+  { floor = 'applies' }: { floor?: 'applies' | 'ignored' } = {},
 ): RoutingDecision {
   if (settings.mutedUntil !== null && settings.mutedUntil.getTime() > now.getTime()) {
     // Deliberately still a digest entry rather than nothing at all: /mute means
@@ -149,7 +150,11 @@ export function routeFinding(
     // would make the quietest possible failure the user's own setting.
     return { route: 'digest', reason: 'muted' };
   }
-  if (!meetsSeverity(severity, settings.notifySeverity)) {
+  // D60: an agent's trade proposal ignores the floor. It expires an hour after
+  // the open, so the digest would deliver it dead; and it exists only because
+  // the user created the agent that made it. Its reason stays `above_floor` -
+  // "nothing held it back" - which is what the run stats count it as.
+  if (floor === 'applies' && !meetsSeverity(severity, settings.notifySeverity)) {
     return { route: 'digest', reason: 'below_floor' };
   }
   if (isWithinQuietHours(settings, now)) {

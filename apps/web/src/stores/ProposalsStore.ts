@@ -133,6 +133,8 @@ export class ProposalsStore {
     // running again: the server's list, with its undo windows, replaces the
     // patched card. After a refusal this is what removes the stale row.
     await client.invalidateQueries({ queryKey: queryKeys.proposals });
+    // A rejected trade leaves the consolidated view's pending list (D63).
+    void client.invalidateQueries({ queryKey: queryKeys.consolidated });
   }
 
   /** Signing out must not leave one account's refusals on screen for the next. */

@@ -149,6 +149,21 @@ describe('meetsSeverity', () => {
   });
 });
 
+describe('routeFinding for a trade proposal (D60)', () => {
+  const day = new Date('2026-06-15T09:00:00Z');
+  const night = new Date('2026-06-15T21:00:00Z');
+
+  it('pushes below the floor: the digest would deliver it expired', () => {
+    expect(routeFinding('notable', settings(), day, { floor: 'ignored' })).toEqual({ route: 'push', reason: 'above_floor' });
+  });
+
+  it('still respects quiet hours and a mute', () => {
+    expect(routeFinding('notable', settings(), night, { floor: 'ignored' }).reason).toBe('quiet_hours');
+    const muted = settings({ mutedUntil: new Date(day.getTime() + 3_600_000) });
+    expect(routeFinding('notable', muted, day, { floor: 'ignored' }).reason).toBe('muted');
+  });
+});
+
 describe('routeFinding', () => {
   const daytime = new Date('2026-09-17T09:00:00Z'); // noon in Jerusalem
   const night = new Date('2026-09-16T23:00:00Z'); // 02:00 in Jerusalem

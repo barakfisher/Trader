@@ -945,6 +945,47 @@ Also settled while building, not needing a decision:
   catalogue's frame in each (`notify/messages.ts`), so a Hebrew reader sees a Hebrew frame around
   the thesis the model wrote in Hebrew (D51).
 
+### Added 2026-10-07, building PR 5b
+
+Measured first (§14.3): today's callback is 57 of Telegram's 64 bytes; a trade observation is
+`notable` while the live install's push floor is `high`; a scan's proposal reached no channel.
+Asked one at a time; the user chose every recommendation.
+
+**D60 - A trade proposal is pushed whatever the severity floor.** It expires an hour after the
+open (D4), so the digest would deliver it dead, and it exists only because the user created the
+agent that made it. Quiet hours and a mute still hold it for the digest (D5's urgent sell arrives
+with PR 7's schedule). The notification's reason stays `above_floor` - nothing held it back - so
+no CHECK changes. *Rejected:* writing trade observations as `high` (it would change what "high"
+means in the feed and the digest); following the floor (with `high`, no trade would ever be
+pushed).
+
+**D61 - Every scan that proposes announces it, a manual one included.** Whoever pressed *Run* may
+have left the page by the time it answers, and the proposal lives an hour. One path for manual and
+scheduled scans (PR 7), keyed by the observation so a retried scan announces once. An announcement
+that fails is logged, never a failed scan: the proposal is written and on the dashboard.
+
+**D62 - In Telegram, Approve answers with the preview and Confirm fills; a refusal keeps Approve
+and Reject.** As D47 says, two taps: *Approve* edits the message with the live price, the agent's
+and the distance, cost, fee and cash after, and offers *Confirm* and *Reject*. *Confirm* carries
+the previewed price **inside its signed callback** - a varint after the nonce, under the same MAC,
+so the ±50 bps band is centred on the price the user read and an edited button fails verification.
+At most `MAX_CALLBACK_PRICE_MINOR` (28 bits, $2,684,354.55: the token is then 63 bytes); a price
+above it is shown with *Reject* only and "confirm it in the app". A refusal (market closed with its
+next open in the user's time, price too far from the agent's with both prices, price moved, stale
+quote, no cash) appends a stamped line to the message in the user's language, is recorded with
+`surface: 'telegram'` (D49), and leaves *Approve* and *Reject*: there is no Confirm without a fresh
+preview. The fill line names quantity, price, fee and cash after; a trade keeps no buttons after it
+(D48: no undo). *Rejected:* one tap that fills (money moves before the live price is seen); the
+reason as a toast only (the chat would keep no record of the refusal).
+
+**D63 - The consolidated view shows pending trades beside their ticker, and the rest above it.**
+`GET /portfolio/consolidated` returns `pendingTrades` - the shown agents' trade proposals still
+answerable by their deadline, soonest first. A held ticker's row carries an "N pending" badge and
+lists them when expanded; a trade on a ticker the view does not list (a buy of something new) goes
+in a "waiting for you" list above it. Both follow the `All / Real only / per agent` filter: *Real
+only* has none (D1). *Rejected:* badges only (a buy of a new stock would be invisible here); a
+separate list only (not "beside the ticker", §4.3).
+
 ---
 
 ## 11. Measured, 2026-10-04 (read-only, live compose database)
@@ -1228,8 +1269,10 @@ Confirm fills through `executeFill` in the approval's transaction; Approve and R
 refused attempt leaves it pending and is recorded. Dashboard and Telegram; the consolidated view's
 pending proposals (D35). `CLAUDE.md` guideline 1 amended for the thesis.
 
-**PR 5b — Telegram (D47, D56).** *Approve* replies with the preview and a *Confirm* button; the
-consolidated view's pending proposals (D35).
+**PR 5b — Telegram (D47, D56, D60-D63).** A scan's proposal is announced, pushed past the floor
+(D60, D61); *Approve* replies with the preview and a *Confirm* button carrying the signed price,
+a refusal keeps *Approve* and *Reject* (D62); the consolidated view's pending proposals (D35, D63).
+No migration.
 
 **News on demand (D57).** A symbol's recent headlines fetched once when none are stored.
 
@@ -1271,3 +1314,11 @@ contract test; a high-severity `SELL` of a held position delivered through quiet
   plus 60 minutes; *Approve* before the open was refused as `market_closed` and recorded.
 - **The Admin page showed "Claude Sonnet 5.5" selected for agents while nothing was chosen** and
   scans ran on the free route: a select with no matching option shows its first. Recorded as debt.
+- **PR 5b, rehearsed on a copy of the live database (`0045`), market open, 2026-10-07 ~15:25 UTC.**
+  This branch's code, the compose AI service, a fake Telegram transport: a `trade` scan's proposal
+  (buy 2 NVDA at 237.14) was announced as a push past the `high` floor, in Hebrew, with *Approve*
+  and *Reject*; the consolidated pending list held it. *Approve* previewed at the live 237.14,
+  cost 474.28, fee 1.50, cash after 9,524.22; the *Confirm* token carried 23714 in 61 bytes. A
+  *Confirm* signed at 2% above it was refused `price_moved`, recorded with `surface: 'telegram'`,
+  and gave *Approve* back. The real *Confirm* filled: cash 10,000.00 -> 9,524.22, no buttons left;
+  repeating it answered the same fill (one fill row). The proposal left the pending list.

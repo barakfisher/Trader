@@ -1280,6 +1280,21 @@
     "shares": "{{quantity}} יח׳",
     "positionLine": "{{quantity}} יח׳ · {{value}}",
     "agentTitle": "{{name}} ({{count}})",
-    "openAgent": "לדף הסוכן כדי לסחור"
+    "openAgent": "לדף הסוכן כדי לסחור",
+    "pending": {
+      "title_one": "עסקה אחת ממתינה לך",
+      "title_two": "{{count}} עסקאות ממתינות לך",
+      "title_other": "{{count}} עסקאות ממתינות לך",
+      "hint": "הצעות של הסוכנים שלך למניות שאינן ברשימה שלמטה. פתחו אחת כדי לאשר במחיר העדכני, או לדחות.",
+      "badge_one": "ממתינה אחת",
+      "badge_two": "{{count}} ממתינות",
+      "badge_other": "{{count}} ממתינות",
+      "line": "{{agent}} מציע {{side}} {{quantity}} {{symbol}} ב־{{price}}",
+      "sides": {
+        "buy": "לקנות",
+        "sell": "למכור"
+      },
+      "open": "לבדיקה"
+    }
   }
 }

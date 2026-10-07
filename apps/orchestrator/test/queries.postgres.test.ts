@@ -971,9 +971,10 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           localized: { he: { headline: 'h', explanation: 'INTC fell 3.18% to 112.50.' } },
           evidence: { scanId: scan },
         };
-        const id = await queries.createTradeProposalIn(client, proposal);
+        const created = await queries.createTradeProposalIn(client, proposal);
+        const id = created.proposalId;
         // A retry after a lost reply answers the same proposal, and writes nothing more.
-        expect(await queries.createTradeProposalIn(client, proposal)).toBe(id);
+        expect(await queries.createTradeProposalIn(client, proposal)).toEqual(created);
         const written = await client.query(
           `SELECT p.kind, p.scan_id, p.payload, o.kind AS observation_kind, o.explanation, o.localized
              FROM proposals p JOIN observations o ON o.id = p.observation_id

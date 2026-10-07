@@ -47,7 +47,7 @@ function main(): void {
   const poller =
     config.TELEGRAM_UPDATES === 'polling' && notifier instanceof TelegramNotifier
       ? new TelegramPoller(notifier, {
-          handle: (update) => handleTelegramUpdate({ config, notifier }, update),
+          handle: (update) => handleTelegramUpdate({ config, notifier, ai }, update),
         })
       : null;
   poller?.start();

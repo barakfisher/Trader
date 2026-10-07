@@ -62,6 +62,15 @@ function proposalRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** The user's floor is `high`, as on the live install: a `notable` trade must still be pushed (D60). */
+let settingsRow: Record<string, unknown> = {
+  notify_severity: 'high',
+  quiet_hours_start: null,
+  quiet_hours_end: null,
+  muted_until: null,
+  language: 'en',
+};
+
 const ledger = { cash: 100_000n, fills: [] as Record<string, unknown>[], applied: true };
 let proposal = proposalRow();
 
@@ -118,7 +127,11 @@ vi.mock('../src/db/queries.js', () => ({
   applyProposalTransitionIn: vi.fn(async () => ({ applied: ledger.applied, intentId: null })),
   applyProposalTransition: vi.fn(async () => ({ applied: true, intentId: null })),
   recordProposalAttempt: vi.fn(async () => undefined),
-  createTradeProposal: vi.fn(async () => PROPOSAL),
+  createTradeProposal: vi.fn(async () => ({ proposalId: PROPOSAL, observationId: 'o-1' })),
+  getUser: vi.fn(async () => USER),
+  getOrCreateUserSettings: vi.fn(async () => settingsRow),
+  claimNotification: vi.fn(async () => ({ id: 'n-1' })),
+  settleNotification: vi.fn(async () => undefined),
 }));
 
 const { AiServiceError } = await import('@traders/shared/ai');
@@ -127,6 +140,11 @@ const approval = await import('../src/services/tradeApproval.js');
 const tradeProposals = await import('../src/services/tradeProposals.js');
 const proposals = await import('../src/services/proposals.js');
 type AiClient = import('@traders/shared/ai').AiClient;
+type Notifier = import('../src/notify/notifier.js').Notifier;
+
+function stubNotifier() {
+  return { channel: 'telegram', send: vi.fn(async () => ({ delivered: true })) } satisfies Notifier;
+}
 
 function stubAi(options: { open?: boolean; priceMinor?: number } = {}) {
   return {
@@ -220,6 +238,7 @@ describe('a scan becomes a proposal', () => {
   it('writes nothing for a scan that did not trade', async () => {
     const id = await tradeProposals.proposeFromScan(USER.id, agentRow() as never, scan({ outcome: 'no_trade' }), {
       ai: stubAi(),
+      notifier: stubNotifier(),
     });
     expect(id).toBeNull();
     expect(queries.createTradeProposal).not.toHaveBeenCalled();
@@ -228,6 +247,7 @@ describe('a scan becomes a proposal', () => {
   it("writes the agent's trade at its price, with the frame in every language and the thesis as written", async () => {
     const id = await tradeProposals.proposeFromScan(USER.id, agentRow() as never, scan(), {
       ai: stubAi({ open: false }),
+      notifier: stubNotifier(),
       now: () => NOW,
     });
     expect(id).toBe(PROPOSAL);
@@ -246,10 +266,55 @@ describe('a scan becomes a proposal', () => {
     expect(written.localized.he?.headline).toContain('לקנות');
   });
 
+  it('announces the proposal with trade buttons, above a floor it is below (D60, D61)', async () => {
+    const notifier = stubNotifier();
+    await tradeProposals.proposeFromScan(USER.id, agentRow() as never, scan(), {
+      ai: stubAi(),
+      notifier,
+      now: () => NOW,
+    });
+    expect(queries.claimNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ refKind: 'observation', refId: 'o-1', route: 'push', channel: 'telegram' }),
+    );
+    expect(notifier.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proposalId: PROPOSAL,
+        trade: true,
+        title: 'Value proposes to buy 3 AAPL at 200.00',
+        body: 'AAPL fell 3.18% to 200.00.',
+      }),
+    );
+  });
+
+  it('holds the announcement for the digest during quiet hours, and still writes the proposal', async () => {
+    settingsRow = { ...settingsRow, quiet_hours_start: '00:00', quiet_hours_end: '23:59' };
+    const notifier = stubNotifier();
+    try {
+      expect(
+        await tradeProposals.proposeFromScan(USER.id, agentRow() as never, scan(), { ai: stubAi(), notifier, now: () => NOW }),
+      ).toBe(PROPOSAL);
+    } finally {
+      settingsRow = { ...settingsRow, quiet_hours_start: null, quiet_hours_end: null };
+    }
+    expect(queries.claimNotification).toHaveBeenCalledWith(expect.objectContaining({ route: 'digest', reason: 'quiet_hours' }));
+    expect(notifier.send).not.toHaveBeenCalled();
+  });
+
+  it('a failed announcement does not fail the scan that proposed', async () => {
+    vi.mocked(queries.claimNotification).mockRejectedValueOnce(new Error('db down'));
+    expect(
+      await tradeProposals.proposeFromScan(USER.id, agentRow() as never, scan(), {
+        ai: stubAi(),
+        notifier: stubNotifier(),
+        now: () => NOW,
+      }),
+    ).toBe(PROPOSAL);
+  });
+
   it('reports a calendar it could not read rather than guessing the expiry', async () => {
     const ai = stubAi();
     vi.mocked(ai.marketCalendar).mockRejectedValueOnce(new AiServiceError('down', 503));
-    expect(await refusal(tradeProposals.proposeFromScan(USER.id, agentRow() as never, scan(), { ai }))).toMatchObject({
+    expect(await refusal(tradeProposals.proposeFromScan(USER.id, agentRow() as never, scan(), { ai, notifier: stubNotifier() }))).toMatchObject({
       status: 503,
     });
     expect(queries.createTradeProposal).not.toHaveBeenCalled();

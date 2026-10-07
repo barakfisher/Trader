@@ -1252,6 +1252,19 @@
     "shares": "{{quantity}} sh",
     "positionLine": "{{quantity}} sh · {{value}}",
     "agentTitle": "{{name}} ({{count}})",
-    "openAgent": "Open the agent's page to trade"
+    "openAgent": "Open the agent's page to trade",
+    "pending": {
+      "title_one": "{{count}} trade waiting for you",
+      "title_other": "{{count}} trades waiting for you",
+      "hint": "Proposed by your agents for stocks not in the list below. Open one to approve it at the live price, or reject it.",
+      "badge_one": "{{count}} pending",
+      "badge_other": "{{count}} pending",
+      "line": "{{agent}} proposes to {{side}} {{quantity}} {{symbol}} at {{price}}",
+      "sides": {
+        "buy": "buy",
+        "sell": "sell"
+      },
+      "open": "Review"
+    }
   }
 }
