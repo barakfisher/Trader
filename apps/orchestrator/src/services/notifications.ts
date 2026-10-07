@@ -66,6 +66,11 @@ export interface NotifiableFinding {
   localized: LocalizedTexts;
   /** Set when the user can act on this, so a channel can offer buttons. */
   proposalId?: string;
+  /**
+   * The proposal is an agent's buy or sell (D60): it is pushed whatever the
+   * severity floor, and a channel offers Approve and Reject only.
+   */
+  trade?: boolean;
 }
 
 export interface FanOutResult {
@@ -98,6 +103,7 @@ function toOutbound(finding: NotifiableFinding, userId: string, language: string
     title: text.headline,
     body: text.explanation ?? '',
     proposalId: finding.proposalId,
+    ...(finding.trade === true ? { trade: true } : {}),
     severity: finding.severity,
     language,
   };
@@ -127,7 +133,9 @@ export async function fanOut(
   };
 
   for (const finding of findings) {
-    const decision = routeFinding(finding.severity, settings, now);
+    const decision = routeFinding(finding.severity, settings, now, {
+      floor: finding.trade === true ? 'ignored' : 'applies',
+    });
     const channel = channelFor(decision.route, notifier);
     if (channel === null) continue;
 

@@ -426,13 +426,15 @@ describe('a signed callback from a bound chat', () => {
   });
 
   it('takes Undo away when a late tap finds the window closed', async () => {
-    vi.mocked(queries.findProposal).mockResolvedValueOnce({
+    const late = {
       id: PROPOSAL,
       state: 'approved',
       expires_at: new Date(Date.now() + 3_600_000),
       snoozed_until: null,
       decided_at: new Date(Date.now() - (UNDO_WINDOW_SECONDS + 5) * 1000),
-    } as never);
+    } as never;
+    // Read twice: once to learn whether it is a trade, once for the Undo window.
+    vi.mocked(queries.findProposal).mockResolvedValueOnce(late).mockResolvedValueOnce(late);
     vi.mocked(proposals.applyDecision).mockResolvedValueOnce({
       outcome: 'refused',
       reason: 'undo_window_closed',

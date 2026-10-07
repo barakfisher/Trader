@@ -14,13 +14,14 @@ import {
   listHoldings,
   listLatestNarrationProvenance,
   listObservations,
+  listProposals,
   listSnapshots,
   primaryAgentId,
   recordQuotes,
 } from '../../db/queries.js';
 import { logger } from '../../logger.js';
 import { valueAgentAccount } from '../../services/agentAccount.js';
-import { consolidate } from '../../services/consolidation.js';
+import { consolidate, pendingTradesOf } from '../../services/consolidation.js';
 import { narrationStateFrom } from '../../services/narrationHealth.js';
 import { SEVERITY_RANK } from '../../services/notificationPolicy.js';
 import { valuePortfolio } from '../../services/valuation.js';
@@ -85,7 +86,7 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
     if (!primary) throw new Error(`user ${userId} has no primary agent`);
     const valuation = { ai: context.get('ai'), requestId: context.get('requestId') };
 
-    const [real, simulated] = await Promise.all([
+    const [real, simulated, open] = await Promise.all([
       listHoldings(userId, primary.id).then((rows) =>
         valuePortfolio(rows, { ...valuation, baseCurrency: user.base_currency }),
       ),
@@ -100,8 +101,19 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
             }),
           })),
       ),
+      listProposals(userId, { open: true }),
     ]);
-    const body: ConsolidatedHoldingsResponse = consolidate(user.base_currency, primary, real, simulated);
+    const body: ConsolidatedHoldingsResponse = consolidate(
+      user.base_currency,
+      primary,
+      real,
+      simulated,
+      pendingTradesOf(
+        open,
+        simulated.map(({ agent }) => agent),
+        new Date(),
+      ),
+    );
     return context.json(body);
   });
 

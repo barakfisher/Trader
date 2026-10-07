@@ -27,7 +27,13 @@ export interface TradeProposalToCreate {
  * `scan_id` make a second call for the same scan - a retry after a lost reply -
  * answer the proposal the first one wrote.
  */
-export function createTradeProposal(proposal: TradeProposalToCreate): Promise<string> {
+export interface CreatedTradeProposal {
+  proposalId: string;
+  /** The observation it hangs from: what a notification about it refers to. */
+  observationId: string;
+}
+
+export function createTradeProposal(proposal: TradeProposalToCreate): Promise<CreatedTradeProposal> {
   return transaction((client) => createTradeProposalIn(client, proposal));
 }
 
@@ -35,7 +41,7 @@ export function createTradeProposal(proposal: TradeProposalToCreate): Promise<st
 export async function createTradeProposalIn(
   client: PoolClient,
   proposal: TradeProposalToCreate,
-): Promise<string> {
+): Promise<CreatedTradeProposal> {
   const dedupeKey = `agent_scan:${proposal.scanId}`;
   await client.query(
     `INSERT INTO observations
@@ -55,13 +61,13 @@ export async function createTradeProposalIn(
       JSON.stringify(proposal.localized),
     ],
   );
-  const inserted = await client.query<{ id: string }>(
+  const inserted = await client.query<{ id: string; observation_id: string }>(
     `INSERT INTO proposals (user_id, agent_id, observation_id, kind, payload, expires_at, scan_id)
      SELECT $1, $2, o.id, $3, $4::jsonb, $5, $6
        FROM observations o
       WHERE o.agent_id = $2 AND o.dedupe_key = $7
      ON CONFLICT DO NOTHING
-     RETURNING id`,
+     RETURNING id, observation_id`,
     [
       proposal.userId,
       proposal.agentId,
@@ -72,13 +78,16 @@ export async function createTradeProposalIn(
       dedupeKey,
     ],
   );
-  if (inserted.rows[0]) return inserted.rows[0].id;
-  const existing = await client.query<{ id: string }>(
-    `SELECT id FROM proposals WHERE user_id = $1 AND agent_id = $2 AND scan_id = $3`,
-    [proposal.userId, proposal.agentId, proposal.scanId],
-  );
-  if (!existing.rows[0]) throw new Error(`scan ${proposal.scanId} wrote no proposal`);
-  return existing.rows[0].id;
+  const row =
+    inserted.rows[0] ??
+    (
+      await client.query<{ id: string; observation_id: string }>(
+        `SELECT id, observation_id FROM proposals WHERE user_id = $1 AND agent_id = $2 AND scan_id = $3`,
+        [proposal.userId, proposal.agentId, proposal.scanId],
+      )
+    ).rows[0];
+  if (!row) throw new Error(`scan ${proposal.scanId} wrote no proposal`);
+  return { proposalId: row.id, observationId: row.observation_id };
 }
 
 export interface ProposalAttemptToRecord {

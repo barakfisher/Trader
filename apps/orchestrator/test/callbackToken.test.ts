@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MAX_CALLBACK_DATA_BYTES,
+  MAX_CALLBACK_PRICE_MINOR,
   decodeCallbackData,
   encodeCallbackData,
   mintNonce,
@@ -59,6 +60,40 @@ describe('encodeCallbackData', () => {
 
   it('refuses a proposal id that is not a uuid rather than encoding nonsense', () => {
     expect(() => encodeCallbackData(payload({ proposalId: 'not-a-uuid' }), SECRET)).toThrow();
+  });
+});
+
+describe('a Confirm carries the previewed price (D47, D62)', () => {
+  const confirm = (priceMinor: bigint) => ({ ...payload({ action: 'confirm' }), priceMinor });
+
+  it.each([1n, 99n, 23_868n, 2_097_151n, 2_097_152n, MAX_CALLBACK_PRICE_MINOR])(
+    'round-trips %s minor units',
+    (price) => {
+      const original = confirm(price);
+      expect(decodeCallbackData(encodeCallbackData(original, SECRET), SECRET)).toEqual(original);
+    },
+  );
+
+  it('fits the limit at the largest price it may carry', () => {
+    const data = encodeCallbackData(confirm(MAX_CALLBACK_PRICE_MINOR), SECRET);
+    expect(Buffer.byteLength(data, 'utf8')).toBeLessThanOrEqual(MAX_CALLBACK_DATA_BYTES);
+  });
+
+  it('refuses a price it cannot carry, and a price on anything but a confirm', () => {
+    expect(() => encodeCallbackData(confirm(MAX_CALLBACK_PRICE_MINOR + 1n), SECRET)).toThrow();
+    expect(() => encodeCallbackData(confirm(0n), SECRET)).toThrow();
+    expect(() => encodeCallbackData({ ...payload(), priceMinor: 100n }, SECRET)).toThrow();
+    expect(() => encodeCallbackData(payload({ action: 'confirm' }), SECRET)).toThrow();
+  });
+
+  it('rejects a token whose price was edited', () => {
+    // The fill is checked against this price: editing it must break the MAC.
+    const data = encodeCallbackData(confirm(23_868n), SECRET);
+    const separator = data.lastIndexOf('.');
+    const body = data.slice(0, separator);
+    const other = encodeCallbackData(confirm(99_999n), SECRET);
+    const otherPrice = other.slice(34, other.lastIndexOf('.'));
+    expect(decodeCallbackData(`${body.slice(0, 34)}${otherPrice}${data.slice(separator)}`, SECRET)).toBeNull();
   });
 });
 

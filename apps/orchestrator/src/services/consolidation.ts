@@ -18,9 +18,14 @@
  * figure here is in one currency, and the response names it.
  */
 
+import {
+  isTradeProposalKind,
+  type TradeProposalPayload,
+} from '@traders/shared';
 import type {
   AgentAccountResponse,
   ConsolidatedHoldingsResponse,
+  ConsolidatedPendingTrade,
   ConsolidatedPosition,
   ConsolidatedRow,
   ConsolidatedSide,
@@ -30,7 +35,9 @@ import type {
   SimulatedTotals,
 } from '@traders/shared';
 
-import type { AgentRow } from '../db/queries.js';
+import type { AgentRow, ProposalRow } from '../db/queries.js';
+import { factsOf } from './proposals.js';
+import { effectiveState } from './proposalState.js';
 
 /** `numeric(38, 18)`: the scale every stored quantity has. */
 const QUANTITY_SCALE = 18;
@@ -114,6 +121,41 @@ export interface ValuedAgent {
 }
 
 /**
+ * The trade proposals still answerable now, of the agents the view shows
+ * (D35, D63): pending by its deadline, not only by its stored state, and never
+ * an archived agent's.
+ */
+export function pendingTradesOf(
+  proposals: ProposalRow[],
+  agents: AgentRow[],
+  now: Date,
+): ConsolidatedPendingTrade[] {
+  const shown = new Set(agents.map((agent) => agent.id));
+  return proposals
+    .filter(
+      (row) =>
+        isTradeProposalKind(row.kind) &&
+        shown.has(row.agent_id) &&
+        effectiveState(factsOf(row), now) === 'pending',
+    )
+    .map((row) => {
+      const payload = row.payload as TradeProposalPayload;
+      return {
+        proposalId: row.id,
+        agentId: row.agent_id,
+        agentName: row.agent_name,
+        side: row.kind as 'buy' | 'sell',
+        symbol: payload.symbol,
+        quantity: payload.quantity,
+        agentPriceMinor: payload.priceMinor,
+        currency: payload.currency,
+        expiresAt: row.expires_at.toISOString(),
+      };
+    })
+    .sort((a, b) => a.expiresAt.localeCompare(b.expiresAt));
+}
+
+/**
  * The view, from valuations already made. `simulated` must already exclude
  * archived agents (D18) and be in the order the agents list shows them.
  */
@@ -122,6 +164,7 @@ export function consolidate(
   primary: AgentRow,
   real: PortfolioResponse,
   simulated: ValuedAgent[],
+  pendingTrades: ConsolidatedPendingTrade[] = [],
 ): ConsolidatedHoldingsResponse {
   const byInstrument = new Map<string, { holdings: HoldingView[]; positions: ConsolidatedPosition[] }>();
   const add = (agent: AgentRow, holding: HoldingView) => {
@@ -151,5 +194,6 @@ export function consolidate(
     simulated: simulatedTotals(standings),
     agents: standings,
     rows,
+    pendingTrades,
   };
 }

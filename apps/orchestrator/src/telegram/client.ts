@@ -26,6 +26,7 @@ import type { DeliveryResult, Notifier, OutboundNotification } from '../notify/n
 import {
   BUSY_CALLBACK_DATA,
   encodeCallbackData,
+  MAX_CALLBACK_PRICE_MINOR,
   mintNonce,
   type CallbackAction,
 } from './callbackToken.js';
@@ -48,8 +49,15 @@ const ACTIONS = ['approve', 'reject', 'snooze'] as const;
  *
  * `decide` for a question that is still open, `undo` for an approval, `none`
  * for everything else - a rejection and an expiry have nothing left to press.
+ * A trade proposal has its own two (D48): `trade` is Approve and Reject, and
+ * `{ confirmAt }` is Confirm at the price its preview showed, and Reject.
  */
-export type Keyboard = 'decide' | 'undo' | 'none';
+export type Keyboard = 'decide' | 'trade' | 'undo' | 'none' | { confirmAt: bigint };
+
+/** Whether a Confirm button can carry this price (`MAX_CALLBACK_PRICE_MINOR`). */
+export function confirmable(priceMinor: bigint): boolean {
+  return priceMinor > 0n && priceMinor <= MAX_CALLBACK_PRICE_MINOR;
+}
 
 /** Telegram's `getUpdates` answer, left loose: the handler validates each update. */
 export interface TelegramUpdate {
@@ -147,7 +155,11 @@ export class TelegramNotifier implements Notifier {
       ...(notification.proposalId === undefined
         ? {}
         : {
-            reply_markup: this.keyboardFor(notification.proposalId, 'decide', notification.language),
+            reply_markup: this.keyboardFor(
+              notification.proposalId,
+              notification.trade === true ? 'trade' : 'decide',
+              notification.language,
+            ),
           }),
     });
   }
@@ -165,10 +177,10 @@ export class TelegramNotifier implements Notifier {
    */
   private keyboardFor(proposalId: string, keyboard: Keyboard, language: string) {
     const messages = messagesFor(language);
-    const button = (action: CallbackAction, label: string) => ({
+    const button = (action: CallbackAction, label: string, priceMinor?: bigint) => ({
       text: label,
       callback_data: encodeCallbackData(
-        { proposalId, action, nonce: mintNonce() },
+        { proposalId, action, nonce: mintNonce(), ...(priceMinor === undefined ? {} : { priceMinor }) },
         this.options.callbackSecret,
       ),
     });
@@ -178,7 +190,21 @@ export class TelegramNotifier implements Notifier {
     const link = base
       ? [[{ text: messages.openInApp, url: `${base}/proposals/${encodeURIComponent(proposalId)}` }]]
       : [];
+    if (typeof keyboard === 'object') {
+      // A price no button can carry leaves Reject; the preview says to confirm in the app.
+      const confirm = confirmable(keyboard.confirmAt)
+        ? [button('confirm', messages.buttons.confirm, keyboard.confirmAt)]
+        : [];
+      return { inline_keyboard: [[...confirm, button('reject', messages.buttons.reject)], ...link] };
+    }
     switch (keyboard) {
+      case 'trade':
+        return {
+          inline_keyboard: [
+            [button('approve', messages.buttons.approve), button('reject', messages.buttons.reject)],
+            ...link,
+          ],
+        };
       case 'decide':
         return {
           inline_keyboard: [ACTIONS.map((action) => button(action, messages.buttons[action])), ...link],

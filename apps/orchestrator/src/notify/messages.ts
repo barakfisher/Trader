@@ -43,6 +43,42 @@ export function isolated(text: string): string {
   return `\u2068${text}\u2069`;
 }
 
+/** A refused trade approval's code, as `fills.ts` and `tradeApproval.ts` throw it. */
+export type TradeRefusalCode =
+  | 'quote_too_old'
+  | 'quote_unavailable'
+  | 'price_moved'
+  | 'insufficient_cash'
+  | 'insufficient_holding'
+  | 'not_tradable'
+  | 'agent_archived'
+  | 'other';
+
+export interface TradePreviewFigures {
+  side: 'buy' | 'sell';
+  quantity: string;
+  symbol: string;
+  livePrice: string;
+  agentPrice: string;
+  /** Signed, e.g. "+0.25%". */
+  distance: string;
+  notional: string;
+  fee: string;
+  cashAfter: string;
+  /** D3's band around the live price, e.g. "0.5%". */
+  band: string;
+}
+
+export interface TradeFillFigures {
+  side: 'buy' | 'sell';
+  quantity: string;
+  symbol: string;
+  price: string;
+  fee: string;
+  cash: string;
+  at: string;
+}
+
 export type RecordedNarrationState = Exclude<NarrationState, 'unknown'>;
 
 export interface NoticeText {
@@ -53,8 +89,10 @@ export interface NoticeText {
 export interface Messages {
   /** The `Intl` locale for times written into a message. */
   locale: string;
+  /** The `Intl` locale for numbers and money, as the web's `i18n/format.ts` has it. */
+  numberLocale: string;
 
-  buttons: Record<'approve' | 'reject' | 'snooze', string>;
+  buttons: Record<'approve' | 'reject' | 'snooze' | 'confirm', string>;
   undoButton: string;
   working: Record<CallbackAction, string>;
   openInApp: string;
@@ -89,6 +127,25 @@ export interface Messages {
   /** A trade proposal's headline (D51: the frame is the catalogue's; the thesis the model's). */
   tradeProposalHeadline: (agent: string, side: 'buy' | 'sell', quantity: string, symbol: string, price: string) => string;
 
+  /**
+   * Approving a trade in Telegram (D47, D49, D60-D63): the preview *Approve*
+   * answers with, the fill *Confirm* writes, and a refusal. Every figure arrives
+   * already formatted in this language's locale; these only frame them.
+   */
+  trade: {
+    previewToast: string;
+    preview: (figures: TradePreviewFigures) => string;
+    filledToast: string;
+    filled: (figures: TradeFillFigures) => string;
+    /** A refusal's outcome line under the message; the toast is the reason alone. */
+    refused: (reason: string, at: string) => string;
+    reasons: Record<TradeRefusalCode, string>;
+    marketClosed: (nextOpen: string) => string;
+    farFromAgent: (agentPrice: string, livePrice: string, distance: string) => string;
+    /** A price too large for a signed button (`MAX_CALLBACK_PRICE_MINOR`). */
+    confirmInApp: string;
+  };
+
   narration: Record<RecordedNarrationState, NoticeText>;
   /** A state added to `NarrationState` without words here still says something true. */
   narrationFallback: NoticeText;
@@ -108,14 +165,16 @@ export interface Messages {
 /** English: the source, and what a chat with no known user is answered in. */
 const en: Messages = {
   locale: 'en-GB',
+  numberLocale: 'en-US',
 
-  buttons: { approve: 'Approve', reject: 'Reject', snooze: 'Snooze' },
+  buttons: { approve: 'Approve', reject: 'Reject', snooze: 'Snooze', confirm: 'Confirm' },
   undoButton: '↩ Undo approval',
   working: {
     approve: '⏳ Approving…',
     reject: '⏳ Rejecting…',
     snooze: '⏳ Snoozing…',
     undo: '⏳ Undoing…',
+    confirm: '⏳ Filling…',
   },
   openInApp: 'Open in app',
 
@@ -129,7 +188,6 @@ const en: Messages = {
   refusalReplies: {
     not_undoable: 'Only an approval can be undone.',
     already_decided: 'This was already decided — open the app to see how.',
-    approve_with_preview: 'Trades are approved in the app, at the live price.',
     not_for_trades: 'A trade can only be approved or rejected.',
   },
   undoTooLate: (seconds) => `Too late to undo — approvals can be undone for ${seconds} seconds.`,
@@ -162,6 +220,35 @@ const en: Messages = {
 
   tradeProposalHeadline: (agent, side, quantity, symbol, price) =>
     `${agent} proposes to ${side} ${quantity} ${symbol} at ${price}`,
+
+  trade: {
+    previewToast: 'Check the live price, then Confirm.',
+    preview: (f) =>
+      [
+        `At the live price: ${f.side} ${f.quantity} ${f.symbol} at ${f.livePrice}`,
+        `The agent's price ${f.agentPrice} (${f.distance})`,
+        `Cost ${f.notional}, fee ${f.fee}; cash after ${f.cashAfter}`,
+        `Confirm fills within ${f.band} of ${f.livePrice}. Virtual ledger only - no order is placed.`,
+      ].join('\n'),
+    filledToast: 'Filled ✓ — recorded in the virtual ledger. No order was placed.',
+    filled: (f) =>
+      `✅ ${f.side === 'buy' ? 'Bought' : 'Sold'} ${f.quantity} ${f.symbol} at ${f.price}, fee ${f.fee}; cash ${f.cash} (${f.at}). Virtual ledger - no order was placed.`,
+    refused: (reason, at) => `⚠️ Not approved (${at}): ${reason} Still open until it expires.`,
+    reasons: {
+      quote_too_old: 'The latest price is too old to trade at.',
+      quote_unavailable: 'No price is available right now.',
+      price_moved: 'The price moved more than 0.5% since the preview. Approve again for the new price.',
+      insufficient_cash: 'The agent does not have the cash for this trade and its fee.',
+      insufficient_holding: 'The agent no longer holds enough shares.',
+      not_tradable: 'This instrument cannot be traded.',
+      agent_archived: 'The agent is archived.',
+      other: 'The trade was refused.',
+    },
+    marketClosed: (nextOpen) => `The market is closed; it opens ${nextOpen}.`,
+    farFromAgent: (agentPrice, livePrice, distance) =>
+      `The price is ${livePrice}, ${distance} from the agent's ${agentPrice} - more than 3%.`,
+    confirmInApp: 'This price is too large for a Telegram button: confirm it in the app.',
+  },
 
   narration: {
     narrating: {
@@ -238,14 +325,16 @@ function hebrewCount(count: number, one: string, many: string): string {
 
 const he: Messages = {
   locale: 'he-IL',
+  numberLocale: 'he-IL',
 
-  buttons: { approve: 'אישור', reject: 'דחייה', snooze: 'השהיה' },
+  buttons: { approve: 'אישור', reject: 'דחייה', snooze: 'השהיה', confirm: 'אישור סופי' },
   undoButton: '↩ ביטול האישור',
   working: {
     approve: '⏳ מאשר…',
     reject: '⏳ דוחה…',
     snooze: '⏳ משהה…',
     undo: '⏳ מבטל…',
+    confirm: '⏳ מבצע…',
   },
   openInApp: 'פתיחה באפליקציה',
 
@@ -259,7 +348,6 @@ const he: Messages = {
   refusalReplies: {
     not_undoable: 'אפשר לבטל רק אישור.',
     already_decided: 'כבר הוכרע — פתחו את האפליקציה כדי לראות איך.',
-    approve_with_preview: 'עסקאות מאשרים באפליקציה, במחיר העדכני.',
     not_for_trades: 'עסקה אפשר רק לאשר או לדחות.',
   },
   undoTooLate: (seconds) => `מאוחר מדי לבטל — אפשר לבטל אישור רק בתוך ${ltr(seconds)} שניות.`,
@@ -291,6 +379,35 @@ const he: Messages = {
 
   tradeProposalHeadline: (agent, side, quantity, symbol, price) =>
     `${isolated(agent)} מציע ${side === 'buy' ? 'לקנות' : 'למכור'} ${ltr(quantity)} ${ltr(symbol)} ב־${ltr(price)}`,
+
+  trade: {
+    previewToast: 'בדקו את המחיר העדכני, ואז אישור סופי.',
+    preview: (f) =>
+      [
+        `במחיר העדכני: ${f.side === 'buy' ? 'קנייה' : 'מכירה'} של ${ltr(f.quantity)} ${ltr(f.symbol)} ב־${ltr(f.livePrice)}`,
+        `המחיר של הסוכן ${ltr(f.agentPrice)} (${ltr(f.distance)})`,
+        `עלות ${ltr(f.notional)}, עמלה ${ltr(f.fee)}; מזומן אחרי ${ltr(f.cashAfter)}`,
+        `האישור הסופי מבוצע בטווח ${ltr(f.band)} מ־${ltr(f.livePrice)}. יומן וירטואלי בלבד - שום פקודה לא נשלחת.`,
+      ].join('\n'),
+    filledToast: 'בוצע ✓ — נרשם ביומן הווירטואלי. שום פקודה לא בוצעה.',
+    filled: (f) =>
+      `✅ ${f.side === 'buy' ? 'נקנו' : 'נמכרו'} ${ltr(f.quantity)} ${ltr(f.symbol)} ב־${ltr(f.price)}, עמלה ${ltr(f.fee)}; מזומן ${ltr(f.cash)} (${ltr(f.at)}). יומן וירטואלי - שום פקודה לא בוצעה.`,
+    refused: (reason, at) => `⚠️ לא אושר (${ltr(at)}): ${reason} ההצעה פתוחה עד שיפוג תוקפה.`,
+    reasons: {
+      quote_too_old: 'המחיר האחרון ישן מדי למסחר.',
+      quote_unavailable: 'אין כרגע מחיר זמין.',
+      price_moved: `המחיר זז ביותר מ־${ltr('0.5%')} מאז התצוגה המקדימה. אשרו שוב למחיר החדש.`,
+      insufficient_cash: 'לסוכן אין מספיק מזומן לעסקה ולעמלה.',
+      insufficient_holding: 'הסוכן כבר לא מחזיק מספיק מניות.',
+      not_tradable: 'אי אפשר לסחור בנכס הזה.',
+      agent_archived: 'הסוכן בארכיון.',
+      other: 'העסקה נדחתה.',
+    },
+    marketClosed: (nextOpen) => `הבורסה סגורה; היא נפתחת ${isolated(nextOpen)}.`,
+    farFromAgent: (agentPrice, livePrice, distance) =>
+      `המחיר ${ltr(livePrice)}, ${ltr(distance)} מהמחיר של הסוכן ${ltr(agentPrice)} - יותר מ־${ltr('3%')}.`,
+    confirmInApp: 'המחיר גדול מדי לכפתור בטלגרם: אשרו אותו באפליקציה.',
+  },
 
   narration: {
     narrating: {

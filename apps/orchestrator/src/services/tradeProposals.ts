@@ -27,11 +27,13 @@ import {
 } from '@traders/shared';
 import { AiServiceError, type AgentScanResponse, type AiClient } from '@traders/shared/ai';
 
-import { createTradeProposal, type AgentRow } from '../db/queries.js';
+import { createTradeProposal, getOrCreateUserSettings, getUser, type AgentRow } from '../db/queries.js';
 import { upstreamFailure } from '../http/errors.js';
 import { logger } from '../logger.js';
 import { messagesFor } from '../notify/messages.js';
+import type { Notifier } from '../notify/notifier.js';
 import { resolveTradable } from './fills.js';
+import { fanOut, settingsForNotification } from './notifications.js';
 
 /** D4: P4's sixty minutes, counted from the next market open. */
 export const TRADE_PROPOSAL_TTL_MS = 60 * 60 * 1000;
@@ -44,6 +46,8 @@ export function tradeProposalExpiry(now: Date, calendar: { is_open: boolean; nex
 
 export interface TradeProposalContext {
   ai: AiClient;
+  /** Announces the proposal (D60, D61): the user is the one who approves it. */
+  notifier: Notifier;
   requestId?: string;
   now?: () => Date;
 }
@@ -97,7 +101,7 @@ export async function proposeFromScan(
     ]),
   );
 
-  const proposalId = await createTradeProposal({
+  const { proposalId, observationId } = await createTradeProposal({
     userId,
     agentId: agent.id,
     scanId: scan.scan_id,
@@ -110,5 +114,56 @@ export async function proposeFromScan(
     evidence: { scanId: scan.scan_id, ...payload, thesis },
   });
   logger().info({ proposalId, scanId: scan.scan_id, agentId: agent.id, kind }, 'proposal.trade_raised');
+
+  await announce(userId, agent, context.notifier, now, {
+    observationId,
+    proposalId,
+    headline: headlineIn('en'),
+    thesis,
+    localized,
+  });
   return proposalId;
+}
+
+/**
+ * Tell the user, with Approve and Reject on the message (D60, D61). Every scan
+ * that proposes announces it - a manual one too: whoever pressed *Run* may have
+ * left the page by the time it answers, and the proposal lives an hour.
+ *
+ * The floor is ignored, quiet hours and a mute are not (`routeFinding`). Keyed
+ * by the observation, so a retried scan never announces twice. A failure to
+ * announce is logged and swallowed: the proposal is written and on the
+ * dashboard, and a scan must not report failure for a message.
+ */
+async function announce(
+  userId: string,
+  agent: AgentRow,
+  notifier: Notifier,
+  now: Date,
+  proposal: { observationId: string; proposalId: string; headline: string; thesis: string; localized: LocalizedTexts },
+): Promise<void> {
+  try {
+    const [settings, user] = await Promise.all([getOrCreateUserSettings(userId), getUser(userId)]);
+    await fanOut(
+      userId,
+      agent.id,
+      [
+        {
+          refKind: 'observation',
+          refId: proposal.observationId,
+          severity: 'notable',
+          headline: proposal.headline,
+          explanation: proposal.thesis,
+          localized: proposal.localized,
+          proposalId: proposal.proposalId,
+          trade: true,
+        },
+      ],
+      settingsForNotification(settings, user?.timezone ?? 'UTC'),
+      notifier,
+      now,
+    );
+  } catch (error) {
+    logger().warn({ err: error, proposalId: proposal.proposalId }, 'proposal.trade_announce_failed');
+  }
 }

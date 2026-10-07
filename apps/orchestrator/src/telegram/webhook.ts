@@ -89,7 +89,7 @@ export function registerTelegramRoutes(app: Hono<AppEnv>): void {
     // be retried by Telegram - re-delivering a callback whose nonce is spent,
     // so one failure would become a loop.
     await handleTelegramUpdate(
-      { config, notifier: context.get('notifier') },
+      { config, notifier: context.get('notifier'), ai: context.get('ai') },
       await context.req.json().catch(() => null),
     );
     return context.json({ ok: true });

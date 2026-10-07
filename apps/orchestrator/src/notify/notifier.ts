@@ -27,6 +27,8 @@ export interface OutboundNotification {
   body: string;
   /** Present when the user can act on it; a channel may offer inline buttons. */
   proposalId?: string;
+  /** The proposal is a buy or sell: Approve and Reject only (D48), and Approve previews. */
+  trade?: boolean;
   severity: string;
   /**
    * The user's interface language. The title and body arrive already in it; a

@@ -58,9 +58,22 @@ function response(overrides: Partial<ConsolidatedHoldingsResponse> = {}): Consol
         ],
       },
     ],
+    pendingTrades: [],
     ...overrides,
   };
 }
+
+const pendingTrade = (proposalId: string, symbol: string) => ({
+  proposalId,
+  agentId: MOMENTUM,
+  agentName: 'Momentum',
+  side: 'buy' as const,
+  symbol,
+  quantity: '2',
+  agentPriceMinor: 23868,
+  currency: 'USD',
+  expiresAt: new Date(Date.now() + 3 * 3_600_000).toISOString(),
+});
 
 afterEach(cleanup);
 
@@ -108,5 +121,24 @@ describe('a consolidated row', () => {
     expect(screen.getByText('Main portfolio').closest('a')?.getAttribute('href')).toBe('/holdings/h-1');
     expect(screen.getByText('Momentum').closest('a')?.getAttribute('href')).toBe(`/agents/${MOMENTUM}`);
     expect(screen.getByText('Paused')).toBeTruthy();
+  });
+});
+
+describe('pending trade proposals (D35, D63)', () => {
+  it('badges a held ticker and lists the trade when the row expands', async () => {
+    renderPage(<ConsolidatedHoldings data={response({ pendingTrades: [pendingTrade('p-1', 'NVDA')] })} />);
+    expect(await screen.findByText('1 pending')).toBeTruthy();
+    // Held, so not in the list above the table.
+    expect(screen.queryByText(/waiting for you/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { expanded: false }));
+    expect(screen.getByText('Momentum proposes to buy 2 NVDA at $238.68')).toBeTruthy();
+    expect(screen.getByText('Review').closest('a')?.getAttribute('href')).toBe('/proposals/p-1');
+  });
+
+  it('lists a trade on a ticker nobody holds above the table', async () => {
+    renderPage(<ConsolidatedHoldings data={response({ pendingTrades: [pendingTrade('p-2', 'INTC')] })} />);
+    expect(await screen.findByText('1 trade waiting for you')).toBeTruthy();
+    expect(screen.getByText('Momentum proposes to buy 2 INTC at $238.68')).toBeTruthy();
+    expect(screen.queryByText('1 pending')).toBeNull();
   });
 });

@@ -45,7 +45,17 @@ const MAC_BYTES = 16;
 const NONCE_BYTES = 8;
 
 /** Wire spellings, one character each - the budget does not stretch to words. */
-const ACTION_CODES = { approve: 'a', reject: 'r', snooze: 's', undo: 'u' } as const;
+const ACTION_CODES = { approve: 'a', reject: 'r', snooze: 's', undo: 'u', confirm: 'c' } as const;
+
+/** base64url of `NONCE_BYTES`: fixed, so a price can follow the nonce with no separator. */
+const NONCE_CHARS = Math.ceil((NONCE_BYTES * 4) / 3);
+
+/**
+ * The largest price a Confirm button can carry, in minor units: four varint
+ * bytes (28 bits), $2,684,354.55. Measured: the token is then 63 bytes. A trade
+ * priced above it is shown without a Confirm button and approved in the app.
+ */
+export const MAX_CALLBACK_PRICE_MINOR = (1n << 28n) - 1n;
 
 export type CallbackAction = keyof typeof ACTION_CODES;
 
@@ -58,6 +68,42 @@ export interface CallbackPayload {
   action: CallbackAction;
   /** Unique per rendered button. Burned on use, so a replay cannot decide twice. */
   nonce: string;
+  /**
+   * *Confirm* only: the live price the preview showed, in minor units (D47).
+   * Signed with the rest, so the price a fill is checked against is the one the
+   * user saw - never one an edited button names.
+   */
+  priceMinor?: bigint;
+}
+
+/**
+ * A price as an unsigned LEB128 varint: seven bits a byte, the high bit set on
+ * every byte but the last. $238.68 is three bytes - four base64url characters -
+ * where its decimal spelling would be five and a fixed-width integer eight.
+ */
+function priceToBytes(price: bigint): Buffer {
+  if (price <= 0n || price > MAX_CALLBACK_PRICE_MINOR) {
+    throw new Error(`price ${price} cannot be carried by a callback`);
+  }
+  const bytes: number[] = [];
+  let rest = price;
+  while (rest >= 0x80n) {
+    bytes.push(Number(rest & 0x7fn) | 0x80);
+    rest >>= 7n;
+  }
+  bytes.push(Number(rest));
+  return Buffer.from(bytes);
+}
+
+/** The inverse of `priceToBytes`; null for anything it would not have written. */
+function bytesToPrice(bytes: Buffer): bigint | null {
+  let price = 0n;
+  for (const [index, byte] of bytes.entries()) {
+    price |= BigInt(byte & 0x7f) << BigInt(7 * index);
+    const last = index === bytes.length - 1;
+    if (last !== ((byte & 0x80) === 0)) return null;
+  }
+  return price > 0n && price <= MAX_CALLBACK_PRICE_MINOR ? price : null;
 }
 
 const base64url = (buffer: Buffer): string => buffer.toString('base64url');
@@ -113,12 +159,17 @@ export function mintNonce(): string {
 /**
  * Encode one button's payload.
  *
- * Format: `<proposal><action><nonce>.<mac>` - the MAC covers everything before
- * the separator, so neither the proposal nor the action can be edited in
- * isolation.
+ * Format: `<proposal><action><nonce>[<price>].<mac>` - the MAC covers everything
+ * before the separator, so neither the proposal, the action nor the price can
+ * be edited in isolation. The price is present on a *Confirm* and nowhere else.
  */
 export function encodeCallbackData(payload: CallbackPayload, secret: string): string {
-  const body = `${base64url(uuidToBytes(payload.proposalId))}${ACTION_CODES[payload.action]}${payload.nonce}`;
+  if (payload.nonce.length !== NONCE_CHARS) throw new Error('not a minted nonce');
+  if ((payload.action === 'confirm') !== (payload.priceMinor !== undefined)) {
+    throw new Error('a confirm carries a price, and nothing else does');
+  }
+  const price = payload.priceMinor === undefined ? '' : base64url(priceToBytes(payload.priceMinor));
+  const body = `${base64url(uuidToBytes(payload.proposalId))}${ACTION_CODES[payload.action]}${payload.nonce}${price}`;
   const data = `${body}.${base64url(sign(secret, body))}`;
   if (Buffer.byteLength(data, 'utf8') > MAX_CALLBACK_DATA_BYTES) {
     // Thrown rather than truncated: a token cut to fit would fail verification
@@ -157,8 +208,14 @@ export function decodeCallbackData(data: string, secret: string): CallbackPayloa
   if (proposalBytes.length !== 16) return null;
   const action = ACTIONS_BY_CODE.get(body.slice(22, 23));
   if (action === undefined) return null;
-  const nonce = body.slice(23);
-  if (nonce.length === 0) return null;
+  const nonce = body.slice(23, 23 + NONCE_CHARS);
+  if (nonce.length !== NONCE_CHARS) return null;
+  const rest = body.slice(23 + NONCE_CHARS);
 
-  return { proposalId: bytesToUuid(proposalBytes), action, nonce };
+  if (action !== 'confirm') {
+    return rest === '' ? { proposalId: bytesToUuid(proposalBytes), action, nonce } : null;
+  }
+  const priceMinor = rest === '' ? null : bytesToPrice(Buffer.from(rest, 'base64url'));
+  if (priceMinor === null) return null;
+  return { proposalId: bytesToUuid(proposalBytes), action, nonce, priceMinor };
 }
