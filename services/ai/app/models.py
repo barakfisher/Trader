@@ -926,3 +926,36 @@ class LlmModelsResponse(BaseModel):
     credits: LlmCredits | None = Field(
         description="Null when the provider reports no balance or it could not be read."
     )
+
+
+class AgentScanRequest(BaseModel):
+    """Run one scan of a simulated agent now (Stage 4, D15)."""
+
+    user_id: UUID
+    trigger: Literal["manual", "schedule"] = "manual"
+
+
+class AgentScanAnswer(BaseModel):
+    """The agent's answer as it wrote it, with the server's reasons if it failed (D14)."""
+
+    decision: Literal["buy", "sell", "none"] | None = None
+    symbol: str | None = None
+    quantity: str | None = Field(
+        default=None, description="Whole shares as a decimal string (guideline 4)."
+    )
+    thesis: str | None = None
+    problems: list[str] = Field(default_factory=list)
+
+
+class AgentScanResponse(BaseModel):
+    """One finished scan, as stored in `agent_scans` (D50)."""
+
+    scan_id: UUID
+    outcome: Literal[
+        "trade", "no_trade", "invalid_answer", "budget_reached", "step_limit", "failed"
+    ]
+    steps: int = Field(description="Tool calls made (D15's step limit counts these).")
+    cost_micro_usd: int
+    model: str | None
+    answer: AgentScanAnswer | None
+    error: str | None

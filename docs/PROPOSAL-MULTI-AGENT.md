@@ -844,6 +844,26 @@ scan outside the schedule, against its daily budget; it is refused for a paused 
 without a persona, or with the budget spent. *Rejected:* a neutral default persona (an agent the
 user has not described spending money on decisions nobody asked it to make).
 
+### Added 2026-10-07, building PR 4
+
+**D53 - The scan is a hand-written loop; LangGraph is not built (amends D10).** Decided with the
+user before PR 4, after comparing the two on paper: the same scan is ~25 lines as a plain loop and
+~45 as a core-only `StateGraph`, with nothing the graph does that the loop cannot (one model, read-only
+tools in sequence, three stops). The same choice was made for every model call in the service - the
+planned assistant (`/ask` with tools) included - so one style serves all three, and the assistant's
+milestone moves the client to the official `openai` package (`.claude/MEMORY.md`, debt). *Rejected:*
+building both to measure, as D10 asked - the comparison D10 wanted is the one above, and a version
+written to be discarded costs a PR of review; LangGraph's one feature the assistant would use is
+streaming progress, which the `openai` package also gives. *Reopen if:* scans grow separate stages or
+several cooperating agents. No checkpointer either way, as D10 said.
+
+**D54 - What PR 4's answer check leaves to PR 5.** The scan checks what it can know when the model
+answers (D14): tradable symbol, whole shares, a sell within holdings, every thesis figure sourced.
+Cash for cost plus fee is checked when the proposal is written (PR 5), at the price and fee of that
+moment. The thesis is English until D51's proposal frame arrives. A value that is already a
+percentage is named `_percent` in tool output, never `_pct`, which the evidence validator reads as a
+ratio (task 17).
+
 Also settled while measuring, not needing a decision:
 - **A scan proposes at most once** (D15: "a proposal or nothing"). Its answer becomes an observation
   carrying the thesis and evidence, and the proposal hangs from it - `proposals.observation_id` is
@@ -1116,11 +1136,11 @@ pre-open). Tool calling in the provider; the day's movers behind `MarketDataProv
 day-gainers, day-losers and most-active screens - one request each, cached for every agent in a
 slot); the seven read-only tools (§10 D15); the briefing. Nothing calls a model yet.
 
-**PR 4 — The scan (migration 0043; D10, D14, D50).** The per-agent budget checked before each call;
-the step limit; `agent_scans` holding each scan's outcome, cost, steps and full transcript. Built
-twice - a hand-written loop and core-only LangGraph, no checkpointer - measured on real scans of a
-test agent on a live copy, and the smaller kept. The answer is validated and stored; it proposes
-nothing yet. `POST /agents/:id/scans` runs one. **Needs the funded account.**
+**PR 4 — The scan (migration 0043; D14, D50, D52, D53, D54).** The per-agent budget checked before
+each call; the step limit; `agent_scans` holding each scan's outcome, cost, steps and full
+transcript. One hand-written loop (D53). The answer is checked and stored; it proposes nothing yet.
+`POST /agents/:id/scans` runs one. Built and tested with a scripted model; **real scans on the funded
+account are measured before PR 5** - their cost replaces §14.1's assumption.
 
 **PR 5 — The trade proposal and its approval (migration 0044; D26, D47-D49, D51).** `buy` / `sell`
 proposal kinds, never on the primary (decision 104's allowlist and trigger unchanged);

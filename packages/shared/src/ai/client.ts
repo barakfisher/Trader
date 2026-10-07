@@ -17,6 +17,7 @@ import type { z } from 'zod';
 
 import type { components } from '../generated/ai-api.js';
 import {
+  agentScanResponseSchema,
   askResponseSchema,
   conceptDocumentSchema,
   conceptSearchResponseSchema,
@@ -60,6 +61,8 @@ export type PriceHistoryResponse = components['schemas']['PriceHistoryResponse']
 export type MarketCalendarStatus = components['schemas']['MarketCalendarStatus'];
 export type MarketSessions = components['schemas']['MarketSessions'];
 export type LlmModelsResponse = components['schemas']['LlmModelsResponse'];
+export type AgentScanRequest = components['schemas']['AgentScanRequest'];
+export type AgentScanResponse = components['schemas']['AgentScanResponse'];
 export type LlmOfferedModel = components['schemas']['LlmOfferedModel'];
 export type LlmScope = components['schemas']['LlmScopeChoice']['scope'];
 export type MarketSession = components['schemas']['MarketSession'];
@@ -87,6 +90,12 @@ export type DiscoveredPhrase = components['schemas']['DiscoveredPhrase'];
  * request still ends.
  */
 const SCAN_TIMEOUT_MS = 5 * 60_000;
+/**
+ * An agent's scan: the briefing, then up to twelve model turns with tools. The AI
+ * service stops the loop at five minutes (`scan.SCAN_TIME_LIMIT`); this leaves it
+ * time to build the briefing and store the row.
+ */
+const AGENT_SCAN_TIMEOUT_MS = 6 * 60_000;
 
 /**
  * A health check is itself read by a Kubernetes readiness probe (the
@@ -339,6 +348,19 @@ export class AiClient {
    * provider account's balance (D43, D44). The choice itself is written by the
    * orchestrator; this service reads it on every call.
    */
+  /**
+   * Run one scan of a simulated agent now and store it (Stage 4, D15, D50). The
+   * agent's eligibility is checked by the AI service too: a 404 or 409 here
+   * carries `{ detail: { code, message } }`.
+   */
+  scanAgent(agentId: string, payload: AgentScanRequest, requestId?: string): Promise<AgentScanResponse> {
+    return this.request<AgentScanResponse>(
+      `/agents/${encodeURIComponent(agentId)}/scans`,
+      agentScanResponseSchema,
+      { method: 'POST', body: JSON.stringify(payload), requestId, timeoutMs: AGENT_SCAN_TIMEOUT_MS },
+    );
+  }
+
   llmModels(requestId?: string): Promise<LlmModelsResponse> {
     return this.request<LlmModelsResponse>('/llm/models', llmModelsResponseSchema, {
       method: 'GET',

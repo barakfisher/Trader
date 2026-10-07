@@ -27,6 +27,7 @@ from app.llm.factory import build_llm
 from app.llm.model_choice import DatabaseModelChoices
 from app.providers.registry import MarketDataService, build_providers
 from app.routers import (
+    agents,
     analysis,
     ask,
     concepts,
@@ -119,3 +120,4 @@ app.include_router(topics.router)
 app.include_router(news.router)
 app.include_router(universe.router)
 app.include_router(llm.router)
+app.include_router(agents.router)

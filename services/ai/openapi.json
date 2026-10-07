@@ -1,6 +1,168 @@
 {
   "components": {
     "schemas": {
+      "AgentScanAnswer": {
+        "description": "The agent's answer as it wrote it, with the server's reasons if it failed (D14).",
+        "properties": {
+          "decision": {
+            "anyOf": [
+              {
+                "enum": [
+                  "buy",
+                  "sell",
+                  "none"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          },
+          "problems": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whole shares as a decimal string (guideline 4).",
+            "title": "Quantity"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
+          "thesis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thesis"
+          }
+        },
+        "title": "AgentScanAnswer",
+        "type": "object"
+      },
+      "AgentScanRequest": {
+        "description": "Run one scan of a simulated agent now (Stage 4, D15).",
+        "properties": {
+          "trigger": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "schedule"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "AgentScanRequest",
+        "type": "object"
+      },
+      "AgentScanResponse": {
+        "description": "One finished scan, as stored in `agent_scans` (D50).",
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentScanAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cost_micro_usd": {
+            "title": "Cost Micro Usd",
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "outcome": {
+            "enum": [
+              "trade",
+              "no_trade",
+              "invalid_answer",
+              "budget_reached",
+              "step_limit",
+              "failed"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "scan_id": {
+            "format": "uuid",
+            "title": "Scan Id",
+            "type": "string"
+          },
+          "steps": {
+            "description": "Tool calls made (D15's step limit counts these).",
+            "title": "Steps",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "scan_id",
+          "outcome",
+          "steps",
+          "cost_micro_usd",
+          "model",
+          "answer",
+          "error"
+        ],
+        "title": "AgentScanResponse",
+        "type": "object"
+      },
       "AskCitation": {
         "description": "One passage an answer rests on, quoted rather than summarised.\n\n`text` is the chunk verbatim. A citation the reader cannot read is a\nfootnote, not evidence, and the whole claim of this endpoint is that its\nanswers are checkable.",
         "properties": {
@@ -2691,6 +2853,74 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/agents/{agent_id}/scans": {
+      "post": {
+        "operationId": "scan_agent_agents__agent_id__scans_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentScanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentScanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scan Agent",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
     "/analysis/portfolio-scan": {
       "post": {
         "operationId": "portfolio_scan_analysis_portfolio_scan_post",

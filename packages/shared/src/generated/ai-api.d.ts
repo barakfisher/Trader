@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/agents/{agent_id}/scans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scan Agent */
+        post: operations["scan_agent_agents__agent_id__scans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/analysis/portfolio-scan": {
         parameters: {
             query?: never;
@@ -447,6 +464,70 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AgentScanAnswer
+         * @description The agent's answer as it wrote it, with the server's reasons if it failed (D14).
+         */
+        AgentScanAnswer: {
+            /** Decision */
+            decision?: ("buy" | "sell" | "none") | null;
+            /** Problems */
+            problems?: string[];
+            /**
+             * Quantity
+             * @description Whole shares as a decimal string (guideline 4).
+             */
+            quantity?: string | null;
+            /** Symbol */
+            symbol?: string | null;
+            /** Thesis */
+            thesis?: string | null;
+        };
+        /**
+         * AgentScanRequest
+         * @description Run one scan of a simulated agent now (Stage 4, D15).
+         */
+        AgentScanRequest: {
+            /**
+             * Trigger
+             * @default manual
+             * @enum {string}
+             */
+            trigger: "manual" | "schedule";
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
+         * AgentScanResponse
+         * @description One finished scan, as stored in `agent_scans` (D50).
+         */
+        AgentScanResponse: {
+            answer: components["schemas"]["AgentScanAnswer"] | null;
+            /** Cost Micro Usd */
+            cost_micro_usd: number;
+            /** Error */
+            error: string | null;
+            /** Model */
+            model: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "trade" | "no_trade" | "invalid_answer" | "budget_reached" | "step_limit" | "failed";
+            /**
+             * Scan Id
+             * Format: uuid
+             */
+            scan_id: string;
+            /**
+             * Steps
+             * @description Tool calls made (D15's step limit counts these).
+             */
+            steps: number;
+        };
         /**
          * AskCitation
          * @description One passage an answer rests on, quoted rather than summarised.
@@ -1860,6 +1941,43 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    scan_agent_agents__agent_id__scans_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentScanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentScanResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     portfolio_scan_analysis_portfolio_scan_post: {
         parameters: {
             query?: never;

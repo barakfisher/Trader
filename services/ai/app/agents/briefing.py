@@ -76,7 +76,7 @@ def movers_section(context: ToolContext, movers: list[Mover]) -> dict[str, Any]:
         section[kind] = [
             {
                 "symbol": mover.symbol,
-                "change_pct": _pct(mover.change_pct),
+                "change_percent": _pct(mover.change_pct),
                 "price": money(mover.price_minor, mover.currency),
             }
             for mover in listed[:MOVERS_PER_LIST]
