@@ -162,3 +162,27 @@ def test_a_copied_minor_unit_price_is_still_refused():
     # 30 of 38 rejections wrote "fell to 790" for $7.90; that stays wrong.
     assert unsourced_figures("fell to 790 from 1118", DRAWDOWN) == ["790", "1118"]
     assert unsourced_figures("fell to $7.90 from $11.18", DRAWDOWN) == []
+
+
+def test_a_window_the_evidence_names_is_not_a_figure():
+    # Measured 2026-10-07: two of four real scans were refused for "60-day",
+    # which the history tool names in a key ("60d") and never as a value.
+    evidence = {"high": "239.24", "change_percent": {"5d": "5.29", "20d": "5.99", "60d": None}}
+    for text in (
+        "Its close of 239.24 is the 60-day high.",
+        "Up 5.29% over 5 days, and 5.99% over 20 trading days.",
+        "הסגירה 239.24 היא השיא של 60 יום, אחרי 5 ימי מסחר.",
+        "שיא של 60־יום.",
+    ):
+        assert unsourced_figures(text, evidence) == [], text
+
+
+def test_a_window_no_key_names_is_still_a_figure():
+    evidence = {"high": "239.24", "change_percent": {"5d": "5.29", "60d": None}}
+    # A claim about history nobody supplied.
+    assert unsourced_figures("Its worst day in 14 months.", evidence) == ["14"]
+    # The right length in the wrong unit is not the window the key names.
+    assert unsourced_figures("A 60-week high.", evidence) == ["60"]
+    # The figure a window qualifies is checked as ever.
+    assert unsourced_figures("Up 7.10% over 5 days.", evidence) == ["7.10"]
+    assert unsourced_figures("A 60-dayish range.", evidence) == ["60"]

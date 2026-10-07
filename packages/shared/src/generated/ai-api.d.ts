@@ -471,6 +471,13 @@ export interface components {
         AgentScanAnswer: {
             /** Decision */
             decision?: ("buy" | "sell" | "none") | null;
+            /** Price As Of */
+            price_as_of?: string | null;
+            /**
+             * Price Minor
+             * @description For a buy or sell: the agent's price (D47), the quote at the scan's end.
+             */
+            price_minor?: number | null;
             /** Problems */
             problems?: string[];
             /**

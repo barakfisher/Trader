@@ -34,6 +34,7 @@ import {
   type TradeWarning,
 } from '@traders/shared';
 import { AiServiceError, type AiClient, type Quote } from '@traders/shared/ai';
+import type { PoolClient } from 'pg';
 
 import {
   findFillByKey,
@@ -382,10 +383,21 @@ async function replay(request: TradeRequest): Promise<TradeResult | null> {
 }
 
 /**
+ * What the caller writes in the fill's own transaction, after the fill and the
+ * holding: the approval of the proposal it fills (D11, D47). Throwing rolls the
+ * fill back with it, so neither can be committed alone. Not run on a replay.
+ */
+export type InFillTransaction = (client: PoolClient, fill: FillView) => Promise<void>;
+
+/**
  * Record a trade: every check, then the fill and the holding in one transaction
  * under the agent's cash-row lock. The single path a fill is written by.
  */
-export async function executeFill(request: TradeRequest, context: TradeContext): Promise<TradeResult> {
+export async function executeFill(
+  request: TradeRequest,
+  context: TradeContext,
+  inTransaction?: InFillTransaction,
+): Promise<TradeResult> {
   assertTradableAgent(request.agent);
   const replayed = await replay(request);
   if (replayed) return replayed;
@@ -453,6 +465,7 @@ export async function executeFill(request: TradeRequest, context: TradeContext):
 
       const fill = await findFillByKey(request.userId, request.agent.id, request.idempotencyKey, client);
       if (!fill || fill.id !== fillId) throw new Error('the fill just written could not be read back');
+      await inTransaction?.(client, toFillView(fill));
       return {
         fill: toFillView(fill),
         created: true,

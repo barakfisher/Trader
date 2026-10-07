@@ -9,8 +9,9 @@
  * things itself, so a scan cannot start by another path; its refusals are passed
  * on with their codes.
  *
- * A scan proposes nothing yet: its answer is stored and returned. The trade
- * proposal arrives in PR 5.
+ * A `trade` scan becomes a proposal here (PR 5a, `services/tradeProposals.ts`),
+ * and its id is returned beside the scan: the AI service owns the scan, the
+ * orchestrator owns what the user is asked.
  */
 
 import type { Hono } from 'hono';
@@ -20,6 +21,7 @@ import { AiServiceError } from '@traders/shared/ai';
 import { getAgent } from '../../db/queries.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { conflict, notFound, upstreamFailure } from '../errors.js';
+import { proposeFromScan } from '../../services/tradeProposals.js';
 import { agentIdFrom } from './agents.js';
 
 /** The AI service's refusal body: FastAPI puts our `{ code, message }` under `detail`. */
@@ -47,10 +49,11 @@ export function registerAgentScanRoutes(app: Hono<AppEnv>): void {
       throw conflict('no_persona', 'give the agent a persona first: it decides by it');
     }
 
+    let scan;
     try {
-      return context.json(
-        await context.get('ai').scanAgent(agent.id, { user_id: userId, trigger: 'manual' }, context.get('requestId')),
-      );
+      scan = await context
+        .get('ai')
+        .scanAgent(agent.id, { user_id: userId, trigger: 'manual' }, context.get('requestId'));
     } catch (error) {
       if (error instanceof AiServiceError) {
         const reason = refusal(error.body);
@@ -63,5 +66,10 @@ export function registerAgentScanRoutes(app: Hono<AppEnv>): void {
       }
       throw error;
     }
+    const proposalId = await proposeFromScan(userId, agent, scan, {
+      ai: context.get('ai'),
+      requestId: context.get('requestId'),
+    });
+    return context.json({ ...scan, proposal_id: proposalId });
   });
 }

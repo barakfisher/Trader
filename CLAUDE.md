@@ -18,7 +18,10 @@ and [docs/MILESTONES.md](docs/MILESTONES.md) before changing architecture.
    stored with their template wording in every UI language (`observations.localized`, rendered
    when written); a model-written observation shows its template in a language other than
    English. Telegram and the digest speak `user_settings.language` through a typed catalogue
-   (`apps/orchestrator/src/notify/messages.ts`; a missing sentence is a compile error). Other
+   (`apps/orchestrator/src/notify/messages.ts`; a missing sentence is a compile error). **An
+   agent's thesis is the one model-written text in the user's language** (D51): the scan asks for
+   it in `user_settings.language`, the evidence validator checks its figures the same way, and
+   the frame around it - side, quantity, price, expiry - comes from the catalogues. Other
    server-generated text (`/ask` answers, news, the concept corpus) stays English
    until a decision says otherwise, and is marked `lang="en"` where the UI shows it.
 2. **No order execution, ever.** Approvals write to the virtual ledger only. No broker API, no

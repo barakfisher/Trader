@@ -41,6 +41,8 @@ class ScanAgent:
     persona: str | None
     state: str
     is_primary: bool
+    #: `user_settings.language`: the thesis is written in it (D51).
+    language: str = "en"
 
 
 class ScanAlreadyRunningError(RuntimeError):
@@ -52,9 +54,11 @@ def find_agent(engine: Engine, user_id: str, agent_id: str) -> ScanAgent | None:
         row = connection.execute(
             text(
                 """
-                SELECT id::text AS id, user_id::text AS user_id, name, persona, state, is_primary
-                  FROM agents
-                 WHERE id = CAST(:agent AS uuid) AND user_id = CAST(:user AS uuid)
+                SELECT a.id::text AS id, a.user_id::text AS user_id, a.name, a.persona,
+                       a.state, a.is_primary, coalesce(s.language, 'en') AS language
+                  FROM agents a
+                  LEFT JOIN user_settings s ON s.user_id = a.user_id
+                 WHERE a.id = CAST(:agent AS uuid) AND a.user_id = CAST(:user AS uuid)
                 """
             ),
             {"agent": agent_id, "user": user_id},
@@ -68,6 +72,7 @@ def find_agent(engine: Engine, user_id: str, agent_id: str) -> ScanAgent | None:
         persona=row.persona,
         state=row.state,
         is_primary=row.is_primary,
+        language=row.language,
     )
 
 

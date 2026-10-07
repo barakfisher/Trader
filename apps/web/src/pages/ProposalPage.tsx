@@ -2,9 +2,10 @@ import { observer } from 'mobx-react-lite';
 import { Link, useParams } from '@tanstack/react-router';
 import { ArrowLeft, ShieldCheck } from 'lucide-react';
 
-import type { Proposal, ProposalTransition } from '@traders/shared';
+import type { Proposal, ProposalAttempt, ProposalTransition } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
+import { formatMoney } from '../i18n/format.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { EvidenceDrawer } from '../components/EvidenceDrawer.tsx';
@@ -89,6 +90,7 @@ export const ProposalPage = observer(function ProposalPage() {
           )}
           <SubjectLink proposal={proposal} />
           <TrailCard transitions={detail.data?.transitions ?? []} createdAt={proposal.createdAt} />
+          <AttemptsCard attempts={detail.data?.attempts ?? []} />
         </>
       )}
 
@@ -167,6 +169,57 @@ function TrailCard({ transitions, createdAt }: { transitions: ProposalTransition
           <li key={`${transition.at}-${transition.to}`} className="flex flex-wrap justify-between gap-x-3">
             <span>{transitionText(transition)}</span>
             <span className="text-xs text-text-muted">{formatExactTime(transition.at)}</span>
+          </li>
+        ))}
+      </ol>
+    </Card>
+  );
+}
+
+/** The reasons a refused approval is recorded with (D49); anything else reads as "refused". */
+const ATTEMPT_REASONS = [
+  'price_far_from_agent',
+  'market_closed',
+  'quote_too_old',
+  'quote_unavailable',
+  'price_moved',
+  'insufficient_cash',
+  'insufficient_holding',
+  'not_tradable',
+  'agent_archived',
+] as const;
+
+function attemptReason(reason: string): (typeof ATTEMPT_REASONS)[number] | 'other' {
+  return (ATTEMPT_REASONS as readonly string[]).includes(reason)
+    ? (reason as (typeof ATTEMPT_REASONS)[number])
+    : 'other';
+}
+
+/**
+ * Approvals of a trade that were refused (D49): the proposal stayed open, and
+ * this is what its history shows of each try - why, and at what prices.
+ */
+function AttemptsCard({ attempts }: { attempts: ProposalAttempt[] }) {
+  const { t } = useTranslation();
+  if (attempts.length === 0) return null;
+  const ordered = [...attempts].sort((a, b) => a.at.localeCompare(b.at));
+  return (
+    <Card title={t('proposalPage.attempts')}>
+      <ol className="space-y-1.5 text-sm">
+        {ordered.map((attempt) => (
+          <li key={`${attempt.at}-${attempt.reason}`} className="flex flex-wrap justify-between gap-x-3">
+            <span>
+              {t(`proposalPage.attemptReasons.${attemptReason(attempt.reason)}`)}
+              {' · '}
+              {attempt.livePriceMinor === null
+                ? t('proposalPage.attemptAgentPrice', { agent: formatMoney(attempt.agentPriceMinor, 'USD') })
+                : t('proposalPage.attemptPrices', {
+                    agent: formatMoney(attempt.agentPriceMinor, 'USD'),
+                    live: formatMoney(attempt.livePriceMinor, 'USD'),
+                  })}
+              {attempt.surface === 'telegram' && t('proposal.approvedFromTelegram')}
+            </span>
+            <span className="text-xs text-text-muted">{formatExactTime(attempt.at)}</span>
           </li>
         ))}
       </ol>

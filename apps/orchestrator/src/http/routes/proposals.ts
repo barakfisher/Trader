@@ -15,12 +15,24 @@ import type { Hono } from 'hono';
 import { z } from 'zod';
 
 import {
+  isTradeProposalKind,
+  type ProposalAttempt,
+  type TradeApprovalPreview,
+  type TradeApprovalResult,
+} from '@traders/shared';
+
+import {
   findProposal,
+  getUser,
+  listProposalAttempts,
   listProposalTransitions,
   listProposals,
+  type ProposalAttemptRow,
   type ProposalRow,
 } from '../../db/queries.js';
 import { applyDecision, factsOf } from '../../services/proposals.js';
+import { confirmTradeApproval, previewTradeApproval } from '../../services/tradeApproval.js';
+import type { TradeContext } from '../../services/fills.js';
 import {
   effectiveState,
   undoableUntil,
@@ -28,6 +40,7 @@ import {
   type RefusalReason,
 } from '../../services/proposalState.js';
 import { currentUserId, type AppEnv } from '../app.js';
+import type { Context } from 'hono';
 import { badRequest, notFound, unprocessable } from '../errors.js';
 
 /** A ceiling on one page of the inbox, matching the observations feed. */
@@ -54,7 +67,31 @@ const REFUSAL_MESSAGES: Record<RefusalReason, string> = {
   undo_window_closed: `an approval can only be undone within ${UNDO_WINDOW_SECONDS} seconds`,
   snooze_past_expiry: 'a snooze cannot outlast the proposal it postpones',
   snooze_in_the_past: 'a snooze must end in the future',
+  approve_with_preview: 'a trade is approved through its preview at the live price, then confirmed',
+  not_for_trades: 'a trade proposal can only be approved or rejected',
 };
+
+/** The live price the user saw on the preview, in minor units; a positive whole number. */
+const confirmSchema = z.object({
+  shownPriceMinor: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+});
+
+function attemptToWire(row: ProposalAttemptRow): ProposalAttempt {
+  return {
+    surface: row.surface,
+    reason: row.reason,
+    agentPriceMinor: Number(row.agent_price_minor),
+    livePriceMinor: row.live_price_minor === null ? null : Number(row.live_price_minor),
+    quoteAsOf: row.quote_as_of?.toISOString() ?? null,
+    at: row.created_at.toISOString(),
+  };
+}
+
+async function tradeContextOf(context: Context<AppEnv>): Promise<TradeContext> {
+  const user = await getUser(currentUserId(context));
+  if (!user) throw notFound('user not found');
+  return { ai: context.get('ai'), requestId: context.get('requestId'), timezone: user.timezone };
+}
 
 function toWire(row: ProposalRow, now: Date) {
   return {
@@ -81,8 +118,15 @@ function toWire(row: ProposalRow, now: Date) {
     // Stated by the server rather than recomputed by the client, so the web
     // cannot offer an Undo the state machine would refuse. Null once there is
     // nothing to undo.
-    undoableUntil: undoableUntil(factsOf(row))?.toISOString() ?? null,
+    undoableUntil: isTradeProposalKind(row.kind)
+      ? // A filled trade is final (D23, D48): there is no undo to offer.
+        null
+      : (undoableUntil(factsOf(row))?.toISOString() ?? null),
     createdAt: row.created_at.toISOString(),
+    agentId: row.agent_id,
+    agentName: row.agent_name,
+    agentIsPrimary: row.agent_is_primary,
+    scanId: row.scan_id,
   };
 }
 
@@ -121,8 +165,10 @@ export function registerProposalsRoutes(app: Hono<AppEnv>): void {
     if (row === null) throw notFound('proposal not found');
 
     const transitions = await listProposalTransitions(userId, row.id);
+    const attempts = await listProposalAttempts(userId, row.id);
     return context.json({
       proposal: toWire(row, new Date()),
+      attempts: attempts.map(attemptToWire),
       // The audit trail, which is the answer to "why does this say expired when
       // I never touched it?" and to "who approved this, and from where?".
       transitions: transitions.map((transition) => ({
@@ -133,6 +179,36 @@ export function registerProposalsRoutes(app: Hono<AppEnv>): void {
         at: transition.created_at.toISOString(),
       })),
     });
+  });
+
+  /**
+   * *Approve* on a trade proposal (D47): the trade at the live price, beside the
+   * agent's. Writes nothing to the ledger; a refusal is recorded (D49).
+   */
+  app.post('/proposals/:id/preview', async (context) => {
+    const body: TradeApprovalPreview = await previewTradeApproval(
+      currentUserId(context),
+      context.req.param('id'),
+      'web',
+      await tradeContextOf(context),
+    );
+    return context.json(body);
+  });
+
+  /** *Confirm*: the fill and the approval in one transaction, at the previewed price ±50 bps. */
+  app.post('/proposals/:id/confirm', async (context) => {
+    const parsed = confirmSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) {
+      throw badRequest('invalid_body', 'expected { shownPriceMinor }', parsed.error.issues);
+    }
+    const body: TradeApprovalResult = await confirmTradeApproval(
+      currentUserId(context),
+      context.req.param('id'),
+      BigInt(parsed.data.shownPriceMinor),
+      'web',
+      await tradeContextOf(context),
+    );
+    return context.json(body);
   });
 
   app.post('/proposals/:id/decision', async (context) => {

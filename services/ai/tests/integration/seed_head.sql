@@ -207,6 +207,28 @@ INSERT INTO proposal_episodes (user_id, agent_id, observation_kind, subject_ref,
 -- trading (a top-up) cover every enumerated value - and make 0040's downgrade
 -- refuse, since it would discard them.
 INSERT INTO fills (user_id, agent_id, instrument_id, side, quantity, price_minor, notional_minor, fee_minor, price_source, quote_as_of, quote_delay_seconds, source, idempotency_key) VALUES
-  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000001', 'buy', '10', 1000, 10000, 150, 'quote', now(), 900, 'manual_user_override', 'seed-buy'),
-  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000001', 'sell', '2', 1100, 2200, 150, 'user', NULL, NULL, 'agent', 'seed-sell');
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000001', 'buy', '10', 1000, 10000, 150, 'quote', now(), 900, 'manual_user_override', 'seed-buy');
+-- Trade proposals (0044): the paused agent's `trade` scan proposed a sell, which
+-- was approved and filled - an agent's fill has a proposal - and a buy still
+-- pending, with one refused attempt from each surface.
+INSERT INTO observations (id, user_id, agent_id, kind, severity, subject_ref, headline, dedupe_key, narration_source) VALUES
+  ('30000000-0000-0000-0000-000000000021', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'agent_trade', 'notable', 'instrument:EQTY', 'Paused agent proposes to sell 2 EQTY', 'agent_scan:seed-sell', 'llm'),
+  ('30000000-0000-0000-0000-000000000022', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'agent_trade', 'notable', 'instrument:EQTY', 'Paused agent proposes to buy 2 EQTY', 'agent_scan:seed-buy', 'llm');
+INSERT INTO proposals (id, user_id, agent_id, observation_id, kind, payload, state, expires_at, decided_via, decided_at, scan_id)
+SELECT ('50000000-0000-0000-0000-00000000002' || n)::uuid, '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1',
+       ('30000000-0000-0000-0000-00000000002' || n)::uuid, kind,
+       '{"symbol": "EQTY", "quantity": "2", "priceMinor": 1100, "currency": "USD"}', state, now() + interval '1 hour',
+       CASE WHEN state = 'approved' THEN 'web' END, CASE WHEN state = 'approved' THEN now() END,
+       (SELECT id FROM agent_scans WHERE outcome = 'trade')
+  FROM (VALUES (1, 'sell', 'approved')) AS t(n, kind, state);
+INSERT INTO agent_scans (id, user_id, agent_id, trigger, started_at, finished_at, outcome, steps, cost_micro_usd, model, briefing, transcript, answer) VALUES
+  ('70000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'manual', now() - interval '7 days', now() - interval '7 days', 'trade', 2, 20000, 'm', '{}', '[]', '{"decision": "buy", "symbol": "EQTY", "quantity": "2", "thesis": "t"}');
+INSERT INTO proposals (id, user_id, agent_id, observation_id, kind, payload, state, expires_at, scan_id) VALUES
+  ('50000000-0000-0000-0000-000000000022', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '30000000-0000-0000-0000-000000000022', 'buy',
+   '{"symbol": "EQTY", "quantity": "2", "priceMinor": 1100, "currency": "USD"}', 'pending', now() + interval '1 hour', '70000000-0000-0000-0000-000000000001');
+INSERT INTO proposal_attempts (user_id, proposal_id, surface, reason, agent_price_minor, live_price_minor, quote_as_of) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-000000000022', 'web', 'price_far_from_agent', 1100, 1200, now()),
+  ('00000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-000000000022', 'telegram', 'market_closed', 1100, NULL, NULL);
+INSERT INTO fills (user_id, agent_id, instrument_id, side, quantity, price_minor, notional_minor, fee_minor, price_source, quote_as_of, quote_delay_seconds, source, proposal_id, idempotency_key) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000001', 'sell', '2', 1100, 2200, 150, 'user', NULL, NULL, 'agent', '50000000-0000-0000-0000-000000000021', 'seed-sell');
 UPDATE agents SET budget_minor = 150000 WHERE id = '90000000-0000-0000-0000-0000000000a1';

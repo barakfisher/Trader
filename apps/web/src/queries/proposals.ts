@@ -9,9 +9,15 @@
  * it holds no copy of the list.
  */
 
-import { queryOptions, useQuery } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import type { Proposal, ProposalDetailResponse, ProposalsResponse } from '@traders/shared';
+import type {
+  Proposal,
+  ProposalDetailResponse,
+  ProposalsResponse,
+  TradeApprovalPreview,
+  TradeApprovalResult,
+} from '@traders/shared';
 
 import { ApiRequestError, api } from '../api/client.ts';
 import { useStore } from '../stores/context.tsx';
@@ -159,4 +165,36 @@ export function decidedHistory(
   shownAbove: ReadonlySet<string>,
 ): Proposal[] {
   return (history ?? []).filter((proposal) => !shownAbove.has(proposal.id));
+}
+
+/**
+ * *Approve* on a trade proposal: the server prices it at the live quote beside
+ * the agent's price (D47). Writes nothing; a refusal is recorded server-side and
+ * leaves the proposal pending (D49), so the inbox is re-read either way.
+ */
+export function usePreviewTradeApproval(proposalId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<TradeApprovalPreview>(`/proposals/${proposalId}/preview`, {}),
+    onSettled: () => client.invalidateQueries({ queryKey: queryKeys.proposal(proposalId) }),
+  });
+}
+
+/**
+ * *Confirm*: the fill and the approval in one transaction. A success moves the
+ * agent's cash and holdings, so the agents and the consolidated view are re-read
+ * with the inbox.
+ */
+export function useConfirmTradeApproval(proposalId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (shownPriceMinor: number) =>
+      api.post<TradeApprovalResult>(`/proposals/${proposalId}/confirm`, { shownPriceMinor }),
+    onSettled: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: queryKeys.proposals }),
+        client.invalidateQueries({ queryKey: queryKeys.agents }),
+        client.invalidateQueries({ queryKey: queryKeys.consolidated }),
+      ]),
+  });
 }

@@ -286,6 +286,8 @@ export const agentScanResponseSchema = z.object({
       symbol: z.string().nullable().optional(),
       quantity: z.string().nullable().optional(),
       thesis: z.string().nullable().optional(),
+      price_minor: z.number().int().nullable().optional(),
+      price_as_of: z.string().nullable().optional(),
       problems: z.array(z.string()).optional(),
     })
     .nullable(),

@@ -15,6 +15,8 @@
  * of what the user assented to, not an order anybody could submit.
  */
 
+import { isTradeProposalKind } from '@traders/shared';
+
 import {
   applyProposalTransition,
   createProposals,
@@ -191,6 +193,17 @@ export async function applyDecision(
 ): Promise<DecisionOutcome> {
   const row = await findProposal(input.userId, input.proposalId);
   if (row === null) return { outcome: 'not_found' };
+
+  // A trade is approved through a preview at the live price and a confirm that
+  // fills (`tradeApproval.ts`, D47), and is never snoozed or undone (D48). Only
+  // its rejection passes through here, whatever a surface sends.
+  if (isTradeProposalKind(row.kind) && input.action !== 'reject') {
+    return {
+      outcome: 'refused',
+      reason: input.action === 'approve' ? 'approve_with_preview' : 'not_for_trades',
+      state: effectiveState(factsOf(row), now),
+    };
+  }
 
   const decision = decide(
     factsOf(row),

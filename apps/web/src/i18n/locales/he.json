@@ -430,7 +430,37 @@
     "undo": "ביטול האישור ({{seconds}} שנ׳)",
     "approve": "אישור",
     "snooze": "השהיה ל-{{hours}} ש׳",
-    "reject": "דחייה"
+    "reject": "דחייה",
+    "trade": {
+      "agentPrice": "המחיר של הסוכן {{price}}",
+      "thesis": "למה הסוכן מציע את זה",
+      "paperOnly": "עסקת נייר: אישור רושם ביצוע בחשבון המדומה של הסוכן. שום פקודה לא נשלחת.",
+      "distance": "הסוכן החליט ב־{{agent}}; המחיר העדכני רחוק ממנו ב־{{distance}}.",
+      "previewFailed": "לא ניתן היה לבדוק את המחיר העדכני. נסו שוב.",
+      "confirmFailed": "לא ניתן היה לרשום את העסקה. נסו שוב.",
+      "filled": {
+        "buy": "נקנו {{quantity}} {{symbol}} ב־{{price}}, עמלה {{fee}}.",
+        "sell": "נמכרו {{quantity}} {{symbol}} ב־{{price}}, עמלה {{fee}}."
+      },
+      "inFlight": {
+        "preview": "בודק את המחיר העדכני…",
+        "confirm": "רושם…"
+      },
+      "confirm": {
+        "buy": "אישור: תשלום {{total}}",
+        "sell": "אישור: תקבול {{total}}"
+      },
+      "cancel": "ביטול",
+      "errors": {
+        "priceFarFromAgent": "המחיר הוא {{live}}, רחוק ב־{{distance}} מ־{{agent}} של הסוכן - יותר מ־3%. הסוכן החליט במחיר שכבר לא תקף: דחו את ההצעה, או נסו שוב מאוחר יותר.",
+        "expired": "תוקף ההצעה פג.",
+        "alreadyDecided": "כבר הוכרע בהצעה הזו.",
+        "marketClosed": "השוק סגור. הוא נפתח {{time}}: אשרו אז, לפני שתוקף ההצעה יפוג.",
+        "quoteTooOld": "המחיר האחרון ישן מיותר מ־30 דקות. נסו שוב בעוד רגע.",
+        "quoteUnavailable": "אין מחיר זמין כרגע. נסו שוב בעוד רגע.",
+        "priceMoved": "המחיר זז ל־{{price}} מאז התצוגה המקדימה. אשרו שוב כדי לראות את הנתונים החדשים."
+      }
+    }
   },
   "summary": {
     "totalValue": "שווי כולל",
@@ -753,7 +783,22 @@
     "subjectPage": "העמוד של {{symbol}}",
     "subjectPageNote": " - המחיר שלו, הממצאים האחרים שלו והחדשות שלו.",
     "trail": "מה קרה",
-    "proposed": "הוצעה"
+    "proposed": "הוצעה",
+    "attempts": "אישורים שנדחו",
+    "attemptPrices": "המחיר של הסוכן {{agent}}, מחיר עדכני {{live}}",
+    "attemptAgentPrice": "המחיר של הסוכן {{agent}}, ללא מחיר עדכני",
+    "attemptReasons": {
+      "price_far_from_agent": "המחיר זז יותר מ־3% מהמחיר של הסוכן",
+      "market_closed": "השוק היה סגור",
+      "quote_too_old": "המחיר האחרון היה ישן מדי",
+      "quote_unavailable": "לא היה מחיר זמין",
+      "price_moved": "המחיר זז בין התצוגה המקדימה לאישור",
+      "insufficient_cash": "אין מספיק מזומן לעסקה ולעמלה",
+      "insufficient_holding": "לסוכן כבר אין מספיק מניות",
+      "not_tradable": "אי אפשר היה לסחור בנייר",
+      "agent_archived": "הסוכן הועבר לארכיון",
+      "other": "נדחה"
+    }
   },
   "settings": {
     "title": "הגדרות",

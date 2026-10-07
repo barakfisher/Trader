@@ -939,4 +939,101 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       }
     });
   });
+  describe('trade proposals (0044), rolled back', () => {
+    // agent_scans does not cascade from users, so everything here is rolled back.
+    it('writes the observation and the proposal once per scan, and holds the constraints', async () => {
+      const client = await getPool().connect();
+      try {
+        await client.query('BEGIN');
+        const simulated = (
+          await client.query(
+            `INSERT INTO agents (user_id, slug, name, persona, budget_minor)
+             VALUES ($1, 'trade-test', 'Trade test', 'Patient.', 100000) RETURNING id`,
+            [USER],
+          )
+        ).rows[0].id as string;
+        const scan = (
+          await client.query(
+            `INSERT INTO agent_scans (user_id, agent_id, trigger, finished_at, outcome, briefing)
+             VALUES ($1, $2, 'manual', now(), 'trade', '{}') RETURNING id`,
+            [USER, simulated],
+          )
+        ).rows[0].id as string;
+        const proposal = {
+          userId: USER,
+          agentId: simulated,
+          scanId: scan,
+          kind: 'buy' as const,
+          payload: { symbol: 'INTC', quantity: '3', priceMinor: 11_250, priceAsOf: null, currency: 'USD' as const },
+          expiresAt: new Date(Date.now() + 3_600_000),
+          headline: 'Trade test proposes to buy 3 INTC at 112.50',
+          thesis: 'INTC fell 3.18% to 112.50.',
+          localized: { he: { headline: 'h', explanation: 'INTC fell 3.18% to 112.50.' } },
+          evidence: { scanId: scan },
+        };
+        const id = await queries.createTradeProposalIn(client, proposal);
+        // A retry after a lost reply answers the same proposal, and writes nothing more.
+        expect(await queries.createTradeProposalIn(client, proposal)).toBe(id);
+        const written = await client.query(
+          `SELECT p.kind, p.scan_id, p.payload, o.kind AS observation_kind, o.explanation, o.localized
+             FROM proposals p JOIN observations o ON o.id = p.observation_id
+            WHERE p.agent_id = $1`,
+          [simulated],
+        );
+        expect(written.rows).toEqual([
+          {
+            kind: 'buy',
+            scan_id: scan,
+            payload: proposal.payload,
+            observation_kind: 'agent_trade',
+            explanation: proposal.thesis,
+            localized: proposal.localized,
+          },
+        ]);
+
+        // A trade kind with no scan behind it is a trade nobody decided.
+        await client.query('SAVEPOINT no_scan');
+        await expect(
+          client.query(
+            `INSERT INTO proposals (user_id, agent_id, observation_id, kind, expires_at)
+             SELECT $1, $2, id, 'sell', now() FROM observations WHERE agent_id = $2`,
+            [USER, simulated],
+          ),
+        ).rejects.toThrow(/proposals_trade_has_scan|proposals_one_per_observation/);
+        await client.query('ROLLBACK TO SAVEPOINT no_scan');
+
+        // An agent's fill without its proposal is refused; with it, written.
+        const instrument = (
+          await client.query(
+            `INSERT INTO instruments (symbol, asset_class) VALUES ($1, 'equity') RETURNING id`,
+            [`TRD${randomUUID().slice(0, 8)}`.toUpperCase()],
+          )
+        ).rows[0].id as string;
+        const fill = (proposalId: string | null, key: string) =>
+          queries.insertFill(client, {
+            userId: USER,
+            agentId: simulated,
+            instrumentId: instrument,
+            side: 'buy',
+            quantity: 3n,
+            priceMinor: 11_250n,
+            notionalMinor: 33_750n,
+            feeMinor: 150n,
+            priceSource: 'quote',
+            quoteAsOf: new Date().toISOString(),
+            quoteDelaySeconds: 900,
+            source: 'agent',
+            proposalId,
+            idempotencyKey: key,
+          });
+        await client.query('SAVEPOINT no_proposal');
+        await expect(fill(null, 'no-proposal')).rejects.toThrow(/fills_agent_has_proposal/);
+        await client.query('ROLLBACK TO SAVEPOINT no_proposal');
+        await fill(id, `proposal:${id}`);
+      } finally {
+        await client.query('ROLLBACK');
+        client.release();
+      }
+    });
+  });
 });

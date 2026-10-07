@@ -10,7 +10,7 @@
 import type { AgentState, AgentView } from '@traders/shared';
 
 import { ApiRequestError } from '../api/client.ts';
-import { formatMoney, formatNumber } from '../i18n/format.ts';
+import { formatMoney, formatNumber, formatPercent } from '../i18n/format.ts';
 import { t } from '../i18n/index.ts';
 import { formatExactTime } from './relativeTime.ts';
 
@@ -99,7 +99,42 @@ export function tradeErrorMessage(error: unknown, fallback: string, currency = '
       return t('agents.trade.errors.archived');
     case 'budget_out_of_range':
       return t('agents.errors.budgetRange');
+    case 'price_far_from_agent':
+      return t('proposal.trade.errors.priceFarFromAgent', {
+        live: formatMoney(detail<number>(error, 'livePriceMinor'), currency),
+        agent: formatMoney(detail<number>(error, 'agentPriceMinor'), currency),
+        distance: formatPercent((detail<number>(error, 'distanceBps') ?? 0) / 100, 1),
+      });
+    case 'expired':
+      return t('proposal.trade.errors.expired');
+    case 'already_decided':
+      return t('proposal.trade.errors.alreadyDecided');
     default:
       return error.message;
+  }
+}
+
+/**
+ * Why approving an agent's trade was refused (D49), in the words of an approval:
+ * a proposal has no typed price to fall back on, and is tried again by Approve.
+ * Every other refusal reads as it does for a manual trade.
+ */
+export function approvalErrorMessage(error: unknown, fallback: string, currency = 'USD'): string {
+  if (!(error instanceof ApiRequestError)) return fallback;
+  switch (error.code) {
+    case 'market_closed':
+      return t('proposal.trade.errors.marketClosed', {
+        time: formatExactTime(detail<string>(error, 'nextOpen')),
+      });
+    case 'quote_too_old':
+      return t('proposal.trade.errors.quoteTooOld');
+    case 'quote_unavailable':
+      return t('proposal.trade.errors.quoteUnavailable');
+    case 'price_moved':
+      return t('proposal.trade.errors.priceMoved', {
+        price: formatMoney(detail<number>(error, 'livePriceMinor'), currency),
+      });
+    default:
+      return tradeErrorMessage(error, fallback, currency);
   }
 }
