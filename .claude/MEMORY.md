@@ -2927,6 +2927,18 @@ answer "what can I ask you?".
 2. Answers in the user's language - needs a decision amending guideline 1, which keeps `/ask` English.
 3. `/ask` in Telegram.
 
+**Web search is in question (the user, 2026-10-07):** the universe, its profiles, stored news and
+the agents' tools may already answer most questions. Decide by measuring - run the test set below
+with and without web search and keep it only if it answers questions the rest cannot. Without it,
+the largest prompt-injection surface goes too.
+
+**Before building:**
+- **A test set for the assistant**, like `/ask`'s 35-case set (#47) and run in CI: ordinary
+  questions, follow-ups, and attack cases - off-domain questions, "ignore your rules", a web page or
+  news text carrying instructions, "should I buy X?". It is how the guardrails are shown to hold.
+- **A cost measurement** on a few real questions once the account is funded; the assistant's daily
+  spend limit is set from it, not guessed.
+
 **Future task, not in the first version: long-term memory** - what the assistant keeps across
 conversations (preferences, what the user follows). Scope and storage to be decided when it starts.
 
