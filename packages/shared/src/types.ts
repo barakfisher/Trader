@@ -984,6 +984,61 @@ export interface Proposal {
   undoableUntil: string | null;
   decidedVia: DecisionSurface | null;
   createdAt: string;
+  /** The agent the proposal is for; the real portfolio's is the primary (D1). */
+  agentId: string;
+  agentName: string;
+  agentIsPrimary: boolean;
+  /** The scan that proposed a trade (migration 0044); null for every other kind. */
+  scanId: string | null;
+}
+
+/** The proposal kinds an agent's scan writes (migration 0044, D26). */
+export const TRADE_PROPOSAL_KINDS = ['buy', 'sell'] as const;
+export type TradeProposalKind = (typeof TRADE_PROPOSAL_KINDS)[number];
+
+export function isTradeProposalKind(kind: string): kind is TradeProposalKind {
+  return (TRADE_PROPOSAL_KINDS as readonly string[]).includes(kind);
+}
+
+/** A trade proposal's `payload`: what the agent proposed, at the price it saw (D47). */
+export interface TradeProposalPayload {
+  symbol: string;
+  /** Whole shares as a decimal string (guideline 4, D9). */
+  quantity: string;
+  /** The agent's price: the quote when its scan answered. */
+  priceMinor: number;
+  priceAsOf: string | null;
+  currency: 'USD';
+}
+
+/** *Approve* on a trade proposal: the trade at the live price, beside the agent's (D47). */
+export interface TradeApprovalPreview {
+  proposalId: string;
+  agentPriceMinor: number;
+  /** Signed distance of the live price from the agent's, in basis points. */
+  distanceBps: number;
+  /** The most the live price may be from the agent's for a preview at all. */
+  maxDistanceBps: number;
+  trade: TradePreview;
+}
+
+/** *Confirm*: the fill, written in the approval's transaction. */
+export interface TradeApprovalResult {
+  state: ProposalState;
+  fill: FillView;
+  cashMinor: number;
+  heldQuantity: string;
+}
+
+/** A refused approval (D49): the proposal stayed pending, and this is its record. */
+export interface ProposalAttempt {
+  surface: 'web' | 'telegram';
+  /** The refusal's code, e.g. `price_far_from_agent`, `market_closed`, `insufficient_cash`. */
+  reason: string;
+  agentPriceMinor: number;
+  livePriceMinor: number | null;
+  quoteAsOf: string | null;
+  at: string;
 }
 
 export interface ProposalsResponse {
@@ -1004,6 +1059,8 @@ export interface ProposalDetailResponse {
   proposal: Proposal;
   /** Newest first. Explains a state the user never set themselves. */
   transitions: ProposalTransition[];
+  /** Refused approvals of a trade proposal, newest first (D49). */
+  attempts: ProposalAttempt[];
 }
 
 /**

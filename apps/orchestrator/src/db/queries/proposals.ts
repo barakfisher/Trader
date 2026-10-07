@@ -1,4 +1,6 @@
 import type { LocalizedTexts } from '@traders/shared';
+import type { PoolClient } from 'pg';
+
 import { query, queryOne, transaction } from '../pool.js';
 
 export interface ProposalRow {
@@ -20,6 +22,12 @@ export interface ProposalRow {
   explanation: string | null;
   localized: LocalizedTexts;
   evidence: unknown;
+  /** Joined from the agent, so the inbox can say whose question it is. */
+  agent_id: string;
+  agent_name: string;
+  agent_is_primary: boolean;
+  /** The scan behind a trade proposal (migration 0044); null otherwise. */
+  scan_id: string | null;
 }
 
 export interface ProposalToCreate {
@@ -78,14 +86,19 @@ export async function createProposals(proposals: ProposalToCreate[]): Promise<st
 /** The columns every proposal read returns, joined to the finding behind it. */
 const PROPOSAL_COLUMNS = `p.id, p.user_id, p.observation_id, p.kind, p.payload, p.state,
        p.expires_at, p.snoozed_until, p.decided_at, p.decided_via, p.created_at,
-       o.severity, o.subject_ref, o.headline, o.explanation, o.localized, o.evidence`;
+       o.severity, o.subject_ref, o.headline, o.explanation, o.localized, o.evidence,
+       a.id AS agent_id, a.name AS agent_name, a.is_primary AS agent_is_primary, p.scan_id`;
+
+/** The joins `PROPOSAL_COLUMNS` reads from. */
+const PROPOSAL_FROM = `proposals p
+       JOIN observations o ON o.id = p.observation_id
+       JOIN agents a ON a.id = p.agent_id`;
 
 export function findProposal(userId: string, proposalId: string): Promise<ProposalRow | null> {
   return queryOne<ProposalRow>(
     `-- agent-blind: addressed by the proposal's own id.
      SELECT ${PROPOSAL_COLUMNS}
-       FROM proposals p
-       JOIN observations o ON o.id = p.observation_id
+       FROM ${PROPOSAL_FROM}
       WHERE p.user_id = $1 AND p.id = $2`,
     [userId, proposalId],
   );
@@ -126,8 +139,7 @@ export function listProposals(
   return query<ProposalRow>(
     `-- agent-blind: the inbox is the user's - every agent's questions in one place (§5.2).
      SELECT ${PROPOSAL_COLUMNS}
-       FROM proposals p
-       JOIN observations o ON o.id = p.observation_id
+       FROM ${PROPOSAL_FROM}
       WHERE p.user_id = $1
         ${filter}
       ORDER BY ${order}
@@ -141,8 +153,7 @@ export function listProposalsToExpire(limit = 500): Promise<ProposalRow[]> {
   return query<ProposalRow>(
     `-- agent-blind: the expiry sweep closes every account's and every agent's proposals.
      SELECT ${PROPOSAL_COLUMNS}
-       FROM proposals p
-       JOIN observations o ON o.id = p.observation_id
+       FROM ${PROPOSAL_FROM}
       WHERE p.state IN ('pending','snoozed')
         AND p.expires_at <= now()
       ORDER BY p.expires_at ASC
@@ -192,79 +203,89 @@ export interface TransitionResult {
  * and the proposal can never disagree about whether assent stands.
  */
 export function applyProposalTransition(transition: TransitionToApply): Promise<TransitionResult> {
-  return transaction(async (client) => {
-    const updated = await client.query(
-      `-- agent-blind: addressed by the proposal's own id.
-       UPDATE proposals
-          SET state = $1,
-              snoozed_until = $2,
-              decided_at = now(),
-              decided_via = $3,
-              updated_at = now()
-        WHERE id = $4
-          AND user_id = $5
-          AND state = $6
-        RETURNING id`,
-      [
-        transition.toState,
-        transition.snoozedUntil,
-        transition.surface,
-        transition.proposalId,
-        transition.userId,
-        transition.fromState,
-      ],
-    );
-    if (updated.rowCount === 0) return { applied: false, intentId: null };
+  return transaction((client) => applyProposalTransitionIn(client, transition));
+}
 
+/**
+ * The same transition inside the caller's transaction - the approval of a trade
+ * proposal, whose fill is written in the same one (D11, D47), so an approval
+ * without its fill, or a fill without its approval, can never be committed.
+ */
+export async function applyProposalTransitionIn(
+  client: PoolClient,
+  transition: TransitionToApply,
+): Promise<TransitionResult> {
+  const updated = await client.query(
+    `-- agent-blind: addressed by the proposal's own id.
+     UPDATE proposals
+        SET state = $1,
+            snoozed_until = $2,
+            decided_at = now(),
+            decided_via = $3,
+            updated_at = now()
+      WHERE id = $4
+        AND user_id = $5
+        AND state = $6
+      RETURNING id`,
+    [
+      transition.toState,
+      transition.snoozedUntil,
+      transition.surface,
+      transition.proposalId,
+      transition.userId,
+      transition.fromState,
+    ],
+  );
+  if (updated.rowCount === 0) return { applied: false, intentId: null };
+
+  await client.query(
+    `INSERT INTO proposal_transitions
+       (proposal_id, user_id, from_state, to_state, surface, actor_user_id,
+        evidence_snapshot, idempotency_key)
+     VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)`,
+    [
+      transition.proposalId,
+      transition.userId,
+      transition.fromState,
+      transition.toState,
+      transition.surface,
+      transition.actorUserId,
+      JSON.stringify(transition.evidenceSnapshot ?? {}),
+      transition.idempotencyKey,
+    ],
+  );
+
+  if (transition.revokeIntent) {
+    // Marked, never deleted - see migration 0014. The partial unique index
+    // allows one *live* intent per proposal, so revoking this one is what
+    // lets a later re-approval write its own row.
     await client.query(
-      `INSERT INTO proposal_transitions
-         (proposal_id, user_id, from_state, to_state, surface, actor_user_id,
-          evidence_snapshot, idempotency_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)`,
+      `-- agent-blind: addressed by the proposal's own id.
+       UPDATE intents
+          SET revoked_at = now(), revoked_via = $3
+        WHERE proposal_id = $1 AND user_id = $2 AND revoked_at IS NULL`,
+      [transition.proposalId, transition.userId, transition.surface],
+    );
+  }
+
+  let intentId: string | null = null;
+  if (transition.intent !== null) {
+    const intent = await client.query<{ id: string }>(
+      // The intent is the proposal's agent's, read in the same transaction.
+      `INSERT INTO intents (user_id, agent_id, proposal_id, kind, payload)
+       VALUES ($1, (SELECT agent_id FROM proposals WHERE id = $2::uuid), $2::uuid, $3, $4::jsonb)
+       RETURNING id`,
       [
-        transition.proposalId,
         transition.userId,
-        transition.fromState,
-        transition.toState,
-        transition.surface,
-        transition.actorUserId,
-        JSON.stringify(transition.evidenceSnapshot ?? {}),
-        transition.idempotencyKey,
+        transition.proposalId,
+        transition.intent.kind,
+        JSON.stringify(transition.intent.payload ?? {}),
       ],
     );
+    intentId = intent.rows[0]?.id ?? null;
+  }
 
-    if (transition.revokeIntent) {
-      // Marked, never deleted - see migration 0014. The partial unique index
-      // allows one *live* intent per proposal, so revoking this one is what
-      // lets a later re-approval write its own row.
-      await client.query(
-        `-- agent-blind: addressed by the proposal's own id.
-         UPDATE intents
-            SET revoked_at = now(), revoked_via = $3
-          WHERE proposal_id = $1 AND user_id = $2 AND revoked_at IS NULL`,
-        [transition.proposalId, transition.userId, transition.surface],
-      );
-    }
-
-    let intentId: string | null = null;
-    if (transition.intent !== null) {
-      const intent = await client.query<{ id: string }>(
-        // The intent is the proposal's agent's, read in the same transaction.
-        `INSERT INTO intents (user_id, agent_id, proposal_id, kind, payload)
-         VALUES ($1, (SELECT agent_id FROM proposals WHERE id = $2::uuid), $2::uuid, $3, $4::jsonb)
-         RETURNING id`,
-        [
-          transition.userId,
-          transition.proposalId,
-          transition.intent.kind,
-          JSON.stringify(transition.intent.payload ?? {}),
-        ],
-      );
-      intentId = intent.rows[0]?.id ?? null;
-    }
-
-    return { applied: true, intentId };
-  });
+  return { applied: true, intentId };
 }
 
 export interface TransitionRow {

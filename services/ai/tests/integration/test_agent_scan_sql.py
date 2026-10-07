@@ -36,6 +36,7 @@ from app.llm.base import (
     ToolCall,
 )
 from tests.integration.conftest import run_script
+from tests.integration.test_agent_tools_sql import NOW as QUOTED_AT
 from tests.integration.test_agent_tools_sql import ScriptedMarket
 
 FIXTURE_EMBEDDER = {"EMBEDDINGS_PROVIDER": "fixture"}
@@ -188,6 +189,9 @@ async def test_tools_run_and_a_sourced_trade_is_accepted(loaded: Engine, agent: 
         "symbol": "CCJ",
         "quantity": "3",
         "thesis": "CCJ trades at 54.32, inside what a patient buyer pays for uranium.",
+        # The agent's price, read at the scan's end, which the proposal carries (D47).
+        "price_minor": 5_432,
+        "price_as_of": QUOTED_AT.isoformat(),
     }
     assert [entry["role"] for entry in row.transcript] == ["assistant", "tool", "assistant"]
     assert row.transcript[1]["result"]["quotes"]["CCJ"]["price"] == "54.32"
@@ -220,6 +224,56 @@ async def test_the_server_checks_the_answer_whatever_the_model_said(
     result = await _scan(loaded, agent, ScriptedLLM(_answer(**fields)))
     assert result.outcome == "invalid_answer"
     assert any(reason in problem for problem in result.problems), result.problems
+
+
+async def test_a_buy_cash_cannot_cover_with_its_fee_is_invalid_with_the_amounts(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    # 18 x 54.32 = 977.76, plus the $1.50 minimum fee: 979.26 fits the 1000.00
+    # of cash; 19 x 54.32 = 1032.08 does not (D54, D55).
+    market = ScriptedMarket()
+    market.prices = {"CCJ": 5_432}
+    fits = await _scan(
+        loaded,
+        agent,
+        ScriptedLLM(_answer(decision="buy", symbol="CCJ", quantity="18", thesis="t")),
+        market,
+    )
+    assert fits.outcome == "trade", fits.problems
+
+    llm = ScriptedLLM(_answer(decision="buy", symbol="CCJ", quantity="19", thesis="t"))
+    short = await _scan(loaded, agent, llm, market)
+
+    assert short.outcome == "invalid_answer"
+    assert short.problems == ("buying 19 CCJ at 54.32 costs 1033.58 with the fee; cash is 1000.00",)
+    assert _stored(loaded, short.scan_id).answer["price_minor"] == 5_432
+    # The model's answer was well formed; the refusal is the server's, not a bad answer.
+    assert llm.verdicts == ["accepted"]
+
+
+async def test_the_thesis_may_state_the_quantity_it_proposes(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    market = ScriptedMarket()
+    market.prices = {"CCJ": 5_432}
+    llm = ScriptedLLM(
+        _answer(decision="buy", symbol="CCJ", quantity="7", thesis="קנייה של 7 מניות CCJ.")
+    )
+    result = await _scan(loaded, agent, llm, market)
+    assert result.outcome == "trade", result.problems
+    # Only the quantity it proposes: any other number is still a figure.
+    llm = ScriptedLLM(
+        _answer(decision="buy", symbol="CCJ", quantity="7", thesis="7 now, 8 next week.")
+    )
+    assert (await _scan(loaded, agent, llm, market)).problems == ("figures not in the evidence: 8",)
+
+
+async def test_a_trade_with_no_price_is_not_proposed(loaded: Engine, agent: ScanAgent) -> None:
+    result = await _scan(
+        loaded, agent, ScriptedLLM(_answer(decision="buy", symbol="CCJ", quantity="1", thesis="t"))
+    )
+    assert result.outcome == "invalid_answer"
+    assert result.problems == ("no USD price is available for CCJ",)
 
 
 async def test_prose_instead_of_json_is_an_invalid_answer(loaded: Engine, agent: ScanAgent) -> None:
@@ -325,3 +379,23 @@ def test_the_instructions_carry_the_persona_and_the_limits(agent: ScanAgent) -> 
     assert "A patient value investor." in prompt
     assert str(SCAN_STEP_LIMIT) in prompt
     assert '"decision"' in prompt
+    assert "Write the thesis in English" in prompt
+
+
+def test_the_thesis_is_asked_for_in_the_users_language(agent: ScanAgent) -> None:
+    from dataclasses import replace
+
+    assert "Write the thesis in Hebrew" in instructions(replace(agent, language="he"))
+
+
+def test_the_agent_carries_its_users_language(loaded: Engine, agent: ScanAgent) -> None:
+    with loaded.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO user_settings (user_id, language) VALUES (CAST(:u AS uuid), 'he') "
+                "ON CONFLICT (user_id) DO UPDATE SET language = 'he'"
+            ),
+            {"u": agent.user_id},
+        )
+    found = find_agent(loaded, agent.user_id, agent.agent_id)
+    assert found is not None and found.language == "he"

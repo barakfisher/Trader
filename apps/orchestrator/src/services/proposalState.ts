@@ -131,7 +131,11 @@ export type RefusalReason =
   | 'not_undoable'
   | 'undo_window_closed'
   | 'snooze_past_expiry'
-  | 'snooze_in_the_past';
+  | 'snooze_in_the_past'
+  // A trade proposal (D47, D48): approved through a preview at the live price,
+  // never by a bare approve, and never snoozed or undone.
+  | 'approve_with_preview'
+  | 'not_for_trades';
 
 export type Decision =
   | { outcome: 'applied'; from: ProposalState; to: ProposalState; snoozedUntil: Date | null }

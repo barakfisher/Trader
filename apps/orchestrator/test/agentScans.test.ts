@@ -47,6 +47,10 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
+  findTradableInstrument: vi.fn(async () => ({
+    id: 'i-intc', symbol: 'INTC', name: 'Intel', asset_class: 'equity', exchange: 'NMS', currency: 'USD', membership: 'screened',
+  })),
+  createTradeProposal: vi.fn(async () => 'p-trade'),
   getUser: vi.fn(async () => USER),
   getAgent: vi.fn(async (_u: string, id: string) =>
     id === PRIMARY ? agentRow({ id: PRIMARY, is_primary: true }) : id === AGENT ? agent : null,
@@ -81,7 +85,10 @@ const RESULT = {
 async function signedIn(scanAgent: (...args: unknown[]) => Promise<unknown>) {
   resetConfigForTests();
   const ai = createFakeAi();
-  Object.assign(ai, { scanAgent: vi.fn(scanAgent) });
+  Object.assign(ai, {
+    scanAgent: vi.fn(scanAgent),
+    marketCalendar: vi.fn(async () => ({ is_open: false, next_open: '2026-10-08T13:30:00Z' })),
+  });
   const app = createApp(loadConfig(ENV), ai);
   const login = await app.request('/auth/login', {
     method: 'POST',
@@ -103,8 +110,27 @@ describe('running a scan', () => {
     const { send, scanAgent } = await signedIn(async () => RESULT);
     const response = await send(`/agents/${AGENT}/scans`);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual(RESULT);
+    expect(await response.json()).toEqual({ ...RESULT, proposal_id: null });
     expect(scanAgent).toHaveBeenCalledWith(AGENT, { user_id: USER.id, trigger: 'manual' }, expect.anything());
+  });
+
+  it('writes the proposal a trade scan made, and returns its id beside the scan', async () => {
+    const trade = {
+      ...RESULT,
+      outcome: 'trade',
+      answer: {
+        decision: 'buy', symbol: 'INTC', quantity: '3', thesis: 'INTC fell 3.18% to 112.50.',
+        price_minor: 11_250, price_as_of: '2026-10-07T13:00:00Z', problems: [],
+      },
+    };
+    const { send } = await signedIn(async () => trade);
+    const response = await send(`/agents/${AGENT}/scans`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ...trade, proposal_id: 'p-trade' });
+    const queries = await import('../src/db/queries.js');
+    expect(queries.createTradeProposal).toHaveBeenCalledWith(
+      expect.objectContaining({ scanId: RESULT.scan_id, agentId: AGENT, kind: 'buy' }),
+    );
   });
 
   it.each([

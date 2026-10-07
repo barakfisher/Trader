@@ -944,6 +944,11 @@ class AgentScanAnswer(BaseModel):
         default=None, description="Whole shares as a decimal string (guideline 4)."
     )
     thesis: str | None = None
+    price_minor: int | None = Field(
+        default=None,
+        description="For a buy or sell: the agent's price (D47), the quote at the scan's end.",
+    )
+    price_as_of: datetime | None = None
     problems: list[str] = Field(default_factory=list)
 
 

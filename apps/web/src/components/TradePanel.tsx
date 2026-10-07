@@ -191,7 +191,7 @@ export function TradePanel({
   );
 }
 
-function PreviewSummary({ preview, children }: { preview: TradePreview; children: React.ReactNode }) {
+export function PreviewSummary({ preview, children }: { preview: TradePreview; children: React.ReactNode }) {
   const { t } = useTranslation();
   const money = (minor: number) => <bdi>{formatMoney(minor, preview.currency)}</bdi>;
   const rows: [string, React.ReactNode][] = [

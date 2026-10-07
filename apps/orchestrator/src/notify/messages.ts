@@ -86,6 +86,9 @@ export interface Messages {
   linkUsed: string;
   linkInvalid: string;
 
+  /** A trade proposal's headline (D51: the frame is the catalogue's; the thesis the model's). */
+  tradeProposalHeadline: (agent: string, side: 'buy' | 'sell', quantity: string, symbol: string, price: string) => string;
+
   narration: Record<RecordedNarrationState, NoticeText>;
   /** A state added to `NarrationState` without words here still says something true. */
   narrationFallback: NoticeText;
@@ -126,6 +129,8 @@ const en: Messages = {
   refusalReplies: {
     not_undoable: 'Only an approval can be undone.',
     already_decided: 'This was already decided — open the app to see how.',
+    approve_with_preview: 'Trades are approved in the app, at the live price.',
+    not_for_trades: 'A trade can only be approved or rejected.',
   },
   undoTooLate: (seconds) => `Too late to undo — approvals can be undone for ${seconds} seconds.`,
   outcomeLines: {
@@ -154,6 +159,9 @@ const en: Messages = {
   chatTaken: 'This chat is already connected to another account.',
   linkUsed: 'That link has already been used. Generate a new one.',
   linkInvalid: 'That link is not valid or has expired. Generate a new one.',
+
+  tradeProposalHeadline: (agent, side, quantity, symbol, price) =>
+    `${agent} proposes to ${side} ${quantity} ${symbol} at ${price}`,
 
   narration: {
     narrating: {
@@ -251,6 +259,8 @@ const he: Messages = {
   refusalReplies: {
     not_undoable: 'אפשר לבטל רק אישור.',
     already_decided: 'כבר הוכרע — פתחו את האפליקציה כדי לראות איך.',
+    approve_with_preview: 'עסקאות מאשרים באפליקציה, במחיר העדכני.',
+    not_for_trades: 'עסקה אפשר רק לאשר או לדחות.',
   },
   undoTooLate: (seconds) => `מאוחר מדי לבטל — אפשר לבטל אישור רק בתוך ${ltr(seconds)} שניות.`,
   outcomeLines: {
@@ -278,6 +288,9 @@ const he: Messages = {
   chatTaken: 'הצ׳אט הזה כבר מחובר לחשבון אחר.',
   linkUsed: 'בקישור הזה כבר השתמשו. צרו קישור חדש.',
   linkInvalid: 'הקישור הזה לא תקף או שפג תוקפו. צרו קישור חדש.',
+
+  tradeProposalHeadline: (agent, side, quantity, symbol, price) =>
+    `${isolated(agent)} מציע ${side === 'buy' ? 'לקנות' : 'למכור'} ${ltr(quantity)} ${ltr(symbol)} ב־${ltr(price)}`,
 
   narration: {
     narrating: {

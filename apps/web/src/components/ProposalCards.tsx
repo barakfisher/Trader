@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { Link } from '@tanstack/react-router';
 import { Undo2 } from 'lucide-react';
 
-import type { Proposal, ProposalAction } from '@traders/shared';
+import { isTradeProposalKind, type Proposal, type ProposalAction } from '@traders/shared';
 
 import { useTranslation } from '../i18n/index.ts';
 import { isUrgent, snoozeDescription, timeLeft } from '../lib/proposalCountdown.ts';
@@ -13,6 +13,7 @@ import { undoSecondsLeft } from '../lib/undoWindow.ts';
 import { SNOOZE_HOURS } from '../stores/ProposalsStore.ts';
 import { useStore } from '../stores/context.tsx';
 import { EvidenceDrawer } from './EvidenceDrawer.tsx';
+import { TradeProposalCard } from './TradeProposalCard.tsx';
 import { Button, Card } from './ui.tsx';
 
 /**
@@ -133,6 +134,22 @@ export const ProposalCard = observer(function ProposalCard({
   baseCurrency: string;
   /** False on the proposal's own page, where the headline would link to itself. */
   linkToPage?: boolean;
+}) {
+  // A trade is approved at the live price, and has no snooze (D47, D48).
+  if (isTradeProposalKind(proposal.kind)) {
+    return <TradeProposalCard proposal={proposal} linkToPage={linkToPage} />;
+  }
+  return <QuestionCard proposal={proposal} baseCurrency={baseCurrency} linkToPage={linkToPage} />;
+});
+
+const QuestionCard = observer(function QuestionCard({
+  proposal,
+  baseCurrency,
+  linkToPage,
+}: {
+  proposal: Proposal;
+  baseCurrency: string;
+  linkToPage: boolean;
 }) {
   const { proposals } = useStore();
   const { t, i18n } = useTranslation();

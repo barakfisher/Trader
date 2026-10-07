@@ -876,6 +876,58 @@ Also settled while measuring, not needing a decision:
 - **`llm_calls.agent` becomes `purpose` before it gains `agent_id`** (§11), expand then contract
   (decision 101 of `.claude/MEMORY.md`), so the pods running during the migration keep writing.
 
+### Added 2026-10-07, building PR 5
+
+Measured first (§14.3): the account was funded ($10) and three real scans were run on Sonnet 5.5
+against a test agent. Asked one at a time; the user chose every recommendation.
+
+**D55 - A buy the agent cannot pay for is an invalid answer, checked at the end of the scan.** D54
+left the cash check to the proposal. It runs as the scan's last step instead, at the quote of that
+moment - the agent's price the proposal then carries (D47) - with D6's fee: when `notional + fee`
+exceeds cash, the scan is stored as `invalid_answer` with both amounts ("buying 19 CCJ at 54.32
+costs 1033.58 with the fee; cash is 1000.00") and no proposal is written. The same treatment as a
+sell of more than is held (D14); nothing is resized (§5.1). Checked in the scan rather than when the
+orchestrator writes the proposal seconds later so that the stored outcome is always the true one:
+a `trade` that silently proposed nothing would be the one row the *Decisions* tab got wrong. The
+model's verdict stays `accepted` - the answer was well formed; the refusal is the server's.
+*Rejected:* one more turn for the model ("you can afford at most 8"), a correction loop for a case
+the briefing's cash already makes rare; shrinking the quantity to fit (§5.1).
+
+**D56 - PR 5 is two PRs: the money path, then Telegram.** 5a: migration 0044, the scan's proposal,
+Approve (a preview at the live price) / Confirm / Reject on the dashboard and the proposal's page,
+refused attempts recorded and shown. 5b: Telegram - *Approve* replies with the preview and a
+*Confirm* button (D47) - and the consolidated view's pending proposals (D35). Until 5b, a Telegram
+*Approve* on a trade is refused with "trades are approved in the app" (the trade kinds never reach
+Telegram in 5a; the refusal is for a surface that sends one anyway). *Rejected:* one PR - twice
+the review, and the money path waiting on messaging plumbing.
+
+**D57 - News on demand, as its own PR after 5a.** Measured: every one of the three scans looked
+for news on the day's mover it considered and found none, because news is collected only for
+followed instruments; a persona that checks the news first can then never act. The tool fetches a
+symbol's recent headlines through `NewsProvider` once when nothing is stored, and caches them for
+every agent. *Rejected:* inside 5a (a larger money-path PR); leaving it until the schedule (PR 7).
+
+**D58 - The validator sources a window the evidence names, and the thesis's own quantity.**
+Asked when real scans on the branch were refused for "a 60-day high" (two of five) and a Hebrew
+thesis for "2 מניות" (its own quantity). A whole number written straight before a unit of time -
+"60-day", "over 5 days", "60 יום" - is sourced when a key in the evidence names that window
+(`"60d"`, as the history tool labels its changes); a window no key names is still a figure, so
+"its worst day in 14 months" is still refused. A buy's or sell's thesis may state the quantity it
+proposes; any other number is checked as ever. *Rejected:* exempting every number before a time
+unit (it let "14 months" through - a claim about history nobody supplied, which the existing test
+caught); waiting for the news PR (half the real scans refused until then).
+
+Also settled while building, not needing a decision:
+- **An approved trade writes no intent.** The fill is the ledger row and carries the proposal;
+  an intent would record the same assent twice. `rebalance` approvals still write theirs.
+- **Several pending trade proposals per agent are allowed.** Each *Confirm* re-checks cash under
+  the agent's row lock, so two pending buys cannot overspend; the second is refused, and recorded.
+- **The scan link lives on the proposal** (`proposals.scan_id`, unique), not on `agent_scans`: the
+  scan's row stays as the scan wrote it, and a trade kind without a scan is refused by CHECK.
+- **The thesis is the observation's explanation in every language**; the headline is the
+  catalogue's frame in each (`notify/messages.ts`), so a Hebrew reader sees a Hebrew frame around
+  the thesis the model wrote in Hebrew (D51).
+
 ---
 
 ## 11. Measured, 2026-10-04 (read-only, live compose database)
@@ -1066,6 +1118,11 @@ fee, cash after; preview, then confirm), *Holdings* with *Sell* from real rows, 
 timeline with the balance after each movement, and *Add cash* (`POST /agents/:id/top-ups`);
 English and Hebrew.
 
+**PR 5b — Telegram (D47, D56).** *Approve* replies with the preview and a *Confirm* button; the
+consolidated view's pending proposals (D35).
+
+**News on demand (D57).** A symbol's recent headlines fetched once when none are stored.
+
 **Then: handoff** (five merged PRs).
 
 **PR 6 — The consolidated holdings view (§4.3, D17, D18, D32-D35).** One row per instrument across
@@ -1142,7 +1199,9 @@ transcript. One hand-written loop (D53). The answer is checked and stored; it pr
 `POST /agents/:id/scans` runs one. Built and tested with a scripted model; **real scans on the funded
 account are measured before PR 5** - their cost replaces §14.1's assumption.
 
-**PR 5 — The trade proposal and its approval (migration 0044; D26, D47-D49, D51).** `buy` / `sell`
+**PR 5a — The trade proposal and its approval, on the dashboard (migration 0044; D26, D47-D49,
+D51, D55, D56).** *Split by D56; PR 5b is Telegram and the consolidated view's pending proposals.*
+**PR 5 as first planned — The trade proposal and its approval (migration 0044; D26, D47-D49, D51).** `buy` / `sell`
 proposal kinds, never on the primary (decision 104's allowlist and trigger unchanged);
 `CHECK (source <> 'agent' OR proposal_id IS NOT NULL)` on `fills`. A scan's answer becomes an
 observation with the thesis in the user's language and a proposal with the agent's quote, TTL from
@@ -1150,6 +1209,11 @@ the next open (D4). Approve previews at the live price (refused beyond 300 bps o
 Confirm fills through `executeFill` in the approval's transaction; Approve and Reject only; a
 refused attempt leaves it pending and is recorded. Dashboard and Telegram; the consolidated view's
 pending proposals (D35). `CLAUDE.md` guideline 1 amended for the thesis.
+
+**PR 5b — Telegram (D47, D56).** *Approve* replies with the preview and a *Confirm* button; the
+consolidated view's pending proposals (D35).
+
+**News on demand (D57).** A symbol's recent headlines fetched once when none are stored.
 
 **Then: handoff** (five merged PRs).
 
@@ -1160,3 +1224,32 @@ and the waiting-for-a-persona state; English and Hebrew.
 **PR 7 — The schedule.** Each agent's scans entered through `POST /internal/runs` at its chosen
 times on the exchange calendar, with a run key per agent and slot; the kind CronJob and its
 contract test; a high-severity `SELL` of a held position delivered through quiet hours (D5).
+
+### 14.3 Measured, 2026-10-07 (live compose database at `0043_agent_scans`)
+
+- **The account is funded** ($10, the user's act, D44); OpenRouter reports `is_free_tier: false`.
+  The agents' model was chosen on the Admin page: `anthropic/claude-sonnet-5.5`. Narration stays
+  on the free route for now, so task 17's re-measurement measures the model it was about.
+- **Three real scans** of a test agent (a cautious large-cap persona, $10,000), 2026-10-07:
+
+  | Outcome | Tool calls | Cost | Time |
+  |---|---|---|---|
+  | `no_trade` | 2 | $0.0146 | 7 s |
+  | `no_trade` | 8 | $0.0775 | 16 s |
+  | `invalid_answer` | 2 | $0.0159 | 6 s |
+
+  **$0.036 a scan on average**, against §14.1's assumed $0.04-0.38: each call sent 2,500-5,600
+  prompt tokens, not the ~45,000 assumed, and no caching was used. This replaces §14.1's figure in
+  D44's and D46's estimates.
+- **The reasoning followed the persona** each time: INTC down 3.18% at 112.50, news looked for,
+  none found, nothing done. **No news was found for any mover** - news is collected only for
+  followed instruments (D57).
+- **The invalid answer was a false positive:** "a 60-day range" - the evidence validator read the
+  window length as a figure not in the evidence. Fixed by D58.
+- **On the PR 5a branch, against a copy of the live database** (the test agent given a persona
+  that always buys): five more real scans - two refused for "60-day" and one for its own quantity
+  in Hebrew before D58, then two `trade` scans that wrote proposals (buy 2 NVDA at 239.24, one
+  thesis in English and one in Hebrew), each $0.014-0.040. The proposal expired at the next open
+  plus 60 minutes; *Approve* before the open was refused as `market_closed` and recorded.
+- **The Admin page showed "Claude Sonnet 5.5" selected for agents while nothing was chosen** and
+  scans ran on the free route: a select with no matching option shows its first. Recorded as debt.

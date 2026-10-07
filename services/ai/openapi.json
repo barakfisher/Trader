@@ -20,6 +20,30 @@
             ],
             "title": "Decision"
           },
+          "price_as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price As Of"
+          },
+          "price_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a buy or sell: the agent's price (D47), the quote at the scan's end.",
+            "title": "Price Minor"
+          },
           "problems": {
             "items": {
               "type": "string"

@@ -57,6 +57,7 @@ vi.mock('../src/db/queries.js', () => ({
   listProposals: vi.fn(async () => []),
   findProposal: vi.fn(async () => null),
   listProposalTransitions: vi.fn(async () => []),
+  listProposalAttempts: vi.fn(async () => []),
   applyProposalTransition: vi.fn(async () => ({ applied: true, intentId: 'intent-1' })),
   createProposals: vi.fn(async () => []),
   listProposalsToExpire: vi.fn(async () => []),

@@ -58,6 +58,10 @@ function proposal(overrides: Partial<Proposal> = {}): Proposal {
     decidedAt: null,
     undoableUntil: null,
     decidedVia: null,
+    agentId: 'agent-main',
+    agentName: 'Main portfolio',
+    agentIsPrimary: true,
+    scanId: null,
     createdAt: '2026-09-30T05:20:00.000Z',
     ...overrides,
   };
@@ -132,7 +136,7 @@ describe('the inbox', () => {
 
 describe("a proposal's page", () => {
   it('decides an open proposal through the same request as the inbox', async () => {
-    const detail: ProposalDetailResponse = { proposal: proposal(), transitions: [] };
+    const detail: ProposalDetailResponse = { proposal: proposal(), transitions: [], attempts: [] };
     serve({ '/proposals/p-open': detail });
     post.mockResolvedValue({ outcome: 'applied', state: 'rejected', intentId: null });
 
@@ -151,6 +155,7 @@ describe("a proposal's page", () => {
         { from: 'pending', to: 'snoozed', surface: 'telegram', byUser: true, at: '2026-09-28T09:00:00.000Z' },
         { from: 'snoozed', to: 'expired', surface: 'system', byUser: false, at: '2026-09-29T05:20:00.000Z' },
       ],
+      attempts: [],
     };
     serve({ '/proposals/p-expired': detail });
 
@@ -174,5 +179,115 @@ describe("a proposal's page", () => {
     renderAt('/proposals/p-open');
     expect(await screen.findByText('boom')).toBeTruthy();
     expect(screen.queryByText('No such proposal')).toBeNull();
+  });
+});
+
+describe("an agent's trade proposal", () => {
+  const TRADE = proposal({
+    id: 'p-trade',
+    kind: 'buy',
+    payload: { symbol: 'INTC', quantity: '3', priceMinor: 11_250, priceAsOf: null, currency: 'USD' },
+    severity: 'notable',
+    subjectRef: 'instrument:INTC',
+    headline: 'Value proposes to buy 3 INTC at 112.50',
+    explanation: 'INTC fell 3.18% to 112.50 with no news against it.',
+    evidence: {},
+    agentId: 'agent-value',
+    agentName: 'Value',
+    agentIsPrimary: false,
+    scanId: 'scan-1',
+  });
+  const PREVIEW = {
+    proposalId: 'p-trade',
+    agentPriceMinor: 11_250,
+    distanceBps: 120,
+    maxDistanceBps: 300,
+    trade: {
+      symbol: 'INTC',
+      name: 'Intel',
+      side: 'buy',
+      quantity: '3',
+      priceSource: 'quote',
+      priceMinor: 11_385,
+      quoteAsOf: '2026-10-07T14:45:00.000Z',
+      quoteDelaySeconds: 900,
+      notionalMinor: 34_155,
+      feeMinor: 150,
+      cashChangeMinor: -34_305,
+      cashMinor: 1_000_000,
+      cashAfterMinor: 965_695,
+      heldQuantity: '0',
+      heldAfterQuantity: '3',
+      currency: 'USD',
+      warnings: [],
+    },
+  };
+
+  it('approves through a preview at the live price, then confirms at the price it showed', async () => {
+    serve({ '/proposals/p-trade': { proposal: TRADE, transitions: [], attempts: [] } });
+    post.mockImplementation((path: string) =>
+      Promise.resolve(
+        path.endsWith('/preview')
+          ? PREVIEW
+          : {
+              state: 'approved',
+              fill: {
+                id: 'f-1', symbol: 'INTC', side: 'buy', quantity: '3', priceMinor: 11_385, notionalMinor: 34_155,
+                feeMinor: 150, currency: 'USD', priceSource: 'quote', quoteAsOf: null, quoteDelaySeconds: 900,
+                source: 'agent', createdAt: '2026-10-07T15:00:00.000Z',
+              },
+              cashMinor: 965_695,
+              heldQuantity: '3',
+            },
+      ),
+    );
+
+    renderAt('/proposals/p-trade');
+
+    expect(await screen.findByText('INTC fell 3.18% to 112.50 with no news against it.')).toBeTruthy();
+    expect(screen.getByText(/the agent's price \$112\.50/)).toBeTruthy();
+    // A trade has no snooze and no undo (D48).
+    expect(screen.queryByRole('button', { name: /Snooze/ })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/proposals/p-trade/preview', {}));
+    expect(await screen.findByText(/the live price is \+1\.2% from it/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm: pay $343.05' }));
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/proposals/p-trade/confirm', { shownPriceMinor: 11_385 }),
+    );
+    expect(await screen.findByText('Bought 3 INTC at $113.85, fee $1.50.')).toBeTruthy();
+  });
+
+  it("says why an approval was refused, and the page lists each refused try", async () => {
+    serve({
+      '/proposals/p-trade': {
+        proposal: TRADE,
+        transitions: [],
+        attempts: [
+          {
+            surface: 'web', reason: 'price_far_from_agent', agentPriceMinor: 11_250, livePriceMinor: 11_700,
+            quoteAsOf: null, at: '2026-10-07T14:00:00.000Z',
+          },
+        ],
+      },
+    });
+    post.mockRejectedValue(
+      new ApiRequestError('far', 422, 'price_far_from_agent', {
+        agentPriceMinor: 11_250,
+        livePriceMinor: 11_700,
+        distanceBps: 400,
+      }),
+    );
+
+    renderAt('/proposals/p-trade');
+
+    expect(await screen.findByText(/The price had moved more than 3% from the agent's/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    expect(await screen.findByText(/The price is \$117\.00, \+4\.0% from the agent's \$112\.50/)).toBeTruthy();
+    // Still open: it can be tried again, or rejected.
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
   });
 });

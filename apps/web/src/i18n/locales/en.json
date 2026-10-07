@@ -416,7 +416,37 @@
     "undo": "Undo approval ({{seconds}}s)",
     "approve": "Approve",
     "snooze": "Snooze {{hours}}h",
-    "reject": "Reject"
+    "reject": "Reject",
+    "trade": {
+      "agentPrice": "the agent's price {{price}}",
+      "thesis": "Why the agent proposes it",
+      "paperOnly": "A paper trade: approving it records a fill in the agent's simulated account. No order is placed.",
+      "distance": "The agent decided at {{agent}}; the live price is {{distance}} from it.",
+      "previewFailed": "The live price could not be checked. Try again.",
+      "confirmFailed": "The trade could not be recorded. Try again.",
+      "filled": {
+        "buy": "Bought {{quantity}} {{symbol}} at {{price}}, fee {{fee}}.",
+        "sell": "Sold {{quantity}} {{symbol}} at {{price}}, fee {{fee}}."
+      },
+      "inFlight": {
+        "preview": "Checking the live price…",
+        "confirm": "Recording…"
+      },
+      "confirm": {
+        "buy": "Confirm: pay {{total}}",
+        "sell": "Confirm: receive {{total}}"
+      },
+      "cancel": "Cancel",
+      "errors": {
+        "priceFarFromAgent": "The price is {{live}}, {{distance}} from the agent's {{agent}} - more than 3%. The agent decided at a price that no longer holds: reject it, or try again later.",
+        "expired": "This proposal has expired.",
+        "alreadyDecided": "This proposal has already been decided.",
+        "marketClosed": "The market is closed. It opens {{time}}: approve it then, before the proposal expires.",
+        "quoteTooOld": "The latest price is more than 30 minutes old. Try again in a moment.",
+        "quoteUnavailable": "No price is available right now. Try again in a moment.",
+        "priceMoved": "The price moved to {{price}} since the preview. Approve again to see the new figures."
+      }
+    }
   },
   "summary": {
     "totalValue": "Total value",
@@ -733,7 +763,22 @@
     "subjectPage": "{{symbol}}’s page",
     "subjectPageNote": " - its price, its other findings and its news.",
     "trail": "What happened",
-    "proposed": "Proposed"
+    "proposed": "Proposed",
+    "attempts": "Approvals that were refused",
+    "attemptPrices": "the agent's price {{agent}}, live {{live}}",
+    "attemptAgentPrice": "the agent's price {{agent}}, no live price",
+    "attemptReasons": {
+      "price_far_from_agent": "The price had moved more than 3% from the agent's",
+      "market_closed": "The market was closed",
+      "quote_too_old": "The latest price was too old",
+      "quote_unavailable": "No price was available",
+      "price_moved": "The price moved between the preview and the confirm",
+      "insufficient_cash": "Not enough cash for the trade and its fee",
+      "insufficient_holding": "The agent no longer held enough shares",
+      "not_tradable": "The instrument could not be traded",
+      "agent_archived": "The agent was archived",
+      "other": "Refused"
+    }
   },
   "settings": {
     "title": "Settings",

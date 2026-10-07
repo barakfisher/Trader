@@ -25,7 +25,15 @@ different number:
     precision the writer chose, so "8.5%" matches -0.08502 but "8.6%" does not;
   * an unsigned mention - "fell 8.5%" drops the minus that "-8.5%" carries;
   * numbers quoted from evidence strings, such as a headline containing "20-year"
-    or a date containing 2026.
+    or a date containing 2026;
+  * a window the evidence names in a key: tools label their windows as keys
+    (`"60d": null`, `"5d": "5.29"`), which hold no number to match, and two of
+    four real scans were refused for "a 60-day range" (2026-10-07). So a whole
+    number written straight before a unit of time - "60-day", "over 5 days",
+    "60 יום" - is sourced when a key names that window (`60d`). A window no key
+    names is still a figure: "its worst day in 14 months" is a claim about
+    history nobody supplied. The figure a window qualifies - "up 5.29% over 5
+    days" - is checked as ever.
 
 Everything else is unsourced, including a figure that is merely plausible.
 """
@@ -65,6 +73,22 @@ _RATIO_MARKERS = ("pct", "ratio", "weight", "drift")
 _PERCENT_AFTER = re.compile(r" ?%")
 
 _ISO_DATE_PREFIX = re.compile(r"^(\d{4})-(\d{2})-(\d{2})(?:[T ]|$)")
+
+#: A unit of time straight after a number, joined by a hyphen, a maqaf or one
+#: space - "60-day", "52 weeks", "20 ימי" - captured as its key letter (d, w, m,
+#: y). English and Hebrew, the languages a thesis is written in (D51).
+_WINDOW_UNITS = {
+    "d": r"(?:trading[- ])?days?|sessions?|יום|ימים|ימי",
+    "w": r"weeks?|שבוע|שבועות",
+    "m": r"months?|חודש|חודשים",
+    "y": r"years?|שנה|שנים",
+}
+_WINDOW_AFTER = {
+    unit: re.compile(rf"(?:-|\u05be| )(?:{words})(?![a-z])")
+    for unit, words in _WINDOW_UNITS.items()
+}
+#: A key naming a window: "5d", "60d", "52w", "change_20d".
+_WINDOW_KEY = re.compile(r"(?:^|_)(\d{1,3})([dwmy])$")
 
 
 def _to_decimal(value: object) -> Decimal | None:
@@ -200,10 +224,36 @@ def _supported(written: Decimal, places: int, sourced: set[Decimal]) -> bool:
     return any(abs(candidate - written) <= tolerance for candidate in sourced)
 
 
+def named_windows(evidence: object) -> set[tuple[int, str]]:
+    """The windows the evidence's keys name, as (length, unit): `{"60d": ...}` is (60, "d")."""
+    found: set[tuple[int, str]] = set()
+    if isinstance(evidence, Mapping):
+        for key, value in evidence.items():
+            match = _WINDOW_KEY.search(str(key))
+            if match:
+                found.add((int(match.group(1)), match.group(2)))
+            found |= named_windows(value)
+    elif isinstance(evidence, Iterable) and not isinstance(evidence, str | bytes):
+        for item in evidence:
+            found |= named_windows(item)
+    return found
+
+
+def _is_named_window(token: str, text: str, end: int, windows: set[tuple[int, str]]) -> bool:
+    """A window's length - "60-day" - that a key in the evidence names."""
+    if not token.isdigit():
+        return False
+    return any(
+        (int(token), unit) in windows and pattern.match(text, end) is not None
+        for unit, pattern in _WINDOW_AFTER.items()
+    )
+
+
 def unsourced_figures(text: str, evidence: Mapping[str, object]) -> list[str]:
     """Figures in `text` that the evidence does not support, in order of appearance."""
     sourced = sourced_values(evidence)
     as_percent = sourced_values(evidence, percent=True)
+    windows = named_windows(evidence)
     offenders: list[str] = []
 
     for match in _NUMBER_PATTERN.finditer(text):
@@ -212,6 +262,8 @@ def unsourced_figures(text: str, evidence: Mapping[str, object]) -> list[str]:
         if written is None:
             continue
         places = -written.as_tuple().exponent if written.as_tuple().exponent < 0 else 0
+        if _is_named_window(token, text, match.end(), windows):
+            continue
         is_percent = _PERCENT_AFTER.match(text, match.end()) is not None
         if not _supported(written, places, as_percent if is_percent else sourced):
             offenders.append(token)

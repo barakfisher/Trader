@@ -47,6 +47,7 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
     # portfolio, so 0036 refuses while one exists.
     "0036_agents": (
         "agents holds non-primary agents",
+        "DELETE FROM observations WHERE agent_id IN (SELECT id FROM agents WHERE NOT is_primary); "
         "DELETE FROM agents WHERE NOT is_primary",
     ),
     # Fills and top-ups are the ledger's history (D23); opening deposits are
@@ -60,6 +61,17 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
     "0042_agent_scan_inputs": (
         "llm_calls holds agent_scan calls",
         "DELETE FROM llm_calls WHERE purpose = 'agent_scan'",
+    ),
+    # A trade proposal without its scan is what 0044's CHECK forbids, so the
+    # downgrade refuses; clearing it takes the agent's fills with it (D23).
+    "0044_trade_proposals": (
+        "proposals holds trade proposals",
+        "ALTER TABLE cash_movements DISABLE TRIGGER USER; ALTER TABLE fills DISABLE TRIGGER USER; "
+        "DELETE FROM cash_movements WHERE fill_id IN "
+        "(SELECT id FROM fills WHERE proposal_id IS NOT NULL); "
+        "DELETE FROM fills WHERE proposal_id IS NOT NULL; "
+        "ALTER TABLE cash_movements ENABLE TRIGGER USER; ALTER TABLE fills ENABLE TRIGGER USER; "
+        "DELETE FROM proposals WHERE kind IN ('buy', 'sell')",
     ),
 }
 
