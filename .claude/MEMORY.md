@@ -388,7 +388,7 @@ job, approved by the user 2026-09-28) in #76, and task 5 (quotes carry asset cla
 the PR after that. Task 7 (server state in TanStack Query) was done across #90-#92 and the topics PR
 that closed it, and task 6 (a screen for `/ask`) in M6 PR 10. That queue emptied at M8's close.
 
-**The post-M8 sweep (2026-10-01)** refilled it as tasks 8-15 - **all done by #140; the queue is empty again** (task 8, one question per standing
+**The post-M8 sweep (2026-10-01)** refilled it as tasks 8-15 - **all done by #140**; task 16 was added 2026-10-07 (task 8, one question per standing
 finding, became decision 92 when measured; task 9 is decision 93; task 10 found a latent cost-currency bug), approved by the user in that order,
 with the same grant as M8 (PR, merge on green, verify on `main` by content, rebuild compose and
 kind). It was measured on compose before it was written: the BTC-USD drift was proposed **7 days
@@ -400,6 +400,7 @@ strings and left-to-right assumptions before designing it.
 
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
+| 16 | **Scan frequency that follows the market, set on the Admin page** (the user, 2026-10-07) | — | M | **Measure first:** from `runs` and `observations`, how many findings each scan kind produces in US market hours, outside them and at weekends; that decides whether a change is worth making. The proposal measured against: every 15 minutes while NYSE is open (the exchange calendar), hourly otherwise (crypto, late data). **Then the Admin page setting**, audited like the model choice (D43): the interval in and out of market hours. Design question to settle first: the schedule lives in two places - the kind CronJobs (`infra/k8s/base/cronjobs.yaml`, fixed cron strings) and the orchestrator's in-process scheduler on compose - so a setting means the trigger fires often and the run decides from the setting whether it is due (idempotent by run key, guideline 8), rather than rewriting cron strings. Done when both environments follow the setting and a test pins in-hours and out-of-hours |
 
 **Not in the queue, and why** - so they are not added back by the next sweep:
 - *Everyday-word company names* ("Apple" the fruit): the user deferred it to a dedicated PR after
