@@ -43,6 +43,8 @@ from app.corpus.retrieval import hybrid_search
 from app.corpus.vector_store import VectorStore
 from app.llm.base import ToolSpec
 from app.models import BackfillInstrument
+from app.news.entities import InstrumentRef
+from app.news.on_demand import NewsOnDemand
 from app.providers.registry import MarketDataService
 from app.topics.resolution import resolve_topic
 
@@ -80,6 +82,8 @@ class ToolContext:
     user_id: str
     agent_id: str
     now: datetime
+    #: Fetches a symbol's news before `get_news` reads it (D57); None reads only what is stored.
+    news: NewsOnDemand | None = None
 
 
 Handler = Callable[[ToolContext, Mapping[str, Any]], Awaitable[dict[str, Any]]]
@@ -109,6 +113,7 @@ class Listing:
     currency: str
     exchange: str | None
     tradable: bool
+    asset_class: str = "unknown"
 
 
 def find_listing(engine: Engine, symbol: str) -> Listing | None:
@@ -119,7 +124,8 @@ def find_listing(engine: Engine, symbol: str) -> Listing | None:
         row = connection.execute(
             text(
                 """
-                SELECT i.id::text AS id, i.symbol, i.name, i.currency, i.exchange, p.membership
+                SELECT i.id::text AS id, i.symbol, i.name, i.currency, i.exchange, i.asset_class,
+                       p.membership
                   FROM instruments i
                   LEFT JOIN instrument_profiles p ON p.instrument_id = i.id
                  WHERE i.symbol = :symbol
@@ -136,6 +142,7 @@ def find_listing(engine: Engine, symbol: str) -> Listing | None:
         currency=row.currency,
         exchange=row.exchange,
         tradable=row.membership not in (None, "dropped") and row.currency.upper() == "USD",
+        asset_class=row.asset_class,
     )
 
 
@@ -332,6 +339,16 @@ async def get_news(context: ToolContext, arguments: Mapping[str, Any]) -> dict[s
     listing = find_listing(context.engine, symbol)
     if listing is None:
         return _unknown(symbol)
+    if context.news is not None:
+        await context.news.refresh(
+            InstrumentRef(
+                symbol=listing.symbol,
+                name=listing.name,
+                asset_class=listing.asset_class,
+                instrument_id=listing.instrument_id,
+            ),
+            context.now,
+        )
     with context.engine.connect() as connection:
         rows = connection.execute(
             text(
@@ -363,7 +380,7 @@ async def get_news(context: ToolContext, arguments: Mapping[str, Any]) -> dict[s
         **(
             {}
             if articles
-            else {"note": "no stored news; news is collected only for followed instruments"}
+            else {"note": f"no news names {symbol} in its headline in the last {days} days"}
         ),
     }
 
@@ -561,6 +578,7 @@ def scan_context(
     user_id: str,
     agent_id: str,
     now: datetime | None = None,
+    news: NewsOnDemand | None = None,
 ) -> ToolContext:
     return ToolContext(
         engine=engine,
@@ -572,4 +590,5 @@ def scan_context(
         user_id=user_id,
         agent_id=agent_id,
         now=now or datetime.now(UTC),
+        news=news,
     )

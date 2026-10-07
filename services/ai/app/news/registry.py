@@ -23,6 +23,7 @@ from app.core.logging import get_logger
 from app.news.base import NewsProvider
 from app.news.fixture import FixtureNewsProvider
 from app.news.gdelt import FeedCursor, GdeltNewsProvider
+from app.news.yahoo import YahooNewsProvider
 
 log = get_logger("news.registry")
 
@@ -49,6 +50,10 @@ def build_news_providers(
             providers.append(
                 GdeltNewsProvider(cursor=cursor_for(name) if cursor_for else None, market_feed=True)
             )
+        elif name == "yahoo":
+            # Keyless, one request per symbol (D57): fine for a few followed
+            # names; the agents' on-demand fetch builds its own (`on_demand.py`).
+            providers.append(YahooNewsProvider())
         else:
             # newsapi and the rest plug in here as they are implemented.
             # An unknown name is a configuration mistake worth surfacing: silently
