@@ -2943,6 +2943,23 @@ the largest prompt-injection surface goes too.
 - **A cost measurement** on a few real questions once the account is funded; the assistant's daily
   spend limit is set from it, not guessed.
 
+**A research agent, used as a tool by both the assistant and the trading agents** (the user,
+2026-10-07). Agent C decides; it calls `research(question)`, and agent B investigates with the
+read-only tools and returns a summary **with its sources**, so the evidence validator still checks
+C's figures against real tool results, never against B's prose. Plain Python: the scan's loop made a
+reusable function, called with a narrower prompt and tool set (D53); if agents multiply further,
+the OpenAI Agents SDK ("agents as tools") is the framework to look at first - its catch is that it
+makes its own model calls, so the recorder, the budget guards and the Admin page's model choice
+must be wired into it (CLAUDE.md convention 5: the user decides). **Cost is measured, not assumed.**
+Each step re-sends the conversation, so one agent doing research and decision carries every raw
+result into every later step, while C carries only B's summary - a worked estimate (4,000-token
+briefing, five 1,500-token results) came to ~46,500 prompt tokens for one agent against ~38,700 for
+B+C, before running B on a cheaper model. It costs more when C asks for research repeatedly or B
+needs the briefing too. **How the answer becomes accurate:** (1) real scans on the funded account
+record every call's tokens and the full transcript (`llm_calls`, `agent_scans`); (2) replay those
+transcripts as B+C on paper - same tool results, recomputed prompt sizes - for an estimate from real
+sizes; (3) run both on the same agent and days and compare cost and the quality of the decisions.
+
 **Future task, not in the first version: long-term memory** - what the assistant keeps across
 conversations (preferences, what the user follows). Scope and storage to be decided when it starts.
 
