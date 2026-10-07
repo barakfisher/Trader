@@ -4,21 +4,27 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-06 ~06:45 UTC - **Multi-agent Stage 3 (the ledger) is complete: seven PRs
-(#161-#165, #167, #168); this is its closing handoff (#169). Nothing is in flight. The next session
-starts Stage 4 - the agent that decides** - see "Next session: multi-agent Stage 4". This session
-built PR 6, the consolidated holdings view (#167, D32-D35: a `Real only / All / <agent>` picker on
-the dashboard's holdings card and headline, real and simulated never summed), and PR 7, performance
-(#168, D36-D42: each agent's value at every close computed from the ledger and stored closes, a
-shadow SPY given the same deposits, and the 30/60/90-day score of the agent's own decisions). The
-user answered every question one at a time ("please ask me one by one"), each with a recommendation
-and a concrete example; every answer was the recommendation, **D38 with a reservation: the shadow
-SPY pays no fees for now, and the user will add them - a debt row says what changes.** Both
-environments run `main` at `c73a163`, migration `0040_ledger` (PR 6 and 7 have no migration);
-neither holds a simulated agent. **SPY's closes arrive with the first backfill of 2026-10-07 Israel
-time** (~21:00 UTC on 2026-10-06): the day's backfill had already run when PR 7 was deployed. **The
-grant continues** into Stage 4 (the user says "merge" per PR; verify by content; redeploy; every
-migration rehearsed on a live copy) - confirm it when Stage 4 opens, since it is a new stage.
+Updated: 2026-10-07 ~10:15 UTC - **Multi-agent Stage 4 is four PRs in: the agent can scan, and
+proposes nothing yet. This is a handoff by count (#172, #173, #177, #178, #179, #180 merged since
+#169), not at a stage boundary. Nothing is in flight. The next session builds Stage 4 PR 5 - the
+trade proposal and its approval** - see "Next session: Stage 4 PR 5". Merged this session (one
+cloud session took over a CLI session that hit its usage limit mid-PR 3): #177 the scan's inputs
+(0042; tool calling, Yahoo movers, seven read-only tools, the briefing - its tests found money
+reaching the model as "1E+3"); #178 planning notes; #179 narration fixes (task 17: thresholds read
+as ratios, money shown as decimals, "0.03%" for 3% refused); #180 the scan (0043, D53, D54). **Both
+environments:** the user redeployed after #177 (the live DB was at `0042` when 0043 was rehearsed);
+**#179 and #180 are not yet deployed** - `git pull && bash scripts/dev-docker.sh && bash
+scripts/k8s-up.sh` on the Mac. **The model account is still unfunded** (OpenRouter free tier, $0):
+real scans and their cost are unmeasured, and that measurement comes before PR 5 is merged.
+**Decided with the user this session, each recorded below:** plain Python and no agent framework for
+every model call (D53; the assistant milestone moves the client to the `openai` package); CLAUDE.md
+convention 5 - **ask before hand-writing what a package already does**; the assistant milestone
+(`/ask` with tools); tasks 16 (scan frequency on the Admin page), 17 (narration re-measurement only)
+and 18 (reset account, by group); a research agent as a tool, measured before it is built. **The
+grant continues** for Stage 4: the user says "merge" per PR; verify on `main` by content; the user
+redeploys on the Mac; every migration rehearsed on a live copy - the user runs the rehearsal block
+on the Mac (cloud sessions cannot reach it) and pastes the output. **Form the user asked for:** one
+question at a time, short, with a recommendation; explain from first principles when asked "why".
 
 Previous handoff, 2026-10-05 ~17:30 UTC - **Multi-agent Stage 3 is half done: five PRs merged (#161-#165),
 which is CLAUDE.md's handoff trigger; this is that handoff (#166). Nothing is in flight. The next
@@ -435,7 +441,7 @@ strings and left-to-right assumptions before designing it.
 | **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 📋 Planned | After Stage 4. `/ask` becomes a tool-using assistant: web search, tickers, the user's account, "what can I ask you?". See "Planned: the assistant" |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
-| **Multi-agent sandbox, Stage 4 — the agent that decides** | 🚧 In progress | #172 spec D43-D52 + §14; #173 models on the Admin page (0041, D43-D44); #177 the scan's inputs - tool calling, movers, seven read-only tools, the briefing (0042); PR 4 the scan - one hand-written loop (D53), the per-agent budget, the step limit, `agent_scans` (0043), `POST /agents/:id/scans`, built on a scripted model (**real scans not yet measured: the account is unfunded**). Next: PR 5, the trade proposal and its approval (D26, D47-D49, D51, D54) |
+| **Multi-agent sandbox, Stage 4 — the agent that decides** | 🚧 In progress | #172 spec D43-D52 + §14; #173 models on the Admin page (0041, D43-D44); #177 the scan's inputs - tool calling, movers, seven read-only tools, the briefing (0042); #180 the scan - one hand-written loop (D53), the per-agent budget, the step limit, `agent_scans` (0043), `POST /agents/:id/scans`, built on a scripted model (**real scans not yet measured: the account is unfunded**). Next: PR 5, the trade proposal and its approval (D26, D47-D49, D51, D54) |
 | Multi-agent sandbox, Stage 3 — the ledger | ✅ Complete | #161 spec D21-D26 + §13; #162 exchange calendar; #163 ledger (0040); #164 manual trades (D27-D30); #165 the agent page (D31); #167 the consolidated holdings view (D32-D35); #168 performance against a shadow SPY and the score (D36-D42). Trade proposals and their approval moved to Stage 4 (D26). Handoff #169 |
 | Multi-agent sandbox, Stage 2 — agent management | ✅ Complete | #158 `/agents` API + the every-route-behind-a-session test; #159 the Agents page and a page per agent (en/he). D17-D20. The consolidated view moved to Stage 3 (D17) |
 | Mastra retired (D11) | ✅ Complete | #157, migration 0039: proposals are the row, `applyDecision` and `proposal_sweep` |
@@ -1944,6 +1950,15 @@ table. **Lesson: an approved document is a statement about the schema on the day
 Before executing one, measure the live schema it touches** (`pg_constraint`, nullability, every
 `ON CONFLICT`) and amend the document first - §11 is that measurement.
 
+**Decimal's `str()` is not a money format (Stage 4, PR 3, caught by tests before merge).** The
+agent tools wrote money as `str(from_minor(...))`, and `from_minor` normalises: $1,000 reached the
+model as "1E+3", $119.90 as "119.9", ten shares as "1E+1". No test asserted the exact string until
+the tools were run over real SQL. **Lesson: any figure a model or a reader quotes is formatted with
+`minor_to_decimal_string` (`core/money.py`) or `f"{d:f}"`, and its test asserts the exact string,
+round values included.** Related, from the same week: in tool output `_pct` means a ratio - the
+evidence validator multiplies it by 100 - so a value that is already a percentage is named
+`_percent`.
+
 **Rehearsing on a copy can test nothing while looking green (Stage 1, PR 3).** Run against a fresh
 copy of the live database, the branch orchestrator's default run keys were already claimed - the
 copy carries live's `runs` rows - so every run "succeeded" by skipping, and no insert through the
@@ -2978,7 +2993,39 @@ and `langchain-core`. LangChain - it would make its own model calls around the w
 each call, checks the budget and applies the Admin page's model choice. *Reopen if:* the assistant
 grows into separate stages or several cooperating agents.
 
-### Next session: multi-agent Stage 4 - the agent that decides
+### Next session: Stage 4 PR 5 - the trade proposal and its approval
+
+**Read first:** D26, D47-D49, D51, D54 and §14.2 in `docs/PROPOSAL-MULTI-AGENT.md`; then
+`services/ai/app/agents/scan.py` and `answer.py` (what a scan's answer already guarantees), and
+`apps/orchestrator/src/services/fills.ts` (`executeFill`, the only writer of fills) and
+`services/proposals.ts` (`applyDecision`).
+
+**What PR 5 builds (migration 0044):** `buy` / `sell` proposal kinds on simulated agents only (the
+primary's allowlist stays `{'rebalance'}`, decision 104); `CHECK (source <> 'agent' OR proposal_id
+IS NOT NULL)` on `fills` (the debt row); an `agent_scans` → proposal link; a `trade` scan becomes an
+observation with the thesis and a proposal with the agent's quote, TTL from the next open (D4);
+**cash for cost plus fee checked here (D54)**; Approve previews at the live price, refused beyond
+300 bps of the agent's (D47); Confirm fills through `executeFill` in the approval's transaction;
+Approve and Reject only (D48); a refused attempt stays pending and is recorded (D49); dashboard and
+Telegram; the thesis in the user's language with CLAUDE.md guideline 1 amended (D51).
+
+**Before merging PR 5, measure real scans** - the user funds OpenRouter and chooses the agents'
+model on the Admin page; create a test agent with a persona and cash; run `POST /agents/:id/scans`
+a few times; read `agent_scans` (steps, cost, outcome, transcript) and `llm_calls`. That replaces
+§14.1's assumed cost (~$0.04-0.38 a scan), feeds D46's estimate, and is stage 1 of the research-agent
+measurement ("Planned: the assistant").
+
+**Pending on the user, not code:** redeploy #179/#180; ~a day after, re-run task 17's export
+(`llm_calls` where `purpose = 'narration'` and `verdict = 'unsourced_figures'`) and record the new
+rejection rate - the rehearsal and export blocks from this session are in the conversation history
+only, so write them again: `docker exec traders-postgres-1 ...` (never `docker exec -i` inside a
+`bash <<'EOF'` block - it swallows the rest of the script), and query a column only after the
+migration that adds it (Postgres resolves names before any guard).
+
+**After PR 5:** PR 6 the agent page (*Decisions* tab, D45/D46/D50/D52), then the handoff, then PR 7
+the schedule.
+
+### History: multi-agent Stage 4 - the agent that decides (opened 2026-10-06)
 
 **Stage 3 is complete; Stage 4 builds the deciding agent** (D14-D16, D10, D12, D26 in
 `docs/PROPOSAL-MULTI-AGENT.md` §10 - read them, and §6, before anything). **Confirm with the user
