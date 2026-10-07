@@ -58,6 +58,12 @@ Each of these cost real time. They are listed so the cost is paid once.
 4. **Name modules after the concept they own.** `money.ts`, `valuation.ts`, `cache_policy.py` - no
    `utils`, `helpers`, `common` or `misc` filenames. A file whose only honest name is "utils" has
    contents that do not belong together.
+5. **Ask before hand-writing what a package already does.** When a maintained package would replace
+   non-trivial code you are about to write (a client, a parser, a retry or scheduling loop, a
+   framework's job), stop and ask the user first: name the package, what it would replace, and what
+   it costs (a dependency, what it cannot do here). The user decides; a decision either way is
+   recorded. The hand-written LLM client (`openai_compatible.py`) is the example that prompted this,
+   and is listed as debt in `.claude/MEMORY.md`.
 
 ## Repository conventions
 
