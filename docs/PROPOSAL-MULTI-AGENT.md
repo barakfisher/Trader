@@ -907,6 +907,23 @@ followed instruments; a persona that checks the news first can then never act. T
 symbol's recent headlines through `NewsProvider` once when nothing is stored, and caches them for
 every agent. *Rejected:* inside 5a (a larger money-path PR); leaving it until the schedule (PR 7).
 
+**D59 - News on demand comes from Yahoo through yfinance, at most hourly per symbol (D57).**
+Measured first: GDELT cannot be asked about one symbol (a stream of 15-minute files; three days is
+~860 MB), and widening its filter to the universe matched 559 of 1,255 headlines in one file on
+names such as "ON" and "News". No other news key is set. `yfinance.Search` - already a dependency;
+its `Ticker.get_news` returned nothing - answered each symbol in under a second with eight or so
+headlines, publisher and time. A `yahoo` provider sits behind `NewsProvider`; when an agent's
+`get_news` names a symbol, it is fetched unless anyone fetched it within the hour (a Redis mark,
+given back if the fetch fails), and stored through the collection run's own pipeline - deduped,
+linked only when the headline names the company, scored - so every agent reads the same rows.
+Yahoo's `relatedTickers` are dropped, as every vendor's relevance is (`app/news/base.py`): half of
+INTC's results were market stories listing forty tickers. Measured on a copy, 2026-10-07: BULL
+(down 20%) got "Webull Sinks 22% as Congressional Panel Finds..." and four more; INTC 5, NVDA 8,
+QXO 2, SITE 2, CCJ 1; 0.6-1.5 s each. `AGENT_NEWS_PROVIDER` (`yahoo` by default, `fixture` in
+`.env.example`, `off`). *Rejected:* fetching only when nothing is stored (a followed stock with one
+old article never gets fresher news); fetching on every call (one request per agent per step).
+*Debt found:* the lexicon sentiment scorer reads "Sinks 22%" and "Plummets" as neutral.
+
 **D58 - The validator sources a window the evidence names, and the thesis's own quantity.**
 Asked when real scans on the branch were refused for "a 60-day high" (two of five) and a Hebrew
 thesis for "2 מניות" (its own quantity). A whole number written straight before a unit of time -
@@ -1121,7 +1138,8 @@ English and Hebrew.
 **PR 5b — Telegram (D47, D56).** *Approve* replies with the preview and a *Confirm* button; the
 consolidated view's pending proposals (D35).
 
-**News on demand (D57).** A symbol's recent headlines fetched once when none are stored.
+**News on demand (D57, D59).** A symbol's recent headlines from Yahoo, fetched at most hourly
+when an agent asks, stored through the collection pipeline.
 
 **Then: handoff** (five merged PRs).
 

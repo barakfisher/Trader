@@ -37,6 +37,7 @@ from app.deps import (
 )
 from app.llm.factory import configured_model
 from app.models import AgentScanAnswer, AgentScanRequest, AgentScanResponse
+from app.news.on_demand import news_on_demand
 from app.providers.price_provenance import excluded_price_sources
 from app.providers.registry import MarketDataService
 
@@ -96,6 +97,7 @@ async def scan_agent(
         excluded_price_sources=excluded_price_sources(settings.market_data_chain),
         user_id=user_id,
         agent_id=agent.agent_id,
+        news=news_on_demand(settings, engine, getattr(request.app.state, "redis", None)),
     )
     try:
         result = await run_scan(

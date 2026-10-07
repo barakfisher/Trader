@@ -236,6 +236,9 @@ class Settings(BaseSettings):
     # accessor every caller should use.
     news_providers: str = "fixture"
     newsapi_key: str | None = None
+    #: Where an agent's `get_news` fetches a symbol's headlines on demand (D57):
+    #: `yahoo` (keyless), `fixture`, or `off` to read only what collection stored.
+    agent_news_provider: Literal["yahoo", "fixture", "off"] = "yahoo"
 
     # LLM access. One gateway module (app/llm) reads all of this; no call site
     # names a provider. An unusable value here degrades to no narration rather

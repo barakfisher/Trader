@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -42,6 +43,8 @@ from app.analysis.thresholds import AnalysisThresholds
 from app.corpus.hashed_embedder import HashedEmbedder
 from app.corpus.vector_store import PgVectorStore
 from app.models import DailyClose, Mover, Quote
+from app.news.on_demand import MemoryFetchMarks, NewsOnDemand
+from app.news.yahoo import YahooNewsProvider
 from tests.integration.conftest import REPO_ROOT, run_script
 
 FIXTURE_EMBEDDER = {"EMBEDDINGS_PROVIDER": "fixture"}
@@ -319,6 +322,74 @@ async def test_get_news_lists_recent_articles_about_the_symbol_with_sentiment(
     assert answer["articles"][0]["sentiment"] == "0.4"
     empty = await get_news(_context(loaded, owner, ScriptedMarket()), {"symbol": "SYK"})
     assert empty["articles"] == [] and "note" in empty
+
+
+async def test_get_news_fetches_a_symbols_headlines_once_an_hour_for_every_agent(
+    loaded: Engine, owner: tuple[str, str, str]
+) -> None:
+    """D57: news on demand, linked by the headline, stored once, read by every agent."""
+    asked: list[str] = []
+    published = int((NOW - timedelta(hours=2)).timestamp())
+
+    def search(query: str, _count: int) -> list[dict[str, object]]:
+        asked.append(query)
+        return [
+            {
+                "title": "Stryker beats on hospital demand",
+                "link": "https://y/syk-1",
+                "publisher": "Reuters",
+                "providerPublishTime": published,
+            },
+            # Listed for SYK by the vendor, but its headline names nothing we know.
+            {
+                "title": "Stocks slip as yields climb",
+                "link": "https://y/mkt-1",
+                "publisher": "Yahoo Finance",
+                "providerPublishTime": published,
+            },
+        ]
+
+    marks = MemoryFetchMarks()
+    news = NewsOnDemand(engine=loaded, provider=YahooNewsProvider(search=search), marks=marks)
+    context = replace(_context(loaded, owner, ScriptedMarket()), news=news)
+
+    answer = await get_news(context, {"symbol": "SYK"})
+
+    assert asked == ["SYK"]
+    assert [article["title"] for article in answer["articles"]] == [
+        "Stryker beats on hospital demand"
+    ]
+    assert answer["articles"][0]["source"] == "Reuters"
+    # Within the hour, another agent's call reads the stored rows and fetches nothing.
+    user, _agent, other = owner
+    other_context = replace(context, agent_id=other)
+    again = await get_news(other_context, {"symbol": "SYK"})
+    assert asked == ["SYK"]
+    assert [article["title"] for article in again["articles"]] == [
+        "Stryker beats on hospital demand"
+    ]
+
+
+async def test_a_failed_fetch_gives_the_hour_back_and_the_tool_still_answers(
+    loaded: Engine, owner: tuple[str, str, str]
+) -> None:
+    calls: list[str] = []
+
+    def failing(query: str, _count: int) -> list[dict[str, object]]:
+        calls.append(query)
+        raise TimeoutError("yahoo is slow")
+
+    news = NewsOnDemand(
+        engine=loaded, provider=YahooNewsProvider(search=failing), marks=MemoryFetchMarks()
+    )
+    context = replace(_context(loaded, owner, ScriptedMarket()), news=news)
+
+    first = await get_news(context, {"symbol": "XOM"})
+    await get_news(context, {"symbol": "XOM"})
+
+    assert "articles" in first
+    # The mark was released, so the next call tried again.
+    assert calls == ["XOM", "XOM"]
 
 
 # -- get_position ----------------------------------------------------------------
