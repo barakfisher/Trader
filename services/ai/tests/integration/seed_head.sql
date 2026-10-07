@@ -175,6 +175,15 @@ INSERT INTO llm_calls (user_id, purpose, provider, model, outcome, verdict, late
 INSERT INTO llm_calls (user_id, agent_id, purpose, provider, model, outcome, latency_ms, prompt) VALUES
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'agent_scan',
    'openrouter', 'm', 'ok', 900, 'p');
+-- Scans (0043): one finished with each outcome, both triggers, and one running.
+INSERT INTO agent_scans (user_id, agent_id, trigger, started_at, finished_at, outcome, steps, cost_micro_usd, model, briefing, transcript, answer, error) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'manual', now() - interval '6 days', now() - interval '6 days', 'trade', 3, 41000, 'm', '{}', '[]', '{"decision": "buy", "symbol": "EQTY", "quantity": "2", "thesis": "t"}', NULL),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', now() - interval '5 days', now() - interval '5 days', 'no_trade', 1, 9000, 'm', '{}', '[]', '{"decision": "none", "thesis": "t"}', NULL),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', now() - interval '4 days', now() - interval '4 days', 'invalid_answer', 2, 12000, 'm', '{}', '[]', '{"problems": ["p"]}', NULL),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', now() - interval '3 days', now() - interval '3 days', 'budget_reached', 0, 0, NULL, '{}', '[]', NULL, NULL),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', now() - interval '2 days', now() - interval '2 days', 'step_limit', 12, 380000, 'm', '{}', '[]', NULL, NULL),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'manual', now() - interval '1 day', now() - interval '1 day', 'failed', 0, 0, NULL, '{}', '[]', NULL, 'LLMRequestError: x'),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a2', 'manual', now(), NULL, NULL, 0, 0, NULL, '{}', '[]', NULL, NULL);
 -- Every schedule an agent may choose (0042).
 UPDATE agents SET scan_schedule = 'pre_open_post_close' WHERE id = '90000000-0000-0000-0000-0000000000a1';
 UPDATE agents SET scan_schedule = 'intraday_twice', llm_budget_micro_usd = 250000

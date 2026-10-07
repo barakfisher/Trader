@@ -274,6 +274,24 @@ const llmCostEstimateSchema = z.object({
   monthly_micro_usd: z.number().int(),
 });
 
+export const agentScanResponseSchema = z.object({
+  scan_id: z.string(),
+  outcome: z.enum(['trade', 'no_trade', 'invalid_answer', 'budget_reached', 'step_limit', 'failed']),
+  steps: z.number().int(),
+  cost_micro_usd: z.number().int(),
+  model: z.string().nullable(),
+  answer: z
+    .object({
+      decision: z.enum(['buy', 'sell', 'none']).nullable().optional(),
+      symbol: z.string().nullable().optional(),
+      quantity: z.string().nullable().optional(),
+      thesis: z.string().nullable().optional(),
+      problems: z.array(z.string()).optional(),
+    })
+    .nullable(),
+  error: z.string().nullable(),
+});
+
 export const llmModelsResponseSchema = z.object({
   provider: z.string(),
   choosable: z.boolean(),
@@ -362,6 +380,9 @@ export type _AssertMarketCalendar = Expect<
 >;
 export type _AssertMarketSessions = Expect<
   Equal<z.infer<typeof marketSessionsSchema>, Schemas['MarketSessions']>
+>;
+export type _AssertAgentScan = Expect<
+  Equal<z.infer<typeof agentScanResponseSchema>, Schemas['AgentScanResponse']>
 >;
 export type _AssertLlmModels = Expect<
   Equal<z.infer<typeof llmModelsResponseSchema>, Schemas['LlmModelsResponse']>

@@ -195,7 +195,7 @@ async def get_quote(context: ToolContext, arguments: Mapping[str, Any]) -> dict[
                 if quote.previous_close_minor is not None
                 else None
             ),
-            "day_change_pct": quote.day_change_pct,
+            "day_change_percent": quote.day_change_pct,
             "as_of": quote.as_of.isoformat(),
             "delayed_minutes": quote.delay_seconds // 60,
             "tradable": bool(listing and listing.tradable),
@@ -263,7 +263,7 @@ async def get_price_history(context: ToolContext, arguments: Mapping[str, Any]) 
         "currency": currency,
         "last_close": money(prices[-1], currency),
         "last_close_date": points[-1].as_of.date().isoformat(),
-        "change_pct": {
+        "change_percent": {
             "5d": back(5),
             "20d": back(20),
             "60d": back(60),

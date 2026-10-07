@@ -229,7 +229,7 @@ async def test_get_price_history_backfills_then_samples_and_summarises(
     assert market.history_calls == ["NEM"], "fewer than the minimum stored, so it backfills"
     assert answer["last_close"] == "119.90"
     assert answer["high"] == "119.90" and answer["low"] == "100.00"
-    assert answer["change_pct"]["5d"] == "0.42"
+    assert answer["change_percent"]["5d"] == "0.42"
     assert len(answer["closes"]) <= MAX_HISTORY_POINTS
     assert answer["closes"][-1] == {
         "date": (NOW - timedelta(days=1)).date().isoformat(),
@@ -474,7 +474,7 @@ async def test_the_briefing_carries_holdings_with_findings_movers_and_topics(
     assert [m["symbol"] for m in briefing["movers"]["gainers"]] == ["NXE", "CCJ"]
     assert briefing["movers"]["gainers"][0] == {
         "symbol": "NXE",
-        "change_pct": "9.88",
+        "change_percent": "9.88",
         "price": "100.00",
     }
     assert [m["symbol"] for m in briefing["movers"]["losers"]] == ["LEU"]
