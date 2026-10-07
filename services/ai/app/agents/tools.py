@@ -37,7 +37,7 @@ from app.analysis.price_move import price_move_findings
 from app.analysis.quote_history import load_daily_closes, load_price_series
 from app.analysis.sigma_move import sigma_move_findings
 from app.analysis.thresholds import AnalysisThresholds
-from app.core.money import minor_unit_exponent
+from app.core.money import minor_to_decimal_string
 from app.corpus.embeddings import BaseEmbedder
 from app.corpus.retrieval import hybrid_search
 from app.corpus.vector_store import VectorStore
@@ -92,9 +92,8 @@ class Tool:
 
 
 def money(minor: int, currency: str) -> str:
-    """Minor units as the decimal string a thesis would quote: every minor digit,
-    never an exponent ("1000.00", not `from_minor`'s normalised "1E+3")."""
-    return f"{Decimal(minor).scaleb(-minor_unit_exponent(currency)):f}"
+    """Minor units as the decimal string a thesis would quote."""
+    return minor_to_decimal_string(minor, currency)
 
 
 def _symbol(arguments: Mapping[str, Any], key: str = "symbol") -> str | None:

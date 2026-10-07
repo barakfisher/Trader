@@ -18,6 +18,7 @@ from app.llm.base import (
 )
 from app.narration import CandidateArticle, correlate, narrate
 from app.narration.evidence_validator import is_supported
+from app.narration.narrator import prompt_evidence
 from app.narration.templates import explanation_for, headline_for
 
 NOW = datetime(2026, 9, 16, 14, 0, tzinfo=UTC)
@@ -333,3 +334,37 @@ class TestVerdicts:
         invented = StubLLM(reply("NVDA fell 8.5%", "Its worst day in 14 months."))
         await narrate(PRICE_MOVE, [], invented)
         assert invented.verdicts == [(7, "unsourced_figures")]
+
+
+def test_the_model_is_shown_money_as_the_decimal_a_sentence_quotes():
+    # 30 of 38 rejected narrations copied a minor-unit figure ("fell to 790" for $7.90).
+    shown = prompt_evidence(
+        {
+            "symbol": "SMR",
+            "currency": "USD",
+            "price_minor": 790,
+            "high_price_minor": 100000,
+            "drawdown_pct": -0.29,
+            "positions": [{"currency": "JPY", "value_minor": 15000}],
+        }
+    )
+    assert shown == {
+        "symbol": "SMR",
+        "currency": "USD",
+        "price": "7.90",
+        "high_price": "1000.00",
+        "drawdown_pct": -0.29,
+        "positions": [{"currency": "JPY", "value": "15000"}],
+    }
+
+
+def test_the_shown_evidence_never_overwrites_a_field_already_named():
+    shown = prompt_evidence({"currency": "USD", "price": "kept", "price_minor": 790})
+    assert shown == {"currency": "USD", "price": "kept", "price_minor": 790}
+
+
+def test_a_figure_written_from_the_shown_evidence_passes_the_stored_evidence():
+    stored = {"currency": "USD", "price_minor": 790, "change_pct": -0.042}
+    shown = prompt_evidence(stored)
+    text = f"SMR fell 4.2% to ${shown['price']}."  # type: ignore[index]
+    assert is_supported(text, stored)
