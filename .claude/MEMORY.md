@@ -429,6 +429,7 @@ strings and left-to-right assumptions before designing it.
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
+| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 📋 Planned | After Stage 4. `/ask` becomes a tool-using assistant: web search, tickers, the user's account, "what can I ask you?". See "Planned: the assistant" |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
 | Multi-agent sandbox, Stage 3 — the ledger | ✅ Complete | #161 spec D21-D26 + §13; #162 exchange calendar; #163 ledger (0040); #164 manual trades (D27-D30); #165 the agent page (D31); #167 the consolidated holdings view (D32-D35); #168 performance against a shadow SPY and the score (D36-D42). Trade proposals and their approval moved to Stage 4 (D26). Handoff #169 |
@@ -2893,6 +2894,45 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 ---
 
 ## Where to go next
+
+### Planned: the assistant - `/ask` with tools (after Stage 4)
+
+**Agreed with the user 2026-10-07, one question at a time.** Today `/ask` routes a question with
+fixed rules, answers from glossary passages, and lets the model write one checked paragraph; it
+works with no model. The user wants an assistant instead: it chooses tools the way an agent's scan
+does (Stage 4, D15), and shares that loop and its read-only tools rather than building a second one.
+
+**Tools:** web search; tickers (the agent's quote, history, findings and news tools); the user's
+account (agents, their proposals, performance, holdings); the product's capabilities, so it can
+answer "what can I ask you?".
+
+**Decided:**
+- **A model is required.** No no-model path: a tool-using assistant cannot work without one, and
+  keeping today's extractive path beside it would double the work. Without a configured model the
+  page says the assistant needs one.
+- **Conversation memory in Postgres** (`user_id` on every row, guideline 5), not S3: small text that
+  must be listed and searched; S3 is for files. Each question sends the last few turns of the same
+  conversation. **Kept 90 days, then deleted; a "delete this conversation" control.**
+- **Guardrails:** read-only (it explains and links, never trades, approves or changes settings); no
+  personalised advice - "should I buy X?" gets facts and context, never a yes or no (guideline 2);
+  **its domain only** (markets, investing, the user's account, the product), anything else is
+  declined politely; a daily spend limit like an agent's.
+- **Prompt-injection defence, in layers:** web and news text is passed as labelled data the model
+  is told never to obey; every tool is read-only, so a persuaded model can do nothing harmful;
+  figures are checked against tool results (guideline 7); web results are reduced to plain text
+  and trimmed before the model sees them; every conversation is logged for review.
+
+**Order (the user's):**
+1. Follow-up questions (conversation memory), sources on every answer, suggested next questions.
+2. Answers in the user's language - needs a decision amending guideline 1, which keeps `/ask` English.
+3. `/ask` in Telegram.
+
+**Future task, not in the first version: long-term memory** - what the assistant keeps across
+conversations (preferences, what the user follows). Scope and storage to be decided when it starts.
+
+**Open when it starts:** the web-search provider (behind an interface, guideline 6, and per
+CLAUDE.md convention 5 a package is proposed to the user before anything is hand-written); the
+framework question (plain Python vs LangGraph), being discussed next with the user.
 
 ### Next session: multi-agent Stage 4 - the agent that decides
 
