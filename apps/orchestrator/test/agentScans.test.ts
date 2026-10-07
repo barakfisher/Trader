@@ -60,6 +60,8 @@ vi.mock('../src/db/queries.js', () => ({
     language: 'en',
   })),
   claimNotification: vi.fn(async () => ({ id: 'n-1' })),
+  listAgentScans: vi.fn(async () => []),
+  getAgentScan: vi.fn(async () => null),
   settleNotification: vi.fn(async () => undefined),
   getAgent: vi.fn(async (_u: string, id: string) =>
     id === PRIMARY ? agentRow({ id: PRIMARY, is_primary: true }) : id === AGENT ? agent : null,
@@ -106,7 +108,8 @@ async function signedIn(scanAgent: (...args: unknown[]) => Promise<unknown>) {
   });
   const cookie = (login.headers.get('set-cookie') as string).split(';')[0]!;
   const send = (path: string) => app.request(path, { method: 'POST', headers: { ...ORIGIN, cookie } });
-  return { send, scanAgent: (ai as unknown as { scanAgent: ReturnType<typeof vi.fn> }).scanAgent };
+  const get = (path: string) => app.request(path, { headers: { ...ORIGIN, cookie } });
+  return { send, get, scanAgent: (ai as unknown as { scanAgent: ReturnType<typeof vi.fn> }).scanAgent };
 }
 
 beforeEach(() => {
@@ -173,5 +176,101 @@ describe('running a scan', () => {
     });
     const response = await send(`/agents/${AGENT}/scans`);
     expect(response.status).toBe(503);
+  });
+});
+
+const SCAN = 'b0000000-0000-0000-0000-000000000001';
+
+function scanRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: SCAN,
+    trigger: 'manual',
+    started_at: new Date('2026-10-07T15:00:00Z'),
+    finished_at: new Date('2026-10-07T15:00:12Z'),
+    outcome: 'trade',
+    steps: 2,
+    cost_micro_usd: '41000',
+    model: 'anthropic/claude-sonnet-5.5',
+    answer: { decision: 'buy', symbol: 'NVDA', quantity: '2', thesis: 'NVDA fell 2.1%.', price_minor: 23714 },
+    error: null,
+    proposal_id: 'p-1',
+    proposal_state: 'pending',
+    // Past its deadline, not yet swept: it reads expired.
+    proposal_expires_at: new Date(Date.now() - 1000),
+    proposal_snoozed_until: null,
+    proposal_decided_at: null,
+    fill_id: null,
+    ...overrides,
+  };
+}
+
+describe('the Decisions tab (D50)', () => {
+  it('lists scans as summaries, with the proposal in its state now', async () => {
+    const queries = await import('../src/db/queries.js');
+    vi.mocked(queries.listAgentScans).mockResolvedValueOnce([scanRow()] as never);
+    const { get } = await signedIn(async () => RESULT);
+    const response = await get(`/agents/${AGENT}/scans`);
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({
+      scans: [
+        expect.objectContaining({
+          id: SCAN, outcome: 'trade', costMicroUsd: 41_000, decision: 'buy', symbol: 'NVDA', quantity: '2',
+          proposal: { id: 'p-1', state: 'expired' }, fillId: null, problems: [],
+        }),
+      ],
+      nextBefore: null,
+    });
+    expect(body.scans[0]).not.toHaveProperty('transcript');
+  });
+
+  it('offers an older page only when one exists', async () => {
+    const queries = await import('../src/db/queries.js');
+    const { SCANS_PAGE_SIZE } = await import('../src/http/routes/agentScans.js');
+    const rows = Array.from({ length: SCANS_PAGE_SIZE + 1 }, (_, i) =>
+      scanRow({ id: `s-${i}`, started_at: new Date(Date.parse('2026-10-07T15:00:00Z') - i * 60_000) }),
+    );
+    vi.mocked(queries.listAgentScans).mockResolvedValueOnce(rows as never);
+    const { get } = await signedIn(async () => RESULT);
+    const body = await (await get(`/agents/${AGENT}/scans?before=2026-10-08T00:00:00Z`)).json();
+    expect(body.scans).toHaveLength(SCANS_PAGE_SIZE);
+    expect(body.nextBefore).toBe(rows[SCANS_PAGE_SIZE - 1]!.started_at.toISOString());
+    expect(queries.listAgentScans).toHaveBeenCalledWith(USER.id, AGENT, {
+      limit: SCANS_PAGE_SIZE + 1,
+      before: new Date('2026-10-08T00:00:00Z'),
+    });
+    expect((await get(`/agents/${AGENT}/scans?before=yesterday`)).status).toBe(400);
+  });
+
+  it('gives one scan in full: the briefing, every step, the thesis', async () => {
+    const queries = await import('../src/db/queries.js');
+    vi.mocked(queries.getAgentScan).mockResolvedValueOnce({
+      ...scanRow({ fill_id: 'f-1', proposal_state: 'approved', proposal_decided_at: new Date() }),
+      briefing: { cash: '10000.00' },
+      transcript: [
+        { role: 'assistant', text: 'Checking NVDA.', tool_calls: [{ id: 'c1', name: 'get_quote', arguments: { symbol: 'NVDA' } }] },
+        { role: 'tool', call_id: 'c1', name: 'get_quote', result: { price: '237.14' } },
+        { role: 'mystery' },
+      ],
+    } as never);
+    const { get } = await signedIn(async () => RESULT);
+    const body = await (await get(`/agents/${AGENT}/scans/${SCAN}`)).json();
+    expect(body).toMatchObject({
+      briefing: { cash: '10000.00' },
+      thesis: 'NVDA fell 2.1%.',
+      proposal: { id: 'p-1', state: 'approved' },
+      fillId: 'f-1',
+      transcript: [
+        { role: 'assistant', text: 'Checking NVDA.', toolCalls: [{ id: 'c1', name: 'get_quote', arguments: { symbol: 'NVDA' } }] },
+        { role: 'tool', callId: 'c1', name: 'get_quote', result: { price: '237.14' } },
+      ],
+    });
+  });
+
+  it('is a 404 for a scan that is not this agent\'s, or an id that is not one', async () => {
+    const { get } = await signedIn(async () => RESULT);
+    expect((await get(`/agents/${AGENT}/scans/${SCAN}`)).status).toBe(404);
+    expect((await get(`/agents/${AGENT}/scans/not-an-id`)).status).toBe(404);
+    expect((await get(`/agents/90000000-0000-0000-0000-0000000000ff/scans`)).status).toBe(404);
   });
 });

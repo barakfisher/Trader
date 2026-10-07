@@ -19,6 +19,8 @@ import type {
   ActivityResponse,
   AgentAccountResponse,
   AgentPerformanceResponse,
+  AgentScanDetail,
+  AgentScansResponse,
   AgentView,
   HoldingView,
   TradePreview,
@@ -50,6 +52,11 @@ const AGENT: AgentView = {
   state: 'active',
   holdingsCount: 1,
   createdAt: '2026-10-05T10:00:00Z',
+  scanSchedule: 'pre_open',
+  llmBudgetMicroUsd: 500_000,
+  llmSpentTodayMicroUsd: 108_022,
+  scanCost: { microUsd: 36_000, basis: 'measured' },
+  waitingForPersona: true,
 };
 
 const AAPL: HoldingView = {
@@ -189,12 +196,50 @@ const PERFORMANCE: AgentPerformanceResponse = {
   },
 };
 
+const SCAN_ID = 'b0000000-0000-0000-0000-000000000001';
+
+const SCAN_SUMMARY = {
+  id: SCAN_ID,
+  trigger: 'manual' as const,
+  startedAt: '2026-10-07T15:00:00Z',
+  finishedAt: '2026-10-07T15:00:12Z',
+  outcome: 'trade' as const,
+  steps: 1,
+  costMicroUsd: 41_000,
+  model: 'anthropic/claude-sonnet-5.5',
+  decision: 'buy' as const,
+  symbol: 'NVDA',
+  quantity: '2',
+  problems: [],
+  error: null,
+  proposal: { id: 'p-1', state: 'pending' as const },
+  fillId: null,
+};
+
+const SCANS: AgentScansResponse = {
+  scans: [SCAN_SUMMARY, { ...SCAN_SUMMARY, id: 's-2', outcome: 'no_trade', decision: 'none', symbol: null, quantity: null, proposal: null, costMicroUsd: 14_600 }],
+  nextBefore: null,
+};
+
+const SCAN_DETAIL: AgentScanDetail = {
+  ...SCAN_SUMMARY,
+  briefing: { cash: '10000.00', holdings: [], movers: { day_gainers: [{ symbol: 'NVDA' }], day_losers: [] } },
+  transcript: [
+    { role: 'assistant', text: 'NVDA moved; checking its quote.', toolCalls: [{ id: 'c1', name: 'get_quote', arguments: { symbol: 'NVDA' } }] },
+    { role: 'tool', callId: 'c1', name: 'get_quote', result: { price: '237.14' } },
+    { role: 'assistant', text: '{"decision": "buy", "thesis": "NVDA trades at 237.14."}', toolCalls: [] },
+  ],
+  thesis: 'NVDA trades at 237.14.',
+};
+
 function serveAgent(agent: AgentView = AGENT, accountBody: AgentAccountResponse = account()) {
   serve({
     [`/agents/${AGENT_ID}`]: agent,
     [`/agents/${AGENT_ID}/account`]: accountBody,
     [`/agents/${AGENT_ID}/activity`]: ACTIVITY,
     [`/agents/${AGENT_ID}/performance`]: PERFORMANCE,
+    [`/agents/${AGENT_ID}/scans`]: SCANS,
+    [`/agents/${AGENT_ID}/scans/${SCAN_ID}`]: SCAN_DETAIL,
   });
 }
 
@@ -391,5 +436,69 @@ describe('AgentPage with the ledger', () => {
     expect(screen.queryByRole('button', { name: 'Trade' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Sell' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Add cash' })).toBeNull();
+  });
+
+  it('lists every scan with its outcome and cost, and opens one to its steps and answer (D50, D64)', async () => {
+    renderAgent();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Decisions' }));
+    expect(await screen.findByText('Proposed')).toBeTruthy();
+    expect(screen.getByText('No trade')).toBeTruthy();
+    expect(screen.getByText('Buy 2 NVDA')).toBeTruthy();
+    expect(screen.getByText('$0.041 · 1 step')).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { expanded: false })[0]!);
+    expect(await screen.findByText('NVDA trades at 237.14.')).toBeTruthy();
+    expect(screen.getByText('Started from: cash $10,000.00, 0 holdings, 1 movers of the day')).toBeTruthy();
+    expect(screen.getByText('NVDA moved; checking its quote.')).toBeTruthy();
+    expect(screen.getByText(/Looked up get_quote/)).toBeTruthy();
+    expect(screen.getByText('The proposal').closest('a')?.getAttribute('href')).toBe('/proposals/p-1');
+    // The final turn is the answer: read once, above; its raw JSON folded, not shown as prose.
+    expect(screen.getAllByText('NVDA trades at 237.14.')).toHaveLength(1);
+    expect(screen.getByText('Its raw answer')).toBeTruthy();
+  });
+
+  it('waits for a persona, and offers no scan until it has one (D52)', async () => {
+    renderAgent();
+    expect(await screen.findByText('Waiting for a persona')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Run a scan now' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('Give the agent a persona first: it decides by it.')).toBeTruthy();
+  });
+
+  it('runs a scan, says what it proposed, and shows its expected cost (D65)', async () => {
+    serveAgent({ ...AGENT, persona: 'Patient.', waitingForPersona: false });
+    post.mockResolvedValueOnce({
+      scan_id: SCAN_ID, outcome: 'trade', steps: 1, cost_micro_usd: 41_000, model: 'm', error: null,
+      answer: { decision: 'buy', symbol: 'NVDA', quantity: '2', thesis: 't' }, proposal_id: 'p-1',
+    });
+    renderAgent();
+    expect(await screen.findByText(/About \$0\.036 a scan \(measured on 7 Oct 2026/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Run a scan now' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(`/agents/${AGENT_ID}/scans`, {}));
+    expect(await screen.findByText(/Proposed: Buy 2 NVDA\./)).toBeTruthy();
+    expect(screen.getByText('Review the proposal').closest('a')?.getAttribute('href')).toBe('/proposals/p-1');
+  });
+
+  it('says why a scan was refused, in the reader\'s words', async () => {
+    serveAgent({ ...AGENT, persona: 'Patient.', waitingForPersona: false });
+    post.mockRejectedValueOnce(new ApiRequestError('busy', 409, 'scan_running'));
+    renderAgent();
+    fireEvent.click(await screen.findByRole('button', { name: 'Run a scan now' }));
+    expect(await screen.findByText('This agent is already scanning.')).toBeTruthy();
+  });
+
+  it('saves the schedule and the model budget, with the cost per day and the note that scheduling is not running yet (D45, D46, D66)', async () => {
+    const patch = (await import('../src/api/client.ts')).api.patch as ReturnType<typeof vi.fn>;
+    patch.mockResolvedValue(AGENT);
+    renderAgent();
+    const schedule = (await screen.findByLabelText('When it scans')) as HTMLSelectElement;
+    expect(screen.getByText(/About \$0\.036 a trading day/)).toBeTruthy();
+    expect(screen.getByText(/Scheduled scans are not running yet/)).toBeTruthy();
+    expect(screen.getByText(/Spent today: \$0\.108 of \$0\.50/)).toBeTruthy();
+    fireEvent.change(schedule, { target: { value: 'pre_open_post_close' } });
+    expect(screen.getByText(/About \$0\.072 a trading day/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Model budget per day (USD)'), { target: { value: '1.25' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save scan settings' }));
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith(`/agents/${AGENT_ID}`, { scanSchedule: 'pre_open_post_close', llmBudget: '1.25' }),
+    );
   });
 });
