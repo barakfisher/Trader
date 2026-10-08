@@ -51,6 +51,8 @@ vi.mock('../src/db/pool.js', () => ({
 vi.mock('../src/db/queries.js', () => ({
   getUser: vi.fn(async () => USER),
   agentHasTraded: vi.fn(async () => false),
+  getInstallationSettings: vi.fn(async () => ({ max_agents_per_user: 3, updated_at: new Date() })),
+  countLiveAgents: vi.fn(async () => 1),
   listAgents: vi.fn(async () => [
     row({ id: PRIMARY, slug: 'primary-portfolio', name: 'Main portfolio', is_primary: true, budget_minor: null }),
     row(),
@@ -268,6 +270,38 @@ describe('the agents API', () => {
     expect((await send('PATCH', `/agents/${SIMULATED}`, { llmBudget: '0.001' })).status).toBe(400);
     expect((await send('PATCH', `/agents/${SIMULATED}`, { scanSchedule: 'hourly' })).status).toBe(400);
     expect(queries.updateAgent).not.toHaveBeenCalled();
+  });
+
+  it('reports how many agents count against the limit (D71)', async () => {
+    const body = await (await send('GET', '/agents')).json();
+    // The primary never counts; the one active simulated agent does.
+    expect(body.agentLimit).toEqual({ used: 1, max: 3 });
+  });
+
+  it('refuses a new agent at the limit before writing anything (D71)', async () => {
+    vi.mocked(queries.countLiveAgents).mockResolvedValueOnce(3);
+    const response = await send('POST', '/agents', { name: 'Fourth', budget: '1000' });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: 'agent_limit_reached' });
+    expect(queries.createAgent).not.toHaveBeenCalled();
+  });
+
+  it("answers the database's refusal of a racing create with the same 409", async () => {
+    vi.mocked(queries.createAgent).mockRejectedValueOnce(
+      Object.assign(new Error('agent_limit_reached: 3 of 3 agents'), { code: '23514' }),
+    );
+    const response = await send('POST', '/agents', { name: 'Racer', budget: '1000' });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: 'agent_limit_reached' });
+  });
+
+  it('refuses a restore from the archive at the limit, and allows pausing or archiving at it', async () => {
+    vi.mocked(queries.getAgent).mockResolvedValueOnce(row({ state: 'archived' }) as never);
+    vi.mocked(queries.countLiveAgents).mockResolvedValueOnce(3);
+    expect((await send('PATCH', `/agents/${SIMULATED}`, { state: 'active' })).status).toBe(409);
+    vi.mocked(queries.countLiveAgents).mockResolvedValue(3);
+    expect((await send('PATCH', `/agents/${SIMULATED}`, { state: 'archived' })).status).toBe(200);
+    vi.mocked(queries.countLiveAgents).mockResolvedValue(1);
   });
 });
 

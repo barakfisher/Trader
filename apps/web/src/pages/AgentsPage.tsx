@@ -12,7 +12,7 @@ import { useTranslation } from '../i18n/index.ts';
 import { formatMoney } from '../i18n/format.ts';
 import { BUDGET_INPUT, agentErrorMessage, agentName, agentStateWord } from '../lib/agentPresentation.ts';
 import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
-import { useAgentsQuery, useCreateAgent } from '../queries/agents.ts';
+import { useAgentLimitQuery, useAgentsQuery, useCreateAgent } from '../queries/agents.ts';
 import { useConsolidatedQuery } from '../queries/portfolio.ts';
 
 /**
@@ -127,6 +127,9 @@ export function KindBadge({ agent }: { agent: Pick<AgentView, 'isPrimary'> }) {
 function CreateAgentForm() {
   const { t } = useTranslation();
   const create = useCreateAgent();
+  const limit = useAgentLimitQuery().data ?? null;
+  // D71: at the limit the form says so before anyone types a name.
+  const full = limit !== null && limit.used >= limit.max;
   const [name, setName] = useState('');
   const [budget, setBudget] = useState('');
   const [persona, setPersona] = useState('');
@@ -147,7 +150,15 @@ function CreateAgentForm() {
   };
 
   return (
-    <Card title={t('agents.create.title')}>
+    <Card
+      title={t('agents.create.title')}
+      action={
+        limit && (
+          <span className="text-xs text-text-muted">{t('agents.limit.used', { used: limit.used, max: limit.max })}</span>
+        )
+      }
+    >
+      {full && <p className="mb-3 text-sm text-text-muted">{t('agents.limit.full', { max: limit.max })}</p>}
       <form onSubmit={submit} className="space-y-3">
         <AgentField label={t('agents.fields.name')}>
           <input
@@ -182,7 +193,7 @@ function CreateAgentForm() {
           />
         </AgentField>
         {create.error && <ErrorNote message={agentErrorMessage(create.error, t('agents.create.failed'))} />}
-        <Button type="submit" disabled={create.isPending || !name.trim() || !budgetValid}>
+        <Button type="submit" disabled={full || create.isPending || !name.trim() || !budgetValid}>
           <span className="flex items-center gap-1">
             <Plus className="size-4" aria-hidden />
             {t('agents.create.submit')}

@@ -1028,6 +1028,13 @@
       "failed": "The reset did not run; nothing was erased.",
       "done_one": "Done: {{count}} row erased. Backup {{id}}.",
       "done_other": "Done: {{count}} rows erased. Backup {{id}}."
+    },
+    "agentLimit": {
+      "title": "Agents per user",
+      "label": "Most simulated agents a user may have",
+      "hint": "Archived agents and the real portfolio don't count. A lower number removes nothing; it stops the next new agent. 1 to {{max}}.",
+      "save": "Save",
+      "saved": "Saved"
     }
   },
   "languages": {
@@ -1111,7 +1118,8 @@
       "nameTaken": "You already have an agent with that name.",
       "budgetRange": "The budget must be more than $0 and at most $1,000,000,000.",
       "invalid": "Check the fields: the name is required, and the budget is dollars with at most two decimals.",
-      "budgetDecrease": "This agent has traded, so its budget can be raised but not lowered."
+      "budgetDecrease": "This agent has traded, so its budget can be raised but not lowered.",
+      "limitReached": "You already have as many agents as this installation allows. Archive one to make room."
     },
     "account": {
       "title": "Account",
@@ -1306,6 +1314,10 @@
     "sides": {
       "buy": "Buy",
       "sell": "Sell"
+    },
+    "limit": {
+      "used": "{{used}} of {{max}} agents",
+      "full": "You have {{max}} agents, the most this installation allows. Archive one to make room."
     }
   },
   "consolidated": {

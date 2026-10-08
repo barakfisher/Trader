@@ -9,6 +9,8 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type {
+  AdminSettingsInput,
+  AdminSettingsResponse,
   AccountResetGroup,
   AccountResetInput,
   AccountResetResponse,
@@ -123,6 +125,27 @@ export function useResetAccount() {
       api.post<AccountResetResponse>('/admin/account/reset', { groups, confirm } satisfies AccountResetInput),
     onSuccess: () => {
       void client.invalidateQueries();
+    },
+  });
+}
+
+/** The installation's settings (D71): how many agents a user may have. */
+export function useAdminSettingsQuery() {
+  return useQuery({
+    queryKey: queryKeys.adminSettings,
+    queryFn: () => api.get<AdminSettingsResponse>('/admin/settings'),
+  });
+}
+
+/** Change them. The agents list carries the limit too, so it is re-read. */
+export function useUpdateAdminSettings() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AdminSettingsInput) => api.put<AdminSettingsResponse>('/admin/settings', input),
+    onSuccess: (body) => {
+      client.setQueryData(queryKeys.adminSettings, body);
+      void client.invalidateQueries({ queryKey: queryKeys.adminAudit });
+      void client.invalidateQueries({ queryKey: queryKeys.agents });
     },
   });
 }

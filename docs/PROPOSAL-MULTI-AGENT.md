@@ -1021,6 +1021,76 @@ UTC day `scan_budget.py` counts. Before an agent's first scan the per-scan estim
 installation's agents' recent average, or §14.3's measured $0.036, labelled as which.
 *Rejected:* hiding the picker until PR 7 (the UI work moves into the scheduler's PR).
 
+### Added 2026-10-08, planning PR 7
+
+Measured first: scheduled work is "ask often, let the run key decide" - a local timer or a kind
+CronJob posts to `/internal/runs` every 15 or 60 minutes and `claimRun` answers a repeat
+"skipped". `GET /market/sessions` already gives each trading day's open and close in UTC, early
+closes marked (checked on the live AI service: 26 Nov 2026 absent, 27 Nov closing 18:00 UTC).
+Both installations' Redis run `appendonly yes` and `noeviction`. Compose and kind keep separate
+databases and share one OpenRouter key; kind held no simulated agent. Asked one at a time; the
+user questioned the side effects before settling, and the answers below are theirs.
+
+**D67 - A slot's time comes from the day's session.** *Pre-open* is the open minus 30 minutes
+(09:00 New York on a normal day); *10:00* and *14:00* New York are as named, and 14:00 is dropped
+on an early close; *post-close* is the close plus 15 minutes (16:15, or 13:15 after an early
+close). No session - a weekend or a holiday - means no slot. Times are read from the calendar's
+UTC open and close each day, so daylight saving moves nothing by hand.
+
+**D68 - A slot runs until its window ends, and retries only a failure, at most twice.** The window
+runs from the slot's time to the agent's next slot, or to the close; post-close runs to midnight New
+York. Within it a slot starts if it never ran - so a sleeping Mac or a restart catches up - and
+retries a `failed` scan (a provider or network error, or a capacity refusal) at least 60 minutes
+later, **at most two retries**. Every other outcome is the slot's answer: `trade`, `no_trade`,
+`step_limit`, and `invalid_answer` too - retrying would pay again for the same mistake. A spent
+budget ends the slot for the day. Worst case for a pre-open agent: three scans, ~$0.11, under its
+$0.50 budget. *Rejected:* skipping a slot an hour late (the user: a late scan still decides on live
+prices, since every approval is priced live - D47); retrying until the window ends (uncontrolled
+cost during an outage).
+
+**D69 - A sell breaks quiet hours only while the market is open (amends D5).** Agents rate no
+urgency, and a sell can be approved only while the exchange is open; so a sell proposal is pushed
+through quiet hours exactly when it could be acted on before it expires. Buys, and sells made while
+the market is closed, follow quiet hours like everything else. *Rejected:* every sell at any hour
+(an interruption at 23:30 about something nothing can be done about until the next afternoon);
+dropping D5.
+
+**D70 - One installation schedules scans: `ENABLE_SCHEDULED_SCANS`.** Compose and kind cannot see
+each other's scans, and both bill the same OpenRouter account, so an agent created in both would be
+scanned and paid for twice. Scheduled scans run only where `ENABLE_SCHEDULED_SCANS=true`; unset
+means off, so a new or forgotten installation never spends on its own. kind's `config.env` sets
+`false`; compose's `.env` sets `true`; production sets it on its single instance. *Run a scan now*
+works everywhere - it is the user's own click. Settings says where scheduled scans run.
+*Rejected:* a per-agent opt-in (easy to turn on the same agent in both); relying on a habit.
+
+**D71 - A user may have at most 3 simulated agents, set on the Admin page.** Migration 0046: one
+row of typed installation settings, `max_agents_per_user` 1-50, default 3, audited when changed.
+Counted: simulated agents not archived; the primary never counts, and archiving frees a place. The
+database refuses a fourth and a restore past the limit with a trigger that locks the user's row
+first, so two creates at once cannot both pass; the orchestrator checks before writing too, and
+the Agents page shows "2 of 3 agents" and disables *Create* at the limit. Lowering the limit
+removes nothing. *Rejected:* counting archived agents (an old experiment would block a new one
+forever, and agents are never deleted); counting only active ones (pausing would sidestep it).
+
+**D72 - Scheduled scans go through a BullMQ queue (CLAUDE.md convention 5: the user chose the
+package).** One queue in the Redis already running, its worker inside the orchestrator; the
+15-minute ask only enqueues due slots, with the run key as the job id so a slot cannot be queued
+twice. `AGENT_SCAN_CONCURRENCY` (default 4) scans run at once; the database already refuses two
+scans of one agent. *Rejected:* time-capped batches in the request (no parallelism, a ceiling near
+16 scans an ask); RabbitMQ (a second stateful service for one producer and one consumer, with
+delays and rate limiting left to build); pg-boss (equally fit, and the user chose BullMQ).
+**Scale, measured on paper:** 5,000 agents scanning before the open would need ~42 scans at once
+for 30 minutes, ~80M prompt tokens - ~2.7M a minute, far above one provider account's limits -
+and ~$180 a day. No queue guarantees that window; at that scale the slot is spread, the queue's
+rate limiter set to the provider's limit, and a slot not done by its deadline alerted. Fairness
+between users needs BullMQ Pro's groups. Multi-user accounts are a milestone of their own.
+
+**D73 - A slot that gives up is reported once.** When a scheduled slot's last attempt fails, one
+Telegram message names the agent, the slot and the cause in plain words ("rate-limited by the
+model provider"), it is recorded as an ops event on the Admin page, and the *Decisions* tab shows
+the failed scan. A retry that succeeds sends nothing. *Rejected:* a message per attempt (an outage
+across agents floods the chat); the Admin page alone (missed for days).
+
 ---
 
 ## 11. Measured, 2026-10-04 (read-only, live compose database)
@@ -1317,9 +1387,13 @@ No migration.
 (`agents.scan_schedule`, default pre-open) with its cost per run, the LLM budget, *Run a scan now*,
 and the waiting-for-a-persona state; English and Hebrew. No migration.
 
-**PR 7 — The schedule.** Each agent's scans entered through `POST /internal/runs` at its chosen
-times on the exchange calendar, with a run key per agent and slot; the kind CronJob and its
-contract test; a high-severity `SELL` of a held position delivered through quiet hours (D5).
+**PR 7a — Agents per user (migration 0046; D71).** The installation's settings row, the trigger
+and its race test, `GET/PUT /admin/settings`, the Agents page's "N of M" and the Admin page's field.
+
+**PR 7b — The schedule (BullMQ; D67-D70, D72, D73).** The `agent_scans` ask every 15 minutes
+(local timer and kind CronJob, contract test), gated by `ENABLE_SCHEDULED_SCANS`, enqueuing due
+slots with their run key as the job id; the worker running scans at `AGENT_SCAN_CONCURRENCY`;
+the retry rule; the give-up alert; D69's quiet-hours rule; Settings naming the next scan.
 
 ### 14.3 Measured, 2026-10-07 (live compose database at `0043_agent_scans`)
 

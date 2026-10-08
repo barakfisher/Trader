@@ -20,6 +20,8 @@ import {
   type AdminLlmModelsResponse,
   type LlmModelChoiceInput,
   type AdminRunsResponse,
+  type AdminSettingsResponse,
+  MAX_AGENTS_PER_USER_CEILING,
   type RescreenStartResponse,
   type UniverseGapsResponse,
 } from '@traders/shared';
@@ -29,6 +31,8 @@ import {
   countUniverse,
   firstLlmCallAt,
   chooseLlmModel,
+  getInstallationSettings,
+  setMaxAgentsPerUser,
   getLatestUniverseLoad,
   groupLlmCalls,
   listAdminAudit,
@@ -60,6 +64,15 @@ const GAP_KINDS: readonly OpsEventKind[] = [
   'universe_gap_missing_ticker',
   'universe_gap_low_confidence',
 ];
+
+const settingsSchema = z
+  .object({ maxAgentsPerUser: z.number().int().min(1).max(MAX_AGENTS_PER_USER_CEILING) })
+  .strict();
+
+async function adminSettings(): Promise<AdminSettingsResponse> {
+  const row = await getInstallationSettings();
+  return { maxAgentsPerUser: row.max_agents_per_user, updatedAt: row.updated_at.toISOString() };
+}
 
 const resetSchema = z
   .object({
@@ -214,6 +227,22 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
     await chooseLlmModel(scope, parsed.data.model, currentUserId(context));
     const body: AdminLlmModelsResponse = toAdminLlmModels(await llmCatalogue(context));
     return context.json(body);
+  });
+
+  /** The installation's settings (D71). */
+  app.get('/admin/settings', async (context) => context.json(await adminSettings()));
+
+  /**
+   * Change them. Audited by the gate before this runs (decision 84). A lower
+   * limit refuses nothing that exists: it stops the next create (0046).
+   */
+  app.put('/admin/settings', async (context) => {
+    const parsed = settingsSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) {
+      throw badRequest('invalid_body', `expected { maxAgentsPerUser: 1-${MAX_AGENTS_PER_USER_CEILING} }`, parsed.error.issues);
+    }
+    await setMaxAgentsPerUser(parsed.data.maxAgentsPerUser, currentUserId(context));
+    return context.json(await adminSettings());
   });
 
   /**

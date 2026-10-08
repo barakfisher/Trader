@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft, ShieldCheck } from 'lucide-react';
@@ -6,6 +6,7 @@ import { ArrowLeft, ShieldCheck } from 'lucide-react';
 import {
   ACCOUNT_RESET_CONFIRMATION,
   ACCOUNT_RESET_GROUPS,
+  MAX_AGENTS_PER_USER_CEILING,
   type AccountResetGroup,
 } from '@traders/shared';
 import type {
@@ -46,10 +47,12 @@ import {
   useAdminLlmModelsQuery,
   useAdminLlmQuery,
   useAdminRunsQuery,
+  useAdminSettingsQuery,
   useAdminUniverseQuery,
   useChooseLlmModel,
   useRescreen,
   useResetAccount,
+  useUpdateAdminSettings,
 } from '../queries/admin.ts';
 import { useStore } from '../stores/context.tsx';
 
@@ -95,6 +98,7 @@ export const AdminPage = observer(function AdminPage() {
           <UniverseCard />
           <GapsCard />
           <ModelsCard />
+          <AgentLimitCard />
           <LlmCard />
           <RunsCard />
           <AuditCard />
@@ -451,6 +455,55 @@ function GapItem({ gap }: { gap: UniverseGap }) {
  * is saved; saving is an audited admin action. The balance beside the totals
  * answers "how much should I add to the account".
  */
+/** D71: how many simulated agents a user may have. Every change is audited. */
+function AgentLimitCard() {
+  const { t } = useTranslation();
+  const settings = useAdminSettingsQuery();
+  const update = useUpdateAdminSettings();
+  const stored = settings.data ? String(settings.data.maxAgentsPerUser) : '';
+  const [value, setValue] = useState(stored);
+  useEffect(() => setValue(stored), [stored]);
+  const number = Number(value);
+  const valid = /^\d+$/.test(value) && number >= 1 && number <= MAX_AGENTS_PER_USER_CEILING;
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    update.mutate({ maxAgentsPerUser: number });
+  };
+  return (
+    <Card title={t('admin.agentLimit.title')}>
+      {settings.isPending && <Spinner label={t('admin.agentLimit.title')} />}
+      {settings.error && <ErrorNote message={errorMessage(settings.error, t('admin.agentLimit.title'))} />}
+      {settings.data && (
+        <form onSubmit={submit} className="flex flex-wrap items-end gap-3 text-sm">
+          <label className="flex flex-col gap-1">
+            <span className="text-text-muted">{t('admin.agentLimit.label')}</span>
+            <input
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+              inputMode="numeric"
+              dir="ltr"
+              aria-invalid={!valid}
+              className="w-24 rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
+            />
+          </label>
+          <Button type="submit" disabled={!valid || value === stored || update.isPending}>
+            {t('admin.agentLimit.save')}
+          </Button>
+          {update.isSuccess && value === stored && (
+            <span role="status" className="text-xs text-text-muted">
+              {t('admin.agentLimit.saved')}
+            </span>
+          )}
+          <p className="basis-full text-xs text-text-muted">
+            {t('admin.agentLimit.hint', { max: MAX_AGENTS_PER_USER_CEILING })}
+          </p>
+          {update.error && <ErrorNote message={errorMessage(update.error, t('admin.agentLimit.title'))} />}
+        </form>
+      )}
+    </Card>
+  );
+}
+
 function ModelsCard() {
   const models = useAdminLlmModelsQuery();
   const { t } = useTranslation();

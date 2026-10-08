@@ -24,8 +24,10 @@ import {
 
 import {
   agentHasTraded,
+  countLiveAgents,
   createAgent,
   getAgent,
+  getInstallationSettings,
   listAgents,
   updateAgent,
   type AgentRow,
@@ -169,10 +171,40 @@ export function agentIdFrom(raw: string): string {
 
 const nameTaken = () => conflict('agent_name_taken', 'you already have an agent with that name');
 
+/** D71: the database's own refusal (migration 0046), met when a racing create got there first. */
+function isAgentLimit(error: unknown): boolean {
+  const pg = error as { code?: string; message?: string };
+  return pg.code === CHECK_VIOLATION && (pg.message ?? '').startsWith('agent_limit_reached');
+}
+
+function agentLimitReached(max: number) {
+  return conflict(
+    'agent_limit_reached',
+    `you have ${max} agents, the most this installation allows: archive one to make room`,
+    { max },
+  );
+}
+
+/** Refuse before writing when a new or restored agent would pass the limit. */
+async function assertRoomForAgent(userId: string): Promise<void> {
+  const [{ max_agents_per_user: max }, used] = await Promise.all([
+    getInstallationSettings(),
+    countLiveAgents(userId),
+  ]);
+  if (used >= max) throw agentLimitReached(max);
+}
+
+async function limitAfter(error: unknown): Promise<never> {
+  if (isAgentLimit(error)) throw agentLimitReached((await getInstallationSettings()).max_agents_per_user);
+  throw error;
+}
+
 export function registerAgentsRoutes(app: Hono<AppEnv>): void {
   app.get('/agents', async (context) => {
     const rows = await listAgents(currentUserId(context));
-    const body: AgentsResponse = { agents: rows.map(toAgentView) };
+    const { max_agents_per_user: max } = await getInstallationSettings();
+    const used = rows.filter((row) => !row.is_primary && row.state !== 'archived').length;
+    const body: AgentsResponse = { agents: rows.map(toAgentView), agentLimit: { used, max } };
     return context.json(body);
   });
 
@@ -188,6 +220,8 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
       throw badRequest('invalid_body', 'expected { name, budget, persona? }', parsed.error.issues);
     }
     const input = parsed.data;
+    const budgetMinor = budgetToMinor(input.budget);
+    await assertRoomForAgent(currentUserId(context));
     try {
       const row = await createAgent({
         userId: currentUserId(context),
@@ -197,13 +231,13 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
         slug: `agent-${randomUUID().slice(0, 8)}`,
         name: input.name,
         persona: personaOf(input.persona) ?? null,
-        budgetMinor: budgetToMinor(input.budget),
+        budgetMinor,
         currency: AGENT_CURRENCY,
       });
       return context.json(toAgentView(row), 201);
     } catch (error) {
       if (isNameTaken(error)) throw nameTaken();
-      throw error;
+      return limitAfter(error);
     }
   });
 
@@ -223,6 +257,10 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
       );
     }
     const patch = parsed.data;
+    // A restore from the archive takes a place back (D71).
+    if (existing.state === 'archived' && patch.state !== undefined && patch.state !== 'archived') {
+      await assertRoomForAgent(userId);
+    }
     const budgetMinor = patch.budget === undefined ? undefined : budgetToMinor(patch.budget);
     // D22: before the first fill a budget edit replaces the opening deposit; after
     // it, a raise is a top-up and a cut is refused. The database enforces the same.
@@ -247,7 +285,7 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
     } catch (error) {
       if (isNameTaken(error)) throw nameTaken();
       if (isBudgetCutAfterTrade(error)) throw budgetCutAfterTrade();
-      throw error;
+      return limitAfter(error);
     }
   });
 }
