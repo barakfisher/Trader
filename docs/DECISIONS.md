@@ -128,3 +128,4 @@ while this file is out of date.
 | 115 | The shadow SPY buys at the first session close at or after each deposit, fractionally, with no fees |
 | 116 | The score replays the agent's own book |
 | 117 | Reset account is one `SECURITY DEFINER` function, `reset_account(user, groups)`, and the ledger's only way to lose a row |
+| 118 | Reading holdings from a broker is in scope; trading through one never is |

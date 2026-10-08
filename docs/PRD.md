@@ -25,7 +25,7 @@ These shape the whole architecture, so they are stated as requirements, not opin
 
 | # | Stance |
 |---|--------|
-| P1 | **No order execution.** The system never places a trade. An approved proposal writes an intent + optional paper-trade fill to our own ledger. Broker integration is explicitly out of scope for v1. |
+| P1 | **No order execution.** The system never places a trade. An approved proposal writes an intent + optional paper-trade fill to our own ledger. No broker write path, ever. Reading holdings from a broker is allowed as an import source (D67): read-only, OAuth on the broker's own page, never a stored or relayed password. |
 | P2 | **Educational framing, not advice.** Output is framed as observation + explanation + "what to read up on". For the user's **real** portfolio: no personalized advice, no price targets, no position sizing recommendations. **Amended for simulated agents** (see [PROPOSAL-MULTI-AGENT.md](PROPOSAL-MULTI-AGENT.md) §2): a simulated agent may propose a sized transaction within its own paper budget, on three conditions — it is proposal-only and never executes (P1, unscoped); its performance is scored and shown, so a philosophy can be judged rather than merely heard; and it is labelled as a simulation at every surface. **The real portfolio is the passive primary agent, "Main portfolio"** (PROPOSAL-MULTI-AGENT.md §10 D1): it is never the subject of a trade proposal, which the database itself refuses; it is only ever asked to acknowledge, as with `rebalance`. A persistent disclaimer is shown in UI and appended to every Telegram digest. |
 | P3 | **Every claim is sourced.** Each observation carries the data points and article URLs that produced it. If the engine can't cite, it doesn't emit. |
 | P4 | **Approvals expire.** A proposal has a TTL (default 60 min). Markets move; a stale approval must be re-derived, not honoured. |
@@ -82,7 +82,7 @@ These shape the whole architecture, so they are stated as requirements, not opin
 - NFR-6 Local `docker compose up` brings the whole system up with seeded demo data and no paid API key required (fixture provider).
 
 ## 7. Out of scope for v1
-Order execution / broker APIs · tax-lot accounting and tax reporting · options, futures, bonds ·
+Order execution and any broker write API (reading holdings is in scope, D67) · tax-lot accounting and tax reporting · options, futures, bonds ·
 backtesting engine · multi-user invitations and billing · mobile app · options-flow or
 alternative data.
 
