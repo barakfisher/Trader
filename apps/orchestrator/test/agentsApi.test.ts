@@ -272,13 +272,13 @@ describe('the agents API', () => {
     expect(queries.updateAgent).not.toHaveBeenCalled();
   });
 
-  it('reports how many agents count against the limit (D71)', async () => {
+  it('reports how many agents count against the limit (D72)', async () => {
     const body = await (await send('GET', '/agents')).json();
     // The primary never counts; the one active simulated agent does.
     expect(body.agentLimit).toEqual({ used: 1, max: 3 });
   });
 
-  it('refuses a new agent at the limit before writing anything (D71)', async () => {
+  it('refuses a new agent at the limit before writing anything (D72)', async () => {
     vi.mocked(queries.countLiveAgents).mockResolvedValueOnce(3);
     const response = await send('POST', '/agents', { name: 'Fourth', budget: '1000' });
     expect(response.status).toBe(409);

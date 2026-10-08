@@ -1,7 +1,7 @@
 import { query, queryOne } from '../pool.js';
 
 /**
- * The installation's own settings (migration 0046): one row, written by the
+ * The installation's own settings (migration 0047): one row, written by the
  * migration, so a read always finds it. Changed only from the Admin page, whose
  * gate has written the `admin_audit` row before this runs (decision 84).
  */
@@ -14,7 +14,7 @@ export async function getInstallationSettings(): Promise<InstallationSettingsRow
   const row = await queryOne<InstallationSettingsRow>(
     `SELECT max_agents_per_user, updated_at FROM installation_settings`,
   );
-  if (row === null) throw new Error('installation_settings has no row: is the schema at 0046?');
+  if (row === null) throw new Error('installation_settings has no row: is the schema at 0047?');
   return row;
 }
 

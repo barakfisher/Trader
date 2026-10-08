@@ -189,14 +189,14 @@ export interface AgentScanDetail extends AgentScanSummary {
 
 export interface AgentsResponse {
   agents: AgentView[];
-  /** D71: simulated agents that are not archived, and how many the installation allows. */
+  /** D72: simulated agents that are not archived, and how many the installation allows. */
   agentLimit: { used: number; max: number };
 }
 
-/** D71's bounds: the Admin page and migration 0046's CHECK agree on them. */
+/** D72's bounds: the Admin page and migration 0047's CHECK agree on them. */
 export const MAX_AGENTS_PER_USER_CEILING = 50;
 
-/** The installation's settings on the Admin page (migration 0046). */
+/** The installation's settings on the Admin page (migration 0047). */
 export interface AdminSettingsResponse {
   maxAgentsPerUser: number;
   updatedAt: string;
@@ -1040,8 +1040,11 @@ export interface DigestEntry {
  */
 export interface DigestResponse {
   next: { entries: DigestEntry[] };
-  /** Null until a digest has been delivered. */
-  last: { sentAt: string; entries: DigestEntry[] } | null;
+  /**
+   * Null until a digest has been delivered. `seen`: the user has opened it or
+   * dismissed its banner, on any device (UX4, migration 0046).
+   */
+  last: { sentAt: string; entries: DigestEntry[]; seen: boolean } | null;
 }
 
 export interface ObservationsResponse {

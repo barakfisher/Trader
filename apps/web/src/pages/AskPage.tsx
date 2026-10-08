@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Link } from '@tanstack/react-router';
-import { ArrowLeft, MessageCircleQuestion } from 'lucide-react';
+import { MessageCircleQuestion } from 'lucide-react';
 
 import type { AskCitation, AskResponse } from '@traders/shared/ai';
 
@@ -20,7 +20,7 @@ import {
 } from '../lib/askPresentation.ts';
 import { conceptLabel } from '../lib/observationPresentation.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
-import { MIRROR_IN_RTL, SERVER_ENGLISH } from '../lib/textDirection.ts';
+import { SERVER_ENGLISH } from '../lib/textDirection.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { MAX_QUESTION_LENGTH, type AskEntry } from '../stores/AskStore.ts';
 import { useStore } from '../stores/context.tsx';
@@ -61,12 +61,6 @@ export const AskPage = observer(function AskPage() {
           <MessageCircleQuestion className="size-5 text-accent" aria-hidden />
           <h1 className="text-base font-semibold">{t('ask.title')}</h1>
         </div>
-        <Link to="/" className={buttonClass('secondary')}>
-          <span className="flex items-center gap-1">
-            <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
-            {t('common.backToPortfolio')}
-          </span>
-        </Link>
       </header>
 
       <Card>

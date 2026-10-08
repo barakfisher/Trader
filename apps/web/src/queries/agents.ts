@@ -37,7 +37,7 @@ export function useAgentsQuery() {
   return useQuery({ ...agentsQuery, select: (body) => body.agents });
 }
 
-/** How many agents count against the installation's limit, and the limit (D71). */
+/** How many agents count against the installation's limit, and the limit (D72). */
 export function useAgentLimitQuery() {
   return useQuery({ ...agentsQuery, select: (body) => body.agentLimit ?? null });
 }

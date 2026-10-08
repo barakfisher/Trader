@@ -129,7 +129,7 @@ export function useResetAccount() {
   });
 }
 
-/** The installation's settings (D71): how many agents a user may have. */
+/** The installation's settings (D72): how many agents a user may have. */
 export function useAdminSettingsQuery() {
   return useQuery({
     queryKey: queryKeys.adminSettings,

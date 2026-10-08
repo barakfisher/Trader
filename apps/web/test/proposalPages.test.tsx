@@ -27,6 +27,7 @@ vi.mock('../src/api/client.ts', async () => {
 
 const { ApiRequestError } = await import('../src/api/client.ts');
 const { App } = await import('../src/App.tsx');
+const { RECENT_APPROVALS } = await import('../src/queries/proposals.ts');
 const { createAppRouter } = await import('../src/router.tsx');
 const { renderWithServerState } = await import('./serverStateHarness.tsx');
 
@@ -224,7 +225,12 @@ describe("an agent's trade proposal", () => {
   };
 
   it('approves through a preview at the live price, then confirms at the price it showed', async () => {
-    serve({ '/proposals/p-trade': { proposal: TRADE, transitions: [], attempts: [] } });
+    serve({
+      '/proposals/p-trade': { proposal: TRADE, transitions: [], attempts: [] },
+      // The app bar's inbox count: confirming re-reads it, and waits for it.
+      '/proposals?state=open': { proposals: [] },
+      [`/proposals?state=approved&limit=${RECENT_APPROVALS}`]: { proposals: [] },
+    });
     post.mockImplementation((path: string) =>
       Promise.resolve(
         path.endsWith('/preview')

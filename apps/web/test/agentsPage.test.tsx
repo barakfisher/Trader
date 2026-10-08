@@ -101,7 +101,7 @@ describe('AgentsPage', () => {
     expect(await screen.findByText('You already have an agent with that name.')).toBeTruthy();
   });
 
-  it('shows how many agents count against the limit, and refuses a new one at it (D71)', async () => {
+  it('shows how many agents count against the limit, and refuses a new one at it (D72)', async () => {
     get.mockImplementation(async (path: string) =>
       path === '/portfolio/consolidated' ? { agents: [] } : { agents: [PRIMARY, MOMENTUM], agentLimit: { used: 3, max: 3 } },
     );

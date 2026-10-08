@@ -105,3 +105,42 @@ export async function replaceUserSettings(
   if (row === null) throw new Error(`user_settings could not be written for ${userId}`);
   return row;
 }
+
+/**
+ * The send time of the last digest the user opened or dismissed (migration
+ * 0046), or null if none. Read without materialising a settings row: no row
+ * means nothing was seen, which is what null says.
+ */
+export async function getDigestSeenAt(userId: string): Promise<Date | null> {
+  const row = await queryOne<{ digest_seen_at: Date | null }>(
+    'SELECT digest_seen_at FROM user_settings WHERE user_id = $1',
+    [userId],
+  );
+  return row?.digest_seen_at ?? null;
+}
+
+/**
+ * Record that the user has seen the digest sent at `sentAt`, and return what is
+ * now recorded.
+ *
+ * Only forward (`GREATEST`): a stale tab dismissing yesterday's banner must not
+ * bring today's back. And never past a digest that exists (`LEAST` with the
+ * latest one sent): a claim to have seen a digest from the future would hide
+ * every banner until then - the client names what it showed, the server keeps
+ * the claim honest. With no digest sent there is nothing to have seen, so
+ * nothing is recorded (`LEAST` alone would ignore the NULL and keep the claim).
+ */
+export async function markDigestSeen(userId: string, sentAt: Date): Promise<Date | null> {
+  const row = await queryOne<{ digest_seen_at: Date | null }>(
+    `-- agent-blind: one digest for every agent (§7.2).
+     INSERT INTO user_settings (user_id, digest_seen_at)
+     SELECT $1::uuid, CASE WHEN max(sent_at) IS NULL THEN NULL ELSE LEAST($2::timestamptz, max(sent_at)) END
+       FROM notifications
+      WHERE user_id = $1 AND channel = 'digest' AND status = 'sent'
+     ON CONFLICT (user_id) DO UPDATE
+        SET digest_seen_at = GREATEST(user_settings.digest_seen_at, EXCLUDED.digest_seen_at)
+     RETURNING digest_seen_at`,
+    [userId, sentAt.toISOString()],
+  );
+  return row?.digest_seen_at ?? null;
+}

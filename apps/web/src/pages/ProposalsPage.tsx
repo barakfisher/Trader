@@ -1,6 +1,6 @@
 import { observer } from 'mobx-react-lite';
 import { Link } from '@tanstack/react-router';
-import { ArrowLeft, Inbox, ShieldCheck } from 'lucide-react';
+import { Inbox, ShieldCheck } from 'lucide-react';
 
 import type { Proposal } from '@traders/shared';
 
@@ -13,7 +13,6 @@ import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { outcomeAt, outcomeText, outcomeTone } from '../lib/proposalOutcome.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
 import { observationText } from '../lib/observationText.ts';
-import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import { undoSecondsLeft } from '../lib/undoWindow.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import {
@@ -87,12 +86,6 @@ export const ProposalsPage = observer(function ProposalsPage() {
             </span>
           )}
         </div>
-        <Link to="/" className={buttonClass('ghost')}>
-          <span className="flex items-center gap-1.5">
-            <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
-            {t('common.backToPortfolio')}
-          </span>
-        </Link>
       </header>
 
       {/*

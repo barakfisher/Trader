@@ -1,6 +1,6 @@
-"""How many simulated agents a user may have, set on the Admin page (D71).
+"""How many simulated agents a user may have, set on the Admin page (D72).
 
-Stage 4, PR 7a (docs/PROPOSAL-MULTI-AGENT.md D71).
+Stage 4, PR 7a (docs/PROPOSAL-MULTI-AGENT.md D72).
 
 **`installation_settings`** is one row of typed columns, not a key/value
 table: a wrong value is refused by a CHECK rather than read back as text and
@@ -23,19 +23,19 @@ orchestrator also checks first, so the page can say so before anyone types a
 name. Lowering the limit below what a user already has refuses nothing that
 exists: it stops the next create.
 
-Revision ID: 0046_agent_limit
-Revises: 0045_account_reset
+Revision ID: 0047_agent_limit
+Revises: 0046_digest_seen
 """
 
 from alembic import op
 
-revision = "0046_agent_limit"
-down_revision = "0045_account_reset"
+revision = "0047_agent_limit"
+down_revision = "0046_digest_seen"
 branch_labels = None
 depends_on = None
 
 APP_ROLE = "traders_app"
-#: D71's default and bounds; the orchestrator's admin route reads the same.
+#: D72's default and bounds; the orchestrator's admin route reads the same.
 DEFAULT_MAX_AGENTS_PER_USER = 3
 MAX_AGENTS_PER_USER_CEILING = 50
 

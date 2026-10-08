@@ -92,8 +92,8 @@ export function getAgent(userId: string, agentId: string): Promise<AgentRow | nu
 }
 
 /**
- * Simulated agents that count against the limit (D71): not archived, never the
- * primary. The trigger in migration 0046 counts the same way.
+ * Simulated agents that count against the limit (D72): not archived, never the
+ * primary. The trigger in migration 0047 counts the same way.
  */
 export async function countLiveAgents(userId: string): Promise<number> {
   const row = await queryOne<{ count: number }>(

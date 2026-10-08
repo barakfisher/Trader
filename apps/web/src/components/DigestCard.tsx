@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { observer } from 'mobx-react-lite';
 
 import type { DigestEntry } from '@traders/shared';
@@ -8,14 +9,14 @@ import { countText, findingsIn, reasonSummary, reasonText } from '../lib/digestP
 import { severityStyle, subjectLabel } from '../lib/observationPresentation.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
 import { observationText } from '../lib/observationText.ts';
-import { useDigestQuery } from '../queries/digest.ts';
+import { useDigestQuery, useMarkDigestSeen } from '../queries/digest.ts';
 import { Card, ErrorNote, Spinner } from './ui.tsx';
 
 /** How many held-back headlines the card lists before "and N more". */
 const SHOWN = 5;
 
 /**
- * The daily digest on the dashboard (FR-13 - "to UI and Telegram").
+ * The daily digest, on the Insights page's Digest tab (FR-13 - "to UI and Telegram").
  *
  * Every finding in a digest is already in the feed. What only the digest says
  * is which of them were *held back* from an interruption, and why - below your
@@ -29,6 +30,18 @@ export const DigestCard = observer(function DigestCard() {
   const next = findingsIn(data?.next.entries ?? []);
   const last = data?.last ?? null;
   const lastFindings = findingsIn(last?.entries ?? []);
+
+  // Showing the last digest is seeing it: its dashboard banner ends (UX4). Once
+  // per digest - a failed write re-reads `seen: false`, and must not retry in
+  // a loop; the banner staying is the honest result of a write that failed.
+  const markSeen = useMarkDigestSeen();
+  const marked = useRef<string | null>(null);
+  const unseen = last !== null && !last.seen ? last.sentAt : null;
+  useEffect(() => {
+    if (unseen === null || marked.current === unseen) return;
+    marked.current = unseen;
+    markSeen.mutate(unseen);
+  }, [unseen, markSeen]);
 
   return (
     <Card title={t('digest.title')}>

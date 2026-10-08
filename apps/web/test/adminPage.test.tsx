@@ -251,14 +251,16 @@ describe('the admin page', () => {
   });
   afterEach(cleanup);
 
-  it('is linked from the dashboard for an admin', async () => {
+  it('is linked from the account menu for an admin', async () => {
     renderAt('/', ADMIN);
+    fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
     const link = await screen.findByRole('link', { name: /Admin/ });
     expect(link.getAttribute('href')).toBe('/admin');
   });
 
   it('is not linked for anyone else', async () => {
     renderAt('/', USER);
+    fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
     await screen.findByRole('link', { name: /Settings/ });
     expect(screen.queryByRole('link', { name: /Admin/ })).toBeNull();
   });
@@ -325,7 +327,7 @@ describe('the admin page', () => {
     expect(put).not.toHaveBeenCalled();
   });
 
-  it('sets how many agents a user may have, within 1 and the ceiling (D71)', async () => {
+  it('sets how many agents a user may have, within 1 and the ceiling (D72)', async () => {
     put.mockResolvedValue({ maxAgentsPerUser: 5, updatedAt: '2026-10-08T10:00:00Z' });
     renderAt('/admin', ADMIN);
     const field = (await screen.findByLabelText('Most simulated agents a user may have')) as HTMLInputElement;

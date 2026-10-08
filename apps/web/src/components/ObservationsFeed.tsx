@@ -37,8 +37,9 @@ const SEVERITY_OPTIONS: { value: FeedFilters['severity']; key: 'all' | 'notable'
  * The feed, a page at a time, filtered by severity and symbol.
  *
  * The filters are props rather than read from the address here, so the
- * component renders the same in a test as on the dashboard, which keeps them in
- * its URL (`?severity=high&symbol=NVDA`) - a filtered view has an address too.
+ * component renders the same in a test as on the Insights page, which keeps
+ * them in its URL (`?severity=high&symbol=NVDA`) - a filtered view has an
+ * address too.
  */
 export const ObservationsFeed = observer(function ObservationsFeed({
   filters = {},

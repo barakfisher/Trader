@@ -171,7 +171,7 @@ export function agentIdFrom(raw: string): string {
 
 const nameTaken = () => conflict('agent_name_taken', 'you already have an agent with that name');
 
-/** D71: the database's own refusal (migration 0046), met when a racing create got there first. */
+/** D72: the database's own refusal (migration 0047), met when a racing create got there first. */
 function isAgentLimit(error: unknown): boolean {
   const pg = error as { code?: string; message?: string };
   return pg.code === CHECK_VIOLATION && (pg.message ?? '').startsWith('agent_limit_reached');
@@ -257,7 +257,7 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
       );
     }
     const patch = parsed.data;
-    // A restore from the archive takes a place back (D71).
+    // A restore from the archive takes a place back (D72).
     if (existing.state === 'archived' && patch.state !== undefined && patch.state !== 'archived') {
       await assertRoomForAgent(userId);
     }

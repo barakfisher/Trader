@@ -4,7 +4,29 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-07 ~15:00 UTC - **Multi-agent Stage 4: the agent proposes and the user approves.
+Updated: 2026-10-08 ~11:45 UTC - **The UI/UX sprint is complete: UX1-UX6 merged as #189, #191,
+#192, #193, #194, #195. Handoff by count (five merged PRs) and at the sprint's end. Nothing is in
+flight.** What it built is under "The UI/UX sprint is complete" in "Where to go next"; the argued
+choices are decisions 119-123. **Neither environment is redeployed:** compose and kind both run
+migration **0045** - UX4's **0046** (`user_settings.digest_seen_at`) and every UI change since #185
+wait for `git pull && bash scripts/dev-docker.sh && bash scripts/k8s-up.sh`. After that deploy, the
+digest sent 2026-10-08 08:42 UTC shows its banner once, by design (0046 has no default). **Merged by
+other sessions since the last handoff:** #185 (task 18, reset account, 0045), #186 (Stage 4 PR 5b,
+Telegram trade approval, D60-D63), #188 (Stage 4 PR 6, the Decisions tab and Run a scan, D64-D66),
+#190 (D67: read-only broker sync is in scope; plan in `docs/PROPOSAL-IBI-SYNC.md`, its migration
+renumbered to **0047** in this handoff because UX4 took 0046). The "Next session: Stage 4 PR 5b"
+heading below predates #186 and #188; read `docs/PROPOSAL-MULTI-AGENT.md` for where Stage 4 stands.
+**Two things about GitHub that cost time today:** (1) a repository ruleset, **"protect main"**
+(created 2026-10-08), restricts updates on *every* branch to the admin role, so `gh pr merge`
+is refused with green CI ("base branch policy prohibits the merge") - the user says **"admin
+merge"** per PR and the merge uses `--admin`; GitHub auto-merge is off for the repo. (2) That
+morning GitHub Actions refused every job in 2 s ("recent account payments have failed") - six red
+checks that ran nothing; the user fixed billing and a rerun went through. **Form, unchanged:** one
+question at a time with a recommendation (AskUserQuestion); the session runs on the user's Mac and
+reads compose's DB itself; the user's Chrome is signed in to localhost (cookies are per host, not
+per port, so a worktree's dev server on :5175 shares the session).
+
+Previous handoff, 2026-10-07 ~15:00 UTC - **Multi-agent Stage 4: the agent proposes and the user approves.
 Handoff at the user's request after two merged PRs (#182, #183; not a count trigger). Nothing is in
 flight. The next session builds PR 5b - Telegram's Approve/Confirm and the consolidated view's
 pending proposals** - see "Next session: Stage 4 PR 5b". Merged this session: **#182** (PR 5a,
@@ -1932,6 +1954,54 @@ failure they prevent.
     `agents_ledger_follows_budget` inserts the opening deposit when none exists - before it, the
     first *Add cash* after a reset would have updated no row and moved no cash, silently. On the
     Admin page, last card; the typed word is `RESET` in every language and checked by the server too.
+118. **Reading holdings from a broker is in scope; trading through one never is** (D67, the user's
+    choice 2026-10-08, plan in [PROPOSAL-IBI-SYNC.md](../docs/PROPOSAL-IBI-SYNC.md)). PRD P1 said
+    "broker integration is out of scope", which mixed two things with opposite risks: a write
+    path that can lose money, and a read path that only saves typing. Only the read path is
+    allowed, and only as an **import source**: a broker's positions become `ImportRow`s and go
+    through the same preview, resolution and merge-or-replace commit as a file (F1), so a sync can
+    never change holdings the user did not see first. **Credentials never reach Traders:** a broker
+    is connected by OAuth on the broker's own page or not at all. *Rejected:* relaying the user's
+    broker password through our server (it turns us into a credential harvester, breaches broker
+    terms, and Node cannot erase a string from memory). **Order:** IBI's Excel export through the
+    file import first - it needs no authentication and builds the mapper the MCP path reuses;
+    the MCP path waits for a read-only probe of IBI's OAuth metadata, because no public
+    registration for third-party clients has been found.
+119. **"Seen" for a digest is a send time, not an id** (UX4, migration 0046). A digest is not stored
+    as a message: it is the batch of digest-channel `notifications` one run sent, named by its
+    latest `sent_at` (`listLastDigestEntries`), so `user_settings.digest_seen_at` holds the send
+    time of the last digest seen. Nullable with **no default** - `now()` would have marked the
+    digest waiting at deploy time as read. `markDigestSeen` moves it only forward (`GREATEST`: a
+    stale tab cannot bring a dismissed banner back) and never past the latest digest sent (`LEAST`:
+    a claim from the future cannot hide tomorrow's), and records nothing when no digest exists -
+    `LEAST` alone ignores a NULL and would have kept the claim. `seen` is compared as JS Dates:
+    `sent_at` has microseconds, the time a client echoes back has milliseconds, and the driver
+    reads both at millisecond precision. **On the server, not `localStorage`**, so a digest read on
+    the phone is not announced on the laptop; opening the Digest tab marks it, once per digest (a
+    failed write must not retry in a loop). *Rejected:* a dialog on entry - dismissed unread.
+120. **The export's cost is a decimal, not minor units** (UX6). The plan said "money as minor
+    units"; the importer reads `cost_basis` as a decimal per unit (`parseToMinor`), and the export
+    is in the importer's shape so it re-imports unmapped. The stored integer is written exactly at
+    the currency's exponent (`minorToDecimalString`, 15000 JPY is "15000"), which reads back to the
+    same integer - the round-trip test in `apps/orchestrator/test/holdingsExport.test.ts` runs a
+    file through the real `buildImportRows`. *Rejected:* adding a `cost_basis_minor` alongside -
+    two spellings of one figure is one more thing to disagree. Per holding, cost per unit; built
+    in the browser from the loaded portfolio, so no endpoint.
+121. **Menus are disclosures, not ARIA menus; side panels are one `Drawer`** (UX2, UX5).
+    `Disclosure` (a button with `aria-expanded` over a list of links and buttons) serves the app
+    bar's Account and hamburger menus and the holdings card's "⋯"; it closes on Escape (focus back
+    on its button), outside click, choosing an item, and address change. An ARIA `menu` would owe
+    an arrow-key model nobody would test. `Drawer` moves focus to its first field and back to the
+    opener, and is full screen below 448 px; `TradePanel` uses it too.
+122. **A chart's box is LTR; its tooltip reads in the language's direction** (UX1). `CHART_DIRECTION`
+    pins the time axis; the one `ChartTooltip` (all four charts) sets `dir` from the language,
+    because inheriting the pinned LTR printed "(100.0%) $ 3,366.70" in Hebrew.
+123. **The bar holds places; a page's own controls stay on the page** (UX2-UX5). Refresh and the
+    price age belong to the portfolio's row; Add holding, Targets, Import and Export to the
+    holdings card (Targets opens `/targets` - the user chose the page over a drawer, the editor
+    needs the room); observations and the digest to `/insights` (`?tab=`, filters in the address;
+    an old `/?severity=` link redirects there). Do not add cards back to the dashboard - that was
+    the point of the sprint.
 
 ---
 
@@ -2593,6 +2663,27 @@ downgrade runs over real data. → **A migration that adds an enumerated value a
 the same PR.** Run `test_migrations.py` against a throwaway Postgres container, never compose's
 (see Local environment).
 
+**A test that read the real clock failed on the 8th of every month** (2026-10-08).
+`test_the_thesis_may_state_the_quantity_it_proposes` used the stray figure "8" and expected the
+evidence validator to refuse it; the briefing carries the scan's timestamp, whose year, month and
+day are sourced figures, so on any 8th it passed as sourced. Two sessions fixed it the same morning
+(this one with 77, #188 with 777 - #188's landed). **Lesson: a test on `datetime.now()` whose
+assertion is about small numbers is a calendar test in disguise; pick figures no date can contain,
+or pin the clock.**
+
+**A query on every page made unrelated tests hang** (UX2). The bar's inbox count turned
+`proposalsQuery` into an always-active query; the confirm and run-scan mutations return their
+`invalidateQueries` promises from `onSettled`, so they now waited for it - and tests whose `get`
+mock answers only the page's own paths left it pending forever. The mutation never settled, the
+"Bought 3 INTC" message never appeared, and the failure read as a UI bug. **Lesson: when a
+component starts a query app-wide, grep the tests for catch-all pending mocks; a mutation that
+awaits invalidation inherits every active query's fate.** Same shape in UX5: adding a holding waits
+for the equity curve's snapshots.
+
+**`git grep PATTERN REV -- path` from a subdirectory reports 0** (UX1 merge check). The pathspec is
+relative to the working directory, so `-- apps/web/src` from `apps/web` matched nothing and a
+merged change looked absent. **Verify by content from the root, or with `-- ':/apps/web/src'`.**
+
 ## Current technical debt
 
 | Item | Where | Impact |
@@ -2679,6 +2770,14 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 | **The topic eval is not in CI** | `scripts/run_topic_eval.py` | Needs a database holding the universe *and* a semantic embedder; CI has neither. `test_topic_eval_set_contract.py` guards the file on every PR, but no automated run measures resolution
 
 ---
+
+- **Compose and kind run 0045 and pre-sprint UI** (2026-10-08): until redeployed, the live app
+  has no Insights page, no shared bar and no digest banner, and its web bundle would call
+  `/notifications/digest/seen`, which only #193's orchestrator has - deploy both together, as
+  `dev-docker.sh` and `k8s-up.sh` do.
+- **Export is a browser download only** (UX6): no server endpoint, so Telegram or a script cannot
+  ask for one. Add `GET /holdings/export` beside `holdingsExport` if that is ever wanted - the
+  builder is already in `@traders/shared`.
 
 ## Local environment (this machine)
 
@@ -2981,12 +3080,36 @@ the same PR.** Run `test_migrations.py` against a throwaway Postgres container, 
 
 ---
 
+**Running a branch's orchestrator against a copy of the live DB** (UX4 rehearsal): copy with
+`docker exec traders-postgres-1 sh -c 'createdb -U traders traders_ux4 && pg_dump -U traders traders
+| psql -q -U traders -d traders_ux4'`, migrate it with this branch's alembic and
+`DATABASE_URL=...@127.0.0.1:55432/traders_ux4`, then start `tsx src/server.ts` with compose's
+environment (`docker inspect traders-orchestrator-1`) **but `TELEGRAM_BOT_TOKEN` unset and
+`SCHEDULER_ENABLED=false`** - otherwise a second orchestrator sends the user real messages from the
+copy's pending notifications. A dev server with `API_PROXY_TARGET` pointed at it (another port)
+shares the Chrome session. Drop the copy afterwards. **The orchestrator's Postgres tests run as
+`traders_app`** like CI: `TEST_DATABASE_URL=postgresql://traders_app:traders_app@127.0.0.1:55434/traders_ci`,
+after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as the owner, two
+grant tests fail for the wrong reason.
+
 ## Where to go next
 
-### Planned: the UI/UX sprint - the dashboard, the app bar, Insights (agreed 2026-10-07)
+### The UI/UX sprint is complete (#189, #191-#195, 2026-10-08)
 
-**Agreed with the user 2026-10-07**, item by item. Not started; no grant yet - the user says "merge"
-per PR, as in Stage 4. One branch off `main` per PR, in this order (each stands alone).
+**As built:** UX1 #189 - `ChartTooltip` for all four charts, Allocation opens by holding
+(`lib/allocationGrouping.ts`, `localStorage`), no outline on a clicked slice. UX2 #191 - `AppBar` in
+the root route, Account menu / hamburger below `md`, Sign out behind a divider; top-level pages lost
+"Back to portfolio". UX3 #192 - `/insights?tab=observations|digest`, the legacy `/?severity=`
+redirect; Telegram and the digest carry no links into the app, so nothing else pointed at the feed.
+UX4 #193 - migration 0046, `POST /notifications/digest/seen`, `DigestBanner` (decision 119). UX5
+#194 - summary, charts row (2:1), holdings full width with `HoldingsActions`; `Drawer` and
+`Disclosure` extracted (decision 121). UX6 #195 - Export JSON in the importer's shape (decision 120).
+Each was checked in the user's Chrome in Hebrew at desktop and 375 px. The plan as agreed follows,
+for its reasoning.
+
+#### The plan (agreed 2026-10-07)
+
+**Agreed with the user 2026-10-07**, item by item. The user said "merge" (then "admin merge") per PR. One branch off `main` per PR, in this order (each stands alone).
 
 **What was decided, and why:**
 - **The dashboard becomes summary -> two charts -> the holdings table.** Value over time and

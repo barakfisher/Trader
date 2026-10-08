@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Link } from '@tanstack/react-router';
-import { ArrowLeft, Newspaper, Plus, Search, Tags, X } from 'lucide-react';
+import { Newspaper, Plus, Search, Tags, X } from 'lucide-react';
 
 import type {
   TopicDetail,
@@ -12,11 +11,11 @@ import type {
 import type { TopicCandidate } from '@traders/shared/ai';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
-import { Button, Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
+import { Button, Card, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
 import { formatMoney } from '../i18n/format.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
-import { MIRROR_IN_RTL, SERVER_ENGLISH } from '../lib/textDirection.ts';
+import { SERVER_ENGLISH } from '../lib/textDirection.ts';
 import {
   coverageNote,
   heldByText,
@@ -64,12 +63,6 @@ export const TopicsPage = observer(function TopicsPage() {
             </span>
           )}
         </div>
-        <Link to="/" className={buttonClass('secondary')}>
-          <span className="flex items-center gap-1">
-            <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
-            {t('common.backToPortfolio')}
-          </span>
-        </Link>
       </header>
 
       <p className="max-w-3xl text-sm text-text-muted">

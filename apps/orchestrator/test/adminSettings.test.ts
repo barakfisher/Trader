@@ -1,5 +1,5 @@
 /**
- * The installation's settings on the Admin page (D71, migration 0046): how many
+ * The installation's settings on the Admin page (D72, migration 0047): how many
  * simulated agents a user may have. Read and changed by an admin only, every
  * change audited by the gate, and refused outside 1-MAX_AGENTS_PER_USER_CEILING.
  */
@@ -57,7 +57,7 @@ const ENV = {
 
 const HEADERS = { origin: 'http://localhost:5173', 'content-type': 'application/json' };
 
-describe('the installation settings (D71)', () => {
+describe('the installation settings (D72)', () => {
   let app: ReturnType<typeof createApp>;
   let cookie: string;
 

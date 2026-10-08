@@ -1016,13 +1016,13 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
         const patched = await queries.updateAgent(SEED_ADMIN, agent, { llmBudgetMicroUsd: 1_250_000, scanSchedule: 'intraday_twice' });
         expect(patched).toMatchObject({ llm_budget_micro_usd: '1250000', scan_schedule: 'intraday_twice' });
-        // Archived, so a reused database never reaches the admin's agent limit (D71).
+        // Archived, so a reused database never reaches the admin's agent limit (D72).
         await queries.updateAgent(SEED_ADMIN, agent, { state: 'archived' });
       }
     });
   });
 
-  describe('the agent limit (0046, D71), rolled back', () => {
+  describe('the agent limit (0047, D72), rolled back', () => {
     const insertAgent = (client: { query: (sql: string, params: unknown[]) => Promise<unknown> }, user: string, slug: string) =>
       client.query(
         `INSERT INTO agents (user_id, slug, name, budget_minor) VALUES ($1, $2, $2, 1000)`,
@@ -1227,6 +1227,61 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         [reset.reset_id],
       );
       expect(backup.rows[0]!.groups).toEqual(['agents_trading', 'followed_topics']);
+    });
+  });
+
+  describe('the digest seen (0046, UX4)', () => {
+    it('records nothing before any digest, then only forward and never past the last one', async () => {
+      const at = (iso: string) => new Date(iso);
+      // No digest sent yet: there is nothing to have seen.
+      expect(await queries.markDigestSeen(USER, at('2026-10-08T08:00:00Z'))).toBeNull();
+      expect(await queries.getDigestSeenAt(USER)).toBeNull();
+
+      const refId = randomUUID();
+      const claimed = await queries.claimNotification({
+        userId: USER,
+        agentId: AGENT,
+        channel: 'digest',
+        refKind: 'narration',
+        refId,
+        route: 'digest',
+        reason: 'quiet_hours',
+        status: 'pending',
+        dedupeKey: `digest:narration:${refId}`,
+      });
+      expect(claimed).not.toBeNull();
+      // Microseconds, as Postgres stores them: the client echoes only milliseconds back.
+      await getPool().query(
+        `UPDATE notifications SET status = 'sent', sent_at = '2026-10-08T08:42:40.736914Z' WHERE ref_id = $1`,
+        [refId],
+      );
+
+      expect(await queries.markDigestSeen(USER, at('2026-10-08T08:42:40.736Z'))).toEqual(
+        at('2026-10-08T08:42:40.736Z'),
+      );
+      // An older digest, from a stale tab: no going back.
+      expect(await queries.markDigestSeen(USER, at('2026-10-01T00:00:00Z'))).toEqual(
+        at('2026-10-08T08:42:40.736Z'),
+      );
+      // A claim from the future is held to the last digest sent.
+      expect(await queries.markDigestSeen(USER, at('2030-01-01T00:00:00Z'))).toEqual(
+        at('2026-10-08T08:42:40.736Z'),
+      );
+      expect(await queries.getDigestSeenAt(USER)).toEqual(at('2026-10-08T08:42:40.736Z'));
+    });
+
+    it('survives a settings save, which names the columns it writes', async () => {
+      const before = await queries.getDigestSeenAt(USER);
+      await queries.replaceUserSettings(USER, {
+        proposalSeverity: 'high',
+        proposalTtlHours: 24,
+        notifySeverity: 'high',
+        quietHoursStart: null,
+        quietHoursEnd: null,
+        mutedUntil: null,
+        language: 'en',
+      });
+      expect(await queries.getDigestSeenAt(USER)).toEqual(before);
     });
   });
 });

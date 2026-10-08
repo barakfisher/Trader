@@ -1,17 +1,16 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from '@tanstack/react-router';
-import { ArrowLeft, Bot, Plus } from 'lucide-react';
+import { Bot, Plus } from 'lucide-react';
 
 import type { AgentView, SimulatedAgentStanding } from '@traders/shared';
 
 import { AgentField } from '../components/AgentField.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
-import { Button, Card, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
+import { Button, Card, ErrorNote, Spinner } from '../components/ui.tsx';
 import { errorMessage } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { formatMoney } from '../i18n/format.ts';
 import { BUDGET_INPUT, agentErrorMessage, agentName, agentStateWord } from '../lib/agentPresentation.ts';
-import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import { useAgentLimitQuery, useAgentsQuery, useCreateAgent } from '../queries/agents.ts';
 import { useConsolidatedQuery } from '../queries/portfolio.ts';
 
@@ -37,12 +36,6 @@ export function AgentsPage() {
           <Bot className="size-5 text-accent" aria-hidden />
           <h1 className="text-base font-semibold">{t('agents.title')}</h1>
         </div>
-        <Link to="/" className={buttonClass('secondary')}>
-          <span className="flex items-center gap-1">
-            <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
-            {t('common.backToPortfolio')}
-          </span>
-        </Link>
       </header>
 
       <p className="max-w-3xl text-sm text-text-muted">{t('agents.intro')}</p>
@@ -128,7 +121,7 @@ function CreateAgentForm() {
   const { t } = useTranslation();
   const create = useCreateAgent();
   const limit = useAgentLimitQuery().data ?? null;
-  // D71: at the limit the form says so before anyone types a name.
+  // D72: at the limit the form says so before anyone types a name.
   const full = limit !== null && limit.used >= limit.max;
   const [name, setName] = useState('');
   const [budget, setBudget] = useState('');

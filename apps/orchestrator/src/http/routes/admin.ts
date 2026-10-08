@@ -229,12 +229,12 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
     return context.json(body);
   });
 
-  /** The installation's settings (D71). */
+  /** The installation's settings (D72). */
   app.get('/admin/settings', async (context) => context.json(await adminSettings()));
 
   /**
    * Change them. Audited by the gate before this runs (decision 84). A lower
-   * limit refuses nothing that exists: it stops the next create (0046).
+   * limit refuses nothing that exists: it stops the next create (0047).
    */
   app.put('/admin/settings', async (context) => {
     const parsed = settingsSchema.safeParse(await context.req.json().catch(() => null));

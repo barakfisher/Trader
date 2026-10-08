@@ -79,7 +79,8 @@ describe('page addresses', () => {
     const { router } = renderAt('/?from=somewhere');
     post.mockResolvedValue(undefined);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Sign out/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
+    fireEvent.click(screen.getByRole('button', { name: /Sign out/ }));
     await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Traders' })).toBeTruthy());
     expect(router.state.location.pathname).toBe('/');
   });

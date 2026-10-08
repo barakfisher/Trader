@@ -68,7 +68,7 @@
     "noneDelivered": "עדיין לא נשלח אף סיכום.",
     "lastDelivered": "נשלח לאחרונה {{when}}: {{findings}}",
     "lastDeliveredReasons": " - {{reasons}}",
-    "more": "ועוד {{count}}, כולם בפיד שלמטה.",
+    "more": "ועוד {{count}}, כולם בלשונית התצפיות.",
     "findings_one": "ממצא אחד",
     "findings_two": "שני ממצאים",
     "findings_other": "{{count}} ממצאים",
@@ -78,6 +78,12 @@
       "quiet_hours": "עוכבו בשעות השקט",
       "muted": "עוכבו בזמן השתקה",
       "above_floor": "לא נשלחו כשנמצאו לראשונה"
+    },
+    "banner": {
+      "ready": "הסיכום היומי שלך מוכן: {{findings}}, נשלח {{age}}.",
+      "readyNoFindings": "הסיכום היומי שלך מוכן, נשלח {{age}}.",
+      "open": "פתיחה",
+      "dismiss": "סגירה"
     }
   },
   "equity": {
@@ -178,7 +184,14 @@
     "noPrice": "אין מחיר",
     "today": " · <delta>{{change}}</delta> היום",
     "ofPortfolio": " · {{share}} מהתיק",
-    "priceAge": " · מחיר {{age}}"
+    "priceAge": " · מחיר {{age}}",
+    "actions": {
+      "add": "הוספת אחזקה",
+      "more": "פעולות נוספות",
+      "import": "ייבוא",
+      "export": "ייצוא JSON",
+      "close": "סגירה"
+    }
   },
   "import": {
     "title": "ייבוא אחזקות",
@@ -695,7 +708,6 @@
   },
   "nav": {
     "refresh": "רענון",
-    "import": "ייבוא",
     "targets": "יעדים",
     "agents": "סוכנים",
     "topics": "נושאים",
@@ -703,7 +715,12 @@
     "proposals": "הצעות",
     "settings": "הגדרות",
     "admin": "ניהול",
-    "signOut": "התנתקות"
+    "signOut": "התנתקות",
+    "portfolio": "תיק",
+    "menu": "תפריט",
+    "account": "חשבון",
+    "label": "ראשי",
+    "insights": "תובנות"
   },
   "dashboard": {
     "title": "תיק",
@@ -1389,6 +1406,13 @@
         "sell": "למכור"
       },
       "open": "לבדיקה"
+    }
+  },
+  "insights": {
+    "title": "תובנות",
+    "tabs": {
+      "observations": "תצפיות",
+      "digest": "סיכום יומי"
     }
   }
 }
