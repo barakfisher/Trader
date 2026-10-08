@@ -30,6 +30,11 @@ const PRIMARY: AgentView = {
   state: 'active',
   holdingsCount: 10,
   createdAt: '2026-10-05T10:00:00Z',
+  scanSchedule: null,
+  llmBudgetMicroUsd: null,
+  llmSpentTodayMicroUsd: null,
+  scanCost: null,
+  waitingForPersona: false,
 };
 const MOMENTUM: AgentView = {
   ...PRIMARY,

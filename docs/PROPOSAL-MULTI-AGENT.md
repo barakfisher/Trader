@@ -986,6 +986,41 @@ in a "waiting for you" list above it. Both follow the `All / Real only / per age
 only* has none (D1). *Rejected:* badges only (a buy of a new stock would be invisible here); a
 separate list only (not "beside the ticker", §4.3).
 
+### Added 2026-10-07, building PR 6
+
+Measured first: the account reset (task 18) had erased every `agent_scans` row, so the tab starts
+empty; `llm_calls` kept the Test agent's 12 scan calls of the day ($0.108). A stored scan is a
+10-20 KB briefing and a transcript of up to twelve tool results, ~100 KB: the list carries a
+summary and a row loads its detail when opened. `agents.llm_budget_micro_usd` and
+`agents.scan_schedule` (0042) were enforced or stored but shown nowhere. Asked one at a time; the
+user chose every recommendation.
+
+**D64 - The *Decisions* tab shows a scan as readable steps.** One row per scan - time, outcome,
+what it proposed, who started it, cost and steps - opening to a line for the briefing (cash,
+holdings, the day's movers it saw, with the whole briefing folded beneath), then each turn: the
+model's words, each tool it chose with its arguments, and the result folded as the JSON the model
+read; then the answer with its thesis, the refusal's problems or the error, and links to the
+proposal (in its state now) and to the fill. `GET /agents/:id/scans` pages summaries by
+`before`; `GET /agents/:id/scans/:scanId` returns one in full. *Rejected:* a sentence per tool
+(seven renderers to keep in step with the tools); the raw transcript.
+
+**D65 - *Run a scan now* waits for the scan, in place.** One click, its expected cost beside it
+(D46's estimate), no confirm; "Scanning..." while the request holds (6-16 s measured), then the
+outcome where the button is - "Proposed: Buy 2 NVDA" with a link, "No trade", or why it stopped -
+and the scan at the top of *Decisions*. Refused with the reason, in the reader's words, for a
+paused or archived agent, one with no persona (shown as *Waiting for a persona* on its page and
+in the list), a spent budget, a scan already running, or no model chosen. *Rejected:* a confirm
+dialog (one more step for $0.04); a background run (a job and polling for a fifteen-second wait).
+
+**D66 - The schedule is chosen and stored in PR 6, and says it is not running yet.** Settings
+shows D46's four choices with the cost per trading day (the per-scan estimate times the scans the
+choice runs) and "Scheduled scans are not running yet; until then this agent scans only when you
+press *Run a scan now*." PR 7 removes the sentence; the choice is already stored. Beside it the
+model budget in dollars (more than $0, at most $100) with today's spend against it, summed on the
+UTC day `scan_budget.py` counts. Before an agent's first scan the per-scan estimate is the
+installation's agents' recent average, or §14.3's measured $0.036, labelled as which.
+*Rejected:* hiding the picker until PR 7 (the UI work moves into the scheduler's PR).
+
 ---
 
 ## 11. Measured, 2026-10-04 (read-only, live compose database)
@@ -1278,9 +1313,9 @@ No migration.
 
 **Then: handoff** (five merged PRs).
 
-**PR 6 — The agent page (D45, D46, D50, D52).** The *Decisions* tab; on Settings the schedule
+**PR 6 — The agent page (D45, D46, D50, D52, D64-D66).** The *Decisions* tab; on Settings the schedule
 (`agents.scan_schedule`, default pre-open) with its cost per run, the LLM budget, *Run a scan now*,
-and the waiting-for-a-persona state; English and Hebrew.
+and the waiting-for-a-persona state; English and Hebrew. No migration.
 
 **PR 7 — The schedule.** Each agent's scans entered through `POST /internal/runs` at its chosen
 times on the exchange calendar, with a run key per agent and slot; the kind CronJob and its

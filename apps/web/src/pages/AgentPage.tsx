@@ -5,7 +5,9 @@ import { Archive, ArrowLeft, ArrowLeftRight, Pause, Play, RotateCcw, Save } from
 import type { AgentState, AgentView, TradeSide } from '@traders/shared';
 
 import { AccountSummary, AgentActivity, AgentHoldings } from '../components/AgentAccount.tsx';
+import { AgentDecisions } from '../components/AgentDecisions.tsx';
 import { AgentPerformance } from '../components/AgentPerformance.tsx';
+import { AgentScans } from '../components/AgentScans.tsx';
 import { TradePanel } from '../components/TradePanel.tsx';
 import { AgentField } from '../components/AgentField.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
@@ -17,9 +19,9 @@ import { minorToDecimalString } from '@traders/shared';
 import { BUDGET_INPUT, agentErrorMessage, agentName, agentStateWord } from '../lib/agentPresentation.ts';
 import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import { useAgentQuery, useUpdateAgent } from '../queries/agents.ts';
-import { KindBadge } from './AgentsPage.tsx';
+import { KindBadge, WaitingForPersona } from './AgentsPage.tsx';
 
-type Tab = 'holdings' | 'activity';
+type Tab = 'holdings' | 'activity' | 'decisions';
 
 /**
  * One agent (decision D19): its account, its settings and persona, and the
@@ -48,6 +50,7 @@ export function AgentPage() {
               {agentStateWord(agent.data.state)}
             </span>
           )}
+          {agent.data?.waitingForPersona && <WaitingForPersona />}
         </div>
         <Link to="/agents" className={buttonClass('secondary')}>
           <span className="flex items-center gap-1">
@@ -106,7 +109,7 @@ function SimulatedAgent({ agent }: { agent: AgentView }) {
       <AgentPerformance agentId={agent.id} />
       <StateControls agent={agent} />
       <div role="tablist" className="flex gap-2 border-b border-border-subtle">
-        {(['holdings', 'activity'] as const).map((name) => (
+        {(['holdings', 'activity', 'decisions'] as const).map((name) => (
           <button
             key={name}
             role="tab"
@@ -121,11 +124,12 @@ function SimulatedAgent({ agent }: { agent: AgentView }) {
           </button>
         ))}
       </div>
-      {tab === 'holdings' ? (
+      {tab === 'holdings' && (
         <AgentHoldings agent={agent} onSell={(symbol) => setTrading({ symbol, side: 'sell' })} />
-      ) : (
-        <AgentActivity agent={agent} />
       )}
+      {tab === 'activity' && <AgentActivity agent={agent} />}
+      {tab === 'decisions' && <AgentDecisions agentId={agent.id} />}
+      <AgentScans agent={agent} />
       <SettingsForm agent={agent} />
       {trading && (
         <TradePanel

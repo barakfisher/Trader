@@ -97,6 +97,94 @@ export interface AgentView {
   state: AgentState;
   holdingsCount: number;
   createdAt: string;
+  /** When scheduled scans run (D46); null for the primary, which never scans (D1). */
+  scanSchedule: ScanSchedule | null;
+  /** The daily model allowance in integer micro-USD (D45); null for the primary. */
+  llmBudgetMicroUsd: number | null;
+  /** Spent on scans since midnight UTC - the day the AI service's check counts. */
+  llmSpentTodayMicroUsd: number | null;
+  /** What one scan is expected to cost (D46); null for the primary. */
+  scanCost: ScanCostEstimate | null;
+  /** An active agent with no persona never scans and is never billed (D52). */
+  waitingForPersona: boolean;
+}
+
+/** D46's choices, in the order Settings offers them. */
+export const SCAN_SCHEDULES = ['pre_open', 'pre_open_post_close', 'intraday_twice', 'intraday_once'] as const;
+export type ScanSchedule = (typeof SCAN_SCHEDULES)[number];
+
+/** Scans a schedule runs on an open day. */
+export const SCANS_PER_DAY: Record<ScanSchedule, number> = {
+  pre_open: 1,
+  pre_open_post_close: 2,
+  intraday_twice: 2,
+  intraday_once: 1,
+};
+
+/**
+ * One scan's expected cost (D46): this agent's recent average, else the
+ * installation's agents', else the cost measured on 2026-10-07 (§14.3).
+ */
+export interface ScanCostEstimate {
+  microUsd: number;
+  basis: 'agent' | 'installation' | 'measured';
+}
+
+export type AgentScanOutcome = 'trade' | 'no_trade' | 'invalid_answer' | 'budget_reached' | 'step_limit' | 'failed';
+
+/** One scan, as a row of the *Decisions* tab (D50). */
+export interface AgentScanSummary {
+  id: string;
+  trigger: 'manual' | 'schedule';
+  startedAt: string;
+  finishedAt: string | null;
+  /** Null while the scan is still running. */
+  outcome: AgentScanOutcome | null;
+  steps: number;
+  costMicroUsd: number;
+  model: string | null;
+  decision: 'buy' | 'sell' | 'none' | null;
+  symbol: string | null;
+  quantity: string | null;
+  /** Why the answer was refused, as the validator named it. */
+  problems: string[];
+  error: string | null;
+  /** The proposal the scan made, in its state now; a fill when it was approved. */
+  proposal: { id: string; state: ProposalState } | null;
+  fillId: string | null;
+}
+
+export interface AgentScansResponse {
+  scans: AgentScanSummary[];
+  /** Pass as `before` for the next older page; null when there is none. */
+  nextBefore: string | null;
+}
+
+/** One step of a scan as stored (D15): the model's turn, or a tool's result. */
+export type AgentScanStep =
+  | { role: 'assistant'; text: string | null; toolCalls: { id: string; name: string; arguments: unknown }[] }
+  | { role: 'tool'; callId: string; name: string; result: unknown };
+
+/**
+ * What `POST /agents/:id/scans` answers: the AI service's result as it gave it
+ * (snake_case, its wire), with the proposal the orchestrator wrote from it.
+ */
+export interface RunScanResult {
+  scan_id: string;
+  outcome: AgentScanOutcome;
+  steps: number;
+  cost_micro_usd: number;
+  model: string | null;
+  answer: { decision?: string | null; symbol?: string | null; quantity?: string | null; thesis?: string | null } | null;
+  error: string | null;
+  proposal_id: string | null;
+}
+
+/** A scan in full, when its row is expanded. */
+export interface AgentScanDetail extends AgentScanSummary {
+  briefing: unknown;
+  transcript: AgentScanStep[];
+  thesis: string | null;
 }
 
 export interface AgentsResponse {
@@ -299,6 +387,9 @@ export interface AgentPatchInput {
   budget?: string;
   persona?: string | null;
   state?: AgentState;
+  /** Dollars and cents a day (D45). */
+  llmBudget?: string;
+  scanSchedule?: ScanSchedule;
 }
 
 export interface PortfolioResponse {
