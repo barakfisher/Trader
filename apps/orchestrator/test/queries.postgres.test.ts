@@ -940,19 +940,21 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
   describe("an agent's scans and model spend (D45, D46, D50)", () => {
-    // Committed (the queries read through the pool). agent_scans does not cascade
-    // from users and traders_app may not delete it, so the account reset - the
-    // one path that erases scans (0045) - cleans up.
+    // Committed, because the queries read through the pool - and written as the
+    // seeded admin, as the admin audit's rows are: traders_app may not delete a
+    // scan or a ledger row, so USER's cleanup would be refused. A fresh agent
+    // per run keeps a re-run on a local database independent of the last one.
+    const SEED_ADMIN = '00000000-0000-0000-0000-000000000001';
     it('pages the scans with their proposal and fill, sums today, and averages the cost', async () => {
       const pool = getPool();
       const agent = (
         await pool.query(
           `INSERT INTO agents (user_id, slug, name, persona, budget_minor)
-           VALUES ($1, 'scan-read', 'Scan read', 'Patient.', 100000) RETURNING id`,
-          [USER],
+           VALUES ($1, $2, $2, 'Patient.', 100000) RETURNING id`,
+          [SEED_ADMIN, `scan-read-${randomUUID().slice(0, 8)}`],
         )
       ).rows[0].id as string;
-      try {
+      {
         const scan = async (startedAt: string, cost: number, outcome: string, answer: unknown) =>
           (
             await pool.query(
@@ -960,7 +962,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
                VALUES ($1, $2, 'manual', $3, $3::timestamptz + interval '10 seconds', $4, $5, '{"cash": "1000.00"}',
                        '[{"role": "assistant", "text": "hi", "tool_calls": []}]', $6)
                RETURNING id`,
-              [USER, agent, startedAt, outcome, cost, JSON.stringify(answer)],
+              [SEED_ADMIN, agent, startedAt, outcome, cost, JSON.stringify(answer)],
             )
           ).rows[0].id as string;
         const older = await scan('2026-10-06T13:00:00Z', 20_000, 'no_trade', { decision: 'none', thesis: 'Nothing.' });
@@ -968,7 +970,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           decision: 'buy', symbol: 'INTC', quantity: '3', thesis: 'INTC fell.', price_minor: 11_250,
         });
         const { proposalId } = await queries.createTradeProposal({
-          userId: USER,
+          userId: SEED_ADMIN,
           agentId: agent,
           scanId: newer,
           kind: 'buy',
@@ -984,37 +986,36 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           await pool.query(
             `INSERT INTO llm_calls (user_id, agent_id, purpose, provider, outcome, latency_ms, cost_micro_usd, prompt, started_at)
              VALUES ($1, $2, 'agent_scan', 'test', 'ok', 1, $3, 'p', $4)`,
-            [USER, agent, cost, startedAt],
+            [SEED_ADMIN, agent, cost, startedAt],
           );
         }
 
-        const page = await queries.listAgentScans(USER, agent, { limit: 1 });
+        const page = await queries.listAgentScans(SEED_ADMIN, agent, { limit: 1 });
         expect(page.map((row) => row.id)).toEqual([newer]);
         expect(page[0]).toMatchObject({ proposal_id: proposalId, proposal_state: 'pending', fill_id: null, cost_micro_usd: '40000' });
         expect(page[0]).not.toHaveProperty('transcript');
-        const back = await queries.listAgentScans(USER, agent, { limit: 5, before: page[0]!.started_at });
+        const back = await queries.listAgentScans(SEED_ADMIN, agent, { limit: 5, before: page[0]!.started_at });
         expect(back.map((row) => row.id)).toEqual([older]);
         expect(await queries.listAgentScans(randomUUID(), agent, { limit: 5 })).toEqual([]);
 
-        const detail = await queries.getAgentScan(USER, agent, older);
+        const detail = await queries.getAgentScan(SEED_ADMIN, agent, older);
         expect(detail).toMatchObject({ briefing: { cash: '1000.00' }, transcript: [{ role: 'assistant' }], proposal_id: null });
         expect(await queries.getAgentScan(USER, AGENT, older)).toBeNull();
 
-        const row = await queries.getAgent(USER, agent);
+        const row = await queries.getAgent(SEED_ADMIN, agent);
         expect(row).toMatchObject({
           llm_budget_micro_usd: '500000',
           scan_schedule: 'pre_open',
           llm_spent_today_micro_usd: '7000',
           agent_scan_cost_micro_usd: '30000',
-          installation_scan_cost_micro_usd: '30000',
         });
+        // The installation's average spans every run's agents on a reused database.
+        expect(row!.installation_scan_cost_micro_usd).not.toBeNull();
         const primary = await queries.getAgent(USER, AGENT);
         expect(primary).toMatchObject({ llm_spent_today_micro_usd: '0', agent_scan_cost_micro_usd: null });
 
-        const patched = await queries.updateAgent(USER, agent, { llmBudgetMicroUsd: 1_250_000, scanSchedule: 'intraday_twice' });
+        const patched = await queries.updateAgent(SEED_ADMIN, agent, { llmBudgetMicroUsd: 1_250_000, scanSchedule: 'intraday_twice' });
         expect(patched).toMatchObject({ llm_budget_micro_usd: '1250000', scan_schedule: 'intraday_twice' });
-      } finally {
-        await queries.resetAccount(USER, ['agents_trading']);
       }
     });
   });
