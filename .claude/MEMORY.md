@@ -1932,6 +1932,19 @@ failure they prevent.
     `agents_ledger_follows_budget` inserts the opening deposit when none exists - before it, the
     first *Add cash* after a reset would have updated no row and moved no cash, silently. On the
     Admin page, last card; the typed word is `RESET` in every language and checked by the server too.
+118. **Reading holdings from a broker is in scope; trading through one never is** (D67, the user's
+    choice 2026-10-08, plan in [PROPOSAL-IBI-SYNC.md](../docs/PROPOSAL-IBI-SYNC.md)). PRD P1 said
+    "broker integration is out of scope", which mixed two things with opposite risks: a write
+    path that can lose money, and a read path that only saves typing. Only the read path is
+    allowed, and only as an **import source**: a broker's positions become `ImportRow`s and go
+    through the same preview, resolution and merge-or-replace commit as a file (F1), so a sync can
+    never change holdings the user did not see first. **Credentials never reach Traders:** a broker
+    is connected by OAuth on the broker's own page or not at all. *Rejected:* relaying the user's
+    broker password through our server (it turns us into a credential harvester, breaches broker
+    terms, and Node cannot erase a string from memory). **Order:** IBI's Excel export through the
+    file import first - it needs no authentication and builds the mapper the MCP path reuses;
+    the MCP path waits for a read-only probe of IBI's OAuth metadata, because no public
+    registration for third-party clients has been found.
 
 ---
 
