@@ -6,10 +6,16 @@ import { minorToNumber } from '@traders/shared';
 
 import { formatMoney, formatShare } from '../i18n/format.ts';
 import { useTranslation } from '../i18n/index.ts';
+import {
+  readAllocationGrouping,
+  rememberAllocationGrouping,
+  type AllocationGrouping,
+} from '../lib/allocationGrouping.ts';
 import { assetClassGroup } from '../lib/assetClass.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { CHART_DIRECTION } from '../lib/textDirection.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
+import { ChartTooltip } from './ChartTooltip.tsx';
 import { Card } from './ui.tsx';
 
 /** Categorical palette: distinguishable, and never reusing the gain/loss colours. */
@@ -18,7 +24,11 @@ const PALETTE = ['#6d8bff', '#59c2e8', '#9a7bf0', '#4fb9a5', '#e5a13c', '#e2736f
 export const AllocationChart = observer(function AllocationChart() {
   const { data: portfolio } = usePortfolioQuery();
   const { t } = useTranslation();
-  const [groupBy, setGroupBy] = useState<'assetClass' | 'instrument'>('assetClass');
+  const [groupBy, setGroupBy] = useState<AllocationGrouping>(readAllocationGrouping);
+  const choose = (grouping: AllocationGrouping) => {
+    setGroupBy(grouping);
+    rememberAllocationGrouping(grouping);
+  };
 
   const slices =
     groupBy === 'assetClass'
@@ -28,7 +38,7 @@ export const AllocationChart = observer(function AllocationChart() {
 
   if (!slices || slices.length === 0) return null;
 
-  const data = slices.map((slice) => ({
+  const data: Slice[] = slices.map((slice) => ({
     name: groupBy === 'assetClass' ? assetClassGroup(slice.key, slice.label) : slice.label,
     value: minorToNumber(slice.valueMinor, currency),
     valueMinor: slice.valueMinor,
@@ -40,11 +50,12 @@ export const AllocationChart = observer(function AllocationChart() {
       title={t('allocation.title')}
       action={
         <div className="flex gap-1 rounded-lg border border-border-subtle p-0.5 text-xs">
-          {(['assetClass', 'instrument'] as const).map((option) => (
+          {(['instrument', 'assetClass'] as const).map((option) => (
             <button
               key={option}
               type="button"
-              onClick={() => setGroupBy(option)}
+              aria-pressed={groupBy === option}
+              onClick={() => choose(option)}
               className={`rounded px-2 py-1 transition ${
                 groupBy === option ? 'bg-surface-hover text-text-primary' : 'text-text-muted'
               }`}
@@ -75,22 +86,9 @@ export const AllocationChart = observer(function AllocationChart() {
               ))}
             </Pie>
             <Tooltip
-              contentStyle={{
-                background: '#131a2e',
-                border: '1px solid #253052',
-                borderRadius: 8,
-                fontSize: 12,
-              }}
-              formatter={(_value, _name, item) => {
-                const payload = item.payload as { valueMinor: number; weightPct: number };
-                return [
-                  t('allocation.tooltip', {
-                    value: formatMoney(payload.valueMinor, currency),
-                    share: formatShare(payload.weightPct),
-                  }),
-                  '',
-                ];
-              }}
+              content={({ active, payload }) =>
+                active && payload?.[0] ? <SliceTooltip slice={payload[0].payload as Slice} currency={currency} /> : null
+              }
             />
           </PieChart>
         </ResponsiveContainer>
@@ -114,3 +112,19 @@ export const AllocationChart = observer(function AllocationChart() {
     </Card>
   );
 });
+
+type Slice = { name: string; value: number; valueMinor: number; weightPct: number };
+
+function SliceTooltip({ slice, currency }: { slice: Slice; currency: string }) {
+  const { t } = useTranslation();
+  return (
+    <ChartTooltip title={<bdi>{slice.name}</bdi>}>
+      <p className="text-text-primary">
+        {t('allocation.tooltip', {
+          value: formatMoney(slice.valueMinor, currency),
+          share: formatShare(slice.weightPct),
+        })}
+      </p>
+    </ChartTooltip>
+  );
+}

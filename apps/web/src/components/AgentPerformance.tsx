@@ -16,6 +16,7 @@ import { useTranslation } from '../i18n/index.ts';
 import { CHART_DIRECTION } from '../lib/textDirection.ts';
 import { useAgentPerformanceQuery } from '../queries/agents.ts';
 import { COST_COLOUR, VALUE_COLOUR, formatDay } from './EquityCurve.tsx';
+import { ChartTooltip } from './ChartTooltip.tsx';
 import { Card, Delta, ErrorNote, Spinner } from './ui.tsx';
 
 /**
@@ -185,8 +186,7 @@ function PointTooltip({ point, data }: { point: PerformancePoint; data: AgentPer
   const { t } = useTranslation();
   const value = (minor: number | null) => (minor === null ? t('agents.performance.unavailable') : formatMoney(minor, data.currency));
   return (
-    <div className="rounded-lg border border-border-subtle bg-surface-raised px-3 py-2 text-xs shadow-lg">
-      <p className="mb-1 font-medium text-text-primary">{formatDay(point.day)}</p>
+    <ChartTooltip title={formatDay(point.day)}>
       <p className="text-text-primary">{t('agents.performance.tooltipAgent', { value: value(point.netWorthMinor) })}</p>
       <p className="text-text-muted">
         {t('agents.performance.tooltipBenchmark', { symbol: data.benchmarkSymbol, value: value(point.benchmarkMinor) })}
@@ -194,7 +194,7 @@ function PointTooltip({ point, data }: { point: PerformancePoint; data: AgentPer
       <p className="text-text-muted">
         {t('agents.performance.tooltipDeposits', { value: formatMoney(point.depositsMinor, data.currency) })}
       </p>
-    </div>
+    </ChartTooltip>
   );
 }
 

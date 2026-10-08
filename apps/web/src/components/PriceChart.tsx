@@ -31,6 +31,7 @@ import {
 import { formatExactTime } from '../lib/relativeTime.ts';
 import { CHART_DIRECTION } from '../lib/textDirection.ts';
 import { useHoldingHistoryQuery } from '../queries/holding.ts';
+import { ChartTooltip } from './ChartTooltip.tsx';
 import { Card, Delta, ErrorNote, Spinner } from './ui.tsx';
 
 /**
@@ -219,8 +220,7 @@ function CloseTooltip({ point, currency }: { point: ChartPoint; currency: string
   const { t } = useTranslation();
   if (point.priceMinor === null) return null;
   return (
-    <div className="rounded-lg border border-border-subtle bg-surface-raised px-3 py-2 text-xs shadow-lg">
-      <p className="mb-1 font-medium text-text-primary">{dayName(point.day)}</p>
+    <ChartTooltip title={dayName(point.day)}>
       <p className="text-text-primary">
         {isOpenDay(point.day)
           ? t('price.latest', { price: formatMoney(point.priceMinor, currency) })
@@ -229,7 +229,7 @@ function CloseTooltip({ point, currency }: { point: ChartPoint; currency: string
       {point.asOf && (
         <p className="text-text-muted">{t('price.observed', { when: formatExactTime(point.asOf) })}</p>
       )}
-    </div>
+    </ChartTooltip>
   );
 }
 
