@@ -4,7 +4,32 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-08 ~11:45 UTC - **The UI/UX sprint is complete: UX1-UX6 merged as #189, #191,
+Updated: 2026-10-08 ~18:45 UTC - **Multi-agent Stage 4 is complete: agents decide on their own
+schedule. Handoff at the stage boundary. Nothing is in flight.** Merged and deployed this session,
+in order: **#186** (PR 5b: trade proposals announced past the floor, Telegram Approve -> preview ->
+Confirm with the price signed in the button, pending trades in the consolidated view; D60-D63),
+**#188** (PR 6: the *Decisions* tab, *Run a scan now*, schedule and model budget on Settings;
+D64-D66), **#197** (PR 7a: at most 3 simulated agents per user, set on the Admin page; migration
+**0047**; D72), **#199** (PR 7b: scheduled scans on a BullMQ queue, slots from the exchange
+calendar, bounded retries, one give-up alert; migration **0048**; D68-D71, D73, D74). Another
+session merged the UI/UX sprint (#189-#196) and #190 in the middle of it - see the paragraph below.
+**Both environments run `main` at `e736ffc`, migration `0048_agent_scan_runs`**, deployed by this
+session at the user's request (`git pull && bash scripts/dev-docker.sh && bash scripts/k8s-up.sh`
+in the main checkout). **Scheduled scans are ON in compose** (`ENABLE_SCHEDULED_SCANS=true` added to
+the user's `.env`, with their yes) **and off in kind** (`config.env`). The first one ran at 18:29 UTC
+on 2026-10-08, catching up that day's pre-open slot: `invalid_answer` ("figures not in the evidence:
+1,923"), $0.026, no retry by design. The next is each trading day at 09:00 New York (16:00 Israel).
+**GitHub:** the repository is now **public** (the user's answer to the Actions billing block; CI is
+free); the ruleset "protect main" covers every branch, so merges use `gh pr merge --squash --admin
+--subject "<title> (#N)"` - `--subject`, because a squash otherwise takes the *first commit's*
+message (#197's title on `main` reads "wip: PR 7a before merging main"). The user says "merge" (or
+"merge and redeploy") per PR. **First thing next session: task 17** (narration re-measurement, due
+since 2026-10-08 10:15 UTC) - see "Next session: after Stage 4". **Form, unchanged:** one question at
+a time with a recommendation (AskUserQuestion); the user questions side effects before agreeing and
+wants them stated plainly (PR 7's plan was re-cut twice on their questions: retries bounded,
+one installation schedules, a real queue).
+
+Previous handoff, 2026-10-08 ~11:45 UTC - **The UI/UX sprint is complete: UX1-UX6 merged as #189, #191,
 #192, #193, #194, #195. Handoff by count (five merged PRs) and at the sprint's end. Nothing is in
 flight.** What it built is under "The UI/UX sprint is complete" in "Where to go next"; the argued
 choices are decisions 119-123. **Neither environment is redeployed:** compose and kind both run
@@ -2002,10 +2027,77 @@ failure they prevent.
     needs the room); observations and the digest to `/insights` (`?tab=`, filters in the address;
     an old `/?severity=` link redirects there). Do not add cards back to the dashboard - that was
     the point of the sprint.
+124. **A scheduled scan's retries are planned from Postgres; the queue only carries attempts**
+    (D69, D73; PR 7b). Every 15 minutes the `agent_scans` ask works out each agent's due slot
+    (`scanSchedule.ts`, from the day's session) and reads that slot's attempts from `runs`
+    (`agent_scan:<agent>:<NY day>:<slot>:<n>`, 0048); the next attempt goes on BullMQ with the run
+    key as its job id. The worker records every outcome on the run and never throws, so BullMQ's
+    own retries never act. A failure retries >= 60 min later, at most twice, inside the window;
+    any other outcome - `invalid_answer` and a spent budget included - is final. *Why not BullMQ's
+    backoff:* a restart, a cleared Redis or a second process would then repeat or lose an attempt,
+    and the window rule needs the calendar anyway. *Rejected (with the user):* time-capped batches
+    in the request (no parallelism); RabbitMQ (a second stateful service); pg-boss (fit, but the
+    user chose BullMQ); "retry hourly until the window ends" (uncontrolled cost in an outage). The
+    5,000-agent arithmetic is in D73: the limit is the provider's rate, not the queue.
+125. **Only one installation schedules scans: `ENABLE_SCHEDULED_SCANS`, off unless `true`** (D71).
+    Compose and kind have separate databases and one OpenRouter key; an agent in both would be
+    scanned and billed twice, and neither can see the other. The switch is an env var, so turning
+    it on is a deliberate act per installation; when off, the ask answers "skipped" and writes no
+    run row (96 a day would say nothing). *Rejected:* a per-agent opt-in (the same agent turned on
+    in both); a habit.
+126. **The agent limit is enforced by a trigger that locks the user's row** (D72, 0047). The
+    orchestrator checks first so the page can say so, but only the database can make two
+    simultaneous creates see each other: the trigger takes `FOR UPDATE` on `users`, counts
+    non-archived simulated agents, and raises `agent_limit_reached` (`check_violation`); a restore
+    from the archive is checked the same way. `installation_settings` is one typed row (`id =
+    true`), the app role may update it but not insert or delete. *Rejected:* key/value settings
+    (a wrong value read back as text); counting archived agents (an old experiment blocks a new
+    one forever).
+127. **A trade proposal ignores the severity floor; a sell ignores quiet hours only while the
+    market is open** (D60, D70). It expires an hour after the open, so the digest delivers it dead;
+    and a sell can be approved only while the exchange is open, so that is the one moment worth an
+    interruption. A mute still holds. Reasons stay `above_floor`/`quiet_hours` - no CHECK changed.
+128. **Telegram's Confirm carries the previewed price inside its signed callback** (D62). A varint
+    after the nonce, under the same MAC: 57 of 64 bytes before, 61 up to $20,971, 63 at the 28-bit
+    ceiling ($2.68M; above it the message offers Reject and "confirm in the app"). The ±50 bps band
+    is centred on the price the user read; an edited button fails verification. *Rejected:* a
+    callback row per button (a write per render, and its own expiry sweep).
+129. **A slot that gives up is reported once, and the failed run is the Admin record** (D74). One
+    Telegram message on the last failed attempt (agent, slot, cause in plain words), sent directly
+    through the notifier - not the fan-out - so it is not deduplicated by `notifications` and does
+    not respect quiet hours or a mute (debt, below). The `agent_scan` run's `stats.cause` is what
+    the Admin runs list shows; `ops_events` was not widened.
 
 ---
 
 ## Bugs that cost real time, and the lesson from each
+
+**Stage 4's last stretch (2026-10-07/08, #186-#199) - lessons, newest first:**
+- **A real-service rehearsal found what 900 unit tests could not:** BullMQ 6 treats `ioredis` as an
+  *optional* peer and fails at the first Redis call without it - the tests never open Redis. Fixed
+  in #199 by adding `ioredis`. *Lesson: a new infrastructure package is proven against the real
+  service before the PR, not after the deploy.*
+- **Two sessions numbering in parallel collide.** UX4 took migration 0046 while PR 7a held a 0046;
+  #190 took D67 in another proposal file. Renumbering by script then rewrote `down_revision =
+  "0046_digest_seen"` into a revision that does not exist - the migration test caught it.
+  *Lesson: `git fetch` and read `origin/main`'s newest migration and decision number before naming
+  one; renumber by hand, never by a blanket replace, and run `test_migrations.py` after.*
+- **A test was time-bombed by the date.** The scan's evidence includes the briefing's `as_of`
+  (today's timestamp), so "8 next week" counted as sourced on 2026-10-08 and the
+  unsourced-figure test failed in CI. *Lesson: a figure meant to be unsourced must be one no date
+  or time can contain (777, not 8).*
+- **Postgres tests run as the owner locally and as `traders_app` in CI.** The app role cannot delete
+  scans, ledger rows (`agent_cash`) or `installation_settings`, so a test that commits them cannot
+  clean up and the file's final `DELETE FROM users` fails - only in CI. *Lesson: commit such rows
+  under the seeded admin (never deleted), or archive instead of delete; a green local run of
+  `queries.postgres.test.ts` does not prove CI's.* The two role tests that always fail locally
+  (admin audit, model choices) are expected.
+- **A rehearsal stack must not share the live queue.** The rehearsal orchestrator used Redis
+  database 5 and it was flushed after; on database 0 a queued rehearsal job would have been run by
+  the real worker against the live account once scheduling was turned on.
+- **The squash title is the first commit's message** when a PR has several commits - #197's reads
+  "wip: PR 7a before merging main" on `main` for good (rewriting it needs a force push the ruleset
+  forbids). *Lesson: merge with `--subject`.*
 
 **A handoff that added decisions turned `main` red (#169, fixed by #170).** `docs/DECISIONS.md` is
 generated from this file's numbered decisions, and `tests/test_decision_index.py` fails when they
@@ -2694,7 +2786,12 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | ~~An `agent` fill does not yet require its proposal~~ | — | **Resolved by #182 (0044)**: `fills_agent_has_proposal`, and `proposals_trade_has_scan` beside it |
 | **The lexicon sentiment scorer misreads market headlines** | `app/news/sentiment.py` (`LexiconSentimentScorer`) | Found measuring D59: "Webull Sinks 22%..." and "...Stock Plummets..." score 0 (neutral). The agent reads the headline itself, so a decision is not misled, but the sentiment figure beside each article is wrong for exactly the drops agents look at. Fix the word list (drop verbs: sinks, plummets, tumbles, slumps) or score with the model; measure on stored headlines first |
 | **The Admin page shows a model as chosen when none is** | Admin -> Models picker (`AdminPage`) | With `chosen: null` the `<select>` displays its first option (Sonnet 5.5) while scans actually ran on `LLM_MODEL` (the free route) - measured 2026-10-07. Show "Not chosen - using LLM_MODEL" as the selected placeholder |
-| **Approving a trade from Telegram is refused** | `applyDecision` (`approve_with_preview`) | Until PR 5b: the trade kinds never reach Telegram (no alert carries them), and a surface that sends an approve gets "trades are approved in the app" |
+| ~~Approving a trade from Telegram is refused~~ | — | **Resolved by #186 (D62)**: Approve previews, Confirm fills at the signed price |
+| **The give-up alert ignores quiet hours, mute and dedupe** | `scheduledScans.ts` (`reportGaveUp`) | Sent through `notifier.send`, not `fanOut`, so a slot that gives up at 03:00 messages at 03:00 and a muted user still hears it; it is once per slot only because it runs on the last attempt. Route it through the fan-out with a `refKind` for runs (a CHECK change) if it ever annoys |
+| **Scheduled scans run for `SINGLE_USER_ID` only** | `routes/internal.ts` (`agent_scans`) | The ask plans one user's agents, as every run kind does. Multi-user means iterating users here, and per-user fairness on the queue needs BullMQ Pro's groups (D73) |
+| **The plan needs the AI service's calendar** | `planScheduledScans` | With the AI service down the ask fails (recorded "AI service unreachable", HTTP 500 - a failed CronJob in kind) and the next ask, 15 minutes later, catches up; a slot's window is hours, so nothing is lost unless the outage outlasts it |
+| **Agents' answers are refused for formatted figures** | evidence validator (`app/agents/answer.py`, `narration` checker) | The first scheduled scan (2026-10-08) wrote "1,923" - refused as unsourced. Measure how often real scans are refused and for what before changing anything; a computed figure (shares x price) is rightly refused, a re-formatted one may not be |
+| **#197's commit title on `main` reads "wip: PR 7a before merging main"** | git history | Cosmetic and permanent (the ruleset forbids the force push a fix would need); the PR and this file name it correctly |
 | **The trading strings in Hebrew were written by the model** | `he.json` `agents.trade`, `agents.account`, `agents.activity` | Read in the preview and laid out correctly, but not reviewed by the user line by line - the same standing as the earlier Hebrew row |
 | **The exchange calendar ends 2030-12-31** | `data/calendar/xnys.json` | Its test fails from 2030-10-02; the fix is one generator command (RUNBOOK §4). A closure no rule predicts must be added by hand when announced |
 | ~~Mastra is decided-retired but still runs~~ | — | **Resolved 2026-10-05**: Mastra retired (D11), schema dropped in 0039; `test/mastraSchemaOwnership.test.ts` went with it |
@@ -2771,7 +2868,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 
 ---
 
-- **Compose and kind run 0045 and pre-sprint UI** (2026-10-08): until redeployed, the live app
+- ~~Compose and kind run 0045 and pre-sprint UI~~ - **resolved**: both deployed at 0048 by the Stage 4 handoff session (2026-10-08). Was: until redeployed, the live app
   has no Insights page, no shared bar and no digest banner, and its web bundle would call
   `/notifications/digest/seen`, which only #193's orchestrator has - deploy both together, as
   `dev-docker.sh` and `k8s-up.sh` do.
@@ -2780,6 +2877,23 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
   builder is already in `@traders/shared`.
 
 ## Local environment (this machine)
+
+- **`ENABLE_SCHEDULED_SCANS=true` in the user's `.env` is deliberate** (2026-10-08, the user's yes):
+  compose schedules agents' scans, kind does not (`config.env`), `.env.example` says `false` so a
+  new installation never spends on its own. Do not "fix" the asymmetry. Off again = the line set to
+  `false` and `bash scripts/dev-docker.sh`.
+- **Rehearsing a scheduled scan end to end (PR 7b's recipe):** a copy of the live DB; a second AI
+  service from the worktree on :8011 against the copy (`uvicorn app.main:app --port 8011`, env from
+  `.env` with `DATABASE_URL` overridden); this branch's orchestrator on :8091 with
+  `ENABLE_SCHEDULED_SCANS=true SCHEDULER_ENABLED=false TELEGRAM_BOT_TOKEN= REDIS_URL=redis://127.0.0.1:6379/5`
+  (**its own Redis database**, flushed after); then `POST /internal/runs {"kind":"agent_scans"}` with
+  the internal key. Start long-lived processes from a script with `nohup ... & disown`, or the Bash
+  tool waits on them. To age a failed attempt past the hour, `UPDATE runs SET finished_at = now() -
+  interval '61 minutes'` on the copy. A changed model on the copy (`llm_model_choices`) makes scans
+  fail without cost.
+- **`traders_ci` left at a revision that no longer exists** (after a renumber): undo the migration by
+  hand there and `UPDATE alembic_version` to the last good revision, then rerun pytest - it
+  migrates forward.
 
 - **Stage 4 PR 5 recipes (2026-10-07), all run by the session itself on the Mac:**
   - *Rehearsal copy:* `docker exec traders-postgres-1 sh -c 'createdb -U traders <copy> && pg_dump
@@ -3094,6 +3208,36 @@ grant tests fail for the wrong reason.
 
 ## Where to go next
 
+### Stage 4 is complete (#186, #188, #197, #199, 2026-10-07/08)
+
+**As built:** PR 5b #186 - a scan's proposal is announced with Approve/Reject past the severity
+floor; Telegram Approve previews at the live price and Confirm fills at the price signed in the
+button; refusals append a reason and keep Approve/Reject; the consolidated view shows pending trades
+beside their ticker or above the table (D60-D63). PR 6 #188 - `GET /agents/:id/scans` and
+`/scans/:scanId`, the *Decisions* tab as readable steps, *Run a scan now* waiting inline, schedule,
+model budget and today's spend on Settings, *Waiting for a persona* (D64-D66). PR 7a #197 -
+`installation_settings` and the agent-limit trigger (0047, D72). PR 7b #199 - the schedule
+(D68-D71, D73, D74; decisions 124-129 here). **How it was verified:** every migration rehearsed on a
+copy of the live database (up/down/up, row counts); the Telegram flow on a copy with the market open
+(a refused Confirm recorded, the real one filled once); the trigger on a copy as `traders_app`
+(fourth refused, restore refused, archive frees a place); the schedule with real services on a copy
+(a scheduled scan proposed buying INTC; a failing slot retried twice and gave up once).
+
+### Next session: after Stage 4
+
+**Do first, before anything else - task 17** (due since 2026-10-08 10:15 UTC): on compose, `SELECT
+verdict, count(*) FROM llm_calls WHERE purpose = 'narration' AND started_at > '2026-10-07 10:13+00'
+GROUP BY 1`; record it in `docs/PROPOSAL-MULTI-AGENT.md` §14 and recommend whether narration moves
+to Sonnet (~$0.02/day measured). Then ask the user what follows. **Candidates, each to be asked
+about one at a time, not assumed:**
+- **Watch the scheduled scans for a few trading days** - outcomes, refusals ("1,923"), cost per day
+  - before changing anything about them (debt rows above).
+- **The two debt fixes the user has not yet approved:** the sentiment scorer reading "Sinks 22%" as
+  neutral; the Admin model picker showing a model as chosen when none is.
+- **IBI read-only sync (D67, `docs/PROPOSAL-IBI-SYNC.md`)** - planned by #190; **its migration is now
+  0049** (renumbered in this handoff: 0047 and 0048 were taken by PR 7).
+- **The assistant milestone** (`/ask` with tools; "Planned: the assistant" below).
+
 ### The UI/UX sprint is complete (#189, #191-#195, 2026-10-08)
 
 **As built:** UX1 #189 - `ChartTooltip` for all four charts, Allocation opens by holding
@@ -3236,7 +3380,7 @@ and `langchain-core`. LangChain - it would make its own model calls around the w
 each call, checks the budget and applies the Admin page's model choice. *Reopen if:* the assistant
 grows into separate stages or several cooperating agents.
 
-### Next session: Stage 4 PR 5b - Telegram, and the consolidated view's pending proposals
+### Next session: Stage 4 PR 5b - Telegram, and the consolidated view's pending proposals (history - done as #186; then #188, #197, #199)
 
 **Read first:** D47-D49, D55-D59 and §14.2-§14.3 in `docs/PROPOSAL-MULTI-AGENT.md`; then
 `apps/orchestrator/src/services/tradeApproval.ts` (preview, confirm, `recordingRefusals`),

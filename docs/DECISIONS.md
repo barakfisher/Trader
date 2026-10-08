@@ -134,3 +134,9 @@ while this file is out of date.
 | 121 | Menus are disclosures, not ARIA menus; side panels are one `Drawer` |
 | 122 | A chart's box is LTR; its tooltip reads in the language's direction |
 | 123 | The bar holds places; a page's own controls stay on the page |
+| 124 | A scheduled scan's retries are planned from Postgres; the queue only carries attempts |
+| 125 | Only one installation schedules scans: `ENABLE_SCHEDULED_SCANS`, off unless `true` |
+| 126 | The agent limit is enforced by a trigger that locks the user's row |
+| 127 | A trade proposal ignores the severity floor; a sell ignores quiet hours only while the market is open |
+| 128 | Telegram's Confirm carries the previewed price inside its signed callback |
+| 129 | A slot that gives up is reported once, and the failed run is the Admin record |
