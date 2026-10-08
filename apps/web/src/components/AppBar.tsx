@@ -1,4 +1,3 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
@@ -13,11 +12,11 @@ import {
   Settings,
   ShieldCheck,
   Tags,
-  Target,
   X,
 } from 'lucide-react';
 
 import { useTranslation } from '../i18n/index.ts';
+import { Disclosure } from './Disclosure.tsx';
 import { openProposals, useProposalsQuery } from '../queries/proposals.ts';
 import { useStore } from '../stores/context.tsx';
 
@@ -27,7 +26,8 @@ import { useStore } from '../stores/context.tsx';
  * It used to be the dashboard's own header, so every other page carried a
  * "Back to portfolio" button and reaching Topics from Settings took two
  * clicks. Page-specific controls - the portfolio's Refresh and its price age -
- * stay on their page; this bar holds only places.
+ * stay on their page; this bar holds only places. Targets and Import act on
+ * the holdings, so they are on the holdings card (UX5).
  *
  * At `md` and up the places sit in a row and the account items (Settings,
  * Admin, Sign out) behind one button; below `md` everything is behind a
@@ -52,8 +52,7 @@ export const AppBar = observer(function AppBar() {
     { to: '/topics', label: t('nav.topics'), icon: Tags },
     { to: '/ask', label: t('nav.ask'), icon: MessageCircleQuestion },
     { to: '/proposals', label: t('nav.proposals'), icon: Inbox, count: openCount },
-    // Moves to the holdings card in UX5; until then it stays reachable from here.
-    { to: '/targets', label: t('nav.targets'), icon: Target },
+    // Targets is on the holdings card (UX5): it is about those rows.
   ];
   const account: Place[] = [
     { to: '/settings', label: t('nav.settings'), icon: Settings },
@@ -89,7 +88,6 @@ export const AppBar = observer(function AppBar() {
 
         <div className="hidden md:block">
           <Disclosure
-            pathname={pathname}
             label={t('nav.account')}
             icon={<CircleUser className="size-5" aria-hidden />}
           >
@@ -104,7 +102,6 @@ export const AppBar = observer(function AppBar() {
 
         <div className="md:hidden">
           <Disclosure
-            pathname={pathname}
             label={t('nav.menu')}
             icon={<Menu className="size-5" aria-hidden />}
             openIcon={<X className="size-5" aria-hidden />}
@@ -123,7 +120,7 @@ export const AppBar = observer(function AppBar() {
 });
 
 type Place = {
-  to: '/insights' | '/agents' | '/topics' | '/ask' | '/proposals' | '/targets' | '/settings' | '/admin';
+  to: '/insights' | '/agents' | '/topics' | '/ask' | '/proposals' | '/settings' | '/admin';
   label: string;
   icon: typeof Bot;
   count?: number;
@@ -168,74 +165,5 @@ function SignOutItem({ label, onSignOut }: { label: string; onSignOut: () => voi
         {label}
       </button>
     </li>
-  );
-}
-
-/**
- * A button that shows a list beneath it. Closes on Escape (focus back on the
- * button), on a click outside, and when the address changes - following a link
- * in it is the usual way to leave.
- */
-function Disclosure({
-  pathname,
-  label,
-  icon,
-  openIcon,
-  children,
-}: {
-  pathname: string;
-  label: string;
-  icon: ReactNode;
-  openIcon?: ReactNode;
-  children: ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const panelId = useId();
-  const root = useRef<HTMLDivElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => setOpen(false), [pathname]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      setOpen(false);
-      button.current?.focus();
-    };
-    const onPointer = (event: PointerEvent) => {
-      if (!root.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener('keydown', onKey);
-    document.addEventListener('pointerdown', onPointer);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.removeEventListener('pointerdown', onPointer);
-    };
-  }, [open]);
-
-  return (
-    <div ref={root} className="relative">
-      <button
-        ref={button}
-        type="button"
-        aria-expanded={open}
-        aria-controls={panelId}
-        aria-label={label}
-        title={label}
-        onClick={() => setOpen(!open)}
-        className="flex items-center rounded-lg p-1.5 text-text-muted transition hover:bg-surface-hover hover:text-text-primary"
-      >
-        {open && openIcon ? openIcon : icon}
-      </button>
-      {open && (
-        <ul
-          id={panelId}
-          className="absolute end-0 top-full z-40 mt-2 w-56 rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg"
-        >
-          {children}
-        </ul>
-      )}
-    </div>
   );
 }

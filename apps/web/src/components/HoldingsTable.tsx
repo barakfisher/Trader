@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Check, Clock, Pencil, Trash2, X } from 'lucide-react';
 
@@ -17,7 +17,8 @@ import { Card, Delta } from './ui.tsx';
 type UpdateHolding = ReturnType<typeof useUpdateHolding>;
 type RemoveHolding = ReturnType<typeof useRemoveHolding>;
 
-export function HoldingsTable() {
+/** `actions`: the card's own controls - Add holding, Targets, the "⋯" menu (UX5). */
+export function HoldingsTable({ actions }: { actions?: ReactNode } = {}) {
   const { data: portfolio } = usePortfolioQuery();
   const { t } = useTranslation();
   // Owned by the table, not each row, so a failure is reported once, under the
@@ -38,7 +39,7 @@ export function HoldingsTable() {
 
   if (narrow) {
     return (
-      <Card title={t('holdings.title', { count: holdings.length })}>
+      <Card title={t('holdings.title', { count: holdings.length })} action={actions}>
         <ul className="divide-y divide-border-subtle/60">
           {holdings.map((holding) => (
             <li key={holding.id} className="py-3 first:pt-0 last:pb-0">
@@ -57,7 +58,7 @@ export function HoldingsTable() {
   }
 
   return (
-    <Card title={t('holdings.title', { count: holdings.length })} className="overflow-hidden">
+    <Card title={t('holdings.title', { count: holdings.length })} action={actions} className="overflow-hidden">
       <div className="-mx-4 overflow-x-auto px-4">
         <table className="w-full min-w-[880px] text-sm">
           <thead>

@@ -1,5 +1,4 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { X } from 'lucide-react';
 
 import type { TradeInput, TradePreview, TradeSide } from '@traders/shared';
 
@@ -9,6 +8,7 @@ import { BUDGET_INPUT, QUANTITY_INPUT, tradeErrorMessage } from '../lib/agentPre
 import { formatClockTime } from '../lib/relativeTime.ts';
 import { usePreviewTrade, useTrade } from '../queries/agents.ts';
 import { AgentField } from './AgentField.tsx';
+import { Drawer } from './Drawer.tsx';
 import { Button, ErrorNote } from './ui.tsx';
 
 type PriceMode = 'market' | 'typed';
@@ -55,12 +55,6 @@ export function TradePanel({
     resetTrade();
   }, [symbol, side, quantity, mode, price, reset, resetTrade]);
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   const valid =
     symbol.trim() !== '' && QUANTITY_INPUT.test(quantity.trim()) && (mode === 'market' || BUDGET_INPUT.test(price.trim()));
 
@@ -91,103 +85,86 @@ export function TradePanel({
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-black/40" onClick={onClose}>
-      <aside
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="trade-title"
-        className="h-full w-full max-w-md overflow-y-auto border-s border-border-subtle bg-surface-raised p-4 shadow-xl"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="mb-4 flex items-center justify-between">
-          <h2 id="trade-title" className="text-sm font-semibold">
-            {t('agents.trade.title')}
-          </h2>
-          <button type="button" onClick={onClose} aria-label={t('agents.trade.close')} className="text-text-muted">
-            <X className="size-4" aria-hidden />
-          </button>
-        </header>
+    <Drawer title={t('agents.trade.title')} closeLabel={t('agents.trade.close')} onClose={onClose}>
+      <form onSubmit={ask} className="space-y-3">
+        <AgentField label={t('agents.trade.symbol')} hint={t('agents.trade.symbolHint')}>
+          <input
+            value={symbol}
+            onChange={(event) => setSymbol(event.target.value)}
+            dir="ltr"
+            autoCapitalize="characters"
+            maxLength={32}
+            required
+            className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-start uppercase"
+          />
+        </AgentField>
 
-        <form onSubmit={ask} className="space-y-3">
-          <AgentField label={t('agents.trade.symbol')} hint={t('agents.trade.symbolHint')}>
+        <fieldset className="flex gap-2">
+          <legend className="mb-1 text-xs text-text-muted">{t('agents.trade.side')}</legend>
+          {(['buy', 'sell'] as const).map((value) => (
+            <label key={value} className="flex items-center gap-1 text-sm">
+              <input type="radio" name="side" checked={side === value} onChange={() => setSide(value)} />
+              {t(`agents.trade.${value}`)}
+            </label>
+          ))}
+        </fieldset>
+
+        <AgentField label={t('agents.trade.quantity')}>
+          <input
+            value={quantity}
+            onChange={(event) => setQuantity(event.target.value)}
+            inputMode="numeric"
+            dir="ltr"
+            required
+            aria-invalid={quantity !== '' && !QUANTITY_INPUT.test(quantity.trim())}
+            className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
+          />
+        </AgentField>
+
+        <fieldset className="space-y-1">
+          <legend className="mb-1 text-xs text-text-muted">{t('agents.trade.priceMode')}</legend>
+          <label className="flex items-center gap-1 text-sm">
+            <input type="radio" name="price-mode" checked={mode === 'market'} onChange={() => setMode('market')} />
+            {t('agents.trade.market')}
+          </label>
+          <label className="flex items-center gap-1 text-sm">
+            <input type="radio" name="price-mode" checked={mode === 'typed'} onChange={() => setMode('typed')} />
+            {t('agents.trade.typed')}
+          </label>
+          <p className="text-xs text-text-muted">
+            {mode === 'market' ? t('agents.trade.marketHint') : t('agents.trade.typedHint')}
+          </p>
+        </fieldset>
+
+        {mode === 'typed' && (
+          <AgentField label={t('agents.trade.typedPrice')}>
             <input
-              value={symbol}
-              onChange={(event) => setSymbol(event.target.value)}
-              dir="ltr"
-              autoCapitalize="characters"
-              maxLength={32}
-              required
-              className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-start uppercase"
-            />
-          </AgentField>
-
-          <fieldset className="flex gap-2">
-            <legend className="mb-1 text-xs text-text-muted">{t('agents.trade.side')}</legend>
-            {(['buy', 'sell'] as const).map((value) => (
-              <label key={value} className="flex items-center gap-1 text-sm">
-                <input type="radio" name="side" checked={side === value} onChange={() => setSide(value)} />
-                {t(`agents.trade.${value}`)}
-              </label>
-            ))}
-          </fieldset>
-
-          <AgentField label={t('agents.trade.quantity')}>
-            <input
-              value={quantity}
-              onChange={(event) => setQuantity(event.target.value)}
-              inputMode="numeric"
+              value={price}
+              onChange={(event) => setPrice(event.target.value)}
+              inputMode="decimal"
               dir="ltr"
               required
-              aria-invalid={quantity !== '' && !QUANTITY_INPUT.test(quantity.trim())}
+              aria-invalid={price !== '' && !BUDGET_INPUT.test(price.trim())}
               className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
             />
           </AgentField>
-
-          <fieldset className="space-y-1">
-            <legend className="mb-1 text-xs text-text-muted">{t('agents.trade.priceMode')}</legend>
-            <label className="flex items-center gap-1 text-sm">
-              <input type="radio" name="price-mode" checked={mode === 'market'} onChange={() => setMode('market')} />
-              {t('agents.trade.market')}
-            </label>
-            <label className="flex items-center gap-1 text-sm">
-              <input type="radio" name="price-mode" checked={mode === 'typed'} onChange={() => setMode('typed')} />
-              {t('agents.trade.typed')}
-            </label>
-            <p className="text-xs text-text-muted">
-              {mode === 'market' ? t('agents.trade.marketHint') : t('agents.trade.typedHint')}
-            </p>
-          </fieldset>
-
-          {mode === 'typed' && (
-            <AgentField label={t('agents.trade.typedPrice')}>
-              <input
-                value={price}
-                onChange={(event) => setPrice(event.target.value)}
-                inputMode="decimal"
-                dir="ltr"
-                required
-                aria-invalid={price !== '' && !BUDGET_INPUT.test(price.trim())}
-                className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
-              />
-            </AgentField>
-          )}
-
-          {preview.error && <ErrorNote message={tradeErrorMessage(preview.error, t('agents.trade.previewFailed'))} />}
-          <Button type="submit" variant="secondary" disabled={!valid || preview.isPending}>
-            {t('agents.trade.preview')}
-          </Button>
-        </form>
-
-        {shown && (
-          <PreviewSummary preview={shown.preview}>
-            {trade.error && <ErrorNote message={tradeErrorMessage(trade.error, t('agents.trade.failed'))} />}
-            <Button onClick={confirm} disabled={trade.isPending}>
-              {side === 'buy' ? t('agents.trade.confirmBuy') : t('agents.trade.confirmSell')}
-            </Button>
-          </PreviewSummary>
         )}
-      </aside>
-    </div>
+
+        {preview.error && <ErrorNote message={tradeErrorMessage(preview.error, t('agents.trade.previewFailed'))} />}
+        <Button type="submit" variant="secondary" disabled={!valid || preview.isPending}>
+          {t('agents.trade.preview')}
+        </Button>
+      </form>
+
+      {shown && (
+        <PreviewSummary preview={shown.preview}>
+          {trade.error && <ErrorNote message={tradeErrorMessage(trade.error, t('agents.trade.failed'))} />}
+          <Button onClick={confirm} disabled={trade.isPending}>
+            {side === 'buy' ? t('agents.trade.confirmBuy') : t('agents.trade.confirmSell')}
+          </Button>
+        </PreviewSummary>
+      )}
+    </Drawer>
   );
 }
 
