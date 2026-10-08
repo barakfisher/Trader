@@ -14,6 +14,7 @@ import {
 import { EquityCurve } from '../components/EquityCurve.tsx';
 import { DigestBanner } from '../components/DigestBanner.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
+import { HoldingsActions } from '../components/HoldingsActions.tsx';
 import { HoldingsTable } from '../components/HoldingsTable.tsx';
 import { ImportWizard } from '../components/ImportWizard.tsx';
 import { NarrationBadge } from '../components/NarrationBadge.tsx';
@@ -142,16 +143,18 @@ export const DashboardPage = observer(function DashboardPage() {
           {scope.kind === 'real' && <SummaryCards />}
           {scope.kind === 'all' && consolidated.data && <ConsolidatedHeadline data={consolidated.data} />}
           {standing && <AgentHeadline standing={standing} />}
-          <EquityCurve />
+          {/* Summary, then the two charts side by side - Value over time where
+              the table used to be, Allocation at its own size - then the
+              holdings with a row to themselves, because a table needs width
+              (UX5). On a phone everything stacks. No cards are added here:
+              findings and the digest are on Insights. */}
           <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-            {scope.kind === 'real' && <HoldingsTable />}
-            {scope.kind === 'all' && consolidated.data && <ConsolidatedHoldings data={consolidated.data} />}
-            {standing && consolidated.data && <AgentScopeHoldings data={consolidated.data} standing={standing} />}
-            <div className="space-y-4">
-              <AllocationChart />
-              <AddHoldingForm />
-            </div>
+            <EquityCurve />
+            <AllocationChart />
           </div>
+          {scope.kind === 'real' && <HoldingsTable actions={<HoldingsActions />} />}
+          {scope.kind === 'all' && consolidated.data && <ConsolidatedHoldings data={consolidated.data} />}
+          {standing && consolidated.data && <AgentScopeHoldings data={consolidated.data} standing={standing} />}
         </>
       )}
 

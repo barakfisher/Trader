@@ -184,7 +184,14 @@
     "noPrice": "אין מחיר",
     "today": " · <delta>{{change}}</delta> היום",
     "ofPortfolio": " · {{share}} מהתיק",
-    "priceAge": " · מחיר {{age}}"
+    "priceAge": " · מחיר {{age}}",
+    "actions": {
+      "add": "הוספת אחזקה",
+      "more": "פעולות נוספות",
+      "import": "ייבוא",
+      "export": "ייצוא JSON",
+      "close": "סגירה"
+    }
   },
   "import": {
     "title": "ייבוא אחזקות",

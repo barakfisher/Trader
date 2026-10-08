@@ -180,7 +180,14 @@
     "noPrice": "no price",
     "today": " · <delta>{{change}}</delta> today",
     "ofPortfolio": " · {{share}} of portfolio",
-    "priceAge": " · price {{age}}"
+    "priceAge": " · price {{age}}",
+    "actions": {
+      "add": "Add holding",
+      "more": "More actions",
+      "import": "Import",
+      "export": "Export JSON",
+      "close": "Close"
+    }
   },
   "import": {
     "title": "Import holdings",
