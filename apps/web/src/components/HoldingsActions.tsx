@@ -3,6 +3,8 @@ import { Link } from '@tanstack/react-router';
 import { Download, Ellipsis, FileUp, Plus, Target } from 'lucide-react';
 
 import { useTranslation } from '../i18n/index.ts';
+import { downloadHoldings } from '../lib/holdingsDownload.ts';
+import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { useStore } from '../stores/context.tsx';
 import { AddHoldingForm } from './AddHoldingForm.tsx';
 import { Disclosure } from './Disclosure.tsx';
@@ -17,13 +19,14 @@ import { Button, buttonClass } from './ui.tsx';
  * claim a button each. They used to sit in the app bar and in a card of their
  * own beside the table; they act on this card's rows, so they live on it.
  *
- * Export is shown and disabled until UX6 builds it, so the menu does not
- * change shape between the two PRs.
+ * Export saves the holdings as JSON the Import reads back (UX6,
+ * `lib/holdingsDownload.ts`).
  */
 export function HoldingsActions() {
   const { t } = useTranslation();
   const { import: importStore } = useStore();
   const [adding, setAdding] = useState(false);
+  const holdings = usePortfolioQuery().data?.holdings;
 
   return (
     <div className="flex items-center gap-1">
@@ -48,7 +51,11 @@ export function HoldingsActions() {
           </MenuButton>
         </li>
         <li>
-          <MenuButton disabled icon={<Download className="size-4" aria-hidden />}>
+          <MenuButton
+            onClick={() => holdings && downloadHoldings(holdings)}
+            disabled={!holdings || holdings.length === 0}
+            icon={<Download className="size-4" aria-hidden />}
+          >
             {t('holdings.actions.export')}
           </MenuButton>
         </li>

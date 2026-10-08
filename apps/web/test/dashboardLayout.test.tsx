@@ -150,14 +150,42 @@ it('adds a holding in a drawer that takes focus, gives it back, and closes when 
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 });
 
-it('opens Import from "⋯", and shows Export as not yet available', async () => {
+it('opens Import from "⋯"', async () => {
   renderAt('/');
   const card = await holdingsCard();
   fireEvent.click(within(card).getByRole('button', { name: 'More actions' }));
-  expect((within(card).getByRole('button', { name: 'Export JSON' }) as HTMLButtonElement).disabled).toBe(true);
-
   fireEvent.click(within(card).getByRole('button', { name: 'Import' }));
   expect(await screen.findByRole('heading', { name: 'Import holdings' })).toBeTruthy();
   // Choosing an item closes the menu.
   expect(within(card).getByRole('button', { name: 'More actions' }).getAttribute('aria-expanded')).toBe('false');
+});
+
+it('exports the stored holdings from "⋯" as a JSON file the import reads', async () => {
+  let saved: { name: string; blob: Blob } | null = null;
+  const blobs = new Map<string, Blob>();
+  URL.createObjectURL = vi.fn((blob: Blob) => {
+    blobs.set('blob:1', blob);
+    return 'blob:1';
+  });
+  URL.revokeObjectURL = vi.fn();
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    saved = { name: this.download, blob: blobs.get(this.href)! };
+  });
+
+  renderAt('/');
+  const card = await holdingsCard();
+  fireEvent.click(within(card).getByRole('button', { name: 'More actions' }));
+  fireEvent.click(within(card).getByRole('button', { name: 'Export JSON' }));
+
+  expect(saved).not.toBeNull();
+  expect(saved!.name).toMatch(/^traders-holdings-\d{4}-\d{2}-\d{2}\.json$/);
+  // jsdom's Blob has no text(); its FileReader reads one.
+  const text = await new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.readAsText(saved!.blob);
+  });
+  const file = JSON.parse(text);
+  expect(file.holdings).toEqual([{ symbol: 'AAPL', quantity: '25', cost_basis: '185.40', currency: 'USD' }]);
+  click.mockRestore();
 });
