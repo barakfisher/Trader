@@ -3261,7 +3261,8 @@ grows into separate stages or several cooperating agents.
 LLM budget, *Run a scan now*, waiting-for-a-persona; D45, D46, D52), then PR 7 the schedule.
 Task 18 (reset account) and the debt rows above whenever asked.
 
-**Pending, not code:** redeploy #183; **task 17** - after 2026-10-08 10:15 UTC re-measure the free
+**Pending, not code:** redeploy #183; **task 17 (done 2026-10-08: 86% accepted since #179, but 24 s
+per call; narration moves to Sonnet on the Admin page, D75 and §14.4)** - after 2026-10-08 10:15 UTC re-measure the free
 model's narration rejection rate since #179 deployed (2026-10-07 10:13 UTC): `SELECT verdict,
 count(*) FROM llm_calls WHERE purpose = 'narration' AND started_at > '2026-10-07 10:13+00' GROUP BY
 1` on compose; record it in §14 and decide with the user whether narration moves to Sonnet

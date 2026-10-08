@@ -1091,6 +1091,18 @@ model provider"), it is recorded as an ops event on the Admin page, and the *Dec
 the failed scan. A retry that succeeds sends nothing. *Rejected:* a message per attempt (an outage
 across agents floods the chat); the Admin page alone (missed for days).
 
+### Added 2026-10-08, task 17
+
+**D75 - Narration moves to Sonnet; the free route stays offered for it.** Measured in §14.4: since
+#179 the free route's narration is accepted 86% of the time (from 33%), so the validator problem
+task 17 was about is solved - but its answers now average 24 s against the 30 s limit, and a
+timeout shows the template sentence instead. The user chooses Claude Sonnet 5.5 for the *explain*
+scope (narration and `/ask`) on the Admin page, about $0.02 a day; the free route remains in that
+picker, so going back is one choice and no code. Agents still never get a free route (D43). No
+code change. *Rejected:* staying on the free route (accurate now, but one slow day from timing out
+most narrations); raising the timeout (a scan with many findings waits longer for every one).
+*Re-measure* Sonnet's narration after a few days with a real portfolio, as §14.4 did.
+
 ---
 
 ## 11. Measured, 2026-10-04 (read-only, live compose database)
@@ -1431,3 +1443,24 @@ the retry rule; the give-up alert; D70's quiet-hours rule; Settings naming the n
   *Confirm* signed at 2% above it was refused `price_moved`, recorded with `surface: 'telegram'`,
   and gave *Approve* back. The real *Confirm* filled: cash 10,000.00 -> 9,524.22, no buttons left;
   repeating it answered the same fill (one fill row). The proposal left the pending list.
+
+### 14.4 Measured, 2026-10-08 (task 17; read-only, live compose database at `0046_digest_seen`)
+
+Narration on `nvidia/nemotron-3.5-lightning:free`, before and after #179 (deployed 2026-10-07
+10:13 UTC), from `llm_calls` where `purpose = 'narration'`:
+
+| | Accepted | `unsourced_figures` | Other | Average time |
+|---|---|---|---|---|
+| Before #179 (last 10 days) | 20 of 61 (33%) | 39 | 2 `malformed` | 6 s |
+| After #179 | **12 of 14 (86%)** | 1 | 1 timeout at 30 s | **24 s** (max 34 s) |
+
+- **The one refusal since #179 was correct.** The model wrote "URA down 4.0% over 19 hours":
+  19 is `gap_days` 0.79 times 24, a figure the evidence does not hold. Nothing to fix in the
+  validator.
+- **The sample is two scans on 2026-10-07 and will not grow by itself.** The compose account was
+  reset at 15:05 UTC that day (task 18; main portfolio, topics, agents' trading); since then it
+  holds one position and no topics, every `portfolio_scan` finds nothing (`degraded`: no target
+  weights) and no model call has been made. kind has no provider (`no_provider` on every call).
+- **The free route got slower, not worse.** 6 s on average before, 24 s after, against a 30 s
+  timeout - the risk D75 acts on.
+
