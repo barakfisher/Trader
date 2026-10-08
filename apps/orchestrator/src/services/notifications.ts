@@ -71,6 +71,8 @@ export interface NotifiableFinding {
    * severity floor, and a channel offers Approve and Reject only.
    */
   trade?: boolean;
+  /** D70: a sell made while the market is open is pushed through quiet hours. */
+  urgent?: boolean;
 }
 
 export interface FanOutResult {
@@ -135,6 +137,7 @@ export async function fanOut(
   for (const finding of findings) {
     const decision = routeFinding(finding.severity, settings, now, {
       floor: finding.trade === true ? 'ignored' : 'applies',
+      quietHours: finding.urgent === true ? 'ignored' : 'apply',
     });
     const channel = channelFor(decision.route, notifier);
     if (channel === null) continue;

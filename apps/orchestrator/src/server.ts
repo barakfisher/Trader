@@ -19,6 +19,8 @@ import { startScheduler, stopScheduler } from './scheduler.js';
 import { TelegramNotifier } from './telegram/client.js';
 import { TelegramPoller } from './telegram/poller.js';
 import { handleTelegramUpdate } from './telegram/updates.js';
+import { startScanQueue } from './services/scanQueue.js';
+import { runSlotAttempt } from './services/scheduledScans.js';
 
 function main(): void {
   const config = loadConfig();
@@ -37,7 +39,12 @@ function main(): void {
   // Built once and shared: the poller answers taps through the same client the
   // fan-out sends alerts with.
   const notifier = buildNotifier(config);
-  const app = createApp(config, ai, notifier);
+  // D71: only the installation that schedules runs the queue and its worker.
+  const scanQueue = config.ENABLE_SCHEDULED_SCANS
+    ? startScanQueue(config, (job) => runSlotAttempt(job, { ai, notifier }))
+    : null;
+  if (scanQueue === null) log.info('scheduled scans are off on this installation (ENABLE_SCHEDULED_SCANS)');
+  const app = createApp(config, ai, notifier, scanQueue);
   const server = serve({ fetch: app.fetch, port: config.ORCHESTRATOR_PORT }, (info) =>
     log.info({ port: info.port }, 'orchestrator listening'),
   );
@@ -60,6 +67,7 @@ function main(): void {
     stopScheduler();
     poller?.stop();
     server.close(async () => {
+      await scanQueue?.close();
       await closePool();
       process.exit(0);
     });

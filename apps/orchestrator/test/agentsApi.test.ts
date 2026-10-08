@@ -303,6 +303,25 @@ describe('the agents API', () => {
     expect((await send('PATCH', `/agents/${SIMULATED}`, { state: 'archived' })).status).toBe(200);
     vi.mocked(queries.countLiveAgents).mockResolvedValue(1);
   });
+
+  it("says where and when an agent's scheduled scans run (D71)", async () => {
+    // Off here: the test env sets no ENABLE_SCHEDULED_SCANS.
+    expect((await (await send('GET', `/agents/${SIMULATED}`)).json()).scheduling).toEqual({ enabled: false, nextAt: null });
+
+    resetConfigForTests();
+    const ai = createFakeAi();
+    Object.assign(ai, {
+      marketSessions: vi.fn(async () => ({
+        exchange: 'NMS',
+        calendar: 'XNYS',
+        sessions: [{ day: '2099-01-05', opens_at: '2099-01-05T14:30:00Z', closes_at: '2099-01-05T21:00:00Z', early_close: false }],
+      })),
+    });
+    const on = createApp(loadConfig({ ...ENV, ENABLE_SCHEDULED_SCANS: 'true' } as unknown as NodeJS.ProcessEnv), ai);
+    vi.mocked(queries.getAgent).mockResolvedValueOnce(row({ persona: 'Patient.' }) as never);
+    const body = await (await on.request(`/agents/${SIMULATED}`, { headers: { ...ORIGIN, cookie } })).json();
+    expect(body.scheduling).toEqual({ enabled: true, nextAt: '2099-01-05T14:00:00.000Z' });
+  });
 });
 
 describe('the cost of a scan (D46)', () => {

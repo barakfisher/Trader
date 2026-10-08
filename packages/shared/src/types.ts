@@ -107,6 +107,18 @@ export interface AgentView {
   scanCost: ScanCostEstimate | null;
   /** An active agent with no persona never scans and is never billed (D52). */
   waitingForPersona: boolean;
+  /** Its scheduled scans on this installation (D71); on `GET /agents/:id` only. */
+  scheduling?: AgentScheduling;
+}
+
+/**
+ * Where and when an agent's scheduled scans run. `enabled` is the
+ * installation's switch (D71); `nextAt` is the next slot's start, null when
+ * the agent cannot scan or the calendar could not be read.
+ */
+export interface AgentScheduling {
+  enabled: boolean;
+  nextAt: string | null;
 }
 
 /** D46's choices, in the order Settings offers them. */

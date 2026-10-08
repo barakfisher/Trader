@@ -300,6 +300,22 @@ describe('a scan becomes a proposal', () => {
     expect(notifier.send).not.toHaveBeenCalled();
   });
 
+  it('pushes a sell through quiet hours while the market is open, and holds a buy (D70)', async () => {
+    settingsRow = { ...settingsRow, quiet_hours_start: '00:00', quiet_hours_end: '23:59' };
+    try {
+      const sell = scan({ answer: { decision: 'sell', symbol: 'AAPL', quantity: '3', thesis: 'AAPL fell 3.18% to 200.00.', price_minor: AGENT_PRICE, price_as_of: NOW.toISOString(), problems: [] } });
+      await tradeProposals.proposeFromScan(USER.id, agentRow() as never, sell, { ai: stubAi({ open: true }), notifier: stubNotifier(), now: () => NOW });
+      expect(queries.claimNotification).toHaveBeenLastCalledWith(expect.objectContaining({ route: 'push' }));
+      // The same sell with the market shut can be approved only at the open: it waits.
+      await tradeProposals.proposeFromScan(USER.id, agentRow() as never, sell, { ai: stubAi({ open: false }), notifier: stubNotifier(), now: () => NOW });
+      expect(queries.claimNotification).toHaveBeenLastCalledWith(expect.objectContaining({ route: 'digest', reason: 'quiet_hours' }));
+      await tradeProposals.proposeFromScan(USER.id, agentRow() as never, scan(), { ai: stubAi({ open: true }), notifier: stubNotifier(), now: () => NOW });
+      expect(queries.claimNotification).toHaveBeenLastCalledWith(expect.objectContaining({ route: 'digest', reason: 'quiet_hours' }));
+    } finally {
+      settingsRow = { ...settingsRow, quiet_hours_start: null, quiet_hours_end: null };
+    }
+  });
+
   it('a failed announcement does not fail the scan that proposed', async () => {
     vi.mocked(queries.claimNotification).mockRejectedValueOnce(new Error('db down'));
     expect(
