@@ -16,6 +16,7 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  redirect,
   type RouterHistory,
 } from '@tanstack/react-router';
 
@@ -27,11 +28,14 @@ import { AdminPage } from './pages/AdminPage.tsx';
 import { AskPage } from './pages/AskPage.tsx';
 import { DashboardPage } from './pages/DashboardPage.tsx';
 import { HoldingPage } from './pages/HoldingPage.tsx';
+import { InsightsPage } from './pages/InsightsPage.tsx';
 import { ProposalPage } from './pages/ProposalPage.tsx';
 import { ProposalsPage } from './pages/ProposalsPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import { TargetsPage } from './pages/TargetsPage.tsx';
 import { TopicsPage } from './pages/TopicsPage.tsx';
+import { feedFiltersFrom } from './lib/feedFilters.ts';
+import { isLegacyFeedAddress } from './lib/insightsTab.ts';
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -52,7 +56,23 @@ const rootRoute = createRootRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  createRoute({ getParentRoute: () => rootRoute, path: '/', component: DashboardPage }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/',
+    component: DashboardPage,
+    // The feed moved to Insights (UX3); a link to the dashboard's filtered
+    // feed still lands on that feed, filtered the same way.
+    beforeLoad: ({ search }) => {
+      if (isLegacyFeedAddress(search)) {
+        throw redirect({
+          to: '/insights',
+          search: { tab: 'observations', ...feedFiltersFrom(search) },
+          replace: true,
+        });
+      }
+    },
+  }),
+  createRoute({ getParentRoute: () => rootRoute, path: '/insights', component: InsightsPage }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/holdings/$holdingId',

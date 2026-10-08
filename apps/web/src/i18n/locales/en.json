@@ -691,7 +691,8 @@
     "portfolio": "Portfolio",
     "menu": "Menu",
     "account": "Account",
-    "label": "Main"
+    "label": "Main",
+    "insights": "Insights"
   },
   "dashboard": {
     "title": "Portfolio",
@@ -1350,6 +1351,13 @@
         "sell": "sell"
       },
       "open": "Review"
+    }
+  },
+  "insights": {
+    "title": "Insights",
+    "tabs": {
+      "observations": "Observations",
+      "digest": "Daily digest"
     }
   }
 }

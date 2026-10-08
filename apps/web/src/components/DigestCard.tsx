@@ -15,7 +15,7 @@ import { Card, ErrorNote, Spinner } from './ui.tsx';
 const SHOWN = 5;
 
 /**
- * The daily digest on the dashboard (FR-13 - "to UI and Telegram").
+ * The daily digest, on the Insights page's Digest tab (FR-13 - "to UI and Telegram").
  *
  * Every finding in a digest is already in the feed. What only the digest says
  * is which of them were *held back* from an interruption, and why - below your

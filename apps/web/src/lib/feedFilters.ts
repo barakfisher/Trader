@@ -1,5 +1,5 @@
 /**
- * The feed's filters as the dashboard's address carries them.
+ * The feed's filters as the Insights page's address carries them.
  *
  * The address is typed by whoever sends a link, so anything this does not
  * recognise is dropped rather than trusted: `?severity=urgent` is the unfiltered

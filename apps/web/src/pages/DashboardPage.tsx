@@ -16,15 +16,12 @@ import { Disclaimer } from '../components/Disclaimer.tsx';
 import { HoldingsTable } from '../components/HoldingsTable.tsx';
 import { ImportWizard } from '../components/ImportWizard.tsx';
 import { NarrationBadge } from '../components/NarrationBadge.tsx';
-import { DigestCard } from '../components/DigestCard.tsx';
-import { ObservationsFeed } from '../components/ObservationsFeed.tsx';
 import { SummaryCards } from '../components/SummaryCards.tsx';
 import { Button, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
 import { errorMessage } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { hasStaleQuotes, pricesAsOf } from '../lib/portfolioView.ts';
 import { formatAge, formatClockTime, formatExactTime } from '../lib/relativeTime.ts';
-import { feedFiltersFrom } from '../lib/feedFilters.ts';
 import { REAL_SCOPE, holdingsScopeFrom, holdingsSearchValue, type HoldingsScope } from '../lib/holdingsScope.ts';
 import { useAgentsQuery } from '../queries/agents.ts';
 import { useConsolidatedQuery, usePortfolioQuery } from '../queries/portfolio.ts';
@@ -36,11 +33,9 @@ export const DashboardPage = observer(function DashboardPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const portfolio = usePortfolioQuery();
-  // The feed's filters live in the address (`/?severity=high&symbol=NVDA`), so
-  // a filtered view survives a reload and can be sent. Read loosely: this page
-  // also renders for unknown addresses, where the '/' route is not matched.
+  // Read loosely: this page also renders for unknown addresses, where the '/'
+  // route is not matched.
   const search = useSearch({ strict: false });
-  const feedFilters = feedFiltersFrom(search);
   // Which holdings the holdings card and the headline show (D32, D33): the
   // real portfolio unless the address asks for more. An agent the user does
   // not have - or has archived - is the default view, once the list is known.
@@ -61,7 +56,7 @@ export const DashboardPage = observer(function DashboardPage() {
   const setScope = (next: HoldingsScope) =>
     void navigate({
       to: '/',
-      search: { severity: feedFilters.severity, symbol: feedFilters.symbol, holdings: holdingsSearchValue(next) },
+      search: { holdings: holdingsSearchValue(next) },
       // A view of this page, not a place: Back leaves the page.
       replace: true,
     });
@@ -97,11 +92,9 @@ export const DashboardPage = observer(function DashboardPage() {
             void portfolio.refetch();
             // The consolidated view and the equity curve live under the portfolio's key.
             void queryClient.invalidateQueries({ queryKey: queryKeys.consolidated });
-            // Every filtered view of the feed, not only the one on screen.
-            void queryClient.invalidateQueries({ queryKey: queryKeys.observations });
+            // The bar's inbox count and the narration badge are on this screen too.
             void queryClient.invalidateQueries({ queryKey: queryKeys.proposals });
             void queryClient.invalidateQueries({ queryKey: queryKeys.narration });
-            void queryClient.invalidateQueries({ queryKey: queryKeys.digest });
           }}
         >
           <span className="flex items-center gap-1">
@@ -156,21 +149,6 @@ export const DashboardPage = observer(function DashboardPage() {
               <AddHoldingForm />
             </div>
           </div>
-          <DigestCard />
-          {/* The feed sits below the portfolio rather than above it: an empty
-              feed is the normal result of a quiet day, and it should not take
-              the top of the page to say so. */}
-          <ObservationsFeed
-            filters={feedFilters}
-            onFiltersChange={(next) =>
-              void navigate({
-                to: '/',
-                search: { severity: next.severity, symbol: next.symbol, holdings: holdingsSearchValue(scope) },
-                // A filter is a view of this page, not a place: Back leaves the page.
-                replace: true,
-              })
-            }
-          />
         </>
       )}
 
