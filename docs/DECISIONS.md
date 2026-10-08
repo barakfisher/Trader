@@ -134,3 +134,7 @@ while this file is out of date.
 | 121 | Menus are disclosures, not ARIA menus; side panels are one `Drawer` |
 | 122 | A chart's box is LTR; its tooltip reads in the language's direction |
 | 123 | The bar holds places; a page's own controls stay on the page |
+| 124 | The portfolio and topic scans stay on the 30-minute bucket |
+| 125 | No on-demand "Scan portfolio" / "Scan topic" |
+| 126 | States fire when they cross a band; an unusual move absorbs the price move |
+| 127 | Insights shows today, back seven days, with unread state |

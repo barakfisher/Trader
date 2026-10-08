@@ -438,7 +438,7 @@ job, approved by the user 2026-09-28) in #76, and task 5 (quotes carry asset cla
 the PR after that. Task 7 (server state in TanStack Query) was done across #90-#92 and the topics PR
 that closed it, and task 6 (a screen for `/ask`) in M6 PR 10. That queue emptied at M8's close.
 
-**The post-M8 sweep (2026-10-01)** refilled it as tasks 8-15 - **all done by #140**; tasks 16-18 were added 2026-10-07, and task 18 (reset account) left it in the PR that added migration 0045 (task 8, one question per standing
+**The post-M8 sweep (2026-10-01)** refilled it as tasks 8-15 - **all done by #140**; tasks 16-18 were added 2026-10-07, and task 18 (reset account) left it in the PR that added migration 0045; task 16 (scan frequency) was dropped 2026-10-08 by decision 124, and tasks 19-20 added by decisions 126-127 (task 8, one question per standing
 finding, became decision 92 when measured; task 9 is decision 93; task 10 found a latent cost-currency bug), approved by the user in that order,
 with the same grant as M8 (PR, merge on green, verify on `main` by content, rebuild compose and
 kind). It was measured on compose before it was written: the BTC-USD drift was proposed **7 days
@@ -450,7 +450,8 @@ strings and left-to-right assumptions before designing it.
 
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
-| 16 | **Scan frequency that follows the market, set on the Admin page** (the user, 2026-10-07) | — | M | **Measure first:** from `runs` and `observations`, how many findings each scan kind produces in US market hours, outside them and at weekends; that decides whether a change is worth making. The proposal measured against: every 15 minutes while NYSE is open (the exchange calendar), hourly otherwise (crypto, late data). **Then the Admin page setting**, audited like the model choice (D43): the interval in and out of market hours. Design question to settle first: the schedule lives in two places - the kind CronJobs (`infra/k8s/base/cronjobs.yaml`, fixed cron strings) and the orchestrator's in-process scheduler on compose - so a setting means the trigger fires often and the run decides from the setting whether it is due (idempotent by run key, guideline 8), rather than rewriting cron strings. Done when both environments follow the setting and a test pins in-hours and out-of-hours |
+| 19 | **Insights noise: states fire on a band crossing; an unusual move absorbs the price move** (the user, 2026-10-08; decision 126) | — | M | **Measure first, read-only:** from `observations`, per kind, how many rows repeat a subject and severity on consecutive days (drawdown and drift), and how many `price_move` rows share a subject and session with a `sigma_move` row - the before figure. **Then one PR:** drawdown and allocation drift written per band entry within an episode (`app/analysis/drawdown.py`, `allocation_drift.py`, the key in `dedupe.py`), and `price_move` suppressed where `sigma_move` fired (`app/analysis/pipeline.py`). Settle the two questions decision 126 leaves open with the user first. Done when a test holds a ten-day drawdown to one observation per band, a test pins the merge, and the measurement is re-run after deploy and recorded here |
+| 20 | **Insights: today by default, back 7 days, unread badge** (the user, 2026-10-08; decision 127) | — | M | After task 19, so the badge counts findings worth reading. A `seen` high-water mark on `user_settings` (migration; decision 119's pattern), `GET /observations` filtered by local day, the feed's day stepper (today, then back to 7 days), the Insights tab badge and the unread styling, translated in en and he. Done when a test pins the 7-day bound and the unread count, and the page is checked in a browser in both languages |
 | 17 | **Narration: why two of three model texts are rejected, fixed on the free model** (the user, 2026-10-07) | — | S | **Measured 2026-10-07** over the 38 `unsourced_figures` rejections on compose (all `nvidia/nemotron-3.5-lightning:free`, the validator re-run on each): **34 of 38 mention a threshold** ("crossed the 25% high threshold") that is true but refused, because `thresholds_pct` / `thresholds_weight` are nested and their keys (`info`, `notable`, `high`) carry no ratio marker - **5 were refused for that alone**; **30 of 38 copy a price in minor units** ("fell to 790" for $7.90), rightly refused, but the evidence invites it by handing the model `*_minor` integers; **3 are real inventions** ("$10.14M" for $101,427.80). **One error passed:** "the 0.03% information threshold" for 0.03 = 3%, accepted because the bare digits are in the evidence. **Fixes, one PR:** (1) the validator reads values under a `thresholds_*` key as ratios; (2) narration's evidence gives money as decimal strings ("7.90"), as the agent tools do since #177; (3) a ratio's bare digits followed by `%` are refused ("0.03%" for 0.03), while "0.03%" for a true 0.0003 stays accepted. **Then measure again on the free model** - the user's choice, because a paid model costs money and the fixes may make it unnecessary for narration (estimated at $0.03-0.07 a week on Flash-Lite or Haiku, against the agents' $0.04-0.38 a scan; the Admin page already sets narration's model separately). **The three fixes landed in the PR after #178; what remains is the re-measurement** on the free model once compose and kind run it - re-run the 2026-10-07 export (`llm_calls` where `purpose = 'narration'`) over the narrations written after the deploy. Done when that rate is recorded here, and this row is then removed |
 
 **Not in the queue, and why** - so they are not added back by the next sweep:
@@ -2002,6 +2003,53 @@ failure they prevent.
     needs the room); observations and the digest to `/insights` (`?tab=`, filters in the address;
     an old `/?severity=` link redirects there). Do not add cards back to the dashboard - that was
     the point of the sprint.
+124. **The portfolio and topic scans stay on the 30-minute bucket** (the user, 2026-10-08). Read
+    the cadence correctly first: the scheduler *asks* every 15 minutes, and the run key
+    (`RUN_BUCKET_MINUTES` in `http/routes/internal.ts`) runs a scan once per 30-minute bucket;
+    the extra asks are what let a restart catch up instead of skipping a bucket (decision 6).
+    *Rejected:* 2-3 market-anchored slots a day (pre-open, mid-day, post-close). The argument for
+    them was notification fatigue and cost, and neither is caused by the cadence: a scan over
+    unchanged data writes nothing (the dedupe key is rule, subject, severity and *day*) and makes
+    **no LLM call** (already-known findings are counted, never narrated), so a repeat run costs
+    database reads and quote requests. The fatigue is the two faults decision 126 fixes, and
+    fewer scans would fix neither - they would only make an intraday crash wait hours to be seen.
+    No rule needs high frequency either: every window is in days. This also **drops queue task 16**
+    (a market-following frequency set on the Admin page): the user chose not to tune the cadence.
+125. **No on-demand "Scan portfolio" / "Scan topic"** (the user, 2026-10-08). Considered with a
+    15-minute cooldown (the run key could have been the cooldown) and a daily cap. *Rejected*
+    because the 30-minute loop already answers "what is true now" within one bucket, and Yahoo's
+    quotes are 15 minutes delayed, so a manual scan would mostly re-read the data the last scan
+    read. Not to be confused with an **agent's** *Run a scan now* (`PROPOSAL-MULTI-AGENT.md`,
+    D64-D66), which asks a model for a thesis and stays.
+126. **States fire when they cross a band; an unusual move absorbs the price move** (the user,
+    2026-10-08; queue task 19, first in order). Two faults found by reading the code, and they are
+    where the feed's noise comes from:
+    (1) **Drawdown and allocation drift are states, but are dated like events.** Both take
+    `as_of` from the latest price, so the day bucket in `dedupe.py` makes a holding that sits 12%
+    below its high for ten days ten observations, and a drift fires (and raises a rebalance
+    proposal) every day until the user rebalances - the BTC-USD drift proposed 7 days running
+    (25 Sep-1 Oct) is this fault. The fix: a state observation is written when the subject
+    **enters a band higher than the one last written in the same episode**; an episode ends when
+    the subject falls back below the `info` band, and the next entry is a new observation.
+    (2) **One move is two observations.** A 5% move on a quiet stock writes both `price_move` and
+    `sigma_move`. The fix: when both fire for the same subject and session, only `sigma_move` is
+    written; `price_move` stands alone only when the z-score could not be computed (too little
+    history, or another of the guards in `sigma_move.py`).
+    **To settle when it is built:** whose severity a merged move takes (recommended: the sigma
+    band's - that is the rule that knows the stock), and whether an expired rebalance proposal is
+    asked again while the drift persists in the same band (after the fix it would not be).
+127. **Insights shows today, back seven days, with unread state** (the user, 2026-10-08; queue
+    task 20, after task 19). The feed opens on **today's findings** ("today" in the user's
+    timezone, guideline 10) and steps back **one day at a time, at most 7 days**; older findings
+    are not shown in the primary UI but are **not deleted** - nothing deletes observations today
+    except `reset_account` (0045), and retention is a separate decision. A **badge** on the
+    Insights tab counts unread findings, and an unread finding is styled apart from a viewed one
+    (an indicator or background that dims once seen). Recommended for "seen": a high-water mark on
+    `user_settings` (e.g. `observations_seen_at`), as decision 119 did for the digest - one column,
+    no per-row writes, and "unread" is `created_at > seen_at` for the primary agent. **Not decided:**
+    splitting Insights into more tabs (Alerts as Telegram sent them, Digest, Proposals, All
+    findings) was discussed, not chosen; rebalance proposals already have their own page,
+    `/proposals`, so they are not lost in the feed today.
 
 ---
 
