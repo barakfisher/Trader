@@ -914,6 +914,8 @@
       "saveFailed": "Could not save the model.",
       "inUse": "In use: {{model}}",
       "inUseDefault": "In use: {{model}} (the configured default; nothing chosen here yet)",
+      "notChosen": "Not chosen – using {{model}}",
+      "notOffered": "{{model}} – no longer offered here",
       "price": "{{input}} per million input tokens, {{output}} per million output tokens",
       "freeRoute": "Free route: unbilled, slow, and often rejected for unsourced figures",
       "estimate": "About {{daily}} a day, {{monthly}} a month",
