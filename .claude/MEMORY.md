@@ -4,7 +4,18 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-08 ~18:45 UTC - **Multi-agent Stage 4 is complete: agents decide on their own
+Updated: 2026-10-08 ~19:45 UTC - **Two debt fixes merged and deployed; the user stopped the session.
+Nothing is in flight.** **#202** - `lexicon-v2` reads present-tense headlines ("Sinks",
+"Plummets"); `scripts/rescore_sentiment.py` was run once on compose (27,678 articles; kind has
+none). **#203** - the Admin model picker shows "Not chosen - using <model>" instead of the first
+model. Both environments run `main` at `012d72b`, migration still `0048`. **Open, and the user's
+to do:** D75's Admin choice of Sonnet for *explain* (narration and `/ask`) was still unsaved at
+19:40 UTC - `llm_model_choices` held only the `agent` row, so narration was still on the free route;
+check the table before assuming either way. **IBI is gated (decision 135): no IBI work at all -
+not even the Excel mapper - until the MCP probe shows our app can connect.** Next session: see
+"Next session: after the debt fixes".
+
+Previous handoff, 2026-10-08 ~18:45 UTC - **Multi-agent Stage 4 is complete: agents decide on their own
 schedule. Handoff at the stage boundary. Nothing is in flight.** Merged and deployed this session,
 in order: **#186** (PR 5b: trade proposals announced past the floor, Telegram Approve -> preview ->
 Confirm with the price signed in the button, pending trades in the consolidated view; D60-D63),
@@ -2128,6 +2139,18 @@ failure they prevent.
     Tab and filters stay in the address (`?tab=`). *Rejected:* keeping one feed with a filter for
     each category - the categories are different questions (was I told, what do I owe an answer
     to, what happened), and a filter left set hides the one that matters.
+135. **No IBI work until the MCP connection is proven** (the user, 2026-10-08). The proposal put
+    the Excel column mapper first ("plan B", useful on its own); the user reversed that: nothing
+    IBI is built - mapper, migration 0049, OAuth, UI - until the §0 probe of
+    `docs/PROPOSAL-IBI-SYNC.md` shows a third-party MCP client can connect to IBI's server and
+    list its tools. Plan B is moot anyway: the user cannot export holdings to Excel. **Probe so far
+    (another session, 2026-10-08):** sign-in is Auth0 at `auth.ibi.co.il`, which advertises
+    `/oidc/register` (possibly disabled); ChatGPT's resource `https://api.ibi.co/mcp` is an Auth0 API
+    identifier that does not resolve; the real server URL is unknown and access is ChatGPT-only.
+    Guessing IBI hosts or paths was refused as scouting - use public sources only, and ask the user
+    before any client registration. The user will not contact IBI support. A one-time scheduled
+    task, `ibi-mcp-support-check`, runs 2026-10-15 09:00 Israel time. *Why it matters:* a mapper
+    built for a sync that never connects is code with no caller.
 
 ---
 
@@ -3284,7 +3307,20 @@ copy of the live database (up/down/up, row counts); the Telegram flow on a copy 
 (fourth refused, restore refused, archive frees a place); the schedule with real services on a copy
 (a scheduled scan proposed buying INTC; a failing slot retried twice and gave up once).
 
-### Next session: after Stage 4
+### Next session: after the debt fixes (#202, #203, 2026-10-08)
+
+Ask the user before starting anything (the Stage 4 grant ended). In order of the user's last answer:
+1. **Review the scheduled scans** once three trading days have run (09:00 New York each trading
+   day, compose only): outcomes, refusals like 2026-10-08's "1,923", cost per day, from
+   `agent_scan_runs` and `llm_calls WHERE purpose = 'agent_scan'`. Report before changing anything.
+2. **Check D75's choice:** `SELECT * FROM llm_model_choices` on compose. No `explain` row means
+   narration is still on the free route; remind the user (Admin -> "Narration and questions" ->
+   *Use this model*). Once it is set, re-measure narration after a few days, as §14.4 did.
+3. **IBI is gated by decision 135** - nothing until the 2026-10-15 check (or public news) shows IBI
+   open to other MCP clients, and the user says go.
+4. **The `/ask` assistant milestone** remains a candidate ("Planned: the assistant").
+
+### Next session: after Stage 4 (history - task 17 and both debt fixes done; see above)
 
 **Task 17 is done** (#198, D75, §14.4 - this line said "do first" because #200 was written beside
 #198; the next session lost a few minutes finding that out). D75's one manual step, choosing Sonnet

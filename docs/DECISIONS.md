@@ -145,3 +145,4 @@ while this file is out of date.
 | 132 | States fire when they cross a band; an unusual move absorbs the price move |
 | 133 | Insights shows today, back seven days, with unread state |
 | 134 | Insights is split into tabs: Alerts, Proposals, Digest, All findings |
+| 135 | No IBI work until the MCP connection is proven |

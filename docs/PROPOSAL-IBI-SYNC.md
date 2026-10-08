@@ -1,7 +1,9 @@
 # Proposal: one-time IBI portfolio sync over MCP
 
 Status: **accepted as D67 (2026-10-08)** - read-only broker sync is in scope; PRD P1 is amended.
-Nothing here is built yet. The Excel import (section 8, PR 2) goes first.
+Nothing here is built yet. **Gated (2026-10-08, the user; MEMORY decision 135):** nothing IBI is
+built - not even the Excel mapper of section 8, PR 2 - until the section 0 probe shows that a
+third-party MCP client can connect to IBI's server. The probe goes first.
 
 ---
 
