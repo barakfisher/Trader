@@ -692,7 +692,6 @@
   },
   "nav": {
     "refresh": "Refresh",
-    "import": "Import",
     "targets": "Targets",
     "agents": "Agents",
     "topics": "Topics",
