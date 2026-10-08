@@ -68,7 +68,7 @@
     "noneDelivered": "עדיין לא נשלח אף סיכום.",
     "lastDelivered": "נשלח לאחרונה {{when}}: {{findings}}",
     "lastDeliveredReasons": " - {{reasons}}",
-    "more": "ועוד {{count}}, כולם בפיד שלמטה.",
+    "more": "ועוד {{count}}, כולם בלשונית התצפיות.",
     "findings_one": "ממצא אחד",
     "findings_two": "שני ממצאים",
     "findings_other": "{{count}} ממצאים",
@@ -78,6 +78,12 @@
       "quiet_hours": "עוכבו בשעות השקט",
       "muted": "עוכבו בזמן השתקה",
       "above_floor": "לא נשלחו כשנמצאו לראשונה"
+    },
+    "banner": {
+      "ready": "הסיכום היומי שלך מוכן: {{findings}}, נשלח {{age}}.",
+      "readyNoFindings": "הסיכום היומי שלך מוכן, נשלח {{age}}.",
+      "open": "פתיחה",
+      "dismiss": "סגירה"
     }
   },
   "equity": {

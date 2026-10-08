@@ -68,7 +68,7 @@
     "noneDelivered": "No digest has been delivered yet.",
     "lastDelivered": "Last delivered {{when}}: {{findings}}",
     "lastDeliveredReasons": " - {{reasons}}",
-    "more": "and {{count}} more, all in the feed below.",
+    "more": "and {{count}} more, all on the Observations tab.",
     "findings_one": "{{count}} finding",
     "findings_other": "{{count}} findings",
     "reasonClause": "{{count}} {{reason}}",
@@ -77,6 +77,12 @@
       "quiet_hours": "held during quiet hours",
       "muted": "held while muted",
       "above_floor": "not delivered when first found"
+    },
+    "banner": {
+      "ready": "Your daily digest is ready: {{findings}}, sent {{age}}.",
+      "readyNoFindings": "Your daily digest is ready, sent {{age}}.",
+      "open": "Open",
+      "dismiss": "Dismiss"
     }
   },
   "equity": {

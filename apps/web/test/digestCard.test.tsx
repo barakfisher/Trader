@@ -50,6 +50,7 @@ it('says what the next digest holds and why, and what the last one delivered', a
     last: {
       sentAt: '2026-09-30T06:45:29.305Z',
       entries: [entry({ reason: 'below_floor' })],
+      seen: true,
     },
   };
   get.mockResolvedValue(response);

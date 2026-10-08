@@ -1025,8 +1025,11 @@ export interface DigestEntry {
  */
 export interface DigestResponse {
   next: { entries: DigestEntry[] };
-  /** Null until a digest has been delivered. */
-  last: { sentAt: string; entries: DigestEntry[] } | null;
+  /**
+   * Null until a digest has been delivered. `seen`: the user has opened it or
+   * dismissed its banner, on any device (UX4, migration 0046).
+   */
+  last: { sentAt: string; entries: DigestEntry[]; seen: boolean } | null;
 }
 
 export interface ObservationsResponse {

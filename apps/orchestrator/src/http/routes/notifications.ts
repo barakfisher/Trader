@@ -13,15 +13,19 @@
  */
 
 import type { Hono } from 'hono';
+import { z } from 'zod';
 import type { DigestEntry, DigestReason, DigestResponse, ObservationSeverity } from '@traders/shared';
 
 import {
+  getDigestSeenAt,
   listLastDigestEntries,
   listNotifications,
   listPendingDigestEntries,
+  markDigestSeen,
   type DigestEntryRow,
 } from '../../db/queries.js';
 import { currentUserId, type AppEnv } from '../app.js';
+import { badRequest } from '../errors.js';
 
 /** A ceiling on one page, matching the observations feed and the run history. */
 const MAX_NOTIFICATIONS = 200;
@@ -65,17 +69,20 @@ function digestEntry(row: DigestEntryRow): DigestEntry {
   };
 }
 
+const seenSchema = z.object({ sentAt: z.string().datetime({ offset: true }) });
+
 export function registerDigestRoute(app: Hono<AppEnv>): void {
   /**
-   * The digest, for the dashboard: the entries waiting for the next one, and
+   * The digest, for the Insights page: the entries waiting for the next one, and
    * the last one delivered. A digest is a batch of notification rows, never a
    * stored message, so this reads the rows (see `listLastDigestEntries`).
    */
   app.get('/notifications/digest', async (context) => {
     const userId = currentUserId(context);
-    const [pending, last] = await Promise.all([
+    const [pending, last, seenAt] = await Promise.all([
       listPendingDigestEntries(userId),
       listLastDigestEntries(userId),
+      getDigestSeenAt(userId),
     ]);
     const sentAt = last.reduce<Date | null>(
       (latest, row) => (row.sent_at && (!latest || row.sent_at > latest) ? row.sent_at : latest),
@@ -83,9 +90,34 @@ export function registerDigestRoute(app: Hono<AppEnv>): void {
     );
     const body: DigestResponse = {
       next: { entries: pending.map(digestEntry) },
-      last: sentAt === null ? null : { sentAt: sentAt.toISOString(), entries: last.map(digestEntry) },
+      last:
+        sentAt === null
+          ? null
+          : {
+              sentAt: sentAt.toISOString(),
+              entries: last.map(digestEntry),
+              // Compared as Dates, both at the driver's millisecond precision:
+              // `sent_at` carries microseconds, and the time a client echoes
+              // back from `sentAt` does not.
+              seen: seenAt !== null && seenAt.getTime() >= sentAt.getTime(),
+            },
     };
     return context.json(body);
+  });
+
+  /**
+   * The user has seen the digest sent at `sentAt` - opened it, or dismissed the
+   * dashboard's banner (UX4). Stored per user on the server, so the banner does
+   * not return on another device. The client names the digest it showed; the
+   * query never moves "seen" backwards, nor past the latest digest sent.
+   */
+  app.post('/notifications/digest/seen', async (context) => {
+    const parsed = seenSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) {
+      throw badRequest('invalid_body', 'expected { sentAt } as an ISO 8601 time', parsed.error.issues);
+    }
+    const seenAt = await markDigestSeen(currentUserId(context), new Date(parsed.data.sentAt));
+    return context.json({ seenAt: seenAt?.toISOString() ?? null });
   });
 }
 

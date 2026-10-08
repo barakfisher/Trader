@@ -12,6 +12,7 @@ import {
   HoldingsScopePicker,
 } from '../components/ConsolidatedHoldings.tsx';
 import { EquityCurve } from '../components/EquityCurve.tsx';
+import { DigestBanner } from '../components/DigestBanner.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { HoldingsTable } from '../components/HoldingsTable.tsx';
 import { ImportWizard } from '../components/ImportWizard.tsx';
@@ -103,6 +104,8 @@ export const DashboardPage = observer(function DashboardPage() {
           </span>
         </Button>
       </header>
+
+      <DigestBanner />
 
       {portfolio.isPending && <Spinner label={t('dashboard.loading')} />}
       {portfolio.error && (
