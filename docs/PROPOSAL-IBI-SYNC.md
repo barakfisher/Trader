@@ -1,7 +1,7 @@
 # Proposal: one-time IBI portfolio sync over MCP
 
-Status: **draft, not decided**. Nothing here is built. It amends PRD P1 and the out-of-scope list
-("broker APIs"), so it needs a decision record (D64) before any code.
+Status: **accepted as D67 (2026-10-08)** - read-only broker sync is in scope; PRD P1 is amended.
+Nothing here is built yet. The Excel import (section 8, PR 2) goes first.
 
 ---
 
@@ -176,7 +176,7 @@ transports, session-id handling and the whole MCP OAuth discovery chain (RFC 972
 DCR → PKCE). That is several hundred lines of security-sensitive code.
 **Recommendation: use it.** Cost: one dependency, and its auth helper assumes the provider stores
 state, which we satisfy with an in-memory, single-sync provider (3.3).
-*This needs your yes before implementation, and the answer goes into D64.*
+*This needs your yes before implementation, and the answer goes into D67.*
 
 ### 3.2 MCP session
 
@@ -415,7 +415,7 @@ never let a gap read as zero.**
 ## 8. Delivery order (one PR each, no stacking)
 
 1. **Probe** (no code merged): endpoint, auth metadata, registration, real tool schemas and a
-   fixture. Write D64 with the result: go MCP, or plan B only.
+   fixture. Write D67 with the result: go MCP, or plan B only.
 2. **Plan B:** an IBI export column mapper for the F1 import, with a fixture-tested agorot and
    security-number mapping. It is useful on its own and builds the mapper the MCP path reuses.
 3. **Migration 0046** + `brokerSyncs.ts` queries + account-reset groups.
@@ -426,8 +426,8 @@ never let a gap read as zero.**
 
 ## 9. Open decisions
 
-1. **D64: read-only broker sync is in scope**, amending PRD P1 and the out-of-scope list. Wording:
-   execution stays forbidden; reading holdings is an import source.
+1. ~~D67: read-only broker sync is in scope~~ - **decided yes, 2026-10-08** (MEMORY decision 118;
+   PRD P1 and the out-of-scope list amended).
 2. Add `@modelcontextprotocol/sdk` (section 3.1).
 3. Whether IBI cash counts in portfolio value or is display-only (section 4).
 4. Whether a synced holding the user later edits by hand keeps `source = 'ibi'` (and is
