@@ -5,6 +5,7 @@ import {
   Bot,
   CircleUser,
   Inbox,
+  Lightbulb,
   LineChart,
   LogOut,
   Menu,
@@ -46,6 +47,7 @@ export const AppBar = observer(function AppBar() {
   const isAdmin = auth.user?.role === 'admin';
 
   const places: Place[] = [
+    { to: '/insights', label: t('nav.insights'), icon: Lightbulb },
     { to: '/agents', label: t('nav.agents'), icon: Bot },
     { to: '/topics', label: t('nav.topics'), icon: Tags },
     { to: '/ask', label: t('nav.ask'), icon: MessageCircleQuestion },
@@ -121,7 +123,7 @@ export const AppBar = observer(function AppBar() {
 });
 
 type Place = {
-  to: '/agents' | '/topics' | '/ask' | '/proposals' | '/targets' | '/settings' | '/admin';
+  to: '/insights' | '/agents' | '/topics' | '/ask' | '/proposals' | '/targets' | '/settings' | '/admin';
   label: string;
   icon: typeof Bot;
   count?: number;

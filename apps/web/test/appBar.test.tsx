@@ -45,6 +45,8 @@ afterEach(cleanup);
 
 it.each([
   '/',
+  '/insights',
+  '/insights?tab=digest',
   '/agents',
   '/agents/a-1',
   '/topics',

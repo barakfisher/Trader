@@ -707,7 +707,8 @@
     "portfolio": "תיק",
     "menu": "תפריט",
     "account": "חשבון",
-    "label": "ראשי"
+    "label": "ראשי",
+    "insights": "תובנות"
   },
   "dashboard": {
     "title": "תיק",
@@ -1381,6 +1382,13 @@
         "sell": "למכור"
       },
       "open": "לבדיקה"
+    }
+  },
+  "insights": {
+    "title": "תובנות",
+    "tabs": {
+      "observations": "תצפיות",
+      "digest": "סיכום יומי"
     }
   }
 }
