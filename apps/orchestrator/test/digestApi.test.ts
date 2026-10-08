@@ -1,6 +1,7 @@
 /**
- * `GET /notifications/digest`: the daily digest as the dashboard shows it
- * (FR-13) - what the next one will carry, and what the last one delivered.
+ * `GET /notifications/digest`: the daily digest as the Insights page shows it
+ * (FR-13) - what the next one will carry, and what the last one delivered -
+ * and `POST /notifications/digest/seen`, which ends its dashboard banner (UX4).
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -25,6 +26,8 @@ const queries = vi.hoisted(() => ({
   listPendingDigestEntries: vi.fn(async (): Promise<unknown[]> => []),
   listLastDigestEntries: vi.fn(async (): Promise<unknown[]> => []),
   listNotifications: vi.fn(async (): Promise<unknown[]> => []),
+  getDigestSeenAt: vi.fn(async (): Promise<Date | null> => null),
+  markDigestSeen: vi.fn(async (_userId: string, sentAt: Date): Promise<Date | null> => sentAt),
 }));
 
 vi.mock('../src/db/queries.js', () => ({ getUser: vi.fn(async () => USER), ...queries }));
@@ -119,5 +122,53 @@ describe('GET /notifications/digest', () => {
 
   it('requires a session', async () => {
     expect((await app.request('/notifications/digest')).status).toBe(401);
+  });
+});
+
+describe('whether the last digest was seen (UX4)', () => {
+  const SENT = '2026-09-30T06:45:29.305Z';
+  const delivered = () =>
+    queries.listLastDigestEntries.mockResolvedValueOnce([row({ status: 'sent', sent_at: new Date(SENT) })]);
+
+  it('is unseen until the user has seen that digest', async () => {
+    delivered();
+    queries.getDigestSeenAt.mockResolvedValueOnce(null);
+    expect((await (await get()).json()).last.seen).toBe(false);
+  });
+
+  it('is unseen when only an earlier digest was seen', async () => {
+    delivered();
+    queries.getDigestSeenAt.mockResolvedValueOnce(new Date('2026-09-29T06:45:00Z'));
+    expect((await (await get()).json()).last.seen).toBe(false);
+  });
+
+  it('is seen once that digest was', async () => {
+    delivered();
+    queries.getDigestSeenAt.mockResolvedValueOnce(new Date(SENT));
+    expect((await (await get()).json()).last.seen).toBe(true);
+  });
+
+  const mark = (body: unknown, headers: Record<string, string> = { cookie }) =>
+    app.request('/notifications/digest/seen', {
+      method: 'POST',
+      headers: { origin: 'http://localhost:5173', 'content-type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+    });
+
+  it('records the digest the client showed, for this user', async () => {
+    const response = await mark({ sentAt: SENT });
+    expect(response.status).toBe(200);
+    expect(queries.markDigestSeen).toHaveBeenCalledWith(USER.id, new Date(SENT));
+    expect(await response.json()).toEqual({ seenAt: SENT });
+  });
+
+  it('refuses a body that names no time', async () => {
+    expect((await mark({ sentAt: 'yesterday' })).status).toBe(400);
+    expect((await mark({})).status).toBe(400);
+    expect(queries.markDigestSeen).not.toHaveBeenCalled();
+  });
+
+  it('requires a session', async () => {
+    expect((await mark({ sentAt: SENT }, {})).status).toBe(401);
   });
 });
