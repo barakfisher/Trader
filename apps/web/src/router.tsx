@@ -19,6 +19,7 @@ import {
   type RouterHistory,
 } from '@tanstack/react-router';
 
+import { AppBar } from './components/AppBar.tsx';
 import { ConceptDialog } from './components/ConceptDialog.tsx';
 import { AgentPage } from './pages/AgentPage.tsx';
 import { AgentsPage } from './pages/AgentsPage.tsx';
@@ -35,6 +36,9 @@ import { TopicsPage } from './pages/TopicsPage.tsx';
 const rootRoute = createRootRoute({
   component: () => (
     <>
+      {/* One bar for every page (UX2): it was the dashboard's own header, so
+          every other page needed a way back to it. */}
+      <AppBar />
       <Outlet />
       {/* Mounted beside the routes rather than inside the feed: it is an
           overlay, and a concept opened from one view must not be unmounted by

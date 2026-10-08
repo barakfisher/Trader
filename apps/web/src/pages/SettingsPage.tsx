@@ -1,11 +1,10 @@
 import type { ReactNode } from 'react';
 import { observer } from 'mobx-react-lite';
-import { Link } from '@tanstack/react-router';
-import { ArrowLeft, BellOff, Settings as SettingsIcon } from 'lucide-react';
+import { BellOff, Settings as SettingsIcon } from 'lucide-react';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { TelegramConnect } from '../components/TelegramConnect.tsx';
-import { Button, Card, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
+import { Button, Card, ErrorNote, Spinner } from '../components/ui.tsx';
 import {
   MUTE_PRESET_HOURS,
   describeMute,
@@ -14,7 +13,6 @@ import {
 } from '../lib/notificationSchedule.ts';
 import { SEVERITY_BANDS, SEVERITY_CHOICES, describeSeverityFloor } from '../lib/severityScale.ts';
 import { formatClockTime, formatExactTime, getDisplayTimeZone } from '../lib/relativeTime.ts';
-import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import {
   MAX_PROPOSAL_TTL_HOURS,
   MIN_PROPOSAL_TTL_HOURS,
@@ -57,12 +55,6 @@ export const SettingsPage = observer(function SettingsPage() {
             </span>
           )}
         </div>
-        <Link to="/" className={buttonClass('secondary')}>
-          <span className="flex items-center gap-1">
-            <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
-            {t('common.backToPortfolio')}
-          </span>
-        </Link>
       </header>
 
       {stored.isPending && <Spinner label={t('settings.loading')} />}

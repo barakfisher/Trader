@@ -1,6 +1,6 @@
 import { observer } from 'mobx-react-lite';
 import { Link } from '@tanstack/react-router';
-import { ArrowLeft, Target } from 'lucide-react';
+import { Target } from 'lucide-react';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Button, Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
@@ -9,7 +9,6 @@ import {
   formatDriftPoints,
   unitsToPercent,
 } from '../lib/targetWeights.ts';
-import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import type { TargetRow } from '../stores/TargetsStore.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { errorMessage } from '../api/client.ts';
@@ -55,12 +54,6 @@ export const TargetsPage = observer(function TargetsPage() {
             </span>
           )}
         </div>
-        <Link to="/" className={buttonClass('secondary')}>
-          <span className="flex items-center gap-1">
-            <ArrowLeft className={`size-4 ${MIRROR_IN_RTL}`} aria-hidden />
-            {t('common.backToPortfolio')}
-          </span>
-        </Link>
       </header>
 
       <p className="max-w-3xl text-sm text-text-muted">
