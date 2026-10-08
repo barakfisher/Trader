@@ -53,6 +53,39 @@ class TestClearCases:
         assert result.magnitude > 0.0
 
 
+class TestHeadlines:
+    """Headlines of the kind v1 scored as matching nothing (from the live database, 2026-10-08).
+
+    Headlines are present tense; v1's verbs were mostly past tense.
+    """
+
+    async def test_present_tense_drops_score_negative(self):
+        for title in (
+            "Webull Sinks 22% After Earnings",
+            "Sensex Crashes 1,230 Points As 5 Factors Trigger Market Bloodbath",
+            "Dow Drops 341, Nasdaq Loses 61",
+            "Bitcoin falls to $84,000 amid crypto market decline",
+            "Australian shares slump as miners tumble",
+            "Stocks extend sell-off for a fourth day",
+        ):
+            assert (await score(title, "")).score < 0, title
+
+    async def test_present_tense_rises_score_positive(self):
+        for title in (
+            "LBS Group turnover rises to £91.8m as profit jumps 30%",
+            "Sensex Jumps 473 Points as Global Markets Rise",
+            "Gold rises as softer PCE cools October Fed hike odds",
+            "Stock jumps 5% intraday trade",
+        ):
+            assert (await score(title, "")).score > 0, title
+
+    async def test_direction_words_that_name_no_price_stay_out(self):
+        # "lower rates" and "sets up" are not a price moving.
+        result = await score("Bank sets up lower rates for a down payment", "")
+        assert result.is_neutral
+        assert result.magnitude == 0.0
+
+
 class TestMechanics:
     async def test_negation_flips_the_term_it_governs(self):
         plain = await score("Results", "The company beat expectations.")

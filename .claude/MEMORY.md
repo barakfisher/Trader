@@ -2784,7 +2784,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | ~~A simulated agent has no stored daily value yet~~ | — | **Resolved by PR 7 (D36)**: the daily value is computed from the ledger and stored closes, not stored - no snapshot, no migration |
 | ~~SPY has no stored prices~~ | — | **Resolved by PR 7**: the backfill always fetches the benchmark, and every instrument an agent has ever traded |
 | ~~An `agent` fill does not yet require its proposal~~ | — | **Resolved by #182 (0044)**: `fills_agent_has_proposal`, and `proposals_trade_has_scan` beside it |
-| **The lexicon sentiment scorer misreads market headlines** | `app/news/sentiment.py` (`LexiconSentimentScorer`) | Found measuring D59: "Webull Sinks 22%..." and "...Stock Plummets..." score 0 (neutral). The agent reads the headline itself, so a decision is not misled, but the sentiment figure beside each article is wrong for exactly the drops agents look at. Fix the word list (drop verbs: sinks, plummets, tumbles, slumps) or score with the model; measure on stored headlines first |
+| ~~The lexicon sentiment scorer misreads market headlines~~ | — | **Resolved** (2026-10-08): the cause was tense - headlines say "Sinks", "Plummets", "Rises"; v1 listed mostly past tenses. `lexicon-v2` adds the present tenses (not "up/down/higher/lower", which name no price) and `scripts/rescore_sentiment.py` scores stored articles beside their v1 rows. Measured on a copy of the live database: articles matching no word 84.2% -> 80.1% (27,678 articles; the rest mostly name no price at all); 92 changed sign, nearly all one-sided -> balanced. Run the script once after any future `LEXICON_MODEL_NAME` bump, or the topic page keeps reporting the old lexicon (it reports the scorer that read the most articles) |
 | **The Admin page shows a model as chosen when none is** | Admin -> Models picker (`AdminPage`) | With `chosen: null` the `<select>` displays its first option (Sonnet 5.5) while scans actually ran on `LLM_MODEL` (the free route) - measured 2026-10-07. Show "Not chosen - using LLM_MODEL" as the selected placeholder |
 | ~~Approving a trade from Telegram is refused~~ | — | **Resolved by #186 (D62)**: Approve previews, Confirm fills at the signed price |
 | **The give-up alert ignores quiet hours, mute and dedupe** | `scheduledScans.ts` (`reportGaveUp`) | Sent through `notifier.send`, not `fanOut`, so a slot that gives up at 03:00 messages at 03:00 and a muted user still hears it; it is once per slot only because it runs on the last attempt. Route it through the fan-out with a `refKind` for runs (a CHECK change) if it ever annoys |
@@ -3225,10 +3225,11 @@ copy of the live database (up/down/up, row counts); the Telegram flow on a copy 
 
 ### Next session: after Stage 4
 
-**Do first, before anything else - task 17** (due since 2026-10-08 10:15 UTC): on compose, `SELECT
-verdict, count(*) FROM llm_calls WHERE purpose = 'narration' AND started_at > '2026-10-07 10:13+00'
-GROUP BY 1`; record it in `docs/PROPOSAL-MULTI-AGENT.md` §14 and recommend whether narration moves
-to Sonnet (~$0.02/day measured). Then ask the user what follows. **Candidates, each to be asked
+**Task 17 is done** (#198, D75, §14.4 - this line said "do first" because #200 was written beside
+#198; the next session lost a few minutes finding that out). D75's one manual step, choosing Sonnet
+for the *explain* scope on the Admin page, was still undone on 2026-10-08 19:00 UTC: if
+`llm_model_choices` has no `explain` row, narration is still on the free route. Then ask the user
+what follows. **Candidates, each to be asked
 about one at a time, not assumed:**
 - **Watch the scheduled scans for a few trading days** - outcomes, refusals ("1,923"), cost per day
   - before changing anything about them (debt rows above).
