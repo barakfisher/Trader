@@ -2082,9 +2082,14 @@ failure they prevent.
     the Excel column mapper first ("plan B", useful on its own); the user reversed that: nothing
     IBI is built - mapper, migration 0049, OAuth, UI - until the §0 probe of
     `docs/PROPOSAL-IBI-SYNC.md` shows a third-party MCP client can connect to IBI's server and
-    list its tools. The probe is read-only and needs the server URL from the user (IBI SMART or
-    ChatGPT's connector settings). *Why it matters:* a mapper built for a sync that never connects
-    is code with no caller; ask for the URL, never guess endpoints or tool names.
+    list its tools. Plan B is moot anyway: the user cannot export holdings to Excel. **Probe so far
+    (another session, 2026-10-08):** sign-in is Auth0 at `auth.ibi.co.il`, which advertises
+    `/oidc/register` (possibly disabled); ChatGPT's resource `https://api.ibi.co/mcp` is an Auth0 API
+    identifier that does not resolve; the real server URL is unknown and access is ChatGPT-only.
+    Guessing IBI hosts or paths was refused as scouting - use public sources only, and ask the user
+    before any client registration. The user will not contact IBI support. A one-time scheduled
+    task, `ibi-mcp-support-check`, runs 2026-10-15 09:00 Israel time. *Why it matters:* a mapper
+    built for a sync that never connects is code with no caller.
 
 ---
 
@@ -3250,7 +3255,8 @@ Ask the user before starting anything (the Stage 4 grant ended). In order of the
 2. **Check D75's choice:** `SELECT * FROM llm_model_choices` on compose. No `explain` row means
    narration is still on the free route; remind the user (Admin -> "Narration and questions" ->
    *Use this model*). Once it is set, re-measure narration after a few days, as §14.4 did.
-3. **IBI is gated by decision 130** - only the §0 probe, and only with a URL from the user.
+3. **IBI is gated by decision 130** - nothing until the 2026-10-15 check (or public news) shows IBI
+   open to other MCP clients, and the user says go.
 4. **The `/ask` assistant milestone** remains a candidate ("Planned: the assistant").
 
 ### Next session: after Stage 4 (history - task 17 and both debt fixes done; see above)
