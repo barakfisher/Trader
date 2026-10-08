@@ -56,3 +56,20 @@ body {
     outline-offset: 1px;
   }
 }
+
+/* Charts: a ring for keyboard focus, none for a click. recharts makes each pie
+   slice focusable by mouse only (tabindex -1), and the browser drew its outline
+   around the slice after every click; a slice cannot be reached by keyboard, so
+   it never needs one. The pie and the chart surface can, so they keep a ring
+   when the keyboard put focus there. */
+@layer base {
+  .recharts-pie-sector:focus,
+  .recharts-wrapper :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  .recharts-wrapper :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}

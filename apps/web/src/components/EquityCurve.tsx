@@ -20,6 +20,7 @@ import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { CHART_DIRECTION } from '../lib/textDirection.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { useSnapshotsQuery } from '../queries/snapshots.ts';
+import { ChartTooltip } from './ChartTooltip.tsx';
 import { Card, ErrorNote, Spinner } from './ui.tsx';
 
 /**
@@ -169,8 +170,7 @@ function ValueDot({ cx, cy, payload }: DotProps & { payload?: CurvePoint }) {
 function DayTooltip({ point, currency }: { point: CurvePoint; currency: string }) {
   const { t } = useTranslation();
   return (
-    <div className="rounded-lg border border-border-subtle bg-surface-raised px-3 py-2 text-xs shadow-lg">
-      <p className="mb-1 font-medium text-text-primary">{formatDay(point.date)}</p>
+    <ChartTooltip title={formatDay(point.date)}>
       {point.totalMinor === null ? (
         <p className="text-text-muted">{t('equity.noSnapshotThisDay')}</p>
       ) : (
@@ -190,7 +190,7 @@ function DayTooltip({ point, currency }: { point: CurvePoint; currency: string }
           )}
         </>
       )}
-    </div>
+    </ChartTooltip>
   );
 }
 
