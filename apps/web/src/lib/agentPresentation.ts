@@ -38,6 +38,8 @@ export function agentErrorMessage(error: unknown, fallback: string): string {
         return t('agents.errors.budgetRange');
       case 'budget_decrease_after_trade':
         return t('agents.errors.budgetDecrease');
+      case 'llm_budget_out_of_range':
+        return t('agents.scans.budgetInvalid');
       case 'invalid_body':
         return t('agents.errors.invalid');
       default:

@@ -30,6 +30,11 @@ function row(overrides: Record<string, unknown> = {}) {
     state: 'active',
     created_at: new Date('2026-10-05T10:00:00Z'),
     holdings_count: 0,
+    llm_budget_micro_usd: '500000',
+    scan_schedule: 'pre_open',
+    llm_spent_today_micro_usd: '108022',
+    agent_scan_cost_micro_usd: null,
+    installation_scan_cost_micro_usd: null,
     ...overrides,
   };
 }
@@ -65,13 +70,16 @@ vi.mock('../src/db/queries.js', () => ({
       ...(patch.name === undefined ? {} : { name: patch.name }),
       ...(patch.state === undefined ? {} : { state: patch.state }),
       ...(patch.budgetMinor === undefined ? {} : { budget_minor: String(patch.budgetMinor) }),
+      ...(patch.llmBudgetMicroUsd === undefined ? {} : { llm_budget_micro_usd: String(patch.llmBudgetMicroUsd) }),
+      ...(patch.scanSchedule === undefined ? {} : { scan_schedule: patch.scanSchedule }),
     }),
   ),
 }));
 
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
 const { createApp } = await import('../src/http/app.js');
-const { MAX_BUDGET_MINOR, MAX_PERSONA_LENGTH } = await import('../src/http/routes/agents.js');
+const { MAX_BUDGET_MINOR, MAX_PERSONA_LENGTH, MAX_LLM_BUDGET_MICRO_USD, MEASURED_SCAN_COST_MICRO_USD, scanCostOf } =
+  await import('../src/http/routes/agents.js');
 const { createFakeAi } = await import('./fakeAi.js');
 const queries = await import('../src/db/queries.js');
 
@@ -222,5 +230,54 @@ describe('the agents API', () => {
     expect((await send('GET', '/agents/90000000-0000-0000-0000-0000000000ff')).status).toBe(404);
     expect((await send('GET', '/agents/not-an-id')).status).toBe(404);
     expect(queries.getAgent).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a simulated agent's schedule, model budget and today's spend, and none of it for the primary", async () => {
+    const { agents } = await (await send('GET', '/agents')).json();
+    expect(agents[1]).toMatchObject({
+      scanSchedule: 'pre_open',
+      llmBudgetMicroUsd: 500_000,
+      llmSpentTodayMicroUsd: 108_022,
+      scanCost: { microUsd: MEASURED_SCAN_COST_MICRO_USD, basis: 'measured' },
+      // Active with no persona: it waits, and is never billed (D52).
+      waitingForPersona: true,
+    });
+    expect(agents[0]).toMatchObject({
+      scanSchedule: null,
+      llmBudgetMicroUsd: null,
+      llmSpentTodayMicroUsd: null,
+      scanCost: null,
+      waitingForPersona: false,
+    });
+  });
+
+  it('sets the model budget in dollars and the schedule from its four choices (D45, D46)', async () => {
+    const response = await send('PATCH', `/agents/${SIMULATED}`, { llmBudget: '1.25', scanSchedule: 'intraday_twice' });
+    expect(response.status).toBe(200);
+    expect(queries.updateAgent).toHaveBeenCalledWith(USER.id, SIMULATED, expect.objectContaining({
+      llmBudgetMicroUsd: 1_250_000,
+      scanSchedule: 'intraday_twice',
+    }));
+    expect(await response.json()).toMatchObject({ llmBudgetMicroUsd: 1_250_000, scanSchedule: 'intraday_twice' });
+  });
+
+  it('refuses a model budget of nothing or above the ceiling, and an unknown schedule', async () => {
+    expect((await send('PATCH', `/agents/${SIMULATED}`, { llmBudget: '0' })).status).toBe(422);
+    const over = (MAX_LLM_BUDGET_MICRO_USD / 1_000_000 + 0.01).toFixed(2);
+    expect((await send('PATCH', `/agents/${SIMULATED}`, { llmBudget: over })).status).toBe(422);
+    expect((await send('PATCH', `/agents/${SIMULATED}`, { llmBudget: '0.001' })).status).toBe(400);
+    expect((await send('PATCH', `/agents/${SIMULATED}`, { scanSchedule: 'hourly' })).status).toBe(400);
+    expect(queries.updateAgent).not.toHaveBeenCalled();
+  });
+});
+
+describe('the cost of a scan (D46)', () => {
+  const base = row() as never;
+  it("is the agent's own average, else the installation's, else what was measured", () => {
+    expect(scanCostOf({ ...(base as object), agent_scan_cost_micro_usd: '41000', installation_scan_cost_micro_usd: '30000' } as never))
+      .toEqual({ microUsd: 41_000, basis: 'agent' });
+    expect(scanCostOf({ ...(base as object), installation_scan_cost_micro_usd: '30000' } as never))
+      .toEqual({ microUsd: 30_000, basis: 'installation' });
+    expect(scanCostOf(base)).toEqual({ microUsd: MEASURED_SCAN_COST_MICRO_USD, basis: 'measured' });
   });
 });

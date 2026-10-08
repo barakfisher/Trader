@@ -86,6 +86,7 @@ function AgentRow({ agent, standing }: { agent: AgentView; standing: SimulatedAg
             {agentStateWord(agent.state)}
           </span>
         )}
+        {agent.waitingForPersona && <WaitingForPersona />}
       </span>
       <span className="text-sm text-text-muted">
         {agent.isPrimary
@@ -102,6 +103,14 @@ function AgentRow({ agent, standing }: { agent: AgentView; standing: SimulatedAg
 }
 
 /** Real or simulated, on every agent the page shows: the label is the point (P2). */
+/** An active agent with no persona never scans and is never billed (D52). */
+export function WaitingForPersona() {
+  const { t } = useTranslation();
+  return (
+    <span className="rounded-full bg-warn/15 px-2 py-0.5 text-xs text-warn">{t('agents.waitingForPersona')}</span>
+  );
+}
+
 export function KindBadge({ agent }: { agent: Pick<AgentView, 'isPrimary'> }) {
   const { t } = useTranslation();
   return agent.isPrimary ? (

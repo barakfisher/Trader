@@ -261,11 +261,15 @@ async def test_the_thesis_may_state_the_quantity_it_proposes(
     )
     result = await _scan(loaded, agent, llm, market)
     assert result.outcome == "trade", result.problems
-    # Only the quantity it proposes: any other number is still a figure.
+    # Only the quantity it proposes: any other number is still a figure. 777 is
+    # no part of a date or a time: the briefing's `as_of` is today's timestamp,
+    # so a small number such as 8 is sourced by it on the 8th of the month.
     llm = ScriptedLLM(
-        _answer(decision="buy", symbol="CCJ", quantity="7", thesis="7 now, 8 next week.")
+        _answer(decision="buy", symbol="CCJ", quantity="7", thesis="7 now, 777 next week.")
     )
-    assert (await _scan(loaded, agent, llm, market)).problems == ("figures not in the evidence: 8",)
+    assert (await _scan(loaded, agent, llm, market)).problems == (
+        "figures not in the evidence: 777",
+    )
 
 
 async def test_a_trade_with_no_price_is_not_proposed(loaded: Engine, agent: ScanAgent) -> None:

@@ -13,6 +13,7 @@ export { transaction } from './pool.js';
 
 export * from './queries/users.js';
 export * from './queries/agents.js';
+export * from './queries/agentScans.js';
 export * from './queries/ledger.js';
 export * from './queries/instruments.js';
 export * from './queries/holdings.js';
