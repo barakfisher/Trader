@@ -240,6 +240,8 @@ function serveAgent(agent: AgentView = AGENT, accountBody: AgentAccountResponse 
     [`/agents/${AGENT_ID}/performance`]: PERFORMANCE,
     [`/agents/${AGENT_ID}/scans`]: SCANS,
     [`/agents/${AGENT_ID}/scans/${SCAN_ID}`]: SCAN_DETAIL,
+    // The app bar's inbox count: a scan re-reads it, and waits for it.
+    '/proposals': { proposals: [] },
   });
 }
 
@@ -445,7 +447,7 @@ describe('AgentPage with the ledger', () => {
     expect(screen.getByText('No trade')).toBeTruthy();
     expect(screen.getByText('Buy 2 NVDA')).toBeTruthy();
     expect(screen.getByText('$0.041 · 1 step')).toBeTruthy();
-    fireEvent.click(screen.getAllByRole('button', { expanded: false })[0]!);
+    fireEvent.click(screen.getByRole('button', { name: /Buy 2 NVDA/, expanded: false }));
     expect(await screen.findByText('NVDA trades at 237.14.')).toBeTruthy();
     expect(screen.getByText('Started from: cash $10,000.00, 0 holdings, 1 movers of the day')).toBeTruthy();
     expect(screen.getByText('NVDA moved; checking its quote.')).toBeTruthy();

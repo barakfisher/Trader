@@ -687,7 +687,11 @@
     "proposals": "Proposals",
     "settings": "Settings",
     "admin": "Admin",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "portfolio": "Portfolio",
+    "menu": "Menu",
+    "account": "Account",
+    "label": "Main"
   },
   "dashboard": {
     "title": "Portfolio",

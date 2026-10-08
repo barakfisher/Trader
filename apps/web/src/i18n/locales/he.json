@@ -703,7 +703,11 @@
     "proposals": "הצעות",
     "settings": "הגדרות",
     "admin": "ניהול",
-    "signOut": "התנתקות"
+    "signOut": "התנתקות",
+    "portfolio": "תיק",
+    "menu": "תפריט",
+    "account": "חשבון",
+    "label": "ראשי"
   },
   "dashboard": {
     "title": "תיק",

@@ -249,14 +249,16 @@ describe('the admin page', () => {
   });
   afterEach(cleanup);
 
-  it('is linked from the dashboard for an admin', async () => {
+  it('is linked from the account menu for an admin', async () => {
     renderAt('/', ADMIN);
+    fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
     const link = await screen.findByRole('link', { name: /Admin/ });
     expect(link.getAttribute('href')).toBe('/admin');
   });
 
   it('is not linked for anyone else', async () => {
     renderAt('/', USER);
+    fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
     await screen.findByRole('link', { name: /Settings/ });
     expect(screen.queryByRole('link', { name: /Admin/ })).toBeNull();
   });

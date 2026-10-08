@@ -1,0 +1,239 @@
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { observer } from 'mobx-react-lite';
+import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
+import {
+  Bot,
+  CircleUser,
+  Inbox,
+  LineChart,
+  LogOut,
+  Menu,
+  MessageCircleQuestion,
+  Settings,
+  ShieldCheck,
+  Tags,
+  Target,
+  X,
+} from 'lucide-react';
+
+import { useTranslation } from '../i18n/index.ts';
+import { openProposals, useProposalsQuery } from '../queries/proposals.ts';
+import { useStore } from '../stores/context.tsx';
+
+/**
+ * The bar every signed-in page shares, rendered once by the root route.
+ *
+ * It used to be the dashboard's own header, so every other page carried a
+ * "Back to portfolio" button and reaching Topics from Settings took two
+ * clicks. Page-specific controls - the portfolio's Refresh and its price age -
+ * stay on their page; this bar holds only places.
+ *
+ * At `md` and up the places sit in a row and the account items (Settings,
+ * Admin, Sign out) behind one button; below `md` everything is behind a
+ * hamburger, with Sign out last behind a divider so it is never the item a
+ * thumb lands on by accident. Both are disclosures - a button that shows a
+ * list of links - rather than ARIA menus: links need no arrow-key model, Tab
+ * walks them, and Escape closes and returns focus to the button.
+ */
+export const AppBar = observer(function AppBar() {
+  const { auth } = useStore();
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  // The count is the point of the Proposals item: a question that expires
+  // unanswered because nobody knew it was there is what the inbox exists to prevent.
+  const openCount = openProposals(useProposalsQuery().data).length;
+  const isAdmin = auth.user?.role === 'admin';
+
+  const places: Place[] = [
+    { to: '/agents', label: t('nav.agents'), icon: Bot },
+    { to: '/topics', label: t('nav.topics'), icon: Tags },
+    { to: '/ask', label: t('nav.ask'), icon: MessageCircleQuestion },
+    { to: '/proposals', label: t('nav.proposals'), icon: Inbox, count: openCount },
+    // Moves to the holdings card in UX5; until then it stays reachable from here.
+    { to: '/targets', label: t('nav.targets'), icon: Target },
+  ];
+  const account: Place[] = [
+    { to: '/settings', label: t('nav.settings'), icon: Settings },
+    // Hiding it is courtesy: the server refuses every /admin request from anyone else (decision 83).
+    ...(isAdmin ? [{ to: '/admin', label: t('nav.admin'), icon: ShieldCheck } as const] : []),
+  ];
+  // Back to the top, so the next sign-in starts at the portfolio rather than
+  // wherever this session last was.
+  const signOut = () => void auth.logout().then(() => navigate({ to: '/' }));
+
+  return (
+    <header className="sticky top-0 z-30 border-b border-border-subtle bg-surface/95 backdrop-blur">
+      <nav
+        aria-label={t('nav.label')}
+        className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-2 sm:px-6"
+      >
+        <Link
+          to="/"
+          className="flex items-center gap-2 rounded-lg px-1 py-1 text-base font-semibold text-text-primary"
+          aria-current={pathname === '/' ? 'page' : undefined}
+        >
+          <LineChart className="size-5 text-accent" aria-hidden />
+          {t('nav.portfolio')}
+        </Link>
+
+        <ul className="hidden flex-1 items-center gap-1 md:flex">
+          {places.map((place) => (
+            <li key={place.to}>
+              <PlaceLink place={place} pathname={pathname} />
+            </li>
+          ))}
+        </ul>
+
+        <div className="hidden md:block">
+          <Disclosure
+            pathname={pathname}
+            label={t('nav.account')}
+            icon={<CircleUser className="size-5" aria-hidden />}
+          >
+            {account.map((place) => (
+              <li key={place.to}>
+                <PlaceLink place={place} pathname={pathname} wide />
+              </li>
+            ))}
+            <SignOutItem label={t('nav.signOut')} onSignOut={signOut} />
+          </Disclosure>
+        </div>
+
+        <div className="md:hidden">
+          <Disclosure
+            pathname={pathname}
+            label={t('nav.menu')}
+            icon={<Menu className="size-5" aria-hidden />}
+            openIcon={<X className="size-5" aria-hidden />}
+          >
+            {[...places, ...account].map((place) => (
+              <li key={place.to}>
+                <PlaceLink place={place} pathname={pathname} wide />
+              </li>
+            ))}
+            <SignOutItem label={t('nav.signOut')} onSignOut={signOut} />
+          </Disclosure>
+        </div>
+      </nav>
+    </header>
+  );
+});
+
+type Place = {
+  to: '/agents' | '/topics' | '/ask' | '/proposals' | '/targets' | '/settings' | '/admin';
+  label: string;
+  icon: typeof Bot;
+  count?: number;
+};
+
+/** A place is current on its own address and below it: /agents/x is still Agents. */
+function isCurrent(to: string, pathname: string): boolean {
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
+
+function PlaceLink({ place, pathname, wide = false }: { place: Place; pathname: string; wide?: boolean }) {
+  const current = isCurrent(place.to, pathname);
+  const Icon = place.icon;
+  return (
+    <Link
+      to={place.to}
+      aria-current={current ? 'page' : undefined}
+      className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition hover:bg-surface-hover hover:text-text-primary ${
+        wide ? 'w-full' : ''
+      } ${current ? 'bg-surface-hover text-text-primary' : 'text-text-muted'}`}
+    >
+      <Icon className="size-4" aria-hidden />
+      {place.label}
+      {place.count !== undefined && place.count > 0 && (
+        <span className="ms-auto rounded-full bg-accent px-1.5 text-xs font-semibold text-surface md:ms-1">
+          {place.count}
+        </span>
+      )}
+    </Link>
+  );
+}
+
+function SignOutItem({ label, onSignOut }: { label: string; onSignOut: () => void }) {
+  return (
+    <li className="mt-1 border-t border-border-subtle pt-1">
+      <button
+        type="button"
+        onClick={onSignOut}
+        className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-start text-sm text-text-muted transition hover:bg-surface-hover hover:text-text-primary"
+      >
+        <LogOut className="size-4" aria-hidden />
+        {label}
+      </button>
+    </li>
+  );
+}
+
+/**
+ * A button that shows a list beneath it. Closes on Escape (focus back on the
+ * button), on a click outside, and when the address changes - following a link
+ * in it is the usual way to leave.
+ */
+function Disclosure({
+  pathname,
+  label,
+  icon,
+  openIcon,
+  children,
+}: {
+  pathname: string;
+  label: string;
+  icon: ReactNode;
+  openIcon?: ReactNode;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => setOpen(false), [pathname]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      button.current?.focus();
+    };
+    const onPointer = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onPointer);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onPointer);
+    };
+  }, [open]);
+
+  return (
+    <div ref={root} className="relative">
+      <button
+        ref={button}
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-label={label}
+        title={label}
+        onClick={() => setOpen(!open)}
+        className="flex items-center rounded-lg p-1.5 text-text-muted transition hover:bg-surface-hover hover:text-text-primary"
+      >
+        {open && openIcon ? openIcon : icon}
+      </button>
+      {open && (
+        <ul
+          id={panelId}
+          className="absolute end-0 top-full z-40 mt-2 w-56 rounded-xl border border-border-subtle bg-surface-raised p-1 shadow-lg"
+        >
+          {children}
+        </ul>
+      )}
+    </div>
+  );
+}
