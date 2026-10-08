@@ -189,6 +189,21 @@ export interface AgentScanDetail extends AgentScanSummary {
 
 export interface AgentsResponse {
   agents: AgentView[];
+  /** D72: simulated agents that are not archived, and how many the installation allows. */
+  agentLimit: { used: number; max: number };
+}
+
+/** D72's bounds: the Admin page and migration 0047's CHECK agree on them. */
+export const MAX_AGENTS_PER_USER_CEILING = 50;
+
+/** The installation's settings on the Admin page (migration 0047). */
+export interface AdminSettingsResponse {
+  maxAgentsPerUser: number;
+  updatedAt: string;
+}
+
+export interface AdminSettingsInput {
+  maxAgentsPerUser: number;
 }
 
 export type TradeSide = 'buy' | 'sell';

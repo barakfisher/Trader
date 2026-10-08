@@ -50,4 +50,5 @@ export const queryKeys = {
   adminUniverse: ['admin', 'universe'] as const,
   adminLlm: (days: number) => ['admin', 'llm', days] as const,
   adminLlmModels: ['admin', 'llm-models'] as const,
+  adminSettings: ['admin', 'settings'] as const,
 };

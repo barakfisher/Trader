@@ -241,6 +241,8 @@ describe('the admin page', () => {
             })
           : path === '/admin/llm/models'
             ? Promise.resolve(MODELS)
+          : path === '/admin/settings'
+            ? Promise.resolve({ maxAgentsPerUser: 3, updatedAt: '2026-10-08T09:00:00Z' })
           : path.startsWith('/admin/llm')
             ? Promise.resolve(LLM_PANEL)
             : new Promise(() => {}),
@@ -323,6 +325,23 @@ describe('the admin page', () => {
     fireEvent.change(explain, { target: { value: 'anthropic/claude-sonnet-5.5' } });
     expect(screen.getByText('Together: about $0.129 a day, $3.87 a month')).toBeTruthy();
     expect(put).not.toHaveBeenCalled();
+  });
+
+  it('sets how many agents a user may have, within 1 and the ceiling (D72)', async () => {
+    put.mockResolvedValue({ maxAgentsPerUser: 5, updatedAt: '2026-10-08T10:00:00Z' });
+    renderAt('/admin', ADMIN);
+    const field = (await screen.findByLabelText('Most simulated agents a user may have')) as HTMLInputElement;
+    expect(field.value).toBe('3');
+    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.change(field, { target: { value: '51' } });
+    expect(save.disabled).toBe(true);
+    fireEvent.change(field, { target: { value: '5' } });
+    await act(async () => {
+      fireEvent.click(save);
+    });
+    expect(put).toHaveBeenCalledWith('/admin/settings', { maxAgentsPerUser: 5 });
+    expect(await screen.findByText('Saved')).toBeTruthy();
   });
 
   it('saves a choice for its scope only when it differs from the one in use', async () => {

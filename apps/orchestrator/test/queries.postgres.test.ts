@@ -1016,6 +1016,75 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
         const patched = await queries.updateAgent(SEED_ADMIN, agent, { llmBudgetMicroUsd: 1_250_000, scanSchedule: 'intraday_twice' });
         expect(patched).toMatchObject({ llm_budget_micro_usd: '1250000', scan_schedule: 'intraday_twice' });
+        // Archived, so a reused database never reaches the admin's agent limit (D72).
+        await queries.updateAgent(SEED_ADMIN, agent, { state: 'archived' });
+      }
+    });
+  });
+
+  describe('the agent limit (0047, D72), rolled back', () => {
+    const insertAgent = (client: { query: (sql: string, params: unknown[]) => Promise<unknown> }, user: string, slug: string) =>
+      client.query(
+        `INSERT INTO agents (user_id, slug, name, budget_minor) VALUES ($1, $2, $2, 1000)`,
+        [user, slug],
+      );
+
+    it('allows three live simulated agents, refuses a fourth and a restore, and frees a place on archive', async () => {
+      const client = await getPool().connect();
+      try {
+        await client.query('BEGIN');
+        const user = randomUUID();
+        await client.query('INSERT INTO users (id) VALUES ($1)', [user]);
+        const { max_agents_per_user: max } = (await client.query('SELECT max_agents_per_user FROM installation_settings')).rows[0];
+        expect(max).toBe(3);
+        for (const slug of ['limit-1', 'limit-2', 'limit-3']) await insertAgent(client, user, slug);
+        // Three, with the primary the trigger on users made: it never counts.
+        await client.query('SAVEPOINT fourth');
+        await expect(insertAgent(client, user, 'limit-4')).rejects.toThrow(/^agent_limit_reached: 3 of 3 agents/);
+        await client.query('ROLLBACK TO SAVEPOINT fourth');
+
+        await client.query(`UPDATE agents SET state = 'archived' WHERE user_id = $1 AND slug = 'limit-1'`, [user]);
+        await insertAgent(client, user, 'limit-4');
+        await client.query('SAVEPOINT restore');
+        await expect(
+          client.query(`UPDATE agents SET state = 'active' WHERE user_id = $1 AND slug = 'limit-1'`, [user]),
+        ).rejects.toThrow(/agent_limit_reached/);
+        await client.query('ROLLBACK TO SAVEPOINT restore');
+        // Pausing one at the limit is no new agent.
+        await client.query(`UPDATE agents SET state = 'paused' WHERE user_id = $1 AND slug = 'limit-2'`, [user]);
+      } finally {
+        await client.query('ROLLBACK');
+        client.release();
+      }
+    });
+
+    it('lets one of two racing creates through, never both', async () => {
+      const user = randomUUID();
+      const first = await getPool().connect();
+      const second = await getPool().connect();
+      try {
+        await getPool().query('INSERT INTO users (id) VALUES ($1)', [user]);
+        await insertAgent(getPool(), user, 'race-1');
+        await insertAgent(getPool(), user, 'race-2');
+        // Two creates of the third at once. Without the lock both would count two.
+        await first.query('BEGIN');
+        await second.query('BEGIN');
+        await insertAgent(first, user, 'race-3');
+        // first holds the user's row: second waits for it, then counts three.
+        const waiting = insertAgent(second, user, 'race-4').then(
+          () => 'inserted',
+          (error: Error) => error.message,
+        );
+        await first.query('COMMIT');
+        expect(await waiting).toMatch(/agent_limit_reached: 3 of 3/);
+        expect(await queries.countLiveAgents(user)).toBe(3);
+      } finally {
+        await second.query('ROLLBACK').catch(() => undefined);
+        first.release();
+        second.release();
+        // Each agent's cash account is a ledger row the app role may not delete, so
+        // the throwaway user stays; its agents are archived and hold nothing.
+        await getPool().query(`UPDATE agents SET state = 'archived' WHERE user_id = $1 AND NOT is_primary`, [user]);
       }
     });
   });

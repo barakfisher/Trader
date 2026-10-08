@@ -30,11 +30,16 @@ import { queryKeys } from './queryKeys.ts';
 
 export const agentsQuery = queryOptions({
   queryKey: queryKeys.agents,
-  queryFn: async () => (await api.get<AgentsResponse>('/agents')).agents,
+  queryFn: () => api.get<AgentsResponse>('/agents'),
 });
 
 export function useAgentsQuery() {
-  return useQuery(agentsQuery);
+  return useQuery({ ...agentsQuery, select: (body) => body.agents });
+}
+
+/** How many agents count against the installation's limit, and the limit (D72). */
+export function useAgentLimitQuery() {
+  return useQuery({ ...agentsQuery, select: (body) => body.agentLimit ?? null });
 }
 
 export function useAgentQuery(agentId: string) {

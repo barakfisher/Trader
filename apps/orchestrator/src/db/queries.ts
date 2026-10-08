@@ -17,6 +17,7 @@ export * from './queries/agentScans.js';
 export * from './queries/ledger.js';
 export * from './queries/instruments.js';
 export * from './queries/holdings.js';
+export * from './queries/installationSettings.js';
 export * from './queries/targetWeights.js';
 export * from './queries/quotes.js';
 export * from './queries/snapshots.js';
