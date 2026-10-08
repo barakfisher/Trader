@@ -34,6 +34,7 @@ import { sendDigest } from '../../services/notifications.js';
 import { RESCREEN_KIND, startRescreen } from '../../services/universeRescreen.js';
 import { BENCHMARK_SYMBOL } from '../../services/performance.js';
 import { sweepExpiredProposals } from '../../services/proposals.js';
+import { planScheduledScans } from '../../services/scheduledScans.js';
 import { logger } from '../../logger.js';
 import { localDate, takeSnapshot } from '../../services/snapshot.js';
 import { currentUserId, type AppEnv } from '../app.js';
@@ -82,6 +83,9 @@ const RUN_BUCKET_MINUTES: Record<string, number> = {
   // and every examined row costs an upstream request. Once a day is enough to
   // heal rows created while the provider could not name them.
   instrument_metadata: 24 * 60,
+  // The ask for agents' scheduled scans (D69): every quarter hour is enough to
+  // start a slot within minutes of its time, and a slot's window is hours long.
+  agent_scans: 15,
 };
 
 /** The bucket a moment falls into, as a readable suffix for the run key. */
@@ -112,6 +116,7 @@ const runSchema = z.object({
     'daily_digest',
     'instrument_metadata',
     'universe_rescreen',
+    'agent_scans',
   ]),
   userId: z.string().uuid().optional(),
   runKey: z.string().max(200).optional(),
@@ -145,6 +150,16 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
         runKey: parsed.data.runKey,
       });
       return context.json({ kind: RESCREEN_KIND, ...started }, started.status === 'running' ? 202 : 200);
+    }
+
+    if (parsed.data.kind === 'agent_scans' && context.get('scanQueue') === null) {
+      // D71: this installation does not schedule scans. Answered without a run
+      // row - ninety-six "skipped" rows a day would say nothing new.
+      return context.json({
+        kind: parsed.data.kind,
+        status: 'skipped',
+        reason: 'scheduled scans are off on this installation (ENABLE_SCHEDULED_SCANS)',
+      });
     }
 
     const userId = parsed.data.userId ?? config.SINGLE_USER_ID;
@@ -213,6 +228,19 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
           status: degraded ? 'degraded' : 'ok',
           result,
         });
+      }
+
+      if (parsed.data.kind === 'agent_scans') {
+        // Only puts due attempts on the queue: the scans run on its worker (D73).
+        const result = await planScheduledScans({
+          userId,
+          ai: context.get('ai'),
+          queue: context.get('scanQueue')!,
+          now: new Date(),
+          requestId: context.get('requestId'),
+        });
+        await finishRun(runId, 'ok', result);
+        return context.json({ kind: parsed.data.kind, runKey, runId, status: 'ok', result });
       }
 
       if (parsed.data.kind === 'instrument_metadata') {

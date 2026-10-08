@@ -49,6 +49,10 @@ export const INTERVALS_MS: Record<string, number> = {
   // last loaded is RESCREEN_DUE_DAYS old, and a not-due ask writes nothing. A
   // quarterly timer would be the once-per-period trigger a restart swallows.
   universe_rescreen: 60 * 60 * 1000,
+  // Every 15 minutes against a 15-minute bucket (D69): a slot's window is hours
+  // long, so a missed ask is caught up by the next; the plan enqueues nothing
+  // most of the time, and nothing at all where scheduled scans are off (D71).
+  agent_scans: 15 * 60 * 1000,
 };
 
 /** Stagger the first run of each kind so a restart does not fire both at once. */
@@ -75,6 +79,8 @@ const FIRST_RUN_DELAY_MS: Record<string, number> = {
   instrument_metadata: 30_000,
   // After the scans and discovery, before the digest; most asks are "not due".
   universe_rescreen: 65_000,
+  // After backfill and the snapshot, before the portfolio scan: a scan reads prices.
+  agent_scans: 25_000,
 };
 
 const timers: NodeJS.Timeout[] = [];

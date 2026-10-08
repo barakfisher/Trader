@@ -4,7 +4,9 @@ What is pinned: only distinct headlines inside the window that are linked or
 came from the market feed are read, and each carries the symbols of every
 instrument it is linked to - the input to a phrase's lead instrument, which
 decides whether it is one company's news. And the market feed's pruning deletes
-only its own old, unlinked articles (decision 60).
+only its own old, unlinked articles (decision 60). And a lexicon re-score reads
+only originals the current lexicon has not scored, so it adds beside older
+opinions and a second pass finds nothing.
 """
 
 from __future__ import annotations
@@ -15,10 +17,14 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.news.queries import (
+    count_unscored_articles,
     load_market_headlines,
+    load_unscored_articles,
     load_window_headlines,
     prune_market_articles,
+    store_sentiment,
 )
+from app.news.sentiment import LEXICON_MODEL_NAME, SentimentScore
 
 NOW = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
 
@@ -137,3 +143,48 @@ def test_pruning_deletes_only_old_unlinked_market_articles(migrated: Engine) -> 
     assert pruned == 1
     assert gone not in left
     assert {linked, fresh, followed} <= left
+
+
+def test_a_rescore_adds_the_current_lexicon_beside_the_old_and_then_finds_nothing(
+    migrated: Engine,
+) -> None:
+    with migrated.connect() as connection, connection.begin() as transaction:
+        before = count_unscored_articles(connection, model=LEXICON_MODEL_NAME)
+        old = _article(connection, "rs-old", "Webull Sinks 22%", NOW)
+        _article(connection, "rs-new", "Shares rally", NOW)
+        copy = _article(connection, "rs-copy", "Webull Sinks 22%", NOW)
+        connection.execute(
+            text(
+                "UPDATE articles SET duplicate_of_id = CAST(:o AS uuid) WHERE id = CAST(:c AS uuid)"
+            ),
+            {"o": old, "c": copy},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO article_sentiment (article_id, score, magnitude, model) "
+                "VALUES (CAST(:a AS uuid), 0, 0, 'lexicon-v0-test')"
+            ),
+            {"a": old},
+        )
+
+        pending = load_unscored_articles(connection, model=LEXICON_MODEL_NAME, limit=10_000)
+        ours = {article_id for article_id, _, _ in pending} & {old, copy}
+        for article_id, _, _ in pending:
+            store_sentiment(
+                connection,
+                article_id,
+                SentimentScore(score=-1.0, magnitude=0.125, model=LEXICON_MODEL_NAME),
+            )
+        after = count_unscored_articles(connection, model=LEXICON_MODEL_NAME)
+        models = set(
+            connection.execute(
+                text("SELECT model FROM article_sentiment WHERE article_id = CAST(:a AS uuid)"),
+                {"a": old},
+            ).scalars()
+        )
+        transaction.rollback()
+
+    assert len(pending) == before + 2  # the two originals, not the copy
+    assert ours == {old}
+    assert after == 0
+    assert models == {"lexicon-v0-test", LEXICON_MODEL_NAME}

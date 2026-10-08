@@ -118,6 +118,8 @@ export async function proposeFromScan(
   await announce(userId, agent, context.notifier, now, {
     observationId,
     proposalId,
+    // D70: a sell that can be approved right now does not wait for the morning.
+    urgent: kind === 'sell' && calendar.is_open,
     headline: headlineIn('en'),
     thesis,
     localized,
@@ -140,7 +142,14 @@ async function announce(
   agent: AgentRow,
   notifier: Notifier,
   now: Date,
-  proposal: { observationId: string; proposalId: string; headline: string; thesis: string; localized: LocalizedTexts },
+  proposal: {
+    observationId: string;
+    proposalId: string;
+    urgent: boolean;
+    headline: string;
+    thesis: string;
+    localized: LocalizedTexts;
+  },
 ): Promise<void> {
   try {
     const [settings, user] = await Promise.all([getOrCreateUserSettings(userId), getUser(userId)]);
@@ -157,6 +166,7 @@ async function announce(
           localized: proposal.localized,
           proposalId: proposal.proposalId,
           trade: true,
+          urgent: proposal.urgent,
         },
       ],
       settingsForNotification(settings, user?.timezone ?? 'UTC'),

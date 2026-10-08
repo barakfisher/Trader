@@ -512,11 +512,16 @@ function ModelsCard() {
 
 const SCOPES: readonly LlmScope[] = ['explain', 'agent'];
 
+/**
+ * The model in use, or '' when it is not offered for this scope - the free route
+ * for agents, or a chosen model since withdrawn. Never the first offered model:
+ * that showed Sonnet as chosen while scans ran on the configured default.
+ */
 function initialSelection(data: AdminLlmModelsResponse, scope: LlmScope): string {
   const choice = data.choices.find((candidate) => candidate.scope === scope);
   const offered = data.models.filter((model) => model.scopes.includes(scope));
   const current = choice?.chosen ?? choice?.effective ?? null;
-  return offered.find((model) => model.id === current)?.id ?? offered[0]?.id ?? '';
+  return offered.find((model) => model.id === current)?.id ?? '';
 }
 
 function estimateFor(model: LlmOfferedModelView | undefined, scope: LlmScope) {
@@ -590,6 +595,13 @@ function ScopePicker({
           onChange={(event) => onChange(event.target.value)}
           className="input w-auto"
         >
+          {value === '' && (
+            <option value="" disabled>
+              {choice?.chosen
+                ? t('admin.models.notOffered', { model: choice.chosen })
+                : t('admin.models.notChosen', { model: choice?.effective ?? t('admin.noModel') })}
+            </option>
+          )}
           {offered.map((candidate) => (
             <option key={candidate.id} value={candidate.id}>
               {candidate.label}

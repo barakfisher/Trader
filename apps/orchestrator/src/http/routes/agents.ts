@@ -18,9 +18,15 @@ import {
   SCAN_SCHEDULES,
   type AgentView,
   type AgentsResponse,
+  type AgentScheduling,
   type ScanCostEstimate,
   type ScanSchedule,
 } from '@traders/shared';
+import type { AiClient } from '@traders/shared/ai';
+
+import { logger } from '../../logger.js';
+import { nextSlot, type Session } from '../../services/scanSchedule.js';
+import { SCHEDULE_EXCHANGE } from '../../services/scheduledScans.js';
 
 import {
   agentHasTraded,
@@ -136,6 +142,32 @@ export function toAgentView(row: AgentRow): AgentView {
   };
 }
 
+/** A week of sessions ahead holds the next slot even across a long weekend. */
+const NEXT_SLOT_HORIZON_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * D71: whether this installation schedules the agent's scans, and the next
+ * one's time. A calendar the AI service cannot answer leaves the time out
+ * rather than failing the page.
+ */
+async function schedulingOf(row: AgentRow, enabled: boolean, ai: AiClient, requestId?: string): Promise<AgentScheduling> {
+  if (!enabled || row.state !== 'active' || !row.persona?.trim()) return { enabled, nextAt: null };
+  const now = new Date();
+  try {
+    const { sessions } = await ai.marketSessions(
+      SCHEDULE_EXCHANGE,
+      now.toISOString().slice(0, 10),
+      new Date(now.getTime() + NEXT_SLOT_HORIZON_MS).toISOString().slice(0, 10),
+      requestId,
+    );
+    const next = nextSlot(row.scan_schedule as ScanSchedule, sessions as Session[], now);
+    return { enabled, nextAt: next?.at.toISOString() ?? null };
+  } catch (error) {
+    logger().warn({ err: error, agentId: row.id }, 'agents.next_scan_unknown');
+    return { enabled, nextAt: null };
+  }
+}
+
 /** An empty persona is no persona: stored as null, never as ''. */
 function personaOf(value: string | null | undefined): string | null | undefined {
   if (value === undefined) return undefined;
@@ -211,7 +243,14 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
   app.get('/agents/:id', async (context) => {
     const row = await getAgent(currentUserId(context), agentIdFrom(context.req.param('id')));
     if (!row) throw notFound('agent not found');
-    return context.json(toAgentView(row));
+    if (row.is_primary) return context.json(toAgentView(row));
+    const scheduling = await schedulingOf(
+      row,
+      context.get('config').ENABLE_SCHEDULED_SCANS,
+      context.get('ai'),
+      context.get('requestId'),
+    );
+    return context.json({ ...toAgentView(row), scheduling } satisfies AgentView);
   });
 
   app.post('/agents', async (context) => {

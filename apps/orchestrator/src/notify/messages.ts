@@ -30,6 +30,8 @@ import type {
 } from '@traders/shared';
 
 import type { CallbackAction } from '../telegram/callbackToken.js';
+import type { FailureCause } from '../services/scheduledScans.js';
+import type { ScanSlot } from '../services/scanSchedule.js';
 import type { NarrationState } from '../services/narrationHealth.js';
 import type { RefusalReason } from '../services/proposalState.js';
 
@@ -146,6 +148,13 @@ export interface Messages {
     confirmInApp: string;
   };
 
+  /** D74: a scheduled slot that gave up, said once. */
+  scheduledScans: {
+    slots: Record<ScanSlot, string>;
+    causes: Record<FailureCause, string>;
+    gaveUp: (agent: string, slot: string, day: string, cause: string) => NoticeText;
+  };
+
   narration: Record<RecordedNarrationState, NoticeText>;
   /** A state added to `NarrationState` without words here still says something true. */
   narrationFallback: NoticeText;
@@ -248,6 +257,28 @@ const en: Messages = {
     farFromAgent: (agentPrice, livePrice, distance) =>
       `The price is ${livePrice}, ${distance} from the agent's ${agentPrice} - more than 3%.`,
     confirmInApp: 'This price is too large for a Telegram button: confirm it in the app.',
+  },
+
+  scheduledScans: {
+    slots: {
+      pre_open: 'pre-open',
+      post_close: 'post-close',
+      ny_1000: '10:00 New York',
+      ny_1400: '14:00 New York',
+    },
+    causes: {
+      rate_limited: 'the model provider is rate-limiting requests',
+      provider_error: 'the model provider or the AI service returned an error',
+      timeout: 'the scan did not finish in time',
+      agent_busy: 'the agent was still busy with another scan',
+      no_model: 'no model is chosen for agents (Admin page)',
+      scan_failed: 'the model call failed during the scan',
+      window_closed: 'its time window ended before it could run again',
+    },
+    gaveUp: (agent, slot, day, cause) => ({
+      headline: `⚠️ ${agent}'s ${slot} scan (${day}) did not run`,
+      explanation: `It stopped trying because ${cause}. Nothing was proposed; the next scheduled scan runs as usual. Details are on the agent's Decisions tab.`,
+    }),
   },
 
   narration: {
@@ -407,6 +438,28 @@ const he: Messages = {
     farFromAgent: (agentPrice, livePrice, distance) =>
       `המחיר ${ltr(livePrice)}, ${ltr(distance)} מהמחיר של הסוכן ${ltr(agentPrice)} - יותר מ־${ltr('3%')}.`,
     confirmInApp: 'המחיר גדול מדי לכפתור בטלגרם: אשרו אותו באפליקציה.',
+  },
+
+  scheduledScans: {
+    slots: {
+      pre_open: 'לפני הפתיחה',
+      post_close: 'אחרי הסגירה',
+      ny_1000: `${ltr('10:00')} שעון ניו יורק`,
+      ny_1400: `${ltr('14:00')} שעון ניו יורק`,
+    },
+    causes: {
+      rate_limited: 'ספק המודל מגביל את קצב הבקשות',
+      provider_error: 'ספק המודל או שירות ה־AI החזירו שגיאה',
+      timeout: 'הסריקה לא הסתיימה בזמן',
+      agent_busy: 'הסוכן עדיין היה עסוק בסריקה אחרת',
+      no_model: 'לא נבחר מודל לסוכנים (דף הניהול)',
+      scan_failed: 'קריאת המודל נכשלה במהלך הסריקה',
+      window_closed: 'חלון הזמן שלה נגמר לפני שאפשר היה לנסות שוב',
+    },
+    gaveUp: (agent, slot, day, cause) => ({
+      headline: `⚠️ הסריקה של ${isolated(agent)} (${slot}, ${ltr(day)}) לא רצה`,
+      explanation: `היא הפסיקה לנסות כי ${cause}. שום דבר לא הוצע; הסריקה המתוזמנת הבאה תרוץ כרגיל. הפרטים בלשונית ההחלטות של הסוכן.`,
+    }),
   },
 
   narration: {

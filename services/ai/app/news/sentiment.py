@@ -51,7 +51,7 @@ from typing import Protocol, runtime_checkable
 #: when the word lists change: a score is only comparable to another score from
 #: the same lexicon, and the unique key on (article_id, model) turns a bump into
 #: a second opinion rather than a silent rewrite of the corpus.
-LEXICON_MODEL_NAME = "lexicon-v1"
+LEXICON_MODEL_NAME = "lexicon-v2"
 
 #: Matched terms at which `magnitude` reaches 1.0. Eight is roughly the point at
 #: which a market story has made its position obvious; beyond it, more loaded
@@ -66,6 +66,13 @@ NEGATION_WINDOW = 3
 #: Terms whose presence in market copy points one way. Market vocabulary, not
 #: general English: "volatile" and "aggressive" are neutral here because they
 #: describe both good and bad weeks.
+#:
+#: Headlines are written in the present tense ("Webull Sinks 22%"), so each verb
+#: needs that form beside its past tense; v1 had mostly past tenses and scored 84%
+#: of stored articles as matching nothing. Left out on purpose: "up", "down",
+#: "higher" and "lower" ("sets up", "down payment", "lower rates" say nothing
+#: about a price), "tanks" (think tanks) and "spikes" (a yield spike is bad news
+#: for the stock it is written beside).
 POSITIVE_TERMS = frozenset(
     {
         "accelerated",
@@ -76,12 +83,14 @@ POSITIVE_TERMS = frozenset(
         "beats",
         "breakthrough",
         "climbed",
+        "climbs",
         "exceeded",
         "expansion",
         "gains",
         "grew",
         "growth",
         "jumped",
+        "jumps",
         "momentum",
         "optimistic",
         "outperform",
@@ -89,15 +98,20 @@ POSITIVE_TERMS = frozenset(
         "raised",
         "raises",
         "rallied",
+        "rallies",
         "rally",
         "record",
+        "rises",
         "robust",
         "rose",
+        "skyrockets",
         "soared",
+        "soars",
         "strength",
         "strong",
         "surge",
         "surged",
+        "surges",
         "upgrade",
         "upgraded",
         "wins",
@@ -108,6 +122,8 @@ POSITIVE_TERMS = frozenset(
 NEGATIVE_TERMS = frozenset(
     {
         "concerns",
+        "crashed",
+        "crashes",
         "cut",
         "cuts",
         "declined",
@@ -115,6 +131,9 @@ NEGATIVE_TERMS = frozenset(
         "delayed",
         "downgrade",
         "downgraded",
+        "dropped",
+        "drops",
+        "falls",
         "fell",
         "fraud",
         "halted",
@@ -125,16 +144,24 @@ NEGATIVE_TERMS = frozenset(
         "losses",
         "miss",
         "missed",
+        "plummeted",
+        "plummets",
         "plunge",
         "plunged",
+        "plunges",
         "probe",
         "recall",
+        "sank",
         "selloff",
         "shortfall",
+        "sinks",
+        "slid",
         "slides",
+        "slump",
         "slumped",
         "slumps",
         "tumbled",
+        "tumbles",
         "underperform",
         "warned",
         "warning",
@@ -149,6 +176,9 @@ NEGATION_CUES = frozenset({"not", "no", "never", "without", "hardly", "barely", 
 
 #: Words, apostrophes kept so "n't" survives tokenisation as part of its verb.
 _TOKEN = re.compile(r"[a-z']+")
+
+#: Hyphenated terms the tokeniser would split, joined into the listed spelling.
+_HYPHENATED = re.compile(r"\bsell-offs?\b")
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,7 +239,7 @@ class LexiconSentimentScorer:
 
 def _count(text: str) -> tuple[int, int]:
     """Positive and negative hits, with negation applied inside its window."""
-    tokens = _TOKEN.findall(text.lower())
+    tokens = _TOKEN.findall(_HYPHENATED.sub("selloff", text.lower()))
     positive = negative = 0
     negated_until = -1
     for index, token in enumerate(tokens):

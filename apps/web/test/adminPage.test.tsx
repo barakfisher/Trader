@@ -311,10 +311,18 @@ describe('the admin page', () => {
     renderAt('/admin', ADMIN);
     const explain = (await screen.findByLabelText('Narration and questions')) as HTMLSelectElement;
     const agents = screen.getByLabelText('Agents') as HTMLSelectElement;
-    // What is in use stays selected; agents may not use the free route, so they start on the first offered.
+    // What is in use stays selected. Agents may not use the free route, so nothing offered is in
+    // use: the picker says so instead of showing the first model as chosen, and cannot save it.
     expect(explain.value).toBe('nvidia/nemotron-3.5-lightning:free');
-    expect(agents.value).toBe('anthropic/claude-sonnet-5.5');
+    expect(agents.value).toBe('');
+    expect(agents.selectedOptions[0]!.textContent).toBe('Not chosen – using nvidia/nemotron-3.5-lightning:free');
     expect([...agents.options].map((option) => option.value)).not.toContain('nvidia/nemotron-3.5-lightning:free');
+    const [, agentSave] = screen.getAllByRole('button', { name: 'Use this model' }) as HTMLButtonElement[];
+    expect(agentSave!.disabled).toBe(true);
+    expect(screen.getByText('Together: about $0 a day, $0 a month')).toBeTruthy();
+
+    fireEvent.change(agents, { target: { value: 'anthropic/claude-sonnet-5.5' } });
+    expect(agentSave!.disabled).toBe(false);
     expect(screen.getByText('About $0.11 a day, $3.30 a month')).toBeTruthy();
     expect(screen.getByText(/assumed until real scans are recorded/)).toBeTruthy();
     expect(screen.getByText('Together: about $0.11 a day, $3.30 a month')).toBeTruthy();

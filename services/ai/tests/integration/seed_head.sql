@@ -53,6 +53,10 @@ SELECT ('20000000-0000-0000-0000-0000000000' || lpad(n::text, 2, '0'))::uuid, ki
                'instrument_metadata','news_collect','topic_discovery'],
          ARRAY['running','ok','degraded','failed','skipped','ok','ok','ok','ok']
        ) WITH ORDINALITY AS t(kind, status, n);
+-- A scheduled scan's ask and one attempt (0048); the attempt names its agent.
+INSERT INTO runs (id, user_id, agent_id, kind, run_key, status) VALUES
+  ('20000000-0000-0000-0000-000000000097', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'agent_scans', 'agent_scans:seed', 'ok'),
+  ('20000000-0000-0000-0000-000000000098', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'agent_scan', 'agent_scan:seed:2026-10-08:pre_open:1', 'failed');
 -- A rescreen running on a heartbeat (0031): the partial unique index allows one.
 INSERT INTO runs (id, kind, run_key, status, heartbeat_at) VALUES
   ('20000000-0000-0000-0000-000000000099', 'universe_rescreen', 'universe-rescreen:2026-10-01', 'running', now());

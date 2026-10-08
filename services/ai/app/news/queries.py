@@ -27,6 +27,7 @@ from sqlalchemy import text
 from app.core.logging import get_logger
 from app.news.article import IngestedArticle
 from app.news.ingestion import KnownHashes
+from app.news.sentiment import SentimentScore
 from app.topics.discovery import Headline
 
 log = get_logger("news.queries")
@@ -327,3 +328,54 @@ class SqlFeedCursor:
         self._connection.execute(  # type: ignore[attr-defined]
             SQL_SAVE_FEED_CURSOR, {"provider": self._provider, "last_file_at": last_file_at}
         )
+
+
+#: Originals that `model` has not read yet, oldest first so a rerun resumes where
+#: the last one stopped. Copies are skipped for the reason ingestion skips them:
+#: the original carries the opinion (`app/news/ingestion.py`).
+SQL_UNSCORED_ARTICLES = text(
+    """
+    SELECT a.id, a.title, a.raw_text
+      FROM articles a
+     WHERE a.duplicate_of_id IS NULL
+       AND NOT EXISTS (SELECT 1 FROM article_sentiment s
+                        WHERE s.article_id = a.id AND s.model = :model)
+     ORDER BY a.created_at, a.id
+     LIMIT :limit
+    """
+)
+
+SQL_COUNT_UNSCORED_ARTICLES = text(
+    """
+    SELECT count(*) AS n
+      FROM articles a
+     WHERE a.duplicate_of_id IS NULL
+       AND NOT EXISTS (SELECT 1 FROM article_sentiment s
+                        WHERE s.article_id = a.id AND s.model = :model)
+    """
+)
+
+
+def count_unscored_articles(connection: object, *, model: str) -> int:
+    row = connection.execute(SQL_COUNT_UNSCORED_ARTICLES, {"model": model}).one()  # type: ignore[attr-defined]
+    return int(row.n)
+
+
+def load_unscored_articles(
+    connection: object, *, model: str, limit: int
+) -> list[tuple[str, str, str]]:
+    """(id, title, raw_text) for up to `limit` originals that `model` has not scored."""
+    rows = connection.execute(SQL_UNSCORED_ARTICLES, {"model": model, "limit": limit})  # type: ignore[attr-defined]
+    return [(str(row.id), row.title, row.raw_text) for row in rows]
+
+
+def store_sentiment(connection: object, article_id: str, score: SentimentScore) -> None:
+    connection.execute(  # type: ignore[attr-defined]
+        SQL_UPSERT_SENTIMENT,
+        {
+            "article_id": article_id,
+            "score": score.score,
+            "magnitude": score.magnitude,
+            "model": score.model,
+        },
+    )

@@ -142,7 +142,10 @@ export function routeFinding(
   severity: string,
   settings: NotificationSettings,
   now: Date,
-  { floor = 'applies' }: { floor?: 'applies' | 'ignored' } = {},
+  {
+    floor = 'applies',
+    quietHours = 'apply',
+  }: { floor?: 'applies' | 'ignored'; quietHours?: 'apply' | 'ignored' } = {},
 ): RoutingDecision {
   if (settings.mutedUntil !== null && settings.mutedUntil.getTime() > now.getTime()) {
     // Deliberately still a digest entry rather than nothing at all: /mute means
@@ -157,7 +160,9 @@ export function routeFinding(
   if (floor === 'applies' && !meetsSeverity(severity, settings.notifySeverity)) {
     return { route: 'digest', reason: 'below_floor' };
   }
-  if (isWithinQuietHours(settings, now)) {
+  // D70: a sell while the market is open is the one thing worth waking for -
+  // it can be approved now and will have expired by morning. A mute still holds.
+  if (quietHours === 'apply' && isWithinQuietHours(settings, now)) {
     return { route: 'digest', reason: 'quiet_hours' };
   }
   return { route: 'push', reason: 'above_floor' };
