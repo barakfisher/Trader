@@ -13,6 +13,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { AiClient } from '@traders/shared/ai';
 
+import type { ScanQueue } from '../services/scheduledScans.js';
 import { buildNotifier } from '../notify/factory.js';
 import type { Notifier } from '../notify/notifier.js';
 
@@ -49,6 +50,8 @@ export interface AppEnv {
     config: Config;
     ai: AiClient;
     notifier: Notifier;
+    /** Null where scheduled scans are off (D71): the ask then does nothing. */
+    scanQueue: ScanQueue | null;
   };
 }
 
@@ -100,6 +103,7 @@ export function createApp(
   config: Config,
   ai: AiClient,
   notifier: Notifier = buildNotifier(config),
+  scanQueue: ScanQueue | null = null,
 ): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
@@ -109,6 +113,7 @@ export function createApp(
     context.set('config', config);
     context.set('ai', ai);
     context.set('notifier', notifier);
+    context.set('scanQueue', scanQueue);
     context.header('x-request-id', requestId);
     const startedAt = Date.now();
     await next();

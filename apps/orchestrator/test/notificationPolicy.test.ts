@@ -157,6 +157,12 @@ describe('routeFinding for a trade proposal (D60)', () => {
     expect(routeFinding('notable', settings(), day, { floor: 'ignored' })).toEqual({ route: 'push', reason: 'above_floor' });
   });
 
+  it('pushes an urgent sell through quiet hours, but not through a mute (D70)', () => {
+    expect(routeFinding('notable', settings(), night, { floor: 'ignored', quietHours: 'ignored' }).route).toBe('push');
+    const muted = settings({ mutedUntil: new Date(night.getTime() + 3_600_000) });
+    expect(routeFinding('notable', muted, night, { floor: 'ignored', quietHours: 'ignored' }).reason).toBe('muted');
+  });
+
   it('still respects quiet hours and a mute', () => {
     expect(routeFinding('notable', settings(), night, { floor: 'ignored' }).reason).toBe('quiet_hours');
     const muted = settings({ mutedUntil: new Date(day.getTime() + 3_600_000) });

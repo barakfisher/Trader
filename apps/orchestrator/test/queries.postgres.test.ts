@@ -1089,6 +1089,29 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe("a scheduled slot's attempts (0048, D69)", () => {
+    it('lists the attempts of one slot, oldest first, and no other slot or agent', async () => {
+      const slot = `agent_scan:${AGENT}:2026-10-08:pre_open`;
+      for (const [key, status] of [
+        [`${slot}:1`, 'failed'],
+        [`${slot}:2`, 'ok'],
+        [`agent_scan:${AGENT}:2026-10-08:post_close:1`, 'ok'],
+        // A slot whose name starts like this one's is not this one.
+        [`${slot}_x:1`, 'ok'],
+      ] as const) {
+        const { runId } = await queries.claimRun({ userId: USER, agentId: AGENT, kind: 'agent_scan', runKey: key, trigger: 'schedule' });
+        await queries.finishRun(runId!, status, { retryable: true });
+      }
+      const attempts = await queries.listSlotAttempts(AGENT, slot);
+      expect(attempts.map((row) => [row.run_key, row.status])).toEqual([
+        [`${slot}:1`, 'failed'],
+        [`${slot}:2`, 'ok'],
+      ]);
+      expect(attempts[0]!.stats).toEqual({ retryable: true });
+      expect(await queries.listSlotAttempts(randomUUID(), slot)).toEqual([]);
+    });
+  });
+
   describe('trade proposals (0044), rolled back', () => {
     // agent_scans does not cascade from users, so everything here is rolled back.
     it('writes the observation and the proposal once per scan, and holds the constraints', async () => {

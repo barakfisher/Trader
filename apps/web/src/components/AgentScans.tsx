@@ -12,9 +12,10 @@ import {
 } from '@traders/shared';
 
 import { ApiRequestError } from '../api/client.ts';
-import { useTranslation } from '../i18n/index.ts';
+import { t, useTranslation } from '../i18n/index.ts';
 import { BUDGET_INPUT, agentErrorMessage } from '../lib/agentPresentation.ts';
 import { formatMicroUsd } from '../lib/llmCalls.ts';
+import { formatExactTime } from '../lib/relativeTime.ts';
 import { useRunScan, useUpdateAgent } from '../queries/agents.ts';
 import { AgentField } from './AgentField.tsx';
 import { Button, Card, ErrorNote } from './ui.tsx';
@@ -35,10 +36,9 @@ const isRunRefusal = (code: string): code is RunRefusal => (RUN_REFUSALS as read
 
 /**
  * How an agent scans (D45, D46, D52, D65, D66): *Run a scan now* with what it
- * is expected to cost, the schedule with its cost per day, and the model budget
- * with what today has spent. The schedule is stored now and acted on when
- * scheduled scans arrive; until then the card says so rather than implying
- * scans are running.
+ * is expected to cost, the schedule with its cost per day and when the next
+ * scheduled scan runs - or that this installation does not schedule them
+ * (D71) - and the model budget with what today has spent.
  */
 export function AgentScans({ agent }: { agent: AgentView }) {
   const { t } = useTranslation();
@@ -123,6 +123,20 @@ function RunResult({ result }: { result: RunScanResult }) {
   );
 }
 
+/**
+ * Where scheduled scans stand for this agent (D71): on another installation,
+ * the next one's time, or none coming. Before the agent's own page has loaded
+ * its scheduling, nothing is claimed.
+ */
+function scheduleState(agent: AgentView): string {
+  const scheduling = agent.scheduling;
+  if (scheduling === undefined) return '';
+  if (!scheduling.enabled) return t('agents.scans.scheduleElsewhere');
+  return scheduling.nextAt === null
+    ? t('agents.scans.scheduleNone')
+    : t('agents.scans.scheduleNext', { when: formatExactTime(scheduling.nextAt) });
+}
+
 function ScanSettings({ agent }: { agent: AgentView }) {
   const { t } = useTranslation();
   const update = useUpdateAgent(agent.id);
@@ -148,7 +162,7 @@ function ScanSettings({ agent }: { agent: AgentView }) {
     <form onSubmit={submit} className="space-y-3 border-t border-border-subtle pt-3">
       <AgentField
         label={t('agents.scans.schedule')}
-        hint={`${t('agents.scans.scheduleCost', { perDay: formatMicroUsd(perScan * SCANS_PER_DAY[schedule]) })} ${t('agents.scans.scheduleNotRunning')}`}
+        hint={`${t('agents.scans.scheduleCost', { perDay: formatMicroUsd(perScan * SCANS_PER_DAY[schedule]) })} ${scheduleState(agent)}`}
       >
         <select
           value={schedule}

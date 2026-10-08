@@ -48,6 +48,29 @@ const schema = z.object({
   AI_SERVICE_URL: z.string().url(),
   INTERNAL_API_KEY: z.string().min(8),
 
+  /**
+   * Whether this installation runs agents' scheduled scans (D71). Off unless
+   * exactly `true`: compose and kind cannot see each other's scans and bill one
+   * OpenRouter account, so an installation that schedules by default would pay
+   * twice for an agent that exists in both. *Run a scan now* works regardless.
+   */
+  ENABLE_SCHEDULED_SCANS: z.preprocess(
+    (value) => value === 'true' || value === true,
+    z.boolean(),
+  ),
+
+  /** Scheduled scans running at once on the queue (D73). */
+  AGENT_SCAN_CONCURRENCY: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.coerce.number().int().min(1).max(64).default(4),
+  ),
+
+  /** The queue's Redis (D73): the one the AI service already uses, durable (appendonly). */
+  REDIS_URL: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().url().default('redis://127.0.0.1:6379/0'),
+  ),
+
   /** Fixed single-user id, seeded by migration 0001. Replaced by real auth later. */
   SINGLE_USER_ID: z.string().uuid().default('00000000-0000-0000-0000-000000000001'),
 

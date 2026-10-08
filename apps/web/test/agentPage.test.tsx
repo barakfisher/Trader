@@ -57,6 +57,7 @@ const AGENT: AgentView = {
   llmSpentTodayMicroUsd: 108_022,
   scanCost: { microUsd: 36_000, basis: 'measured' },
   waitingForPersona: true,
+  scheduling: { enabled: true, nextAt: '2026-10-08T13:00:00Z' },
 };
 
 const AAPL: HoldingView = {
@@ -487,13 +488,13 @@ describe('AgentPage with the ledger', () => {
     expect(await screen.findByText('This agent is already scanning.')).toBeTruthy();
   });
 
-  it('saves the schedule and the model budget, with the cost per day and the note that scheduling is not running yet (D45, D46, D66)', async () => {
+  it('saves the schedule and the model budget, with the cost per day and the next scheduled scan (D45, D46, D66, D71)', async () => {
     const patch = (await import('../src/api/client.ts')).api.patch as ReturnType<typeof vi.fn>;
     patch.mockResolvedValue(AGENT);
     renderAgent();
     const schedule = (await screen.findByLabelText('When it scans')) as HTMLSelectElement;
     expect(screen.getByText(/About \$0\.036 a trading day/)).toBeTruthy();
-    expect(screen.getByText(/Scheduled scans are not running yet/)).toBeTruthy();
+    expect(screen.getByText(/Next scheduled scan: /)).toBeTruthy();
     expect(screen.getByText(/Spent today: \$0\.108 of \$0\.50/)).toBeTruthy();
     fireEvent.change(schedule, { target: { value: 'pre_open_post_close' } });
     expect(screen.getByText(/About \$0\.072 a trading day/)).toBeTruthy();
@@ -502,5 +503,11 @@ describe('AgentPage with the ledger', () => {
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith(`/agents/${AGENT_ID}`, { scanSchedule: 'pre_open_post_close', llmBudget: '1.25' }),
     );
+  });
+
+  it("says when this installation does not schedule scans (D71)", async () => {
+    serveAgent({ ...AGENT, scheduling: { enabled: false, nextAt: null } });
+    renderAgent();
+    expect(await screen.findByText(/Scheduled scans don't run on this installation/)).toBeTruthy();
   });
 });
