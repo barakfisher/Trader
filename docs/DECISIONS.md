@@ -140,3 +140,8 @@ while this file is out of date.
 | 127 | A trade proposal ignores the severity floor; a sell ignores quiet hours only while the market is open |
 | 128 | Telegram's Confirm carries the previewed price inside its signed callback |
 | 129 | A slot that gives up is reported once, and the failed run is the Admin record |
+| 130 | The portfolio and topic scans stay on the 30-minute bucket |
+| 131 | No on-demand "Scan portfolio" / "Scan topic" |
+| 132 | States fire when they cross a band; an unusual move absorbs the price move |
+| 133 | Insights shows today, back seven days, with unread state |
+| 134 | Insights is split into tabs: Alerts, Proposals, Digest, All findings |

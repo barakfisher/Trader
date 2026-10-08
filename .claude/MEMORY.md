@@ -11,7 +11,7 @@ none). **#203** - the Admin model picker shows "Not chosen - using <model>" inst
 model. Both environments run `main` at `012d72b`, migration still `0048`. **Open, and the user's
 to do:** D75's Admin choice of Sonnet for *explain* (narration and `/ask`) was still unsaved at
 19:40 UTC - `llm_model_choices` held only the `agent` row, so narration was still on the free route;
-check the table before assuming either way. **IBI is gated (decision 130): no IBI work at all -
+check the table before assuming either way. **IBI is gated (decision 135): no IBI work at all -
 not even the Excel mapper - until the MCP probe shows our app can connect.** Next session: see
 "Next session: after the debt fixes".
 
@@ -474,7 +474,7 @@ job, approved by the user 2026-09-28) in #76, and task 5 (quotes carry asset cla
 the PR after that. Task 7 (server state in TanStack Query) was done across #90-#92 and the topics PR
 that closed it, and task 6 (a screen for `/ask`) in M6 PR 10. That queue emptied at M8's close.
 
-**The post-M8 sweep (2026-10-01)** refilled it as tasks 8-15 - **all done by #140**; tasks 16-18 were added 2026-10-07, and task 18 (reset account) left it in the PR that added migration 0045 (task 8, one question per standing
+**The post-M8 sweep (2026-10-01)** refilled it as tasks 8-15 - **all done by #140**; tasks 16-18 were added 2026-10-07, and task 18 (reset account) left it in the PR that added migration 0045; task 16 (scan frequency) was dropped 2026-10-08 by decision 130, and tasks 19-21 added by decisions 132-134 (task 8, one question per standing
 finding, became decision 92 when measured; task 9 is decision 93; task 10 found a latent cost-currency bug), approved by the user in that order,
 with the same grant as M8 (PR, merge on green, verify on `main` by content, rebuild compose and
 kind). It was measured on compose before it was written: the BTC-USD drift was proposed **7 days
@@ -486,7 +486,9 @@ strings and left-to-right assumptions before designing it.
 
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
-| 16 | **Scan frequency that follows the market, set on the Admin page** (the user, 2026-10-07) | — | M | **Measure first:** from `runs` and `observations`, how many findings each scan kind produces in US market hours, outside them and at weekends; that decides whether a change is worth making. The proposal measured against: every 15 minutes while NYSE is open (the exchange calendar), hourly otherwise (crypto, late data). **Then the Admin page setting**, audited like the model choice (D43): the interval in and out of market hours. Design question to settle first: the schedule lives in two places - the kind CronJobs (`infra/k8s/base/cronjobs.yaml`, fixed cron strings) and the orchestrator's in-process scheduler on compose - so a setting means the trigger fires often and the run decides from the setting whether it is due (idempotent by run key, guideline 8), rather than rewriting cron strings. Done when both environments follow the setting and a test pins in-hours and out-of-hours |
+| 19 | **Insights noise: states fire on a band crossing; an unusual move absorbs the price move** (the user, 2026-10-08; decision 132) | — | M | **Measure first, read-only:** from `observations`, per kind, how many rows repeat a subject and severity on consecutive days (drawdown and drift), and how many `price_move` rows share a subject and session with a `sigma_move` row - the before figure. **Then one PR:** drawdown and allocation drift written per band entry within an episode (`app/analysis/drawdown.py`, `allocation_drift.py`, the key in `dedupe.py`), and `price_move` suppressed where `sigma_move` fired (`app/analysis/pipeline.py`). The merged move takes the sigma band's severity, and an expired rebalance proposal is not raised again in the same band (both settled in decision 132). Done when a test holds a ten-day drawdown to one observation per band, a test pins the merge, and the measurement is re-run after deploy and recorded here |
+| 20 | **Insights tabs: Alerts, Proposals, Digest, All findings** (the user, 2026-10-08; decision 134) | — | M | After task 19. `apps/web/src/pages/InsightsPage.tsx` and `lib/insightsTab.ts` gain the two tabs; Alerts reads observations joined to their `push` notifications (a filter on `GET /observations`, SQL in `db/queries/observations.ts`); Proposals reuses the pending list from `ProposalsPage` with a count badge; `/proposals` redirects to `?tab=proposals`. en and he copy. Done when each tab is checked in a browser in both languages and a test pins the redirect and an unknown `?tab=` falling back to the default |
+| 21 | **Insights: today by default, back 7 days, unread badge** (the user, 2026-10-08; decision 133) | — | M | After tasks 19 and 20, so the badge counts findings worth reading and has tabs to sit on. A `last_seen` timestamp on `user_settings` (migration; decision 119's pattern), `GET /observations` filtered by local day, the feed's day stepper (today, then back to 7 days), the Insights tab badge and the unread styling, translated in en and he. Done when a test pins the 7-day bound and the unread count, and the page is checked in a browser in both languages |
 | 17 | **Narration: why two of three model texts are rejected, fixed on the free model** (the user, 2026-10-07) | — | S | **Measured 2026-10-07** over the 38 `unsourced_figures` rejections on compose (all `nvidia/nemotron-3.5-lightning:free`, the validator re-run on each): **34 of 38 mention a threshold** ("crossed the 25% high threshold") that is true but refused, because `thresholds_pct` / `thresholds_weight` are nested and their keys (`info`, `notable`, `high`) carry no ratio marker - **5 were refused for that alone**; **30 of 38 copy a price in minor units** ("fell to 790" for $7.90), rightly refused, but the evidence invites it by handing the model `*_minor` integers; **3 are real inventions** ("$10.14M" for $101,427.80). **One error passed:** "the 0.03% information threshold" for 0.03 = 3%, accepted because the bare digits are in the evidence. **Fixes, one PR:** (1) the validator reads values under a `thresholds_*` key as ratios; (2) narration's evidence gives money as decimal strings ("7.90"), as the agent tools do since #177; (3) a ratio's bare digits followed by `%` are refused ("0.03%" for 0.03), while "0.03%" for a true 0.0003 stays accepted. **Then measure again on the free model** - the user's choice, because a paid model costs money and the fixes may make it unnecessary for narration (estimated at $0.03-0.07 a week on Flash-Lite or Haiku, against the agents' $0.04-0.38 a scan; the Admin page already sets narration's model separately). **The three fixes landed in the PR after #178; what remains is the re-measurement** on the free model once compose and kind run it - re-run the 2026-10-07 export (`llm_calls` where `purpose = 'narration'`) over the narrations written after the deploy. Done when that rate is recorded here, and this row is then removed |
 
 **Not in the queue, and why** - so they are not added back by the next sweep:
@@ -2078,7 +2080,66 @@ failure they prevent.
     through the notifier - not the fan-out - so it is not deduplicated by `notifications` and does
     not respect quiet hours or a mute (debt, below). The `agent_scan` run's `stats.cause` is what
     the Admin runs list shows; `ops_events` was not widened.
-130. **No IBI work until the MCP connection is proven** (the user, 2026-10-08). The proposal put
+130. **The portfolio and topic scans stay on the 30-minute bucket** (the user, 2026-10-08). Read
+    the cadence correctly first: the scheduler *asks* every 15 minutes, and the run key
+    (`RUN_BUCKET_MINUTES` in `http/routes/internal.ts`) runs a scan once per 30-minute bucket;
+    the extra asks are what let a restart catch up instead of skipping a bucket (decision 6).
+    *Rejected:* 2-3 market-anchored slots a day (pre-open, mid-day, post-close). The argument for
+    them was notification fatigue and cost, and neither is caused by the cadence: a scan over
+    unchanged data writes nothing (the dedupe key is rule, subject, severity and *day*) and makes
+    **no LLM call** (already-known findings are counted, never narrated), so a repeat run costs
+    database reads and quote requests. The fatigue is the two faults decision 132 fixes, and
+    fewer scans would fix neither - they would only make an intraday crash wait hours to be seen.
+    No rule needs high frequency either: every window is in days. This also **drops queue task 16**
+    (a market-following frequency set on the Admin page): the user chose not to tune the cadence.
+131. **No on-demand "Scan portfolio" / "Scan topic"** (the user, 2026-10-08). Considered with a
+    15-minute cooldown (the run key could have been the cooldown) and a daily cap. *Rejected*
+    because the 30-minute loop already answers "what is true now" within one bucket, and Yahoo's
+    quotes are 15 minutes delayed, so a manual scan would mostly re-read the data the last scan
+    read. Not to be confused with an **agent's** *Run a scan now* (`PROPOSAL-MULTI-AGENT.md`,
+    D64-D66), which asks a model for a thesis and stays.
+132. **States fire when they cross a band; an unusual move absorbs the price move** (the user,
+    2026-10-08; queue task 19, first in order). Two faults found by reading the code, and they are
+    where the feed's noise comes from:
+    (1) **Drawdown and allocation drift are states, but are dated like events.** Both take
+    `as_of` from the latest price, so the day bucket in `dedupe.py` makes a holding that sits 12%
+    below its high for ten days ten observations, and a drift fires (and raises a rebalance
+    proposal) every day until the user rebalances - the BTC-USD drift proposed 7 days running
+    (25 Sep-1 Oct) is this fault. The fix: a state observation is written when the subject
+    **enters a band higher than the one last written in the same episode**; an episode ends when
+    the subject falls back below the `info` band, and the next entry is a new observation.
+    (2) **One move is two observations.** A 5% move on a quiet stock writes both `price_move` and
+    `sigma_move`. The fix: when both fire for the same subject and session, only `sigma_move` is
+    written; `price_move` stands alone only when the z-score could not be computed (too little
+    history, or another of the guards in `sigma_move.py`).
+    **Settled by the user, 2026-10-08:** a merged move takes the **sigma band's** severity - that
+    is the rule that knows the stock, so a 5% move that is ordinary for it is not "notable". And an
+    expired rebalance proposal is **not asked again** while the drift stays in the same band: the
+    user was asked once, and repeating it daily is the nagging this decision removes. A higher band,
+    or a new episode, asks again.
+133. **Insights shows today, back seven days, with unread state** (the user, 2026-10-08; queue
+    task 21, after tasks 19 and 20). The feed opens on **today's findings** ("today" in the user's
+    timezone, guideline 10) and steps back **one day at a time, at most 7 days**; older findings
+    are not shown in the primary UI but are **not deleted** - nothing deletes observations today
+    except `reset_account` (0045), and retention is a separate decision. A **badge** on the
+    Insights tab counts unread findings, and an unread finding is styled apart from a viewed one
+    (an indicator or background that dims once seen). **"Seen" is one `last_seen` timestamp per
+    user** on `user_settings` (the user, 2026-10-08), as decision 119 did for the digest - one
+    column, no per-row writes, and "unread" is `created_at > last_seen` for the primary agent.
+    *Rejected:* a flag per observation, which costs a write per row read and a migration every time
+    a new kind of thing becomes "readable".
+134. **Insights is split into tabs: Alerts, Proposals, Digest, All findings** (the user,
+    2026-10-08; queue task 20, after task 19). Each tab answers one question, so a rebalance
+    proposal waiting for an answer is never under a day of drawdowns. **Alerts** is what was
+    pushed - observations whose notification was routed `push` (`notificationPolicy.ts`), i.e.
+    what Telegram sent, plus what quiet hours deferred, marked as deferred. **Proposals** is what
+    waits for the user, with a count badge; `/proposals` keeps working (it redirects to the tab,
+    as `/?severity=` redirects today, decision 123) and `/proposals/$proposalId` stays a page.
+    **Digest** is today's tab. **All findings** is today's observations feed, filters and all.
+    Tab and filters stay in the address (`?tab=`). *Rejected:* keeping one feed with a filter for
+    each category - the categories are different questions (was I told, what do I owe an answer
+    to, what happened), and a filter left set hides the one that matters.
+135. **No IBI work until the MCP connection is proven** (the user, 2026-10-08). The proposal put
     the Excel column mapper first ("plan B", useful on its own); the user reversed that: nothing
     IBI is built - mapper, migration 0049, OAuth, UI - until the §0 probe of
     `docs/PROPOSAL-IBI-SYNC.md` shows a third-party MCP client can connect to IBI's server and
@@ -3255,7 +3316,7 @@ Ask the user before starting anything (the Stage 4 grant ended). In order of the
 2. **Check D75's choice:** `SELECT * FROM llm_model_choices` on compose. No `explain` row means
    narration is still on the free route; remind the user (Admin -> "Narration and questions" ->
    *Use this model*). Once it is set, re-measure narration after a few days, as §14.4 did.
-3. **IBI is gated by decision 130** - nothing until the 2026-10-15 check (or public news) shows IBI
+3. **IBI is gated by decision 135** - nothing until the 2026-10-15 check (or public news) shows IBI
    open to other MCP clients, and the user says go.
 4. **The `/ask` assistant milestone** remains a candidate ("Planned: the assistant").
 
