@@ -129,3 +129,8 @@ while this file is out of date.
 | 116 | The score replays the agent's own book |
 | 117 | Reset account is one `SECURITY DEFINER` function, `reset_account(user, groups)`, and the ledger's only way to lose a row |
 | 118 | Reading holdings from a broker is in scope; trading through one never is |
+| 119 | "Seen" for a digest is a send time, not an id |
+| 120 | The export's cost is a decimal, not minor units |
+| 121 | Menus are disclosures, not ARIA menus; side panels are one `Drawer` |
+| 122 | A chart's box is LTR; its tooltip reads in the language's direction |
+| 123 | The bar holds places; a page's own controls stay on the page |
