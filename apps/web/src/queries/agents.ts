@@ -6,7 +6,7 @@
  * cents, the primary being unchangeable), so the cache shows what it stored.
  */
 
-import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type {
   ActivityResponse,
@@ -14,8 +14,11 @@ import type {
   AgentInput,
   AgentPerformanceResponse,
   AgentPatchInput,
+  AgentScanDetail,
+  AgentScansResponse,
   AgentView,
   AgentsResponse,
+  RunScanResult,
   TopUpInput,
   TradeInput,
   TradePreview,
@@ -116,5 +119,42 @@ export function useTopUp(agentId: string) {
   return useMutation({
     mutationFn: (input: TopUpInput) => api.post<AgentView>(`/agents/${agentId}/top-ups`, input),
     onSuccess: invalidate,
+  });
+}
+
+/** The *Decisions* tab (D50): summaries a page at a time, newest first. */
+export function useAgentScansQuery(agentId: string) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.agentScans(agentId),
+    queryFn: ({ pageParam }) =>
+      api.get<AgentScansResponse>(
+        `/agents/${agentId}/scans${pageParam ? `?before=${encodeURIComponent(pageParam)}` : ''}`,
+      ),
+    initialPageParam: null as string | null,
+    getNextPageParam: (page) => page.nextBefore,
+  });
+}
+
+/** One scan in full - briefing and transcript - fetched when its row is opened. */
+export function useAgentScanQuery(agentId: string, scanId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.agentScan(agentId, scanId),
+    queryFn: () => api.get<AgentScanDetail>(`/agents/${agentId}/scans/${scanId}`),
+    enabled,
+  });
+}
+
+/**
+ * *Run a scan now* (D52, D65): waits for the scan, which takes seconds. A
+ * proposal it made lands in the inbox and the consolidated view, and the spend
+ * and the Decisions tab live under the agent's key.
+ */
+export function useRunScan(agentId: string) {
+  const client = useQueryClient();
+  const invalidate = useInvalidateAgents();
+  return useMutation({
+    mutationFn: () => api.post<RunScanResult>(`/agents/${agentId}/scans`, {}),
+    onSettled: () =>
+      Promise.all([invalidate(), client.invalidateQueries({ queryKey: queryKeys.proposals })]),
   });
 }

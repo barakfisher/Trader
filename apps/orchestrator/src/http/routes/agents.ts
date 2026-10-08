@@ -14,7 +14,13 @@ import { randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 
-import type { AgentView, AgentsResponse } from '@traders/shared';
+import {
+  SCAN_SCHEDULES,
+  type AgentView,
+  type AgentsResponse,
+  type ScanCostEstimate,
+  type ScanSchedule,
+} from '@traders/shared';
 
 import {
   agentHasTraded,
@@ -42,6 +48,12 @@ export const MAX_PERSONA_LENGTH = 4000;
 
 export const MAX_NAME_LENGTH = 60;
 
+/** D45's ceiling, as migration 0042's CHECK has it: $100 a day. */
+export const MAX_LLM_BUDGET_MICRO_USD = 100_000_000;
+
+/** One scan's cost as measured on 2026-10-07 (§14.3): the estimate before any scan exists (D46). */
+export const MEASURED_SCAN_COST_MICRO_USD = 36_000;
+
 /** Dollars and cents, no more: a third decimal would round on the way in. */
 export const BUDGET_PATTERN = /^\d+(\.\d{1,2})?$/;
 
@@ -59,8 +71,34 @@ const patchSchema = z
     budget: budget.optional(),
     persona: persona.optional(),
     state: z.enum(['active', 'paused', 'archived']).optional(),
+    llmBudget: budget.optional(),
+    scanSchedule: z.enum(SCAN_SCHEDULES).optional(),
   })
   .strict();
+
+/** A daily model allowance from dollars and cents, in micro-USD (D45). */
+export function llmBudgetToMicroUsd(text: string): number {
+  const [whole, fraction = ''] = text.split('.');
+  const micro = (Number(whole) * 100 + Number(fraction.padEnd(2, '0'))) * 10_000;
+  if (!Number.isSafeInteger(micro) || micro <= 0 || micro > MAX_LLM_BUDGET_MICRO_USD) {
+    throw unprocessable(
+      'llm_budget_out_of_range',
+      `a model budget must be more than $0 and at most $${MAX_LLM_BUDGET_MICRO_USD / 1_000_000} a day`,
+    );
+  }
+  return micro;
+}
+
+/** D46: this agent's recent average, else the installation's, else what was measured. */
+export function scanCostOf(row: AgentRow): ScanCostEstimate {
+  if (row.agent_scan_cost_micro_usd !== null) {
+    return { microUsd: Number(row.agent_scan_cost_micro_usd), basis: 'agent' };
+  }
+  if (row.installation_scan_cost_micro_usd !== null) {
+    return { microUsd: Number(row.installation_scan_cost_micro_usd), basis: 'installation' };
+  }
+  return { microUsd: MEASURED_SCAN_COST_MICRO_USD, basis: 'measured' };
+}
 
 /** Whole cents from a validated decimal string, refusing zero and the ceiling. */
 export function budgetToMinor(text: string): number {
@@ -87,6 +125,12 @@ export function toAgentView(row: AgentRow): AgentView {
     state: row.state,
     holdingsCount: row.holdings_count,
     createdAt: row.created_at.toISOString(),
+    // The primary never scans (D1): none of this describes it.
+    scanSchedule: row.is_primary ? null : (row.scan_schedule as ScanSchedule),
+    llmBudgetMicroUsd: row.is_primary ? null : Number(row.llm_budget_micro_usd),
+    llmSpentTodayMicroUsd: row.is_primary ? null : Number(row.llm_spent_today_micro_usd),
+    scanCost: row.is_primary ? null : scanCostOf(row),
+    waitingForPersona: !row.is_primary && row.state === 'active' && !row.persona?.trim(),
   };
 }
 
@@ -167,7 +211,7 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
     const userId = currentUserId(context);
     const parsed = patchSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
-      throw badRequest('invalid_body', 'expected { name?, budget?, persona?, state? }', parsed.error.issues);
+      throw badRequest('invalid_body', 'expected { name?, budget?, persona?, state?, llmBudget?, scanSchedule? }', parsed.error.issues);
     }
     const agentId = agentIdFrom(context.req.param('id'));
     const existing = await getAgent(userId, agentId);
@@ -195,6 +239,8 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
         persona: personaOf(patch.persona),
         budgetMinor,
         state: patch.state,
+        llmBudgetMicroUsd: patch.llmBudget === undefined ? undefined : llmBudgetToMicroUsd(patch.llmBudget),
+        scanSchedule: patch.scanSchedule,
       });
       if (!row) throw notFound('agent not found');
       return context.json(toAgentView(row));

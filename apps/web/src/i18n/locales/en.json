@@ -1080,7 +1080,7 @@
       "budget": "Paper budget (USD)",
       "budgetHint": "Simulated money, not taken from your portfolio. Dollars and cents, e.g. 1000 or 1000.50.",
       "persona": "Persona",
-      "personaHint": "How this agent should think. Agents don't act on it yet; it will guide their decisions once they start making them.",
+      "personaHint": "How this agent should think. Every scan decides by it; an agent with no persona does not scan.",
       "budgetEditHint": "Before the first trade this is the agent's starting cash. After it, the budget can only rise: use Add cash."
     },
     "create": {
@@ -1096,7 +1096,8 @@
     },
     "tabs": {
       "holdings": "Holdings",
-      "activity": "Activity"
+      "activity": "Activity",
+      "decisions": "Decisions"
     },
     "holdingsEmpty": {
       "title": "Nothing held yet",
@@ -1225,6 +1226,86 @@
       "days_other": "{{count}} days",
       "winRateValue": "{{rate}} ({{wins}} of {{sells}})",
       "unrealised": "Still held from the agent's own buys, at the latest close: {{value}}."
+    },
+    "waitingForPersona": "Waiting for a persona",
+    "scans": {
+      "title": "Scans",
+      "run": "Run a scan now",
+      "running": "Scanning… this takes up to a minute.",
+      "runCost": "About {{cost}} a scan ({{basis}})",
+      "basis": {
+        "agent": "this agent's recent average",
+        "installation": "your agents' recent average",
+        "measured": "measured on 7 Oct 2026, before this agent's first scan"
+      },
+      "result": {
+        "trade": "Proposed: {{side}} {{quantity}} {{symbol}}.",
+        "no_trade": "No trade: nothing fit the persona today.",
+        "invalid_answer": "The answer was refused; see Decisions for why.",
+        "budget_reached": "Stopped: today's model budget is spent.",
+        "step_limit": "Stopped at the step limit without an answer.",
+        "failed": "The scan failed; see Decisions for why."
+      },
+      "openProposal": "Review the proposal",
+      "refusals": {
+        "agent_not_active": "Resume the agent to scan.",
+        "no_persona": "Give the agent a persona first: it decides by it.",
+        "budget_spent": "Today's model budget is spent. It resets at midnight UTC, or raise it below.",
+        "scan_running": "This agent is already scanning.",
+        "no_model": "No model is chosen for agents. Choose one on the Admin page."
+      },
+      "schedule": "When it scans",
+      "schedules": {
+        "pre_open": "Before the open, once a day",
+        "pre_open_post_close": "Before the open and after the close",
+        "intraday_twice": "10:00 and 14:00 New York",
+        "intraday_once": "10:00 New York"
+      },
+      "scheduleCost": "About {{perDay}} a trading day",
+      "scheduleNotRunning": "Scheduled scans are not running yet; until then this agent scans only when you press Run a scan now.",
+      "budget": "Model budget per day (USD)",
+      "budgetHint": "Scans stop when it is spent and resume after midnight UTC. Spent today: {{spent}} of {{budget}}.",
+      "budgetInvalid": "More than $0 and at most $100, dollars and cents.",
+      "save": "Save scan settings"
+    },
+    "decisions": {
+      "empty": "No scans yet. Run one from Scans below, or wait for its schedule.",
+      "loadFailed": "Could not load the scans.",
+      "older": "Show older scans",
+      "trigger": {
+        "manual": "Run by you",
+        "schedule": "Scheduled"
+      },
+      "outcomes": {
+        "trade": "Proposed",
+        "no_trade": "No trade",
+        "invalid_answer": "Answer refused",
+        "budget_reached": "Budget reached",
+        "step_limit": "Step limit",
+        "failed": "Failed",
+        "running": "Running"
+      },
+      "proposed": "{{side}} {{quantity}} {{symbol}}",
+      "cost_one": "{{cost}} · {{count}} step",
+      "cost_other": "{{cost}} · {{count}} steps",
+      "loading": "Loading the scan…",
+      "briefing": "Started from: cash {{cash}}, {{holdings}} holdings, {{movers}} movers of the day",
+      "briefingRaw": "The briefing it started from",
+      "thought": "The model",
+      "called": "Looked up {{tool}}",
+      "result": "What it returned",
+      "answer": "Its answer",
+      "rawAnswer": "Its raw answer",
+      "problems": "Why it was refused: {{problems}}",
+      "error": "Error: {{error}}",
+      "proposal": "The proposal",
+      "proposalState": "now {{state}}",
+      "fill": "Filled - see Activity",
+      "model": "Model: {{model}}"
+    },
+    "sides": {
+      "buy": "Buy",
+      "sell": "Sell"
     }
   },
   "consolidated": {

@@ -34,6 +34,8 @@ export const queryKeys = {
   agentAccount: (agentId: string) => ['agents', agentId, 'account'] as const,
   agentActivity: (agentId: string) => ['agents', agentId, 'activity'] as const,
   agentPerformance: (agentId: string) => ['agents', agentId, 'performance'] as const,
+  agentScans: (agentId: string) => ['agents', agentId, 'scans'] as const,
+  agentScan: (agentId: string, scanId: string) => ['agents', agentId, 'scans', scanId] as const,
   /** The list, and - under it, so invalidating the list prefix reaches them - each topic. */
   topics: ['topics'] as const,
   topic: (topicId: string) => ['topics', topicId] as const,
