@@ -147,3 +147,9 @@ while this file is out of date.
 | 134 | Insights is split into tabs: Alerts, Proposals, Digest, All findings |
 | 135 | No IBI work until the MCP connection is proven |
 | 136 | The ledger charges IBI's published US fee: 1¢ a share, at least $7.50 |
+| 137 | Backups are a host script on a launchd schedule, not an in-cluster CronJob |
+| 138 | `intents` is never read, and is kept on purpose |
+| 139 | `telegram_bind_tokens` needs no cleanup job |
+| 140 | Agents are never hard-deleted; the foreign keys say so and stay as they are |
+| 141 | Retention and new indexes wait for a measurement |
+| 142 | The schema's split stays as designed |
