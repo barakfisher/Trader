@@ -5,7 +5,7 @@ the reasoning behind it is not, and that is what this file is for. Maintained pe
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
 Updated: 2026-10-09 - **Database sprint: planned in #207 (decisions 137-142); DB1, backup and
-restore, built in #DB1PR and drilled on both live databases.** The daily schedule is the user's to
+restore, built in #208 and drilled on both live databases.** The daily schedule is the user's to
 install (`bash scripts/backup-schedule.sh install`, main checkout). DB2 - the universe loader - next.
 
 Previous update, 2026-10-08 ~19:45 UTC - **Two debt fixes merged and deployed; the user stopped the session.
@@ -523,7 +523,7 @@ strings and left-to-right assumptions before designing it.
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
-| **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #DB1PR. DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-142. See "Planned: the database sprint" |
+| **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208. DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-142. See "Planned: the database sprint" |
 | **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 📋 Planned | After Stage 4. `/ask` becomes a tool-using assistant: web search, tickers, the user's account, "what can I ask you?". See "Planned: the assistant" |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
@@ -3392,7 +3392,7 @@ foreign-key audit - and the measurement moved most of them:
 - **`runs` had 1,768 sequential scans averaging ~700 rows** - some query reads the whole table
   repeatedly. Harmless at 1 MB (about 130 runs a day); the statistics in DB3 will name it.
 
-**DB1 is built (2026-10-09, #DB1PR):** `scripts/db-backup.sh`, `db-restore.sh`,
+**DB1 is built (2026-10-09, #208):** `scripts/db-backup.sh`, `db-restore.sh`,
 `backup-schedule.sh`, `lib/backups.sh`, the launchd template in `infra/launchd/`, RUNBOOK section 5.
 **Drills passed on both live databases:** compose 51 MB, 42 tables, 135,828 rows, dumped in 10 s;
 kind 4.3 MB (its fixture-embedder vectors compress well), 42 tables, 30,330 rows; every table
@@ -3443,7 +3443,7 @@ copy of the live database (up/down/up, row counts); the Telegram flow on a copy 
 ### Next session: after the debt fixes (#202, #203, 2026-10-08)
 
 Ask the user before starting anything (the Stage 4 grant ended). In order of the user's last answer:
-0. **The database sprint** (see "Planned: the database sprint"): DB1 done (#DB1PR); **DB2 next** -
+0. **The database sprint** (see "Planned: the database sprint"): DB1 done (#208); **DB2 next** -
    the universe loader. Check first that the user installed the backup schedule
    (`bash scripts/backup-schedule.sh status`); DB2's `VACUUM FULL` waits for a fresh backup.
 1. **Review the scheduled scans** once three trading days have run (09:00 New York each trading
