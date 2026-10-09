@@ -1,28 +1,30 @@
-/** The fee formula (decision D6). Cases are shared with services/ai/tests/test_fees.py. */
+/** The fee formula (decisions D6, D76). Cases are shared with services/ai/tests/test_fees.py. */
 
 import { describe, expect, it } from 'vitest';
 
-import { BPS_DENOMINATOR, FEE_BPS, MIN_FEE_MINOR, feeMinor, notionalMinor } from '../src/fees.js';
+import { FEE_PER_SHARE_MINOR, MIN_FEE_MINOR, feeMinor, notionalMinor } from '../src/fees.js';
+
+/** The share count at which the per-share fee reaches the minimum. */
+const CROSSOVER = MIN_FEE_MINOR / FEE_PER_SHARE_MINOR;
 
 describe('feeMinor', () => {
   it('charges the minimum on a small trade', () => {
-    expect(feeMinor(1n)).toBe(MIN_FEE_MINOR);
-  });
-
-  it('rounds the proportional fee up', () => {
-    const exact = ((MIN_FEE_MINOR + 10n) * BPS_DENOMINATOR) / FEE_BPS;
-    expect(feeMinor(exact)).toBe(MIN_FEE_MINOR + 10n);
-    expect(feeMinor(exact + 1n)).toBe(MIN_FEE_MINOR + 11n);
+    expect(feeMinor('1')).toBe(MIN_FEE_MINOR);
   });
 
   it('meets the minimum where the formula says', () => {
-    const crossover = (MIN_FEE_MINOR * BPS_DENOMINATOR) / FEE_BPS;
-    expect(feeMinor(crossover)).toBe(MIN_FEE_MINOR);
-    expect(feeMinor(crossover + 1n)).toBe(MIN_FEE_MINOR + 1n);
+    expect(feeMinor(CROSSOVER.toString())).toBe(MIN_FEE_MINOR);
+    expect(feeMinor((CROSSOVER + 1n).toString())).toBe(MIN_FEE_MINOR + FEE_PER_SHARE_MINOR);
   });
 
-  it('refuses a non-positive notional', () => {
-    expect(() => feeMinor(0n)).toThrow(RangeError);
+  it('charges per share above the minimum', () => {
+    const shares = 4n * CROSSOVER;
+    expect(feeMinor(shares.toString())).toBe(shares * FEE_PER_SHARE_MINOR);
+    expect(feeMinor(`${shares}.000`)).toBe(shares * FEE_PER_SHARE_MINOR);
+  });
+
+  it.each(['0', '-1', '1.5', '', 'abc'])('refuses %j', (quantity) => {
+    expect(() => feeMinor(quantity)).toThrow(RangeError);
   });
 });
 

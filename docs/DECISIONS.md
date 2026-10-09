@@ -146,3 +146,4 @@ while this file is out of date.
 | 133 | Insights shows today, back seven days, with unread state |
 | 134 | Insights is split into tabs: Alerts, Proposals, Digest, All findings |
 | 135 | No IBI work until the MCP connection is proven |
+| 136 | The ledger charges IBI's published US fee: 1¢ a share, at least $7.50 |
