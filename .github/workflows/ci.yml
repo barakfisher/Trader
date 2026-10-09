@@ -196,6 +196,42 @@ jobs:
           docker compose -f infra/compose/docker-compose.yml exec -T
           -e CORPUS_DIR=/app/data/corpus
           ai-service python scripts/run_eval.py --tier keyless
+      # Backups (decision 137), last because the real restore stops and starts
+      # the services. Ninety days of dated dumps are planted first, so the
+      # retention rule is checked by the same run that writes a real one.
+      - name: Backups - retention, a drill, and a real restore
+        env:
+          TRADERS_BACKUP_DIR: ${{ runner.temp }}/backups
+        run: |
+          dir="$TRADERS_BACKUP_DIR/compose"; mkdir -p "$dir"
+          for d in $(seq 1 90); do
+            stamp=$(date -u -d "$d days ago" +%Y%m%dT040000Z)
+            echo planted > "$dir/traders-compose-$stamp.dump"; echo 'public.x|0' > "$dir/traders-compose-$stamp.counts"
+          done
+          bash scripts/db-backup.sh --target compose
+          # Kept: the newest 14 (today's and 13 planted), then the newest of each
+          # ISO week up to 56 days old, and nothing older. The bounds leave a day's
+          # margin, because a dump's age in whole days depends on the hour the job
+          # runs. `if`, not `!`: bash -e ignores a failing command that is negated.
+          ls "$dir"/*.dump | sort -r > kept
+          day() { date -u -d "$1 days ago" +%Y%m%d; }
+          week_of() { date -u -d "$1" +%G-%V; }
+          test "$(sed -n 14p kept)" = "$dir/traders-compose-$(day 13)T040000Z.dump"
+          for d in $(seq 58 90); do
+            if grep -q "$(day "$d")" kept; then echo "kept a dump $d days old"; exit 1; fi
+          done
+          sed -E 's/.*-([0-9]{8})T.*/\1/' kept | while read -r ymd; do week_of "$ymd"; done | sort -u > weeks
+          for d in $(seq 0 55); do
+            grep -qx "$(week_of "$(day "$d")")" weeks || { echo "no dump kept for the week of $(day "$d")"; exit 1; }
+          done
+          test "$(wc -l < kept)" -le 23
+          bash scripts/db-restore.sh --target compose --drill latest
+          bash scripts/db-restore.sh --target compose latest --yes
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/readyz | grep -q '"postgres":"ok"'; then exit 0; fi
+            sleep 5
+          done
+          exit 1
       - name: Dump logs on failure
         if: failure()
         run: docker compose -f infra/compose/docker-compose.yml logs
@@ -270,6 +306,14 @@ jobs:
           rows=$($KUBECTL exec postgres-0 -- psql -U traders -d traders -tAc \
             "select count(*) from runs where kind = 'proposal_sweep' and trigger = 'cronjob'")
           test "$rows" -ge 1
+      # The cluster's database backed up to the runner, as the schedule does on
+      # the Mac (decision 137), and restored into a scratch database.
+      - name: Back up the cluster's database and drill a restore
+        env:
+          TRADERS_BACKUP_DIR: ${{ runner.temp }}/backups
+        run: |
+          bash scripts/db-backup.sh --target kind
+          bash scripts/db-restore.sh --target kind --drill latest
       - name: Dump cluster state on failure
         if: failure()
         run: |
