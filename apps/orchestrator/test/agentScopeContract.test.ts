@@ -33,6 +33,8 @@ const OWNED_TABLES = [
   'target_weights',
   'notifications',
   'proposal_episodes',
+  // Decision 132 (migration 0049), agent-owned from its first row.
+  'finding_episodes',
   // The ledger (migration 0040), agent-owned from its first row.
   'agent_cash',
   'cash_movements',

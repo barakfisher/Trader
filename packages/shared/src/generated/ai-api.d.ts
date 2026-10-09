@@ -1394,6 +1394,21 @@ export interface components {
             /** Subject Ref */
             subject_ref: string;
         };
+        /**
+         * OpenEpisodeIn
+         * @description An open finding episode: the highest band written for one state.
+         */
+        OpenEpisodeIn: {
+            /** Kind */
+            kind: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "info" | "notable" | "high";
+            /** Subject Ref */
+            subject_ref: string;
+        };
         /** PortfolioScanRequest */
         PortfolioScanRequest: {
             /**
@@ -1408,6 +1423,11 @@ export interface components {
              * @description Dedupe keys the caller has already stored. Matching findings are counted and skipped before narration, so a repeat costs a hash rather than a model call. Omit to narrate everything.
              */
             known_dedupe_keys?: string[];
+            /**
+             * Open Episodes
+             * @description The caller's open finding episodes (decision 132). A drawdown or drift finding at or below its episode's band is counted as known and not written again; a higher band is new.
+             */
+            open_episodes?: components["schemas"]["OpenEpisodeIn"][];
             /**
              * Target Weights
              * @description symbol -> target weight as a decimal string, e.g. {'VOO': '0.25'}.
@@ -1615,6 +1635,11 @@ export interface components {
              * @default 0
              */
             findings: number;
+            /**
+             * Held In Episode
+             * @default 0
+             */
+            held_in_episode: number;
             /** Insufficient History */
             insufficient_history?: string[];
             /**

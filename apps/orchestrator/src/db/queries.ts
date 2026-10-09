@@ -32,6 +32,7 @@ export * from './queries/observations.js';
 export * from './queries/narration.js';
 export * from './queries/proposals.js';
 export * from './queries/proposalEpisodes.js';
+export * from './queries/findingEpisodes.js';
 export * from './queries/tradeProposals.js';
 export * from './queries/userSettings.js';
 export * from './queries/notifications.js';

@@ -332,6 +332,14 @@ class ScanHolding(BaseModel):
     )
 
 
+class OpenEpisodeIn(BaseModel):
+    """An open finding episode: the highest band written for one state."""
+
+    kind: str
+    subject_ref: str
+    severity: Severity
+
+
 class PortfolioScanRequest(BaseModel):
     #: The account this is for, recorded on each model call it makes
     #: (`llm_calls.user_id`, decision 87). Optional: a caller that sends none
@@ -350,6 +358,15 @@ class PortfolioScanRequest(BaseModel):
             "Dedupe keys the caller has already stored. Matching findings are counted "
             "and skipped before narration, so a repeat costs a hash rather than a model "
             "call. Omit to narrate everything."
+        ),
+    )
+    open_episodes: list[OpenEpisodeIn] = Field(
+        default_factory=list,
+        max_length=5000,
+        description=(
+            "The caller's open finding episodes (decision 132). A drawdown or drift "
+            "finding at or below its episode's band is counted as known and not "
+            "written again; a higher band is new."
         ),
     )
 
@@ -400,6 +417,7 @@ class ScanStatsOut(BaseModel):
     subjects_with_history: int = 0
     findings: int = 0
     already_known: int = 0
+    held_in_episode: int = 0
     narrated_by_llm: int = 0
     narration_fallbacks: dict[str, int] = Field(default_factory=dict)
     drift_skipped_reason: str | None = None

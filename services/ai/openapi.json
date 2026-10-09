@@ -1812,6 +1812,35 @@
         "title": "ObservationOut",
         "type": "object"
       },
+      "OpenEpisodeIn": {
+        "description": "An open finding episode: the highest band written for one state.",
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "notable",
+              "high"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "subject_ref": {
+            "title": "Subject Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "subject_ref",
+          "severity"
+        ],
+        "title": "OpenEpisodeIn",
+        "type": "object"
+      },
       "PortfolioScanRequest": {
         "properties": {
           "base_currency": {
@@ -1835,6 +1864,15 @@
             },
             "maxItems": 5000,
             "title": "Known Dedupe Keys",
+            "type": "array"
+          },
+          "open_episodes": {
+            "description": "The caller's open finding episodes (decision 132). A drawdown or drift finding at or below its episode's band is counted as known and not written again; a higher band is new.",
+            "items": {
+              "$ref": "#/components/schemas/OpenEpisodeIn"
+            },
+            "maxItems": 5000,
+            "title": "Open Episodes",
             "type": "array"
           },
           "target_weights": {
@@ -2227,6 +2265,11 @@
           "findings": {
             "default": 0,
             "title": "Findings",
+            "type": "integer"
+          },
+          "held_in_episode": {
+            "default": 0,
+            "title": "Held In Episode",
             "type": "integer"
           },
           "insufficient_history": {

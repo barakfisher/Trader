@@ -463,6 +463,67 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('finding episodes (0049, decision 132)', () => {
+    it('raises a band, never lowers it, and goes with its observation', async () => {
+      const subjectRef = `instrument:EP${randomUUID().slice(0, 6)}`;
+      const observe = async (severity: string) => {
+        const { inserted } = await queries.insertObservations([
+          {
+            userId: USER,
+            agentId: AGENT,
+            runId: null,
+            kind: 'drawdown',
+            severity,
+            subjectKind: 'instrument',
+            subjectRef,
+            headline: 'h',
+            explanation: 'e',
+            evidence: {},
+            conceptRefs: [],
+            dedupeKey: `episode-${randomUUID()}`,
+            narrationSource: null,
+            fallbackReason: null,
+            localized: {},
+          },
+        ]);
+        return inserted[0]!.id;
+      };
+      const record = async (severity: string) =>
+        queries.recordFindingEpisode({
+          userId: USER,
+          agentId: AGENT,
+          kind: 'drawdown',
+          subjectRef,
+          severity,
+          observationId: await observe(severity),
+        });
+      const open = async () =>
+        (await queries.listOpenFindingEpisodes(USER, AGENT)).filter(
+          (row) => row.subject_ref === subjectRef,
+        );
+
+      await record('notable');
+      await record('high');
+      await record('info');
+
+      const [episode] = await open();
+      expect(episode?.severity).toBe('high');
+      expect(await open()).toHaveLength(1);
+
+      expect(await queries.closeFindingEpisodes(USER, [episode!.id])).toBe(1);
+      expect(await open()).toEqual([]);
+
+      // A reset erases observations; their episodes must not hold it up.
+      await record('info');
+      await getPool().query('DELETE FROM observations WHERE subject_ref = $1', [subjectRef]);
+      const { rows } = await getPool().query(
+        'SELECT count(*)::int AS n FROM finding_episodes WHERE subject_ref = $1',
+        [subjectRef],
+      );
+      expect(rows[0].n).toBe(0);
+    });
+  });
+
   describe('listSnapshots', () => {
     it('returns the calendar date that was stored, whatever the process timezone', async () => {
       // East of UTC is where a DATE parsed to local midnight and printed in UTC

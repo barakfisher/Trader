@@ -289,7 +289,7 @@ export async function runIbiSync(syncId: string, userId: string, code: string, v
 
 ---
 
-## 4. Database (migration 0049, AI service / Alembic)
+## 4. Database (the next free migration, AI service / Alembic; 0049 went to `finding_episodes` on 2026-10-09)
 
 ```sql
 CREATE TABLE broker_syncs (
@@ -420,7 +420,7 @@ never let a gap read as zero.**
    fixture. Write D67 with the result: go MCP, or plan B only.
 2. **Plan B:** an IBI export column mapper for the F1 import, with a fixture-tested agorot and
    security-number mapping. It is useful on its own and builds the mapper the MCP path reuses.
-3. **Migration 0049** (renumbered 2026-10-08: Stage 4 PR 7 took 0047 and 0048) + `brokerSyncs.ts` queries + account-reset groups.
+3. **The next free migration** (0047 and 0048 went to Stage 4 PR 7, 0049 to `finding_episodes`) + `brokerSyncs.ts` queries + account-reset groups.
 4. **MCP session + OAuth + `brokerSync` service**, hermetic tests against an in-process fake MCP
    server built with the SDK's server half, so there is no network and no IBI in CI.
 5. **UI**: button, return page, preview reuse, error copy in en/he.
