@@ -205,6 +205,12 @@ INSERT INTO proposal_episodes (user_id, agent_id, observation_kind, subject_ref,
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '-0.150619', now(), 'reversed'),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', '30000000-0000-0000-0000-000000000002', '0.210000', NULL, NULL);
 
+-- Finding episodes (0049): both state kinds, every band, one closed.
+INSERT INTO finding_episodes (user_id, agent_id, kind, subject_ref, severity, observation_id, closed_at) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'allocation_drift', 'portfolio', 'notable', '30000000-0000-0000-0000-000000000002', NULL),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'drawdown', 'instrument:EQTY', 'high', '30000000-0000-0000-0000-000000000001', NULL),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'drawdown', 'instrument:EQTY', 'info', '30000000-0000-0000-0000-000000000001', now());
+
 -- The ledger (0040). The two simulated agents above were given their cash and
 -- opening deposits by the `agents_ledger_follows_budget` trigger. A buy at a
 -- quote by hand, a sell at a typed price by the agent, and a budget raised after

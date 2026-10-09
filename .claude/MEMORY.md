@@ -486,7 +486,7 @@ strings and left-to-right assumptions before designing it.
 
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
-| 19 | **Insights noise: states fire on a band crossing; an unusual move absorbs the price move** (the user, 2026-10-08; decision 132) | — | M | **Measure first, read-only:** from `observations`, per kind, how many rows repeat a subject and severity on consecutive days (drawdown and drift), and how many `price_move` rows share a subject and session with a `sigma_move` row - the before figure. **Then one PR:** drawdown and allocation drift written per band entry within an episode (`app/analysis/drawdown.py`, `allocation_drift.py`, the key in `dedupe.py`), and `price_move` suppressed where `sigma_move` fired (`app/analysis/pipeline.py`). The merged move takes the sigma band's severity, and an expired rebalance proposal is not raised again in the same band (both settled in decision 132). Done when a test holds a ten-day drawdown to one observation per band, a test pins the merge, and the measurement is re-run after deploy and recorded here |
+| 19 | **Insights noise: states fire on a band crossing; an unusual move absorbs the price move** (the user, 2026-10-08; decision 132) | — | M | **Built in the PR that added migration 0049** (`finding_episodes`; decision 132's 2026-10-09 paragraph). **Before**, on kind 30 Sep-9 Oct: 14 drawdown rows (SMR *high* x7, URA *info*/*notable* x7) where the rule gives 3, and 1 of 8 `price_move` rows repeating a `sigma_move`. **What remains:** after deploy, re-run the before query (drawdown rows per subject and band, `price_move` sharing a subject and New York day with `sigma_move`) over kind's observations written after the deploy, record it here, then remove this row. Compose cannot measure it until the main portfolio has holdings again (reset 2026-10-07) |
 | 20 | **Insights tabs: Alerts, Proposals, Digest, All findings** (the user, 2026-10-08; decision 134) | — | M | After task 19. `apps/web/src/pages/InsightsPage.tsx` and `lib/insightsTab.ts` gain the two tabs; Alerts reads observations joined to their `push` notifications (a filter on `GET /observations`, SQL in `db/queries/observations.ts`); Proposals reuses the pending list from `ProposalsPage` with a count badge; `/proposals` redirects to `?tab=proposals`. en and he copy. Done when each tab is checked in a browser in both languages and a test pins the redirect and an unknown `?tab=` falling back to the default |
 | 21 | **Insights: today by default, back 7 days, unread badge** (the user, 2026-10-08; decision 133) | — | M | After tasks 19 and 20, so the badge counts findings worth reading and has tabs to sit on. A `last_seen` timestamp on `user_settings` (migration; decision 119's pattern), `GET /observations` filtered by local day, the feed's day stepper (today, then back to 7 days), the Insights tab badge and the unread styling, translated in en and he. Done when a test pins the 7-day bound and the unread count, and the page is checked in a browser in both languages |
 | 17 | **Narration: why two of three model texts are rejected, fixed on the free model** (the user, 2026-10-07) | — | S | **Measured 2026-10-07** over the 38 `unsourced_figures` rejections on compose (all `nvidia/nemotron-3.5-lightning:free`, the validator re-run on each): **34 of 38 mention a threshold** ("crossed the 25% high threshold") that is true but refused, because `thresholds_pct` / `thresholds_weight` are nested and their keys (`info`, `notable`, `high`) carry no ratio marker - **5 were refused for that alone**; **30 of 38 copy a price in minor units** ("fell to 790" for $7.90), rightly refused, but the evidence invites it by handing the model `*_minor` integers; **3 are real inventions** ("$10.14M" for $101,427.80). **One error passed:** "the 0.03% information threshold" for 0.03 = 3%, accepted because the bare digits are in the evidence. **Fixes, one PR:** (1) the validator reads values under a `thresholds_*` key as ratios; (2) narration's evidence gives money as decimal strings ("7.90"), as the agent tools do since #177; (3) a ratio's bare digits followed by `%` are refused ("0.03%" for 0.03), while "0.03%" for a true 0.0003 stays accepted. **Then measure again on the free model** - the user's choice, because a paid model costs money and the fixes may make it unnecessary for narration (estimated at $0.03-0.07 a week on Flash-Lite or Haiku, against the agents' $0.04-0.38 a scan; the Admin page already sets narration's model separately). **The three fixes landed in the PR after #178; what remains is the re-measurement** on the free model once compose and kind run it - re-run the 2026-10-07 export (`llm_calls` where `purpose = 'narration'`) over the narrations written after the deploy. Done when that rate is recorded here, and this row is then removed |
@@ -2117,6 +2117,19 @@ failure they prevent.
     expired rebalance proposal is **not asked again** while the drift stays in the same band: the
     user was asked once, and repeating it daily is the nagging this decision removes. A higher band,
     or a new episode, asks again.
+    **Built 2026-10-09, with two more answers from the user.** (a) **The episode lives in a table**,
+    `finding_episodes` (0049): open row per agent, kind and subject, holding the highest band written.
+    *Rejected:* re-deriving the episode from the price history (works for drawdown only - drift
+    cannot be rebuilt once holdings change) and keying on the trailing high's date (a 30-day window
+    rolling past the high re-announces it, and a recovery that does not make a new high is silently
+    merged). (b) **`price_move` is dropped only when `sigma_move` fired**; when the z-score is
+    computed but below its band, the price move stands alone - "a 6% fall is never invisible" won
+    over "sigma decides". The expired-proposal half needed no code: decision 92's
+    `proposal_episodes` already holds the question until the drift resolves, worsens or turns.
+    An episode is closed only when the rule *measured* the subject (drift ran; the holding had
+    history) - closing re-arms the finding, so "did not look" must not count as "went away". An
+    empty portfolio closes every open episode. `observation_id` cascades, so `reset_account` needed
+    no change. **Before:** kind, 30 Sep-9 Oct, 14 drawdown rows for SMR and URA, 3 under the rule.
 133. **Insights shows today, back seven days, with unread state** (the user, 2026-10-08; queue
     task 21, after tasks 19 and 20). The feed opens on **today's findings** ("today" in the user's
     timezone, guideline 10) and steps back **one day at a time, at most 7 days**; older findings
@@ -2141,7 +2154,7 @@ failure they prevent.
     to, what happened), and a filter left set hides the one that matters.
 135. **No IBI work until the MCP connection is proven** (the user, 2026-10-08). The proposal put
     the Excel column mapper first ("plan B", useful on its own); the user reversed that: nothing
-    IBI is built - mapper, migration 0049, OAuth, UI - until the §0 probe of
+    IBI is built - mapper, migration, OAuth, UI - until the §0 probe of
     `docs/PROPOSAL-IBI-SYNC.md` shows a third-party MCP client can connect to IBI's server and
     list its tools. Plan B is moot anyway: the user cannot export holdings to Excel. **Probe so far
     (another session, 2026-10-08):** sign-in is Auth0 at `auth.ibi.co.il`, which advertises
@@ -3332,8 +3345,8 @@ about one at a time, not assumed:**
   - before changing anything about them (debt rows above).
 - **The two debt fixes the user has not yet approved:** the sentiment scorer reading "Sinks 22%" as
   neutral; the Admin model picker showing a model as chosen when none is.
-- **IBI read-only sync (D67, `docs/PROPOSAL-IBI-SYNC.md`)** - planned by #190; **its migration is now
-  0049** (renumbered in this handoff: 0047 and 0048 were taken by PR 7).
+- **IBI read-only sync (D67, `docs/PROPOSAL-IBI-SYNC.md`)** - planned by #190; its migration takes
+  the next free number (0047-0049 were taken by PR 7 and `finding_episodes`).
 - **The assistant milestone** (`/ask` with tools; "Planned: the assistant" below).
 
 ### The UI/UX sprint is complete (#189, #191-#195, 2026-10-08)
