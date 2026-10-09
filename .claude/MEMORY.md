@@ -4,8 +4,9 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-09 - **The database sprint is planned (decisions 137-142, "Planned: the database
-sprint"); nothing of it is built. DB1, backups, comes first: no backup of either database exists.**
+Updated: 2026-10-09 - **Database sprint: planned in #207 (decisions 137-142); DB1, backup and
+restore, built in #DB1PR and drilled on both live databases.** The daily schedule is the user's to
+install (`bash scripts/backup-schedule.sh install`, main checkout). DB2 - the universe loader - next.
 
 Previous update, 2026-10-08 ~19:45 UTC - **Two debt fixes merged and deployed; the user stopped the session.
 Nothing is in flight.** **#202** - `lexicon-v2` reads present-tense headlines ("Sinks",
@@ -522,7 +523,7 @@ strings and left-to-right assumptions before designing it.
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
-| **Database sprint** (no M-number; agreed 2026-10-09) | 📋 Planned | DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-142. See "Planned: the database sprint" |
+| **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #DB1PR. DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-142. See "Planned: the database sprint" |
 | **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 📋 Planned | After Stage 4. `/ask` becomes a tool-using assistant: web search, tickers, the user's account, "what can I ask you?". See "Planned: the assistant" |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
@@ -3391,13 +3392,27 @@ foreign-key audit - and the measurement moved most of them:
 - **`runs` had 1,768 sequential scans averaging ~700 rows** - some query reads the whole table
   repeatedly. Harmless at 1 MB (about 130 runs a day); the statistics in DB3 will name it.
 
+**DB1 is built (2026-10-09, #DB1PR):** `scripts/db-backup.sh`, `db-restore.sh`,
+`backup-schedule.sh`, `lib/backups.sh`, the launchd template in `infra/launchd/`, RUNBOOK section 5.
+**Drills passed on both live databases:** compose 51 MB, 42 tables, 135,828 rows, dumped in 10 s;
+kind 4.3 MB (its fixture-embedder vectors compress well), 42 tables, 30,330 rows; every table
+restored to exactly the rows the dump holds. CI now plants 90 days of dated dumps and checks the
+retention rule, drills both environments, and performs a real swap-restore on compose that the
+services come back from. Built differently from the row below, on purpose: a real restore never
+drops anything (restore beside, verify, rename the live one to `<db>_before_<stamp>`, swap), and the
+dump is verified by reading the *whole* archive back (`pg_restore --data-only`, counting COPY rows
+into `.counts`) rather than `pg_restore --list`, which reads only the table of contents. **Still the
+user's to do:** run `bash scripts/backup-schedule.sh install` from the main checkout (it writes to
+`~/Library/LaunchAgents`), and answer whether `~/Backups` is under Time Machine. Also found while
+building: compose's `instrument_profiles` is 155 MB too (5,226 rows) - DB2 applies to both.
+
 **The PRs:**
 
 | # | PR | Size | Done when |
 |---|---|---|---|
-| DB1 | **Backup and restore** (decision 137). `scripts/db-backup.sh [--target kind\|compose]`: `pg_dump -Fc` run inside the Postgres container (`kubectl exec` / `docker exec`, so the host needs no Postgres client and the versions match), streamed to `${TRADERS_BACKUP_DIR:-$HOME/Backups/traders}/<target>/`, written to `.partial` and renamed only after `pg_restore --list` reads it; directory `700`, files `600`. Keeps the newest 14 plus one a week for 8 weeks. `scripts/db-restore.sh <file> --target ...` refuses without `--yes`. `k8s-down.sh` takes a kind backup before deleting (skip with `--no-backup`). A launchd agent (a plist template under `infra/launchd/` and an install script the **user** runs - it is persistent config on their Mac) runs both targets daily. `k8s-up.sh` and `dev-docker.sh` warn when the newest backup is older than 48 h, so a schedule that stopped is noticed | M | **a restore drill passes:** a dump of each environment restored into a scratch database with row counts equal per table; the drill and the dump sizes recorded here |
+| DB1 ✅ | **Backup and restore** (decision 137). `scripts/db-backup.sh [--target kind\|compose]`: `pg_dump -Fc` run inside the Postgres container (`kubectl exec` / `docker exec`, so the host needs no Postgres client and the versions match), streamed to `${TRADERS_BACKUP_DIR:-$HOME/Backups/traders}/<target>/`, written to `.partial` and renamed only after `pg_restore --list` reads it; directory `700`, files `600`. Keeps the newest 14 plus one a week for 8 weeks. `scripts/db-restore.sh <file> --target ...` refuses without `--yes`. `k8s-down.sh` takes a kind backup before deleting (skip with `--no-backup`). A launchd agent (a plist template under `infra/launchd/` and an install script the **user** runs - it is persistent config on their Mac) runs both targets daily. `k8s-up.sh` and `dev-docker.sh` warn when the newest backup is older than 48 h, so a schedule that stopped is noticed | M | **a restore drill passes:** a dump of each environment restored into a scratch database with row counts equal per table; the drill and the dump sizes recorded here |
 | DB2 | **The universe loader writes only what changed.** Both upserts in `load_universe` gain `WHERE (...) IS DISTINCT FROM (...)` over every column but `updated_at` (`size_as_of` included, so a *new* snapshot still updates its rows). **Trap:** `ON CONFLICT DO UPDATE ... WHERE` false returns no row, so `_upsert_instrument`'s `RETURNING id` needs a fallback select. ETF holdings are replaced only when the set differs. **Do not** skip the load when `as_of` equals the last one: the mounted descriptions file can change without `as_of` changing - the row-level guard is the safe one. Then, **after DB1 has a fresh backup**, reclaim the space once: measure live versus dead bytes first (`pgstattuple`, on a copy), then `VACUUM FULL instrument_profiles` (an exclusive lock for seconds; run it with the CronJobs quiet) | S-M | a test loads one snapshot twice and the second writes no row; `n_tup_upd` on both tables unchanged across a `k8s-up.sh` restart; the table's size before and after recorded here |
-| DB3 | **Query statistics on.** `shared_preload_libraries=pg_stat_statements` and `log_min_duration_statement=200` (ms - an observation threshold, not a product rule) as server flags in `infra/k8s/base/postgres.yaml`, `infra/compose/docker-compose.yml` and CI's Postgres; the extension created (Alembic, or a guarded init - settle in the PR; **0049 is reserved in prose for IBI**, so read `origin/main`'s newest migration before numbering). `scripts/db-report.sh`, read-only: top statements by total time, tables by sequential reads, unused indexes, sizes, dead tuples. Reset the statistics once after deploying, so the week starts clean | S | the report runs against both environments; the date the week starts recorded here |
+| DB3 | **Query statistics on.** `shared_preload_libraries=pg_stat_statements` and `log_min_duration_statement=200` (ms - an observation threshold, not a product rule) as server flags in `infra/k8s/base/postgres.yaml`, `infra/compose/docker-compose.yml` and CI's Postgres; the extension created (Alembic, or a guarded init - settle in the PR; **0049 was taken by #206** (`0049_finding_episodes`) although IBI's plan names it, so read `origin/main`'s newest migration before numbering). `scripts/db-report.sh`, read-only: top statements by total time, tables by sequential reads, unused indexes, sizes, dead tuples. Reset the statistics once after deploying, so the week starts clean | S | the report runs against both environments; the date the week starts recorded here |
 | DB4 | **The review, a week after DB3 - measure, then decide.** No code planned: the report, then one question at a time with a recommendation. Expected questions: the query behind `runs`' full scans and its index; `intents_ledger_idx` (no reader, decision 138) and other indexes with no scans across a full week; retention for `runs`. Each answer becomes a decision; any change is its own PR | — | the findings and the user's answers recorded as decisions |
 
 **Considered and rejected:** an in-cluster CronJob for backups (decision 137); a backup operator
@@ -3428,8 +3443,9 @@ copy of the live database (up/down/up, row counts); the Telegram flow on a copy 
 ### Next session: after the debt fixes (#202, #203, 2026-10-08)
 
 Ask the user before starting anything (the Stage 4 grant ended). In order of the user's last answer:
-0. **The database sprint was agreed 2026-10-09** (see "Planned: the database sprint"): DB1, the
-   backup, first - it is the only item that protects data that exists today.
+0. **The database sprint** (see "Planned: the database sprint"): DB1 done (#DB1PR); **DB2 next** -
+   the universe loader. Check first that the user installed the backup schedule
+   (`bash scripts/backup-schedule.sh status`); DB2's `VACUUM FULL` waits for a fresh backup.
 1. **Review the scheduled scans** once three trading days have run (09:00 New York each trading
    day, compose only): outcomes, refusals like 2026-10-08's "1,923", cost per day, from
    `agent_scan_runs` and `llm_calls WHERE purpose = 'agent_scan'`. Report before changing anything.

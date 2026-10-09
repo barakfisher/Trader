@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The daily database backup, as a launchd agent: macOS's own scheduler, which
+  runs a job missed while the Mac slept once it wakes (cron would skip it).
+
+  A template. scripts/backup-schedule.sh install fills the __PLACEHOLDERS__ and
+  writes the result to ~/Library/LaunchAgents/com.traders.db-backup.plist; it is
+  not meant to be copied by hand. Decision 137 says why this runs on the Mac
+  rather than in the cluster.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.traders.db-backup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__REPO_ROOT__/scripts/db-backup.sh</string>
+    <string>--target</string>
+    <string>all</string>
+  </array>
+
+  <!-- 04:00 local time: the quietest hour, outside the market's and the scans'. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>4</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <!-- launchd starts jobs with a minimal PATH; docker and kubectl live elsewhere. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__PATH__</string>
+    <key>TRADERS_BACKUP_DIR</key>
+    <string>__BACKUP_DIR__</string>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>__LOG__</string>
+  <key>StandardErrorPath</key>
+  <string>__LOG__</string>
+</dict>
+</plist>

@@ -34,6 +34,8 @@ COMPOSE=(docker compose -f "$REPO_ROOT/infra/compose/docker-compose.yml" --env-f
 
 # shellcheck source=scripts/lib/dev-common.sh
 source "$REPO_ROOT/scripts/lib/dev-common.sh"
+# shellcheck source=scripts/lib/backups.sh
+source "$REPO_ROOT/scripts/lib/backups.sh"
 
 REBUILD=false
 RESET=false
@@ -66,7 +68,15 @@ require_env_file
 load_env
 
 if [ "$RESET" = true ]; then
-  warn "--reset deletes the Postgres volume. Every holding and snapshot will be lost."
+  # Backed up first, so a reset typed by mistake costs a restore, not the data.
+  if backup_target_available compose; then
+    bash "$REPO_ROOT/scripts/db-backup.sh" --target compose ||
+      fail "the backup failed, so nothing was deleted"
+    warn "--reset deletes the Postgres volume; the backup above is in $(backup_target_dir compose)"
+    warn "and comes back with: bash scripts/db-restore.sh --target compose latest"
+  else
+    warn "--reset deletes the Postgres volume. The stack is stopped, so it was not backed up first."
+  fi
   printf '   Type "yes" to continue: '
   read -r reply
   [ "$reply" = "yes" ] || fail "aborted"
@@ -90,6 +100,7 @@ wait_for_http "http://127.0.0.1:${WEB_HOST_PORT:-5173}/" 60 "web"
 echo
 "${COMPOSE[@]}" ps --format 'table {{.Service}}\t{{.Status}}\t{{.Ports}}'
 print_urls
+warn_if_backup_stale compose
 say "Stop with: bash scripts/dev-docker.sh --stop"
 
 if [ "$FOLLOW_LOGS" = true ]; then
