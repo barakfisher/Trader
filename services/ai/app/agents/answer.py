@@ -203,7 +203,7 @@ async def price_answer(context: ToolContext, checked: CheckedAnswer) -> CheckedA
     priced = replace(answer, price_minor=quote.price_minor, price_as_of=quote.as_of)
     if answer.decision == "buy":
         notional = notional_minor(Decimal(answer.quantity), quote.price_minor)
-        cost = notional + fee_minor(notional)
+        cost = notional + fee_minor(Decimal(answer.quantity))
         cash = agent_cash_minor(context.engine, context.user_id, context.agent_id)
         if cost > cash:
             price = money(quote.price_minor, "USD")

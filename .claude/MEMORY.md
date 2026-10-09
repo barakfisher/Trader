@@ -2151,6 +2151,10 @@ failure they prevent.
     before any client registration. The user will not contact IBI support. A one-time scheduled
     task, `ibi-mcp-support-check`, runs 2026-10-15 09:00 Israel time. *Why it matters:* a mapper
     built for a sync that never connects is code with no caller.
+136. **The ledger charges IBI's published US fee: 1¢ a share, at least $7.50** (the user,
+    2026-10-09; D76). From the IBI SMART terms of use, clause 2.2.3. The user ruled it *outside*
+    decision 135's gate - it is a simulation price, not an IBI connection. Fees jumped fivefold on
+    small trades, so fewer small proposals afterwards is expected; do not chase it as a bug.
 
 ---
 
