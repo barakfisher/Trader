@@ -5,7 +5,12 @@ a different table for the reason migration 0014 gives:
 
 - **Compare before writing.** A profile whose matching-text hash is unchanged
   keeps its embedding; only size facts are refreshed. Re-running the load on an
-  unchanged snapshot therefore embeds nothing and costs nothing.
+  unchanged snapshot therefore embeds nothing and costs nothing - **and writes
+  nothing**: every upsert below updates a row only when a value differs, and
+  the ETF holdings are replaced only when they differ. Without that, each stack
+  start reloaded the same snapshot over all ~5,200 profiles and instruments,
+  every new row version went into the HNSW index, and the table reached 155 MB
+  for 5,243 rows (database sprint, DB2).
 - **A vector never outlives its text.** The statement that changes a
   description nulls its embedding, so "needs embedding" is `embedding IS NULL`
   or "made by another model", and there is no third case.
@@ -26,6 +31,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -77,6 +83,9 @@ class LoadReport:
     #: unexplained rows.
     undescribed_kept: int = 0
     no_currency_kept: int = 0
+    #: Profiles this load inserted or changed - 0 when it reloads a snapshot
+    #: already in the database, which is what most loads are.
+    profiles_written: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,30 +117,43 @@ def content_hash(text_to_embed: str) -> str:
 
 
 def _upsert_instrument(connection: Connection, member: UniverseInstrument) -> str:
-    return str(
-        connection.execute(
-            text(
-                """
-                INSERT INTO instruments (symbol, asset_class, exchange, currency, name)
-                VALUES (:symbol, :asset_class, :exchange, :currency, :name)
-                ON CONFLICT (symbol) DO UPDATE
-                   SET name        = COALESCE(instruments.name, EXCLUDED.name),
-                       exchange    = COALESCE(instruments.exchange, EXCLUDED.exchange),
-                       asset_class = CASE WHEN instruments.asset_class = 'unknown'
-                                          THEN EXCLUDED.asset_class
-                                          ELSE instruments.asset_class END
-                RETURNING id
-                """
-            ),
-            {
-                "symbol": member.symbol,
-                "asset_class": member.asset_class,
-                "exchange": member.exchange,
-                "currency": member.currency,
-                "name": member.name,
-            },
+    """The instrument's id, filling only what an existing row is missing.
+
+    The update runs only when it would fill something (the `WHERE`), so an
+    instrument already complete is not rewritten. A conflict the `WHERE` turns
+    away returns no row from `RETURNING` - hence the select after it.
+    """
+    instrument_id = connection.execute(
+        text(
+            """
+            INSERT INTO instruments (symbol, asset_class, exchange, currency, name)
+            VALUES (:symbol, :asset_class, :exchange, :currency, :name)
+            ON CONFLICT (symbol) DO UPDATE
+               SET name        = COALESCE(instruments.name, EXCLUDED.name),
+                   exchange    = COALESCE(instruments.exchange, EXCLUDED.exchange),
+                   asset_class = CASE WHEN instruments.asset_class = 'unknown'
+                                      THEN EXCLUDED.asset_class
+                                      ELSE instruments.asset_class END
+             WHERE (instruments.name IS NULL AND EXCLUDED.name IS NOT NULL)
+                OR (instruments.exchange IS NULL AND EXCLUDED.exchange IS NOT NULL)
+                OR (instruments.asset_class = 'unknown'
+                    AND EXCLUDED.asset_class <> 'unknown')
+            RETURNING id
+            """
+        ),
+        {
+            "symbol": member.symbol,
+            "asset_class": member.asset_class,
+            "exchange": member.exchange,
+            "currency": member.currency,
+            "name": member.name,
+        },
+    ).scalar_one_or_none()
+    if instrument_id is None:
+        instrument_id = connection.execute(
+            text("SELECT id FROM instruments WHERE symbol = :symbol"), {"symbol": member.symbol}
         ).scalar_one()
-    )
+    return str(instrument_id)
 
 
 def load_universe(
@@ -163,7 +185,7 @@ def load_universe(
     )
     as_of = datetime.fromisoformat(snapshot.as_of.replace("Z", "+00:00"))
     created = changed = unchanged = undescribed = no_currency = 0
-    undescribed_kept = no_currency_kept = 0
+    undescribed_kept = no_currency_kept = written = 0
 
     for member in snapshot.instruments:
         # Skipped, but not dropped: a member's earlier profile stays.
@@ -187,7 +209,7 @@ def load_universe(
         else:
             unchanged += 1
 
-        connection.execute(
+        result = connection.execute(
             text(
                 """
                 INSERT INTO instrument_profiles (
@@ -223,6 +245,24 @@ def load_universe(
                            THEN instrument_profiles.embedding_model END,
                        content_hash     = EXCLUDED.content_hash,
                        updated_at       = now()
+                 -- Only when something differs: a reload of the same snapshot
+                 -- leaves the row, its TOAST and its HNSW entry alone, and
+                 -- `updated_at` then means what it says.
+                 WHERE (instrument_profiles.description, instrument_profiles.membership,
+                        instrument_profiles.matching_text, instrument_profiles.source,
+                        instrument_profiles.license, instrument_profiles.content_hash,
+                        instrument_profiles.sector, instrument_profiles.industry,
+                        instrument_profiles.category, instrument_profiles.market_cap_minor,
+                        instrument_profiles.net_assets_minor, instrument_profiles.size_currency,
+                        instrument_profiles.size_as_of)
+                       IS DISTINCT FROM
+                       (EXCLUDED.description, 'screened',
+                        EXCLUDED.matching_text, EXCLUDED.source,
+                        EXCLUDED.license, EXCLUDED.content_hash,
+                        EXCLUDED.sector, EXCLUDED.industry,
+                        EXCLUDED.category, EXCLUDED.market_cap_minor,
+                        EXCLUDED.net_assets_minor, EXCLUDED.size_currency,
+                        EXCLUDED.size_as_of)
                 """
             ),
             {
@@ -241,9 +281,17 @@ def load_universe(
                 "as_of": as_of,
             },
         )
+        written += int(result.rowcount or 0)
 
     return LoadReport(
-        created, changed, unchanged, undescribed, no_currency, undescribed_kept, no_currency_kept
+        created,
+        changed,
+        unchanged,
+        undescribed,
+        no_currency,
+        undescribed_kept,
+        no_currency_kept,
+        profiles_written=written,
     )
 
 
@@ -470,6 +518,9 @@ class HoldingsReport:
     #: never be a topic's source. Counted since M8 - skipped silently before,
     #: which left 14 rows of the 2026-09-24 snapshot unexplained.
     of_unprofiled_etf: int = 0
+    #: Whether the table was rewritten. False when the stored rows already
+    #: were these, which is every reload of a snapshot already loaded.
+    replaced: bool = True
 
 
 #: `etf_holdings.weight` is numeric(9, 6): a weight is stored to a millionth.
@@ -571,7 +622,9 @@ def load_holdings(
     """Replace `etf_holdings` with `holdings`, each matched by `HoldingMatcher`.
 
     Replaced wholesale: holdings derive entirely from the committed snapshot
-    and nothing refers to their rows.
+    and nothing refers to their rows. But only when they differ from what is
+    stored - a reload of the same snapshot otherwise deleted and re-inserted
+    ~16,000 rows on every stack start, for nothing.
     """
     matcher = HoldingMatcher(
         [
@@ -589,9 +642,9 @@ def load_holdings(
         ]
     )
     stamp = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
-    connection.execute(text("DELETE FROM etf_holdings"))
     counts = {"symbol": 0, "name": 0, None: 0}
-    written = implausible = unprofiled = 0
+    implausible = unprofiled = 0
+    rows: list[dict[str, Any]] = []
     for holding in holdings:
         etf = matcher.member(holding.etf)
         if etf is None:
@@ -602,16 +655,7 @@ def load_holdings(
             continue
         matched = matcher.match(holding.symbol, holding.name)
         counts[matched[1] if matched else None] += 1
-        connection.execute(
-            text(
-                """
-                INSERT INTO etf_holdings (
-                    etf_instrument_id, position, symbol, name, weight,
-                    holding_instrument_id, matched_by, as_of
-                ) VALUES (:etf, :position, :symbol, :name, CAST(:weight AS numeric),
-                          :holding, :matched_by, :as_of)
-                """
-            ),
+        rows.append(
             {
                 "etf": etf.id,
                 "position": holding.position,
@@ -621,11 +665,73 @@ def load_holdings(
                 "holding": matched[0].id if matched else None,
                 "matched_by": matched[1] if matched else None,
                 "as_of": stamp,
-            },
+            }
         )
-        written += 1
+
+    # As multisets, not sorted lists: a key holds None beside text, which do
+    # not order against each other.
+    replaced = _stored_holdings(connection) != Counter(_holding_key(row) for row in rows)
+    if replaced:
+        connection.execute(text("DELETE FROM etf_holdings"))
+        if rows:
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO etf_holdings (
+                        etf_instrument_id, position, symbol, name, weight,
+                        holding_instrument_id, matched_by, as_of
+                    ) VALUES (:etf, :position, :symbol, :name, CAST(:weight AS numeric),
+                              :holding, :matched_by, :as_of)
+                    """
+                ),
+                rows,
+            )
     return HoldingsReport(
-        written, counts["symbol"], counts["name"], counts[None], implausible, unprofiled
+        len(rows),
+        counts["symbol"],
+        counts["name"],
+        counts[None],
+        implausible,
+        unprofiled,
+        replaced=replaced,
+    )
+
+
+def _holding_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    """One holding as it compares to a stored row: ids as text, the weight at
+    the column's resolution (`numeric(9, 6)` rounds what it stores)."""
+    return (
+        str(row["etf"]),
+        row["position"],
+        row["symbol"],
+        row["name"],
+        Decimal(row["weight"]).quantize(WEIGHT_RESOLUTION, rounding=ROUND_HALF_UP),
+        None if row["holding"] is None else str(row["holding"]),
+        row["matched_by"],
+        row["as_of"],
+    )
+
+
+def _stored_holdings(connection: Connection) -> Counter[tuple[Any, ...]]:
+    return Counter(
+        _holding_key(
+            {
+                "etf": row.etf_instrument_id,
+                "position": row.position,
+                "symbol": row.symbol,
+                "name": row.name,
+                "weight": row.weight,
+                "holding": row.holding_instrument_id,
+                "matched_by": row.matched_by,
+                "as_of": row.as_of,
+            }
+        )
+        for row in connection.execute(
+            text(
+                "SELECT etf_instrument_id, position, symbol, name, weight, "
+                "holding_instrument_id, matched_by, as_of FROM etf_holdings"
+            )
+        )
     )
 
 
