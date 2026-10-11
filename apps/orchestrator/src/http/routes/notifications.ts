@@ -14,14 +14,25 @@
 
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import type { DigestEntry, DigestReason, DigestResponse, ObservationSeverity } from '@traders/shared';
+import type {
+  Alert,
+  AlertSource,
+  AlertsResponse,
+  DigestEntry,
+  DigestReason,
+  DigestResponse,
+  ObservationSeverity,
+} from '@traders/shared';
 
 import {
+  countAlerts,
   getDigestSeenAt,
+  listAlerts,
   listLastDigestEntries,
   listNotifications,
   listPendingDigestEntries,
   markDigestSeen,
+  type AlertRow,
   type DigestEntryRow,
 } from '../../db/queries.js';
 import { currentUserId, type AppEnv } from '../app.js';
@@ -114,7 +125,11 @@ export function registerDigestRoute(app: Hono<AppEnv>): void {
   app.post('/notifications/digest/seen', async (context) => {
     const parsed = seenSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
-      throw badRequest('invalid_body', 'expected { sentAt } as an ISO 8601 time', parsed.error.issues);
+      throw badRequest(
+        'invalid_body',
+        'expected { sentAt } as an ISO 8601 time',
+        parsed.error.issues,
+      );
     }
     const seenAt = await markDigestSeen(currentUserId(context), new Date(parsed.data.sentAt));
     return context.json({ seenAt: seenAt?.toISOString() ?? null });
@@ -122,3 +137,65 @@ export function registerDigestRoute(app: Hono<AppEnv>): void {
 }
 
 export { MAX_NOTIFICATIONS };
+
+const ALERT_SOURCES: readonly AlertSource[] = ['portfolio', 'topics', 'agents'];
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function alertOf(row: AlertRow): Alert {
+  return {
+    id: row.id,
+    kind: row.kind,
+    severity: row.severity as ObservationSeverity,
+    subjectKind: row.subject_kind as Alert['subjectKind'],
+    subjectRef: row.subject_ref,
+    headline: row.headline,
+    explanation: row.explanation ?? '',
+    evidence: (row.evidence ?? {}) as Record<string, unknown>,
+    conceptRefs: row.concept_refs,
+    narrationSource: row.narration_source as Alert['narrationSource'],
+    fallbackReason: row.fallback_reason,
+    localized: row.localized ?? {},
+    createdAt: new Date(row.created_at).toISOString(),
+    agent: { id: row.agent_id, name: row.agent_name, isPrimary: row.agent_is_primary },
+    delivery: {
+      deferred: row.route === 'digest',
+      delivered: row.status === 'sent',
+      sentAt: row.sent_at === null ? null : new Date(row.sent_at).toISOString(),
+    },
+  };
+}
+
+export function registerAlertsRoute(app: Hono<AppEnv>): void {
+  /**
+   * What the user was told (decision 134): every finding pushed to Telegram, or
+   * deferred by quiet hours, across the main portfolio, topics and every agent.
+   * `?source=portfolio|topics|agents` keeps one; `?before=<id>` pages.
+   */
+  app.get('/notifications/alerts', async (context) => {
+    const userId = currentUserId(context);
+    const requested = Number(context.req.query('limit') ?? 20);
+    const limit =
+      Number.isInteger(requested) && requested > 0 ? Math.min(requested, MAX_NOTIFICATIONS) : 20;
+    const sourceParam = context.req.query('source');
+    if (sourceParam !== undefined && !ALERT_SOURCES.includes(sourceParam as AlertSource)) {
+      throw badRequest('invalid_source', 'source must be one of portfolio, topics, agents');
+    }
+    const source = (sourceParam as AlertSource | undefined) ?? null;
+    const before = context.req.query('before');
+    if (before !== undefined && !UUID.test(before)) {
+      throw badRequest('invalid_cursor', 'before must be the id of a finding');
+    }
+    // One more than a page, so whether another page exists is known, not guessed.
+    const [rows, total] = await Promise.all([
+      listAlerts(userId, limit + 1, source, before ?? null),
+      countAlerts(userId, source),
+    ]);
+    const page = rows.slice(0, limit);
+    const body: AlertsResponse = {
+      alerts: page.map(alertOf),
+      total,
+      nextCursor: rows.length > limit ? page[page.length - 1]!.id : null,
+    };
+    return context.json(body);
+  });
+}

@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 /**
- * The Insights page (UX3): the observations feed and the daily digest as two
- * tabs whose choice lives in the address, neither on the dashboard any more,
- * and an old link to the dashboard's filtered feed still landing on that feed.
+ * The Insights page (UX3, decision 134): Alerts, Proposals, the daily digest and
+ * All findings as four tabs whose choice lives in the address, none of them on
+ * the dashboard, and old links - the dashboard's filtered feed, `/proposals` -
+ * still landing where they meant.
  */
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { createMemoryHistory } from '@tanstack/react-router';
 
 const get = vi.fn();
@@ -45,16 +46,61 @@ afterEach(cleanup);
 
 const selected = (name: string) => screen.getByRole('tab', { name }).getAttribute('aria-selected');
 
-it('opens on the observations feed, and the digest is a tab away with its own address', async () => {
+it('opens on Alerts, and every other tab is a tab away with its own address', async () => {
   const { router } = renderAt('/insights');
   expect(await screen.findByRole('heading', { name: 'Insights' })).toBeTruthy();
-  expect(selected('Observations')).toBe('true');
-  expect(screen.getByRole('heading', { name: 'Observations' })).toBeTruthy();
+  expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+    'Alerts',
+    'Proposals',
+    'Daily digest',
+    'All findings',
+  ]);
+  expect(selected('Alerts')).toBe('true');
+  expect(screen.getByRole('heading', { name: 'Alerts' })).toBeTruthy();
 
   fireEvent.click(screen.getByRole('tab', { name: 'Daily digest' }));
   expect(await screen.findByRole('heading', { name: 'Daily digest' })).toBeTruthy();
-  expect(screen.queryByRole('heading', { name: 'Observations' })).toBeNull();
+  expect(screen.queryByRole('heading', { name: 'Alerts' })).toBeNull();
   expect(router.state.location.search).toEqual({ tab: 'digest' });
+
+  fireEvent.click(screen.getByRole('tab', { name: 'All findings' }));
+  expect(await screen.findByRole('heading', { name: 'Observations' })).toBeTruthy();
+  expect(router.state.location.search).toEqual({ tab: 'observations' });
+});
+
+it('opens an unknown tab on Alerts rather than failing', async () => {
+  renderAt('/insights?tab=news');
+  await screen.findByRole('heading', { name: 'Alerts' });
+  expect(selected('Alerts')).toBe('true');
+});
+
+it('sends /proposals to the Proposals tab, which holds the inbox', async () => {
+  const { router } = renderAt('/proposals');
+  expect(await screen.findByRole('heading', { name: 'Insights' })).toBeTruthy();
+  expect(router.state.location.pathname).toBe('/insights');
+  expect(router.state.location.search).toEqual({ tab: 'proposals' });
+  expect(selected('Proposals')).toBe('true');
+  expect(get).toHaveBeenCalledWith(expect.stringMatching(/^\/proposals\?state=open/));
+});
+
+it('keeps the source pill in the address, and asks the server for that source', async () => {
+  const { router } = renderAt('/insights?tab=alerts');
+  await screen.findByRole('heading', { name: 'Alerts' });
+  expect(get).toHaveBeenCalledWith('/notifications/alerts?limit=10');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
+  await waitFor(() =>
+    expect(get).toHaveBeenCalledWith('/notifications/alerts?limit=10&source=agents'),
+  );
+  expect(router.state.location.search).toEqual({ tab: 'alerts', source: 'agents' });
+  expect(screen.getByRole('button', { name: 'Agents' }).getAttribute('aria-pressed')).toBe('true');
+});
+
+it('treats an unknown source as All', async () => {
+  renderAt('/insights?tab=alerts&source=everything');
+  await screen.findByRole('heading', { name: 'Alerts' });
+  expect(screen.getByRole('button', { name: 'All' }).getAttribute('aria-pressed')).toBe('true');
+  expect(get).toHaveBeenCalledWith('/notifications/alerts?limit=10');
 });
 
 it('lands on the tab a link names', async () => {

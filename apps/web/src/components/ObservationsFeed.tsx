@@ -1,4 +1,5 @@
 import { observer } from 'mobx-react-lite';
+import type { ReactNode } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 import type { Observation } from '@traders/shared';
@@ -194,13 +195,16 @@ export function symbolChoices(held: string[] | undefined, current: string | unde
   return [...set].sort();
 }
 
-/** One finding with its evidence drawer: the feed's row, and a holding page's. */
+/** One finding with its evidence drawer: the feed's row, a holding page's, and an alert's. */
 export const ObservationRow = observer(function ObservationRow({
   observation,
   baseCurrency,
+  meta,
 }: {
   observation: Observation;
   baseCurrency: string;
+  /** Said under the header line: an alert's agent and delivery. */
+  meta?: ReactNode;
 }) {
   const { observations, concepts } = useStore();
   const { t, i18n } = useTranslation();
@@ -230,6 +234,7 @@ export const ObservationRow = observer(function ObservationRow({
             {formatAge(observation.createdAt)}
           </span>
         </div>
+        {meta}
 
         <p {...text.attributes} className="mt-1 text-sm font-medium text-text-primary">{text.headline}</p>
         <p {...text.attributes} className="mt-1 text-sm text-text-muted">{text.explanation}</p>

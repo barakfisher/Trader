@@ -463,6 +463,79 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('alerts (decision 134)', () => {
+    it('lists what was pushed or deferred, by source, and nothing that only waited for the digest', async () => {
+      const pool = getPool();
+      const agent = (
+        await pool.query(
+          `INSERT INTO agents (user_id, slug, name, budget_minor)
+           VALUES ($1, 'alerts-test', 'Alerts test', 100000) RETURNING id`,
+          [USER],
+        )
+      ).rows[0].id as string;
+      const observe = async (agentId: string, subjectKind: string, kind: string) =>
+        (
+          await pool.query(
+            `INSERT INTO observations (user_id, agent_id, kind, severity, subject_kind, subject_ref,
+                                       headline, dedupe_key)
+             VALUES ($1, $2, $3, 'high', $4, 'instrument:ALRT', 'h', $5) RETURNING id`,
+            [USER, agentId, kind, subjectKind, `alerts-${randomUUID()}`],
+          )
+        ).rows[0].id as string;
+      const notify = (
+        agentId: string,
+        refId: string,
+        channel: string,
+        route: string,
+        reason: string,
+      ) =>
+        pool.query(
+          `INSERT INTO notifications (user_id, agent_id, channel, ref_kind, ref_id, route, reason,
+                                      status, sent_at, dedupe_key)
+           VALUES ($1, $2, $3, 'observation', $4, $5, $6, 'sent', now(), $7)`,
+          [USER, agentId, channel, refId, route, reason, `alerts-${randomUUID()}`],
+        );
+
+      const pushed = await observe(AGENT, 'instrument', 'drawdown');
+      await notify(AGENT, pushed, 'telegram', 'push', 'above_floor');
+      const quiet = await observe(AGENT, 'topic', 'topic_move');
+      await notify(AGENT, quiet, 'digest', 'digest', 'quiet_hours');
+      const belowFloor = await observe(AGENT, 'instrument', 'price_move');
+      await notify(AGENT, belowFloor, 'digest', 'digest', 'below_floor');
+      await observe(AGENT, 'instrument', 'sigma_move'); // never routed anywhere
+      const trade = await observe(agent, 'instrument', 'agent_trade');
+      await notify(agent, trade, 'telegram', 'push', 'above_floor');
+
+      const ids = async (source: 'portfolio' | 'topics' | 'agents' | null) =>
+        (await queries.listAlerts(USER, 50, source, null)).map((row) => row.id);
+
+      expect(await ids(null)).toEqual([trade, quiet, pushed]);
+      expect(await queries.countAlerts(USER, null)).toBe(3);
+      expect(await ids('portfolio')).toEqual([pushed]);
+      expect(await ids('topics')).toEqual([quiet]);
+      expect(await ids('agents')).toEqual([trade]);
+
+      const [first] = await queries.listAlerts(USER, 1, null, null);
+      expect(first?.agent_name).toBe('Alerts test');
+      expect(first?.agent_is_primary).toBe(false);
+      // The next page continues after the last alert the reader has.
+      expect((await queries.listAlerts(USER, 50, null, trade)).map((row) => row.id)).toEqual([
+        quiet,
+        pushed,
+      ]);
+
+      await pool.query('DELETE FROM notifications WHERE user_id = $1 AND dedupe_key LIKE $2', [
+        USER,
+        'alerts-%',
+      ]);
+      await pool.query('DELETE FROM observations WHERE user_id = $1 AND dedupe_key LIKE $2', [
+        USER,
+        'alerts-%',
+      ]);
+      await pool.query('DELETE FROM agents WHERE id = $1', [agent]);
+    });
+  });
+
   describe('finding episodes (0049, decision 132)', () => {
     it('raises a band, never lowers it, and goes with its observation', async () => {
       const subjectRef = `instrument:EP${randomUUID().slice(0, 6)}`;
