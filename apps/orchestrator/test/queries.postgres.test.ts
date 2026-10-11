@@ -819,6 +819,23 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       await pool.query('DELETE FROM runs WHERE run_key = $1', [runKey]);
       await pool.query('DELETE FROM agents WHERE id = $1', [simulated]);
     });
+
+    it("reports the holder's status per agent, and the installation's as its own (DB4)", async () => {
+      const pool = getPool();
+      const runKey = `portfolio_scan:test-${randomUUID()}`;
+      // The installation's own runs have neither user nor agent (0036's runs_agent_follows_user).
+      const claim = (agentId: string | null) =>
+        queries.claimRun({ userId: agentId && USER, agentId, kind: 'portfolio_scan', runKey, trigger: 'test' });
+      expect((await claim(null)).claimed).toBe(true);
+      expect(await queries.runKeyExists(runKey)).toBe(true);
+      // The agent's claim is not the installation's, though they share the key.
+      expect((await claim(AGENT)).claimed).toBe(true);
+      await pool.query(`UPDATE runs SET status = 'ok' WHERE run_key = $1 AND agent_id = $2`, [runKey, AGENT]);
+      expect(await claim(null)).toEqual({ claimed: false, runId: null, existingStatus: 'running' });
+      expect(await claim(AGENT)).toEqual({ claimed: false, runId: null, existingStatus: 'ok' });
+      await pool.query('DELETE FROM runs WHERE run_key = $1', [runKey]);
+      expect(await queries.runKeyExists(runKey)).toBe(false);
+    });
   });
 
   describe('recordNarrationState', () => {
