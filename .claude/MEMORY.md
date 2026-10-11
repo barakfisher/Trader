@@ -4,7 +4,23 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-11 ~09:00 UTC - **DB4, first half (decisions 143-147).** The user asked for the
+Updated: 2026-10-11 ~13:59 UTC - **Insights handoff: queue tasks 19-21 complete (#206, #209, #214,
+fix #216). Nothing is in flight.** #206 - drawdown and drift written once per band per episode
+(`finding_episodes`, migration **0049**), `price_move` dropped where `sigma_move` fired (decision
+132). #209 - Insights tabs Alerts / Proposals / Digest / All findings, Alerts with source pills
+(decision 134). #214 - All findings opens on today and steps back 7 days, unread dot and highlight
+(`insights_seen_at`, migration **0051**, decision 133). **#214 first shipped its migration as 0050
+and collided with DB3's `0050_query_statistics` (#213): two heads on `main`, both deploys stopped,
+compose was down ~35 min and kind's crons failed ~15 min (Sunday morning, market closed; runs
+caught up).** #216 renumbered it; lesson under "Bugs". **Both environments run `main` at
+`49d43d7` (DB4's #218/#219 included, deployed by the database sprint's session), migration
+`0051_insights_seen`**. **Due:** task 19's after-measurement
+on kind after Monday 2026-10-12's scans - see "Next session: after the Insights work".
+**Other sessions at this handoff:** DB4's first half merged and deployed (**#218**, the `runs` claim
+predicate; **#219**, decisions 143-147 - its status is the previous update below). A worktree,
+`ask-agent-plan-4a141f`, is on a branch `claude/assistant-build` with no commits yet.
+
+Previous update, 2026-10-11 ~09:00 UTC - **DB4, first half (decisions 143-147).** The user asked for the
 review a week early; the window was 29 minutes, so DB4 was split (decision 143): what code reading
 settles was decided now - `runs`' full scans are `IS NOT DISTINCT FROM` and **#218** rewrites it
 (decision 144), `db-report.sh` reads `reltuples` (145), `traders_m5` is dropped by the user (146),
@@ -2301,7 +2317,8 @@ failure they prevent.
 `0050_query_statistics` and the Insights session's task 21 took `0050_insights_seen`, both off
 `0049`. Each PR's CI was green - `test_migration_chain_contract.py` saw one head on each branch -
 and they were squash-merged about an hour apart, so `main` had two heads and both deploys stopped
-at `migrate` (the old pods kept serving; nothing went down). Fixed by renumbering the later one to
+at `migrate` - and the failed deploy took compose down for ~35 min (no runs 07:56-08:31 UTC) and
+kind's crons failed for ~15 min; a session that says "nothing is down" must check `runs` first. Fixed by renumbering the later one to
 `0051` off `0050_query_statistics`, rehearsed on a live copy. **Lesson: with two sessions merging,
 a green CI on a branch says nothing about the merge.** Immediately before merging a PR that adds a
 migration, fetch `main` and run `alembic heads` on the branch merged with it (or merge `main` in
@@ -3470,6 +3487,39 @@ grant tests fail for the wrong reason.
 
 ## Where to go next
 
+### Next session: after the Insights work (#206, #209, #214, #216, 2026-10-11)
+
+Ask the user before starting anything (the Insights grant ended with task 21). In date order:
+1. **Task 19's after-measurement - after Monday 2026-10-12's scans, on kind.** Kind's 9 Oct scan
+   showed no `heldInEpisode` only because the day key caught SMR and URA first. Re-run the before
+   query (drawdown rows per subject and band; `price_move` sharing a subject and New York day with
+   `sigma_move`) over kind's observations written after 2026-10-11, check `runs.stats.heldInEpisode`
+   and `finding_episodes`, record it in queue row 19 and remove the row. SMR should still have
+   exactly one open *high* episode and no new *high* row.
+2. **Review the scheduled scans** (now three trading days after Monday): outcomes, refusals, cost
+   per day from `agent_scan_runs` and `llm_calls WHERE purpose = 'agent_scan'`. **The agents run on
+   `google/gemini-3.5-flash-lite` since 2026-10-08 19:47 - intended (the user, 2026-10-09)**, so the
+   review measures Flash-Lite, not Sonnet. D75's *explain* choice is set (Sonnet, 2026-10-08 19:45):
+   re-measure narration's rejection rate on it after a few days.
+3. **IBI check, 2026-10-15** (decision 135; the scheduled task runs it) - nothing IBI unless it shows
+   other MCP clients can connect and the user says go.
+4. **DB4's second half, on or after 2026-10-18** (the section below). Its first half ran
+   2026-10-11 on the user's request (#218, #219, deployed; decision 143 split it).
+5. **The `/ask` assistant milestone**: its 80-case test set landed as #212. A worktree named
+   `claude/assistant-build` exists - **check open PRs and `git worktree list` before starting it**,
+   so two sessions do not build it at once. Its test set predates #209: see the note in "Planned:
+   the assistant".
+
+**Before merging anything with a migration:** `git fetch`, then `alembic heads` on the branch merged
+with `origin/main` - two sessions were merging in parallel this week and branch CI cannot see it.
+**The next free migration is `0052`, and two pieces of work will want one:** DB4's second half, if
+it drops an index or adds `runs` retention, and the assistant's conversation tables. The one that
+merges second renumbers. Decision numbers likewise: DB4 has reached 147 (#219); read `origin/main`
+before taking the next.
+**Insights after deploy:** the first visit showed the whole 7-day window as unread, once (null
+`insights_seen_at`), as the PR said.
+
+
 ### Next session: the database sprint's review, second half (DB4, due on or after 2026-10-18)
 
 **The first half ran 2026-10-11** on the user's request, 29 minutes into the window (decision 143):
@@ -3615,7 +3665,7 @@ copy of the live database (up/down/up, row counts); the Telegram flow on a copy 
 (fourth refused, restore refused, archive frees a place); the schedule with real services on a copy
 (a scheduled scan proposed buying INTC; a failing slot retried twice and gave up once).
 
-### Next session: after the debt fixes (#202, #203, 2026-10-08)
+### Next session: after the debt fixes (history - superseded by "after the Insights work", 2026-10-11; D75's choice was saved 2026-10-08 19:45)
 
 Ask the user before starting anything (the Stage 4 grant ended). In order of the user's last answer:
 0. **The database sprint's review, DB4's second half - due on or after 2026-10-18** (see "Next
@@ -3770,6 +3820,11 @@ the largest prompt-injection surface goes too.
   The planned tools it names (`get_portfolio`, `get_agents`, `get_proposals`, `get_observations`,
   `get_topics`, `replay_scan`, `get_universe_info`, `get_product_guide`) are the assistant's tool
   list as far as the cases need it - a starting point, not a decision.
+  **Written before #209 and #214 (2026-10-11), so update it when the assistant is built:** three
+  cases expect a `/proposals` link and P4's tour lists Proposals as a page. `/proposals` now
+  redirects to `/insights?tab=proposals` and Proposals is no longer in the bar (decision 134), so
+  link the tab and tour Insights' four tabs. M2 ("what happened while I was away") can use the
+  unread state: `GET /observations/days` and `insights_seen_at` (decision 133).
 - **A cost measurement** on a few real questions once the account is funded; the assistant's daily
   spend limit is set from it, not guessed.
 
