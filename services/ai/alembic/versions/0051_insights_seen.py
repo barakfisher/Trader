@@ -15,14 +15,14 @@ counts those in the bar's dot and the All findings tab, and styles them apart.
 - **Untouched by the settings form**: `replaceUserSettings` names the columns it
   writes; only `markInsightsSeen` moves it, and only forward.
 
-Revision ID: 0050_insights_seen
-Revises: 0049_finding_episodes
+Revision ID: 0051_insights_seen
+Revises: 0050_query_statistics
 """
 
 from alembic import op
 
-revision = "0050_insights_seen"
-down_revision = "0049_finding_episodes"
+revision = "0051_insights_seen"
+down_revision = "0050_query_statistics"
 branch_labels = None
 depends_on = None
 

@@ -463,7 +463,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
-  describe('the Insights window (0050, decision 133)', () => {
+  describe('the Insights window (0051, decision 133)', () => {
     it("counts a day's findings in the user's timezone, and the unread among them", async () => {
       const pool = getPool();
       const at = async (createdAt: string) =>
