@@ -3613,6 +3613,14 @@ the largest prompt-injection surface goes too.
 - **A test set for the assistant**, like `/ask`'s 35-case set (#47) and run in CI: ordinary
   questions, follow-ups, and attack cases - off-domain questions, "ignore your rules", a web page or
   news text carrying instructions, "should I buy X?". It is how the guardrails are shown to hold.
+  **Written 2026-10-11:** `data/eval/assistant.json`, 80 cases (11 in the user's own words), from
+  `docs/ASSISTANT_QUESTIONS.md`. Every case needs a model, so none runs on a PR yet; the runner is
+  built with the assistant. What runs now is `test_assistant_eval_set_contract.py`: tool names
+  against `app/agents/tools.py` (`exists` / `planned` - flip the status when a planned tool is
+  built), links against the web router, no tools on a decline, and every user question present.
+  The planned tools it names (`get_portfolio`, `get_agents`, `get_proposals`, `get_observations`,
+  `get_topics`, `replay_scan`, `get_universe_info`, `get_product_guide`) are the assistant's tool
+  list as far as the cases need it - a starting point, not a decision.
 - **A cost measurement** on a few real questions once the account is funded; the assistant's daily
   spend limit is set from it, not guessed.
 

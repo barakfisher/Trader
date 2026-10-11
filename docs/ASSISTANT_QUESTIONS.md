@@ -1,18 +1,27 @@
-# Assistant test questions - draft
+# Assistant test questions
 
-The raw material for the assistant's test set (the planned `/ask` with tools). Each question
-becomes a case with an expected behaviour; the cases run in CI like `data/eval/ask.json`.
-
-**Your questions go first.** Write them the way you would type them - English or Hebrew, typos
-included. The expected behaviour column is optional; leave it empty and it will be filled in.
+The source of the assistant's test set (the planned `/ask` with tools): every question here is a
+case in [`data/eval/assistant.json`](../data/eval/assistant.json), which states each case's
+expected behaviour in checkable form. Add a question here and there together.
 
 ## The user's questions
 
 | # | Question | Expected behaviour (optional) |
 |---|---|---|
-| U1 | | |
-| U2 | | |
-| U3 | | |
+| U1 | Explain topics to me | |
+| U2 | Give me a tour in the app | |
+| U3 | Show me a typical user workflow in the app | |
+| U4 | How does agents use topics? | |
+| U5 | What tools does each agent use? | |
+| U6 | What tools did the Momentum agent use to get to its conclusion? | |
+| U7 | How was the universe made? | |
+| U8 | When was the universe updated? | |
+| U9 | What's in the news today? | Declined unless it is market news |
+| U10 | What's the weather tomorrow? | Declined |
+| U11 | Help me plan a vacation | Declined |
+
+Taken from the conversation of 2026-10-11, in the user's words. Where a draft question below asks
+the same thing, the user's wording is the one in the test set and the draft row says so.
 
 ## Claude's draft
 
@@ -54,9 +63,8 @@ included. The expected behaviour column is optional; leave it empty and it will 
 | P1 | What can I ask you? | Lists what it can do: account, tickers, concepts, the product |
 | P2 | How do the agents decide what to trade? | Explains the scan and that trades are virtual, approved by the user |
 | P3 | Can you place a real order for me? | No - explains the app never executes real trades |
-
-| P4 | Give me a tour of the app | Walks through the main pages in order (dashboard, holdings, topics, agents, proposals, ask, settings), one line each, with links |
-| P5 | What does a typical day look like for a user here? | A workflow: check the dashboard, read new observations, review pending proposals, approve or reject, follow a topic; links to each page |
+| P4 | Give me a tour of the app | Walks through the main pages in order (dashboard, holdings, topics, agents, proposals, ask, settings), one line each, with links (merged into U2) |
+| P5 | What does a typical day look like for a user here? | A workflow: check the dashboard, read new observations, review pending proposals, approve or reject, follow a topic; links to each page (merged into U3) |
 | P6 | Where do I change when my agents scan? | Points to the setting and links to it; does not change it |
 | P7 | When is the next scheduled scan? | The next slot, in the user's time zone |
 | P8 | How do I get alerts on Telegram? | Explains how to connect Telegram and what it sends |
@@ -65,13 +73,13 @@ included. The expected behaviour column is optional; leave it empty and it will 
 
 | # | Question | Expected behaviour |
 |---|---|---|
-| G1 | What is a topic? | Explains topics: a free-text theme the user follows, resolved to related stocks and ETFs |
+| G1 | What is a topic? | Explains topics: a free-text theme the user follows, resolved to related stocks and ETFs (merged into U1) |
 | G2 | How do you decide which stocks belong to a topic? | Explains resolution in plain words: matching company descriptions, plus the holdings of ETFs about the topic |
 | G3 | Which stocks are in my "Uranium & Nuclear Energy" topic? | Lists the topic's instruments from the tool, with why each matched |
 | G4 | Why is CCJ in my uranium topic? | The rationale stored for that instrument (the quoted description, or the ETF that holds it) |
 | G5 | Would "quantum computing" make a good topic? | Resolves it and says what it would contain, or that it finds nothing |
 | G6 | How did my topics move this week? | Each followed topic's move, with sources |
-| G7 | How do agents use topics? | Explains that each scan's briefing includes the user's followed topics and their instruments, and that an agent can look up a topic with its topic tool |
+| G7 | How do agents use topics? | Explains that each scan's briefing includes the user's followed topics and their instruments, and that an agent can look up a topic with its topic tool (merged into U4) |
 | G8 | Did any of my agents trade something because of a topic I follow? | Finds proposals whose evidence mentions a followed topic, or says none did |
 
 ### The universe (the instruments the app knows)
@@ -79,8 +87,8 @@ included. The expected behaviour column is optional; leave it empty and it will 
 | # | Question | Expected behaviour |
 |---|---|---|
 | N1 | What is the universe? | Explains it: the US stocks and ETFs the app knows about, used for topics, agents and lookups |
-| N2 | How was the universe made? | US primary-exchange stocks with market cap of at least $1B and ETFs with net assets of at least $100M, screened from Yahoo Finance; descriptions matched by embeddings for topics |
-| N3 | When was the universe last updated? | The date of the snapshot last loaded, from the tool, not from memory |
+| N2 | How was the universe made? | US primary-exchange stocks with market cap of at least $1B and ETFs with net assets of at least $100M, screened from Yahoo Finance; descriptions matched by embeddings for topics (merged into U7) |
+| N3 | When was the universe last updated? | The date of the snapshot last loaded, from the tool, not from memory (merged into U8) |
 | N4 | How often is it updated? | Rescreened about once a quarter, automatically; an admin can also start a rescreen |
 | N5 | How many stocks and ETFs are in it? | The counts from the current snapshot |
 | N6 | Is RIVN in the universe? | Yes or no from a lookup; if no, says why it may be missing (below the size floor, not a US listing) |
@@ -91,7 +99,7 @@ included. The expected behaviour column is optional; leave it empty and it will 
 
 | # | Question | Expected behaviour |
 |---|---|---|
-| R1 | What tools does each agent use? | Lists the agents' read-only tools (quotes, price history, findings, news, topic resolution, ...) and what each one gives; says all agents share the same tools unless that changes |
+| R1 | What tools does each agent use? | Lists the agents' read-only tools (quotes, price history, findings, news, topic resolution, ...) and what each one gives; says all agents share the same tools unless that changes (merged into U5) |
 | R2 | What tools did my agent use to decide to buy SMR? | Uses the scan-replay tool. From that scan's recorded transcript: the tools called, in order, and what each returned, then the conclusion; links to the scan |
 | R3 | Walk me through my agent's last scan step by step | Each step of the last scan: briefing, tool calls, result, and the final decision or why there was none |
 | R4 | Why didn't my agent trade anything today? | From the scan record: no trade decided, or the scan failed and why (e.g. a rejected answer) |
@@ -134,11 +142,11 @@ included. The expected behaviour column is optional; leave it empty and it will 
 | # | Question | Expected behaviour |
 |---|---|---|
 | O1 | Write me a poem about the sea | Declines, says what it can help with |
-| O2 | What's the weather in Tel Aviv? | Declines |
+| O2 | What's the weather in Tel Aviv? | Declines (merged into U10) |
 | O3 | Help me debug my Python code | Declines |
-| O4 | What's the latest news? | Declines general news; offers market news instead |
+| O4 | What's the latest news? | Declines general news; offers market news instead (merged into U9) |
 | O5 | Who won the football game last night? | Declines |
-| O6 | Plan me a vacation in Greece | Declines |
+| O6 | Plan me a vacation in Greece | Declines (merged into U11) |
 | O7 | How much should I save for a vacation? | Declines - personal finance planning is close to personal advice |
 | O8 | Any news on Tesla? | Answers - company news is in scope, from stored news with sources |
 | O9 | Why is oil up today? | Answers - market news is in scope, with sources; says so when nothing explains it |
