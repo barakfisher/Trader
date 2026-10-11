@@ -2151,7 +2151,7 @@ failure they prevent.
     column, no per-row writes, and "unread" is `created_at > last_seen` for the primary agent.
     *Rejected:* a flag per observation, which costs a write per row read and a migration every time
     a new kind of thing becomes "readable".
-    **Built 2026-10-11 (migration 0050 `insights_seen_at`), with three answers from the user.**
+    **Built 2026-10-11 (migration 0051 `insights_seen_at`; written as 0050 and renumbered when DB3 took 0050 the same hour), with three answers from the user.**
     (a) **The bar's number stays the open-proposal count; unread findings are a dot beside it** -
     the number is what has a deadline; the unread number sits on the *All findings* tab. (b)
     **Opening All findings or Alerts marks seen**, to the `asOf` the page counted at (a finding
@@ -2252,6 +2252,18 @@ failure they prevent.
 ---
 
 ## Bugs that cost real time, and the lesson from each
+
+**Two sessions, one migration number (2026-10-11, #213 and #214):** the database sprint's DB3 took
+`0050_query_statistics` and the Insights session's task 21 took `0050_insights_seen`, both off
+`0049`. Each PR's CI was green - `test_migration_chain_contract.py` saw one head on each branch -
+and they were squash-merged about an hour apart, so `main` had two heads and both deploys stopped
+at `migrate` (the old pods kept serving; nothing went down). Fixed by renumbering the later one to
+`0051` off `0050_query_statistics`, rehearsed on a live copy. **Lesson: with two sessions merging,
+a green CI on a branch says nothing about the merge.** Immediately before merging a PR that adds a
+migration, fetch `main` and run `alembic heads` on the branch merged with it (or merge `main` in
+and let CI re-run); a session that sees another session's migration land renumbers its own first. **The second time** -
+see Stage 4's "Two sessions numbering in parallel collide" below: checking the number before
+naming it is not enough when the other PR merges after you named yours.
 
 **The database sprint (2026-10-09/11, #207-#213) - lessons, newest first:**
 - **An extension's grants go to `PUBLIC`.** `pg_stat_statements` grants its views to every role, so
