@@ -59,6 +59,11 @@ export interface ClaimRunInput {
  * succeed no matter how many fire at once, across processes and replicas. A
  * previous attempt that died mid-flight is reclaimed after STALE_RUN_MINUTES;
  * anything else already claimed returns `claimed: false` and the caller stops.
+ *
+ * The agent is matched as `agent_id = $n OR ($n IS NULL AND agent_id IS NULL)`, not
+ * `IS NOT DISTINCT FROM`: the planner cannot use an index for the latter, and read
+ * the whole of `runs` on every refused claim (DB4). Bound, the former folds to one
+ * branch and `runs_agent_run_key` answers it.
  */
 export async function claimRun(
   input: ClaimRunInput,
@@ -104,7 +109,7 @@ export async function claimRun(
     `UPDATE runs
         SET status = 'running', started_at = now(), finished_at = NULL, trigger = $2,
             heartbeat_at = CASE WHEN heartbeat_at IS NULL THEN NULL ELSE now() END
-      WHERE run_key = $1 AND agent_id IS NOT DISTINCT FROM $6::uuid
+      WHERE run_key = $1 AND (agent_id = $6::uuid OR ($6::uuid IS NULL AND agent_id IS NULL))
         AND ((status = 'failed' AND $5::boolean)
              OR (status = 'running'
                  AND CASE WHEN heartbeat_at IS NULL
@@ -126,7 +131,8 @@ export async function claimRun(
   }
 
   const existing = await queryOne<{ status: string }>(
-    'SELECT status FROM runs WHERE run_key = $1 AND agent_id IS NOT DISTINCT FROM $2::uuid',
+    `SELECT status FROM runs
+      WHERE run_key = $1 AND (agent_id = $2::uuid OR ($2::uuid IS NULL AND agent_id IS NULL))`,
     [input.runKey, input.agentId],
   );
   return { claimed: false, runId: null, existingStatus: existing?.status };
@@ -163,8 +169,9 @@ async function abandonDeadRuns(kind: string, supersededBy: string): Promise<numb
 /** Whether any run, in any state, holds `runKey`. */
 export async function runKeyExists(runKey: string): Promise<boolean> {
   const row = await queryOne<{ exists: boolean }>(
-    `-- agent-blind: asked only of the installation's rescreen key, which has no agent.
-     SELECT EXISTS (SELECT 1 FROM runs WHERE run_key = $1) AS exists`,
+    // Asked only of the installation's rescreen key, which has no agent; saying so lets
+    // `runs_agent_run_key` (agent_id, run_key) answer it.
+    `SELECT EXISTS (SELECT 1 FROM runs WHERE agent_id IS NULL AND run_key = $1) AS exists`,
     [runKey],
   );
   return row?.exists ?? false;
