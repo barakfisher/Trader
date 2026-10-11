@@ -153,3 +153,8 @@ while this file is out of date.
 | 140 | Agents are never hard-deleted; the foreign keys say so and stay as they are |
 | 141 | Retention and new indexes wait for a measurement |
 | 142 | The schema's split stays as designed |
+| 143 | DB4 is split: decide from code now, from statistics after a full week |
+| 144 | `runs`' full scans were `IS NOT DISTINCT FROM`; rewritten, no index added |
+| 145 | `db-report.sh` counts rows with `pg_class.reltuples` |
+| 146 | `traders_m5` is dropped; a scratch copy is restored from a dump when a branch needs one |
+| 147 | No backup leaves the laptop, by the user's choice |
