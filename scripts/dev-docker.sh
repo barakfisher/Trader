@@ -69,7 +69,7 @@ load_env
 
 if [ "$RESET" = true ]; then
   # Backed up first, so a reset typed by mistake costs a restore, not the data.
-  if backup_target_available compose; then
+  if db_target_available compose; then
     bash "$REPO_ROOT/scripts/db-backup.sh" --target compose ||
       fail "the backup failed, so nothing was deleted"
     warn "--reset deletes the Postgres volume; the backup above is in $(backup_target_dir compose)"

@@ -42,7 +42,7 @@ fi
 
 # Before asking, so the question is asked about a database that is already safe.
 if [ "$BACKUP" = true ]; then
-  if backup_target_available kind; then
+  if db_target_available kind; then
     bash "$REPO_ROOT/scripts/db-backup.sh" --target kind ||
       fail "the backup failed, so nothing was deleted (--no-backup deletes without one)"
   else

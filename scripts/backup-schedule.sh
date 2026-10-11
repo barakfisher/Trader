@@ -87,7 +87,7 @@ case "${1:-}" in
     else
       warn "not installed - run: bash scripts/backup-schedule.sh install"
     fi
-    for target in $(backup_targets); do warn_if_backup_stale "$target"; done
+    for target in $(db_targets); do warn_if_backup_stale "$target"; done
     [ ! -f "$LOG" ] || { echo "     last lines of $LOG:"; tail -n 5 "$LOG" | sed 's/^/       /'; }
     ;;
   -h | --help | "")
