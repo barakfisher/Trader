@@ -4,9 +4,16 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-11 - **Database sprint: planned in #207 (decisions 137-142); DB1, backup and
-restore, built in #208 and drilled on both live databases; schedule installed. DB2 done in #210 and
-deployed (both environments at `17010d3`); `instrument_profiles` reclaimed 155 -> 96 MB. DB3 next.**
+Updated: 2026-10-11 ~08:00 UTC - **Database sprint handoff (five merged PRs: #207, #208, #210,
+#211, #213). Nothing is in flight.** DB1 backups (#208; launchd schedule installed, daily 04:00
+local), DB2 the loader writes only changed rows (#210; `instrument_profiles` reclaimed 155 -> 96 MB
+on both), DB3 query statistics (#213, migration **0050**). **Both environments run `main` at
+`0232a21`, migration `0050_query_statistics`**, redeployed by this session at the user's request.
+**The measurement window opened 2026-10-11 07:56 UTC** (`db-report.sh --reset` on both): **DB4,
+the review, is due on or after 2026-10-18** - see "Next session: the database sprint's review".
+**No backup leaves the laptop** (no Time Machine destination, no synced folder; the user knows).
+Merges this session used `gh pr merge --squash --admin --subject "<title> (#N)"` on the user's
+"merge" per PR.
 
 Previous update, 2026-10-08 ~19:45 UTC - **Two debt fixes merged and deployed; the user stopped the session.
 Nothing is in flight.** **#202** - `lexicon-v2` reads present-tense headlines ("Sinks",
@@ -521,7 +528,7 @@ strings and left-to-right assumptions before designing it.
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
-| **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 ✅ #210 (instrument_profiles 155 -> 96 MB); DB3 #213 (deploy + window start pending). DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-142. See "Planned: the database sprint" |
+| **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 ✅ #210 (instrument_profiles 155 -> 96 MB); DB3 ✅ #213 (window from 2026-10-11 07:56 UTC); DB4 due 2026-10-18. DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-142. See "Planned: the database sprint" |
 | **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 📋 Planned | After Stage 4. `/ask` becomes a tool-using assistant: web search, tickers, the user's account, "what can I ask you?". See "Planned: the assistant" |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
@@ -2246,6 +2253,24 @@ failure they prevent.
 
 ## Bugs that cost real time, and the lesson from each
 
+**The database sprint (2026-10-09/11, #207-#213) - lessons, newest first:**
+- **An extension's grants go to `PUBLIC`.** `pg_stat_statements` grants its views to every role, so
+  `REVOKE ... FROM traders_app` left `has_table_privilege('traders_app', ...)` true. *Lesson: after
+  creating an extension, check the app role's privileges with `has_table_privilege` (which counts
+  `PUBLIC`), and revoke from `PUBLIC` where the app should not read.*
+- **A table's floor is its live rows plus a fresh index build.** DB2 promised ~45 MB from
+  `sum(pg_column_size(row))`; `VACUUM FULL` gave 96 MB, because the HNSW index is a real 40 MB.
+  *Lesson: estimate reclaimable space as total minus (live rows + rebuilt indexes); the cheapest
+  honest measure is the `VACUUM FULL` itself, on a backed-up database.*
+- **`bash -e` ignores a failing command that is negated.** A CI check written `! grep -q ... kept`
+  could never fail. *Lesson: in a `run:` block, assert absence with `if grep -q ...; then exit 1;
+  fi`.* Also: whole-day age arithmetic depends on the hour CI runs - give boundaries a day's margin.
+- **The startup loader's "newer or equal" rule made every restart a full reload** (49 loads of 2
+  snapshots), and an unconditional `ON CONFLICT DO UPDATE` made each reload a rewrite of every row.
+  *Lesson: an upsert run on every start needs a `WHERE ... IS DISTINCT FROM`, and a test that
+  checks `xmin` across two runs - and remember `RETURNING` returns nothing when that `WHERE` is
+  false.*
+
 **Stage 4's last stretch (2026-10-07/08, #186-#199) - lessons, newest first:**
 - **A real-service rehearsal found what 900 unit tests could not:** BullMQ 6 treats `ioredis` as an
   *optional* peer and fails at the first Redis call without it - the tests never open Redis. Fixed
@@ -2954,6 +2979,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 
 | Item | Where | Impact |
 |---|---|---|
+| **No backup leaves the laptop** | `~/Backups/traders` (DB1, decision 137) | The daily dumps survive `k8s-down.sh`, a lost Docker volume and a bad migration, but not the Mac's disk failing or the laptop being lost: Time Machine has no destination and no synced folder exists (checked 2026-10-11). The fix is the user's - a Time Machine disk (`~/Backups` is already included) or a synced folder (`TRADERS_BACKUP_DIR`, then `backup-schedule.sh install` again) |
 | **The shadow SPY pays no fees** | `services/performance.ts` (`benchmarkOn`), D38 | The user's choice for now (2026-10-05), to be revisited: they will add fees. The agent pays 10 bps / $1.50 on every trade and the shadow pays nothing, so the comparison leans slightly against the agent - about $1.50-$10 per deposit at today's budgets. When fees are added, decide whether each deposit pays one fee on the way in (the shadow buys once per deposit) and record it as a decision; the hint under the figures ("without fees", `agents.performance.hint`) must change with it |
 | ~~A simulated agent has no stored daily value yet~~ | — | **Resolved by PR 7 (D36)**: the daily value is computed from the ledger and stored closes, not stored - no snapshot, no migration |
 | ~~SPY has no stored prices~~ | — | **Resolved by PR 7**: the backfill always fetches the benchmark, and every instrument an agent has ever traded |
@@ -3051,6 +3077,14 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
   builder is already in `@traders/shared`.
 
 ## Local environment (this machine)
+
+- **The daily backup is a launchd agent** (`~/Library/LaunchAgents/com.traders.db-backup.plist`,
+  installed 2026-10-11 from the main checkout at the user's request): 04:00 local, both databases,
+  into `~/Backups/traders/<kind|compose>/`, log `~/Library/Logs/traders-db-backup.log`. It runs
+  **the main checkout's** `scripts/db-backup.sh` - a different branch checked out there changes
+  what the backup runs. `bash scripts/backup-schedule.sh status|run|uninstall`.
+- **Both Postgres servers log statements over 200 ms** (DB3); `docker logs traders-postgres-1` and
+  `kubectl ... logs postgres-0` are therefore no longer quiet, by design.
 
 - **`ENABLE_SCHEDULED_SCANS=true` in the user's `.env` is deliberate** (2026-10-08, the user's yes):
   compose schedules agents' scans, kind does not (`config.env`), `.env.example` says `false` so a
@@ -3382,6 +3416,24 @@ grant tests fail for the wrong reason.
 
 ## Where to go next
 
+### Next session: the database sprint's review (DB4, due on or after 2026-10-18)
+
+Ask the user before starting (no standing grant; "merge" per PR). **Before 2026-10-18 the window
+is too short** for "never scanned" to mean anything - a weekly CronJob or a weekend could be the
+only reader - so do something else first and say why.
+1. **Check the backups are running:** `bash scripts/backup-schedule.sh status` (last exit code 0,
+   both dumps under 48 h old). The log is `~/Library/Logs/traders-db-backup.log`.
+2. **Run the report on both:** `bash scripts/db-report.sh --target kind` and `--target compose`.
+   Confirm the window header still says 2026-10-11 07:56 UTC: a Postgres restart keeps
+   `pg_stat_statements` but a `--reset` or a `k8s-down.sh` would not, and a shorter window must be
+   said, not hidden.
+3. **Bring the findings one question at a time, each with a recommendation** (AskUserQuestion), as
+   DB4's row says. Expected: the query behind `runs`' ~700-row sequential scans and its index;
+   indexes never scanned across the full week (`intents_ledger_idx`, decision 138, among them -
+   the unique ones are excluded because they enforce rules); whether `runs` needs retention
+   (~130 rows a day). Each answer is a decision (next number: **143**); each change its own PR.
+4. **Still open from DB1:** an off-laptop copy. The user was told twice; ask once more, do not nag.
+
 ### Planned: the database sprint (agreed 2026-10-09)
 
 **Agreed with the user 2026-10-09**, after a read-only measurement of kind's database (and compose's
@@ -3450,7 +3502,7 @@ bloat. *Lesson: estimate a table's floor as live rows plus a fresh index build, 
 file-level copy needs the live database disconnected; the `VACUUM FULL` before/after measured it.
 #209 (Insights tabs, another session) shipped in the same redeploy; it has no migration.
 
-**DB3 is built (2026-10-11, #213); deploy and window start pending.** Migration **0050**
+**DB3 is done (2026-10-11, #213; deployed, window opened 07:56 UTC on both).** Migration **0050**
 creates `pg_stat_statements` - in Alembic, because an extension is schema (as `vector` is) and a
 report that ran DDL the first time it was read would change the database by looking at it. Both
 servers get `shared_preload_libraries=pg_stat_statements`, `log_min_duration_statement=200` and
@@ -3464,8 +3516,9 @@ kind|compose [--reset]` reads statements by total time, tables by sequential rea
 non-unique indexes, sizes and the slow log; `--reset` starts the window. The helpers that reach
 each database moved from `lib/backups.sh` to `lib/db-targets.sh` (`db_target_available`,
 `db_targets`, `require_db_target`), which `backups.sh` sources. RUNBOOK section 6. **After merge:**
-redeploy both (Postgres restarts - its pod or container is recreated with the flags; data is on the
-volume), run `--reset` on each, and record the window's start date here; DB4 is a week after it.
+redeployed both (Postgres restarted with the flags; both show `shared_preload_libraries =
+pg_stat_statements`, `log_min_duration_statement = 200ms`, revision 0050, `/readyz` ok), then
+`--reset` on each at **2026-10-11 07:56 UTC** - the window DB4 reads.
 
 **The PRs:**
 
@@ -3473,7 +3526,7 @@ volume), run `--reset` on each, and record the window's start date here; DB4 is 
 |---|---|---|---|
 | DB1 ✅ | **Backup and restore** (decision 137). `scripts/db-backup.sh [--target kind\|compose]`: `pg_dump -Fc` run inside the Postgres container (`kubectl exec` / `docker exec`, so the host needs no Postgres client and the versions match), streamed to `${TRADERS_BACKUP_DIR:-$HOME/Backups/traders}/<target>/`, written to `.partial` and renamed only after `pg_restore --list` reads it; directory `700`, files `600`. Keeps the newest 14 plus one a week for 8 weeks. `scripts/db-restore.sh <file> --target ...` refuses without `--yes`. `k8s-down.sh` takes a kind backup before deleting (skip with `--no-backup`). A launchd agent (a plist template under `infra/launchd/` and an install script the **user** runs - it is persistent config on their Mac) runs both targets daily. `k8s-up.sh` and `dev-docker.sh` warn when the newest backup is older than 48 h, so a schedule that stopped is noticed | M | **a restore drill passes:** a dump of each environment restored into a scratch database with row counts equal per table; the drill and the dump sizes recorded here |
 | DB2 ✅ | **The universe loader writes only what changed.** Both upserts in `load_universe` gain `WHERE (...) IS DISTINCT FROM (...)` over every column but `updated_at` (`size_as_of` included, so a *new* snapshot still updates its rows). **Trap:** `ON CONFLICT DO UPDATE ... WHERE` false returns no row, so `_upsert_instrument`'s `RETURNING id` needs a fallback select. ETF holdings are replaced only when the set differs. **Do not** skip the load when `as_of` equals the last one: the mounted descriptions file can change without `as_of` changing - the row-level guard is the safe one. Then, **after DB1 has a fresh backup**, reclaim the space once: measure live versus dead bytes first (`pgstattuple`, on a copy), then `VACUUM FULL instrument_profiles` (an exclusive lock for seconds; run it with the CronJobs quiet) | S-M | a test loads one snapshot twice and the second writes no row; `n_tup_upd` on both tables unchanged across a `k8s-up.sh` restart; the table's size before and after recorded here |
-| DB3 🚧 | **Query statistics on.** `shared_preload_libraries=pg_stat_statements` and `log_min_duration_statement=200` (ms - an observation threshold, not a product rule) as server flags in `infra/k8s/base/postgres.yaml`, `infra/compose/docker-compose.yml` and CI's Postgres; the extension created (Alembic, or a guarded init - settle in the PR; **0049 was taken by #206** (`0049_finding_episodes`) although IBI's plan names it, so read `origin/main`'s newest migration before numbering). `scripts/db-report.sh`, read-only: top statements by total time, tables by sequential reads, unused indexes, sizes, dead tuples. Reset the statistics once after deploying, so the week starts clean | S | the report runs against both environments; the date the week starts recorded here |
+| DB3 ✅ | **Query statistics on.** `shared_preload_libraries=pg_stat_statements` and `log_min_duration_statement=200` (ms - an observation threshold, not a product rule) as server flags in `infra/k8s/base/postgres.yaml`, `infra/compose/docker-compose.yml` and CI's Postgres; the extension created (Alembic, or a guarded init - settle in the PR; **0049 was taken by #206** (`0049_finding_episodes`) although IBI's plan names it, so read `origin/main`'s newest migration before numbering). `scripts/db-report.sh`, read-only: top statements by total time, tables by sequential reads, unused indexes, sizes, dead tuples. Reset the statistics once after deploying, so the week starts clean | S | the report runs against both environments; the date the week starts recorded here |
 | DB4 | **The review, a week after DB3 - measure, then decide.** No code planned: the report, then one question at a time with a recommendation. Expected questions: the query behind `runs`' full scans and its index; `intents_ledger_idx` (no reader, decision 138) and other indexes with no scans across a full week; retention for `runs`. Each answer becomes a decision; any change is its own PR | — | the findings and the user's answers recorded as decisions |
 
 **Considered and rejected:** an in-cluster CronJob for backups (decision 137); a backup operator
@@ -3504,10 +3557,8 @@ copy of the live database (up/down/up, row counts); the Telegram flow on a copy 
 ### Next session: after the debt fixes (#202, #203, 2026-10-08)
 
 Ask the user before starting anything (the Stage 4 grant ended). In order of the user's last answer:
-0. **The database sprint** (see "Planned: the database sprint"): DB1 done (#208; schedule installed,
-   first run 2026-10-11 exit 0); DB2 done (#210, deployed and reclaimed 2026-10-11); DB3 is #213 -
-   after its merge: redeploy, `db-report.sh --reset` on both, record the date. **DB4 is due a week
-   after that reset** - run the report on both, then one question at a time. **No off-laptop copy
+0. **The database sprint's review, DB4 - due on or after 2026-10-18** (see "Next session: the
+   database sprint's review" below). **No off-laptop copy
    exists:** Time Machine has no destination and no synced folder exists on the Mac - the user was
    told (2026-10-11).
 1. **Review the scheduled scans** once three trading days have run (09:00 New York each trading
