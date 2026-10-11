@@ -30,6 +30,7 @@ from app.routers import (
     agents,
     analysis,
     ask,
+    assistant,
     concepts,
     health,
     llm,
@@ -121,3 +122,4 @@ app.include_router(news.router)
 app.include_router(universe.router)
 app.include_router(llm.router)
 app.include_router(agents.router)
+app.include_router(assistant.router)

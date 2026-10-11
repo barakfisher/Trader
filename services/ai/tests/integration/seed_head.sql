@@ -245,3 +245,23 @@ UPDATE agents SET budget_minor = 150000 WHERE id = '90000000-0000-0000-0000-0000
 -- A reset's backup (0045), which makes its downgrade refuse: it would discard it.
 INSERT INTO account_resets (user_id, groups, counts, backup) VALUES
   ('00000000-0000-0000-0000-00000000000a', ARRAY['followed_topics'], '{"topics": 0}', '{"topics": []}');
+-- The assistant (0052): its own model choice and purpose, and a conversation
+-- whose replies cover every outcome and every decline reason.
+INSERT INTO llm_model_choices (scope, model, updated_by) VALUES
+  ('assistant', 'google/gemini-3.5-flash-lite', '00000000-0000-0000-0000-00000000000a');
+INSERT INTO llm_calls (user_id, purpose, provider, model, outcome, verdict, latency_ms, cost_micro_usd, prompt) VALUES
+  ('00000000-0000-0000-0000-00000000000a', 'assistant', 'openrouter', 'm', 'ok', 'accepted', 900, 1200, 'p');
+INSERT INTO assistant_conversations (id, user_id, title) VALUES
+  ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'How is my portfolio?');
+INSERT INTO assistant_messages (conversation_id, user_id, role, content, outcome, reason, sources, suggestions, tool_calls, model, cost_micro_usd) VALUES
+  ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'user', 'How is my portfolio?', NULL, NULL, '[]', '[]', '[]', NULL, 0),
+  ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'Up.', 'answer', NULL, '[{"kind": "page", "label": "Portfolio", "link": "/"}]', '["Why?"]', '[{"role": "tool", "name": "get_portfolio", "result": {}}]', 'm', 1200),
+  ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'No.', 'decline', 'off_domain', '[]', '[]', '[]', 'm', 0),
+  ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'No.', 'decline', 'advice', '[]', '[]', '[]', 'm', 0),
+  ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'No.', 'decline', 'action', '[]', '[]', '[]', 'm', 0),
+  ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'No.', 'decline', 'prompt', '[]', '[]', '[]', 'm', 0),
+  ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'Which?', 'clarify', NULL, '[]', '[]', '[]', 'm', 0),
+  ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'x', 'failed', NULL, '[]', '[]', '[]', 'm', 0),
+  ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'x', 'budget_reached', NULL, '[]', '[]', '[]', NULL, 0),
+  ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'x', 'no_model', NULL, '[]', '[]', '[]', NULL, 0);
+UPDATE installation_settings SET assistant_daily_budget_micro_usd = 750000;

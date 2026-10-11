@@ -353,7 +353,7 @@ async def get_news(context: ToolContext, arguments: Mapping[str, Any]) -> dict[s
         rows = connection.execute(
             text(
                 """
-                SELECT DISTINCT ON (a.id) a.title, a.source, a.published_at, s.score
+                SELECT DISTINCT ON (a.id) a.title, a.source, a.url, a.published_at, s.score
                   FROM article_entities e
                   JOIN articles a ON a.id = e.article_id AND a.duplicate_of_id IS NULL
                   LEFT JOIN article_sentiment s ON s.article_id = a.id
@@ -372,6 +372,7 @@ async def get_news(context: ToolContext, arguments: Mapping[str, Any]) -> dict[s
             {
                 "title": row.title,
                 "source": row.source,
+                "url": row.url,
                 "published": row.published_at.isoformat(),
                 "sentiment": None if row.score is None else f"{row.score.normalize():f}",
             }
@@ -549,15 +550,22 @@ TOOLS: tuple[Tool, ...] = (
 TOOLS_BY_NAME: dict[str, Tool] = {tool.spec.name: tool for tool in TOOLS}
 
 
-async def run_tool(context: ToolContext, name: str, arguments_text: str) -> str:
+async def run_tool(
+    context: ToolContext,
+    name: str,
+    arguments_text: str,
+    tools: Mapping[str, Tool] = TOOLS_BY_NAME,
+) -> str:
     """Run one tool call as the model wrote it and answer the JSON the model will read.
 
-    The model's mistakes - an unknown tool, arguments that are not a JSON
-    object - come back as an error it can read and correct; ours raise.
+    `tools` is the set the caller offered: an agent's by default, the
+    assistant's from `app/assistant/tools.py`. The model's mistakes - an unknown
+    tool, arguments that are not a JSON object - come back as an error it can
+    read and correct; ours raise.
     """
-    tool = TOOLS_BY_NAME.get(name)
+    tool = tools.get(name)
     if tool is None:
-        return json.dumps({"error": f"no tool named {name}; the tools are {sorted(TOOLS_BY_NAME)}"})
+        return json.dumps({"error": f"no tool named {name}; the tools are {sorted(tools)}"})
     try:
         arguments = json.loads(arguments_text or "{}")
     except json.JSONDecodeError:

@@ -982,3 +982,46 @@ class AgentScanResponse(BaseModel):
     model: str | None
     answer: AgentScanAnswer | None
     error: str | None
+
+
+# -- the assistant (migration 0052) --------------------------------------------
+
+
+class AssistantMessageRequest(BaseModel):
+    """One question to the assistant, in a conversation or starting one."""
+
+    user_id: UUID
+    conversation_id: UUID | None = Field(
+        default=None, description="Null starts a new conversation."
+    )
+    message: str = Field(max_length=2000)
+
+
+class AssistantSource(BaseModel):
+    """Where a fact in the reply came from, built from the tools that ran - never the model."""
+
+    kind: Literal["news", "concept", "page", "data"]
+    label: str
+    url: str | None = Field(default=None, description="An outside page: a news article.")
+    link: str | None = Field(default=None, description="A page of this app, e.g. '/insights'.")
+    published: str | None = None
+
+
+class AssistantReply(BaseModel):
+    """The assistant's reply. A decline, a clarify and every failure are 200s with an
+    `outcome`, like `/ask`'s refusal: each is an outcome the screen shows, not a fault."""
+
+    conversation_id: UUID | None = Field(
+        description="Null only for a blank question, which starts nothing."
+    )
+    message_id: UUID | None
+    outcome: Literal["answer", "decline", "clarify", "failed", "budget_reached", "no_model"]
+    reason: Literal["off_domain", "advice", "action", "prompt"] | None = Field(
+        default=None, description="Why it declined; null unless outcome is 'decline'."
+    )
+    text: str = Field(description="Markdown. Every figure in it was checked against tool results.")
+    sources: list[AssistantSource] = Field(default_factory=list)
+    suggestions: list[str] = Field(default_factory=list, description="Questions to ask next.")
+    model: str | None = None
+    cost_micro_usd: int = 0
+    steps: int = Field(default=0, description="Tool calls made.")

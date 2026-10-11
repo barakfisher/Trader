@@ -529,7 +529,7 @@ strings and left-to-right assumptions before designing it.
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
 | **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 ✅ #210 (instrument_profiles 155 -> 96 MB); DB3 ✅ #213 (window from 2026-10-11 07:56 UTC); DB4 due 2026-10-18. DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-142. See "Planned: the database sprint" |
-| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 📋 Planned | After Stage 4. `/ask` becomes a tool-using assistant: web search, tickers, the user's account, "what can I ask you?". See "Planned: the assistant" |
+| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 🚧 In progress | Test set #212. PR 1a (AI service core, migration 0052) opened 2026-10-11. See "Planned: the assistant" and its "Build" list |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
 | **Multi-agent sandbox, Stage 4 — the agent that decides** | 🚧 In progress | #172 spec D43-D52 + §14; #173 models on the Admin page (0041, D43-D44); #177 the scan's inputs - tool calling, movers, seven read-only tools, the briefing (0042); #180 the scan - one hand-written loop (D53), the per-agent budget, the step limit, `agent_scans` (0043), `POST /agents/:id/scans`, built on a scripted model (**real scans not yet measured: the account is unfunded**). Next: PR 5, the trade proposal and its approval (D26, D47-D49, D51, D54) |
@@ -3699,6 +3699,33 @@ answer "what can I ask you?".
   are answered. Borderline cases are test cases O4-O10.
 - **No memory across conversations.** Memory stays per conversation; asked about an earlier one,
   the assistant says it does not remember (test case M7).
+
+**Build, agreed 2026-10-11 (the user chose each; grant in the auto-memory `traders-assistant-grant`):**
+1a. AI service core - shared loop `app/llm/tool_loop.py` (the scan now uses it), `app/assistant/`
+    (six own tools + six shared agent tools, the reply check, conversations, the daily limit),
+    `POST /assistant/messages`, migration **0052**. 1b. Admin: the `assistant` model picker and
+    the daily-limit field; orchestrator route; list/read/delete conversations (orchestrator SQL).
+2. `replay_scan` + `get_universe_info`. 3. The `/ask` chat screen, 90-day retention. 4. The eval
+    runner on a real model + cost measurement -> the real limit. 5. The `openai` package switch.
+**Decided in 1a, each argued in its module's docstring:** the assistant has **its own scope**
+(`assistant`) - until 1b adds the picker, no choice exists and calls use `LLM_MODEL`; a
+**$0.50/day per user** limit in `installation_settings`, reset at the **user's midnight** (an
+agent's budget keeps UTC days, D45); step limit 8, 2,500 output tokens, 120 s, history = last 6
+messages (open - measure in PR 4); **one repair turn** when a reply fails its check, then the
+user is told no checked answer exists (the text is kept for review, never shown); **sources are
+built by the server from the tools that ran**, never by the model; **the user's own words count
+as evidence** (so "not 50%" can correct them); **earlier tool results stay evidence** for
+follow-ups, though they are not re-sent; no-model and budget are 200 outcomes, not errors.
+**Measured on a live copy with the free route (2026-10-11), which changed the code:** a real
+reply wrote every hyphen as U+2011 and "7‑day" was refused (dashes are now normalised for the
+assistant's check only - **narration's and the agents' checks still refuse them; a candidate
+fix**); a table of 20 holdings hit 1,500 tokens mid-JSON (now 2,500, and "keep replies short");
+the model passed `"None"` as an agent name. After the fixes: answered with sources in one tool
+call, and declined the weather with none. **It also said "EOSE is the only holding down" when
+three others were** - a reasoning error no figure check can see; that is the eval's job (PR 4).
+**Environment trap:** the worktree's `.venv` is a symlink to the main checkout's, whose editable
+install points `app` at the main checkout - so `python scripts/export_openapi.py` silently
+exported **main's** app. Run it as `PYTHONPATH=. .venv/bin/python scripts/export_openapi.py`.
 
 **Order (the user's):**
 1. Follow-up questions (conversation memory), sources on every answer, suggested next questions.
