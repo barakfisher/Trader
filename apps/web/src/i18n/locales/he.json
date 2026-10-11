@@ -321,7 +321,8 @@
     "sigma_move": "תנועה חריגה",
     "drawdown": "ירידה מהשיא",
     "allocation_drift": "סטייה בפיזור",
-    "topic_move": "תנועת נושא"
+    "topic_move": "תנועת נושא",
+    "agent_trade": "עסקת סוכן"
   },
   "news": {
     "cashtag": "הטיקר ⁦${{symbol}}⁩ בטקסט",
@@ -1415,8 +1416,30 @@
   "insights": {
     "title": "תובנות",
     "tabs": {
-      "observations": "תצפיות",
-      "digest": "סיכום יומי"
+      "alerts": "התראות",
+      "proposals": "הצעות",
+      "digest": "סיכום יומי",
+      "observations": "כל הממצאים"
     }
+  },
+  "alerts": {
+    "title": "התראות",
+    "source": "מקור",
+    "sources": {
+      "all": "הכל",
+      "portfolio": "תיק",
+      "topics": "נושאים",
+      "agents": "סוכנים"
+    },
+    "loading": "טוען התראות…",
+    "loadFailed": "לא ניתן היה לטעון את ההתראות.",
+    "emptyTitle": "לא נשלח דבר",
+    "emptyBody": "ממצאים ברמת ההתראה שלך ומעליה נשלחים לטלגרם ומופיעים כאן. כל השאר נמצא תחת כל הממצאים.",
+    "noMatchTitle": "לא נשלח דבר ממקור זה",
+    "noMatchBody": "ייתכן שיש התראות ממקורות אחרים.",
+    "deferred": "נדחה לסיכום (שעות שקטות)",
+    "notDelivered": "לא נמסר",
+    "sent": "נשלח {{when}}",
+    "agent": "סוכן: {{name}}"
   }
 }

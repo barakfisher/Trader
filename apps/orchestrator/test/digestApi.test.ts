@@ -2,6 +2,7 @@
  * `GET /notifications/digest`: the daily digest as the Insights page shows it
  * (FR-13) - what the next one will carry, and what the last one delivered -
  * and `POST /notifications/digest/seen`, which ends its dashboard banner (UX4).
+ * And `GET /notifications/alerts`, the Insights page's Alerts tab (decision 134).
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -28,6 +29,8 @@ const queries = vi.hoisted(() => ({
   listNotifications: vi.fn(async (): Promise<unknown[]> => []),
   getDigestSeenAt: vi.fn(async (): Promise<Date | null> => null),
   markDigestSeen: vi.fn(async (_userId: string, sentAt: Date): Promise<Date | null> => sentAt),
+  listAlerts: vi.fn(async (): Promise<unknown[]> => []),
+  countAlerts: vi.fn(async (): Promise<number> => 0),
 }));
 
 vi.mock('../src/db/queries.js', () => ({ getUser: vi.fn(async () => USER), ...queries }));
@@ -80,7 +83,12 @@ const get = () => app.request('/notifications/digest', { headers: { cookie } });
 
 describe('GET /notifications/digest', () => {
   it('says what the next digest holds, with why each was held back', async () => {
-    const localized = { he: { headline: 'מחיר \u2066SMR\u2069 נמצא \u2066-30.6%\u2069 מהשיא של \u206630\u2069 יום', explanation: '' } };
+    const localized = {
+      he: {
+        headline: 'מחיר \u2066SMR\u2069 נמצא \u2066-30.6%\u2069 מהשיא של \u206630\u2069 יום',
+        explanation: '',
+      },
+    };
     queries.listPendingDigestEntries.mockResolvedValueOnce([row({ localized })]);
 
     const body = await (await get()).json();
@@ -103,7 +111,11 @@ describe('GET /notifications/digest', () => {
   it('dates the last digest by when it was delivered', async () => {
     queries.listLastDigestEntries.mockResolvedValueOnce([
       row({ status: 'sent', sent_at: new Date('2026-09-30T06:45:29.300Z'), reason: 'below_floor' }),
-      row({ notification_id: 'n-2', status: 'sent', sent_at: new Date('2026-09-30T06:45:29.305Z') }),
+      row({
+        notification_id: 'n-2',
+        status: 'sent',
+        sent_at: new Date('2026-09-30T06:45:29.305Z'),
+      }),
     ]);
 
     const body = await (await get()).json();
@@ -114,7 +126,13 @@ describe('GET /notifications/digest', () => {
 
   it('keeps a narration notice, which has no finding behind it', async () => {
     queries.listPendingDigestEntries.mockResolvedValueOnce([
-      row({ observation_id: null, headline: null, severity: null, subject_ref: null, reason: 'below_floor' }),
+      row({
+        observation_id: null,
+        headline: null,
+        severity: null,
+        subject_ref: null,
+        reason: 'below_floor',
+      }),
     ]);
     const body = await (await get()).json();
     expect(body.next.entries[0]).toMatchObject({ observationId: null, headline: null });
@@ -128,7 +146,9 @@ describe('GET /notifications/digest', () => {
 describe('whether the last digest was seen (UX4)', () => {
   const SENT = '2026-09-30T06:45:29.305Z';
   const delivered = () =>
-    queries.listLastDigestEntries.mockResolvedValueOnce([row({ status: 'sent', sent_at: new Date(SENT) })]);
+    queries.listLastDigestEntries.mockResolvedValueOnce([
+      row({ status: 'sent', sent_at: new Date(SENT) }),
+    ]);
 
   it('is unseen until the user has seen that digest', async () => {
     delivered();
@@ -170,5 +190,71 @@ describe('whether the last digest was seen (UX4)', () => {
 
   it('requires a session', async () => {
     expect((await mark({ sentAt: SENT }, {})).status).toBe(401);
+  });
+});
+
+describe('GET /notifications/alerts', () => {
+  const alerts = (query = '') =>
+    app.request(`/notifications/alerts${query}`, { headers: { cookie } });
+
+  function alertRow(overrides: Record<string, unknown> = {}) {
+    return {
+      ...row(),
+      id: 'o-1',
+      kind: 'agent_trade',
+      subject_kind: 'instrument',
+      explanation: 'thesis',
+      evidence: {},
+      concept_refs: [],
+      narration_source: 'llm',
+      fallback_reason: null,
+      localized: {},
+      agent_id: 'a-1',
+      agent_name: 'Test agent',
+      agent_is_primary: false,
+      route: 'push',
+      status: 'failed',
+      ...overrides,
+    };
+  }
+
+  it('says who sent each alert and what became of it, and pages by the last id', async () => {
+    queries.listAlerts.mockResolvedValueOnce([
+      alertRow(),
+      alertRow({
+        id: 'o-2',
+        route: 'digest',
+        status: 'sent',
+        sent_at: new Date('2026-09-30T05:00:00Z'),
+      }),
+      alertRow({ id: 'o-3' }),
+    ]);
+    queries.countAlerts.mockResolvedValueOnce(5);
+
+    const response = await alerts('?limit=2&source=agents');
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(queries.listAlerts).toHaveBeenCalledWith(USER.id, 3, 'agents', null);
+    expect(body.total).toBe(5);
+    expect(body.nextCursor).toBe('o-2');
+    expect(body.alerts.map((alert: { id: string }) => alert.id)).toEqual(['o-1', 'o-2']);
+    expect(body.alerts[0].agent).toEqual({ id: 'a-1', name: 'Test agent', isPrimary: false });
+    expect(body.alerts[0].delivery).toEqual({ deferred: false, delivered: false, sentAt: null });
+    expect(body.alerts[1].delivery).toEqual({
+      deferred: true,
+      delivered: true,
+      sentAt: '2026-09-30T05:00:00.000Z',
+    });
+  });
+
+  it('refuses a source it does not know, and a cursor that is not an id', async () => {
+    expect((await alerts('?source=news')).status).toBe(400);
+    expect((await alerts('?before=yesterday')).status).toBe(400);
+    expect(queries.listAlerts).not.toHaveBeenCalled();
+  });
+
+  it('is behind the session like every other read', async () => {
+    expect((await app.request('/notifications/alerts')).status).toBe(401);
   });
 });

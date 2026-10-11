@@ -21,6 +21,7 @@ from decimal import Decimal
 from app.analysis.allocation_drift import PositionValue, allocation_drift_findings
 from app.analysis.dedupe import dedupe_key
 from app.analysis.drawdown import drawdown_findings
+from app.analysis.episodes import EpisodeBook, OpenEpisode
 from app.analysis.findings import Finding
 from app.analysis.price_move import price_move_findings
 from app.analysis.price_series import PricePoint
@@ -78,6 +79,9 @@ class ScanStats:
     #: Findings the caller already has. Counted rather than narrated: see the
     #: note above `run_portfolio_scan`.
     already_known: int = 0
+    #: Of `already_known`, the states an open episode had already reached
+    #: (decision 132): same subject, same or a lower band, on a later day.
+    held_in_episode: int = 0
     #: Every finding this scan made, new or already known, as kind, subject and
     #: severity. The observations carry only what is new, so without this a
     #: caller cannot tell "the drift fell back" from "the feed already has it" -
@@ -105,6 +109,7 @@ async def run_portfolio_scan(
     articles: Sequence[CandidateArticle] = (),
     excluded_sources: Sequence[str] = (),
     known_dedupe_keys: Iterable[str] = (),
+    open_episodes: Iterable[OpenEpisode] = (),
     now: datetime | None = None,
     user_id: str | None = None,
 ) -> tuple[list[ScanObservation], ScanStats]:
@@ -120,6 +125,11 @@ async def run_portfolio_scan(
     `known_dedupe_keys` is what the caller has already stored. Findings matching
     one are counted in `already_known` and dropped here, so the cost of a repeat
     is a hash rather than a completion.
+
+    `open_episodes` does the same for states (drawdown, drift; decision 132): a
+    state is said again only when it reaches a band higher than its episode has
+    written, not each day it persists. `stats.seen` still lists every finding,
+    so the caller can tell when an episode has ended.
     """
     moment = now or datetime.now(UTC)
     since = moment - timedelta(days=HISTORY_DAYS)
@@ -135,8 +145,14 @@ async def run_portfolio_scan(
             stats.insufficient_history.append(subject.symbol)
             continue
         stats.subjects_with_history += 1
-        findings.extend(price_move_findings(subject.symbol, points, thresholds))
-        findings.extend(sigma_move_findings(subject.symbol, points, thresholds))
+        # One move is one observation (decision 132). When the move is unusual
+        # for this instrument, the sigma rule says so and takes its severity
+        # from the band that knows the stock; the plain percentage would only
+        # repeat it. A price move stands alone when the sigma rule is silent -
+        # including a large move that is ordinary for a volatile holding, so a
+        # 6% fall is never invisible (the user, 2026-10-09).
+        unusual = sigma_move_findings(subject.symbol, points, thresholds)
+        findings.extend(unusual or price_move_findings(subject.symbol, points, thresholds))
         findings.extend(drawdown_findings(subject.symbol, points, thresholds))
 
     unpriced = [subject.symbol for subject in subjects if subject.value_minor is None]
@@ -178,7 +194,13 @@ async def run_portfolio_scan(
     ]
 
     observations = await _narrate_new(
-        findings, known_dedupe_keys, llm, stats, articles, user_id=user_id
+        findings,
+        known_dedupe_keys,
+        llm,
+        stats,
+        articles,
+        user_id=user_id,
+        episodes=EpisodeBook(open_episodes),
     )
 
     log.info(
@@ -295,9 +317,11 @@ async def _narrate_new(
     stats: ScanStats | TopicScanStats,
     articles: Sequence[CandidateArticle] = (),
     user_id: str | None = None,
+    episodes: EpisodeBook | None = None,
 ) -> list[ScanObservation]:
     """Drop what the caller already holds, and put words to the rest."""
     known = set(known_dedupe_keys)
+    book = episodes or EpisodeBook()
     observations: list[ScanObservation] = []
     for finding in findings:
         key = dedupe_key(finding)
@@ -305,6 +329,12 @@ async def _narrate_new(
             # Same rule, same subject, same severity, same day: the feed already
             # says this. Nothing new to write and nothing to pay for.
             stats.already_known += 1
+            continue
+        if book.already_said(finding):
+            # A state its episode has already reached: still true, not news.
+            stats.already_known += 1
+            if isinstance(stats, ScanStats):
+                stats.held_in_episode += 1
             continue
         narration = await narrate(
             finding, list(correlate(finding, list(articles))), llm, user_id=user_id

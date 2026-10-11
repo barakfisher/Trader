@@ -156,6 +156,12 @@ the day the observed data belongs to - from the finding's own `as_of`, never a c
 sends the keys it already holds, so a repeat is dropped before anything is narrated: the rules are
 deterministic and the scan runs half-hourly, so most of what a scan finds is what the last one
 found, and narrating those meant paying a model to write sentences that were discarded on insert.
+**States are the exception** (decision 132): drawdown and allocation drift describe where a subject
+*is*, so a day bucket repeated them daily. Each belongs to an episode (`finding_episodes`, 0049)
+holding the highest band it has written; the caller sends the open episodes too, and a state is
+written again only above its episode's band. The episode ends when a scan that measured the subject
+finds nothing - below the `info` band - and the next entry is new. One move is also one finding: when
+`sigma_move` fires, `price_move` is dropped; it stands alone when the sigma rule is silent.
 
 **Narration last, and least trusted.** The model is offered a finding whose deterministic narration
 already exists and is correct. Every number in what it returns is checked against the evidence, with

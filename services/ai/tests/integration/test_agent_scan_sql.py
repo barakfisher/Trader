@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -25,8 +26,9 @@ from app.agents.scan_log import (
     find_agent,
     start_scan,
 )
-from app.agents.tools import scan_context
+from app.agents.tools import money, scan_context
 from app.analysis.thresholds import AnalysisThresholds
+from app.core.fees import fee_minor
 from app.corpus.hashed_embedder import HashedEmbedder
 from app.corpus.vector_store import PgVectorStore
 from app.llm.base import (
@@ -229,8 +231,8 @@ async def test_the_server_checks_the_answer_whatever_the_model_said(
 async def test_a_buy_cash_cannot_cover_with_its_fee_is_invalid_with_the_amounts(
     loaded: Engine, agent: ScanAgent
 ) -> None:
-    # 18 x 54.32 = 977.76, plus the $1.50 minimum fee: 979.26 fits the 1000.00
-    # of cash; 19 x 54.32 = 1032.08 does not (D54, D55).
+    # 18 x 54.32 = 977.76 plus the minimum fee fits the 1000.00 of cash;
+    # 19 x 54.32 = 1032.08 does not (D54, D55, D76).
     market = ScriptedMarket()
     market.prices = {"CCJ": 5_432}
     fits = await _scan(
@@ -245,7 +247,8 @@ async def test_a_buy_cash_cannot_cover_with_its_fee_is_invalid_with_the_amounts(
     short = await _scan(loaded, agent, llm, market)
 
     assert short.outcome == "invalid_answer"
-    assert short.problems == ("buying 19 CCJ at 54.32 costs 1033.58 with the fee; cash is 1000.00",)
+    cost = money(19 * 5_432 + fee_minor(Decimal("19")), "USD")
+    assert short.problems == (f"buying 19 CCJ at 54.32 costs {cost} with the fee; cash is 1000.00",)
     assert _stored(loaded, short.scan_id).answer["price_minor"] == 5_432
     # The model's answer was well formed; the refusal is the server's, not a bad answer.
     assert llm.verdicts == ["accepted"]

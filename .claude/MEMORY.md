@@ -4,7 +4,11 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-08 ~19:45 UTC - **Two debt fixes merged and deployed; the user stopped the session.
+Updated: 2026-10-09 - **Database sprint: planned in #207 (decisions 137-142); DB1, backup and
+restore, built in #208 and drilled on both live databases.** The daily schedule is the user's to
+install (`bash scripts/backup-schedule.sh install`, main checkout). DB2 - the universe loader - next.
+
+Previous update, 2026-10-08 ~19:45 UTC - **Two debt fixes merged and deployed; the user stopped the session.
 Nothing is in flight.** **#202** - `lexicon-v2` reads present-tense headlines ("Sinks",
 "Plummets"); `scripts/rescore_sentiment.py` was run once on compose (27,678 articles; kind has
 none). **#203** - the Admin model picker shows "Not chosen - using <model>" instead of the first
@@ -486,9 +490,8 @@ strings and left-to-right assumptions before designing it.
 
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
-| 19 | **Insights noise: states fire on a band crossing; an unusual move absorbs the price move** (the user, 2026-10-08; decision 132) | — | M | **Measure first, read-only:** from `observations`, per kind, how many rows repeat a subject and severity on consecutive days (drawdown and drift), and how many `price_move` rows share a subject and session with a `sigma_move` row - the before figure. **Then one PR:** drawdown and allocation drift written per band entry within an episode (`app/analysis/drawdown.py`, `allocation_drift.py`, the key in `dedupe.py`), and `price_move` suppressed where `sigma_move` fired (`app/analysis/pipeline.py`). The merged move takes the sigma band's severity, and an expired rebalance proposal is not raised again in the same band (both settled in decision 132). Done when a test holds a ten-day drawdown to one observation per band, a test pins the merge, and the measurement is re-run after deploy and recorded here |
-| 20 | **Insights tabs: Alerts, Proposals, Digest, All findings** (the user, 2026-10-08; decision 134) | — | M | After task 19. `apps/web/src/pages/InsightsPage.tsx` and `lib/insightsTab.ts` gain the two tabs; Alerts reads observations joined to their `push` notifications (a filter on `GET /observations`, SQL in `db/queries/observations.ts`); Proposals reuses the pending list from `ProposalsPage` with a count badge; `/proposals` redirects to `?tab=proposals`. en and he copy. Done when each tab is checked in a browser in both languages and a test pins the redirect and an unknown `?tab=` falling back to the default |
-| 21 | **Insights: today by default, back 7 days, unread badge** (the user, 2026-10-08; decision 133) | — | M | After tasks 19 and 20, so the badge counts findings worth reading and has tabs to sit on. A `last_seen` timestamp on `user_settings` (migration; decision 119's pattern), `GET /observations` filtered by local day, the feed's day stepper (today, then back to 7 days), the Insights tab badge and the unread styling, translated in en and he. Done when a test pins the 7-day bound and the unread count, and the page is checked in a browser in both languages |
+| 19 | **Insights noise: states fire on a band crossing; an unusual move absorbs the price move** (the user, 2026-10-08; decision 132) | — | M | **Built in the PR that added migration 0049** (`finding_episodes`; decision 132's 2026-10-09 paragraph). **Before**, on kind 30 Sep-9 Oct: 14 drawdown rows (SMR *high* x7, URA *info*/*notable* x7) where the rule gives 3, and 1 of 8 `price_move` rows repeating a `sigma_move`. **What remains:** after deploy, re-run the before query (drawdown rows per subject and band, `price_move` sharing a subject and New York day with `sigma_move`) over kind's observations written after the deploy, record it here, then remove this row. Compose cannot measure it until the main portfolio has holdings again (reset 2026-10-07) |
+| 21 | **Insights: today by default, back 7 days, unread badge** (the user, 2026-10-08; decision 133) | — | M | After tasks 19 and 20 (#206 and the tabs PR), so the badge counts findings worth reading and has tabs to sit on. **The Insights bar item already carries the open-proposal count** (decision 134 as built): decide with the user how the unread count and that count share it. A `last_seen` timestamp on `user_settings` (migration; decision 119's pattern), `GET /observations` filtered by local day, the feed's day stepper (today, then back to 7 days), the Insights tab badge and the unread styling, translated in en and he. Done when a test pins the 7-day bound and the unread count, and the page is checked in a browser in both languages |
 | 17 | **Narration: why two of three model texts are rejected, fixed on the free model** (the user, 2026-10-07) | — | S | **Measured 2026-10-07** over the 38 `unsourced_figures` rejections on compose (all `nvidia/nemotron-3.5-lightning:free`, the validator re-run on each): **34 of 38 mention a threshold** ("crossed the 25% high threshold") that is true but refused, because `thresholds_pct` / `thresholds_weight` are nested and their keys (`info`, `notable`, `high`) carry no ratio marker - **5 were refused for that alone**; **30 of 38 copy a price in minor units** ("fell to 790" for $7.90), rightly refused, but the evidence invites it by handing the model `*_minor` integers; **3 are real inventions** ("$10.14M" for $101,427.80). **One error passed:** "the 0.03% information threshold" for 0.03 = 3%, accepted because the bare digits are in the evidence. **Fixes, one PR:** (1) the validator reads values under a `thresholds_*` key as ratios; (2) narration's evidence gives money as decimal strings ("7.90"), as the agent tools do since #177; (3) a ratio's bare digits followed by `%` are refused ("0.03%" for 0.03), while "0.03%" for a true 0.0003 stays accepted. **Then measure again on the free model** - the user's choice, because a paid model costs money and the fixes may make it unnecessary for narration (estimated at $0.03-0.07 a week on Flash-Lite or Haiku, against the agents' $0.04-0.38 a scan; the Admin page already sets narration's model separately). **The three fixes landed in the PR after #178; what remains is the re-measurement** on the free model once compose and kind run it - re-run the 2026-10-07 export (`llm_calls` where `purpose = 'narration'`) over the narrations written after the deploy. Done when that rate is recorded here, and this row is then removed |
 
 **Not in the queue, and why** - so they are not added back by the next sweep:
@@ -519,6 +522,7 @@ strings and left-to-right assumptions before designing it.
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
+| **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 #210 (deploy + reclaim pending). DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-142. See "Planned: the database sprint" |
 | **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 📋 Planned | After Stage 4. `/ask` becomes a tool-using assistant: web search, tickers, the user's account, "what can I ask you?". See "Planned: the assistant" |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
@@ -2117,6 +2121,19 @@ failure they prevent.
     expired rebalance proposal is **not asked again** while the drift stays in the same band: the
     user was asked once, and repeating it daily is the nagging this decision removes. A higher band,
     or a new episode, asks again.
+    **Built 2026-10-09, with two more answers from the user.** (a) **The episode lives in a table**,
+    `finding_episodes` (0049): open row per agent, kind and subject, holding the highest band written.
+    *Rejected:* re-deriving the episode from the price history (works for drawdown only - drift
+    cannot be rebuilt once holdings change) and keying on the trailing high's date (a 30-day window
+    rolling past the high re-announces it, and a recovery that does not make a new high is silently
+    merged). (b) **`price_move` is dropped only when `sigma_move` fired**; when the z-score is
+    computed but below its band, the price move stands alone - "a 6% fall is never invisible" won
+    over "sigma decides". The expired-proposal half needed no code: decision 92's
+    `proposal_episodes` already holds the question until the drift resolves, worsens or turns.
+    An episode is closed only when the rule *measured* the subject (drift ran; the holding had
+    history) - closing re-arms the finding, so "did not look" must not count as "went away". An
+    empty portfolio closes every open episode. `observation_id` cascades, so `reset_account` needed
+    no change. **Before:** kind, 30 Sep-9 Oct, 14 drawdown rows for SMR and URA, 3 under the rule.
 133. **Insights shows today, back seven days, with unread state** (the user, 2026-10-08; queue
     task 21, after tasks 19 and 20). The feed opens on **today's findings** ("today" in the user's
     timezone, guideline 10) and steps back **one day at a time, at most 7 days**; older findings
@@ -2139,9 +2156,19 @@ failure they prevent.
     Tab and filters stay in the address (`?tab=`). *Rejected:* keeping one feed with a filter for
     each category - the categories are different questions (was I told, what do I owe an answer
     to, what happened), and a filter left set hides the one that matters.
+    **Built 2026-10-11, with the user's answers.** Alerts takes **every** pushed finding - the main
+    portfolio's, topics', and the agents' trade proposals, each naming its agent - with **source
+    pills (All, Portfolio, Topics, Agents)** in the address (`?tab=alerts&source=agents`): one place
+    answers "what was I told?" and a pill narrows it (the user's addition). A push the channel could
+    not deliver is listed as *Not delivered* - on kind every push fails (no bot), and hiding them
+    would read as "nothing to tell". Below-floor and muted digest entries are not alerts. Served by
+    `GET /notifications/alerts` (behind the existing `/notifications` gate; SQL in
+    `db/queries/alerts.ts`). Alerts is the default tab; `?tab=observations` stays the address of
+    *All findings* so links since UX3 still work. **Proposals left the bar**: its open count moved
+    onto the Insights item and the Proposals tab. The narration-health notice is not an alert.
 135. **No IBI work until the MCP connection is proven** (the user, 2026-10-08). The proposal put
     the Excel column mapper first ("plan B", useful on its own); the user reversed that: nothing
-    IBI is built - mapper, migration 0049, OAuth, UI - until the §0 probe of
+    IBI is built - mapper, migration, OAuth, UI - until the §0 probe of
     `docs/PROPOSAL-IBI-SYNC.md` shows a third-party MCP client can connect to IBI's server and
     list its tools. Plan B is moot anyway: the user cannot export holdings to Excel. **Probe so far
     (another session, 2026-10-08):** sign-in is Auth0 at `auth.ibi.co.il`, which advertises
@@ -2151,6 +2178,56 @@ failure they prevent.
     before any client registration. The user will not contact IBI support. A one-time scheduled
     task, `ibi-mcp-support-check`, runs 2026-10-15 09:00 Israel time. *Why it matters:* a mapper
     built for a sync that never connects is code with no caller.
+136. **The ledger charges IBI's published US fee: 1¢ a share, at least $7.50** (the user,
+    2026-10-09; D76). From the IBI SMART terms of use, clause 2.2.3. The user ruled it *outside*
+    decision 135's gate - it is a simulation price, not an IBI connection. Fees jumped fivefold on
+    small trades, so fewer small proposals afterwards is expected; do not chase it as a bug.
+137. **Backups are a host script on a launchd schedule, not an in-cluster CronJob** (the user,
+    2026-10-09; database sprint DB1). The rule that decides it: **a backup must not share a
+    failure domain with what it backs up.** On a real cluster the standard answer is a CronJob (or
+    an operator) shipping dumps to object storage *outside* the cluster. Here there is no object
+    storage, and kind's volumes live inside the node container, so an in-cluster CronJob writing
+    to a PVC dies with the database in the one event most worth surviving - `k8s-down.sh`, or the
+    Docker VM's disk. Getting a CronJob's output onto the Mac needs a new `extraMounts` entry, and
+    mounts are fixed when the cluster is created: recreating it to add one destroys the very data
+    that has no backup yet. The host script reaches both compose and kind (compose holds the longer
+    history), writes where Time Machine can see it, and is the same command `k8s-down.sh` runs
+    first. launchd, not cron, because launchd runs a missed calendar job once when the Mac wakes;
+    a Mac that is off all day still misses that day, which is why the startup scripts warn on a
+    stale backup. *Revisit* if this ever runs on a real cluster: then a CronJob to object storage
+    is right, and this script becomes its local fallback.
+138. **`intents` is never read, and is kept on purpose** (the user, 2026-10-09). It is the audit
+    trail of approvals and revocations: rows are inserted and marked revoked
+    (`db/queries/proposals.ts`), never selected by the app. **It is not passive, though:** the
+    partial unique index `intents_one_live_per_proposal` is what refuses a second live approval of
+    one proposal, and `intents -> proposals ON DELETE RESTRICT` keeps an approved proposal from
+    being deleted. Do not drop the table or that index as dead code. `intents_ledger_idx (user_id,
+    created_at DESC)` has no reader; whether to keep it for a future audit view is a DB4 question.
+139. **`telegram_bind_tokens` needs no cleanup job** (the user proposed one 2026-10-09; dropped
+    on the measurement). It is not a table of link codes: minting a code writes nothing - the code
+    carries its user, expiry and nonce under an HMAC (`telegram/bindToken.ts`) - and a row is
+    written only when a code is *redeemed*, as the used-nonce record that makes it single-use.
+    It grows by one row each time the user connects Telegram (0 rows on 2026-10-09). If it ever
+    needs bounding, delete nonces older than `BIND_TOKEN_TTL_MS` inside the redeem transaction
+    (an expired code can no longer verify, so its nonce is safe to forget), as `llm_calls` prunes on
+    insert - not a scheduled job, which must exist in compose, the cluster and `scheduler.ts`.
+140. **Agents are never hard-deleted; the foreign keys say so and stay as they are** (2026-10-09,
+    database sprint audit). Deleting an agent would cascade to `agent_cash`, `cash_movements` and
+    `llm_calls` but be refused by `fills`, `runs`, `observations` and others (`NO ACTION`). That
+    asymmetry is harmless because no code deletes an agent - its `state` becomes `archived` - so it
+    is recorded rather than "fixed": a change to cascade would make a stray delete erase a ledger.
+    Likewise the ledger tables (`fills`, `cash_movements`, `agent_scans`, `proposal_attempts`)
+    refuse a user's deletion on purpose; the database function `reset_account` (0045) is the only
+    path by which the ledger loses a row, and it keeps every erased row in `account_resets`.
+141. **Retention and new indexes wait for a measurement** (the user, 2026-10-09). At the measured
+    volumes no table needs a retention policy: `llm_calls` already prunes on insert, `ops_events`
+    is bounded by its `dedupe_key`, and **`admin_audit` is never pruned** - an audit log with a
+    retention window is not one. `runs` is the one table that grows (~130 rows a day) and is
+    revisited in DB4. Indexes likewise come from a week of `pg_stat_statements`, not from guesses:
+    at these sizes the planner ignores a composite index on a time window anyway.
+142. **The schema's split stays as designed** (the user, 2026-10-09): `llm_model_choices` remains
+    its own table for its change history, and the ledger, news, proposals and corpus tables keep
+    their separate domains - no consolidation was found worth its migration.
 
 ---
 
@@ -3292,6 +3369,87 @@ grant tests fail for the wrong reason.
 
 ## Where to go next
 
+### Planned: the database sprint (agreed 2026-10-09)
+
+**Agreed with the user 2026-10-09**, after a read-only measurement of kind's database (and compose's
+size). Decisions 137-142. One branch off `main` per PR, in this order; ask before starting, as
+always. The user's first list had four items - retention, composite indexes, vector indexes, a
+foreign-key audit - and the measurement moved most of them:
+
+- **Vector indexes are already done.** `kb_chunks` has HNSW since 0013, `instrument_profiles` since
+  0015. At 36 chunks the planner rightly ignores it (a scan is exact and faster). Nothing to build.
+- **The foreign keys leave no orphans.** Every `*_id` column has one except `notifications.ref_id`,
+  which is polymorphic by design. The rules are deliberate (decision 140); nothing to change.
+- **Retention is mostly in place or not yet needed** (decision 141): `llm_calls` prunes on insert,
+  `ops_events` is upserted by `dedupe_key`, `admin_audit` is never pruned.
+- **Indexes cannot be chosen yet:** nothing records slow queries (`pg_stat_statements` absent,
+  `log_min_duration_statement = -1`), there is no `findings` table, `runs` has `started_at` not
+  `created_at`, and `fills` was empty. They come from a week of statistics (DB3, DB4).
+
+**What the measurement found instead (kind, 2026-10-09):**
+- **`instrument_profiles` is 155 MB of a 176 MB database, for 5,243 rows** (heap 18 MB, indexes
+  48 MB - the HNSW index alone 41 MB - TOAST 89 MB). It had taken **276,637 updates, about 53 per
+  row, 1 of them HOT**; `instruments` 271,294. Cause: `load_universe` (`profiles.py`) updates every
+  profile and instrument on every load, because `size_as_of` and `updated_at` always change, and
+  each new row version is inserted into the HNSW index. And loads are frequent: **49 loads since
+  2026-09-30 but only 2 distinct snapshots**, because the startup loader skips only a snapshot
+  *older* than the last load (`loading.py`, `as_of < last_loaded`), so every stack start reloads
+  the same one - about 10,500 row rewrites plus `DELETE FROM etf_holdings` and 16,307 inserts.
+- **No backup exists.** No `pg_dump` anywhere in `infra/` or `scripts/`; kind's data lives on a
+  `local-path` volume inside the node container, which `scripts/k8s-down.sh` deletes. Compose's
+  database (226 MB, 44,465 articles, the scheduled scans) lives in one Docker volume.
+- **`runs` had 1,768 sequential scans averaging ~700 rows** - some query reads the whole table
+  repeatedly. Harmless at 1 MB (about 130 runs a day); the statistics in DB3 will name it.
+
+**DB1 is built (2026-10-09, #208):** `scripts/db-backup.sh`, `db-restore.sh`,
+`backup-schedule.sh`, `lib/backups.sh`, the launchd template in `infra/launchd/`, RUNBOOK section 5.
+**Drills passed on both live databases:** compose 51 MB, 42 tables, 135,828 rows, dumped in 10 s;
+kind 4.3 MB (its fixture-embedder vectors compress well), 42 tables, 30,330 rows; every table
+restored to exactly the rows the dump holds. CI now plants 90 days of dated dumps and checks the
+retention rule, drills both environments, and performs a real swap-restore on compose that the
+services come back from. Built differently from the row below, on purpose: a real restore never
+drops anything (restore beside, verify, rename the live one to `<db>_before_<stamp>`, swap), and the
+dump is verified by reading the *whole* archive back (`pg_restore --data-only`, counting COPY rows
+into `.counts`) rather than `pg_restore --list`, which reads only the table of contents. **Still the
+user's to do:** run `bash scripts/backup-schedule.sh install` from the main checkout (it writes to
+`~/Library/LaunchAgents`), and answer whether `~/Backups` is under Time Machine. Also found while
+building: compose's `instrument_profiles` is 155 MB too (5,226 rows) - DB2 applies to both.
+
+**DB2 is built (2026-10-11, #210); deploy and reclaim pending.** Both upserts in
+`profiles.py` update a row only when a value differs (`IS DISTINCT FROM` over every column but
+`updated_at`; the instrument's `WHERE` mirrors its fill-only `SET`), with the `RETURNING` fallback
+select; ETF holdings are compared as a multiset (weights quantized to the column's 6 places) and
+replaced only when they differ, in one `executemany`. `universe_loads.report` gains
+`profiles_written` and `holdings_replaced`. `tests/integration/test_universe_load_sql.py` checks
+by `xmin` that a reload leaves every row untouched - it **fails on the old code** (checked) - and
+that a changed row is still written. **Before, measured 2026-10-11:** one load on kind = 5,217
+profile updates (281,854 - 276,637 across loads 49 -> 50); kind and compose each hold
+`instrument_profiles` at 155 MB with 43 MB of live row data; `etf_holdings` had taken 864,775
+deletes on kind. `pgstattuple` on a copy was **dropped** from the plan: a dump-based copy has no
+bloat, and a file-level copy (`CREATE DATABASE ... TEMPLATE`) needs the live database disconnected;
+the before/after of `VACUUM FULL` measures the same thing. **After merge:** redeploy both, record
+`n_tup_upd` across a restart (expected unchanged), then `VACUUM (FULL, ANALYZE)
+instrument_profiles` on each and record the sizes here.
+
+**The PRs:**
+
+| # | PR | Size | Done when |
+|---|---|---|---|
+| DB1 ✅ | **Backup and restore** (decision 137). `scripts/db-backup.sh [--target kind\|compose]`: `pg_dump -Fc` run inside the Postgres container (`kubectl exec` / `docker exec`, so the host needs no Postgres client and the versions match), streamed to `${TRADERS_BACKUP_DIR:-$HOME/Backups/traders}/<target>/`, written to `.partial` and renamed only after `pg_restore --list` reads it; directory `700`, files `600`. Keeps the newest 14 plus one a week for 8 weeks. `scripts/db-restore.sh <file> --target ...` refuses without `--yes`. `k8s-down.sh` takes a kind backup before deleting (skip with `--no-backup`). A launchd agent (a plist template under `infra/launchd/` and an install script the **user** runs - it is persistent config on their Mac) runs both targets daily. `k8s-up.sh` and `dev-docker.sh` warn when the newest backup is older than 48 h, so a schedule that stopped is noticed | M | **a restore drill passes:** a dump of each environment restored into a scratch database with row counts equal per table; the drill and the dump sizes recorded here |
+| DB2 🚧 | **The universe loader writes only what changed.** Both upserts in `load_universe` gain `WHERE (...) IS DISTINCT FROM (...)` over every column but `updated_at` (`size_as_of` included, so a *new* snapshot still updates its rows). **Trap:** `ON CONFLICT DO UPDATE ... WHERE` false returns no row, so `_upsert_instrument`'s `RETURNING id` needs a fallback select. ETF holdings are replaced only when the set differs. **Do not** skip the load when `as_of` equals the last one: the mounted descriptions file can change without `as_of` changing - the row-level guard is the safe one. Then, **after DB1 has a fresh backup**, reclaim the space once: measure live versus dead bytes first (`pgstattuple`, on a copy), then `VACUUM FULL instrument_profiles` (an exclusive lock for seconds; run it with the CronJobs quiet) | S-M | a test loads one snapshot twice and the second writes no row; `n_tup_upd` on both tables unchanged across a `k8s-up.sh` restart; the table's size before and after recorded here |
+| DB3 | **Query statistics on.** `shared_preload_libraries=pg_stat_statements` and `log_min_duration_statement=200` (ms - an observation threshold, not a product rule) as server flags in `infra/k8s/base/postgres.yaml`, `infra/compose/docker-compose.yml` and CI's Postgres; the extension created (Alembic, or a guarded init - settle in the PR; **0049 was taken by #206** (`0049_finding_episodes`) although IBI's plan names it, so read `origin/main`'s newest migration before numbering). `scripts/db-report.sh`, read-only: top statements by total time, tables by sequential reads, unused indexes, sizes, dead tuples. Reset the statistics once after deploying, so the week starts clean | S | the report runs against both environments; the date the week starts recorded here |
+| DB4 | **The review, a week after DB3 - measure, then decide.** No code planned: the report, then one question at a time with a recommendation. Expected questions: the query behind `runs`' full scans and its index; `intents_ledger_idx` (no reader, decision 138) and other indexes with no scans across a full week; retention for `runs`. Each answer becomes a decision; any change is its own PR | — | the findings and the user's answers recorded as decisions |
+
+**Considered and rejected:** an in-cluster CronJob for backups (decision 137); a backup operator
+(CloudNativePG's WAL archiving, point-in-time recovery) - it needs object storage and replaces the
+StatefulSet, for a database whose lost day costs one day of simulated history; PgHero for the
+statistics - one more running service for a weekly read, where five SQL queries do it; a
+scheduled sweep of `telegram_bind_tokens` (decision 139).
+
+**Open, to settle in the PR that meets it:** whether `$HOME/Backups/traders` is inside Time Machine
+or iCloud on the user's Mac (if so, the dumps get a second copy off the laptop for free - ask in
+DB1); the extension's home (DB3).
+
 ### Stage 4 is complete (#186, #188, #197, #199, 2026-10-07/08)
 
 **As built:** PR 5b #186 - a scan's proposal is announced with Approve/Reject past the severity
@@ -3310,6 +3468,10 @@ copy of the live database (up/down/up, row counts); the Telegram flow on a copy 
 ### Next session: after the debt fixes (#202, #203, 2026-10-08)
 
 Ask the user before starting anything (the Stage 4 grant ended). In order of the user's last answer:
+0. **The database sprint** (see "Planned: the database sprint"): DB1 done (#208; schedule installed
+   and first run 2026-10-11, exit 0); DB2 is #210 - after its merge, redeploy, check `n_tup_upd`
+   across a restart, `VACUUM FULL`, record. Then DB3. **No off-laptop copy exists:** Time Machine
+   has no destination and no synced folder exists on the Mac - the user was told (2026-10-11).
 1. **Review the scheduled scans** once three trading days have run (09:00 New York each trading
    day, compose only): outcomes, refusals like 2026-10-08's "1,923", cost per day, from
    `agent_scan_runs` and `llm_calls WHERE purpose = 'agent_scan'`. Report before changing anything.
@@ -3332,8 +3494,8 @@ about one at a time, not assumed:**
   - before changing anything about them (debt rows above).
 - **The two debt fixes the user has not yet approved:** the sentiment scorer reading "Sinks 22%" as
   neutral; the Admin model picker showing a model as chosen when none is.
-- **IBI read-only sync (D67, `docs/PROPOSAL-IBI-SYNC.md`)** - planned by #190; **its migration is now
-  0049** (renumbered in this handoff: 0047 and 0048 were taken by PR 7).
+- **IBI read-only sync (D67, `docs/PROPOSAL-IBI-SYNC.md`)** - planned by #190; its migration takes
+  the next free number (0047-0049 were taken by PR 7 and `finding_episodes`).
 - **The assistant milestone** (`/ask` with tools; "Planned: the assistant" below).
 
 ### The UI/UX sprint is complete (#189, #191-#195, 2026-10-08)

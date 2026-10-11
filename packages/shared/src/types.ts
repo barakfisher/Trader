@@ -1059,6 +1059,34 @@ export interface DigestResponse {
   last: { sentAt: string; entries: DigestEntry[]; seen: boolean } | null;
 }
 
+/** Where an alert came from: the main portfolio, a followed topic, or an agent's trade (D134). */
+export type AlertSource = 'portfolio' | 'topics' | 'agents';
+
+/**
+ * A finding the user was told about (decision 134): pushed to Telegram, or held
+ * back by quiet hours for the digest. Every agent's, each naming its agent.
+ */
+export interface Alert extends Omit<Observation, 'kind'> {
+  /** Wider than `ObservationKind`: an agent's trade proposal is `agent_trade`. */
+  kind: string;
+  agent: { id: string; name: string; isPrimary: boolean };
+  delivery: {
+    /** Quiet hours held it for the digest rather than interrupting. */
+    deferred: boolean;
+    /** False when the channel was tried and could not deliver - said, never hidden. */
+    delivered: boolean;
+    sentAt: string | null;
+  };
+}
+
+export interface AlertsResponse {
+  /** Newest first. */
+  alerts: Alert[];
+  total: number;
+  /** The id to pass as `before` for the next page; null when there is none. */
+  nextCursor: string | null;
+}
+
 export interface ObservationsResponse {
   /** Newest first, and within one scan the most severe first, as returned. */
   observations: Observation[];

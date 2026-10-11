@@ -30,7 +30,6 @@ import { DashboardPage } from './pages/DashboardPage.tsx';
 import { HoldingPage } from './pages/HoldingPage.tsx';
 import { InsightsPage } from './pages/InsightsPage.tsx';
 import { ProposalPage } from './pages/ProposalPage.tsx';
-import { ProposalsPage } from './pages/ProposalsPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import { TargetsPage } from './pages/TargetsPage.tsx';
 import { TopicsPage } from './pages/TopicsPage.tsx';
@@ -79,7 +78,15 @@ const routeTree = rootRoute.addChildren([
     component: HoldingPage,
   }),
   createRoute({ getParentRoute: () => rootRoute, path: '/ask', component: AskPage }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/proposals', component: ProposalsPage }),
+  createRoute({
+    getParentRoute: () => rootRoute,
+    path: '/proposals',
+    // The inbox is the Insights page's Proposals tab (decision 134); a link to
+    // it, or a bookmark, still lands on it. A single proposal is still a page.
+    beforeLoad: () => {
+      throw redirect({ to: '/insights', search: { tab: 'proposals' }, replace: true });
+    },
+  }),
   createRoute({
     getParentRoute: () => rootRoute,
     path: '/proposals/$proposalId',

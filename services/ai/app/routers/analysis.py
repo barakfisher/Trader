@@ -13,6 +13,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Request
 
+from app.analysis.episodes import OpenEpisode
 from app.analysis.pipeline import (
     ScanObservation,
     ScanSubject,
@@ -77,6 +78,10 @@ async def portfolio_scan(
             thresholds=AnalysisThresholds.from_settings(settings),
             llm=llm,
             known_dedupe_keys=payload.known_dedupe_keys,
+            open_episodes=[
+                OpenEpisode(kind=item.kind, subject_ref=item.subject_ref, severity=item.severity)
+                for item in payload.open_episodes
+            ],
             excluded_sources=excluded_price_sources(settings.market_data_chain),
             user_id=str(payload.user_id) if payload.user_id else None,
         )

@@ -11,9 +11,11 @@
 import type { AiClient } from '@traders/shared/ai';
 
 import {
+  closeFindingEpisodes,
   getOrCreateUserSettings,
   insertObservations,
   listHoldings,
+  listOpenFindingEpisodes,
   listRecentDedupeKeys,
   listTargetWeights,
   type ObservationToStore,
@@ -21,6 +23,7 @@ import {
 } from '../db/queries.js';
 import { logger } from '../logger.js';
 import type { Notifier } from '../notify/notifier.js';
+import { settleFindingEpisodes } from './findingEpisodes.js';
 import { admitCandidates, settleEpisodes } from './proposalEpisodes.js';
 import { watchNarration, type NarrationWatchOutcome } from './narrationWatch.js';
 import { fanOut, settingsForNotification, type NotifiableFinding } from './notifications.js';
@@ -34,6 +37,10 @@ export interface ScanResult {
   created: number;
   /** Skipped before narration, because the feed already had them. */
   alreadyKnown: number;
+  /** Of `alreadyKnown`, states their open episode had already said (decision 132). */
+  heldInEpisode: number;
+  /** Finding episodes this scan saw end: the state fell below its lowest band. */
+  findingEpisodesEnded: number;
   /** Lost a race with a concurrent scan. Expected to be zero. */
   suppressed: number;
   narratedByLlm: number;
@@ -64,12 +71,21 @@ export async function runPortfolioScan(
 ): Promise<ScanResult> {
   const rows = await listHoldings(user.id, agentId);
   if (rows.length === 0) {
+    // Nothing held, so no state stands: an episode left open here would keep a
+    // holding bought back later from being announced (decision 132).
+    const standing = await listOpenFindingEpisodes(user.id, agentId);
+    const findingEpisodesEnded = await closeFindingEpisodes(
+      user.id,
+      standing.map((episode) => episode.id),
+    );
     return {
       holdings: 0,
       priced: 0,
       findings: 0,
       created: 0,
       alreadyKnown: 0,
+      heldInEpisode: 0,
+      findingEpisodesEnded,
       suppressed: 0,
       narratedByLlm: 0,
       narrationFallbacks: {},
@@ -90,6 +106,8 @@ export async function runPortfolioScan(
   const targets = await listTargetWeights(user.id, agentId);
 
   const knownKeys = await listRecentDedupeKeys(user.id, agentId);
+  // The states already said, and the band each reached (decision 132).
+  const openEpisodes = await listOpenFindingEpisodes(user.id, agentId);
 
   const portfolio = await valuePortfolio(rows, {
     baseCurrency: user.base_currency,
@@ -122,6 +140,13 @@ export async function runPortfolioScan(
       // at a thirty-minute cadence, where most of what a scan finds is what the
       // last one found.
       known_dedupe_keys: knownKeys,
+      // A drawdown or drift at or below its episode's band is still true but
+      // not news, and is counted rather than written.
+      open_episodes: openEpisodes.map((episode) => ({
+        kind: episode.kind,
+        subject_ref: episode.subject_ref,
+        severity: episode.severity as 'info' | 'notable' | 'high',
+      })),
     },
     requestId,
   );
@@ -149,6 +174,20 @@ export async function runPortfolioScan(
   }));
 
   const { created, suppressed, inserted } = await insertObservations(toStore);
+
+  // Before anything is raised or sent, so a scan that fails later still leaves
+  // the episodes matching what the feed holds.
+  const findingEpisodesEnded = await settleFindingEpisodes(
+    user.id,
+    agentId,
+    openEpisodes,
+    inserted,
+    response.stats.seen ?? [],
+    {
+      driftSkippedReason: response.stats.drift_skipped_reason,
+      insufficientHistory: response.stats.insufficient_history,
+    },
+  );
 
   /**
    * Proposals are raised only for observations this scan actually created. A
@@ -212,9 +251,7 @@ export async function runPortfolioScan(
     skipped.push(`allocation drift: ${response.stats.drift_skipped_reason}`);
   }
   if (response.stats.insufficient_history?.length) {
-    skipped.push(
-      `insufficient price history: ${response.stats.insufficient_history.join(', ')}`,
-    );
+    skipped.push(`insufficient price history: ${response.stats.insufficient_history.join(', ')}`);
   }
 
   /**
@@ -286,6 +323,8 @@ export async function runPortfolioScan(
     findings: response.stats.findings,
     created,
     alreadyKnown: response.stats.already_known ?? 0,
+    heldInEpisode: response.stats.held_in_episode ?? 0,
+    findingEpisodesEnded,
     suppressed,
     narratedByLlm: response.stats.narrated_by_llm,
     narrationFallbacks: response.stats.narration_fallbacks ?? {},

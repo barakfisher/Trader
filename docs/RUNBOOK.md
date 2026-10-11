@@ -181,4 +181,39 @@ the new year's dates with [NYSE's published list](https://www.nyse.com/markets/h
 commit the diff. A closure no rule predicts (a national day of mourning) is added to
 `data/calendar/xnys.json` by hand with `"source": "manual"`; regeneration keeps it.
 
+---
+
+## 5. Back up and restore the database
+
+Both databases are dumped to this Mac, never into the cluster: kind keeps its volumes inside its
+node container, so a dump stored there would be deleted with the database (decision 137). Dumps go
+to `~/Backups/traders/<kind|compose>/` (override with `TRADERS_BACKUP_DIR`), readable only by you,
+each with a `.counts` file: the rows every table holds in the dump, read back from the archive
+before the dump is given its final name. The newest 14 are kept, plus one a week for 8 weeks.
+
+| To | Run |
+|---|---|
+| back up now | `bash scripts/db-backup.sh --target kind` (or `compose`, or `all` for whichever is running) |
+| schedule a daily backup (04:00) | `bash scripts/backup-schedule.sh install`, **from the main checkout**, then `... run` once to check it |
+| check the schedule | `bash scripts/backup-schedule.sh status` - loaded, last exit code, age of the newest dumps, the log's tail |
+| prove a dump restores | `bash scripts/db-restore.sh --target kind --drill latest` - into a scratch database, compared table by table, then dropped; touches nothing live |
+| replace the live database with a dump | `bash scripts/db-restore.sh --target compose <file.dump>` (asks first; `--yes` for scripts) |
+
+**What a real restore does**, so it can be trusted: it restores into `traders_restore` beside the
+live database and checks every table against the dump's `.counts` - if that fails, it stops and the
+live database is untouched. Only then does it stop the orchestrator and the AI service, rename the
+live database to `traders_before_<stamp>`, rename the restored one into its place, and start them
+again. Nothing is dropped: the script prints the `DROP DATABASE` for the old one, to run when you
+are sure. A dump keeps the schema revision it was taken at; if the code is newer, start the stack
+again (`k8s-up.sh` / `dev-docker.sh`) and the migrations bring it forward.
+
+**The two commands that delete a database back it up first:** `scripts/k8s-down.sh` (skip with
+`--no-backup`) and `scripts/dev-docker.sh --reset`. If that backup fails, nothing is deleted. Both
+start scripts warn when the newest dump is more than 48 hours old - the sign that the schedule has
+stopped (the Mac was off all day, or Docker was not running when the job ran).
+
+**Restoring into a new cluster** (after `k8s-down.sh`): `bash scripts/k8s-up.sh` first - its
+migrations create the application role a dump's grants name - then
+`bash scripts/db-restore.sh --target kind latest`.
+
 More on the cluster: [infra/k8s/README.md](../infra/k8s/README.md).

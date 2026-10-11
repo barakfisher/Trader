@@ -51,6 +51,10 @@ def load_record(
         "holdings_unmatched": holdings.unmatched,
         "holdings_implausible": holdings.implausible,
         "holdings_of_unprofiled_etf": holdings.of_unprofiled_etf,
+        # What the load actually wrote, outside the reconciliation: 0 and 0 on
+        # a reload of a snapshot already in the database (database sprint DB2).
+        "profiles_written": report.profiles_written,
+        "holdings_replaced": int(holdings.replaced),
     }
 
 

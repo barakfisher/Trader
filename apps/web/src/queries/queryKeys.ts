@@ -18,6 +18,11 @@ export const queryKeys = {
     ['observations', 'feed', { severity, symbol }] as const,
   /** Under the feed, so anything that invalidates the feed refreshes a holding's findings too. */
   symbolObservations: (symbol: string) => ['observations', 'symbol', symbol] as const,
+  /**
+   * What the user was told (decision 134), per source pill. Under `observations`,
+   * so anything that refreshes the feed refreshes the alerts too.
+   */
+  alerts: (source: string | null) => ['observations', 'alerts', { source }] as const,
   proposals: ['proposals'] as const,
   /** Under the inbox's key, so a decision's invalidation of `['proposals']` refreshes both. */
   proposalHistory: ['proposals', 'history'] as const,

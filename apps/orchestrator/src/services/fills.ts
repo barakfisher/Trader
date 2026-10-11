@@ -319,7 +319,7 @@ export async function previewTrade(request: TradeRequest, context: TradeContext)
   const quantity = parseQuantity(request.quantity);
   const { priceMinor, quote } = await priceOf(instrument, request.price, context);
   const notional = notionalMinor(quantity.toString(), priceMinor);
-  const fee = feeMinor(notional);
+  const fee = feeMinor(quantity.toString());
   const change = cashChange(request.side, notional, fee);
   const cashRow = await getAgentCash(request.userId, request.agent.id);
   if (!cashRow) throw conflict('agent_has_no_cash', 'this agent has no cash account');
@@ -409,7 +409,7 @@ export async function executeFill(
   }
   const { priceMinor, quote } = await priceOf(instrument, request.price, context);
   const notional = notionalMinor(quantity.toString(), priceMinor);
-  const fee = feeMinor(notional);
+  const fee = feeMinor(quantity.toString());
   const change = cashChange(request.side, notional, fee);
   const now = (context.now ?? (() => new Date()))();
 

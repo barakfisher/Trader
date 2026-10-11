@@ -456,6 +456,7 @@ one module per language named for the concept (`fees.ts`, `fees.py`), with tests
 constants rather than their values (CLAUDE.md, convention 1). Rounding up keeps the cash check
 conservative. Net worth is `cash + market value`; fees already left cash, so they are shown as a
 figure and never subtracted a second time. P&L is `net worth − (budget + top-ups)`.
+*Superseded in its rate by D76* (IBI's published per-share fee); the rest of D6 stands.
 
 **D7 — USD-listed instruments only, in v1.** The $1.50 minimum is a USD amount, and agents with
 non-USD instruments would need FX on fees, fills and cash. Refused at proposal time, not filtered
@@ -744,7 +745,7 @@ user's intervention would change the agent's record), and skipping mixed holding
 
 **D40 - A win is a sell with a profit after fees**: its own fee and its share of the buy fees.
 Break-even is not a win. Example: 10 bought at $100.00 and sold at $100.10, $1.50 each way, is a
-$2.00 loss. *Rejected:* price above average cost, fees ignored.
+$2.00 loss (at D6's rate; D76 replaced it). *Rejected:* price above average cost, fees ignored.
 
 **D41 - Each sell is one decision, counted in the windows its date falls in.** The 30/60/90-day
 windows count the agent's fills (decisions), its scored sells, wins, the win rate and realised
@@ -1107,6 +1108,23 @@ picker, so going back is one choice and no code. Agents still never get a free r
 code change. *Rejected:* staying on the free route (accurate now, but one slow day from timing out
 most narrations); raising the timeout (a scan with many findings waits longer for every one).
 *Re-measure* Sonnet's narration after a few days with a real portfolio, as §14.4 did.
+
+**D76 - The ledger charges IBI's published US rate** (the user, 2026-10-09). D6's 0.1% with a
+$1.50 minimum was a placeholder. The IBI SMART terms of use, clause 2.2.3
+(https://www.ibi.co.il/en/about/terms-and-conditions-of-use-ibi-smart/, read 2026-10-09), price US
+shares and ETFs at **1 cent a share, at least $7.50 a trade**, the foreign broker's fee included:
+`fee_minor = max(MIN_FEE_MINOR, shares × FEE_PER_SHARE_MINOR)`, so the fee takes the share count, not
+the notional. The user chose the public rate over a per-account one. Not charged: the SEC/FINRA fees
+on a sale ("costs of other third parties" - the clause states no figure, so one would be invented,
+guideline 7), and the clause's Israeli rate (0.08%, at least ₪2.35), since agents are USD-only (D7);
+both are recorded in the fee modules' docstrings. Consequence: any trade under 750 shares costs
+$7.50, five times the old minimum, so a round trip must earn $15 before it scores as a win (D40),
+and agents will propose fewer small trades - a correct reading of the cost, not a bug. Recorded as
+constants in `fees.py` / `fees.ts`, not a data file: one rule does not need a schedule format.
+*Rejected:* giving agents the link to read before trading (unfetchable in hermetic tests, silently
+changeable, and the model would do the fee arithmetic - guideline 7); a prose summary for the model
+(the same arithmetic problem). *Re-check* the clause when IBI announces a change (an increase takes
+effect 7 days after notice, clause 2.4.1).
 
 ---
 

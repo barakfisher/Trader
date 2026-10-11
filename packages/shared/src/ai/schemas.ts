@@ -135,6 +135,7 @@ export const scanStatsSchema = z.object({
   subjects_with_history: z.number().int(),
   findings: z.number().int(),
   already_known: z.number().int(),
+  held_in_episode: z.number().int(),
   narrated_by_llm: z.number().int(),
   narration_fallbacks: z.record(z.string(), z.number().int()).optional(),
   drift_skipped_reason: z.string().nullish(),
