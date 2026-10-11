@@ -59,7 +59,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$TARGET" ] || fail "say which database: --target kind or compose"
-require_backup_target "$TARGET"
+require_db_target "$TARGET"
 [ -n "$DUMP" ] || fail "say which dump: a .dump file, or 'latest'"
 if [ "$DUMP" = latest ]; then
   DUMP="$(newest_backup "$TARGET")"
@@ -69,7 +69,7 @@ fi
 COUNTS="${DUMP%.dump}.counts"
 [ -f "$COUNTS" ] || fail "no $(basename "$COUNTS") beside the dump - it was not written by db-backup.sh, or was not verified"
 
-backup_target_available "$TARGET" || fail "the $TARGET database is not running"
+db_target_available "$TARGET" || fail "the $TARGET database is not running"
 LIVE_DB="$(db_name "$TARGET")"
 [ -n "$LIVE_DB" ] || fail "could not read the $TARGET database's name"
 

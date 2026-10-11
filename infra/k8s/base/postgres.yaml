@@ -48,6 +48,17 @@ spec:
       containers:
         - name: postgres
           image: pgvector/pgvector:pg16
+          # Query statistics (migration 0050, database sprint DB3), read by
+          # scripts/db-report.sh. The image's entrypoint passes arguments that
+          # start with "-" to the server. Kept identical to the compose stack's
+          # flags; slow statements and lock waits go to `kubectl logs postgres-0`.
+          args:
+            - -c
+            - shared_preload_libraries=pg_stat_statements
+            - -c
+            - log_min_duration_statement=200
+            - -c
+            - log_lock_waits=on
           ports:
             - name: postgres
               containerPort: 5432

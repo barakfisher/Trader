@@ -19,6 +19,19 @@ services:
     # pgvector is part of the image so the RAG milestone needs no extra setup.
     image: pgvector/pgvector:pg16
     restart: unless-stopped
+    # Query statistics (migration 0050, database sprint DB3), read by
+    # scripts/db-report.sh: the library must be loaded when the server starts;
+    # statements slower than 200 ms and lock waits go to the log
+    # (`docker logs traders-postgres-1`). Kept identical to the cluster's flags
+    # in infra/k8s/base/postgres.yaml.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - log_min_duration_statement=200
+      - -c
+      - log_lock_waits=on
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-traders}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-traders}

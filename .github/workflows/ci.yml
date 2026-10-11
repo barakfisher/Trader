@@ -175,6 +175,11 @@ jobs:
           exit 1
       - name: Smoke test the vertical slice
         run: bash scripts/smoke-test.sh
+      # Query statistics (migration 0050, DB3): the server was started with the
+      # library preloaded, the extension exists, and the report reads it - after
+      # the smoke test, so there are statements to report.
+      - name: Query statistics report
+        run: bash scripts/db-report.sh --target compose | tee report && grep -q 'Statements by total time' report
       # The production web image (M7), the one a cluster runs: the built bundle
       # behind nginx, which forwards /api/* to the orchestrator on the page's
       # own origin. The compose stack above runs the Vite dev server instead,
@@ -306,6 +311,8 @@ jobs:
           rows=$($KUBECTL exec postgres-0 -- psql -U traders -d traders -tAc \
             "select count(*) from runs where kind = 'proposal_sweep' and trigger = 'cronjob'")
           test "$rows" -ge 1
+      - name: Query statistics report
+        run: bash scripts/db-report.sh --target kind | tee report && grep -q 'Statements by total time' report
       # The cluster's database backed up to the runner, as the schedule does on
       # the Mac (decision 137), and restored into a scratch database.
       - name: Back up the cluster's database and drill a restore

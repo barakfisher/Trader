@@ -126,15 +126,15 @@ backup() {
 umask 077
 case "$TARGET" in
   kind | compose)
-    backup_target_available "$TARGET" || fail "the $TARGET database is not running, so there is nothing to back up"
+    db_target_available "$TARGET" || fail "the $TARGET database is not running, so there is nothing to back up"
     backup "$TARGET"
     ;;
   all)
     # The schedule's form: a stack that is stopped is skipped, not an error -
     # the startup scripts' stale-backup warning is what notices a long gap.
     found=0
-    for target in $(backup_targets); do
-      if backup_target_available "$target"; then
+    for target in $(db_targets); do
+      if db_target_available "$target"; then
         found=1
         backup "$target"
       else

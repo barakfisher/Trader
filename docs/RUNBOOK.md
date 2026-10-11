@@ -216,4 +216,25 @@ stopped (the Mac was off all day, or Docker was not running when the job ran).
 migrations create the application role a dump's grants name - then
 `bash scripts/db-restore.sh --target kind latest`.
 
+---
+
+## 6. What the database is doing - query statistics
+
+Both Postgres servers start with `pg_stat_statements` preloaded (the flags are in
+`infra/compose/docker-compose.yml` and `infra/k8s/base/postgres.yaml`, kept identical) and
+migration 0050 creates the extension. Statements slower than 200 ms and lock waits are written to
+the server's log. It is how indexes and retention are chosen: from what the services actually run,
+not from guesses (decision 141).
+
+| To | Run |
+|---|---|
+| read the report | `bash scripts/db-report.sh --target kind` (or `compose`) - statements by total time, tables read whole, indexes never scanned, the largest tables, the slow-statement log |
+| start a clean measurement window | `bash scripts/db-report.sh --target kind --reset` - zeroes the statement and table/index counters; the only flag that writes |
+| read the slow log directly | `kubectl --context kind-traders -n traders logs postgres-0 \| grep duration:` / `docker logs traders-postgres-1 2>&1 \| grep duration:` |
+
+The report runs as the database owner; the application role cannot read the statistics (0050
+revokes them). An index the report lists as never scanned is a candidate, not a verdict: only a
+window that covered every scheduled run - a full week - says it is unused, and unique indexes are
+left out because they enforce a rule whether or not a query reads them.
+
 More on the cluster: [infra/k8s/README.md](../infra/k8s/README.md).
