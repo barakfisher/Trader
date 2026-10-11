@@ -18,6 +18,8 @@
 #   4. the largest tables, with dead rows and their last vacuum;
 #   5. statements slower than 200 ms from the server's log (the log of the
 #      current Postgres container only - a restart starts a new one).
+# Row counts are the planner's estimate (pg_class.reltuples, refreshed by ANALYZE),
+# not n_live_tup: a reset zeroes the counters, and showed every table empty.
 # =============================================================================
 set -euo pipefail
 
@@ -90,10 +92,12 @@ SELECT calls,
  LIMIT 15"
 
 section "2. Tables by rows read sequentially (top 10)" "
-SELECT relname AS table_name, seq_scan, seq_tup_read,
+SELECT s.relname AS table_name, seq_scan, seq_tup_read,
        CASE WHEN seq_scan > 0 THEN seq_tup_read / seq_scan END AS rows_per_seq_scan,
-       coalesce(idx_scan, 0) AS idx_scan, n_live_tup AS live_rows
-  FROM pg_stat_user_tables
+       coalesce(idx_scan, 0) AS idx_scan,
+       NULLIF(c.reltuples, -1)::bigint AS live_rows
+  FROM pg_stat_user_tables s
+  JOIN pg_class c ON c.oid = s.relid
  ORDER BY seq_tup_read DESC
  LIMIT 10"
 
@@ -106,11 +110,12 @@ SELECT s.relname AS table_name, s.indexrelname AS index_name,
  ORDER BY pg_relation_size(s.indexrelid) DESC"
 
 section "4. Largest tables" "
-SELECT relname AS table_name,
+SELECT s.relname AS table_name,
        pg_size_pretty(pg_total_relation_size(relid)) AS total,
-       n_live_tup AS live_rows, n_dead_tup AS dead_rows,
+       NULLIF(c.reltuples, -1)::bigint AS live_rows, n_dead_tup AS dead_since_reset,
        greatest(last_vacuum, last_autovacuum) AS last_vacuum
-  FROM pg_stat_user_tables
+  FROM pg_stat_user_tables s
+  JOIN pg_class c ON c.oid = s.relid
  ORDER BY pg_total_relation_size(relid) DESC
  LIMIT 10"
 
