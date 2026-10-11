@@ -522,7 +522,7 @@ strings and left-to-right assumptions before designing it.
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
-| **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 ✅ #210 (instrument_profiles 155 -> 96 MB); DB3 #DB3PR (deploy + window start pending). DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-142. See "Planned: the database sprint" |
+| **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 ✅ #210 (instrument_profiles 155 -> 96 MB); DB3 #213 (deploy + window start pending). DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-142. See "Planned: the database sprint" |
 | **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 📋 Planned | After Stage 4. `/ask` becomes a tool-using assistant: web search, tickers, the user's account, "what can I ask you?". See "Planned: the assistant" |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
@@ -3437,7 +3437,7 @@ bloat. *Lesson: estimate a table's floor as live rows plus a fresh index build, 
 file-level copy needs the live database disconnected; the `VACUUM FULL` before/after measured it.
 #209 (Insights tabs, another session) shipped in the same redeploy; it has no migration.
 
-**DB3 is built (2026-10-11, #DB3PR); deploy and window start pending.** Migration **0050**
+**DB3 is built (2026-10-11, #213); deploy and window start pending.** Migration **0050**
 creates `pg_stat_statements` - in Alembic, because an extension is schema (as `vector` is) and a
 report that ran DDL the first time it was read would change the database by looking at it. Both
 servers get `shared_preload_libraries=pg_stat_statements`, `log_min_duration_statement=200` and
@@ -3492,7 +3492,7 @@ copy of the live database (up/down/up, row counts); the Telegram flow on a copy 
 
 Ask the user before starting anything (the Stage 4 grant ended). In order of the user's last answer:
 0. **The database sprint** (see "Planned: the database sprint"): DB1 done (#208; schedule installed,
-   first run 2026-10-11 exit 0); DB2 done (#210, deployed and reclaimed 2026-10-11); DB3 is #DB3PR -
+   first run 2026-10-11 exit 0); DB2 done (#210, deployed and reclaimed 2026-10-11); DB3 is #213 -
    after its merge: redeploy, `db-report.sh --reset` on both, record the date. **DB4 is due a week
    after that reset** - run the report on both, then one question at a time. **No off-laptop copy
    exists:** Time Machine has no destination and no synced folder exists on the Mac - the user was
