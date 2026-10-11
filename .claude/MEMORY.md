@@ -15,6 +15,11 @@ compose was down ~35 min and kind's crons failed ~15 min (Sunday morning, market
 caught up).** #216 renumbered it; lesson under "Bugs". **Both environments run `main` at
 `2696fbf`, migration `0051_insights_seen`**, smoke test passed. **Due:** task 19's after-measurement
 on kind after Monday 2026-10-12's scans - see "Next session: after the Insights work".
+**In flight in other sessions at this handoff (not this one's):** DB4's first half - **#218** (the
+`runs` claim predicate) and **#219** (decisions 143-147), both open; and a worktree,
+`ask-agent-plan-4a141f`, on a branch `claude/assistant-build` with no commits yet. **#219 edits this
+status block and the 2026-10-08 list below too** - whichever of it and this handoff merges second
+resolves the conflict by keeping both.
 
 Previous update, 2026-10-11 ~08:00 UTC - **Database sprint handoff (five merged PRs: #207, #208, #210,
 #211, #213). Nothing is in flight.** DB1 backups (#208; launchd schedule installed, daily 04:00
@@ -3457,12 +3462,19 @@ Ask the user before starting anything (the Insights grant ended with task 21). I
    re-measure narration's rejection rate on it after a few days.
 3. **IBI check, 2026-10-15** (decision 135; the scheduled task runs it) - nothing IBI unless it shows
    other MCP clients can connect and the user says go.
-4. **DB4, the database sprint's review, on or after 2026-10-18** (the section below).
-5. **The `/ask` assistant milestone**: its 80-case test set landed as #212 (another session); the
-   build is a candidate, still to be asked about.
+4. **DB4's second half, on or after 2026-10-18** (the section below). Its first half ran
+   2026-10-11 on the user's request (#218, #219; decision 143 split it).
+5. **The `/ask` assistant milestone**: its 80-case test set landed as #212. A worktree named
+   `claude/assistant-build` exists - **check open PRs and `git worktree list` before starting it**,
+   so two sessions do not build it at once. Its test set predates #209: see the note in "Planned:
+   the assistant".
 
 **Before merging anything with a migration:** `git fetch`, then `alembic heads` on the branch merged
 with `origin/main` - two sessions were merging in parallel this week and branch CI cannot see it.
+**The next free migration is `0052`, and two pieces of work will want one:** DB4's second half, if
+it drops an index or adds `runs` retention, and the assistant's conversation tables. The one that
+merges second renumbers. Decision numbers likewise: DB4 has reached 147 (#219); read `origin/main`
+before taking the next.
 **Insights after deploy:** the first visit showed the whole 7-day window as unread, once (null
 `insights_seen_at`), as the PR said.
 
@@ -3605,7 +3617,7 @@ copy of the live database (up/down/up, row counts); the Telegram flow on a copy 
 (fourth refused, restore refused, archive frees a place); the schedule with real services on a copy
 (a scheduled scan proposed buying INTC; a failing slot retried twice and gave up once).
 
-### Next session: after the debt fixes (#202, #203, 2026-10-08)
+### Next session: after the debt fixes (history - superseded by "after the Insights work", 2026-10-11; D75's choice was saved 2026-10-08 19:45)
 
 Ask the user before starting anything (the Stage 4 grant ended). In order of the user's last answer:
 0. **The database sprint's review, DB4 - due on or after 2026-10-18** (see "Next session: the
@@ -3761,6 +3773,11 @@ the largest prompt-injection surface goes too.
   The planned tools it names (`get_portfolio`, `get_agents`, `get_proposals`, `get_observations`,
   `get_topics`, `replay_scan`, `get_universe_info`, `get_product_guide`) are the assistant's tool
   list as far as the cases need it - a starting point, not a decision.
+  **Written before #209 and #214 (2026-10-11), so update it when the assistant is built:** three
+  cases expect a `/proposals` link and P4's tour lists Proposals as a page. `/proposals` now
+  redirects to `/insights?tab=proposals` and Proposals is no longer in the bar (decision 134), so
+  link the tab and tour Insights' four tabs. M2 ("what happened while I was away") can use the
+  unread state: `GET /observations/days` and `insights_seen_at` (decision 133).
 - **A cost measurement** on a few real questions once the account is funded; the assistant's daily
   spend limit is set from it, not guessed.
 
