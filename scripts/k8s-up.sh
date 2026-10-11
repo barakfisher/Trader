@@ -35,6 +35,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/dev-common.sh
 source "$REPO_ROOT/scripts/lib/dev-common.sh"
+# shellcheck source=scripts/lib/backups.sh
+source "$REPO_ROOT/scripts/lib/backups.sh"
 
 CLUSTER=traders
 CONTEXT="kind-$CLUSTER"
@@ -282,3 +284,4 @@ if [ -n "$TAILNET_HOST" ] && [ "$TAILNET_HOST" != "none" ]; then
   fi
 fi
 echo "     sign in with: grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.env"
+warn_if_backup_stale kind
