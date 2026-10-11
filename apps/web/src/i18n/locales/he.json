@@ -357,7 +357,27 @@
     "concepts": "מושגים",
     "whatIs": "מה זה {{concept}}?",
     "hideEvidence": "הסתרת הראיות",
-    "showEvidence": "הצגת הראיות"
+    "showEvidence": "הצגת הראיות",
+    "unread": "חדש",
+    "unreadCount_one": "ממצא חדש אחד",
+    "unreadCount_two": "שני ממצאים חדשים",
+    "unreadCount_other": "{{count}} ממצאים חדשים",
+    "days": {
+      "label": "יום",
+      "older": "קודם",
+      "newer": "הבא",
+      "today": "היום",
+      "yesterday": "אתמול",
+      "count_one": "ממצא אחד",
+      "count_two": "שני ממצאים",
+      "count_other": "{{count}} ממצאים",
+      "emptyToday": "עדיין אין ממצאים היום",
+      "empty": "אין ממצאים ב{{day}}",
+      "emptyWindow": "אין ממצאים ב-7 הימים האחרונים. ממצאים ישנים יותר נשמרים, אך אינם מוצגים כאן.",
+      "latest_one": "האחרון: {{day}} (ממצא אחד)",
+      "latest_two": "האחרון: {{day}} (שני ממצאים)",
+      "latest_other": "האחרון: {{day}} ({{count}} ממצאים)"
+    }
   },
   "price": {
     "title": "מחיר",
@@ -721,7 +741,8 @@
     "menu": "תפריט",
     "account": "חשבון",
     "label": "ראשי",
-    "insights": "תובנות"
+    "insights": "תובנות",
+    "unread": "ממצאים חדשים"
   },
   "dashboard": {
     "title": "תיק",

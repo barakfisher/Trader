@@ -10,6 +10,7 @@ import type { FeedFilters } from '../queries/observations.ts';
 
 const SEVERITIES = new Set(['notable', 'high']);
 const SYMBOL = /^[A-Z0-9.\-^=]{1,32}$/;
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 export function feedFiltersFrom(search: unknown): FeedFilters {
   const params = (search ?? {}) as Record<string, unknown>;
@@ -21,5 +22,8 @@ export function feedFiltersFrom(search: unknown): FeedFilters {
     const symbol = params.symbol.trim().toUpperCase();
     if (SYMBOL.test(symbol)) filters.symbol = symbol;
   }
+  // Shape only: whether it is inside the seven days is the window's call
+  // (`dayInWindow`), and a day outside it is today rather than an error.
+  if (typeof params.day === 'string' && DAY.test(params.day)) filters.day = params.day;
   return filters;
 }

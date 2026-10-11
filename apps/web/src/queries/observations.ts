@@ -24,12 +24,18 @@ export interface FeedFilters {
   severity?: Exclude<ObservationSeverity, 'info'>;
   /** Findings about one symbol; undefined is every subject. */
   symbol?: string;
+  /**
+   * One local day of the Insights window (decision 133), YYYY-MM-DD; undefined
+   * in the address is today. The feed itself is always asked for one day.
+   */
+  day?: string;
 }
 
 function feedPath(filters: FeedFilters, before: string | null): string {
   const params = new URLSearchParams({ limit: String(FEED_PAGE_SIZE) });
   if (filters.severity) params.set('severity', filters.severity);
   if (filters.symbol) params.set('symbol', filters.symbol);
+  if (filters.day) params.set('day', filters.day);
   if (before) params.set('before', before);
   return `/observations?${params.toString()}`;
 }
@@ -38,15 +44,15 @@ export function feedQuery(filters: FeedFilters) {
   return infiniteQueryOptions({
     // Keyed by the filters, under the feed's prefix, so anything that refreshes
     // the feed refreshes every filtered view of it too.
-    queryKey: queryKeys.feed(filters.severity ?? null, filters.symbol ?? null),
+    queryKey: queryKeys.feed(filters.severity ?? null, filters.symbol ?? null, filters.day ?? null),
     queryFn: ({ pageParam }) => api.get<ObservationsResponse>(feedPath(filters, pageParam)),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
   });
 }
 
-export function useFeedQuery(filters: FeedFilters) {
-  return useInfiniteQuery(feedQuery(filters));
+export function useFeedQuery(filters: FeedFilters, options: { enabled?: boolean } = {}) {
+  return useInfiniteQuery({ ...feedQuery(filters), enabled: options.enabled ?? true });
 }
 
 /** Every finding loaded so far, in the order the server sent them. */

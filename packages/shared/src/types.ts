@@ -1059,6 +1059,18 @@ export interface DigestResponse {
   last: { sentAt: string; entries: DigestEntry[]; seen: boolean } | null;
 }
 
+/**
+ * The Insights window (decision 133): seven local days, today first, with each
+ * day's findings and unread findings for the main portfolio.
+ */
+export interface InsightsDaysResponse {
+  /** When these were counted; sent back as `upTo` to mark them seen. */
+  asOf: string;
+  /** Null until the user has opened All findings or Alerts. */
+  seenAt: string | null;
+  days: { day: string; count: number; unread: number }[];
+}
+
 /** Where an alert came from: the main portfolio, a followed topic, or an agent's trade (D134). */
 export type AlertSource = 'portfolio' | 'topics' | 'agents';
 

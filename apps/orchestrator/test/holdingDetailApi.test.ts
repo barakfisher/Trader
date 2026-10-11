@@ -225,7 +225,7 @@ describe('GET /observations?symbol=', () => {
       USER.id,
       AGENT,
       51,
-      { subjectRefs: ['instrument:NVDA', 'portfolio:allocation:NVDA'], minRank: null },
+      { subjectRefs: ['instrument:NVDA', 'portfolio:allocation:NVDA'], minRank: null, day: null },
       null,
     );
   });
@@ -236,7 +236,7 @@ describe('GET /observations?symbol=', () => {
       USER.id,
       AGENT,
       51,
-      { subjectRefs: null, minRank: null },
+      { subjectRefs: null, minRank: null, day: null },
       null,
     );
   });
@@ -247,10 +247,10 @@ describe('GET /observations?symbol=', () => {
       USER.id,
       AGENT,
       11,
-      { subjectRefs: null, minRank: 1 },
+      { subjectRefs: null, minRank: 1, day: null },
       '2d7c7f7e-8a55-4d5e-9d1a-3b1f0e9c6a11',
     );
-    expect(queries.countObservations).toHaveBeenCalledWith(USER.id, AGENT, { subjectRefs: null, minRank: 1 });
+    expect(queries.countObservations).toHaveBeenCalledWith(USER.id, AGENT, { subjectRefs: null, minRank: 1, day: null });
   });
 
   it.each(['severity=urgent', 'before=not-an-id'])('refuses %s', async (query) => {

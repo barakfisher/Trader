@@ -16,6 +16,7 @@ import {
 
 import { useTranslation } from '../i18n/index.ts';
 import { Disclosure } from './Disclosure.tsx';
+import { unreadCount, useInsightsDaysQuery } from '../queries/insightsDays.ts';
 import { openProposals, useProposalsQuery } from '../queries/proposals.ts';
 import { useStore } from '../stores/context.tsx';
 
@@ -43,11 +44,14 @@ export const AppBar = observer(function AppBar() {
   // Open questions, on Insights: a question that expires unanswered because
   // nobody knew it was there is what the inbox exists to prevent.
   const openCount = openProposals(useProposalsQuery().data).length;
+  // Unread findings are a dot beside the count, not a second number (the user,
+  // 2026-10-11): the number is what has a deadline.
+  const hasUnread = unreadCount(useInsightsDaysQuery().data) > 0;
   const isAdmin = auth.user?.role === 'admin';
 
   const places: Place[] = [
     // Proposals is a tab of Insights (decision 134), so its count is here.
-    { to: '/insights', label: t('nav.insights'), icon: Lightbulb, count: openCount },
+    { to: '/insights', label: t('nav.insights'), icon: Lightbulb, count: openCount, dot: hasUnread },
     { to: '/agents', label: t('nav.agents'), icon: Bot },
     { to: '/topics', label: t('nav.topics'), icon: Tags },
     { to: '/ask', label: t('nav.ask'), icon: MessageCircleQuestion },
@@ -123,6 +127,8 @@ type Place = {
   label: string;
   icon: typeof Bot;
   count?: number;
+  /** Something new to read there (decision 133), shown beside the count. */
+  dot?: boolean;
 };
 
 /** A place is current on its own address and below it: /agents/x is still Agents. */
@@ -131,6 +137,7 @@ function isCurrent(to: string, pathname: string): boolean {
 }
 
 function PlaceLink({ place, pathname, wide = false }: { place: Place; pathname: string; wide?: boolean }) {
+  const { t } = useTranslation();
   const current = isCurrent(place.to, pathname);
   const Icon = place.icon;
   return (
@@ -147,6 +154,13 @@ function PlaceLink({ place, pathname, wide = false }: { place: Place; pathname: 
         <span className="ms-auto rounded-full bg-accent px-1.5 text-xs font-semibold text-surface md:ms-1">
           {place.count}
         </span>
+      )}
+      {place.dot && (
+        <span
+          role="status"
+          aria-label={t('nav.unread')}
+          className={`size-2 rounded-full bg-accent ${place.count ? '' : 'ms-auto md:ms-1'}`}
+        />
       )}
     </Link>
   );

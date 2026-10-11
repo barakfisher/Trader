@@ -11,12 +11,13 @@ import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react
 import { createMemoryHistory } from '@tanstack/react-router';
 
 const get = vi.fn();
+const post = vi.fn(async () => ({ seenAt: null }));
 
 vi.mock('../src/api/client.ts', async () => {
   const actual = await vi.importActual<typeof import('../src/api/client.ts')>(
     '../src/api/client.ts',
   );
-  return { ...actual, api: { get, post: vi.fn(), put: vi.fn(), delete: vi.fn(), postForm: vi.fn() } };
+  return { ...actual, api: { get, post, put: vi.fn(), delete: vi.fn(), postForm: vi.fn() } };
 });
 
 const { App } = await import('../src/App.tsx');
@@ -109,11 +110,67 @@ it('lands on the tab a link names', async () => {
   expect(selected('Daily digest')).toBe('true');
 });
 
-it('reads the feed filters from the address', async () => {
+/** The window as the server sends it: seven days, today first (decision 133). */
+const DAYS = ['2026-10-11', '2026-10-10', '2026-10-09', '2026-10-08', '2026-10-07', '2026-10-06', '2026-10-05'];
+function serveDays(seenAt: string | null = null, counts: Record<string, [number, number]> = {}) {
+  get.mockImplementation((path: string) =>
+    path === '/observations/days'
+      ? Promise.resolve({
+          asOf: '2026-10-11T09:00:00.000Z',
+          seenAt,
+          days: DAYS.map((day) => ({ day, count: counts[day]?.[0] ?? 0, unread: counts[day]?.[1] ?? 0 })),
+        })
+      : new Promise(() => {}),
+  );
+}
+
+it('reads the feed filters from the address, and asks for today', async () => {
+  serveDays();
   renderAt('/insights?tab=observations&severity=high&symbol=NVDA');
   await screen.findByRole('heading', { name: 'Observations' });
+  await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringMatching(/day=2026-10-11/)));
   expect(get).toHaveBeenCalledWith(expect.stringMatching(/severity=high/));
   expect(get).toHaveBeenCalledWith(expect.stringMatching(/symbol=NVDA/));
+});
+
+it('steps back one day at a time, no further than the window, and today leaves the address clean', async () => {
+  serveDays();
+  const { router } = renderAt('/insights?tab=observations');
+  const older = await screen.findByRole('button', { name: 'Older' });
+  expect(screen.getByRole('button', { name: 'Newer' })).toHaveProperty('disabled', true);
+
+  fireEvent.click(older);
+  await waitFor(() => expect(router.state.location.search).toEqual({ tab: 'observations', day: DAYS[1] }));
+  expect(await screen.findByText('Yesterday')).toBeTruthy();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Newer' }));
+  await waitFor(() => expect(router.state.location.search).toEqual({ tab: 'observations' }));
+});
+
+it('opens a day that has left the window on today, and stops at its oldest day', async () => {
+  serveDays();
+  renderAt(`/insights?tab=observations&day=2026-09-01`);
+  await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringMatching(/day=2026-10-11/)));
+
+  cleanup();
+  vi.clearAllMocks();
+  serveDays();
+  renderAt(`/insights?tab=observations&day=${DAYS.at(-1)}`);
+  expect(await screen.findByRole('button', { name: 'Older' })).toHaveProperty('disabled', true);
+});
+
+it('counts unread findings on the tab, and marks them seen up to the moment it counted', async () => {
+  serveDays('2026-10-10T00:00:00.000Z', { '2026-10-11': [3, 2], '2026-10-10': [4, 1] });
+  renderAt('/insights?tab=proposals');
+  // Three unread across the window, on the All findings tab.
+  expect(await screen.findByLabelText('3 new findings')).toBeTruthy();
+  // Not on Proposals: only All findings and Alerts mark findings seen.
+  expect(post).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole('tab', { name: /All findings/ }));
+  await waitFor(() =>
+    expect(post).toHaveBeenCalledWith('/observations/seen', { upTo: '2026-10-11T09:00:00.000Z' }),
+  );
 });
 
 it('shows neither the feed nor the digest on the dashboard', async () => {

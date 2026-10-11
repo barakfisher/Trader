@@ -144,3 +144,31 @@ export async function markDigestSeen(userId: string, sentAt: Date): Promise<Date
   );
   return row?.digest_seen_at ?? null;
 }
+
+export async function getInsightsSeenAt(userId: string): Promise<Date | null> {
+  const row = await queryOne<{ insights_seen_at: Date | null }>(
+    'SELECT insights_seen_at FROM user_settings WHERE user_id = $1',
+    [userId],
+  );
+  return row?.insights_seen_at ?? null;
+}
+
+/**
+ * Record that the user has seen the findings written up to `upTo` (decision
+ * 133), and return what is now recorded.
+ *
+ * Only forward (`GREATEST`): a stale tab must not bring back findings already
+ * read. And never past now (`LEAST`): a claim from the future would mark
+ * findings read before they were written.
+ */
+export async function markInsightsSeen(userId: string, upTo: Date): Promise<Date | null> {
+  const row = await queryOne<{ insights_seen_at: Date | null }>(
+    `INSERT INTO user_settings (user_id, insights_seen_at)
+     VALUES ($1::uuid, LEAST($2::timestamptz, now()))
+     ON CONFLICT (user_id) DO UPDATE
+        SET insights_seen_at = GREATEST(user_settings.insights_seen_at, EXCLUDED.insights_seen_at)
+     RETURNING insights_seen_at`,
+    [userId, upTo.toISOString()],
+  );
+  return row?.insights_seen_at ?? null;
+}

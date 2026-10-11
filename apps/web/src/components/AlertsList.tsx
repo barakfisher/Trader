@@ -5,6 +5,7 @@ import type { Alert, AlertSource, Observation } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
+import { isUnread } from '../lib/insightsDays.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { loadedAlerts, useAlertsQuery } from '../queries/alerts.ts';
@@ -32,9 +33,12 @@ const SOURCES: { value: AlertSource | undefined; key: 'all' | AlertSource }[] = 
 export const AlertsList = observer(function AlertsList({
   source,
   onSourceChange,
+  seenAt,
 }: {
   source: AlertSource | undefined;
   onSourceChange: (source: AlertSource | undefined) => void;
+  /** `seenAt` as it was when the page opened (decision 133); undefined marks nothing. */
+  seenAt?: string | null;
 }) {
   const { t } = useTranslation();
   const alerts = useAlertsQuery(source);
@@ -110,6 +114,7 @@ export const AlertsList = observer(function AlertsList({
                 observation={alert as unknown as Observation}
                 baseCurrency={baseCurrency}
                 meta={<AlertMeta alert={alert} />}
+                unread={seenAt !== undefined && isUnread(alert.createdAt, seenAt)}
               />
             </li>
           ))}
