@@ -523,7 +523,7 @@ strings and left-to-right assumptions before designing it.
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
-| **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 #DB2PR (deploy + reclaim pending). DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-142. See "Planned: the database sprint" |
+| **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 #210 (deploy + reclaim pending). DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-142. See "Planned: the database sprint" |
 | **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 📋 Planned | After Stage 4. `/ask` becomes a tool-using assistant: web search, tickers, the user's account, "what can I ask you?". See "Planned: the assistant" |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
@@ -3406,7 +3406,7 @@ user's to do:** run `bash scripts/backup-schedule.sh install` from the main chec
 `~/Library/LaunchAgents`), and answer whether `~/Backups` is under Time Machine. Also found while
 building: compose's `instrument_profiles` is 155 MB too (5,226 rows) - DB2 applies to both.
 
-**DB2 is built (2026-10-11, #DB2PR); deploy and reclaim pending.** Both upserts in
+**DB2 is built (2026-10-11, #210); deploy and reclaim pending.** Both upserts in
 `profiles.py` update a row only when a value differs (`IS DISTINCT FROM` over every column but
 `updated_at`; the instrument's `WHERE` mirrors its fill-only `SET`), with the `RETURNING` fallback
 select; ETF holdings are compared as a multiset (weights quantized to the column's 6 places) and
@@ -3460,7 +3460,7 @@ copy of the live database (up/down/up, row counts); the Telegram flow on a copy 
 
 Ask the user before starting anything (the Stage 4 grant ended). In order of the user's last answer:
 0. **The database sprint** (see "Planned: the database sprint"): DB1 done (#208; schedule installed
-   and first run 2026-10-11, exit 0); DB2 is #DB2PR - after its merge, redeploy, check `n_tup_upd`
+   and first run 2026-10-11, exit 0); DB2 is #210 - after its merge, redeploy, check `n_tup_upd`
    across a restart, `VACUUM FULL`, record. Then DB3. **No off-laptop copy exists:** Time Machine
    has no destination and no synced folder exists on the Mac - the user was told (2026-10-11).
 1. **Review the scheduled scans** once three trading days have run (09:00 New York each trading
