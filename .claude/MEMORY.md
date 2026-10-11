@@ -3426,6 +3426,17 @@ answer "what can I ask you?".
   figures are checked against tool results (guideline 7); web results are reduced to plain text
   and trimmed before the model sees them; every conversation is logged for review.
 
+**Added 2026-10-11 (the user, while drafting the test set in `docs/ASSISTANT_QUESTIONS.md`):**
+- **A scan-replay tool** (read-only): reads a scan's recorded transcript (`agent_scans`,
+  `llm_calls`) so the assistant can answer "what tools did my agent use to reach that?" step by step.
+- **A universe tool**: the snapshot's date, counts, how it was screened, and whether a symbol is in
+  it - so "when was the universe updated?" comes from data, never from the model.
+- **The scope stays narrow** (re-confirmed): general news, weather, sport, travel and personal
+  savings plans are declined; company and market news, and how events touch the user's holdings,
+  are answered. Borderline cases are test cases O4-O10.
+- **No memory across conversations.** Memory stays per conversation; asked about an earlier one,
+  the assistant says it does not remember (test case M7).
+
 **Order (the user's):**
 1. Follow-up questions (conversation memory), sources on every answer, suggested next questions.
 2. Answers in the user's language - needs a decision amending guideline 1, which keeps `/ask` English.
