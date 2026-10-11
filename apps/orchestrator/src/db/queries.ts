@@ -29,6 +29,7 @@ export * from './queries/universe.js';
 export * from './queries/llmCalls.js';
 export * from './queries/llmModels.js';
 export * from './queries/observations.js';
+export * from './queries/alerts.js';
 export * from './queries/narration.js';
 export * from './queries/proposals.js';
 export * from './queries/proposalEpisodes.js';

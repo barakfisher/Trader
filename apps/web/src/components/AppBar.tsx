@@ -3,7 +3,6 @@ import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
   Bot,
   CircleUser,
-  Inbox,
   Lightbulb,
   LineChart,
   LogOut,
@@ -41,17 +40,17 @@ export const AppBar = observer(function AppBar() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  // The count is the point of the Proposals item: a question that expires
-  // unanswered because nobody knew it was there is what the inbox exists to prevent.
+  // Open questions, on Insights: a question that expires unanswered because
+  // nobody knew it was there is what the inbox exists to prevent.
   const openCount = openProposals(useProposalsQuery().data).length;
   const isAdmin = auth.user?.role === 'admin';
 
   const places: Place[] = [
-    { to: '/insights', label: t('nav.insights'), icon: Lightbulb },
+    // Proposals is a tab of Insights (decision 134), so its count is here.
+    { to: '/insights', label: t('nav.insights'), icon: Lightbulb, count: openCount },
     { to: '/agents', label: t('nav.agents'), icon: Bot },
     { to: '/topics', label: t('nav.topics'), icon: Tags },
     { to: '/ask', label: t('nav.ask'), icon: MessageCircleQuestion },
-    { to: '/proposals', label: t('nav.proposals'), icon: Inbox, count: openCount },
     // Targets is on the holdings card (UX5): it is about those rows.
   ];
   const account: Place[] = [
@@ -120,7 +119,7 @@ export const AppBar = observer(function AppBar() {
 });
 
 type Place = {
-  to: '/insights' | '/agents' | '/topics' | '/ask' | '/proposals' | '/settings' | '/admin';
+  to: '/insights' | '/agents' | '/topics' | '/ask' | '/settings' | '/admin';
   label: string;
   icon: typeof Bot;
   count?: number;

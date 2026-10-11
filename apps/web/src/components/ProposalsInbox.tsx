@@ -1,12 +1,11 @@
 import { observer } from 'mobx-react-lite';
 import { Link } from '@tanstack/react-router';
-import { Inbox, ShieldCheck } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 
 import type { Proposal } from '@traders/shared';
 
-import { Disclaimer } from '../components/Disclaimer.tsx';
-import { ApprovedCard, ProposalCard, useNow } from '../components/ProposalCards.tsx';
-import { Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
+import { ApprovedCard, ProposalCard, useNow } from './ProposalCards.tsx';
+import { Card, EmptyState, ErrorNote, Spinner, buttonClass } from './ui.tsx';
 import { errorMessage } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
@@ -26,7 +25,9 @@ import {
 import { useStore } from '../stores/context.tsx';
 
 /**
- * The approvals inbox.
+ * The approvals inbox: the Insights page's Proposals tab (decision 134). It was
+ * a page of its own until the tabs; `/proposals` now redirects here, and a
+ * single proposal (`/proposals/$proposalId`) is still a page.
  *
  * Three things about this page are deliberate and would be wrong if done the
  * obvious way.
@@ -48,7 +49,7 @@ import { useStore } from '../stores/context.tsx';
  * writes a ledger row, and a screen that says "Approved" for one the server
  * refused is the most expensive kind of wrong this product can be.
  */
-export const ProposalsPage = observer(function ProposalsPage() {
+export const ProposalsInbox = observer(function ProposalsInbox() {
   const { proposals } = useStore();
   const { t } = useTranslation();
   // Live: re-read on an interval and on focus while this page is open, because
@@ -75,19 +76,7 @@ export const ProposalsPage = observer(function ProposalsPage() {
   const isEmpty = inbox.status === 'success' && open.length === 0;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Inbox className="size-5 text-accent" aria-hidden />
-          <h1 className="text-base font-semibold">{t('proposals.title')}</h1>
-          {open.length > 0 && (
-            <span className="rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent">
-              {t('proposals.open', { count: open.length })}
-            </span>
-          )}
-        </div>
-      </header>
-
+    <div className="space-y-4">
       {/*
         Said once, at the top, rather than on every card. Approving records an
         intention in a ledger this product owns; nothing is ever sent to a
@@ -149,7 +138,6 @@ export const ProposalsPage = observer(function ProposalsPage() {
         full={(history.data?.length ?? 0) >= HISTORY_PAGE}
       />
 
-      <Disclaimer />
     </div>
   );
 });

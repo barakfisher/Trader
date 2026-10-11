@@ -312,7 +312,8 @@
     "sigma_move": "Unusual move",
     "drawdown": "Drawdown",
     "allocation_drift": "Allocation drift",
-    "topic_move": "Topic move"
+    "topic_move": "Topic move",
+    "agent_trade": "Agent trade"
   },
   "news": {
     "cashtag": "ticker ${{symbol}} in the text",
@@ -1384,8 +1385,30 @@
   "insights": {
     "title": "Insights",
     "tabs": {
-      "observations": "Observations",
-      "digest": "Daily digest"
+      "alerts": "Alerts",
+      "proposals": "Proposals",
+      "digest": "Daily digest",
+      "observations": "All findings"
     }
+  },
+  "alerts": {
+    "title": "Alerts",
+    "source": "Source",
+    "sources": {
+      "all": "All",
+      "portfolio": "Portfolio",
+      "topics": "Topics",
+      "agents": "Agents"
+    },
+    "loading": "Loading alerts…",
+    "loadFailed": "Could not load the alerts.",
+    "emptyTitle": "Nothing was sent",
+    "emptyBody": "Findings at or above your alert level are sent to Telegram and listed here. Everything else is under All findings.",
+    "noMatchTitle": "Nothing was sent from this source",
+    "noMatchBody": "Other sources may have alerts.",
+    "deferred": "Held for the digest (quiet hours)",
+    "notDelivered": "Not delivered",
+    "sent": "Sent {{when}}",
+    "agent": "Agent: {{name}}"
   }
 }

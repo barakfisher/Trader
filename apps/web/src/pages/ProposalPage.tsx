@@ -20,7 +20,7 @@ import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { useProposalQuery } from '../queries/proposals.ts';
 import { useStore } from '../stores/context.tsx';
-import { OutcomeBadge } from './ProposalsPage.tsx';
+import { OutcomeBadge } from '../components/ProposalsInbox.tsx';
 
 /**
  * One proposal at its own address: what a Telegram message links to (FR-21),
