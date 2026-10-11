@@ -1,8 +1,8 @@
 import { observer } from 'mobx-react-lite';
 import type { ReactNode } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
-import type { Observation } from '@traders/shared';
+import type { InsightsDaysResponse, Observation } from '@traders/shared';
 
 import {
   conceptLabel,
@@ -13,6 +13,7 @@ import {
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { errorMessage } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
+import { dayLabel, isUnread, latestEarlierDay } from '../lib/insightsDays.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { observationText } from '../lib/observationText.ts';
 import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
@@ -35,7 +36,8 @@ const SEVERITY_OPTIONS: { value: FeedFilters['severity']; key: 'all' | 'notable'
 ];
 
 /**
- * The feed, a page at a time, filtered by severity and symbol.
+ * The feed, a page at a time, filtered by severity and symbol - and, on the
+ * Insights page, one local day of the seven it steps through (decision 133).
  *
  * The filters are props rather than read from the address here, so the
  * component renders the same in a test as on the Insights page, which keeps
@@ -45,11 +47,21 @@ const SEVERITY_OPTIONS: { value: FeedFilters['severity']; key: 'all' | 'notable'
 export const ObservationsFeed = observer(function ObservationsFeed({
   filters = {},
   onFiltersChange,
+  days,
+  seenAt,
 }: {
   filters?: FeedFilters;
   onFiltersChange?: (filters: FeedFilters) => void;
+  /**
+   * The window's days, today first. When given, the feed shows `filters.day`
+   * with a stepper, and waits for a day before asking for anything.
+   */
+  days?: InsightsDaysResponse['days'];
+  /** `seenAt` as it was when the page opened; undefined marks nothing unread. */
+  seenAt?: string | null;
 }) {
-  const feed = useFeedQuery(filters);
+  const stepping = days !== undefined;
+  const feed = useFeedQuery(filters, { enabled: !stepping || filters.day !== undefined });
   const { t } = useTranslation();
   const portfolio = usePortfolioQuery().data;
   const baseCurrency = baseCurrencyOf(portfolio);
@@ -58,7 +70,12 @@ export const ObservationsFeed = observer(function ObservationsFeed({
   const items = loadedFindings(feed.data?.pages);
   const total = feed.data?.pages[0]?.total ?? null;
   const latestAt = items[0]?.createdAt ?? null;
+  // The day is where the reader is, not a filter: an empty day says so in its own words.
   const filtered = filters.severity !== undefined || filters.symbol !== undefined;
+  const dayIndex = stepping && filters.day ? days.findIndex((day) => day.day === filters.day) : -1;
+  const earlier = stepping && filters.day ? latestEarlierDay(days, filters.day) : undefined;
+  const goToDay = (day: string) =>
+    onFiltersChange?.({ ...filters, day: day === days?.[0]?.day ? undefined : day });
   // True only once a load has succeeded and returned nothing. An empty feed is
   // the normal state of a quiet day, so the view must be able to tell "the
   // engine found nothing" apart from "we have not asked yet" and from "the
@@ -122,6 +139,39 @@ export const ObservationsFeed = observer(function ObservationsFeed({
         </div>
       )}
 
+      {stepping && filters.day && dayIndex >= 0 && (
+        <nav
+          aria-label={t('feed.days.label')}
+          className="mb-3 flex items-center justify-between gap-2 border-b border-border-subtle pb-2"
+        >
+          <button
+            type="button"
+            disabled={dayIndex >= days.length - 1}
+            onClick={() => goToDay(days[dayIndex + 1]!.day)}
+            className="flex items-center gap-1 rounded px-2 py-1 text-xs text-text-muted hover:bg-surface-hover hover:text-text-primary disabled:opacity-40"
+          >
+            <ChevronLeft className={`size-3.5 ${MIRROR_IN_RTL}`} aria-hidden />
+            {t('feed.days.older')}
+          </button>
+          <span className="text-sm font-medium text-text-primary" aria-live="polite">
+            {dayLabel(days, filters.day)}
+            <span className="ms-2 text-xs font-normal text-text-muted">
+              {t('feed.days.count', { count: days[dayIndex]!.count })}
+            </span>
+          </span>
+          <button
+            type="button"
+            disabled={dayIndex === 0}
+            onClick={() => goToDay(days[dayIndex - 1]!.day)}
+            className="flex items-center gap-1 rounded px-2 py-1 text-xs text-text-muted hover:bg-surface-hover hover:text-text-primary disabled:opacity-40"
+          >
+            {t('feed.days.newer')}
+            <ChevronRight className={`size-3.5 ${MIRROR_IN_RTL}`} aria-hidden />
+          </button>
+        </nav>
+      )}
+
+      {/* Pending includes waiting for the window's days, before a day is known. */}
       {feed.isPending && <Spinner label={t('feed.loading')} />}
 
       {feed.error && (
@@ -136,10 +186,34 @@ export const ObservationsFeed = observer(function ObservationsFeed({
       {/* A quiet day is the normal result, so the empty state states a finding
           rather than apologising for one. A filter that matches nothing is a
           different statement, and says so. */}
-      {isEmpty && !filtered && (
+      {isEmpty && !filtered && !stepping && (
         <EmptyState
           title={t('feed.quietTitle')}
           body={t('feed.quietBody')}
+        />
+      )}
+      {/* Days without findings are common - weekends, quiet sessions (4 of 14
+          on kind, measured 2026-10-11) - so an empty day points at the latest
+          one that has some instead of leaving the reader to step back. */}
+      {isEmpty && !filtered && stepping && filters.day && (
+        <EmptyState
+          title={
+            dayIndex === 0
+              ? t('feed.days.emptyToday')
+              : t('feed.days.empty', { day: dayLabel(days, filters.day) })
+          }
+          body={earlier ? undefined : t('feed.days.emptyWindow')}
+          action={
+            earlier && (
+              <button
+                type="button"
+                onClick={() => goToDay(earlier.day)}
+                className="text-xs text-accent underline"
+              >
+                {t('feed.days.latest', { day: dayLabel(days, earlier.day), count: earlier.count })}
+              </button>
+            )
+          }
         />
       )}
       {isEmpty && filtered && (
@@ -164,7 +238,11 @@ export const ObservationsFeed = observer(function ObservationsFeed({
         <ul className="space-y-3">
           {items.map((observation) => (
             <li key={observation.id}>
-              <ObservationRow observation={observation} baseCurrency={baseCurrency} />
+              <ObservationRow
+                observation={observation}
+                baseCurrency={baseCurrency}
+                unread={seenAt !== undefined && isUnread(observation.createdAt, seenAt)}
+              />
             </li>
           ))}
         </ul>
@@ -200,11 +278,14 @@ export const ObservationRow = observer(function ObservationRow({
   observation,
   baseCurrency,
   meta,
+  unread = false,
 }: {
   observation: Observation;
   baseCurrency: string;
   /** Said under the header line: an alert's agent and delivery. */
   meta?: ReactNode;
+  /** Written since the user last opened the findings (decision 133). */
+  unread?: boolean;
 }) {
   const { observations, concepts } = useStore();
   const { t, i18n } = useTranslation();
@@ -214,13 +295,23 @@ export const ObservationRow = observer(function ObservationRow({
   const drawerId = `evidence-${observation.id}`;
 
   return (
-    <article className="flex gap-3 rounded-lg border border-border-subtle bg-surface-raised/60 p-3">
+    <article
+      className={`flex gap-3 rounded-lg border p-3 ${
+        unread ? 'border-accent/40 bg-accent/5' : 'border-border-subtle bg-surface-raised/60'
+      }`}
+    >
       {/* The rail carries severity at a glance; the chip names it for anyone who
           cannot rely on colour alone. */}
       <span className={`w-1 shrink-0 rounded-full ${severity.railClassName}`} aria-hidden />
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-muted">
+          {unread && (
+            <span className="flex items-center gap-1 text-accent">
+              <span className="size-1.5 rounded-full bg-accent" aria-hidden />
+              {t('feed.unread')}
+            </span>
+          )}
           <span className={`rounded px-1.5 py-0.5 text-[10px] ${severity.chipClassName}`}>
             {severity.label}
           </span>

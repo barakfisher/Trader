@@ -5,7 +5,12 @@
  */
 
 import type { Hono } from 'hono';
-import type { ConsolidatedHoldingsResponse, SnapshotsResponse } from '@traders/shared';
+import { z } from 'zod';
+import type {
+  ConsolidatedHoldingsResponse,
+  InsightsDaysResponse,
+  SnapshotsResponse,
+} from '@traders/shared';
 
 import {
   countObservations,
@@ -18,10 +23,14 @@ import {
   listSnapshots,
   primaryAgentId,
   recordQuotes,
+  countObservationsByDay,
+  getInsightsSeenAt,
+  markInsightsSeen,
 } from '../../db/queries.js';
 import { logger } from '../../logger.js';
 import { valueAgentAccount } from '../../services/agentAccount.js';
 import { consolidate, pendingTradesOf } from '../../services/consolidation.js';
+import { INSIGHTS_DAYS, isWindowDay, windowDays } from '../../services/insightsWindow.js';
 import { narrationStateFrom } from '../../services/narrationHealth.js';
 import { SEVERITY_RANK } from '../../services/notificationPolicy.js';
 import { valuePortfolio } from '../../services/valuation.js';
@@ -38,6 +47,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function subjectRefsFor(symbol: string): string[] {
   return [`instrument:${symbol}`, `portfolio:allocation:${symbol}`];
 }
+
+const seenSchema = z.object({ upTo: z.string().datetime({ offset: true }) });
 
 export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
   app.get('/portfolio', async (context) => {
@@ -123,7 +134,9 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
    *
    * - `?symbol=NVDA` keeps the findings about one instrument (its holding page);
    * - `?severity=notable` keeps findings at least that severe (notable and high);
-   * - `?before=<id>` continues after the last finding the reader has.
+   * - `?before=<id>` continues after the last finding the reader has;
+   * - `?day=YYYY-MM-DD` keeps one local day of the Insights window (decision
+   *   133) - today or one of the six before it, in the user's timezone.
    *
    * `total` is how many findings the filter matches in all, and `nextCursor` the
    * id to pass as `before` for the next page - null when there is none, so
@@ -146,9 +159,21 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
     if (before !== undefined && !UUID.test(before)) {
       throw badRequest('invalid_cursor', 'before must be the id of a finding');
     }
+    const day = context.req.query('day');
+    let timezone = 'UTC';
+    if (day !== undefined) {
+      timezone = (await getUser(userId))?.timezone ?? 'UTC';
+      if (!isWindowDay(day, timezone)) {
+        throw badRequest(
+          'invalid_day',
+          `day must be today or one of the ${INSIGHTS_DAYS - 1} days before it, as YYYY-MM-DD`,
+        );
+      }
+    }
     const filter = {
       subjectRefs: symbol ? subjectRefsFor(symbol) : null,
       minRank: severity === undefined ? null : SEVERITY_RANK[severity]!,
+      day: day === undefined ? null : { date: day, timezone },
     };
     // One more than a page, so whether another page exists is known, not guessed.
     const agentId = await primaryAgentId(userId);
@@ -176,6 +201,54 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
         createdAt: new Date(row.created_at).toISOString(),
       })),
     });
+  });
+
+  /**
+   * The Insights window (decision 133): its seven local days, today first, each
+   * with how many of the main portfolio's findings it holds and how many are
+   * unread; `seenAt` as recorded, and `asOf`, the moment these were counted -
+   * what the page sends back to mark them seen, so a finding written after
+   * this read stays unread.
+   */
+  app.get('/observations/days', async (context) => {
+    const userId = currentUserId(context);
+    const asOf = new Date();
+    const [user, agentId, seenAt] = await Promise.all([
+      getUser(userId),
+      primaryAgentId(userId),
+      getInsightsSeenAt(userId),
+    ]);
+    const timezone = user?.timezone ?? 'UTC';
+    const days = windowDays(timezone, asOf);
+    const counted = new Map(
+      (await countObservationsByDay(userId, agentId, timezone, days.at(-1)!, seenAt)).map(
+        (row) => [row.day, row],
+      ),
+    );
+    const body: InsightsDaysResponse = {
+      asOf: asOf.toISOString(),
+      seenAt: seenAt?.toISOString() ?? null,
+      days: days.map((date) => ({
+        day: date,
+        count: counted.get(date)?.count ?? 0,
+        unread: counted.get(date)?.unread ?? 0,
+      })),
+    };
+    return context.json(body);
+  });
+
+  /**
+   * Mark the findings read up to `upTo` - the `asOf` the page counted at
+   * (decision 133). Opening All findings or Alerts sends it (the user,
+   * 2026-10-11). Only forward, never past now: see `markInsightsSeen`.
+   */
+  app.post('/observations/seen', async (context) => {
+    const parsed = seenSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) {
+      throw badRequest('invalid_body', 'expected { upTo } as an ISO 8601 time', parsed.error.issues);
+    }
+    const seenAt = await markInsightsSeen(currentUserId(context), new Date(parsed.data.upTo));
+    return context.json({ seenAt: seenAt?.toISOString() ?? null });
   });
 
   /**

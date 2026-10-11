@@ -463,6 +463,54 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('the Insights window (0050, decision 133)', () => {
+    it("counts a day's findings in the user's timezone, and the unread among them", async () => {
+      const pool = getPool();
+      const at = async (createdAt: string) =>
+        pool.query(
+          `INSERT INTO observations (user_id, agent_id, kind, severity, subject_ref, headline,
+                                     dedupe_key, created_at)
+           VALUES ($1, $2, 'price_move', 'info', 'instrument:WIN', 'h', $3, $4)`,
+          [USER, AGENT, `window-${randomUUID()}`, createdAt],
+        );
+      // 22:30 UTC on the 1st is the 2nd in Jerusalem; 10:00 UTC on the 2nd is the 2nd too.
+      await at('2026-09-01T22:30:00Z');
+      await at('2026-09-02T10:00:00Z');
+      await at('2026-09-01T08:00:00Z');
+
+      const rows = await queries.countObservationsByDay(
+        USER,
+        AGENT,
+        'Asia/Jerusalem',
+        '2026-09-01',
+        new Date('2026-09-02T00:00:00Z'),
+      );
+      const byDay = Object.fromEntries(rows.map((row) => [row.day, row]));
+      expect(byDay['2026-09-01']).toMatchObject({ count: 1, unread: 0 });
+      expect(byDay['2026-09-02']).toMatchObject({ count: 2, unread: 1 });
+
+      const filtered = await queries.listObservations(USER, AGENT, 50, {
+        day: { date: '2026-09-02', timezone: 'Asia/Jerusalem' },
+      });
+      expect(filtered.filter((row) => row.subject_ref === 'instrument:WIN')).toHaveLength(2);
+
+      await pool.query('DELETE FROM observations WHERE user_id = $1 AND dedupe_key LIKE $2', [
+        USER,
+        'window-%',
+      ]);
+    });
+
+    it('moves seen only forward, and never past now', async () => {
+      const first = await queries.markInsightsSeen(USER, new Date('2026-09-02T00:00:00Z'));
+      expect(first?.toISOString()).toBe('2026-09-02T00:00:00.000Z');
+      const stale = await queries.markInsightsSeen(USER, new Date('2026-09-01T00:00:00Z'));
+      expect(stale?.toISOString()).toBe('2026-09-02T00:00:00.000Z');
+      const future = await queries.markInsightsSeen(USER, new Date('2999-01-01T00:00:00Z'));
+      expect(future!.getTime()).toBeLessThanOrEqual(Date.now() + 1000);
+      expect(await queries.getInsightsSeenAt(USER)).toEqual(future);
+    });
+  });
+
   describe('alerts (decision 134)', () => {
     it('lists what was pushed or deferred, by source, and nothing that only waited for the digest', async () => {
       const pool = getPool();

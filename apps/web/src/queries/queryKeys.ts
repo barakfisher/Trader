@@ -14,8 +14,8 @@ export const queryKeys = {
   consolidated: ['portfolio', 'consolidated'] as const,
   observations: ['observations'] as const,
   /** The dashboard's feed, per filter. Under `observations`, so a refresh of the feed reaches it. */
-  feed: (severity: string | null, symbol: string | null) =>
-    ['observations', 'feed', { severity, symbol }] as const,
+  feed: (severity: string | null, symbol: string | null, day: string | null) =>
+    ['observations', 'feed', { severity, symbol, day }] as const,
   /** Under the feed, so anything that invalidates the feed refreshes a holding's findings too. */
   symbolObservations: (symbol: string) => ['observations', 'symbol', symbol] as const,
   /**
@@ -23,6 +23,11 @@ export const queryKeys = {
    * so anything that refreshes the feed refreshes the alerts too.
    */
   alerts: (source: string | null) => ['observations', 'alerts', { source }] as const,
+  /**
+   * The Insights window's seven days and their unread counts (decision 133).
+   * Under `observations`, so a new finding's refresh updates the dot too.
+   */
+  insightsDays: ['observations', 'days'] as const,
   proposals: ['proposals'] as const,
   /** Under the inbox's key, so a decision's invalidation of `['proposals']` refreshes both. */
   proposalHistory: ['proposals', 'history'] as const,

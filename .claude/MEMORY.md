@@ -491,7 +491,6 @@ strings and left-to-right assumptions before designing it.
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
 | 19 | **Insights noise: states fire on a band crossing; an unusual move absorbs the price move** (the user, 2026-10-08; decision 132) | — | M | **Built in the PR that added migration 0049** (`finding_episodes`; decision 132's 2026-10-09 paragraph). **Before**, on kind 30 Sep-9 Oct: 14 drawdown rows (SMR *high* x7, URA *info*/*notable* x7) where the rule gives 3, and 1 of 8 `price_move` rows repeating a `sigma_move`. **What remains:** after deploy, re-run the before query (drawdown rows per subject and band, `price_move` sharing a subject and New York day with `sigma_move`) over kind's observations written after the deploy, record it here, then remove this row. Compose cannot measure it until the main portfolio has holdings again (reset 2026-10-07) |
-| 21 | **Insights: today by default, back 7 days, unread badge** (the user, 2026-10-08; decision 133) | — | M | After tasks 19 and 20 (#206 and the tabs PR), so the badge counts findings worth reading and has tabs to sit on. **The Insights bar item already carries the open-proposal count** (decision 134 as built): decide with the user how the unread count and that count share it. A `last_seen` timestamp on `user_settings` (migration; decision 119's pattern), `GET /observations` filtered by local day, the feed's day stepper (today, then back to 7 days), the Insights tab badge and the unread styling, translated in en and he. Done when a test pins the 7-day bound and the unread count, and the page is checked in a browser in both languages |
 | 17 | **Narration: why two of three model texts are rejected, fixed on the free model** (the user, 2026-10-07) | — | S | **Measured 2026-10-07** over the 38 `unsourced_figures` rejections on compose (all `nvidia/nemotron-3.5-lightning:free`, the validator re-run on each): **34 of 38 mention a threshold** ("crossed the 25% high threshold") that is true but refused, because `thresholds_pct` / `thresholds_weight` are nested and their keys (`info`, `notable`, `high`) carry no ratio marker - **5 were refused for that alone**; **30 of 38 copy a price in minor units** ("fell to 790" for $7.90), rightly refused, but the evidence invites it by handing the model `*_minor` integers; **3 are real inventions** ("$10.14M" for $101,427.80). **One error passed:** "the 0.03% information threshold" for 0.03 = 3%, accepted because the bare digits are in the evidence. **Fixes, one PR:** (1) the validator reads values under a `thresholds_*` key as ratios; (2) narration's evidence gives money as decimal strings ("7.90"), as the agent tools do since #177; (3) a ratio's bare digits followed by `%` are refused ("0.03%" for 0.03), while "0.03%" for a true 0.0003 stays accepted. **Then measure again on the free model** - the user's choice, because a paid model costs money and the fixes may make it unnecessary for narration (estimated at $0.03-0.07 a week on Flash-Lite or Haiku, against the agents' $0.04-0.38 a scan; the Admin page already sets narration's model separately). **The three fixes landed in the PR after #178; what remains is the re-measurement** on the free model once compose and kind run it - re-run the 2026-10-07 export (`llm_calls` where `purpose = 'narration'`) over the narrations written after the deploy. Done when that rate is recorded here, and this row is then removed |
 
 **Not in the queue, and why** - so they are not added back by the next sweep:
@@ -2145,6 +2144,20 @@ failure they prevent.
     column, no per-row writes, and "unread" is `created_at > last_seen` for the primary agent.
     *Rejected:* a flag per observation, which costs a write per row read and a migration every time
     a new kind of thing becomes "readable".
+    **Built 2026-10-11 (migration 0050 `insights_seen_at`), with three answers from the user.**
+    (a) **The bar's number stays the open-proposal count; unread findings are a dot beside it** -
+    the number is what has a deadline; the unread number sits on the *All findings* tab. (b)
+    **Opening All findings or Alerts marks seen**, to the `asOf` the page counted at (a finding
+    written while the page is open stays unread), only forward, never past now. The highlight is
+    judged against `seenAt` as the page found it, so it lasts the visit and is gone on the next.
+    *Caveat:* that baseline is per page load - Insights left open for hours keeps its first one;
+    the dot always follows the latest counts. (c) **The day stepper is on All findings only**;
+    Alerts keeps paging (few alerts; days would be mostly empty). The server computes the seven
+    days (`services/insightsWindow.ts`) and serves them with counts (`GET /observations/days`), so
+    the browser never does timezone arithmetic; `?day=` outside the window is a 400 from the API
+    and *today* in the page. An empty day points at the latest earlier day with findings -
+    measured: 4 of 14 days on kind had none. Null `insights_seen_at` is "nothing seen": the first
+    visit after deploy shows the whole window as new, once.
 134. **Insights is split into tabs: Alerts, Proposals, Digest, All findings** (the user,
     2026-10-08; queue task 20, after task 19). Each tab answers one question, so a rebalance
     proposal waiting for an answer is never under a day of drawdowns. **Alerts** is what was

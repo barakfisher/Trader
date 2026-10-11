@@ -191,18 +191,30 @@ export interface ObservationFilter {
   subjectRefs?: string[] | null;
   /** Only findings at least this severe, on `SEVERITY_RANK`'s scale: 0 info, 1 notable, 2 high. */
   minRank?: number | null;
+  /**
+   * Only findings written on this local day (YYYY-MM-DD) in `timezone` - the
+   * Insights page's day stepper (decision 133). Both or neither.
+   */
+  day?: { date: string; timezone: string } | null;
 }
 
-/** `next` is the first placeholder after the filter's own two. */
+/** `next` is the first placeholder after the filter's own four. */
 function observationWhere(
   filter: ObservationFilter,
   first: number,
 ): { sql: string; params: unknown[]; next: number } {
   return {
-    next: first + 2,
+    next: first + 4,
     sql: `AND ($${first}::text[] IS NULL OR subject_ref = ANY($${first}::text[]))
-          AND (${SEVERITY_RANK_SQL}) >= coalesce($${first + 1}::int, 0)`,
-    params: [filter.subjectRefs ?? null, filter.minRank ?? null],
+          AND (${SEVERITY_RANK_SQL}) >= coalesce($${first + 1}::int, 0)
+          AND ($${first + 2}::date IS NULL
+               OR (created_at AT TIME ZONE $${first + 3}::text)::date = $${first + 2}::date)`,
+    params: [
+      filter.subjectRefs ?? null,
+      filter.minRank ?? null,
+      filter.day?.date ?? null,
+      filter.day?.timezone ?? 'UTC',
+    ],
   };
 }
 
@@ -257,4 +269,36 @@ export async function countObservations(
     [userId, ...where.params, agentId],
   );
   return Number(row?.count ?? 0);
+}
+
+export interface ObservationDayRow {
+  /** YYYY-MM-DD, the local day in the timezone asked for. */
+  day: string;
+  count: number;
+  unread: number;
+}
+
+/**
+ * The main portfolio's findings per local day from `oldest` on, and how many of
+ * each day's were written after `seenAt` (decision 133). Days with none are
+ * absent; the caller fills the window.
+ */
+export async function countObservationsByDay(
+  userId: string,
+  agentId: string,
+  timezone: string,
+  oldest: string,
+  seenAt: Date | null,
+): Promise<ObservationDayRow[]> {
+  const rows = await query<{ day: string; count: string; unread: string }>(
+    `SELECT (created_at AT TIME ZONE $3::text)::date::text AS day,
+            count(*)::text AS count,
+            count(*) FILTER (WHERE $5::timestamptz IS NULL OR created_at > $5::timestamptz)::text AS unread
+       FROM observations
+      WHERE user_id = $1 AND agent_id = $2
+        AND (created_at AT TIME ZONE $3::text)::date >= $4::date
+      GROUP BY 1`,
+    [userId, agentId, timezone, oldest, seenAt?.toISOString() ?? null],
+  );
+  return rows.map((row) => ({ day: row.day, count: Number(row.count), unread: Number(row.unread) }));
 }

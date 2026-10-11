@@ -180,7 +180,8 @@ describe('the holding page', () => {
 
     expect(await screen.findByText('No such holding')).toBeTruthy();
     expect(requested().some((path) => path.startsWith('/holdings/'))).toBe(false);
-    expect(requested().some((path) => path.startsWith('/observations'))).toBe(false);
+    // The findings about it; the bar's unread dot (`/observations/days`) is not about it.
+    expect(requested().some((path) => path.startsWith('/observations?'))).toBe(false);
   });
 
   it('says which empty an empty chart and an empty week are', async () => {

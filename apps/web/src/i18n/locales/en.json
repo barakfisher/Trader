@@ -348,7 +348,24 @@
     "concepts": "Concepts",
     "whatIs": "What is {{concept}}?",
     "hideEvidence": "Hide evidence",
-    "showEvidence": "Show evidence"
+    "showEvidence": "Show evidence",
+    "unread": "New",
+    "unreadCount_one": "{{count}} new finding",
+    "unreadCount_other": "{{count}} new findings",
+    "days": {
+      "label": "Day",
+      "older": "Older",
+      "newer": "Newer",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "count_one": "{{count}} finding",
+      "count_other": "{{count}} findings",
+      "emptyToday": "Nothing yet today",
+      "empty": "Nothing on {{day}}",
+      "emptyWindow": "Nothing in the last 7 days. Older findings are kept, not shown here.",
+      "latest_one": "Latest: {{day}} ({{count}} finding)",
+      "latest_other": "Latest: {{day}} ({{count}} findings)"
+    }
   },
   "price": {
     "title": "Price",
@@ -705,7 +722,8 @@
     "menu": "Menu",
     "account": "Account",
     "label": "Main",
-    "insights": "Insights"
+    "insights": "Insights",
+    "unread": "New findings"
   },
   "dashboard": {
     "title": "Portfolio",
