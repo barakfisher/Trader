@@ -766,3 +766,51 @@ async def test_a_model_call_that_fails_twice_ends_the_question(
 
     assert turn.outcome == "failed" and turn.text == NO_REPLY_TEXT["failed"]
     assert len(llm.sent) == 2
+
+
+async def test_starting_a_conversation_deletes_the_users_old_ones_and_nobody_elses(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    from app.assistant.conversations import RETENTION_DAYS
+
+    old = await _ask(loaded, account, ScriptedLLM(_reply(outcome="clarify", text="Which?")), "Hm")
+    recent = await _ask(
+        loaded, account, ScriptedLLM(_reply(outcome="clarify", text="Which?")), "Ho"
+    )
+    with loaded.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE assistant_conversations SET updated_at = now() - make_interval(days => :d) "
+                "WHERE id = CAST(:id AS uuid)"
+            ),
+            {"d": RETENTION_DAYS + 1, "id": old.conversation_id},
+        )
+        stranger = connection.execute(
+            text("INSERT INTO users (role) VALUES ('user') RETURNING id::text")
+        ).scalar_one()
+        stranger_primary = primary_agent_id(connection, stranger)
+    theirs = await _ask(
+        loaded,
+        {**account, "user": stranger, "primary": stranger_primary},
+        ScriptedLLM(_reply(outcome="clarify", text="Which?")),
+        "Hi",
+    )
+    with loaded.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE assistant_conversations SET updated_at = now() - make_interval(days => :d) "
+                "WHERE id = CAST(:id AS uuid)"
+            ),
+            {"d": RETENTION_DAYS + 1, "id": theirs.conversation_id},
+        )
+
+    await _ask(loaded, account, ScriptedLLM(_reply(outcome="clarify", text="Which?")), "New")
+
+    with loaded.connect() as connection:
+        kept = set(
+            connection.execute(text("SELECT id::text FROM assistant_conversations")).scalars()
+        )
+    assert old.conversation_id not in kept
+    assert recent.conversation_id in kept
+    assert theirs.conversation_id in kept
+    assert _stored(loaded, old.conversation_id) == []

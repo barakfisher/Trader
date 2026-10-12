@@ -554,7 +554,7 @@ strings and left-to-right assumptions before designing it.
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
 | **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 ✅ #210 (instrument_profiles 155 -> 96 MB); DB3 ✅ #213 (window from 2026-10-11 07:56 UTC); DB4 split (decision 143): first half 2026-10-11 (#218, decisions 143-147), second half - indexes and `runs` retention - on/after 2026-10-18. DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-147. See "Planned: the database sprint" |
-| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 🚧 In progress | Test set #212. 1a #220 deployed; 1b #221 merged (not yet redeployed); PR 2 (`replay_scan`, `get_universe_info`) opened 2026-10-12. See "Planned: the assistant" and its "Build" list |
+| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 🚧 In progress | Test set #212. #220-#222 deployed 2026-10-12 (core, Admin, replay + universe). PR 3 (the `/ask` chat screen, 90-day retention) opened 2026-10-12. See "Planned: the assistant" and its "Build" list |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
 | **Multi-agent sandbox, Stage 4 — the agent that decides** | 🚧 In progress | #172 spec D43-D52 + §14; #173 models on the Admin page (0041, D43-D44); #177 the scan's inputs - tool calling, movers, seven read-only tools, the briefing (0042); #180 the scan - one hand-written loop (D53), the per-agent budget, the step limit, `agent_scans` (0043), `POST /agents/:id/scans`, built on a scripted model (**real scans not yet measured: the account is unfunded**). Next: PR 5, the trade proposal and its approval (D26, D47-D49, D51, D54) |
@@ -3851,6 +3851,16 @@ kept; a replayed scan was never a source because its result had an `error: null`
 refusal is now a result whose *only* field is `error`. **Still open, for PR 4's eval and the
 model choice:** Flash-Lite declined "How was the universe made?" as cosmology 4 times in 6 even
 with the app's meaning spelled out - prompt-tuning against three samples was stopped on purpose.
+**PR 3 (2026-10-12): the `/ask` screen is the assistant.** Markdown by **`react-markdown` + `remark-gfm`**
+(the user's choice under CLAUDE.md convention 5, over extending `conceptText.ts`; raw HTML and
+images never render); suggestions and examples fill the box, never send (decision 70 kept); the
+three no-reply outcomes are said in the page's language, not the server's English; history beside
+the chat with delete (confirm). **Retention runs when a user starts a conversation** - their own
+conversations untouched 90 days go first; no scheduled job (cost: a user who never returns keeps
+theirs until they do). Checked live on a copy in the built-in browser, desktop and phone width,
+with a follow-up; 4 questions $0.004. **Left on purpose:** the old `POST /ask` (extractive path) in
+both services and its 35-case eval job still exist, unused by the web app - removing them belongs
+with PR 4, whose eval runner replaces that job.
 **Environment trap:** the worktree's `.venv` is a symlink to the main checkout's, whose editable
 install points `app` at the main checkout - so `python scripts/export_openapi.py` silently
 exported **main's** app. Run it as `PYTHONPATH=. .venv/bin/python scripts/export_openapi.py`.
