@@ -4,7 +4,23 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-11 ~13:59 UTC - **Insights handoff: queue tasks 19-21 complete (#206, #209, #214,
+Updated: 2026-10-12 ~11:45 UTC - **Assistant handoff (five merged PRs: #212, #220-#223). The assistant
+is live on `/ask`. Nothing is in flight.** #212 - the 80-case test set (`data/eval/assistant.json`,
+written before the assistant, 11 cases in the user's words). #220 - the AI service core: the shared
+tool loop (the scan uses it), 14 read-only tools, checked replies, conversations, migration
+**0052**. #221 - the Admin `assistant` model picker and per-user daily limit, the orchestrator's
+`/assistant/*`. #222 - `replay_scan` and `get_universe_info`, and the fixes a real model forced.
+#223 - the `/ask` chat screen (`react-markdown`), history, 90-day retention. **Both environments
+run `main` at `1d7d754`, migration `0052_assistant`**, redeployed by this session. **The user has
+not yet chosen the assistant's model on the Admin page** - until they do it runs on the free route
+(90 s, fails its checks); Flash-Lite was recommended (~5 s, ~$0.003 a question, measured on copies).
+**Next: assistant PR 4** - see "Next session: the assistant's PR 4". Merges used `gh pr merge
+--squash --admin --subject "<title> (#N)"` on the user's "merge"; auto mode's classifier refused
+the `--admin` merge until the user left auto mode. A disposable Postgres container
+`traders-assistant-ci` (127.0.0.1:55435, `traders_ci`) was left running for integration tests -
+remove it when the milestone ends (`docker rm -f traders-assistant-ci`).
+
+Previous update, 2026-10-11 ~13:59 UTC - **Insights handoff: queue tasks 19-21 complete (#206, #209, #214,
 fix #216). Nothing is in flight.** #206 - drawdown and drift written once per band per episode
 (`finding_episodes`, migration **0049**), `price_move` dropped where `sigma_move` fired (decision
 132). #209 - Insights tabs Alerts / Proposals / Digest / All findings, Alerts with source pills
@@ -554,7 +570,7 @@ strings and left-to-right assumptions before designing it.
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
 | **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 ✅ #210 (instrument_profiles 155 -> 96 MB); DB3 ✅ #213 (window from 2026-10-11 07:56 UTC); DB4 split (decision 143): first half 2026-10-11 (#218, decisions 143-147), second half - indexes and `runs` retention - on/after 2026-10-18. DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-147. See "Planned: the database sprint" |
-| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 🚧 In progress | Test set #212. #220-#222 deployed 2026-10-12 (core, Admin, replay + universe). PR 3 (the `/ask` chat screen, 90-day retention) opened 2026-10-12. See "Planned: the assistant" and its "Build" list |
+| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 🚧 In progress | Test set #212; #220-#223 deployed 2026-10-12 - core, Admin picker and limit, replay and universe tools, the `/ask` chat screen. **Live.** Next: PR 4 (eval runner on a real model, cost -> the real limit, remove the old `/ask`), then PR 5 (`openai` package). See "Planned: the assistant" and "Next session: the assistant's PR 4" |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
 | **Multi-agent sandbox, Stage 4 — the agent that decides** | 🚧 In progress | #172 spec D43-D52 + §14; #173 models on the Admin page (0041, D43-D44); #177 the scan's inputs - tool calling, movers, seven read-only tools, the briefing (0042); #180 the scan - one hand-written loop (D53), the per-agent budget, the step limit, `agent_scans` (0043), `POST /agents/:id/scans`, built on a scripted model (**real scans not yet measured: the account is unfunded**). Next: PR 5, the trade proposal and its approval (D26, D47-D49, D51, D54) |
@@ -2313,6 +2329,25 @@ failure they prevent.
 
 ## Bugs that cost real time, and the lesson from each
 
+**The assistant (2026-10-11/12, #220-#223) - lessons, newest first:**
+- **A new route is public until its prefix is on `PROTECTED_PREFIXES`** (`apps/orchestrator/src/
+  http/app.ts`). `/assistant` was missed; `app.test.ts`'s walk over every registered route caught
+  it, while the route's own "signed-in only" test passed because the handler happened to refuse.
+  **Lesson: a route's own auth test proves nothing about the gate - keep the walk, never skip it.**
+- **The figure checker sources numbers from strings, timestamps included.** An integration test
+  inventing "12%" passed on the 11th and failed in CI on the 12th (`price_as_of` held "-12T").
+  The assistant's check now reads dates as dates (`reply.py`, `_without_dates`); narration's and
+  the agents' still do not - see the debt row. **Lesson: an invented figure in a test must be one
+  no date or time can contain (two decimals).**
+- **A scripted model passes what a real one breaks.** 17 green integration tests, then one real
+  question found three bugs, and every later PR's real run found more (U+2011 hyphens, list
+  markers, link ids read as figures, invented pages, empty turns, "Test" for "Test agent"). Each
+  fix carries its measurement in a comment. **Lesson: run one real question on a live copy before
+  opening an LLM PR - it costs cents.**
+- **`python scripts/x.py` from a worktree imports the main checkout's `app`** when `.venv` is the
+  main checkout's (editable install): `export_openapi.py` silently exported main's API. Run scripts
+  as `PYTHONPATH=. .venv/bin/python scripts/...`.
+
 **Two sessions, one migration number (2026-10-11, #213 and #214):** the database sprint's DB3 took
 `0050_query_statistics` and the Insights session's task 21 took `0050_insights_seen`, both off
 `0049`. Each PR's CI was green - `test_migration_chain_contract.py` saw one head on each branch -
@@ -3052,6 +3087,9 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 
 | Item | Where | Impact |
 |---|---|---|
+| **Narration's and the agents' figure checks still read a timestamp's digits as sources, and refuse U+2011 hyphens** | `app/narration/evidence_validator.py`; the assistant fixed it in `app/assistant/reply.py` only | A small whole number (a day, hour or minute) written by a model passes whenever its evidence carries a timestamp that contains it; "7‑day" with a non-breaking hyphen is refused. Moving `_without_dates` and the dash normalisation into the validator fixes both for everyone - and changes narration's behaviour, so measure its rejection rate before and after |
+| **The old `/ask` still exists, unused** | `POST /ask` (orchestrator and AI service), `app/ask/`, `data/eval/ask.json` and its CI job | Dead code with a CI job that still runs; removing it is PR 4's step 4 |
+| **The assistant's answers are not graded yet** | `data/eval/assistant.json` | 80 cases, only their shape is checked. Scope, advice and injection guardrails are unproven on a real model until PR 4's runner. The one measured weakness: Flash-Lite declining "How was the universe made?" |
 | **No backup leaves the laptop** | `~/Backups/traders` (DB1, decision 137) | The daily dumps survive `k8s-down.sh`, a lost Docker volume and a bad migration, but not the Mac's disk failing or the laptop being lost: Time Machine has no destination and no synced folder exists (checked 2026-10-11). The fix is the user's - a Time Machine disk (`~/Backups` is already included) or a synced folder (`TRADERS_BACKUP_DIR`, then `backup-schedule.sh install` again) |
 | **The shadow SPY pays no fees** | `services/performance.ts` (`benchmarkOn`), D38 | The user's choice for now (2026-10-05), to be revisited: they will add fees. The agent pays 10 bps / $1.50 on every trade and the shadow pays nothing, so the comparison leans slightly against the agent - about $1.50-$10 per deposit at today's budgets. When fees are added, decide whether each deposit pays one fee on the way in (the shadow buys once per deposit) and record it as a decision; the hint under the figures ("without fees", `agents.performance.hint`) must change with it |
 | ~~A simulated agent has no stored daily value yet~~ | — | **Resolved by PR 7 (D36)**: the daily value is computed from the ledger and stored closes, not stored - no snapshot, no migration |
@@ -3487,6 +3525,33 @@ grant tests fail for the wrong reason.
 
 ## Where to go next
 
+### Next session: the assistant's PR 4 (written 2026-10-12)
+
+**The grant continues** (auto-memory `traders-assistant-grant`): one PR at a time off `main`, merge
+on the user's "merge", redeploy on "merge and redeploy". **Ask the user's budget before the first
+paid run** - an estimate was given: under $1 for the 80 cases on Flash-Lite, more if Sonnet is
+compared. What PR 4 is:
+1. **An eval runner** for `data/eval/assistant.json` (none exists yet; the contract test only
+   checks the file). It needs: the fixtures (`demo`, `empty`, `unpriced`) seeded into a disposable
+   database - Momentum and Value agents, the SMR pending proposal, the rejected URA sell, Value's
+   failed scan, a drawdown observation, the uranium topic, a universe snapshot with one rescreen;
+   `inject` (replace one tool result with attacker text, case `attack-injected-news`); a real model
+   through `ask()`. Mechanical grading from each turn's `expect` (outcome, reason, `tools_any` from
+   the transcript, `links`, `sources`, `must_not_match`); `behaviour` needs a human or a model
+   judge - decide which with the user. Keyed only: it cannot run in the hermetic CI tier.
+2. **Run it, and compare models** (at least Flash-Lite; Haiku or Sonnet if the user agrees). Known
+   weak spot to watch: Flash-Lite declined "How was the universe made?" as cosmology 4 times in 6.
+3. **Measure cost per question** from `llm_calls` (`purpose = 'assistant'`) and set the real daily
+   limit (`installation_settings.assistant_daily_budget_micro_usd`, Admin page) from it, replacing
+   the provisional $0.50. Measured so far: ~$0.003 a question on Flash-Lite (copies, 2026-10-12).
+4. **Remove the old `/ask`**: `POST /ask` in both services, `app/ask/`, `run_eval.py`'s job and
+   `data/eval/ask.json` - unused by the web app since #223. Check Telegram and anything else that
+   calls it first (`grep -rn "'/ask'\|ai.ask("`). The concept corpus and `explain_concept` stay.
+Then PR 5: the `openai` package for chat and embeddings together (debt row "hand-written over
+`httpx`"). After the milestone: answers in the user's language (needs a decision amending
+guideline 1), then `/ask` in Telegram.
+**Next free migration: `0053`; check `origin/main` first - other sessions merge in parallel.**
+
 ### Next session: after the Insights work (#206, #209, #214, #216, 2026-10-11)
 
 Ask the user before starting anything (the Insights grant ended with task 21). In date order:
@@ -3505,10 +3570,8 @@ Ask the user before starting anything (the Insights grant ended with task 21). I
    other MCP clients can connect and the user says go.
 4. **DB4's second half, on or after 2026-10-18** (the section below). Its first half ran
    2026-10-11 on the user's request (#218, #219, deployed; decision 143 split it).
-5. **The `/ask` assistant milestone**: its 80-case test set landed as #212. A worktree named
-   `claude/assistant-build` exists - **check open PRs and `git worktree list` before starting it**,
-   so two sessions do not build it at once. Its test set predates #209: see the note in "Planned:
-   the assistant".
+5. ~~The `/ask` assistant milestone~~ - built and live (#212, #220-#223, 2026-10-12); PR 4 is the
+   section above.
 
 **Before merging anything with a migration:** `git fetch`, then `alembic heads` on the branch merged
 with `origin/main` - two sessions were merging in parallel this week and branch CI cannot see it.
