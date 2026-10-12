@@ -29,7 +29,6 @@ from app.providers.registry import MarketDataService, build_providers
 from app.routers import (
     agents,
     analysis,
-    ask,
     assistant,
     concepts,
     health,
@@ -116,7 +115,6 @@ app.include_router(market.router)
 app.include_router(analysis.router)
 app.include_router(narration.router)
 app.include_router(concepts.router)
-app.include_router(ask.router)
 app.include_router(topics.router)
 app.include_router(news.router)
 app.include_router(universe.router)

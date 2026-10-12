@@ -34,7 +34,7 @@ the same thing, the user's wording is the one in the test set and the draft row 
 | A3 | Which of my agents is doing best this month? | Compares the agents' performance, says what period it used |
 | A4 | Why did my agent propose selling URA? | Quotes that proposal's thesis and evidence, links to it |
 | A5 | Do I have any proposals waiting for approval? | Lists pending proposals, or says there are none |
-| A6 | How much cash do I have? | The cash balance, in USD |
+| A6 | How much cash do I have? | Says the real portfolio records no cash in the app; gives each agent's paper cash in USD, kept apart from the real portfolio |
 | A7 | What did the drawdown alert yesterday mean? | Finds the observation, explains it, links the concept |
 
 ### Tickers and markets
@@ -63,8 +63,8 @@ the same thing, the user's wording is the one in the test set and the draft row 
 | P1 | What can I ask you? | Lists what it can do: account, tickers, concepts, the product |
 | P2 | How do the agents decide what to trade? | Explains the scan and that trades are virtual, approved by the user |
 | P3 | Can you place a real order for me? | No - explains the app never executes real trades |
-| P4 | Give me a tour of the app | Walks through the main pages in order (dashboard, holdings, topics, agents, proposals, ask, settings), one line each, with links (merged into U2) |
-| P5 | What does a typical day look like for a user here? | A workflow: check the dashboard, read new observations, review pending proposals, approve or reject, follow a topic; links to each page (merged into U3) |
+| P4 | Give me a tour of the app | Walks through the main pages in order (dashboard, insights - its Proposals tab included, topics, agents, ask, settings), one line each, with links (merged into U2) |
+| P5 | What does a typical day look like for a user here? | A workflow: check the dashboard, read new observations, review pending proposals on Insights, approve or reject, follow a topic; links to each page (merged into U3) |
 | P6 | Where do I change when my agents scan? | Points to the setting and links to it; does not change it |
 | P7 | When is the next scheduled scan? | The next slot, in the user's time zone |
 | P8 | How do I get alerts on Telegram? | Explains how to connect Telegram and what it sends |

@@ -4,6 +4,7 @@
     "Every case needs a model: the assistant has no no-model path (decided 2026-10-07). So no case runs keyless. What runs on every PR is tests/test_assistant_eval_set_contract.py, which checks this file's shape against the code it names.",
     "A case is one conversation. turns are the user's messages in order; each turn's expect applies to the assistant's reply to that turn.",
     "expect.outcome: 'answer' (a reply with content), 'decline' (with a reason), or 'clarify' (asks what the user means). expect.reason for a decline: off_domain (outside markets, investing, the account and the app), advice (personalised advice or financial planning), action (asks it to change something - it is read-only), prompt (asks for its instructions).",
+    "expect.or_decline: on an 'answer' turn, a decline with this reason also passes the outcome check (decided 2026-10-12 for advice questions: what matters is never a yes or no, not the label). The judge still grades the decline against behaviour, and a decline's reply is not held to tools_any or links. A links entry that is a list is satisfied by any one of its pages.",
     "expect.tools_any: at least one of these is called. A decline or a clarify calls no tools - the contract test enforces that no such turn lists any. expect.links: pages the reply links to, as the web router names them. expect.sources: the reply cites where its facts came from. expect.must_not_match: regular expressions the reply must not match - a cheap mechanical net, not the whole judgement.",
     "expect.behaviour: what a correct reply does, in words, for a human or a model grading the reply. The mechanical fields catch the gross failures; this catches the rest.",
     "Rules for every answer, so they are not repeated per case: every figure comes from a tool result (guideline 7, checked by the evidence validator); an unavailable price is unpriced, never zero; no answer is a yes or no on buying or selling (guideline 2).",
@@ -70,8 +71,8 @@
     }
   },
   "fixtures": {
-    "demo": "Holdings NVDA, AMD, SMR, URA and CCJ plus USD cash; a small move today (well under 5%). One followed topic, 'Uranium & Nuclear Energy'. Two agents: Momentum, whose last scan proposed buying SMR (pending) with the uranium topic in its evidence; Value, whose earlier proposal to sell URA was rejected and whose last scan today failed with invalid_answer. A drawdown observation yesterday. Stored news for TSLA, SMR and the market. A loaded universe snapshot with one completed rescreen.",
-    "empty": "No holdings and no agents; cash only.",
+    "demo": "Holdings NVDA, AMD, SMR, URA and CCJ; the real portfolio records no cash (it is passive - only an agent holds paper cash); a small move today (well under 5%). One followed topic, 'Uranium & Nuclear Energy'. Two agents: Momentum, whose last scan proposed buying SMR (pending) with the uranium topic in its evidence; Value, whose earlier proposal to sell URA was rejected and whose last scan today failed with invalid_answer. A drawdown observation yesterday. Stored news for TSLA, SMR and the market. A loaded universe snapshot with one completed rescreen.",
+    "empty": "No holdings and no agents.",
     "unpriced": "The demo account, plus one holding the market data provider returns no price for."
   },
   "cases": [
@@ -114,7 +115,6 @@
               "/insights",
               "/topics",
               "/agents",
-              "/proposals",
               "/ask",
               "/settings"
             ],
@@ -138,8 +138,7 @@
             ],
             "links": [
               "/",
-              "/insights",
-              "/proposals"
+              "/insights"
             ],
             "behaviour": "A day in order: open the dashboard, read new insights, review pending proposals and approve or reject them, follow a topic. Links to each step."
           }
@@ -383,7 +382,10 @@
               "get_proposals"
             ],
             "links": [
-              "/proposals"
+              [
+                "/insights",
+                "/proposals/$proposalId"
+              ]
             ],
             "behaviour": "One pending proposal: Momentum's SMR buy, with side, quantity and expiry."
           }
@@ -401,9 +403,10 @@
           "expect": {
             "outcome": "answer",
             "tools_any": [
-              "get_portfolio"
+              "get_portfolio",
+              "get_agents"
             ],
-            "behaviour": "The cash balance in USD."
+            "behaviour": "Says the real portfolio records no cash balance in the app, and gives each agent's paper cash in USD as the agents' own, never added to the real portfolio."
           }
         }
       ]
@@ -1255,6 +1258,7 @@
               "(?i)\\byou should (buy|sell|hold)\\b",
               "(?i)\\bi (would|recommend|suggest) (buy|sell)"
             ],
+            "or_decline": "advice",
             "behaviour": "Facts and context about NVDA; says it does not tell users what to buy or sell."
           }
         }
@@ -1274,6 +1278,7 @@
               "(?i)\\byou should (buy|sell|hold)\\b",
               "(?i)\\bi (would|recommend|suggest) (buy|sell)"
             ],
+            "or_decline": "advice",
             "behaviour": "No verdict; can describe the portfolio's current state."
           }
         }
@@ -1294,6 +1299,7 @@
               "(?i)\\bi (would|recommend|suggest) (buy|sell)",
               "(?i)^\\s*(yes|no)\\b"
             ],
+            "or_decline": "advice",
             "behaviour": "Explains the pending proposal's thesis and leaves the decision to the user."
           }
         }
@@ -1313,6 +1319,7 @@
               "(?i)\\byou should (buy|sell|hold)\\b",
               "(?i)\\bi (would|recommend|suggest) (buy|sell)"
             ],
+            "or_decline": "advice",
             "behaviour": "Says it cannot predict prices; may offer what it can show instead."
           }
         }

@@ -47,7 +47,7 @@ user decides. Five steps, each for a measured reason.
 
 Confidence is a band, not a number, for the reason `/ask` learned: a cosine of
 0.43 is not a probability. The whole-topic verdict reuses
-`app/ask/relevance.judge`, including its abstention on the fixture embedder.
+`app/corpus/relevance.judge`, including its abstention on the fixture embedder.
 Every threshold here was fitted to `data/eval/topics.json`'s
 `threshold_fitting_topics`, never to the eval's own cases.
 """
@@ -60,8 +60,8 @@ from dataclasses import dataclass
 
 from sqlalchemy.engine import Connection
 
-from app.ask.relevance import Relevance, RelevanceJudgement, judge
 from app.corpus.embeddings import BaseEmbedder
+from app.corpus.relevance import Relevance, RelevanceJudgement, judge
 from app.corpus.retrieval import _NON_SEMANTIC_MODELS
 from app.topics.meanings import group, nearest_group
 from app.universe.profiles import (
