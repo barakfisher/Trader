@@ -9,7 +9,9 @@ empty for a reason nobody could see - the failure D43 rejected free text for.
 
 An agent's scan calls tools (D15), so the agents' list holds only models that
 accept them, and never a free route: §11 measured the free route's rationale
-rejected 70% of the time, which is an agent that almost never proposes.
+rejected 70% of the time, which is an agent that almost never proposes. The
+assistant calls tools too, and its list is the agents' for the same reason
+(measured 2026-10-11: the free route took 90 s and failed its check twice).
 
 Ids are OpenRouter's. The list applies only when `LLM_PROVIDER=openrouter`; with
 another provider the configured model is used and nothing can be chosen.
@@ -25,9 +27,8 @@ from app.llm.pricing import ModelPrice, is_declared_free, price_for
 #: What a choice is for: `explain` is narration and `/ask`, `agent` an agent's scan,
 #: `assistant` the assistant's conversations (migration 0052).
 Scope = Literal["explain", "agent", "assistant"]
-#: The scopes the Admin page offers. `assistant` joins when its picker does; until
-#: then it has no choice, and its calls use the configured model.
-SCOPES: tuple[Scope, ...] = ("explain", "agent")
+#: The scopes the Admin page offers, in its order.
+SCOPES: tuple[Scope, ...] = ("explain", "agent", "assistant")
 
 
 @dataclass(frozen=True)

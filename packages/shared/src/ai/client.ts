@@ -18,6 +18,7 @@ import type { z } from 'zod';
 import type { components } from '../generated/ai-api.js';
 import {
   agentScanResponseSchema,
+  assistantReplySchema,
   askResponseSchema,
   conceptDocumentSchema,
   conceptSearchResponseSchema,
@@ -63,6 +64,8 @@ export type MarketSessions = components['schemas']['MarketSessions'];
 export type LlmModelsResponse = components['schemas']['LlmModelsResponse'];
 export type AgentScanRequest = components['schemas']['AgentScanRequest'];
 export type AgentScanResponse = components['schemas']['AgentScanResponse'];
+export type AssistantMessageRequest = components['schemas']['AssistantMessageRequest'];
+export type AssistantReply = components['schemas']['AssistantReply'];
 export type LlmOfferedModel = components['schemas']['LlmOfferedModel'];
 export type LlmScope = components['schemas']['LlmScopeChoice']['scope'];
 export type MarketSession = components['schemas']['MarketSession'];
@@ -96,6 +99,13 @@ const SCAN_TIMEOUT_MS = 5 * 60_000;
  * time to build the briefing and store the row.
  */
 const AGENT_SCAN_TIMEOUT_MS = 6 * 60_000;
+/**
+ * One question to the assistant: up to eight tool calls and two answers. The AI
+ * service stops at two minutes (`assistant/service.TIME_LIMIT`) and still
+ * answers - with a reply saying no checked answer could be given - so this
+ * leaves it time to store that reply.
+ */
+const ASSISTANT_TIMEOUT_MS = 150_000;
 
 /**
  * A health check is itself read by a Kubernetes readiness probe (the
@@ -359,6 +369,20 @@ export class AiClient {
       agentScanResponseSchema,
       { method: 'POST', body: JSON.stringify(payload), requestId, timeoutMs: AGENT_SCAN_TIMEOUT_MS },
     );
+  }
+
+  /**
+   * One question to the assistant (`/ask` with tools). Every outcome is a 200,
+   * declines and failures included; a 404 is a conversation that is not this
+   * user's, the same as one that does not exist.
+   */
+  assistantMessage(payload: AssistantMessageRequest, requestId?: string): Promise<AssistantReply> {
+    return this.request<AssistantReply>('/assistant/messages', assistantReplySchema, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      requestId,
+      timeoutMs: ASSISTANT_TIMEOUT_MS,
+    });
   }
 
   llmModels(requestId?: string): Promise<LlmModelsResponse> {

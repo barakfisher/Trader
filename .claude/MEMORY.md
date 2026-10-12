@@ -554,7 +554,7 @@ strings and left-to-right assumptions before designing it.
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
 | **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 ✅ #210 (instrument_profiles 155 -> 96 MB); DB3 ✅ #213 (window from 2026-10-11 07:56 UTC); DB4 split (decision 143): first half 2026-10-11 (#218, decisions 143-147), second half - indexes and `runs` retention - on/after 2026-10-18. DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-147. See "Planned: the database sprint" |
-| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 🚧 In progress | Test set #212. PR 1a (AI service core, migration 0052) opened 2026-10-11. See "Planned: the assistant" and its "Build" list |
+| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 🚧 In progress | Test set #212. PR 1a #220 (AI service core, migration 0052) deployed 2026-10-12. PR 1b (Admin picker + limit, orchestrator routes) opened 2026-10-12. See "Planned: the assistant" and its "Build" list |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
 | **Multi-agent sandbox, Stage 4 — the agent that decides** | 🚧 In progress | #172 spec D43-D52 + §14; #173 models on the Admin page (0041, D43-D44); #177 the scan's inputs - tool calling, movers, seven read-only tools, the briefing (0042); #180 the scan - one hand-written loop (D53), the per-agent budget, the step limit, `agent_scans` (0043), `POST /agents/:id/scans`, built on a scripted model (**real scans not yet measured: the account is unfunded**). Next: PR 5, the trade proposal and its approval (D26, D47-D49, D51, D54) |
@@ -3821,6 +3821,16 @@ fix**); a table of 20 holdings hit 1,500 tokens mid-JSON (now 2,500, and "keep r
 the model passed `"None"` as an agent name. After the fixes: answered with sources in one tool
 call, and declined the weather with none. **It also said "EOSE is the only holding down" when
 three others were** - a reasoning error no figure check can see; that is the eval's job (PR 4).
+**1b (2026-10-12):** the `assistant` scope is offered for the agents' list (billed, tool-calling;
+the free route is refused with a 422); `PUT /admin/settings` takes either setting alone;
+`/assistant/*` in the orchestrator (`routes/assistant.ts`, `queries/assistant.ts`) - the model's
+name, the cost and the tool transcript never reach the browser. **`/assistant` had to be added to
+`PROTECTED_PREFIXES`** - `app.test.ts`'s walk over every route caught it; the route's own
+signed-in test had passed only because the handler happened to refuse. **First paid measurement,
+on a live copy with Gemini 3.5 Flash-Lite:** two questions (one a follow-up) took ~5 s each and
+cost $0.0054 together (7 calls, 14,840 prompt tokens): ~$0.003 a question, so $0.50/day is ~180
+questions. One copy run, not PR 4's measurement. No `assistant` choice exists live yet - the user
+chooses it on the Admin page.
 **Environment trap:** the worktree's `.venv` is a symlink to the main checkout's, whose editable
 install points `app` at the main checkout - so `python scripts/export_openapi.py` silently
 exported **main's** app. Run it as `PYTHONPATH=. .venv/bin/python scripts/export_openapi.py`.

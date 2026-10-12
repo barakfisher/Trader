@@ -5,6 +5,7 @@ import { ShieldCheck } from 'lucide-react';
 import {
   ACCOUNT_RESET_CONFIRMATION,
   ACCOUNT_RESET_GROUPS,
+  ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD,
   MAX_AGENTS_PER_USER_CEILING,
   type AccountResetGroup,
 } from '@traders/shared';
@@ -91,6 +92,7 @@ export const AdminPage = observer(function AdminPage() {
           <GapsCard />
           <ModelsCard />
           <AgentLimitCard />
+          <AssistantLimitCard />
           <LlmCard />
           <RunsCard />
           <AuditCard />
@@ -447,6 +449,65 @@ function GapItem({ gap }: { gap: UniverseGap }) {
  * is saved; saving is an audited admin action. The balance beside the totals
  * answers "how much should I add to the account".
  */
+/** Integer micro-USD as dollars and cents for an input ("0.50"), with no float. */
+function microToDollarsText(micro: number): string {
+  const cents = Math.floor(micro / 10_000);
+  return `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, '0')}`;
+}
+
+/**
+ * What one user's questions to the assistant may spend a day (migration 0052).
+ * Entered in dollars and cents, stored in integer micro-USD; 0 switches the
+ * assistant off. Provisional until its cost per question is measured.
+ */
+function AssistantLimitCard() {
+  const { t } = useTranslation();
+  const settings = useAdminSettingsQuery();
+  const update = useUpdateAdminSettings();
+  const stored = settings.data ? microToDollarsText(settings.data.assistantDailyBudgetMicroUsd) : '';
+  const [value, setValue] = useState(stored);
+  useEffect(() => setValue(stored), [stored]);
+  const micro = /^\d+(\.\d{1,2})?$/.test(value.trim()) ? decimalUsdToMicro(value) : null;
+  const valid = micro !== null && micro <= ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD;
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (micro !== null) update.mutate({ assistantDailyBudgetMicroUsd: micro });
+  };
+  return (
+    <Card title={t('admin.assistantLimit.title')}>
+      {settings.isPending && <Spinner label={t('admin.assistantLimit.title')} />}
+      {settings.error && <ErrorNote message={errorMessage(settings.error, t('admin.assistantLimit.title'))} />}
+      {settings.data && (
+        <form onSubmit={submit} className="flex flex-wrap items-end gap-3 text-sm">
+          <label className="flex flex-col gap-1">
+            <span className="text-text-muted">{t('admin.assistantLimit.label')}</span>
+            <input
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+              inputMode="decimal"
+              dir="ltr"
+              aria-invalid={!valid}
+              className="w-28 rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
+            />
+          </label>
+          <Button type="submit" disabled={!valid || value === stored || update.isPending}>
+            {t('admin.assistantLimit.save')}
+          </Button>
+          {update.isSuccess && value === stored && (
+            <span role="status" className="text-xs text-text-muted">
+              {t('admin.assistantLimit.saved')}
+            </span>
+          )}
+          <p className="basis-full text-xs text-text-muted">
+            {t('admin.assistantLimit.hint', { max: formatMicroUsd(ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD) })}
+          </p>
+          {update.error && <ErrorNote message={errorMessage(update.error, t('admin.assistantLimit.title'))} />}
+        </form>
+      )}
+    </Card>
+  );
+}
+
 /** D72: how many simulated agents a user may have. Every change is audited. */
 function AgentLimitCard() {
   const { t } = useTranslation();
@@ -510,7 +571,7 @@ function ModelsCard() {
   );
 }
 
-const SCOPES: readonly LlmScope[] = ['explain', 'agent'];
+const SCOPES: readonly LlmScope[] = ['explain', 'agent', 'assistant'];
 
 /**
  * The model in use, or '' when it is not offered for this scope - the free route
@@ -524,8 +585,10 @@ function initialSelection(data: AdminLlmModelsResponse, scope: LlmScope): string
   return offered.find((model) => model.id === current)?.id ?? '';
 }
 
+/** The assistant has no estimate until its cost per question is measured (its PR 4). */
 function estimateFor(model: LlmOfferedModelView | undefined, scope: LlmScope) {
-  return model ? (scope === 'explain' ? model.estimates.explain : model.estimates.agent) : null;
+  if (!model || scope === 'assistant') return null;
+  return scope === 'explain' ? model.estimates.explain : model.estimates.agent;
 }
 
 function ModelsPanel({ data }: { data: AdminLlmModelsResponse }) {
@@ -533,6 +596,7 @@ function ModelsPanel({ data }: { data: AdminLlmModelsResponse }) {
   const [selected, setSelected] = useState<Record<LlmScope, string>>(() => ({
     explain: initialSelection(data, 'explain'),
     agent: initialSelection(data, 'agent'),
+    assistant: initialSelection(data, 'assistant'),
   }));
   const pick = (scope: LlmScope) => data.models.find((model) => model.id === selected[scope]);
   const totals = SCOPES.map((scope) => estimateFor(pick(scope), scope));
@@ -640,7 +704,9 @@ function ScopePicker({
         </p>
       )}
       <p className="text-xs text-text-muted">
-        {scope === 'explain'
+        {scope === 'assistant'
+          ? t('admin.models.assistantBasis')
+          : scope === 'explain'
           ? t('admin.models.explainBasis', {
               days: data.explainBasis.windowDays,
               prompt: count.format(data.explainBasis.promptTokensPerDay),

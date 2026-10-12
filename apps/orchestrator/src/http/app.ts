@@ -29,6 +29,7 @@ import { registerAgentScanRoutes } from './routes/agentScans.js';
 import { registerAgentsRoutes } from './routes/agents.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAskRoutes } from './routes/ask.js';
+import { registerAssistantRoutes } from './routes/assistant.js';
 import { registerConceptsRoutes } from './routes/concepts.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerHoldingsRoutes } from './routes/holdings.js';
@@ -77,6 +78,8 @@ const PROTECTED_PREFIXES = [
   // Like '/concepts': the universe has no `user_id`, and is still the product.
   '/topics',
   '/proposals',
+  // The assistant's questions and the conversations they make (migration 0052).
+  '/assistant',
   '/notifications',
   '/settings',
   // Named individually, not as '/telegram': POST /telegram/webhook is called by
@@ -253,6 +256,7 @@ export function createApp(
   registerImportRoutes(app);
   registerConceptsRoutes(app);
   registerAskRoutes(app);
+  registerAssistantRoutes(app);
   registerTopicsRoutes(app);
   registerInternalRoutes(app);
   registerAdminRoutes(app);

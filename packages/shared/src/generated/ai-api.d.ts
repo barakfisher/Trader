@@ -695,15 +695,12 @@ export interface components {
              * @description Null only for a blank question, which starts nothing.
              */
             conversation_id: string | null;
-            /**
-             * Cost Micro Usd
-             * @default 0
-             */
+            /** Cost Micro Usd */
             cost_micro_usd: number;
             /** Message Id */
             message_id: string | null;
             /** Model */
-            model?: string | null;
+            model: string | null;
             /**
              * Outcome
              * @enum {string}
@@ -713,20 +710,19 @@ export interface components {
              * Reason
              * @description Why it declined; null unless outcome is 'decline'.
              */
-            reason?: ("off_domain" | "advice" | "action" | "prompt") | null;
+            reason: ("off_domain" | "advice" | "action" | "prompt") | null;
             /** Sources */
-            sources?: components["schemas"]["AssistantSource"][];
+            sources: components["schemas"]["AssistantSource"][];
             /**
              * Steps
              * @description Tool calls made.
-             * @default 0
              */
             steps: number;
             /**
              * Suggestions
              * @description Questions to ask next.
              */
-            suggestions?: string[];
+            suggestions: string[];
             /**
              * Text
              * @description Markdown. Every figure in it was checked against tool results.
@@ -750,7 +746,10 @@ export interface components {
              * @description A page of this app, e.g. '/insights'.
              */
             link?: string | null;
-            /** Published */
+            /**
+             * Published
+             * @description A news article's publication time.
+             */
             published?: string | null;
             /**
              * Url
@@ -1209,7 +1208,7 @@ export interface components {
              * Scopes
              * @description What it may be chosen for.
              */
-            scopes: ("explain" | "agent")[];
+            scopes: ("explain" | "agent" | "assistant")[];
             /** Supports Tools */
             supports_tools: boolean;
         };
@@ -1229,7 +1228,7 @@ export interface components {
              * Scope
              * @enum {string}
              */
-            scope: "explain" | "agent";
+            scope: "explain" | "agent" | "assistant";
         };
         /**
          * LocalizedTextOut

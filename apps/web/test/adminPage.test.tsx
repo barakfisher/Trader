@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { createMemoryHistory } from '@tanstack/react-router';
 
 const get = vi.fn();
@@ -242,7 +242,7 @@ describe('the admin page', () => {
           : path === '/admin/llm/models'
             ? Promise.resolve(MODELS)
           : path === '/admin/settings'
-            ? Promise.resolve({ maxAgentsPerUser: 3, updatedAt: '2026-10-08T09:00:00Z' })
+            ? Promise.resolve({ maxAgentsPerUser: 3, assistantDailyBudgetMicroUsd: 500_000, updatedAt: '2026-10-08T09:00:00Z' })
           : path.startsWith('/admin/llm')
             ? Promise.resolve(LLM_PANEL)
             : new Promise(() => {}),
@@ -336,11 +336,12 @@ describe('the admin page', () => {
   });
 
   it('sets how many agents a user may have, within 1 and the ceiling (D72)', async () => {
-    put.mockResolvedValue({ maxAgentsPerUser: 5, updatedAt: '2026-10-08T10:00:00Z' });
+    put.mockResolvedValue({ maxAgentsPerUser: 5, assistantDailyBudgetMicroUsd: 500_000, updatedAt: '2026-10-08T10:00:00Z' });
     renderAt('/admin', ADMIN);
     const field = (await screen.findByLabelText('Most simulated agents a user may have')) as HTMLInputElement;
     expect(field.value).toBe('3');
-    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    const form = within(field.closest('form')!);
+    const save = form.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
     fireEvent.change(field, { target: { value: '51' } });
     expect(save.disabled).toBe(true);
@@ -349,7 +350,31 @@ describe('the admin page', () => {
       fireEvent.click(save);
     });
     expect(put).toHaveBeenCalledWith('/admin/settings', { maxAgentsPerUser: 5 });
-    expect(await screen.findByText('Saved')).toBeTruthy();
+    expect(await form.findByText('Saved')).toBeTruthy();
+  });
+
+  it("sets the assistant's daily limit in dollars and cents, sent as integer micro-USD", async () => {
+    put.mockResolvedValue({ maxAgentsPerUser: 3, assistantDailyBudgetMicroUsd: 1_250_000, updatedAt: '2026-10-12T10:00:00Z' });
+    renderAt('/admin', ADMIN);
+    const field = (await screen.findByLabelText("Most one user's questions may cost a day, in US dollars")) as HTMLInputElement;
+    expect(field.value).toBe('0.50');
+    const form = within(field.closest('form')!);
+    const save = form.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    for (const refused of ['1.255', '-1', 'abc', '100.01']) {
+      fireEvent.change(field, { target: { value: refused } });
+      expect(save.disabled, refused).toBe(true);
+    }
+    fireEvent.change(field, { target: { value: '1.25' } });
+    await act(async () => {
+      fireEvent.click(save);
+    });
+    expect(put).toHaveBeenCalledWith('/admin/settings', { assistantDailyBudgetMicroUsd: 1_250_000 });
+  });
+
+  it('offers the assistant a model picker of its own, with no estimate until one is measured', async () => {
+    renderAt('/admin', ADMIN);
+    expect(await screen.findByLabelText('Assistant')).toBeTruthy();
+    expect(screen.getByText(/No estimate yet/)).toBeTruthy();
   });
 
   it('saves a choice for its scope only when it differs from the one in use', async () => {

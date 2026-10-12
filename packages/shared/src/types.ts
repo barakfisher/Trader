@@ -208,14 +208,21 @@ export interface AgentsResponse {
 /** D72's bounds: the Admin page and migration 0047's CHECK agree on them. */
 export const MAX_AGENTS_PER_USER_CEILING = 50;
 
-/** The installation's settings on the Admin page (migration 0047). */
+/** The most the assistant's daily limit may be set to: migration 0052's CHECK, $100. */
+export const ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD = 100_000_000;
+
+/** The installation's settings on the Admin page (migrations 0047, 0052). */
 export interface AdminSettingsResponse {
   maxAgentsPerUser: number;
+  /** What one user's questions to the assistant may spend a day, integer micro-USD. */
+  assistantDailyBudgetMicroUsd: number;
   updatedAt: string;
 }
 
+/** Either setting, or both; what is left out is unchanged. */
 export interface AdminSettingsInput {
-  maxAgentsPerUser: number;
+  maxAgentsPerUser?: number;
+  assistantDailyBudgetMicroUsd?: number;
 }
 
 export type TradeSide = 'buy' | 'sell';
@@ -871,8 +878,11 @@ export interface LlmPanelResponse {
   recent: LlmCallSummary[];
 }
 
-/** What a model choice is for: `explain` is narration and `/ask`, `agent` an agent's scan (D43). */
-export type LlmScope = 'explain' | 'agent';
+/**
+ * What a model choice is for: `explain` is narration and `/ask`, `agent` an
+ * agent's scan (D43), `assistant` the assistant's conversations (migration 0052).
+ */
+export type LlmScope = 'explain' | 'agent' | 'assistant';
 
 /** Estimated cost in integer micro-USD, rounded up (D44). */
 export interface LlmCostEstimate {
@@ -1624,4 +1634,72 @@ export interface TopicsResponse {
 export interface TopicConfirmRequest {
   label: string;
   symbols: string[];
+}
+
+
+/* -- the assistant (`/ask` with tools, migration 0052) ----------------------- */
+
+/** How a reply ended. Every one is a 200 and is shown as itself. */
+export type AssistantOutcome = 'answer' | 'decline' | 'clarify' | 'failed' | 'budget_reached' | 'no_model';
+export type AssistantDeclineReason = 'off_domain' | 'advice' | 'action' | 'prompt';
+
+/** Where a fact in a reply came from, built by the server from the tools that ran. */
+export interface AssistantSourceView {
+  kind: 'news' | 'concept' | 'page' | 'data';
+  label: string;
+  /** An outside page, such as a news article. */
+  url: string | null;
+  /** A page of this app, such as `/insights`. */
+  link: string | null;
+  published: string | null;
+}
+
+/** `POST /assistant/messages`. */
+export interface AssistantMessageInput {
+  message: string;
+  /** Omitted to start a new conversation. */
+  conversationId?: string;
+}
+
+/** The reply to `POST /assistant/messages`. */
+export interface AssistantReplyView {
+  /** Null only for a blank question, which starts nothing. */
+  conversationId: string | null;
+  messageId: string | null;
+  outcome: AssistantOutcome;
+  reason: AssistantDeclineReason | null;
+  /** Markdown; every figure in it was checked against what the tools returned. */
+  text: string;
+  sources: AssistantSourceView[];
+  suggestions: string[];
+}
+
+export interface AssistantConversationSummary {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `GET /assistant/conversations`, newest first. */
+export interface AssistantConversationsResponse {
+  conversations: AssistantConversationSummary[];
+}
+
+export interface AssistantMessageView {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  /** Null for the user's own messages. */
+  outcome: AssistantOutcome | null;
+  reason: AssistantDeclineReason | null;
+  sources: AssistantSourceView[];
+  suggestions: string[];
+  createdAt: string;
+}
+
+/** `GET /assistant/conversations/:id`. */
+export interface AssistantConversationResponse {
+  conversation: AssistantConversationSummary;
+  messages: AssistantMessageView[];
 }

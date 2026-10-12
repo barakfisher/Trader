@@ -927,7 +927,8 @@
       "failed": "Could not load the models.",
       "scope": {
         "explain": "Narration and questions",
-        "agent": "Agents"
+        "agent": "Agents",
+        "assistant": "Assistant"
       },
       "save": "Use this model",
       "saveFailed": "Could not save the model.",
@@ -950,7 +951,8 @@
       "lasts_one": "At this rate the balance lasts about {{count}} day.",
       "lasts_other": "At this rate the balance lasts about {{count}} days.",
       "estimateNote": "Estimates, rounded up, at list prices and without prompt caching; the real bill is usually lower.",
-      "notChoosable": "Models are chosen here only with OpenRouter; this installation uses {{provider}}."
+      "notChoosable": "Models are chosen here only with OpenRouter; this installation uses {{provider}}.",
+      "assistantBasis": "No estimate yet: the cost of a question is measured once the assistant has a screen. Each user's spending is capped by the daily limit below."
     },
     "title": "Admin",
     "onlyTitle": "Administrators only",
@@ -1071,6 +1073,13 @@
       "title": "Agents per user",
       "label": "Most simulated agents a user may have",
       "hint": "Archived agents and the real portfolio don't count. A lower number removes nothing; it stops the next new agent. 1 to {{max}}.",
+      "save": "Save",
+      "saved": "Saved"
+    },
+    "assistantLimit": {
+      "title": "Assistant spending",
+      "label": "Most one user's questions may cost a day, in US dollars",
+      "hint": "Starts again at midnight in each user's time zone. 0 switches the assistant off. At most {{max}}.",
       "save": "Save",
       "saved": "Saved"
     }
