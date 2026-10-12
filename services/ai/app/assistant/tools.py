@@ -19,6 +19,7 @@ unavailable price is reported as unpriced, never as zero (guideline 7).
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from datetime import timedelta
 from decimal import Decimal
@@ -97,14 +98,30 @@ _PRIMARY_WORDS = {"", "none", "null", "main", "primary", "real"}
 
 
 def _pick_agent(agents: list[Any], name: Any) -> Any | dict[str, Any]:
-    """The named agent, the primary when no name is given, or an error naming the choices."""
+    """The named agent, the primary when no name is given, or an error naming the choices.
+
+    An exact name (any case) wins; otherwise the one agent whose name contains it,
+    so "Test" finds "Test agent" (measured 2026-10-12: a real model asked for
+    "Test", found nothing, and its answer failed). Two that contain it are an
+    error naming both, never a guess.
+    """
     if name is None or (isinstance(name, str) and name.strip().lower() in _PRIMARY_WORDS):
         return next(agent for agent in agents if agent.is_primary)
     if isinstance(name, str):
-        for agent in agents:
-            if agent.name.lower() == name.strip().lower():
-                return agent
-    return {"error": f"no agent named {name!r}; the agents are {[a.name for a in agents]}"}
+        wanted = name.strip().lower()
+        exact = [agent for agent in agents if agent.name.lower() == wanted]
+        partial = [agent for agent in agents if wanted in agent.name.lower()]
+        if len(exact) == 1 or len(partial) == 1:
+            return (exact or partial)[0]
+    return {"error": f"no one agent is named {name!r}; the agents are {[a.name for a in agents]}"}
+
+
+def _agent_filter(connection: Connection, user_id: str, name: Any) -> str | dict[str, Any] | None:
+    """The id to filter by for a named agent: None for no name, or `_pick_agent`'s error."""
+    if name is None or (isinstance(name, str) and not name.strip()):
+        return None
+    picked = _pick_agent(_agents(connection, user_id), name)
+    return picked if isinstance(picked, dict) else str(picked.id)
 
 
 async def _prices(context: ToolContext, symbols: list[str]) -> dict[str, Any]:
@@ -393,9 +410,10 @@ async def get_proposals(context: ToolContext, arguments: Mapping[str, Any]) -> d
         return {"error": f"limit is a whole number from 1 to {MAX_ROWS}"}
     symbol = arguments.get("symbol")
     symbol = symbol.strip().upper() if isinstance(symbol, str) and symbol.strip() else None
-    agent = arguments.get("agent")
-    agent = agent.strip() if isinstance(agent, str) and agent.strip() else None
     with context.engine.connect() as connection:
+        agent = _agent_filter(connection, context.user_id, arguments.get("agent"))
+        if isinstance(agent, dict):
+            return agent
         rows = connection.execute(
             text(
                 """
@@ -419,7 +437,7 @@ async def get_proposals(context: ToolContext, arguments: Mapping[str, Any]) -> d
                   JOIN agents a ON a.id = c.agent_id
                   LEFT JOIN agent_scans s ON s.id = c.scan_id
                  WHERE (:state = 'any' OR c.current_state = :state)
-                   AND (CAST(:agent AS text) IS NULL OR lower(a.name) = lower(:agent))
+                   AND (CAST(:agent AS text) IS NULL OR a.id::text = :agent)
                    AND (CAST(:symbol AS text) IS NULL
                         OR c.payload ->> 'symbol' = :symbol
                         OR o.subject_ref = 'instrument:' || :symbol)
@@ -631,6 +649,247 @@ async def get_product_guide(context: ToolContext, arguments: Mapping[str, Any]) 
     return {section: SECTIONS[section]}
 
 
+# -- replay_scan ---------------------------------------------------------------
+
+#: A step's tool result is cut here: enough to see what the agent read and the
+#: figures its thesis quotes, short enough that a twelve-step scan stays cheap
+#: to re-read. Every figure inside the kept part is evidence like any other.
+MAX_STEP_RESULT_CHARS = 1200
+#: Scans listed when the model asks which scan it should replay.
+MAX_SCANS_LISTED = 10
+
+
+def _compact(value: Any) -> Any:
+    raw = json.dumps(value, ensure_ascii=False, default=str)
+    if len(raw) <= MAX_STEP_RESULT_CHARS:
+        return value
+    return {"truncated": raw[:MAX_STEP_RESULT_CHARS] + "…", "full_length": len(raw)}
+
+
+async def replay_scan(context: ToolContext, arguments: Mapping[str, Any]) -> dict[str, Any]:
+    """One recorded scan step by step (MEMORY.md, added 2026-10-11): what the agent
+    was briefed with, each tool it called with what came back, and what it decided."""
+    scan_id = arguments.get("scan_id")
+    agent = arguments.get("agent")
+    symbol = arguments.get("symbol")
+    scan_id = scan_id.strip() if isinstance(scan_id, str) and scan_id.strip() else None
+    symbol = symbol.strip().upper() if isinstance(symbol, str) and symbol.strip() else None
+    with context.engine.connect() as connection:
+        agent = _agent_filter(connection, context.user_id, agent)
+        if isinstance(agent, dict):
+            return agent
+        rows = connection.execute(
+            text(
+                """
+                SELECT s.id::text AS id, a.id::text AS agent_id, a.name AS agent, s.trigger,
+                       s.started_at, s.finished_at, s.outcome, s.steps, s.cost_micro_usd, s.model,
+                       s.briefing, s.transcript, s.answer, s.error
+                  FROM agent_scans s
+                  JOIN agents a ON a.id = s.agent_id
+                 WHERE s.user_id = CAST(:user AS uuid)
+                   AND (CAST(:scan AS text) IS NULL OR s.id::text = :scan)
+                   AND (CAST(:agent AS text) IS NULL OR a.id::text = :agent)
+                   AND (CAST(:symbol AS text) IS NULL OR s.answer ->> 'symbol' = :symbol)
+                 ORDER BY s.started_at DESC
+                 LIMIT :limit
+                """
+            ),
+            {
+                "user": context.user_id,
+                "scan": scan_id,
+                "agent": agent,
+                "symbol": symbol,
+                "limit": MAX_SCANS_LISTED,
+            },
+        ).all()
+    if not rows:
+        return {"note": "no recorded scan matches", "scans": []}
+    scan = rows[0]
+    briefing = scan.briefing if isinstance(scan.briefing, dict) else {}
+    steps: list[dict[str, Any]] = []
+    calls: dict[str, dict[str, Any]] = {}
+    for entry in scan.transcript if isinstance(scan.transcript, list) else []:
+        if entry.get("role") == "assistant":
+            for call in entry.get("tool_calls", []):
+                step = {"step": len(steps) + 1, "tool": call.get("name"), "arguments": None}
+                try:
+                    step["arguments"] = json.loads(call.get("arguments") or "{}")
+                except json.JSONDecodeError:
+                    step["arguments"] = call.get("arguments")
+                calls[str(call.get("id"))] = step
+                steps.append(step)
+        elif entry.get("role") == "tool":
+            answered = calls.get(str(entry.get("call_id")))
+            if answered is not None:
+                answered["result"] = _compact(entry.get("result"))
+    answer = scan.answer if isinstance(scan.answer, dict) else None
+    return {
+        "scan_id": scan.id,
+        "agent": scan.agent,
+        "trigger": scan.trigger,
+        "started_at": scan.started_at.isoformat(),
+        "finished_at": scan.finished_at.isoformat() if scan.finished_at else None,
+        "outcome": scan.outcome,
+        "model": scan.model,
+        "cost_usd": _usd(scan.cost_micro_usd),
+        "briefing": {
+            "cash": briefing.get("cash"),
+            "holdings": [h.get("symbol") for h in briefing.get("holdings", [])],
+            "movers": {
+                kind: [m.get("symbol") for m in listed]
+                for kind, listed in (briefing.get("movers") or {}).items()
+                if isinstance(listed, list)
+            },
+            "followed_topics": briefing.get("followed_topics", []),
+        },
+        "steps": steps,
+        "decision": answer,
+        "scan_error": scan.error,
+        "link": f"/agents/{scan.agent_id}",
+        **(
+            {
+                "other_matching_scans": [
+                    {
+                        "scan_id": r.id,
+                        "agent": r.agent,
+                        "started_at": r.started_at.isoformat(),
+                        "outcome": r.outcome,
+                    }
+                    for r in rows[1:]
+                ]
+            }
+            if len(rows) > 1
+            else {}
+        ),
+        "note": (
+            "outcomes: trade (a proposal was made), no_trade, invalid_answer (the answer failed "
+            "the server's checks, so nothing was proposed), budget_reached, step_limit, failed"
+        ),
+    }
+
+
+# -- get_universe_info ---------------------------------------------------------
+
+#: The orchestrator rescreens when the loaded snapshot is this old
+#: (`services/universeRescreen.ts`, decision 90); a test holds the two equal.
+RESCREEN_DUE_DAYS = 91
+
+
+async def get_universe_info(context: ToolContext, arguments: Mapping[str, Any]) -> dict[str, Any]:
+    """The universe as loaded: when it was screened, by what rule, what it holds, and
+    whether a symbol is in it (MEMORY.md, added 2026-10-11)."""
+    symbol = arguments.get("symbol")
+    symbol = symbol.strip().upper() if isinstance(symbol, str) and symbol.strip() else None
+    with context.engine.connect() as connection:
+        load = connection.execute(
+            text(
+                "SELECT snapshot_as_of, source, manifest, loaded_at FROM universe_loads "
+                "ORDER BY loaded_at DESC LIMIT 1"
+            )
+        ).one_or_none()
+        membership: dict[str, int] = {
+            row.membership: int(row.members)
+            for row in connection.execute(
+                text(
+                    "SELECT membership, count(*) AS members FROM instrument_profiles "
+                    "GROUP BY membership"
+                )
+            ).all()
+        }
+        rescreen = connection.execute(
+            text(
+                """
+                SELECT started_at, finished_at, stats FROM runs
+                 WHERE kind = 'universe_rescreen' AND status = 'ok'
+                 ORDER BY started_at DESC LIMIT 1
+                """
+            )
+        ).one_or_none()
+        dropped = list(
+            connection.execute(
+                text(
+                    "SELECT i.symbol FROM instrument_profiles p "
+                    "JOIN instruments i ON i.id = p.instrument_id "
+                    "WHERE p.membership = 'dropped' ORDER BY i.symbol LIMIT 50"
+                )
+            ).scalars()
+        )
+        lookup = (
+            connection.execute(
+                text(
+                    """
+                    SELECT i.symbol, i.name, i.asset_class, i.currency, p.membership,
+                           p.market_cap_minor, p.net_assets_minor, p.size_currency
+                      FROM instruments i
+                      LEFT JOIN instrument_profiles p ON p.instrument_id = i.id
+                     WHERE i.symbol = :symbol
+                    """
+                ),
+                {"symbol": symbol},
+            ).one_or_none()
+            if symbol
+            else None
+        )
+    if load is None:
+        return {"note": "no universe has been loaded on this installation"}
+    manifest = load.manifest if isinstance(load.manifest, dict) else {}
+    screen = manifest.get("screen", {})
+    size_currency = screen.get("min_size_currency", "USD")
+    answer: dict[str, Any] = {
+        "screened_at": load.snapshot_as_of.isoformat(),
+        "loaded_at": load.loaded_at.isoformat(),
+        "source": manifest.get("source") or load.source,
+        "rules": {
+            "region": screen.get("region"),
+            "exchanges": screen.get("exchanges"),
+            "min_stock_market_cap": (
+                money(int(screen["min_equity_size_minor"]), size_currency)
+                if screen.get("min_equity_size_minor") is not None
+                else None
+            ),
+            "min_etf_net_assets": (
+                money(int(screen["min_etf_size_minor"]), size_currency)
+                if screen.get("min_etf_size_minor") is not None
+                else None
+            ),
+            "size_currency": size_currency,
+        },
+        "counts": manifest.get("counts", {}),
+        "membership": membership,
+        "rescreen_every_days": RESCREEN_DUE_DAYS,
+        "last_rescreen": (
+            {
+                "at": rescreen.started_at.isoformat(),
+                "created": (rescreen.stats or {}).get("created"),
+                "dropped": (rescreen.stats or {}).get("dropped"),
+            }
+            if rescreen
+            else None
+        ),
+        "dropped_symbols": dropped,
+        "note": (
+            "membership: screened (passed the screen), on_demand (outside it, profiled because "
+            "a user named it), dropped (left at a rescreen; kept so history still resolves)"
+        ),
+    }
+    if symbol:
+        if lookup is None:
+            answer["symbol"] = {"symbol": symbol, "known": False}
+        else:
+            size = lookup.market_cap_minor or lookup.net_assets_minor
+            answer["symbol"] = {
+                "symbol": lookup.symbol,
+                "known": True,
+                "name": lookup.name,
+                "kind": lookup.asset_class,
+                "membership": lookup.membership or "not_profiled",
+                "size": money(int(size), lookup.size_currency)
+                if size and lookup.size_currency
+                else None,
+            }
+    return answer
+
+
 # -- the set -------------------------------------------------------------------
 
 _TEXT = {"type": "string"}
@@ -698,6 +957,26 @@ OWN_TOOLS: tuple[Tool, ...] = (
             _object({"topic": _TEXT}, []),
         ),
         get_topics,
+    ),
+    Tool(
+        ToolSpec(
+            "replay_scan",
+            "One recorded agent scan, step by step: its briefing, each tool it called with "
+            "what came back, and its decision or why it made none. Picks the latest scan "
+            "matching scan_id, agent and/or the symbol it decided on.",
+            _object({"scan_id": _TEXT, "agent": _TEXT, "symbol": _TEXT}, []),
+        ),
+        replay_scan,
+    ),
+    Tool(
+        ToolSpec(
+            "get_universe_info",
+            "The universe of instruments this app knows: when it was screened and loaded, the "
+            "screen's rules, its counts, the last rescreen and what it dropped, and - given a "
+            "symbol - whether that symbol is in it.",
+            _object({"symbol": _TEXT}, []),
+        ),
+        get_universe_info,
     ),
     Tool(
         ToolSpec(

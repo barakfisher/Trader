@@ -153,3 +153,97 @@ def test_a_non_breaking_hyphen_reads_as_a_hyphen() -> None:
     raw = _raw(outcome="answer", text="NVDA is down −3.30% today; no 7‑day figure yet.")
 
     assert check(raw, tool_results=[PORTFOLIO], user_messages=["hi"]).valid
+
+
+def test_a_replayed_scan_and_the_universe_are_sources_too() -> None:
+    calls = [
+        {
+            "name": "replay_scan",
+            "result": {
+                "scan_id": "s1",
+                "agent": "Momentum",
+                "started_at": "2026-10-12T09:00:00+00:00",
+                "link": "/agents/a1",
+            },
+        },
+        {"name": "replay_scan", "result": {"note": "no recorded scan matches", "scans": []}},
+        {"name": "get_universe_info", "result": {"screened_at": "2026-09-24T12:04:35+00:00"}},
+    ]
+
+    assert sources(calls) == [
+        {
+            "kind": "page",
+            "label": "Momentum's scan, 2026-10-12 09:00 UTC",
+            "link": "/agents/a1",
+        },
+        {"kind": "data", "label": "The universe snapshot"},
+    ]
+
+
+def test_a_numbered_list_is_not_read_as_figures() -> None:
+    """Measured 2026-10-12: a real step-by-step reply was refused for its "2."."""
+    listed = _raw(outcome="answer", text="1. The briefing.\n2. The decision.\n10) The end.")
+    inline = _raw(outcome="answer", text="It rose 2. Then 7 more.")
+
+    assert check(listed, tool_results=[], user_messages=["hi"]).valid
+    assert check(inline, tool_results=[], user_messages=["hi"]).unsourced == ("2", "7")
+
+
+def test_a_result_that_carries_an_error_field_is_still_a_source() -> None:
+    """Only a tool's refusal - a result that is nothing but `error` - is skipped."""
+    calls = [
+        {
+            "name": "replay_scan",
+            "result": {
+                "scan_id": "s1",
+                "agent": "A",
+                "started_at": "t",
+                "link": "/agents/a",
+                "scan_error": None,
+                "error": None,
+            },
+        },
+        {"name": "get_universe_info", "result": {"symbol": {"symbol": "RIVN", "known": True}}},
+        {"name": "get_topics", "result": {"error": "no such topic"}},
+    ]
+
+    assert sources(calls) == [
+        {"kind": "page", "label": "A's scan, t", "link": "/agents/a"},
+        {"kind": "data", "label": "The universe snapshot"},
+    ]
+
+
+TIMESTAMPED = {
+    "loaded_at": "2026-10-12T09:57:05.199619+00:00",
+    "screened_at": "2026-09-24T12:04:35+00:00",
+}
+
+
+def test_a_date_the_evidence_states_passes_whole_and_its_digits_source_nothing() -> None:
+    """Measured 2026-10-12: a real reply quoting a timestamp was refused for "57",
+    and an invented "12%" passed on the 12th because a timestamp held a 12."""
+    quoted = _raw(
+        outcome="answer", text="Loaded 2026-10-12T09:57:05.199619+00:00; screened 2026-09-24."
+    )
+    invented = _raw(outcome="answer", text="Up 12% on 2026-10-12.")
+    wrong_day = _raw(outcome="answer", text="Screened 2026-09-25.")
+
+    assert check(quoted, tool_results=[TIMESTAMPED], user_messages=["hi"]).valid
+    assert check(invented, tool_results=[TIMESTAMPED], user_messages=["hi"]).unsourced == ("12",)
+    assert not check(wrong_day, tool_results=[TIMESTAMPED], user_messages=["hi"]).valid
+
+
+def test_a_link_is_checked_as_a_page_never_read_for_figures() -> None:
+    linked = _raw(
+        outcome="answer",
+        text="See [the agent](/agents/491ed17e-cc85-4c47-b55b-c195a7e0d9f5), [home](/) and "
+        "[the article](https://r.example/2026/77).",
+    )
+    invented_page = _raw(outcome="answer", text="See [the universe](/universe) and [home](/).")
+
+    assert check(linked, tool_results=[], user_messages=["hi"]).valid
+    checked = check(invented_page, tool_results=[], user_messages=["hi"])
+    # A broken link is dropped, its words kept; the reply is not sent back for it.
+    assert checked.valid
+    assert checked.reply is not None
+    assert checked.reply.text == "See the universe and [home](/)."

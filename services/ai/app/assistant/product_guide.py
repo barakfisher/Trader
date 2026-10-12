@@ -13,6 +13,23 @@ from __future__ import annotations
 
 from types import MappingProxyType
 
+#: The app's pages a reply may link to: the web router's paths, with `/<id>` for a
+#: parameter. `test_assistant_tools_contract.py` holds them equal to `router.tsx`.
+PAGES = (
+    "/",
+    "/insights",
+    "/holdings/<id>",
+    "/ask",
+    "/proposals",
+    "/proposals/<id>",
+    "/targets",
+    "/agents",
+    "/agents/<id>",
+    "/topics",
+    "/settings",
+    "/admin",
+)
+
 #: Section name -> text. Order is the order a tour takes.
 SECTIONS = MappingProxyType(
     {
@@ -113,6 +130,9 @@ SECTIONS = MappingProxyType(
             "concepts; and about how this app works. It reads, it never changes anything: it "
             "cannot trade, approve, or change a setting. It does not say whether to buy or "
             "sell. It declines questions outside markets, investing, the account and the app. "
+            "It can replay any recorded agent scan step by step - what the agent read, each "
+            "tool it called, and what it decided - and report when the universe was last "
+            "screened and whether a symbol is in it. "
             "It remembers the current conversation, not earlier ones."
         ),
     }
