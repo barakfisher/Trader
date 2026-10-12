@@ -56,7 +56,8 @@ TIME_LIMIT = 120.0
 #: Messages of the conversation sent with each question: the last three
 #: exchanges. A starting value (MEMORY.md lists it as open); measured in PR 4.
 HISTORY_MESSAGES = 6
-#: Times a reply that failed its check is sent back with what was wrong.
+#: Second chances per question: a reply that failed its check is sent back once
+#: with what was wrong, and a model call that failed is made once more.
 REPAIRS = 1
 
 ReplyOutcome = Literal["answer", "decline", "clarify", "failed", "budget_reached", "no_model"]
@@ -283,6 +284,11 @@ async def _converse(
         if stop.end != "answer" or stop.reply is None:
             turn.outcome = "no_model" if isinstance(stop.cause, LLMUnavailableError) else "failed"
             turn.problems = [stop.error or stop.end]
+            # A failed call is asked once more, from where it stopped (measured
+            # 2026-10-12: a real model's turn came back with no text at all).
+            # Not when there is no model, and not past the step limit.
+            if stop.end == "failed" and turn.outcome == "failed" and attempt < REPAIRS:
+                continue
             return
 
         checked = check(

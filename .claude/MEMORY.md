@@ -554,7 +554,7 @@ strings and left-to-right assumptions before designing it.
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
 | **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 ✅ #210 (instrument_profiles 155 -> 96 MB); DB3 ✅ #213 (window from 2026-10-11 07:56 UTC); DB4 split (decision 143): first half 2026-10-11 (#218, decisions 143-147), second half - indexes and `runs` retention - on/after 2026-10-18. DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-147. See "Planned: the database sprint" |
-| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 🚧 In progress | Test set #212. PR 1a #220 (AI service core, migration 0052) deployed 2026-10-12. PR 1b (Admin picker + limit, orchestrator routes) opened 2026-10-12. See "Planned: the assistant" and its "Build" list |
+| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 🚧 In progress | Test set #212. 1a #220 deployed; 1b #221 merged (not yet redeployed); PR 2 (`replay_scan`, `get_universe_info`) opened 2026-10-12. See "Planned: the assistant" and its "Build" list |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
 | **Multi-agent sandbox, Stage 4 — the agent that decides** | 🚧 In progress | #172 spec D43-D52 + §14; #173 models on the Admin page (0041, D43-D44); #177 the scan's inputs - tool calling, movers, seven read-only tools, the briefing (0042); #180 the scan - one hand-written loop (D53), the per-agent budget, the step limit, `agent_scans` (0043), `POST /agents/:id/scans`, built on a scripted model (**real scans not yet measured: the account is unfunded**). Next: PR 5, the trade proposal and its approval (D26, D47-D49, D51, D54) |
@@ -3836,6 +3836,21 @@ in an evidence *string*, and timestamps are strings - so on 2026-10-12 an invent
 because `price_as_of` read "2026-10-12T...". Small whole numbers (days, hours, minutes) are
 effectively unchecked whenever a tool result carries a timestamp. The tests now invent figures
 with two decimals; **the checker itself is unchanged - a candidate fix** (read dates as dates).
+**PR 2 (2026-10-12): `replay_scan` and `get_universe_info`, and what a real model broke** (Flash-Lite
+on a live copy, $0.045 for 55 calls including one real scan). Each fix is in `reply.py`/`tools.py`
+with its measurement: an agent asked for as "Test" (named "Test agent") found nothing - names now
+match exactly, else the one agent containing the word, never a guess between two; a turn that came
+back with **no text** ended the question - a failed call is now made once more; numbered lists
+("2.") were read as figures; a reply quoting a raw timestamp was refused for "57" - **dates are now
+read as dates in the assistant's check** (a date the evidence states passes whole, and the
+evidence's own dates are stripped so a timestamp's digits never source a figure: this closes the
+"12% on the 12th" hole for the assistant; **narration and agents still have it**); link targets'
+digits were read as figures; invented pages (`/universe`, `/guide`) - a link to a page not in
+`product_guide.PAGES` (held equal to the router by a test) is reduced to its words, the reply
+kept; a replayed scan was never a source because its result had an `error: null` field - a tool
+refusal is now a result whose *only* field is `error`. **Still open, for PR 4's eval and the
+model choice:** Flash-Lite declined "How was the universe made?" as cosmology 4 times in 6 even
+with the app's meaning spelled out - prompt-tuning against three samples was stopped on purpose.
 **Environment trap:** the worktree's `.venv` is a symlink to the main checkout's, whose editable
 install points `app` at the main checkout - so `python scripts/export_openapi.py` silently
 exported **main's** app. Run it as `PYTHONPATH=. .venv/bin/python scripts/export_openapi.py`.

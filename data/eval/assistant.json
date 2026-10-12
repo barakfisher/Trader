@@ -57,11 +57,11 @@
       "what": "followed topics, their instruments, rationale and moves"
     },
     "replay_scan": {
-      "status": "planned",
+      "status": "exists",
       "what": "a recorded scan, step by step: briefing, tool calls, results, decision (added 2026-10-11)"
     },
     "get_universe_info": {
-      "status": "planned",
+      "status": "exists",
       "what": "the universe snapshot: date, counts, screen rules, membership, last rescreen (added 2026-10-11)"
     },
     "get_product_guide": {

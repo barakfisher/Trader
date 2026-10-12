@@ -29,11 +29,20 @@ from app.assistant.tools import (
     get_portfolio,
     get_proposals,
     get_topics,
+    get_universe_info,
     primary_agent_id,
+    replay_scan,
 )
 from app.corpus.hashed_embedder import HashedEmbedder
 from app.corpus.vector_store import PgVectorStore
-from app.llm.base import LLMCompletion, LLMUnavailableError, TokenUsage, ToolCall, UserMessage
+from app.llm.base import (
+    LLMCompletion,
+    LLMRequestError,
+    LLMUnavailableError,
+    TokenUsage,
+    ToolCall,
+    UserMessage,
+)
 from tests.integration.conftest import run_script
 from tests.integration.test_agent_tools_sql import ScriptedMarket
 
@@ -367,6 +376,133 @@ def test_no_tool_can_write_what_a_user_decides() -> None:
         assert not name.startswith(("approve", "reject", "set_", "update", "delete", "trade"))
 
 
+def _record_scan(engine: Engine, account: dict[str, Any], *, symbol: str, minutes_ago: int) -> str:
+    """A finished scan of the account's agent: one tool call, then a buy."""
+    transcript = [
+        {
+            "role": "assistant",
+            "text": "",
+            "tool_calls": [
+                {"id": "c1", "name": "get_quote", "arguments": json.dumps({"symbols": [symbol]})}
+            ],
+        },
+        {
+            "role": "tool",
+            "call_id": "c1",
+            "name": "get_quote",
+            "result": {"quotes": {symbol: {"price": "229.28"}}, "padding": "x" * 3000},
+        },
+        {"role": "assistant", "text": "{}", "tool_calls": []},
+    ]
+    with engine.begin() as connection:
+        return connection.execute(
+            text(
+                """
+                INSERT INTO agent_scans (user_id, agent_id, trigger, started_at, finished_at,
+                                         outcome, steps, cost_micro_usd, model, briefing,
+                                         transcript, answer)
+                VALUES (CAST(:u AS uuid), CAST(:a AS uuid), 'schedule',
+                        now() - make_interval(mins => :m), now() - make_interval(mins => :m),
+                        'trade', 1, 2500, 'm', CAST(:b AS jsonb), CAST(:t AS jsonb),
+                        CAST(:ans AS jsonb))
+                RETURNING id::text
+                """
+            ),
+            {
+                "u": account["user"],
+                "a": account["agent"],
+                "m": minutes_ago,
+                "b": json.dumps(
+                    {
+                        "cash": "1000.00",
+                        "holdings": [],
+                        "movers": {
+                            "gainers": [{"symbol": symbol}],
+                            "losers": [],
+                            "most_active": [],
+                        },
+                        "followed_topics": [{"topic": "Uranium", "symbols": [symbol]}],
+                    }
+                ),
+                "t": json.dumps(transcript),
+                "ans": json.dumps(
+                    {"decision": "buy", "symbol": symbol, "quantity": "2", "thesis": "Momentum."}
+                ),
+            },
+        ).scalar_one()
+
+
+async def test_replay_scan_walks_a_scan_step_by_step(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    held = account["held"]
+    older = _record_scan(loaded, account, symbol=held, minutes_ago=60)
+    latest = _record_scan(loaded, account, symbol=held, minutes_ago=5)
+
+    # Part of the name finds the agent (a real model asked for "Test" for "Test agent").
+    result = await replay_scan(_context(loaded, account), {"agent": "moment", "symbol": held})
+
+    assert result["scan_id"] == latest
+    assert result["agent"] == "Momentum" and result["outcome"] == "trade"
+    assert result["briefing"]["movers"]["gainers"] == [held]
+    assert result["briefing"]["followed_topics"] == [{"topic": "Uranium", "symbols": [held]}]
+    [step] = result["steps"]
+    assert (step["step"], step["tool"], step["arguments"]) == (1, "get_quote", {"symbols": [held]})
+    # A long result is cut, and says so.
+    assert step["result"]["full_length"] > 3000 and len(step["result"]["truncated"]) < 1300
+    assert result["decision"]["thesis"] == "Momentum."
+    assert result["link"] == f"/agents/{account['agent']}"
+    assert [s["scan_id"] for s in result["other_matching_scans"]] == [older]
+
+
+async def test_replay_scan_finds_one_scan_by_id_and_only_the_users_own(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    scan = _record_scan(loaded, account, symbol=account["held"], minutes_ago=1)
+    with loaded.begin() as connection:
+        stranger = connection.execute(
+            text("INSERT INTO users (role) VALUES ('user') RETURNING id::text")
+        ).scalar_one()
+        stranger_primary = primary_agent_id(connection, stranger)
+
+    mine = await replay_scan(_context(loaded, account), {"scan_id": scan})
+    theirs = await replay_scan(
+        _context(loaded, {**account, "user": stranger, "primary": stranger_primary}),
+        {"scan_id": scan},
+    )
+
+    assert mine["scan_id"] == scan and "other_matching_scans" not in mine
+    assert theirs == {"note": "no recorded scan matches", "scans": []}
+
+
+async def test_get_universe_info_reports_the_snapshot_its_rules_and_a_symbol(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    with loaded.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO runs (kind, run_key, trigger, status, started_at, finished_at, stats) "
+                "VALUES ('universe_rescreen', :k, 'schedule', 'ok', now(), now(), "
+                '\'{"created": 20, "dropped": 22}\')'
+            ),
+            {"k": f"universe-rescreen:test:{NOW.isoformat()}"},
+        )
+    context = _context(loaded, account)
+
+    result = await get_universe_info(context, {"symbol": account["held"].lower()})
+    unknown = await get_universe_info(context, {"symbol": "ZZZQX"})
+
+    assert result["screened_at"].startswith("2026-")
+    assert result["rules"]["min_stock_market_cap"] == "1000000000.00"
+    assert result["rules"]["min_etf_net_assets"] == "100000000.00"
+    assert result["counts"]["kept"] > 0
+    assert result["rescreen_every_days"] == 91
+    assert result["last_rescreen"]["dropped"] == 22
+    assert result["symbol"]["symbol"] == account["held"] and result["symbol"]["known"] is True
+    assert result["symbol"]["membership"] in ("screened", "on_demand", "dropped")
+    assert unknown["symbol"] == {"symbol": "ZZZQX", "known": False}
+
+
 # -- a question ----------------------------------------------------------------
 
 
@@ -580,3 +716,53 @@ def test_only_the_users_assistant_calls_since_local_midnight_count(
     assert not budget.exhausted
     _spend(loaded, user, "assistant", allowance, NOW)
     assert assistant_budget(loaded, user, NOW, TZ).exhausted
+
+
+async def test_part_of_a_name_finds_one_agent_and_never_guesses_between_two(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    context = _context(loaded, account)
+    with loaded.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO agents (user_id, slug, name, budget_minor) "
+                "VALUES (CAST(:u AS uuid), 'momentum-2', 'Momentum Two', 100000)"
+            ),
+            {"u": account["user"]},
+        )
+
+    exact = await get_portfolio(context, {"agent": "MOMENTUM"})
+    partial = await get_portfolio(context, {"agent": "two"})
+    ambiguous = await get_portfolio(context, {"agent": "mom"})
+
+    assert exact["portfolio"] == "Momentum"
+    assert partial["portfolio"] == "Momentum Two"
+    assert "Momentum Two" in ambiguous["error"]
+    assert "error" in await get_proposals(context, {"agent": "mom"})
+
+
+async def test_a_failed_model_call_is_made_once_more(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    llm = ScriptedLLM(
+        _call("get_portfolio"),
+        LLMRequestError("openrouter", "response carried no completion text"),
+        _reply(outcome="answer", text="Up 5.00% over 7 days."),
+    )
+
+    turn = await _ask(loaded, account, llm, "How did I do this week?")
+
+    assert turn.outcome == "answer", turn.problems
+    assert turn.steps == 1
+
+
+async def test_a_model_call_that_fails_twice_ends_the_question(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    error = LLMRequestError("openrouter", "response carried no completion text")
+    llm = ScriptedLLM(error, error)
+
+    turn = await _ask(loaded, account, llm, "Hello")
+
+    assert turn.outcome == "failed" and turn.text == NO_REPLY_TEXT["failed"]
+    assert len(llm.sent) == 2
