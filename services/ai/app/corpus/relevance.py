@@ -1,5 +1,9 @@
 """Does the corpus actually cover this question? Three answers, not two.
 
+Measured for the extractive `/ask` (M3), which the assistant replaced (assistant
+PR 4); topic resolution still judges its matches with these bands
+(`app/topics/resolution.py`). The history below is that measurement's.
+
 M3's exit criterion is that `/ask` "correctly refuses out-of-index questions",
 so something has to decide. This is that decision, kept apart from the retrieval
 that feeds it and from the answer that follows it, because it is the one place in

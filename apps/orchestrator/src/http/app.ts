@@ -28,7 +28,6 @@ import { registerAgentAccountRoutes } from './routes/agentAccount.js';
 import { registerAgentScanRoutes } from './routes/agentScans.js';
 import { registerAgentsRoutes } from './routes/agents.js';
 import { registerAuthRoutes } from './routes/auth.js';
-import { registerAskRoutes } from './routes/ask.js';
 import { registerAssistantRoutes } from './routes/assistant.js';
 import { registerConceptsRoutes } from './routes/concepts.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -255,7 +254,6 @@ export function createApp(
   registerTelegramRoutes(app);
   registerImportRoutes(app);
   registerConceptsRoutes(app);
-  registerAskRoutes(app);
   registerAssistantRoutes(app);
   registerTopicsRoutes(app);
   registerInternalRoutes(app);

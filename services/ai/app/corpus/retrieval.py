@@ -88,7 +88,7 @@ class ScoredChunk:
     #: return this chunk. Carried through fusion rather than discarded because
     #: it is the only score in this system that means the same thing across
     #: different queries - which is what makes a relevance floor possible
-    #: (`app/ask/relevance.py`). The fused score cannot do that job.
+    #: (`app/corpus/relevance.py`). The fused score cannot do that job.
     vector_similarity: float | None = None
 
 

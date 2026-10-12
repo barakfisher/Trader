@@ -4,7 +4,17 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-12 ~11:45 UTC - **Assistant handoff (five merged PRs: #212, #220-#223). The assistant
+Updated: 2026-10-12 ~13:30 UTC - **Assistant PR 4: the eval runner, the measured limit, the old `/ask`
+removed.** `scripts/run_assistant_eval.py` runs `data/eval/assistant.json` on a real model in a seeded,
+disposable world and grades each turn mechanically and by a Sonnet 5.5 judge (the user's choice: model
+judge + the user reads failures and disagreements). **Flash-Lite won** (51% of turns pass over 3
+samples, $0.0019 a question, 2 s; Haiku 4.5: 40%, $0.0123, 10 s). **The $0.50/day limit stays - now
+measured** (~160 questions at the p90 cost). The old `POST /ask`, `app/ask/` (relevance moved to
+`app/corpus/relevance.py`), `data/eval/ask.json` and both its CI jobs are gone. **Next: PR 4b - the
+eval's findings** (see "Next session: the assistant's PR 4b"), then PR 5 (`openai` package). Eval
+budget the user gave: $5, ~$3.40 spent. No migration.
+
+Previous update, 2026-10-12 ~11:45 UTC - **Assistant handoff (five merged PRs: #212, #220-#223). The assistant
 is live on `/ask`. Nothing is in flight.** #212 - the 80-case test set (`data/eval/assistant.json`,
 written before the assistant, 11 cases in the user's words). #220 - the AI service core: the shared
 tool loop (the scan uses it), 14 read-only tools, checked replies, conversations, migration
@@ -570,7 +580,7 @@ strings and left-to-right assumptions before designing it.
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
 | **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 ✅ #210 (instrument_profiles 155 -> 96 MB); DB3 ✅ #213 (window from 2026-10-11 07:56 UTC); DB4 split (decision 143): first half 2026-10-11 (#218, decisions 143-147), second half - indexes and `runs` retention - on/after 2026-10-18. DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-147. See "Planned: the database sprint" |
-| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 🚧 In progress | Test set #212; #220-#223 deployed 2026-10-12 - core, Admin picker and limit, replay and universe tools, the `/ask` chat screen. **Live.** Next: PR 4 (eval runner on a real model, cost -> the real limit, remove the old `/ask`), then PR 5 (`openai` package). See "Planned: the assistant" and "Next session: the assistant's PR 4" |
+| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 🚧 In progress | Test set #212; #220-#223 deployed 2026-10-12 - core, Admin picker and limit, replay and universe tools, the `/ask` chat screen. **Live.** PR 4 (eval runner, measured limit, old `/ask` removed) done. Next: PR 4b (the eval's findings), then PR 5 (`openai` package). See "Planned: the assistant" and "Next session: the assistant's PR 4" |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
 | **Multi-agent sandbox, Stage 4 — the agent that decides** | 🚧 In progress | #172 spec D43-D52 + §14; #173 models on the Admin page (0041, D43-D44); #177 the scan's inputs - tool calling, movers, seven read-only tools, the briefing (0042); #180 the scan - one hand-written loop (D53), the per-agent budget, the step limit, `agent_scans` (0043), `POST /agents/:id/scans`, built on a scripted model (**real scans not yet measured: the account is unfunded**). Next: PR 5, the trade proposal and its approval (D26, D47-D49, D51, D54) |
@@ -2330,6 +2340,11 @@ failure they prevent.
 ## Bugs that cost real time, and the lesson from each
 
 **The assistant (2026-10-11/12, #220-#223) - lessons, newest first:**
+- **A provider's spending cap is not the credit balance** (PR 4, 2026-10-12). OpenRouter answered 403
+  "Workspace lifetime budget of $1.00 exceeded" with $8.80 of credit left; the first Haiku run graded
+  61 refused turns as model failures. The runner now stops at the first 401/402/403. The cap is a
+  workspace setting the user raised; the same key serves the local compose stack, which was blocked
+  too. **Lesson: when every call fails the same way, stop and read the error before grading.**
 - **A new route is public until its prefix is on `PROTECTED_PREFIXES`** (`apps/orchestrator/src/
   http/app.ts`). `/assistant` was missed; `app.test.ts`'s walk over every registered route caught
   it, while the route's own "signed-in only" test passed because the handler happened to refuse.
@@ -3088,8 +3103,8 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | Item | Where | Impact |
 |---|---|---|
 | **Narration's and the agents' figure checks still read a timestamp's digits as sources, and refuse U+2011 hyphens** | `app/narration/evidence_validator.py`; the assistant fixed it in `app/assistant/reply.py` only | A small whole number (a day, hour or minute) written by a model passes whenever its evidence carries a timestamp that contains it; "7‑day" with a non-breaking hyphen is refused. Moving `_without_dates` and the dash normalisation into the validator fixes both for everyone - and changes narration's behaviour, so measure its rejection rate before and after |
-| **The old `/ask` still exists, unused** | `POST /ask` (orchestrator and AI service), `app/ask/`, `data/eval/ask.json` and its CI job | Dead code with a CI job that still runs; removing it is PR 4's step 4 |
-| **The assistant's answers are not graded yet** | `data/eval/assistant.json` | 80 cases, only their shape is checked. Scope, advice and injection guardrails are unproven on a real model until PR 4's runner. The one measured weakness: Flash-Lite declining "How was the universe made?" |
+| **`purpose = 'ask'` outlives `/ask`** | `Purpose` in `app/llm/base.py`, `SCOPE_FOR_PURPOSE`, `llm_calls`' CHECK, `services/llmPanel.ts`, `spend_estimate.py` | Nothing emits it since PR 4; kept so stored rows still read. Retention (30 days) empties them; then drop it with a migration |
+| **The assistant eval runs only by hand** | `scripts/run_assistant_eval.py` | Keyed and paid, so never in CI: a prompt or tool change can regress it unseen. Run it (Flash-Lite, `--repeat 3`, ~$1.30 with the judge) before merging any change to the assistant's prompt, tools or checks |
 | **No backup leaves the laptop** | `~/Backups/traders` (DB1, decision 137) | The daily dumps survive `k8s-down.sh`, a lost Docker volume and a bad migration, but not the Mac's disk failing or the laptop being lost: Time Machine has no destination and no synced folder exists (checked 2026-10-11). The fix is the user's - a Time Machine disk (`~/Backups` is already included) or a synced folder (`TRADERS_BACKUP_DIR`, then `backup-schedule.sh install` again) |
 | **The shadow SPY pays no fees** | `services/performance.ts` (`benchmarkOn`), D38 | The user's choice for now (2026-10-05), to be revisited: they will add fees. The agent pays 10 bps / $1.50 on every trade and the shadow pays nothing, so the comparison leans slightly against the agent - about $1.50-$10 per deposit at today's budgets. When fees are added, decide whether each deposit pays one fee on the way in (the shadow buys once per deposit) and record it as a decision; the hint under the figures ("without fees", `agents.performance.hint`) must change with it |
 | ~~A simulated agent has no stored daily value yet~~ | — | **Resolved by PR 7 (D36)**: the daily value is computed from the ledger and stored closes, not stored - no snapshot, no migration |
@@ -3525,7 +3540,27 @@ grant tests fail for the wrong reason.
 
 ## Where to go next
 
-### Next session: the assistant's PR 4 (written 2026-10-12)
+### Next session: the assistant's PR 4b - what the eval found (written 2026-10-12)
+
+The user chose (2026-10-12) to fix these in their own PR before PR 5, measured against PR 4's Flash-Lite
+numbers (`--repeat 3`: 132/258 turns pass, mechanical 210/258; 30 of 86 turns pass every sample, 30
+fail every sample). Ask before the first paid run; ~$1.60 of the $5 eval budget is left.
+**Tool gaps (the model cannot answer without them):** `get_agents` has no next-scan time
+(`product-next-scan`); `get_portfolio` has no day change in money and says nothing when cash is null
+(the real portfolio keeps none - `account-cash`, `account-today`); `get_price_history(days=5)` loads 5
+*calendar* days = 3 closes, so its own `5d` is null and "how did NVDA do this week?" has no weekly
+number (`followup-nvda-amd` - load trading days, or at least `days + weekend`); agents have no
+month-to-date return (`account-best-agent`).
+**Prompt omissions (consistent across samples):** says nothing of a proposal being rejected; drops
+news source names; never says a quote is delayed; a replayed scan's conclusion left out; the universe
+question still declined as cosmology 1 time in 3 (and once more on a live copy). Haiku's own failure
+mode, for the record: dates written "Oct 12, 2026" were refused as unsourced figures.
+**How to run it:** `PYTHONPATH=. .venv/bin/python scripts/run_assistant_eval.py --env-file
+/Users/a/projects/Traders/.env --database-url postgresql://traders:traders@127.0.0.1:55435/traders_ci
+--model google/gemini-3.5-flash-lite --repeat 3 --max-usd 1.60` (reports land in
+`services/ai/eval-results/`, gitignored). `--cases`/`--group` for a subset.
+
+### Next session: the assistant's PR 4 (history - done as PR 4, 2026-10-12)
 
 **The grant continues** (auto-memory `traders-assistant-grant`): one PR at a time off `main`, merge
 on the user's "merge", redeploy on "merge and redeploy". **Ask the user's budget before the first
@@ -3927,6 +3962,21 @@ with PR 4, whose eval runner replaces that job.
 **Environment trap:** the worktree's `.venv` is a symlink to the main checkout's, whose editable
 install points `app` at the main checkout - so `python scripts/export_openapi.py` silently
 exported **main's** app. Run it as `PYTHONPATH=. .venv/bin/python scripts/export_openapi.py`.
+**PR 4 (2026-10-12): the eval runner, decided with the user one question at a time.**
+- **Grading `behaviour`: a model judge (Sonnet 5.5) plus the user reading** every failure and every
+  judge/mechanical disagreement (the report lists them). Rejected: human only (85 turns per model per
+  run); judge only (its mistakes go unseen). The judge costs ~$0.003 a turn - more than Flash-Lite.
+- **The world is built, not copied** (`scripts/assistant_eval/world.py`): committed fixtures + rows
+  written relative to the run's clock, one fresh account per case. A live copy would grade differently
+  every week, and two models compared a day apart would not have seen the same world. The drawdown
+  alert is `drawdown_findings` over the fixture prices (SMR, high), not a typed number.
+- **Advice cases accept a decline** (`expect.or_decline`): the rule is "never a yes or no", not the
+  label. A links entry may be a list of alternatives.
+- **The test set was stale in two places**, fixed in PR 4: the real portfolio cannot hold cash (the
+  ledger trigger refuses an `agent_cash` row for the primary agent), and Proposals is an Insights tab.
+- **$0.50/day kept** (the user's choice over $0.25 and $1.00), now measured: Flash-Lite mean $0.0019,
+  p90 $0.0031, max $0.0071 a question.
+- **Haiku 4.5 rejected for the assistant**: worse (40% vs 51%), 6x the cost, 5x slower.
 
 **Order (the user's):**
 1. Follow-up questions (conversation memory), sources on every answer, suggested next questions.

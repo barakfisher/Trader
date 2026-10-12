@@ -36,7 +36,7 @@ from app.universe.screener import IncompleteFetch, build_snapshot
 
 
 def default_out() -> Path:
-    """`data/universe`, beside the corpus - resolved the way `run_eval.py` does."""
+    """`data/universe`, beside the corpus - resolved from CORPUS_DIR's parent, as the corpus is."""
     return Path(get_settings().corpus_dir).parent / "universe"
 
 

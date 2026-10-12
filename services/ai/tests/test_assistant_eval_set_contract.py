@@ -26,7 +26,16 @@ ROUTER = ROOT / "apps" / "web" / "src" / "router.tsx"
 OUTCOMES = {"answer", "decline", "clarify"}
 DECLINE_REASONS = {"off_domain", "advice", "action", "prompt"}
 SOURCES = {"user", "claude"}
-EXPECT_KEYS = {"outcome", "reason", "tools_any", "links", "sources", "must_not_match", "behaviour"}
+EXPECT_KEYS = {
+    "outcome",
+    "reason",
+    "or_decline",
+    "tools_any",
+    "links",
+    "sources",
+    "must_not_match",
+    "behaviour",
+}
 
 
 def _normalise(question: str) -> str:
@@ -67,6 +76,9 @@ def test_every_turn_names_a_known_outcome(cases: list[dict[str, object]]) -> Non
             assert expect.get("reason") in DECLINE_REASONS, where
         else:
             assert "reason" not in expect, where
+        if "or_decline" in expect:
+            assert expect["outcome"] == "answer", where
+            assert expect["or_decline"] in DECLINE_REASONS, where
 
 
 def test_a_decline_or_a_clarify_calls_no_tools(cases: list[dict[str, object]]) -> None:
@@ -117,7 +129,12 @@ def test_every_planned_tool_is_needed_by_some_case(
 def test_every_link_is_a_page_in_the_web_router(cases: list[dict[str, object]]) -> None:
     pages = set(re.findall(r"path: '(/[^']*)'", ROUTER.read_text(encoding="utf-8")))
     for where, turn in _turns(cases):
-        missing = set(turn["expect"].get("links", [])) - pages
+        named = {
+            page
+            for link in turn["expect"].get("links", [])
+            for page in (link if isinstance(link, list) else [link])
+        }
+        missing = named - pages
         assert not missing, f"{where} links to {missing}, which the router does not serve"
 
 

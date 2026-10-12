@@ -4,7 +4,7 @@
 
 Each case in `data/eval/topics.json` is a topic and what resolution must do:
 offer every listed symbol among its candidates, or resolve to nothing. A case
-passes or fails; there is no partial credit, for `run_eval.py`'s reason - a
+passes or fails; there is no partial credit, because a
 behaviour that is right 80% of the time is a behaviour that is wrong. The report
 does print, per failing case, where each missing symbol actually ranked, because
 "ranked 17th with a limit of 15" and "not in the universe" need different fixes.

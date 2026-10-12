@@ -3,7 +3,7 @@
 A topic resolver can only offer what is in its universe, so the universe decides
 what the topic eval measures. If it were assembled from the eval's own answers,
 every case would be choosing among correct answers and the eval would pass
-while measuring nothing - the same failure `data/eval/ask.json` guards against
+while measuring nothing - the same failure the retired `/ask` eval guarded against
 by holding its cases out of the thresholds. So membership is a screen over the
 whole listed market, and no rule in this file names a symbol.
 

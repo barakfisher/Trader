@@ -20,8 +20,8 @@ from contextlib import contextmanager
 import pytest
 from fastapi.testclient import TestClient
 
-from app.ask.relevance import Relevance, RelevanceJudgement
 from app.config import Settings, get_settings
+from app.corpus.relevance import Relevance, RelevanceJudgement
 from app.db import get_engine
 from app.deps import get_embedder
 from app.main import app
