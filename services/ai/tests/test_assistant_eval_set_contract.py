@@ -2,7 +2,7 @@
 
 The assistant does not exist yet, and every case needs a model to run, so none
 of the cases runs on a PR. What can rot meanwhile is the file's grip on the
-code it names: a tool renamed in `app/agents/tools.py`, a page removed from the
+code it names: a tool renamed in `app/assistant/tools.py`, a page removed from the
 web router, a decline that quietly lists tools. Each of those would leave the
 eval asserting something that can never happen, which reads as an assistant
 failure on the day it first runs. This test keeps them honest until then.
@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from app.agents.tools import TOOLS_BY_NAME
+from app.assistant.tools import TOOLS_BY_NAME
 
 ROOT = Path(__file__).resolve().parents[3]
 EVAL = ROOT / "data" / "eval" / "assistant.json"
@@ -90,16 +90,16 @@ def test_every_named_tool_is_registered(
             assert case["inject"]["tool"] in registry, case["id"]  # type: ignore[index]
 
 
-def test_tool_status_matches_the_agents_tools(data: dict[str, object]) -> None:
-    """'exists' must be an agent tool today; 'planned' must not be one yet.
+def test_tool_status_matches_the_assistants_tools(data: dict[str, object]) -> None:
+    """'exists' must be an assistant tool today; 'planned' must not be one yet.
 
-    Renaming an agent tool fails here instead of on the day the assistant first
-    runs. Building a planned tool under its planned name fails here too, which
-    is the reminder to flip its status.
+    Renaming a tool fails here instead of on the day the eval first runs.
+    Building a planned tool under its planned name fails here too, which is the
+    reminder to flip its status.
     """
     for name, entry in data["tools"].items():  # type: ignore[union-attr]
         if entry["status"] == "exists":
-            assert name in TOOLS_BY_NAME, f"{name} is not an agent tool"
+            assert name in TOOLS_BY_NAME, f"{name} is not an assistant tool"
         else:
             assert entry["status"] == "planned", name
             assert name not in TOOLS_BY_NAME, f"{name} exists now: mark it 'exists'"

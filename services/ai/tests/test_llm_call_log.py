@@ -29,8 +29,8 @@ from app.llm.factory import build_llm
 
 VERSIONS = Path(__file__).parents[1] / "alembic" / "versions"
 MIGRATION = VERSIONS / "0029_llm_calls.py"
-PURPOSE_MIGRATION = VERSIONS / "0042_agent_scan_inputs.py"
-SCOPE_MIGRATION = VERSIONS / "0041_llm_models.py"
+PURPOSE_MIGRATION = VERSIONS / "0052_assistant.py"
+SCOPE_MIGRATION = VERSIONS / "0052_assistant.py"
 
 
 class MemoryLog:
@@ -163,7 +163,7 @@ def _migration(path: Path):
 
 
 def test_the_database_accepts_exactly_the_values_the_code_can_write() -> None:
-    """The CHECKs in 0029, 0041 and 0042 and the Literals in code are one list each, twice."""
+    """The CHECKs in 0029 and 0052 and the Literals in code are one list each, twice."""
     migration = _migration(MIGRATION)
     assert set(_migration(PURPOSE_MIGRATION).PURPOSES) == set(typing.get_args(Purpose))
     assert set(_migration(SCOPE_MIGRATION).SCOPES) == set(typing.get_args(Scope))

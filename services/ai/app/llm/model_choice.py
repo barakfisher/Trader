@@ -39,6 +39,7 @@ SCOPE_FOR_PURPOSE: dict[Purpose, Scope] = {
     "narration": "explain",
     "ask": "explain",
     "agent_scan": "agent",
+    "assistant": "assistant",
 }
 
 

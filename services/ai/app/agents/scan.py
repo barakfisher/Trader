@@ -1,11 +1,10 @@
 """One agent's scan: the briefing, the tools the model chooses, and its answer (D14, D15).
 
-The loop is our own and short on purpose (D10, amended 2026-10-07: plain
-Python, no framework). Each turn sends the conversation so far; the model
-either asks for tools, which run and are appended as results, or answers, and
-the answer is checked (`answer.py`). Nothing a tool or the model does writes
-anything the user owns: the only writes are this scan's own row and the
-recorder's `llm_calls` rows.
+The loop is `app/llm/tool_loop.py`, shared with the assistant (D53): each turn
+sends the conversation so far; the model either asks for tools, which run and
+are appended as results, or answers, and the answer is checked (`answer.py`).
+Nothing a tool or the model does writes anything the user owns: the only writes
+are this scan's own row and the recorder's `llm_calls` rows.
 
 **The code's limits, whatever the model does:**
 
@@ -45,16 +44,8 @@ from app.agents.scan_log import (
 )
 from app.agents.tools import TOOLS, ToolContext, run_tool
 from app.core.logging import get_logger
-from app.llm.base import (
-    AssistantMessage,
-    Caller,
-    LLMBudgetExceededError,
-    LLMError,
-    LLMProvider,
-    Message,
-    ToolResultMessage,
-    UserMessage,
-)
+from app.llm.base import Caller, LLMProvider, UserMessage
+from app.llm.tool_loop import LoopState, run_tool_loop
 from app.models import Mover
 
 log = get_logger("agents.scan")
@@ -68,10 +59,6 @@ SCAN_TIME_LIMIT = 300.0
 
 #: The languages a thesis is written in (D51), by `user_settings.language`.
 THESIS_LANGUAGES = {"en": "English", "he": "Hebrew"}
-
-_STEP_LIMIT_RESULT = json.dumps(
-    {"error": "the step limit is reached; answer now with what you have"}
-)
 
 
 def instructions(agent: ScanAgent) -> str:
@@ -183,83 +170,54 @@ async def _converse(
     agent: ScanAgent,
     briefing: dict[str, Any],
 ) -> None:
-    """The loop. Fills `result` as it goes, so a timeout keeps what was done."""
-    system = instructions(agent)
-    caller = Caller("agent_scan", user_id=agent.user_id, agent_id=agent.agent_id)
-    messages: list[Message] = [
-        UserMessage("Today's briefing:\n" + json.dumps(briefing, ensure_ascii=False, indent=1))
-    ]
-    tool_results: list[Any] = []
+    """The scan's use of the shared loop. Fills `result` as it goes, so a timeout
+    keeps what was done."""
+    state = LoopState(
+        messages=[
+            UserMessage("Today's briefing:\n" + json.dumps(briefing, ensure_ascii=False, indent=1))
+        ],
+        transcript=result.transcript,
+    )
 
-    while True:
-        if agent_budget(engine, agent.agent_id, datetime.now(UTC)).exhausted:
-            result.outcome = "budget_reached"
-            return
-        offer_tools = result.steps < SCAN_STEP_LIMIT
-        try:
-            reply = await llm.converse(
-                system=system,
-                messages=messages,
-                tools=[tool.spec for tool in TOOLS] if offer_tools else [],
-                max_output_tokens=MAX_OUTPUT_TOKENS,
-                caller=caller,
-            )
-        except LLMBudgetExceededError as error:
-            result.outcome, result.error = "budget_reached", str(error)
-            return
-        except LLMError as error:
-            result.outcome, result.error = "failed", f"{type(error).__name__}: {error}"
-            return
+    async def run(name: str, arguments: str) -> str:
+        content = await run_tool(context, name, arguments)
+        result.steps = state.steps
+        return content
 
-        result.cost_micro_usd += reply.estimated_cost_micro_usd
-        result.model = reply.model
-        messages.append(AssistantMessage(reply.text, reply.tool_calls))
-        result.transcript.append(
-            {
-                "role": "assistant",
-                "text": reply.text,
-                "tool_calls": [
-                    {"id": c.id, "name": c.name, "arguments": c.arguments} for c in reply.tool_calls
-                ],
-            }
+    try:
+        stop = await run_tool_loop(
+            state,
+            llm=llm,
+            system=instructions(agent),
+            tools=[tool.spec for tool in TOOLS],
+            run_tool=run,
+            step_limit=SCAN_STEP_LIMIT,
+            max_output_tokens=MAX_OUTPUT_TOKENS,
+            caller=Caller("agent_scan", user_id=agent.user_id, agent_id=agent.agent_id),
+            within_budget=lambda: (
+                not agent_budget(engine, agent.agent_id, datetime.now(UTC)).exhausted
+            ),
         )
+    finally:
+        result.steps = state.steps
+        result.cost_micro_usd = state.cost_micro_usd
+        result.model = state.model
 
-        if not reply.tool_calls:
-            checked = check_answer(
-                reply.text,
-                engine=engine,
-                user_id=agent.user_id,
-                agent_id=agent.agent_id,
-                evidence={"briefing": briefing, "tool_results": tool_results},
-            )
-            # The verdict is on what the model wrote; the price check after it
-            # is the server's, and a buy cash cannot cover is not a bad answer.
-            await llm.record_verdict(
-                reply.call_id, "accepted" if checked.valid else _verdict(checked)
-            )
-            _conclude(result, await price_answer(context, checked))
-            return
-        if not offer_tools:
-            result.outcome = "step_limit"
-            return
-
-        for call in reply.tool_calls:
-            if result.steps >= SCAN_STEP_LIMIT:
-                # Every call the model made needs a result in the conversation.
-                content = _STEP_LIMIT_RESULT
-            else:
-                result.steps += 1
-                content = await run_tool(context, call.name, call.arguments)
-                tool_results.append(json.loads(content))
-            messages.append(ToolResultMessage(call.id, content))
-            result.transcript.append(
-                {
-                    "role": "tool",
-                    "call_id": call.id,
-                    "name": call.name,
-                    "result": json.loads(content),
-                }
-            )
+    if stop.end != "answer" or stop.reply is None:
+        result.outcome = stop.end if stop.end != "answer" else "failed"
+        result.error = stop.error
+        return
+    checked = check_answer(
+        stop.reply.text,
+        engine=engine,
+        user_id=agent.user_id,
+        agent_id=agent.agent_id,
+        evidence={"briefing": briefing, "tool_results": state.tool_results},
+    )
+    # The verdict is on what the model wrote; the price check after it is the
+    # server's, and a buy cash cannot cover is not a bad answer.
+    await llm.record_verdict(stop.reply.call_id, "accepted" if checked.valid else _verdict(checked))
+    _conclude(result, await price_answer(context, checked))
 
 
 def _conclude(result: ScanResult, checked: CheckedAnswer) -> None:

@@ -115,7 +115,8 @@ NO_REASONING = "none"
 #: which purpose is slow, costly or failing - and never has to guess from a
 #: prompt. Called `agent` until migration 0041: Stage 4 brought real agents
 #: (`Caller.agent_id`), and one word for both would confuse every reader.
-Purpose = Literal["narration", "ask", "agent_scan"]
+#: `assistant` is `/ask` with tools (migration 0052).
+Purpose = Literal["narration", "ask", "agent_scan", "assistant"]
 
 
 @dataclass(frozen=True)

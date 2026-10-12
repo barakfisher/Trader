@@ -405,6 +405,210 @@
         "title": "AskResponse",
         "type": "object"
       },
+      "AssistantMessageRequest": {
+        "description": "One question to the assistant, in a conversation or starting one.",
+        "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null starts a new conversation.",
+            "title": "Conversation Id"
+          },
+          "message": {
+            "maxLength": 2000,
+            "title": "Message",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "message"
+        ],
+        "title": "AssistantMessageRequest",
+        "type": "object"
+      },
+      "AssistantReply": {
+        "description": "The assistant's reply. A decline, a clarify and every failure are 200s with an\n`outcome`, like `/ask`'s refusal: each is an outcome the screen shows, not a fault.",
+        "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null only for a blank question, which starts nothing.",
+            "title": "Conversation Id"
+          },
+          "cost_micro_usd": {
+            "default": 0,
+            "title": "Cost Micro Usd",
+            "type": "integer"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "outcome": {
+            "enum": [
+              "answer",
+              "decline",
+              "clarify",
+              "failed",
+              "budget_reached",
+              "no_model"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "off_domain",
+                  "advice",
+                  "action",
+                  "prompt"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it declined; null unless outcome is 'decline'.",
+            "title": "Reason"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/AssistantSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "steps": {
+            "default": 0,
+            "description": "Tool calls made.",
+            "title": "Steps",
+            "type": "integer"
+          },
+          "suggestions": {
+            "description": "Questions to ask next.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          },
+          "text": {
+            "description": "Markdown. Every figure in it was checked against tool results.",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "message_id",
+          "outcome",
+          "text"
+        ],
+        "title": "AssistantReply",
+        "type": "object"
+      },
+      "AssistantSource": {
+        "description": "Where a fact in the reply came from, built from the tools that ran - never the model.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "news",
+              "concept",
+              "page",
+              "data"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A page of this app, e.g. '/insights'.",
+            "title": "Link"
+          },
+          "published": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An outside page: a news article.",
+            "title": "Url"
+          }
+        },
+        "required": [
+          "kind",
+          "label"
+        ],
+        "title": "AssistantSource",
+        "type": "object"
+      },
       "BackfillInstrument": {
         "properties": {
           "instrument_id": {
@@ -3163,6 +3367,65 @@
         "summary": "Ask",
         "tags": [
           "ask"
+        ]
+      }
+    },
+    "/assistant/messages": {
+      "post": {
+        "operationId": "assistant_message_assistant_messages_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantReply"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assistant Message",
+        "tags": [
+          "assistant"
         ]
       }
     },

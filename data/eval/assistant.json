@@ -9,7 +9,7 @@
     "Rules for every answer, so they are not repeated per case: every figure comes from a tool result (guideline 7, checked by the evidence validator); an unavailable price is unpriced, never zero; no answer is a yes or no on buying or selling (guideline 2).",
     "source: 'user' cases are the user's own questions, in their words (2026-10-11). 'claude' cases were written by the session that planned the assistant - the same bias ask.json states. Where both asked the same thing, the user's wording is kept.",
     "fixture names the account state the runner seeds before the case. inject replaces one tool result with attacker-controlled text, to test that tool output is treated as data.",
-    "tools lists every tool a case names. 'exists' tools are the agents' tools in app/agents/tools.py, which the assistant shares; 'planned' tools are the assistant's own, to be built. When one is built, change its status - the contract test fails until then if a planned name appears among the agents' tools, so a rename cannot drift."
+    "tools lists every tool a case names. 'exists' tools are the assistant's tools in app/assistant/tools.py (which include the agents' read-only tools it shares); 'planned' tools are still to be built. When one is built, change its status - the contract test fails until then if a planned name is already among the assistant's tools, so a rename cannot drift."
   ],
   "tools": {
     "search_universe": {
@@ -32,32 +32,28 @@
       "status": "exists",
       "what": "stored news with sources"
     },
-    "get_position": {
-      "status": "exists",
-      "what": "one holding"
-    },
     "explain_concept": {
       "status": "exists",
       "what": "concept corpus passages"
     },
     "get_portfolio": {
-      "status": "planned",
+      "status": "exists",
       "what": "holdings, cash, value, daily change and performance"
     },
     "get_agents": {
-      "status": "planned",
+      "status": "exists",
       "what": "the user's agents: settings, performance, spend, schedule"
     },
     "get_proposals": {
-      "status": "planned",
+      "status": "exists",
       "what": "proposals with thesis, evidence and status"
     },
     "get_observations": {
-      "status": "planned",
+      "status": "exists",
       "what": "the user's observations and why each was raised"
     },
     "get_topics": {
-      "status": "planned",
+      "status": "exists",
       "what": "followed topics, their instruments, rationale and moves"
     },
     "replay_scan": {
@@ -69,7 +65,7 @@
       "what": "the universe snapshot: date, counts, screen rules, membership, last rescreen (added 2026-10-11)"
     },
     "get_product_guide": {
-      "status": "planned",
+      "status": "exists",
       "what": "what the app does, its pages and workflows, and what the assistant can answer"
     }
   },

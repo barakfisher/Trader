@@ -22,8 +22,11 @@ from typing import Literal
 
 from app.llm.pricing import ModelPrice, is_declared_free, price_for
 
-#: What a choice is for: `explain` is narration and `/ask`, `agent` an agent's scan.
-Scope = Literal["explain", "agent"]
+#: What a choice is for: `explain` is narration and `/ask`, `agent` an agent's scan,
+#: `assistant` the assistant's conversations (migration 0052).
+Scope = Literal["explain", "agent", "assistant"]
+#: The scopes the Admin page offers. `assistant` joins when its picker does; until
+#: then it has no choice, and its calls use the configured model.
 SCOPES: tuple[Scope, ...] = ("explain", "agent")
 
 

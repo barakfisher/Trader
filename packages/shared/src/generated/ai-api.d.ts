@@ -79,6 +79,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/assistant/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Assistant Message */
+        post: operations["assistant_message_assistant_messages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/concepts": {
         parameters: {
             query?: never;
@@ -648,6 +665,98 @@ export interface components {
             text: string;
             /** Vector Is Semantic */
             vector_is_semantic: boolean;
+        };
+        /**
+         * AssistantMessageRequest
+         * @description One question to the assistant, in a conversation or starting one.
+         */
+        AssistantMessageRequest: {
+            /**
+             * Conversation Id
+             * @description Null starts a new conversation.
+             */
+            conversation_id?: string | null;
+            /** Message */
+            message: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
+         * AssistantReply
+         * @description The assistant's reply. A decline, a clarify and every failure are 200s with an
+         *     `outcome`, like `/ask`'s refusal: each is an outcome the screen shows, not a fault.
+         */
+        AssistantReply: {
+            /**
+             * Conversation Id
+             * @description Null only for a blank question, which starts nothing.
+             */
+            conversation_id: string | null;
+            /**
+             * Cost Micro Usd
+             * @default 0
+             */
+            cost_micro_usd: number;
+            /** Message Id */
+            message_id: string | null;
+            /** Model */
+            model?: string | null;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "answer" | "decline" | "clarify" | "failed" | "budget_reached" | "no_model";
+            /**
+             * Reason
+             * @description Why it declined; null unless outcome is 'decline'.
+             */
+            reason?: ("off_domain" | "advice" | "action" | "prompt") | null;
+            /** Sources */
+            sources?: components["schemas"]["AssistantSource"][];
+            /**
+             * Steps
+             * @description Tool calls made.
+             * @default 0
+             */
+            steps: number;
+            /**
+             * Suggestions
+             * @description Questions to ask next.
+             */
+            suggestions?: string[];
+            /**
+             * Text
+             * @description Markdown. Every figure in it was checked against tool results.
+             */
+            text: string;
+        };
+        /**
+         * AssistantSource
+         * @description Where a fact in the reply came from, built from the tools that ran - never the model.
+         */
+        AssistantSource: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "news" | "concept" | "page" | "data";
+            /** Label */
+            label: string;
+            /**
+             * Link
+             * @description A page of this app, e.g. '/insights'.
+             */
+            link?: string | null;
+            /** Published */
+            published?: string | null;
+            /**
+             * Url
+             * @description An outside page: a news article.
+             */
+            url?: string | null;
         };
         /** BackfillInstrument */
         BackfillInstrument: {
@@ -2102,6 +2211,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AskResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assistant_message_assistant_messages_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantReply"];
                 };
             };
             /** @description Validation Error */
