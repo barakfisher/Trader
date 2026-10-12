@@ -269,7 +269,7 @@ export const marketSessionsSchema = z.object({
   sessions: z.array(marketSessionSchema),
 });
 
-const llmScopeSchema = z.enum(['explain', 'agent']);
+const llmScopeSchema = z.enum(['explain', 'agent', 'assistant']);
 const llmCostEstimateSchema = z.object({
   daily_micro_usd: z.number().int(),
   monthly_micro_usd: z.number().int(),
@@ -293,6 +293,27 @@ export const agentScanResponseSchema = z.object({
     })
     .nullable(),
   error: z.string().nullable(),
+});
+
+export const assistantReplySchema = z.object({
+  conversation_id: z.string().nullable(),
+  message_id: z.string().nullable(),
+  outcome: z.enum(['answer', 'decline', 'clarify', 'failed', 'budget_reached', 'no_model']),
+  reason: z.enum(['off_domain', 'advice', 'action', 'prompt']).nullable(),
+  text: z.string(),
+  sources: z.array(
+    z.object({
+      kind: z.enum(['news', 'concept', 'page', 'data']),
+      label: z.string(),
+      url: z.string().nullable().optional(),
+      link: z.string().nullable().optional(),
+      published: z.string().nullable().optional(),
+    }),
+  ),
+  suggestions: z.array(z.string()),
+  model: z.string().nullable(),
+  cost_micro_usd: z.number().int(),
+  steps: z.number().int(),
 });
 
 export const llmModelsResponseSchema = z.object({
@@ -386,6 +407,9 @@ export type _AssertMarketSessions = Expect<
 >;
 export type _AssertAgentScan = Expect<
   Equal<z.infer<typeof agentScanResponseSchema>, Schemas['AgentScanResponse']>
+>;
+export type _AssertAssistantReply = Expect<
+  Equal<z.infer<typeof assistantReplySchema>, Schemas['AssistantReply']>
 >;
 export type _AssertLlmModels = Expect<
   Equal<z.infer<typeof llmModelsResponseSchema>, Schemas['LlmModelsResponse']>

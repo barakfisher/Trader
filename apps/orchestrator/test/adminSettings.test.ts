@@ -1,12 +1,13 @@
 /**
- * The installation's settings on the Admin page (D72, migration 0047): how many
- * simulated agents a user may have. Read and changed by an admin only, every
- * change audited by the gate, and refused outside 1-MAX_AGENTS_PER_USER_CEILING.
+ * The installation's settings on the Admin page: how many simulated agents a
+ * user may have (D72, migration 0047) and what one user's questions to the
+ * assistant may spend a day (migration 0052). Read and changed by an admin
+ * only, every change audited by the gate, each refused outside its bounds.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MAX_AGENTS_PER_USER_CEILING } from '@traders/shared';
+import { ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD, MAX_AGENTS_PER_USER_CEILING } from '@traders/shared';
 
 const ADMIN = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -26,16 +27,21 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 let stored = 3;
+let budget = 500_000;
 
 vi.mock('../src/db/queries.js', () => ({
   getUser: vi.fn(async () => ADMIN),
   insertAdminAudit: vi.fn(async () => undefined),
   getInstallationSettings: vi.fn(async () => ({
     max_agents_per_user: stored,
+    assistant_daily_budget_micro_usd: budget,
     updated_at: new Date('2026-10-08T09:00:00Z'),
   })),
   setMaxAgentsPerUser: vi.fn(async (max: number) => {
     stored = max;
+  }),
+  setAssistantDailyBudget: vi.fn(async (micro: number) => {
+    budget = micro;
   }),
 }));
 
@@ -65,6 +71,7 @@ describe('the installation settings (D72)', () => {
     vi.clearAllMocks();
     vi.mocked(queries.getUser).mockResolvedValue(ADMIN as never);
     stored = 3;
+    budget = 500_000;
     resetConfigForTests();
     app = createApp(loadConfig(ENV), createFakeAi());
     const login = await app.request('/auth/login', {
@@ -80,7 +87,11 @@ describe('the installation settings (D72)', () => {
 
   it('reads the limit, three until an admin changes it', async () => {
     const response = await app.request('/admin/settings', { headers: { ...HEADERS, cookie } });
-    expect(await response.json()).toEqual({ maxAgentsPerUser: 3, updatedAt: '2026-10-08T09:00:00.000Z' });
+    expect(await response.json()).toEqual({
+      maxAgentsPerUser: 3,
+      assistantDailyBudgetMicroUsd: 500_000,
+      updatedAt: '2026-10-08T09:00:00.000Z',
+    });
   });
 
   it('changes it, names the admin who did, and audits the request', async () => {
@@ -88,7 +99,28 @@ describe('the installation settings (D72)', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ maxAgentsPerUser: 5 });
     expect(queries.setMaxAgentsPerUser).toHaveBeenCalledWith(5, ADMIN.id);
+    expect(queries.setAssistantDailyBudget).not.toHaveBeenCalled();
     expect(queries.insertAdminAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'PUT /admin/settings' }));
+  });
+
+  it("changes the assistant's daily limit alone, leaving the agent limit as it was", async () => {
+    const response = await put({ assistantDailyBudgetMicroUsd: 1_000_000 });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ maxAgentsPerUser: 3, assistantDailyBudgetMicroUsd: 1_000_000 });
+    expect(queries.setAssistantDailyBudget).toHaveBeenCalledWith(1_000_000, ADMIN.id);
+    expect(queries.setMaxAgentsPerUser).not.toHaveBeenCalled();
+  });
+
+  it("accepts a limit of zero - the assistant switched off - and refuses past the ceiling", async () => {
+    expect((await put({ assistantDailyBudgetMicroUsd: 0 })).status).toBe(200);
+    for (const value of [-1, ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD + 1, 0.5, '100']) {
+      expect((await put({ assistantDailyBudgetMicroUsd: value })).status, String(value)).toBe(400);
+    }
+  });
+
+  it('refuses a request that names no setting, or one it does not know', async () => {
+    expect((await put({})).status).toBe(400);
+    expect((await put({ theme: 'dark' })).status).toBe(400);
   });
 
   it('refuses a limit of none, past the ceiling, or not a whole number', async () => {

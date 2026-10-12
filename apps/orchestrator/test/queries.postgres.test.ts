@@ -1506,4 +1506,64 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       expect(await queries.getDigestSeenAt(USER)).toEqual(before);
     });
   });
+
+  describe("the assistant's conversations (0052)", () => {
+    const OTHER = randomUUID();
+    let conversation = '';
+
+    beforeAll(async () => {
+      await getPool().query('INSERT INTO users (id) VALUES ($1)', [OTHER]);
+      const { rows } = await getPool().query<{ id: string }>(
+        `INSERT INTO assistant_conversations (user_id, title) VALUES ($1, 'How am I doing?') RETURNING id`,
+        [USER],
+      );
+      conversation = rows[0]!.id;
+      await getPool().query(
+        `INSERT INTO assistant_messages (conversation_id, user_id, role, content, outcome, sources, created_at)
+         VALUES ($1, $2, 'user', 'How am I doing?', NULL, '[]', now() - interval '1 minute'),
+                ($1, $2, 'assistant', 'Up.', 'answer', '[{"kind": "page", "label": "Portfolio", "link": "/"}]', now())`,
+        [conversation, USER],
+      );
+    });
+
+    afterAll(async () => {
+      // No cascade from `users` (0052): a conversation is removed with its own DELETE.
+      await getPool().query('DELETE FROM assistant_conversations WHERE user_id IN ($1, $2)', [USER, OTHER]);
+      await getPool().query('DELETE FROM users WHERE id = $1', [OTHER]);
+    });
+
+    it('lists and reads back only the owner\'s conversations, messages oldest first', async () => {
+      expect((await queries.listAssistantConversations(USER, 10)).map((c) => c.id)).toEqual([conversation]);
+      expect(await queries.listAssistantConversations(OTHER, 10)).toEqual([]);
+      expect(await queries.getAssistantConversation(OTHER, conversation)).toBeNull();
+      expect(await queries.listAssistantMessages(OTHER, conversation)).toEqual([]);
+
+      const messages = await queries.listAssistantMessages(USER, conversation);
+      expect(messages.map((m) => [m.role, m.outcome])).toEqual([
+        ['user', null],
+        ['assistant', 'answer'],
+      ]);
+      expect(messages[1]!.sources).toEqual([{ kind: 'page', label: 'Portfolio', link: '/' }]);
+    });
+
+    it("refuses to delete another user's conversation, and deletes the owner's with its messages", async () => {
+      expect(await queries.deleteAssistantConversation(OTHER, conversation)).toBe(false);
+      expect(await queries.deleteAssistantConversation(USER, conversation)).toBe(true);
+      const { rows } = await getPool().query('SELECT 1 FROM assistant_messages WHERE conversation_id = $1', [
+        conversation,
+      ]);
+      expect(rows).toEqual([]);
+      expect(await queries.deleteAssistantConversation(USER, conversation)).toBe(false);
+    });
+
+    it("reads and sets the assistant's daily limit", async () => {
+      const before = await queries.getInstallationSettings();
+      try {
+        await queries.setAssistantDailyBudget(1_250_000, '00000000-0000-0000-0000-000000000001');
+        expect((await queries.getInstallationSettings()).assistant_daily_budget_micro_usd).toBe(1_250_000);
+      } finally {
+        await queries.setAssistantDailyBudget(before.assistant_daily_budget_micro_usd, '00000000-0000-0000-0000-000000000001');
+      }
+    });
+  });
 });

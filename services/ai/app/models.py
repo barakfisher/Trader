@@ -870,7 +870,7 @@ class TopicDiscoverResponse(BaseModel):
     phrases: list[DiscoveredPhrase] = Field(default_factory=list)
 
 
-LlmScope = Literal["explain", "agent"]
+LlmScope = Literal["explain", "agent", "assistant"]
 
 
 class LlmCostEstimate(BaseModel):
@@ -1004,7 +1004,7 @@ class AssistantSource(BaseModel):
     label: str
     url: str | None = Field(default=None, description="An outside page: a news article.")
     link: str | None = Field(default=None, description="A page of this app, e.g. '/insights'.")
-    published: str | None = None
+    published: str | None = Field(default=None, description="A news article's publication time.")
 
 
 class AssistantReply(BaseModel):
@@ -1017,11 +1017,11 @@ class AssistantReply(BaseModel):
     message_id: UUID | None
     outcome: Literal["answer", "decline", "clarify", "failed", "budget_reached", "no_model"]
     reason: Literal["off_domain", "advice", "action", "prompt"] | None = Field(
-        default=None, description="Why it declined; null unless outcome is 'decline'."
+        description="Why it declined; null unless outcome is 'decline'."
     )
     text: str = Field(description="Markdown. Every figure in it was checked against tool results.")
-    sources: list[AssistantSource] = Field(default_factory=list)
-    suggestions: list[str] = Field(default_factory=list, description="Questions to ask next.")
-    model: str | None = None
-    cost_micro_usd: int = 0
-    steps: int = Field(default=0, description="Tool calls made.")
+    sources: list[AssistantSource]
+    suggestions: list[str] = Field(description="Questions to ask next.")
+    model: str | None
+    cost_micro_usd: int
+    steps: int = Field(description="Tool calls made.")

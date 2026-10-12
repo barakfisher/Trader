@@ -21,6 +21,7 @@ import {
   type LlmModelChoiceInput,
   type AdminRunsResponse,
   type AdminSettingsResponse,
+  ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD,
   MAX_AGENTS_PER_USER_CEILING,
   type RescreenStartResponse,
   type UniverseGapsResponse,
@@ -32,6 +33,7 @@ import {
   firstLlmCallAt,
   chooseLlmModel,
   getInstallationSettings,
+  setAssistantDailyBudget,
   setMaxAgentsPerUser,
   getLatestUniverseLoad,
   groupLlmCalls,
@@ -66,12 +68,25 @@ const GAP_KINDS: readonly OpsEventKind[] = [
 ];
 
 const settingsSchema = z
-  .object({ maxAgentsPerUser: z.number().int().min(1).max(MAX_AGENTS_PER_USER_CEILING) })
-  .strict();
+  .object({
+    maxAgentsPerUser: z.number().int().min(1).max(MAX_AGENTS_PER_USER_CEILING).optional(),
+    assistantDailyBudgetMicroUsd: z
+      .number()
+      .int()
+      .min(0)
+      .max(ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD)
+      .optional(),
+  })
+  .strict()
+  .refine((input) => Object.keys(input).length > 0, { message: 'name at least one setting' });
 
 async function adminSettings(): Promise<AdminSettingsResponse> {
   const row = await getInstallationSettings();
-  return { maxAgentsPerUser: row.max_agents_per_user, updatedAt: row.updated_at.toISOString() };
+  return {
+    maxAgentsPerUser: row.max_agents_per_user,
+    assistantDailyBudgetMicroUsd: row.assistant_daily_budget_micro_usd,
+    updatedAt: row.updated_at.toISOString(),
+  };
 }
 
 const resetSchema = z
@@ -239,9 +254,18 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
   app.put('/admin/settings', async (context) => {
     const parsed = settingsSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
-      throw badRequest('invalid_body', `expected { maxAgentsPerUser: 1-${MAX_AGENTS_PER_USER_CEILING} }`, parsed.error.issues);
+      throw badRequest(
+        'invalid_body',
+        `expected { maxAgentsPerUser?: 1-${MAX_AGENTS_PER_USER_CEILING}, ` +
+          `assistantDailyBudgetMicroUsd?: 0-${ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD} }`,
+        parsed.error.issues,
+      );
     }
-    await setMaxAgentsPerUser(parsed.data.maxAgentsPerUser, currentUserId(context));
+    const admin = currentUserId(context);
+    if (parsed.data.maxAgentsPerUser !== undefined) await setMaxAgentsPerUser(parsed.data.maxAgentsPerUser, admin);
+    if (parsed.data.assistantDailyBudgetMicroUsd !== undefined) {
+      await setAssistantDailyBudget(parsed.data.assistantDailyBudgetMicroUsd, admin);
+    }
     return context.json(await adminSettings());
   });
 

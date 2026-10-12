@@ -456,7 +456,6 @@
             "title": "Conversation Id"
           },
           "cost_micro_usd": {
-            "default": 0,
             "title": "Cost Micro Usd",
             "type": "integer"
           },
@@ -521,7 +520,6 @@
             "type": "array"
           },
           "steps": {
-            "default": 0,
             "description": "Tool calls made.",
             "title": "Steps",
             "type": "integer"
@@ -544,7 +542,13 @@
           "conversation_id",
           "message_id",
           "outcome",
-          "text"
+          "reason",
+          "text",
+          "sources",
+          "suggestions",
+          "model",
+          "cost_micro_usd",
+          "steps"
         ],
         "title": "AssistantReply",
         "type": "object"
@@ -587,6 +591,7 @@
                 "type": "null"
               }
             ],
+            "description": "A news article's publication time.",
             "title": "Published"
           },
           "url": {
@@ -1510,7 +1515,8 @@
             "items": {
               "enum": [
                 "explain",
-                "agent"
+                "agent",
+                "assistant"
               ],
               "type": "string"
             },
@@ -1566,7 +1572,8 @@
           "scope": {
             "enum": [
               "explain",
-              "agent"
+              "agent",
+              "assistant"
             ],
             "title": "Scope",
             "type": "string"

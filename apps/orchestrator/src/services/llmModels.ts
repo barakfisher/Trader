@@ -10,7 +10,7 @@
 import type { AdminLlmModelsResponse, LlmScope } from '@traders/shared';
 import type { LlmModelsResponse } from '@traders/shared/ai';
 
-export const LLM_SCOPES: readonly LlmScope[] = ['explain', 'agent'];
+export const LLM_SCOPES: readonly LlmScope[] = ['explain', 'agent', 'assistant'];
 
 export function isLlmScope(value: string): value is LlmScope {
   return (LLM_SCOPES as readonly string[]).includes(value);
@@ -87,7 +87,7 @@ export function choiceRefusal(
   if (!offered.scopes.includes(scope)) {
     return {
       code: 'model_not_offered_for_scope',
-      message: `${model} cannot be chosen for ${scope}: an agent needs a billed model that calls tools`,
+      message: `${model} cannot be chosen for ${scope}: it needs a billed model that calls tools`,
     };
   }
   return null;
