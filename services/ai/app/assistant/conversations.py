@@ -20,6 +20,8 @@ from sqlalchemy.engine import Connection
 
 #: Characters of the first question kept as a conversation's title.
 TITLE_CHARS = 80
+#: A conversation untouched this long is deleted (decided 2026-10-07: kept 90 days).
+RETENTION_DAYS = 90
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,18 @@ def title_for(question: str) -> str:
 
 
 def start(connection: Connection, user_id: str, question: str) -> str:
+    """A new conversation. The user's conversations untouched for `RETENTION_DAYS`
+    go first: retention runs when the user next starts one, with no job of its own
+    - nobody else's rows are touched, and `assistant_conversations_by_user` serves
+    the delete. A user who never returns keeps theirs until they do; that is the
+    one cost of not scheduling it, and it holds no one else's data."""
+    connection.execute(
+        text(
+            "DELETE FROM assistant_conversations WHERE user_id = CAST(:user AS uuid) "
+            "AND updated_at < now() - make_interval(days => :days)"
+        ),
+        {"user": user_id, "days": RETENTION_DAYS},
+    )
     return connection.execute(
         text(
             "INSERT INTO assistant_conversations (user_id, title) "

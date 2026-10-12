@@ -33,6 +33,8 @@ export const queryKeys = {
   proposalHistory: ['proposals', 'history'] as const,
   proposal: (proposalId: string) => ['proposals', 'detail', proposalId] as const,
   narration: ['narration'] as const,
+  /** The assistant's conversations, newest first (migration 0052). */
+  assistantConversations: ['assistant', 'conversations'] as const,
   digest: ['notifications', 'digest'] as const,
   telegramBinding: ['telegram', 'binding'] as const,
   settings: ['settings'] as const,

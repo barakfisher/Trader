@@ -608,49 +608,39 @@
     }
   },
   "ask": {
-    "refusals": {
-      "not_in_corpus": "Not in the reference corpus",
-      "no_holdings": "No holdings to compute from",
-      "advice": "No personal investment advice",
-      "not_computable": "Not something I can compute"
-    },
-    "notAnswered": "Not answered ({{reason}})",
-    "computable": {
-      "worth": "what your portfolio is worth",
-      "positions": "your largest and smallest position",
-      "targets": "how far your weights sit from your targets"
-    },
-    "setAside": {
-      "unsourced_figures": "it stated a figure the passages do not contain",
-      "degenerate_completion": "it was not readable text",
-      "empty_completion": "it came back empty",
-      "budget": "today’s model budget is spent",
-      "timeout": "the model did not answer in time",
-      "unreachable": "the model could not be reached"
-    },
-    "source": {
-      "llm": "Written by a model from the passages below. Every figure in it was checked against them.",
-      "computed": "Computed from your holdings. No model wrote this.",
-      "extractive": "Quoted from the passages below.",
-      "extractiveSetAside": "Quoted from the passages below. A model’s draft was set aside: {{reason}}."
-    },
-    "lexicalMatching": "Matched on shared words, not meaning: no semantic embedder is configured here, so the relevance check is not applied.",
-    "searching": "Searching the reference corpus…",
-    "stillWorking": "Still working ({{seconds}}s). When a model writes the answer from the passages, this can take a minute or more.",
     "title": "Ask",
-    "intro": "Ask what a term means, or ask about your holdings. Answers come from this app’s reference notes and from arithmetic over your portfolio - never advice.",
+    "newConversation": "New conversation",
+    "opening": "Opening the conversation…",
+    "openFailed": "Could not open that conversation.",
+    "intro": "Ask about your portfolio, your agents and what they decided, a ticker, the news, an investing term, or how this app works. Every figure in an answer is checked against what the app looked up; it never tells you what to buy or sell.",
+    "label": "Your question",
+    "placeholder": "Ask a question…",
     "tooLong": "{{length}} of {{max}} characters",
     "answering": "Answering…",
     "submit": "Ask",
-    "closestBelow": "The closest passage scored {{score}} for relevance, which is below what counts as covering the question.",
-    "addHoldings": "Add or import holdings",
-    "canCompute": "What I can compute: {{questions}}.",
-    "weakMatch": "Weak match: the reference notes may not cover this question.",
-    "weakMatchScored": "Weak match: the reference notes may not cover this question (closest passage scored {{score}}).",
-    "concepts": "Concepts",
-    "passages": "Passages ({{count}})",
-    "heading": " - {{heading}}",
-    "relevance": " · relevance {{score}}"
+    "thinking": "Looking it up ({{seconds}}s)",
+    "outcome": {
+      "failed": "No answer I could check against the data, so none is shown. Try asking again, or more narrowly.",
+      "budget_reached": "Today's spending limit for questions is reached. Questions work again after midnight.",
+      "no_model": "The assistant needs a model, and none is set up. An admin can choose one on the Admin page."
+    },
+    "declined": {
+      "off_domain": "Outside what I cover",
+      "advice": "Not personal advice",
+      "action": "I can't change anything",
+      "prompt": "Not something I share"
+    },
+    "suggestions": "Questions to ask next",
+    "sources": "Sources ({{count}})",
+    "noReplyStored": "No reply was stored for this question.",
+    "history": "Conversations",
+    "historyLoading": "Loading conversations…",
+    "historyFailed": "Could not load your conversations.",
+    "historyEmpty": "Nothing yet: your conversations will appear here.",
+    "delete": "Delete “{{title}}”",
+    "deleteConfirm": "Delete this conversation? It cannot be undone.",
+    "deleteFailed": "Could not delete that conversation.",
+    "retention": "Conversations are kept for 90 days after their last message, then deleted."
   },
   "topics": {
     "heldBy": "held by {{funds}}",

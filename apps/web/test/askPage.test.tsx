@@ -1,28 +1,29 @@
 // @vitest-environment jsdom
 /**
- * The /ask screen, rendered at its address.
+ * The /ask screen: the assistant's conversation, rendered at its address.
  *
- * Pinned: a weak match and each refusal look different from an answer and from
- * each other (decisions 32, 36); who wrote an answer is said; the passages are
- * shown verbatim; a computed answer shows its figures; a failure to get any
- * reply is an error with a retry, never a refusal; one question at a time; and
- * signing out forgets the questions.
+ * Pinned: a reply's markdown is rendered (links through the router, outside
+ * links in a new tab), with the sources the server built and questions to ask
+ * next that fill the box and are not sent; a follow-up carries the
+ * conversation's id; a decline says why and the three no-reply outcomes are
+ * said in the page's language - none of them an error; only a failure to get
+ * any reply is, with a retry; one question at a time; conversations are listed,
+ * opened and deleted; and signing out forgets the conversation.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { createMemoryHistory } from '@tanstack/react-router';
 
-import type { AskResponse } from '@traders/shared/ai';
+import type { AssistantConversationResponse, AssistantReplyView } from '@traders/shared';
 
 const get = vi.fn();
 const post = vi.fn();
+const del = vi.fn();
 
 vi.mock('../src/api/client.ts', async () => {
-  const actual = await vi.importActual<typeof import('../src/api/client.ts')>(
-    '../src/api/client.ts',
-  );
-  return { ...actual, api: { get, post, put: vi.fn(), delete: vi.fn(), postForm: vi.fn() } };
+  const actual = await vi.importActual<typeof import('../src/api/client.ts')>('../src/api/client.ts');
+  return { ...actual, api: { get, post, put: vi.fn(), delete: del, postForm: vi.fn() } };
 });
 
 const { ApiRequestError } = await import('../src/api/client.ts');
@@ -30,36 +31,29 @@ const { App } = await import('../src/App.tsx');
 const { createAppRouter } = await import('../src/router.tsx');
 const { renderWithServerState } = await import('./serverStateHarness.tsx');
 
-const PASSAGE = 'A drawdown is how far an instrument has fallen from a recent high.';
+const CONVERSATION = '80000000-0000-0000-0000-000000000001';
 
-function reply(overrides: Partial<AskResponse> = {}): AskResponse {
+function reply(overrides: Partial<AssistantReplyView> = {}): AssistantReplyView {
   return {
-    question: 'what is a drawdown',
-    intent: 'concept',
-    answered: true,
-    text: 'A drawdown is the distance from a recent peak.',
-    citations: [
-      {
-        chunk_id: 'c1',
-        document_id: 'd1',
-        concept_slug: 'drawdown',
-        title: 'Drawdown',
-        heading: 'What it is',
-        text: PASSAGE,
-        similarity: 0.7124,
-      },
+    conversationId: CONVERSATION,
+    messageId: 'm1',
+    outcome: 'answer',
+    reason: null,
+    text: 'Your portfolio is up **5.00%** over 7 days. See [Insights](/insights).',
+    sources: [
+      { kind: 'page', label: 'Portfolio', link: '/', url: null, published: null },
+      { kind: 'news', label: 'Reuters: Chips slide', link: null, url: 'https://r.example/1', published: null },
     ],
-    concept_refs: ['drawdown'],
-    evidence: {},
-    answer_source: 'llm',
-    fallback_reason: 'none',
-    relevance: 'confident',
-    best_similarity: 0.7124,
-    refused_reason: null,
-    vector_is_semantic: true,
+    suggestions: ['Which holding moved most?'],
     ...overrides,
   };
 }
+
+const CONVERSATIONS = {
+  conversations: [
+    { id: CONVERSATION, title: 'How am I doing?', createdAt: '2026-10-12T08:00:00Z', updatedAt: '2026-10-12T08:01:00Z' },
+  ],
+};
 
 function renderAsk() {
   const router = createAppRouter(createMemoryHistory({ initialEntries: ['/ask'] }));
@@ -68,11 +62,11 @@ function renderAsk() {
     result.root.auth.user = { id: 'u', baseCurrency: 'USD', timezone: 'Asia/Jerusalem' } as never;
     result.root.auth.initialised = true;
   });
-  return result;
+  return { ...result, router };
 }
 
-async function askQuestion(text: string) {
-  const box = await screen.findByLabelText(/Ask what a term means/);
+async function ask(text: string) {
+  const box = await screen.findByLabelText('Your question');
   fireEvent.change(box, { target: { value: text } });
   fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
 }
@@ -80,111 +74,178 @@ async function askQuestion(text: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   window.scrollTo = () => {};
-  get.mockReturnValue(new Promise(() => {}));
+  get.mockImplementation((path: string) =>
+    path === '/assistant/conversations' ? Promise.resolve(CONVERSATIONS) : new Promise(() => {}),
+  );
 });
 afterEach(cleanup);
 
-describe('an answer', () => {
-  it('says who wrote it and shows the passage verbatim', async () => {
+describe('a reply', () => {
+  it('renders its markdown, its sources and what to ask next', async () => {
     post.mockResolvedValueOnce(reply());
     renderAsk();
-    await askQuestion('what is a drawdown');
+    await ask('How am I doing?');
 
-    expect(await screen.findByText('A drawdown is the distance from a recent peak.')).toBeTruthy();
-    expect(screen.getByText(/Written by a model from the passages below/)).toBeTruthy();
-    expect(screen.getByText(PASSAGE)).toBeTruthy();
-    expect(screen.queryByText(/Weak match/)).toBeNull();
-    expect(post).toHaveBeenCalledWith('/ask', { question: 'what is a drawdown' });
+    expect(await screen.findByText('5.00%')).toBeTruthy();
+    expect(screen.getByText('5.00%').tagName).toBe('STRONG');
+    const replyText = within(screen.getByText('5.00%').closest('div')!);
+    expect(replyText.getByRole('link', { name: 'Insights' }).getAttribute('href')).toBe('/insights');
+    const news = screen.getByRole('link', { name: /Reuters: Chips slide/ });
+    expect(news.getAttribute('target')).toBe('_blank');
+    expect(news.getAttribute('rel')).toContain('noopener');
+    expect(screen.getByText('Sources (2)')).toBeTruthy();
+    expect(post).toHaveBeenCalledWith('/assistant/messages', { message: 'How am I doing?' });
   });
 
-  it('marks a weak match on the page, not only in the text', async () => {
+  it('never renders HTML or an image from the text', async () => {
     post.mockResolvedValueOnce(
-      reply({ relevance: 'weak', best_similarity: 0.2502, answer_source: 'extractive' }),
+      reply({ text: 'Hi <img src="x" onerror="alert(1)"> ![pic](https://x.example/p.png) <b>bold</b>', sources: [] }),
     );
-    renderAsk();
-    await askQuestion('what is the current price of gold');
+    const { container } = renderAsk();
+    await ask('Hi');
 
-    expect(await screen.findByText(/Weak match: the reference notes may not cover/)).toBeTruthy();
-    expect(screen.getByText(/closest passage scored 0.25/)).toBeTruthy();
+    await screen.findByText(/Hi/, { selector: 'p' });
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('b')).toBeNull();
   });
 
-  it('shows a computed answer’s figures, and that no model wrote it', async () => {
-    post.mockResolvedValueOnce(
-      reply({
-        intent: 'portfolio',
-        answer_source: 'computed',
-        text: 'Your largest position is BTC-USD.',
-        citations: [],
-        concept_refs: [],
-        evidence: { symbol: 'BTC-USD', value_minor: 3499743, currency: 'USD' },
-      }),
-    );
+  it('fills the box with a suggestion and does not send it', async () => {
+    post.mockResolvedValueOnce(reply());
     renderAsk();
-    await askQuestion('what is my largest position');
+    await ask('How am I doing?');
 
-    expect(await screen.findByText(/No model wrote this/)).toBeTruthy();
-    expect(screen.getByText('$34,997.43')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Which holding moved most?' }));
+    expect((screen.getByLabelText('Your question') as HTMLTextAreaElement).value).toBe('Which holding moved most?');
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends a follow-up in the same conversation', async () => {
+    post.mockResolvedValueOnce(reply()).mockResolvedValueOnce(reply({ text: 'NVDA moved most.', suggestions: [] }));
+    renderAsk();
+    await ask('How am I doing?');
+    await screen.findByText('5.00%');
+    await ask('Which moved most?');
+
+    expect(await screen.findByText('NVDA moved most.')).toBeTruthy();
+    expect(post).toHaveBeenLastCalledWith('/assistant/messages', {
+      message: 'Which moved most?',
+      conversationId: CONVERSATION,
+    });
   });
 });
 
-describe('a refusal', () => {
+describe('what is not an answer', () => {
+  it('says why it declined, in the page language', async () => {
+    post.mockResolvedValueOnce(
+      reply({ outcome: 'decline', reason: 'off_domain', text: 'I can only help with investing.', sources: [] }),
+    );
+    renderAsk();
+    await ask("What's the weather?");
+
+    expect(await screen.findByText('Outside what I cover')).toBeTruthy();
+    expect(screen.getByText('I can only help with investing.')).toBeTruthy();
+  });
+
   it.each([
-    ['not_in_corpus', 'Not in the reference corpus'],
-    ['no_holdings', 'No holdings to compute from'],
-    ['advice', 'No personal investment advice'],
-    ['not_computable', 'Not something I can compute'],
-  ])('%s has its own title', async (reason, title) => {
-    post.mockResolvedValueOnce(
-      reply({ answered: false, refused_reason: reason, answer_source: 'none', citations: [], text: 'declined' }),
-    );
+    ['failed', /No answer I could check against the data/],
+    ['budget_reached', /spending limit for questions is reached/],
+    ['no_model', /needs a model/],
+  ] as const)('%s is said plainly, not as an error', async (outcome, text) => {
+    post.mockResolvedValueOnce(reply({ outcome, text: 'server words', sources: [], suggestions: [] }));
     renderAsk();
-    await askQuestion('anything');
+    await ask('Hello');
 
-    expect(await screen.findByText(title)).toBeTruthy();
-    expect(screen.queryByText(/Written by a model/)).toBeNull();
+    expect(await screen.findByText(text)).toBeTruthy();
+    expect(screen.queryByText('server words')).toBeNull();
+    expect(screen.queryByRole('button', { name: /retry/i })).toBeNull();
   });
-});
 
-describe('asking', () => {
   it('reports a failure to reply as an error with a retry, and asks again from it', async () => {
-    post.mockRejectedValueOnce(new ApiRequestError('The question could not be answered.', 502, 'x'));
+    post.mockRejectedValueOnce(new ApiRequestError('The assistant could not answer.', 502, 'x'));
     renderAsk();
-    await askQuestion('what is a drawdown');
+    await ask('How am I doing?');
 
-    expect(await screen.findByText('The question could not be answered.')).toBeTruthy();
-    expect(screen.queryByText('Not in the reference corpus')).toBeNull();
-
+    expect(await screen.findByText('The assistant could not answer.')).toBeTruthy();
     post.mockResolvedValueOnce(reply());
     fireEvent.click(screen.getByRole('button', { name: /retry/i }));
-    expect(await screen.findByText('A drawdown is the distance from a recent peak.')).toBeTruthy();
+    expect(await screen.findByText('5.00%')).toBeTruthy();
     expect(post).toHaveBeenCalledTimes(2);
   });
+});
 
+describe('the conversation', () => {
   it('asks one question at a time, and says it is still working', async () => {
     post.mockReturnValueOnce(new Promise(() => {}));
     const { root } = renderAsk();
-    await askQuestion('what is a drawdown');
+    await ask('How am I doing?');
 
-    expect(await screen.findByText(/Searching the reference corpus/)).toBeTruthy();
-    act(() => root.ask.setDraft('what is volatility'));
-    await act(() => root.ask.ask());
+    expect(await screen.findByText(/Looking it up/)).toBeTruthy();
+    act(() => root.ask.setDraft('Another'));
+    await act(() => root.ask.send());
     expect(post).toHaveBeenCalledTimes(1);
     expect((screen.getByRole('button', { name: 'Answering…' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('forgets the questions when the account signs out', async () => {
+  it('opens an earlier conversation from the list', async () => {
+    const stored: AssistantConversationResponse = {
+      conversation: CONVERSATIONS.conversations[0]!,
+      messages: [
+        { id: 'u1', role: 'user', text: 'How am I doing?', outcome: null, reason: null, sources: [], suggestions: [], createdAt: '2026-10-12T08:00:00Z' },
+        { id: 'a1', role: 'assistant', text: 'Up **5.00%**.', outcome: 'answer', reason: null, sources: [], suggestions: [], createdAt: '2026-10-12T08:01:00Z' },
+      ],
+    };
+    get.mockImplementation((path: string) =>
+      path === '/assistant/conversations'
+        ? Promise.resolve(CONVERSATIONS)
+        : path === `/assistant/conversations/${CONVERSATION}`
+          ? Promise.resolve(stored)
+          : new Promise(() => {}),
+    );
+    const { root } = renderAsk();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^How am I doing\?/ }));
+
+    expect(await screen.findByText('5.00%')).toBeTruthy();
+    expect(root.ask.conversationId).toBe(CONVERSATION);
+  });
+
+  it('deletes a conversation after confirming, and starts afresh if it was open', async () => {
+    window.confirm = vi.fn(() => true);
+    del.mockResolvedValueOnce(undefined);
     post.mockResolvedValueOnce(reply());
     const { root } = renderAsk();
-    await askQuestion('what is a drawdown');
-    await screen.findByText(PASSAGE);
+    await ask('How am I doing?');
+    await screen.findByText('5.00%');
+
+    const history = within(screen.getByText('Conversations').closest('section') ?? document.body);
+    fireEvent.click(await history.findByRole('button', { name: /Delete “How am I doing\?”/ }));
+
+    await waitFor(() => expect(del).toHaveBeenCalledWith(`/assistant/conversations/${CONVERSATION}`));
+    await waitFor(() => expect(root.ask.turns).toEqual([]));
+  });
+
+  it('does not delete without confirming', async () => {
+    window.confirm = vi.fn(() => false);
+    renderAsk();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Delete “How am I doing\?”/ }));
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it('forgets the conversation when the account signs out', async () => {
+    post.mockResolvedValueOnce(reply());
+    const { root } = renderAsk();
+    await ask('How am I doing?');
+    await screen.findByText('5.00%');
 
     post.mockResolvedValueOnce(undefined);
     await act(() => root.auth.logout());
-    expect(root.ask.entries).toEqual([]);
+    expect(root.ask.turns).toEqual([]);
+    expect(root.ask.conversationId).toBeNull();
   });
 });
 
-it('is linked from the dashboard', async () => {
+it('is linked from the app bar', async () => {
   const router = createAppRouter(createMemoryHistory({ initialEntries: ['/'] }));
   const result = renderWithServerState(<App router={router} />);
   act(() => {
