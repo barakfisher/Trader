@@ -399,9 +399,12 @@ async def test_a_question_runs_a_tool_and_stores_a_checked_reply_with_its_source
 async def test_an_unsourced_figure_is_sent_back_once_and_the_repair_is_shown(
     loaded: Engine, account: dict[str, Any]
 ) -> None:
+    # Invented figures here have two decimals: a whole number such as "12" can be
+    # sourced by a timestamp in the evidence ("2026-10-12T..."), which made this
+    # test pass or fail by the day of the month (CI, 2026-10-12).
     llm = ScriptedLLM(
         _call("get_portfolio"),
-        _reply(outcome="answer", text="Up 12% this week."),
+        _reply(outcome="answer", text="Up 83.71% this week."),
         _reply(outcome="answer", text="Up 5.00% over 7 days."),
     )
 
@@ -411,26 +414,26 @@ async def test_an_unsourced_figure_is_sent_back_once_and_the_repair_is_shown(
     assert llm.verdicts == ["unsourced_figures", "accepted"]
     correction = llm.sent[2][-1]
     assert isinstance(correction, UserMessage)
-    assert "figures not in the evidence: 12" in correction.text
+    assert "figures not in the evidence: 83.71" in correction.text
 
 
 async def test_a_reply_that_fails_twice_is_not_shown(
     loaded: Engine, account: dict[str, Any]
 ) -> None:
     llm = ScriptedLLM(
-        _reply(outcome="answer", text="NVDA will rise 40%."),
-        _reply(outcome="answer", text="Fine: 40%."),
+        _reply(outcome="answer", text="NVDA will rise 61.29%."),
+        _reply(outcome="answer", text="Fine: 61.29%."),
     )
 
     turn = await _ask(loaded, account, llm, "Tell me something")
 
     assert turn.outcome == "failed"
     assert turn.text == NO_REPLY_TEXT["failed"]
-    assert "40" not in turn.text
+    assert "61.29" not in turn.text
     stored = _stored(loaded, turn.conversation_id)
     assert stored[1].outcome == "failed" and stored[1].content == NO_REPLY_TEXT["failed"]
     # The model's words are kept for review, never shown.
-    assert "40%" in json.dumps(stored[1].tool_calls)
+    assert "61.29%" in json.dumps(stored[1].tool_calls)
 
 
 async def test_a_follow_up_sees_the_conversation_and_may_repeat_an_earlier_figure(

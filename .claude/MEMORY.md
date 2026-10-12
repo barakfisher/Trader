@@ -3831,6 +3831,11 @@ on a live copy with Gemini 3.5 Flash-Lite:** two questions (one a follow-up) too
 cost $0.0054 together (7 calls, 14,840 prompt tokens): ~$0.003 a question, so $0.50/day is ~180
 questions. One copy run, not PR 4's measurement. No `assistant` choice exists live yet - the user
 chooses it on the Admin page.
+**A checker limit that made a test flaky by date:** `unsourced_figures` accepts a number quoted
+in an evidence *string*, and timestamps are strings - so on 2026-10-12 an invented "12%" passed
+because `price_as_of` read "2026-10-12T...". Small whole numbers (days, hours, minutes) are
+effectively unchecked whenever a tool result carries a timestamp. The tests now invent figures
+with two decimals; **the checker itself is unchanged - a candidate fix** (read dates as dates).
 **Environment trap:** the worktree's `.venv` is a symlink to the main checkout's, whose editable
 install points `app` at the main checkout - so `python scripts/export_openapi.py` silently
 exported **main's** app. Run it as `PYTHONPATH=. .venv/bin/python scripts/export_openapi.py`.
