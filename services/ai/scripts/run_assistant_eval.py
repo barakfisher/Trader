@@ -51,11 +51,13 @@ from redis.asyncio import Redis
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
+from app.agents.scan_schedule import Scheduling
 from app.agents.tools import Tool, ToolContext, scan_context
 from app.analysis.thresholds import AnalysisThresholds
 from app.assistant.service import ask
 from app.assistant.tools import TOOLS_BY_NAME
 from app.config import Settings, get_settings
+from app.core.exchange_calendar import load_calendar
 from app.corpus.hashed_embedder import HashedEmbedder
 from app.corpus.vector_store import PgVectorStore
 from app.llm.base import LLMError, LLMProvider
@@ -241,6 +243,13 @@ async def run_case(
             excluded_price_sources=(),
             user_id=account.user_id,
             agent_id=account.primary_id,
+            # The world schedules scans, whatever the env file says: "when is the
+            # next scan?" has an answer to find (`product-next-scan`).
+            scheduling=Scheduling(
+                enabled=True,
+                calendar=load_calendar(settings.calendar_dir),
+                timezone=settings.app_timezone,
+            ),
         )
         started, started_at = time.monotonic(), datetime.now(UTC)
         reply = await ask(

@@ -24,6 +24,7 @@ from sqlalchemy.engine import Engine
 
 from app.agents.briefing import build_briefing, movers_section
 from app.agents.tools import (
+    MAX_HISTORY_DAYS,
     MAX_HISTORY_POINTS,
     MAX_QUOTE_SYMBOLS,
     MIN_STORED_CLOSES,
@@ -227,7 +228,7 @@ async def test_get_price_history_backfills_then_samples_and_summarises(
     market.closes = {"NEM": _daily("NEM", prices)}
     context = _context(loaded, owner, market)
 
-    answer = await get_price_history(context, {"symbol": "nem", "days": 365})
+    answer = await get_price_history(context, {"symbol": "nem", "days": MAX_HISTORY_DAYS})
 
     assert market.history_calls == ["NEM"], "fewer than the minimum stored, so it backfills"
     assert answer["last_close"] == "119.90"
@@ -243,6 +244,34 @@ async def test_get_price_history_backfills_then_samples_and_summarises(
     # Now stored, a second call reads the database and leaves the provider alone.
     await get_price_history(context, {"symbol": "NEM", "days": 30})
     assert market.history_calls == ["NEM"]
+
+
+async def test_get_price_history_counts_trading_days_across_a_weekend(
+    loaded: Engine, owner: tuple[str, str, str]
+) -> None:
+    """Measured 2026-10-12: `days=5` read as calendar days held three closes over a
+    weekend, so the answer's own "5d" was null and "how did it do this week?" had
+    no weekly figure."""
+    market = ScriptedMarket()
+    weekdays = [day for day in range(1, 60) if (NOW - timedelta(days=day)).weekday() < 5][:40]
+    market.closes = {
+        "ISRG": [
+            DailyClose(
+                symbol="ISRG",
+                as_of=NOW - timedelta(days=day),
+                price_minor=40_000 + 100 * n,
+                currency="USD",
+                source="fixture",
+            )
+            for n, day in enumerate(reversed(weekdays))
+        ]
+    }
+
+    answer = await get_price_history(_context(loaded, owner, market), {"symbol": "ISRG", "days": 5})
+
+    assert len(answer["closes"]) == 6, "the last close and the five sessions before it"
+    assert answer["change_percent"]["5d"] is not None
+    assert answer["change_percent"]["5d"] == answer["change_percent"]["period"]
 
 
 async def test_get_price_history_says_when_nothing_is_stored(

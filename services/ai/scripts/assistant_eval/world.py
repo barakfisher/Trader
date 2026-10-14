@@ -462,10 +462,17 @@ def _agent(
     holdings: dict[str, tuple[str, str, int]],
     now: datetime,
 ) -> str:
+    """An agent whose ledger agrees with its holdings: each holding is a fill on the
+    day it was opened, and the budget is what leaves `cash_minor` after them - so
+    month_to_date can replay the ledger as it does on a real installation."""
+    spent = {
+        symbol: int(Decimal(quantity) * Decimal(cost) * 100)
+        for symbol, (quantity, cost, _days) in holdings.items()
+    }
     agent = connection.execute(
         text(
             "INSERT INTO agents (user_id, slug, name, persona, budget_minor, scan_schedule, "
-            "created_at) VALUES (CAST(:u AS uuid), :slug, :name, :persona, 1000000, :schedule, "
+            "created_at) VALUES (CAST(:u AS uuid), :slug, :name, :persona, :budget, :schedule, "
             ":created) RETURNING id::text"
         ),
         {
@@ -473,18 +480,33 @@ def _agent(
             "slug": slug,
             "name": name,
             "persona": persona,
+            "budget": cash_minor + sum(spent.values()),
             "schedule": schedule,
             "created": now - timedelta(days=40),
         },
     ).scalar_one()
-    connection.execute(
-        text(
-            # Created with the agent at its budget; set to what is left after its buys.
-            "UPDATE agent_cash SET balance_minor = :b "
-            "WHERE agent_id = CAST(:a AS uuid) AND user_id = CAST(:u AS uuid)"
-        ),
-        {"a": agent, "u": account.user_id, "b": cash_minor},
-    )
+    for symbol, (quantity, cost, days_ago) in holdings.items():
+        # A user's fill, not the agent's: an agent's fill needs a proposal behind it
+        # (fills_agent_has_proposal), and nothing the assistant reads tells them apart.
+        connection.execute(
+            text(
+                "INSERT INTO fills (user_id, agent_id, instrument_id, side, quantity, "
+                "price_minor, notional_minor, fee_minor, price_source, source, "
+                "idempotency_key, created_at) VALUES (CAST(:u AS uuid), CAST(:a AS uuid), "
+                "CAST(:i AS uuid), 'buy', CAST(:q AS numeric), :p, :n, 0, 'user', "
+                "'manual_user_override', :k, :at)"
+            ),
+            {
+                "u": account.user_id,
+                "a": agent,
+                "i": _instrument(connection, symbol),
+                "q": quantity,
+                "p": int(Decimal(cost) * 100),
+                "n": spent[symbol],
+                "k": f"eval-{slug}-{symbol}",
+                "at": now - timedelta(days=days_ago),
+            },
+        )
     _holdings(connection, account.user_id, agent, holdings, now)
     account.agents[name] = agent
     return agent

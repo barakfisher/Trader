@@ -22,10 +22,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.engine import Engine
 
+from app.agents.scan_schedule import Scheduling
 from app.agents.tools import scan_context
 from app.analysis.thresholds import AnalysisThresholds
 from app.assistant.service import ask
 from app.assistant.tools import primary_agent_id
+from app.config import Settings
+from app.core.exchange_calendar import load_calendar
 from app.corpus.embeddings import BaseEmbedder
 from app.corpus.vector_store import VectorStore
 from app.db import get_engine
@@ -45,6 +48,18 @@ from app.providers.registry import MarketDataService
 router = APIRouter(
     prefix="/assistant", tags=["assistant"], dependencies=[Depends(require_internal_key)]
 )
+
+
+def _scheduling(settings: Settings) -> Scheduling:
+    """D71's switch and the calendar; a calendar that cannot be read leaves the
+    next scan unknown rather than failing the question."""
+    try:
+        calendar = load_calendar(settings.calendar_dir)
+    except (OSError, ValueError):
+        calendar = None
+    return Scheduling(
+        enabled=settings.enable_scheduled_scans, calendar=calendar, timezone=settings.app_timezone
+    )
 
 
 @router.post("/messages", response_model=AssistantReply)
@@ -76,6 +91,7 @@ async def assistant_message(
         user_id=user_id,
         agent_id=primary,
         news=news_on_demand(settings, engine, getattr(request.app.state, "redis", None)),
+        scheduling=_scheduling(settings),
     )
     turn = await ask(
         engine=engine,

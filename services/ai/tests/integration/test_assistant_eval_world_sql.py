@@ -17,9 +17,11 @@ from typing import Any
 import pytest
 from sqlalchemy.engine import Engine
 
+from app.agents.scan_schedule import Scheduling
 from app.agents.tools import scan_context
 from app.analysis.thresholds import AnalysisThresholds
 from app.assistant.tools import TOOLS_BY_NAME
+from app.core.exchange_calendar import load_calendar
 from app.corpus.hashed_embedder import HashedEmbedder
 from app.corpus.vector_store import PgVectorStore
 from scripts.assistant_eval.market import UNPRICED_SYMBOL, EvalMarket
@@ -43,7 +45,14 @@ def world(engine: Engine, database_url: str) -> Iterator[tuple[Engine, EvalMarke
     yield engine, EvalMarket(str(REPO_ROOT / "data" / "fixtures"))
 
 
-async def _call(world: tuple[Engine, EvalMarket], account: Account, tool: str, **args: Any) -> Any:
+async def _call(
+    world: tuple[Engine, EvalMarket],
+    account: Account,
+    tool: str,
+    scheduling: bool = False,
+    **args: Any,
+) -> Any:
+    """`scheduling` gives the context the runner's: scans scheduled, the real calendar."""
     engine, market = world
     context = scan_context(
         engine=engine,
@@ -55,6 +64,15 @@ async def _call(world: tuple[Engine, EvalMarket], account: Account, tool: str, *
         user_id=account.user_id,
         agent_id=account.primary_id,
         now=NOW,
+        scheduling=(
+            Scheduling(
+                enabled=True,
+                calendar=load_calendar(str(REPO_ROOT / "data" / "calendar")),
+                timezone="Asia/Jerusalem",
+            )
+            if scheduling
+            else None
+        ),
     )
     return await TOOLS_BY_NAME[tool].handler(context, args)
 
@@ -69,6 +87,31 @@ async def test_the_demo_portfolio_is_priced_with_a_snapshot(world: Any) -> None:
     assert portfolio["snapshot"]["total_value"] is not None
     assert all(portfolio["snapshot"]["change_percent"].values())
     assert portfolio["cash"] is None  # the real portfolio keeps no cash
+    assert portfolio["cash_note"]  # ... and says so (`account-cash`)
+    assert portfolio["today"]["change"] is not None  # `account-today`
+
+
+async def test_the_agents_have_a_month_and_a_next_scan(world: Any) -> None:
+    """`account-best-agent` compares the same month; `product-next-scan` names a slot."""
+    account = await seed_account(world[0], world[1], "demo", NOW)
+
+    agents = await _call(world, account, "get_agents", scheduling=True)
+
+    simulated = {a["name"]: a for a in agents["agents"] if not a["real"]}
+    assert set(simulated) == {"Momentum", "Value"}
+    for agent in simulated.values():
+        assert agent["cash"] in ("6000.00", "7500.00")  # what the scans' theses quote
+        assert agent["month_to_date"]["change_percent"] is not None
+        assert agent["next_scan"]["at"] is not None
+
+
+async def test_a_week_of_history_has_a_weekly_figure(world: Any) -> None:
+    """`followup-nvda-amd`: "how did NVDA do this week?" needs a 5-day return."""
+    account = await seed_account(world[0], world[1], "demo", NOW)
+
+    for symbol in ("NVDA", "AMD"):
+        history = await _call(world, account, "get_price_history", symbol=symbol, days=5)
+        assert history["change_percent"]["5d"] is not None, symbol
 
 
 async def test_the_unpriced_fixture_has_one_unpriced_holding(world: Any) -> None:

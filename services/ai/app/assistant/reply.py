@@ -124,6 +124,32 @@ def _strings(value: Any) -> Iterable[str]:
             yield from _strings(item)
 
 
+_MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+_MONTH_NAMES = (
+    "january", "february", "march", "april", "may", "june", "july", "august", "september",
+    "october", "november", "december", "sept",
+)  # fmt: skip
+#: A month's name, whole or as three letters: "October", "Oct", "Sept.".
+_MONTH = rf"((?:{'|'.join((*_MONTH_NAMES, *_MONTHS))})\b)\.?"
+_ORDINAL = r"(\d{1,2})(?:st|nd|rd|th)?"
+_YEAR = r"(?:,?\s+(\d{4}))?"
+#: A date written in words: "12 October", "Oct 12, 2026", "12th of October 2026".
+_DAY_MONTH = re.compile(rf"\b{_ORDINAL}\s+(?:of\s+)?{_MONTH}{_YEAR}\b", re.IGNORECASE)
+_MONTH_DAY = re.compile(rf"\b{_MONTH}\s+{_ORDINAL}\b{_YEAR}", re.IGNORECASE)
+
+
+def _month_number(name: str) -> int:
+    return _MONTHS.index(name[:3].lower()) + 1
+
+
+def _stated(evidence_dates: set[str], month: str, day: str, year: str | None) -> bool:
+    wanted = f"-{_month_number(month):02d}-{int(day):02d}"
+    return any(
+        stated.endswith(wanted) and (year is None or stated.startswith(year))
+        for stated in evidence_dates
+    )
+
+
 def _as_checked(written: str, evidence_dates: set[str]) -> str:
     """The text as the figure check reads it: dashes as "-", list markers removed,
     and a date the evidence states removed whole. The text shown is the model's own.
@@ -132,10 +158,25 @@ def _as_checked(written: str, evidence_dates: set[str]) -> str:
     "2026-10-12T09:57:05.199619+00:00" was refused for "57", and on the 12th of
     the month an invented "12%" passed because a timestamp held a 12. A date
     whose day the evidence does not state stays in, and its digits are checked.
+    A date in words - "12 October", "Oct 12, 2026" - is the same date: the
+    instructions ask for it, and Haiku's replies were refused for writing it
+    (measured 2026-10-12, PR 4's eval).
     """
     text_ = _LIST_MARKER.sub(r"\1", written.translate(_DASHES))
     text_ = _LINK_TARGET.sub("]()", _URL.sub(" ", text_))
-    return _DATE.sub(lambda m: " " if m.group(1) in evidence_dates else m.group(0), text_)
+    text_ = _DATE.sub(lambda m: " " if m.group(1) in evidence_dates else m.group(0), text_)
+    text_ = _DAY_MONTH.sub(
+        lambda m: (
+            " " if _stated(evidence_dates, m.group(2), m.group(1), m.group(3)) else m.group(0)
+        ),
+        text_,
+    )
+    return _MONTH_DAY.sub(
+        lambda m: (
+            " " if _stated(evidence_dates, m.group(1), m.group(2), m.group(3)) else m.group(0)
+        ),
+        text_,
+    )
 
 
 def _without_dates(value: Any) -> Any:
