@@ -588,7 +588,6 @@ strings and left-to-right assumptions before designing it.
 
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
-| 19 | **Insights noise: states fire on a band crossing; an unusual move absorbs the price move** (the user, 2026-10-08; decision 132) | — | M | **Built in the PR that added migration 0049** (`finding_episodes`; decision 132's 2026-10-09 paragraph). **Before**, on kind 30 Sep-9 Oct: 14 drawdown rows (SMR *high* x7, URA *info*/*notable* x7) where the rule gives 3, and 1 of 8 `price_move` rows repeating a `sigma_move`. **What remains:** after deploy, re-run the before query (drawdown rows per subject and band, `price_move` sharing a subject and New York day with `sigma_move`) over kind's observations written after the deploy, record it here, then remove this row. Compose cannot measure it until the main portfolio has holdings again (reset 2026-10-07) |
 | 17 | **Narration: why two of three model texts are rejected, fixed on the free model** (the user, 2026-10-07) | — | S | **Measured 2026-10-07** over the 38 `unsourced_figures` rejections on compose (all `nvidia/nemotron-3.5-lightning:free`, the validator re-run on each): **34 of 38 mention a threshold** ("crossed the 25% high threshold") that is true but refused, because `thresholds_pct` / `thresholds_weight` are nested and their keys (`info`, `notable`, `high`) carry no ratio marker - **5 were refused for that alone**; **30 of 38 copy a price in minor units** ("fell to 790" for $7.90), rightly refused, but the evidence invites it by handing the model `*_minor` integers; **3 are real inventions** ("$10.14M" for $101,427.80). **One error passed:** "the 0.03% information threshold" for 0.03 = 3%, accepted because the bare digits are in the evidence. **Fixes, one PR:** (1) the validator reads values under a `thresholds_*` key as ratios; (2) narration's evidence gives money as decimal strings ("7.90"), as the agent tools do since #177; (3) a ratio's bare digits followed by `%` are refused ("0.03%" for 0.03), while "0.03%" for a true 0.0003 stays accepted. **Then measure again on the free model** - the user's choice, because a paid model costs money and the fixes may make it unnecessary for narration (estimated at $0.03-0.07 a week on Flash-Lite or Haiku, against the agents' $0.04-0.38 a scan; the Admin page already sets narration's model separately). **The three fixes landed in the PR after #178; what remains is the re-measurement** on the free model once compose and kind run it - re-run the 2026-10-07 export (`llm_calls` where `purpose = 'narration'`) over the narrations written after the deploy. Done when that rate is recorded here, and this row is then removed |
 
 **Not in the queue, and why** - so they are not added back by the next sweep:
@@ -2230,7 +2229,13 @@ failure they prevent.
     An episode is closed only when the rule *measured* the subject (drift ran; the holding had
     history) - closing re-arms the finding, so "did not look" must not count as "went away". An
     empty portfolio closes every open episode. `observation_id` cascades, so `reset_account` needed
-    no change. **Before:** kind, 30 Sep-9 Oct, 14 drawdown rows for SMR and URA, 3 under the rule.
+    no change. **Before:** kind, 30 Sep-9 Oct, 14 drawdown rows for SMR and URA, 3 under the rule. **After** (measured
+    2026-10-14 on kind, observations written 2026-10-11..14, 88 portfolio scans): **0** new
+    drawdown rows for SMR or URA - each holds one open episode (SMR *high*, URA *notable*, both
+    opened 2026-10-09) and every scan counted both as `heldInEpisode` (176 in all); ETH-USD's two
+    *info* rows are two episodes (closed 2026-10-11 08:08 when it recovered, reopened 2026-10-14),
+    which is the rule working. **0** `price_move` rows sharing a subject and New York day with a
+    `sigma_move` (3 `price_move`, 1 `sigma_move`). Queue task 19 closed.
 133. **Insights shows today, back seven days, with unread state** (the user, 2026-10-08; queue
     task 21, after tasks 19 and 20). The feed opens on **today's findings** ("today" in the user's
     timezone, guideline 10) and steps back **one day at a time, at most 7 days**; older findings
@@ -3685,13 +3690,20 @@ guideline 1), then `/ask` in Telegram.
 ### Next session: after the Insights work (#206, #209, #214, #216, 2026-10-11)
 
 Ask the user before starting anything (the Insights grant ended with task 21). In date order:
-1. **Task 19's after-measurement - after Monday 2026-10-12's scans, on kind.** Kind's 9 Oct scan
+1. ~~**Task 19's after-measurement - after Monday 2026-10-12's scans, on kind.**~~ **Done 2026-10-14** (decision 132's *After*: 0 repeated drawdown rows, 0 merged-move overlaps). Kind's 9 Oct scan
    showed no `heldInEpisode` only because the day key caught SMR and URA first. Re-run the before
    query (drawdown rows per subject and band; `price_move` sharing a subject and New York day with
    `sigma_move`) over kind's observations written after 2026-10-11, check `runs.stats.heldInEpisode`
    and `finding_episodes`, record it in queue row 19 and remove the row. SMR should still have
    exactly one open *high* episode and no new *high* row.
-2. **Review the scheduled scans** (now three trading days after Monday): outcomes, refusals, cost
+2. ~~**Review the scheduled scans**~~ **Done 2026-10-14, and it measured nothing worth having:** kind runs
+   no scans (`LLM_PROVIDER=null`); compose has one agent, "Test agent" (created 2026-10-07,
+   `pre_open`), with **$0.00 cash, no holdings and no deposit**, so every scan (10-12, 10-13, 10-14,
+   one per trading day at ~09:05 New York, none missed) concluded `no_trade` because it cannot buy,
+   for ~$0.001 each. The scheduler works; Flash-Lite's trading judgement is unmeasured until an agent
+   has paper money. Also moot: narration's rejection rate on D75's choice - narration failed every
+   call 10-07..14 (#229) and the explain model is now Flash-Lite. Original note:
+   (now three trading days after Monday): outcomes, refusals, cost
    per day from `agent_scan_runs` and `llm_calls WHERE purpose = 'agent_scan'`. **The agents run on
    `google/gemini-3.5-flash-lite` since 2026-10-08 19:47 - intended (the user, 2026-10-09)**, so the
    review measures Flash-Lite, not Sonnet. D75's *explain* choice is set (Sonnet, 2026-10-08 19:45):
