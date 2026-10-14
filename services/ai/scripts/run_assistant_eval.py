@@ -209,7 +209,8 @@ async def _judge(judge: LLMProvider, prompt: str, spend: Spend) -> dict[str, Any
     spend.judge_micro_usd += completion.estimated_cost_micro_usd
     verdict = parse_verdict(completion.text)
     if verdict is None:
-        return {"pass": False, "why": f"unreadable verdict: {completion.text[:200]}", "error": True}
+        # Whole, not cut: a cut copy of an unreadable verdict cannot say why it was unreadable.
+        return {"pass": False, "why": f"unreadable verdict: {completion.text}", "error": True}
     return {"pass": verdict[0], "why": verdict[1]}
 
 

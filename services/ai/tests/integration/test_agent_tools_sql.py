@@ -272,6 +272,36 @@ async def test_get_price_history_counts_trading_days_across_a_weekend(
     assert len(answer["closes"]) == 6, "the last close and the five sessions before it"
     assert answer["change_percent"]["5d"] is not None
     assert answer["change_percent"]["5d"] == answer["change_percent"]["period"]
+    # The window it covers is in the answer, so "over the last 5 trading days" is sourced.
+    assert answer["trading_days"] == 5
+
+
+async def test_get_price_history_reports_the_span_it_has_not_the_one_asked_for(
+    loaded: Engine, owner: tuple[str, str, str]
+) -> None:
+    """Asked for the longest window over a short history, it reports the span it has.
+
+    Holds whatever earlier tests in this module stored for ISRG (they share one
+    database): no fixture here comes near a year of closes.
+    """
+    market = ScriptedMarket()
+    weekdays = [day for day in range(1, 10) if (NOW - timedelta(days=day)).weekday() < 5][:3]
+    market.closes = {
+        "ISRG": [
+            DailyClose(
+                symbol="ISRG",
+                as_of=NOW - timedelta(days=day),
+                price_minor=40_000 + day,
+                currency="USD",
+                source="fixture",
+            )
+            for day in weekdays
+        ]
+    }
+    answer = await get_price_history(
+        _context(loaded, owner, market), {"symbol": "ISRG", "days": MAX_HISTORY_DAYS}
+    )
+    assert 2 <= answer["trading_days"] < MAX_HISTORY_DAYS
 
 
 async def test_get_price_history_says_when_nothing_is_stored(

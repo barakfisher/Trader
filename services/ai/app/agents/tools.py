@@ -283,6 +283,11 @@ async def get_price_history(context: ToolContext, arguments: Mapping[str, Any]) 
         "currency": currency,
         "last_close": money(prices[-1], currency),
         "last_close_date": points[-1].as_of.date().isoformat(),
+        # The window this answer covers, which a reply quotes ("over the last 63
+        # trading days") - it was the model's own argument and in no result, so
+        # the figure check refused it (2026-10-14). The span actually loaded,
+        # never the one asked for: a shorter history makes the asked span untrue.
+        "trading_days": len(points) - 1,
         "change_percent": {
             "5d": back(5),
             "20d": back(20),
