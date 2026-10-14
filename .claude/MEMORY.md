@@ -4,7 +4,37 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-14 ~12:00 UTC - **Assistant milestone handoff: every planned PR is merged (#225 PR 4,
+Updated: 2026-10-14 ~15:00 UTC - **Handoff after five merges (#229, #230, #231, #233, #234). One draft
+is open on purpose (#232).** Both environments run `main` at `6248524`, no migration since `0052`
+(next free: `0053`; decisions reached 147). What happened, in order:
+- **Redeploy + PR 5's live check:** `/ask` answered first time on the `openai` package. **Narration had
+  failed on every call since 2026-10-07**: OpenRouter began refusing `reasoning: {effort: "none"}`
+  ("Reasoning is mandatory for this endpoint") - Sonnet 5.5 from 10-09, Flash-Lite from 10-13. Not PR
+  5 (the old client got the same 400). **#229:** `NO_REASONING="none"` -> `LEAST_REASONING="minimal"`
+  (measured: 0 reasoning tokens on both models, the same as "none" gave).
+- **#230:** the first narration after #229 wrote CIFR's -12.8% as "-0.1276923076923077 percent" (the
+  stored ratio, a hundredfold too small) and the validator passed it - its percent rule saw only `%`.
+  Now the word counts (percent / per cent / percentage / אחוז), for narration, the assistant and the
+  agents' theses alike, and the prompt shows ratios as percentages (`"-12.77%"`) by the validator's
+  own `is_ratio_key`. Live: 3/3 then wrote 12.77%.
+- **The 4b eval re-run:** 143/258 turns (PR 4: 132), mechanical 201 (210), judge 161 (152), $1.28.
+  Report: `services/ai/eval-results/assistant-google_gemini-3.5-flash-lite-20261014T121135.*` (main
+  checkout, gitignored). **#231 (4c, the tested half):** Gemini's `MALFORMED_FUNCTION_CALL` (a 200
+  with `finish_reason: "error"`, zero usage - 12 of the "no completion text" turns) is retried once;
+  `get_portfolio`'s snapshot says what its total leaves out (`total_covers`; `edge-unpriced` was 0/3);
+  `get_price_history` reports `trading_days`; the eval reads a judge verdict whose JSON broke after
+  it decided. **#232 (the prompt half) is a DRAFT on purpose** - see "Next session" below.
+- **#233:** task 19's after-measurement (closed: 0 repeated drawdown rows, 0 merged-move overlaps) and
+  the scheduled scans' review (measured nothing: compose's one agent had no money).
+- **The user gave "Test agent" (compose, `pre_open`) $10,000 paper** via the top-up route (it is its
+  `opening_deposit`), so Flash-Lite's trading can be measured; a one-time scheduled task
+  `traders-test-agent-scan-review` reviews its scans read-only on **2026-10-20 10:00 Israel**.
+- **#234:** the narration watch now announces a *first* state that is already a break (decision 58
+  amended) - the week-long outage had become the watch's silent baseline.
+**Eval spend:** ~$4.82 of the user's $5 (this session $1.42); #232's run needs a new budget.
+**`traders-assistant-ci` (127.0.0.1:55435) is kept on purpose** until #232 is measured (the user).
+
+Previous update, 2026-10-14 ~12:00 UTC - **Assistant milestone handoff: every planned PR is merged (#225 PR 4,
 #226 PR 4b, #227 PR 5). Nothing is in flight.** The trigger is the milestone boundary (CLAUDE.md).
 **Owed, in order:** (1) **redeploy** - this session (a cloud container) deployed nothing, so both
 environments still run what the last session left (`1d7d754` per the update below, unless the user
@@ -3587,7 +3617,56 @@ grant tests fail for the wrong reason.
 
 ## Where to go next
 
-### Next session: after the assistant milestone (written 2026-10-14)
+### Next session: after the assistant follow-ups (written 2026-10-14, evening)
+
+Ask the user before starting anything; there is no standing grant ("merge" per PR, "redeploy" only
+when said). In date order:
+1. **IBI check, 2026-10-15** - its scheduled task runs it (decision 135); nothing IBI unless it shows
+   other MCP clients can connect and the user says go.
+2. **DB4's second half, on or after 2026-10-18** - "Next session: the database sprint's review,
+   second half" below.
+3. **Test agent's scan review, 2026-10-20** - the scheduled task reports it; read it with the user.
+   First time Flash-Lite trades with money: check its proposals against its persona (3% drop rule,
+   20% of cash per trade, 5 positions) and its theses' figures (#230's rule is now live for them).
+4. **#232, the assistant's prompt lines (draft)** - the user chose to measure it **after this sprint**
+   with one full eval (`--repeat 3`, cap $1.50, command in the PR body), compare the targeted 0/3
+   cases and look for any case that loses passes; merge only if it does not cost more than it fixes.
+   **Ask for a budget first** (~$0.18 of the $5 is left). One more run only if it shows a regression,
+   and ask before that too. Then remove `traders-assistant-ci` (`docker rm -f traders-assistant-ci`).
+   **Unanswered, ask before that run:** should `/agents` count where a case expects
+   `/agents/$agentId`, and should a correct decline pass whatever `reason` code it gives?
+5. **Assistant candidates, each needing the user's yes:** answers in the user's language (amends
+   guideline 1), `/ask` in Telegram, live progress while it looks things up.
+
+**Lessons from this stretch worth keeping:**
+- **A gateway can start refusing a request it accepted for months, and a fallback hides it.**
+  Narration's template fallback is the right product behaviour and it turned a total outage into
+  silence for a week. A health signal must speak at first sight too: a watch whose first reading
+  is a baseline will baseline an outage (#234). When something "works", check `llm_calls.outcome`,
+  not the feed.
+- **A validator that recognises a symbol must recognise its words.** The `%` rule had existed since
+  the 0.03% bug; the model wrote "percent" and walked past it. And show a model each figure in the
+  form a sentence quotes it - money as `7.90`, ratios as `-12.77%` - from the validator's own rule, so
+  what is shown and what is checked cannot drift apart.
+- **Read the raw body before designing a retry.** "No completion text" looked like transport
+  flakiness; the body said `finish_reason: "error"`, `MALFORMED_FUNCTION_CALL`, zero usage - a model
+  failure that is free to retry, and only that one. A five-cent `--no-judge --cases` run with a
+  temporary dump of the response found it; the error now names the reason itself.
+- **Attribute a regression by A/B, not by suspicion.** The empty replies rose after PR 5 changed the
+  client; running the same cases on 4b's commit (old client) showed the same failure (3/27 vs 5/27).
+  A scratch `git worktree add --detach <sha>` plus `--no-judge` costs cents.
+- **Split a PR by how it can be verified.** 4c's code fixes were proven by tests and shipped; its
+  prompt lines change every question and wait for a paid eval (#232). One PR would have held the
+  honesty fix (`total_covers`) hostage to a budget.
+- **After a dependency PR, the local environments lag.** The main checkout's `.venv` lacked `openai`
+  after #227 (`uv pip install --python .venv/bin/python -e ".[dev]"`); a fresh worktree has no
+  `node_modules` (`pnpm install --frozen-lockfile`) - `npx vitest` there fetches an unrelated vitest
+  and fails on a native binding.
+- **Integration tests in one module share a database**: an assertion on a count of stored closes
+  broke when an earlier test had stored more. Assert the relation (`< asked for`), not the count.
+
+
+### Next session: after the assistant milestone (history - written 2026-10-14; items 1-2 done, see above)
 
 Ask the user before starting anything: the assistant grant (`traders-assistant-grant`) covered the
 milestone's planned PRs, and they are all merged. In order:
