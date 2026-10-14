@@ -97,6 +97,17 @@ def test_only_the_checks_the_expectation_names_are_run() -> None:
         ('```json\n{"pass": false, "why": "Omits the expiry."}\n```', (False, "Omits the expiry.")),
         ('{"pass": "yes"}', None),
         ("The reply passes.", None),
+        # Cut short after deciding (seen 2026-10-14): the decision stands.
+        (
+            '{"pass": true, "why": "Gives the $1B floor and the',
+            (True, "Gives the $1B floor and the"),
+        ),
+        # An unescaped quote inside `why`: the JSON is invalid, the decision is not.
+        (
+            '{"pass": false, "why": "Calls it "momentum" without the 10% move."}',
+            (False, 'Calls it "momentum" without the 10% move.'),
+        ),
+        ('Thinking first. {"pass": tru', None),
     ],
 )
 def test_the_judges_verdict_is_read_only_from_the_json_asked_for(

@@ -45,12 +45,21 @@ same answer however many times we ask, so retrying it only spends time and, for
 a paid gateway, possibly money. Narration is optional in this product; one retry
 is the point where persistence stops being worth the latency it adds to a
 scheduled run.
+
+The same single retry applies to a 200 whose generation failed upstream
+(`finish_reason: "error"`). Measured 2026-10-14: Gemini Flash-Lite ends about one
+assistant turn in ten that reads the product guide with Google's
+`MALFORMED_FUNCTION_CALL` - a tool call it wrote and could not emit - reported as
+an empty 200 with zero usage, so the retry costs nothing. Any other empty reply
+is not retried: a model that finished normally and said nothing will say
+nothing again.
 """
 
 from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
+from dataclasses import replace
 from decimal import Decimal
 from typing import Any
 
@@ -195,8 +204,7 @@ class OpenAICompatibleProvider:
             reasoning_effort=reasoning_effort,
             model=model,
         )
-        response = await self._post_with_one_retry(payload)
-        return self._parse(response, requested=payload["model"])
+        return await self._completion(payload)
 
     async def converse(
         self,
@@ -219,8 +227,39 @@ class OpenAICompatibleProvider:
             reasoning_effort=reasoning_effort,
             model=model,
         )
-        response = await self._post_with_one_retry(payload)
-        return self._parse(response, requested=payload["model"], tools_offered=True)
+        return await self._completion(payload, tools_offered=True)
+
+    async def _completion(
+        self, payload: dict[str, Any], *, tools_offered: bool = False
+    ) -> LLMCompletion:
+        """Send and parse, once more when the generation failed upstream (see the module)."""
+        metered = 0
+        for attempt in (1, 2):
+            response = await self._post_with_one_retry(payload)
+            try:
+                completion = self._parse(
+                    response, requested=payload["model"], tools_offered=tools_offered
+                )
+            except GenerationFailedError as error:
+                log.warning(
+                    "llm.generation_failed",
+                    provider=self.name,
+                    model=payload["model"],
+                    native_reason=error.native_reason,
+                    attempt=attempt,
+                    will_retry=attempt == 1,
+                )
+                metered += error.metered_micro_usd
+                if attempt == 2:
+                    error.metered_micro_usd = metered
+                    raise
+                continue
+            # Whatever the failed attempt was charged travels with the answer.
+            return replace(
+                completion,
+                estimated_cost_micro_usd=completion.estimated_cost_micro_usd + metered,
+            )
+        raise LLMRequestError(self.name, "retry loop ended without a response")
 
     def _build_conversation_payload(
         self,
@@ -448,18 +487,28 @@ class OpenAICompatibleProvider:
         )
 
         choices = response.choices or []
-        message = getattr(choices[0], "message", None) if choices else None
+        choice = choices[0] if choices else None
+        message = getattr(choice, "message", None)
         text = str(getattr(message, "content", None) or "").strip()
         tool_calls = _tool_calls(message) if tools_offered and message is not None else ()
         if not text and not tool_calls:
             # A 200 with no content still consumed prompt tokens, so the charge
-            # travels with the error and the budget guard records it.
-            raise LLMRequestError(
+            # travels with the error and the budget guard records it. The finish
+            # reason, and the upstream's own when OpenRouter passes it on, go in
+            # the message: "no completion text" alone took a debug run to explain.
+            finish = getattr(choice, "finish_reason", None)
+            native = getattr(choice, "native_finish_reason", None)
+            reason = f" (finish_reason {finish}{f': {native}' if native else ''})" if finish else ""
+            error_type = GenerationFailedError if finish == "error" else LLMRequestError
+            error = error_type(
                 self.name,
-                "response carried no completion text",
+                f"response carried no completion text{reason}",
                 status_code=200,
                 metered_micro_usd=cost,
             )
+            if isinstance(error, GenerationFailedError):
+                error.native_reason = native
+            raise error
 
         return LLMCompletion(
             text=text,
@@ -469,6 +518,12 @@ class OpenAICompatibleProvider:
             provider=self.name,
             tool_calls=tool_calls,
         )
+
+
+class GenerationFailedError(LLMRequestError):
+    """A 200 whose generation failed upstream (`finish_reason: "error"`); retried once."""
+
+    native_reason: str | None = None
 
 
 def _tool_calls(message: Any) -> tuple[ToolCall, ...]:

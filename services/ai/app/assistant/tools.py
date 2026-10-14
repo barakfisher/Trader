@@ -269,6 +269,25 @@ async def get_portfolio(context: ToolContext, arguments: Mapping[str, Any]) -> d
                 "of that date; price and day_change_percent are live"
             ),
         }
+        if latest.priced_count < latest.holdings_count:
+            # Measured 2026-10-14: with `priced: "5 of 6"` beside the total, the
+            # model gave the total as the whole portfolio and named LEU only for
+            # today's change, three samples in three. The total now says it itself.
+            # The snapshot lists an unpriced holding with no value; an older or
+            # thinner breakdown may leave it out, so a held symbol it does not
+            # value counts as missing too.
+            valued = {
+                entry["symbol"]
+                for entry in latest.breakdown or []
+                if entry.get("valueMinor") is not None
+            }
+            missing = [row.symbol for row in holdings if row.symbol not in valued]
+            answer["snapshot"]["total_covers"] = (
+                f"total_value and total_cost cover {latest.priced_count} of "
+                f"{latest.holdings_count} holdings; "
+                + (f"{', '.join(missing)} had no price and " if missing else "unpriced ones ")
+                + "are not in them - say so wherever the total is given"
+            )
     else:
         # The windows are named even when unknown, so "no 7-day figure yet" is a
         # statement about a window the evidence names, not an invented number.

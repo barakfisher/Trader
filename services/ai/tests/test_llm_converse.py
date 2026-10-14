@@ -18,6 +18,7 @@ from app.llm.base import (
     Caller,
     LLMRequestError,
     LLMUnavailableError,
+    TokenUsage,
     ToolCall,
     ToolResultMessage,
     ToolSpec,
@@ -228,3 +229,73 @@ async def test_a_scan_uses_the_model_chosen_for_agents():
         caller=Caller(purpose="agent_scan", user_id="u", agent_id="a"),
     )
     assert seen["body"]["model"] == GEMINI
+
+
+# Measured 2026-10-14: Flash-Lite ends about one product-guide turn in ten with
+# Google's MALFORMED_FUNCTION_CALL, which OpenRouter reports as this - a 200 with
+# no content, no usage and `finish_reason: "error"`.
+GENERATION_FAILED = {
+    "model": GEMINI,
+    "choices": [
+        {
+            "finish_reason": "error",
+            "native_finish_reason": "MALFORMED_FUNCTION_CALL",
+            "message": {"role": "assistant", "content": None},
+        }
+    ],
+    "usage": {"prompt_tokens": 0, "completion_tokens": 0},
+}
+
+
+def _sequence(*bodies: dict):
+    """A gateway answering each request with the next body; records how many it saw."""
+    seen: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(1)
+        return httpx.Response(200, json=bodies[len(seen) - 1])
+
+    return handler, seen
+
+
+async def test_a_generation_that_failed_upstream_is_retried_once():
+    handler, seen = _sequence(GENERATION_FAILED, _turn(content="Here it is.", model=GEMINI))
+    completion = await _provider(handler, model=GEMINI).converse(
+        system="s", messages=CONVERSATION, tools=[QUOTE]
+    )
+    assert completion.text == "Here it is."
+    assert len(seen) == 2
+
+
+async def test_a_generation_that_fails_twice_names_its_upstream_reason():
+    handler, seen = _sequence(GENERATION_FAILED, GENERATION_FAILED)
+    with pytest.raises(LLMRequestError, match="MALFORMED_FUNCTION_CALL"):
+        await _provider(handler, model=GEMINI).converse(
+            system="s", messages=CONVERSATION, tools=[QUOTE]
+        )
+    assert len(seen) == 2
+
+
+async def test_an_empty_reply_that_finished_normally_is_not_retried():
+    """A model that stopped and said nothing will say nothing again."""
+    stopped = _turn(content=None, model=GEMINI)
+    stopped["choices"][0]["finish_reason"] = "stop"
+    handler, seen = _sequence(stopped, _turn(content="never asked for", model=GEMINI))
+    with pytest.raises(LLMRequestError, match=r"finish_reason stop\)"):
+        await _provider(handler, model=GEMINI).converse(
+            system="s", messages=CONVERSATION, tools=[QUOTE]
+        )
+    assert len(seen) == 1
+
+
+async def test_a_failed_attempts_charge_travels_with_the_retried_answer():
+    charged = json.loads(json.dumps(GENERATION_FAILED))
+    charged["usage"] = {"prompt_tokens": 4000, "completion_tokens": 0}
+    answer = _turn(content="Here it is.", model=GEMINI)
+    handler, _ = _sequence(charged, answer)
+    completion = await _provider(handler, model=GEMINI).converse(
+        system="s", messages=CONVERSATION, tools=[QUOTE]
+    )
+    first = estimate_cost_micro_usd(GEMINI, TokenUsage(4000, 0), PRICES)
+    second = estimate_cost_micro_usd(GEMINI, TokenUsage(4000, 120), PRICES)
+    assert completion.estimated_cost_micro_usd == first + second

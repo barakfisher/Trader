@@ -197,15 +197,36 @@ def judge_prompt(
     )
 
 
+#: The verdict's decision, read on its own when the JSON around it does not parse.
+_PASS_FIELD = re.compile(r'^\s*(?:```(?:json)?\s*)?\{\s*"pass"\s*:\s*(true|false)\b')
+#: What follows `"why": "`, to the end of the reply.
+_WHY_FIELD = re.compile(r'"why"\s*:\s*"(.*)', re.DOTALL)
+
+
 def parse_verdict(raw: str) -> tuple[bool, str] | None:
-    """The judge's (pass, why), or None when it did not answer in the JSON asked for."""
+    """The judge's (pass, why), or None when it did not answer in the JSON asked for.
+
+    When the JSON does not parse but opens with `{"pass": true|false`, the
+    decision is read from there: the judge writes `pass` first, so a reply cut
+    short, or a `why` with an unescaped quote in it, has still decided. Four
+    verdicts were lost that way on 2026-10-14 - one of them a pass - and counted
+    as failures of the assistant.
+    """
     match = re.search(r"\{.*\}", raw, re.DOTALL)
-    if match is None:
+    if match is not None:
+        try:
+            data = json.loads(match.group(0))
+        except json.JSONDecodeError:
+            data = None
+        if isinstance(data, dict) and isinstance(data.get("pass"), bool):
+            return data["pass"], str(data.get("why", "")).strip()
+        if data is not None:
+            return None
+    decided = _PASS_FIELD.match(raw)
+    if decided is None:
         return None
-    try:
-        data = json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(data, dict) or not isinstance(data.get("pass"), bool):
-        return None
-    return data["pass"], str(data.get("why", "")).strip()
+    why = _WHY_FIELD.search(raw)
+    reason = (
+        why.group(1).rstrip().removesuffix("```").rstrip().removesuffix("}").rstrip() if why else ""
+    )
+    return decided.group(1) == "true", reason.removesuffix('"').strip()

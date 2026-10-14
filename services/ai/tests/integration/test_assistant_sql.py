@@ -294,6 +294,9 @@ async def test_get_portfolio_reports_live_prices_the_snapshot_and_what_is_unpric
     assert result["snapshot"]["change_percent"]["7d"] == "5.00"
     assert result["snapshot"]["change_percent"]["30d"] is None
     assert held[account["held"]]["delayed_minutes"] == 15
+    # The total says what it leaves out, where the total is (2026-10-14's finding).
+    assert account["unpriced"] in result["snapshot"]["total_covers"]
+    assert "1 of 2 holdings" in result["snapshot"]["total_covers"]
 
 
 async def test_get_portfolio_gives_todays_change_in_money_over_what_is_priced(
