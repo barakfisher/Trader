@@ -240,7 +240,8 @@ async def get_portfolio(context: ToolContext, arguments: Mapping[str, Any]) -> d
         # do I have?" was answered with a guess or not at all.
         answer["cash_note"] = (
             "the real portfolio keeps no cash balance in this app - it records holdings "
-            "only; cash is kept only by simulated agents, as paper money of their own"
+            "only; cash is kept only by simulated agents, as paper money of their own "
+            "(get_agents gives each one's), never part of the real portfolio"
         )
     if holdings:
         answer["today"] = _today(
