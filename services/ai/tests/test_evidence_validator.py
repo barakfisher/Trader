@@ -154,6 +154,39 @@ def test_a_ratios_bare_digits_with_a_percent_sign_are_a_hundredfold_too_small():
     assert unsourced_figures("past the 3% threshold", evidence) == []
 
 
+# Seen live 2026-10-14 (Flash-Lite, CIFR down 12.8%): the ratio's bare digits
+# with the word instead of the sign, which the sign-only rule read as sourced.
+CIFR = {"change_pct": -0.1276923076923077, "price_minor": 1134, "currency": "USD"}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "a change of -0.1276923076923077 percent",
+        "a change of -0.13 Percent",
+        "a change of -0.13 per cent",
+        "a change of -0.13 percentage points",
+        "שינוי של -0.13 אחוז",
+        "שינוי של -0.13 אחוזים",
+    ],
+)
+def test_a_ratios_bare_digits_with_the_word_percent_are_a_hundredfold_too_small(text):
+    assert unsourced_figures(text, CIFR) != []
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["a change of -12.8 percent", "a fall of 12.77 per cent", "ירידה של 12.8 אחוזים"],
+)
+def test_a_ratio_written_as_a_percentage_in_words_is_accepted(text):
+    assert unsourced_figures(text, CIFR) == []
+
+
+def test_a_word_that_only_begins_with_percent_is_not_a_percentage():
+    # "percentile" names a rank, not a percentage of the figure before it.
+    assert unsourced_figures("in the 20 percentile band", {"window": 20}) == []
+
+
 def test_a_genuinely_small_percentage_is_still_accepted():
     assert unsourced_figures("moved 0.03%", {"change_pct": 0.0003}) == []
 

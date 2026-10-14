@@ -64,14 +64,21 @@ _MINOR_SUFFIX = "_minor"
 #: template failing its own check.
 _RATIO_MARKERS = ("pct", "ratio", "weight", "drift")
 
+#: A percentage after a number, allowing one space: the sign ("3%", "3 %") or
+#: the word, in English and Hebrew ("3 percent", "3 per cent", "3 percentage
+#: points", "3 אחוז", "3 אחוזים"). The word was missing until 2026-10-14: a
+#: model wrote "a change of -0.1276923076923077 percent" for a 12.8% fall - the
+#: stored ratio's bare digits, a hundred times too small - and it read as sourced
+#: because the sign rule never saw it.
+_PERCENT_AFTER = re.compile(
+    r" ?(?:%|percent(?:age)?(?![a-z])|per cent(?![a-z])|אחוז)", re.IGNORECASE
+)
+
 #: An ISO 8601 date, optionally followed by a time. Timestamps are mined for
 #: their DATE only: the clock components of "2026-09-16T11:30:00+00:00" are 11,
 #: 30 and 0, and admitting those would quietly whitelist most small integers -
 #: enough for "fallen 30% this year" to read as sourced. A narration may quote
 #: the day something happened; it has no business quoting the minute.
-#: A percent sign after a number, allowing one space ("3 %").
-_PERCENT_AFTER = re.compile(r" ?%")
-
 _ISO_DATE_PREFIX = re.compile(r"^(\d{4})-(\d{2})-(\d{2})(?:[T ]|$)")
 
 #: A unit of time straight after a number, joined by a hyphen, a maqaf or one
@@ -89,6 +96,17 @@ _WINDOW_AFTER = {
 }
 #: A key naming a window: "5d", "60d", "52w", "change_20d".
 _WINDOW_KEY = re.compile(r"(?:^|_)(\d{1,3})([dwmy])$")
+
+
+def is_ratio_key(key: str) -> bool:
+    """Whether evidence under `key` is a ratio that prose writes as a percentage.
+
+    `key` is the dotted path `sourced_values` builds, so a mapping nested under a
+    ratio key (`thresholds_pct.high`) is a ratio too. Public because the prompt
+    shows the model ratios as percentages by the same rule, and the two must not
+    disagree about which figures are ratios.
+    """
+    return any(marker in key for marker in _RATIO_MARKERS)
 
 
 def _to_decimal(value: object) -> Decimal | None:
@@ -116,7 +134,7 @@ def _forms_for(
     read as sourced because the digits were in the evidence. For a currency
     with no minor unit (JPY) the two forms coincide, so nothing is lost there.
     """
-    is_ratio = any(marker in key for marker in _RATIO_MARKERS)
+    is_ratio = is_ratio_key(key)
     if key.endswith(_MINOR_SUFFIX):
         forms = {value.scaleb(-minor_unit_exponent(currency or ""))}
     elif is_ratio and percent:

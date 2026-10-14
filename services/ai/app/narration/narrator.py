@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from decimal import Decimal, InvalidOperation
 from typing import Literal
 
 from app.analysis.findings import Finding
@@ -31,7 +32,7 @@ from app.llm.base import (
 )
 from app.llm.degenerate_text import is_degenerate
 from app.narration.correlation import CandidateArticle, as_evidence
-from app.narration.evidence_validator import is_supported
+from app.narration.evidence_validator import is_ratio_key, is_supported
 from app.narration.localized import LocalizedText, TranslatedLanguage, localize
 from app.narration.templates import concepts_for, explanation_for, headline_for
 
@@ -106,19 +107,27 @@ def _template(finding: Finding, evidence: dict[str, object], reason: FallbackRea
 _MINOR_SUFFIX = "_minor"
 
 
-def prompt_evidence(evidence: object, currency: str | None = None) -> object:
-    """The evidence as the model is shown it: money as the decimal string a sentence quotes.
+def prompt_evidence(evidence: object, currency: str | None = None, _key: str = "") -> object:
+    """The evidence as the model is shown it: each figure in the form a sentence quotes.
 
-    Stored evidence keeps integer minor units (guideline 3); the model is shown
-    `"price": "7.90"` for `"price_minor": 790`. Measured 2026-10-07: 30 of 38
+    Money: stored evidence keeps integer minor units (guideline 3); the model is
+    shown `"price": "7.90"` for `"price_minor": 790`. Measured 2026-10-07: 30 of 38
     rejected narrations had copied a minor-unit figure into prose ("fell to 790"
-    for $7.90) - rightly refused, but invited by the form they were shown. The
-    validator still checks against the stored evidence, whose minor figures it
-    already reads in their major form, so both forms agree by construction.
+    for $7.90) - rightly refused, but invited by the form they were shown. A key
+    whose plain name is already taken keeps its minor-unit name and value, so
+    nothing is overwritten.
 
-    A mapping's `currency` applies to the money inside it, nested ones included,
-    as it does in the validator. A key whose plain name is already taken keeps
-    its minor-unit name and value, so nothing is overwritten.
+    Ratios: the model is shown `"change_pct": "-12.77%"` for `-0.1276923...`.
+    Measured 2026-10-14: shown the bare ratio, a model wrote "a change of
+    -0.1276923076923077 percent" for a 12.8% fall. Which figures are ratios is
+    the validator's own rule (`is_ratio_key`, over the same dotted path), so the
+    two cannot disagree.
+
+    The validator still checks against the stored evidence, which it already
+    reads in both forms, so what is shown and what is checked agree by
+    construction. A mapping's `currency` applies to the money inside it, nested
+    ones included, as it does in the validator; a mapping inside a list starts
+    its path afresh, as there.
     """
     if isinstance(evidence, dict):
         declared = evidence.get("currency") or evidence.get("base_currency")
@@ -135,11 +144,45 @@ def prompt_evidence(evidence: object, currency: str | None = None) -> object:
             ):
                 shown[plain] = minor_to_decimal_string(value, currency or "USD")
             else:
-                shown[key] = prompt_evidence(value, currency)
+                child = f"{_key}.{key}" if _key else str(key)
+                shown[key] = prompt_evidence(value, currency, child)
         return shown
     if isinstance(evidence, list):
-        return [prompt_evidence(item, currency) for item in evidence]
+        return [
+            prompt_evidence(item, currency, "" if isinstance(item, dict) else _key)
+            for item in evidence
+        ]
+    if is_ratio_key(_key):
+        ratio = _as_ratio(evidence)
+        if ratio is not None:
+            return _percent_string(ratio)
     return evidence
+
+
+def _as_ratio(value: object) -> Decimal | None:
+    """A ratio's exact value, from a number or a decimal string; None for anything else."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return Decimal(str(value))
+    if isinstance(value, str):
+        try:
+            return Decimal(value.strip())
+        except InvalidOperation:
+            return None
+    return None
+
+
+def _percent_string(ratio: Decimal) -> str:
+    """`-0.1276923` as `"-12.77%"`: two places, the way a sentence quotes it.
+
+    A ratio too small to survive two places (0.00001) keeps its digits rather
+    than reading as "0%", which would state a figure the evidence does not hold.
+    """
+    percent = ratio * 100
+    rounded = percent.quantize(Decimal("0.01"))
+    shown = rounded if rounded != 0 or percent == 0 else percent
+    return f"{format(shown.normalize(), 'f')}%"
 
 
 def _user_prompt(finding: Finding, evidence: dict[str, object]) -> str:
