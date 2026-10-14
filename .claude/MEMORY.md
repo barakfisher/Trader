@@ -4,7 +4,22 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-14 - **Assistant PR 5: the `openai` package for chat and embeddings together.** Both
+Updated: 2026-10-14 ~12:00 UTC - **Assistant milestone handoff: every planned PR is merged (#225 PR 4,
+#226 PR 4b, #227 PR 5). Nothing is in flight.** The trigger is the milestone boundary (CLAUDE.md).
+**Owed, in order:** (1) **redeploy** - this session (a cloud container) deployed nothing, so both
+environments still run what the last session left (`1d7d754` per the update below, unless the user
+redeployed since: check with `git -C <checkout> log -1` against `origin/main` = `36f9ff2`); no
+migration since `0052`. (2) **The live check of PR 5:** one narration and one `/ask` question after
+deploy - the `openai` package has never spoken to OpenRouter from this code. (3) **The 4b eval
+re-run** (paid, the user's machine, ~$1.30, cap $1.60 - command under "Next session: the assistant's
+PR 4b"); compare with PR 4's 132/258. (4) Then remove the disposable `traders-assistant-ci` container
+on the Mac (`docker rm -f traders-assistant-ci`) - the eval needs it until (3) is done. **Next work:**
+"Next session: after the assistant milestone" below. **Cloud-session note:** a container session can
+run the whole suite - `dockerd &` then a `pgvector/pgvector:pg16` container for
+`TEST_DATABASE_URL`; the daemon does not survive an idle container, so restart it if integration tests
+suddenly all error with "connection refused".
+
+Previous update, 2026-10-14 - **Assistant PR 5: the `openai` package for chat and embeddings together.** Both
 clients (`app/llm/openai_compatible.py`, `app/corpus/openrouter_embedder.py`) now send through
 `AsyncOpenAI` pointed at the configured base URL; their constructors, and so `factory.py` and every
 call site, are unchanged (guideline 6), and every existing test passed unchanged. **Kept ours, on
@@ -605,7 +620,7 @@ strings and left-to-right assumptions before designing it.
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
 | **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 ✅ #210 (instrument_profiles 155 -> 96 MB); DB3 ✅ #213 (window from 2026-10-11 07:56 UTC); DB4 split (decision 143): first half 2026-10-11 (#218, decisions 143-147), second half - indexes and `runs` retention - on/after 2026-10-18. DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-147. See "Planned: the database sprint" |
-| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 🚧 In progress | Test set #212; #220-#223 deployed 2026-10-12 - core, Admin picker and limit, replay and universe tools, the `/ask` chat screen. **Live.** PR 4 (eval runner, measured limit, old `/ask` removed) done. PR 4b (the eval's findings) built, its paid re-run owed. PR 5 (`openai` package) built. See "Planned: the assistant" and "Next session: the assistant's PR 4b" |
+| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | ✅ Built (checks owed) | Test set #212; #220-#223 deployed 2026-10-12 - core, Admin picker and limit, replay and universe tools, the `/ask` chat screen. **Live.** PR 4 (eval runner, measured limit, old `/ask` removed) done. #225 PR 4, #226 PR 4b, #227 PR 5 (`openai` package) merged 2026-10-14 - **all planned PRs built**; owed: redeploy, PR 5's live check, the 4b eval re-run. Post-milestone candidates in "Next session: after the assistant milestone". See "Planned: the assistant" and "Next session: the assistant's PR 4b" |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
 | **Multi-agent sandbox, Stage 4 — the agent that decides** | 🚧 In progress | #172 spec D43-D52 + §14; #173 models on the Admin page (0041, D43-D44); #177 the scan's inputs - tool calling, movers, seven read-only tools, the briefing (0042); #180 the scan - one hand-written loop (D53), the per-agent budget, the step limit, `agent_scans` (0043), `POST /agents/:id/scans`, built on a scripted model (**real scans not yet measured: the account is unfunded**). Next: PR 5, the trade proposal and its approval (D26, D47-D49, D51, D54) |
@@ -3563,6 +3578,40 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after the assistant milestone (written 2026-10-14)
+
+Ask the user before starting anything: the assistant grant (`traders-assistant-grant`) covered the
+milestone's planned PRs, and they are all merged. In order:
+1. **Redeploy and check PR 5 live** (the user's machine: `git pull && bash scripts/dev-docker.sh &&
+   bash scripts/k8s-up.sh`; no migration). Then one narration (a scan or `POST /internal/runs`) and one
+   `/ask` question; `llm_calls` should show both with a cost, and `docker logs` no `llm.http_error`.
+   If the gateway refuses something the hand-written client sent, compare the request body - the
+   package adds `x-stainless-*` headers and, for embeddings, `encoding_format: "float"`.
+2. **The 4b eval re-run** - see "Next session: the assistant's PR 4b". Read every failure and every
+   judge/mechanical disagreement with the user; a regression gets its own PR.
+3. **The items still due from "after the Insights work"** (below): task 19's after-measurement, the
+   scheduled scans' review, the IBI check (2026-10-15, its scheduled task), **DB4's second half on or
+   after 2026-10-18**.
+4. **Post-milestone candidates for the assistant**, each needing the user's yes: answers in the
+   user's language (needs a decision amending guideline 1 - today `/ask` answers stay English and are
+   marked `lang="en"`); `/ask` in Telegram; streaming progress ("looking up NVDA...") - the `openai`
+   package now gives it, which was the reason for the switch.
+**Decision numbers** reached 147 (DB4); the assistant took none. **Next free migration: `0053`.**
+
+**Lessons from this stretch (PR 4b, PR 5) worth keeping:**
+- **A package's defaults are decisions you inherit.** `openai` retries timeouts, waits out a
+  Retry-After of a minute, asks embeddings for base64, refuses a client without a key and reads
+  `OPENAI_API_KEY` from the environment when given none. Each was checked against this product's
+  choice and overridden in the constructor; a test pins the key one. Read the defaults before
+  swapping a client, not after the first odd bill.
+- **A test written for the swap found the swap's bug.** The existing client tests passed unchanged
+  on the package; the one new test (no key) failed. Passing old tests proves the old behaviour, not
+  the new edges - add a test for each thing the new dependency does differently.
+- **"Copy and pin" beats a wire change for a constant two services share.** The scan slot times live
+  in TypeScript and now in Python; a test parses the TypeScript. Cheaper than routing schedule data
+  through the orchestrator on every question, and it fails loudly the day they differ.
+
 
 ### Next session: the assistant's PR 4b - what the eval found (written 2026-10-12)
 
