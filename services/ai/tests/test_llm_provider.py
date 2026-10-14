@@ -19,7 +19,7 @@ from app.llm.base import (
     TokenUsage,
 )
 from app.llm.null_provider import NullProvider
-from app.llm.openai_compatible import OpenAICompatibleProvider
+from app.llm.openai_compatible import KEYLESS_PLACEHOLDER, OpenAICompatibleProvider
 from app.llm.pricing import ModelPrice, estimate_cost_micro_usd
 
 MODEL = "anthropic/claude-sonnet-4.5"
@@ -89,6 +89,22 @@ async def test_the_request_carries_the_prompts_model_and_credential():
     assert payload["max_tokens"] == 123
     assert payload["temperature"] == 0.0
     assert payload["stream"] is False
+
+
+async def test_no_key_sends_a_placeholder_never_the_environments_key(monkeypatch):
+    """A local Ollama needs no key, and the `openai` package will not build a client
+    without one. It must not fall back to OPENAI_API_KEY - a credential this
+    configuration never named - so a fixed placeholder is sent instead."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-from-the-environment")
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["authorization"] = request.headers.get("authorization")
+        return httpx.Response(200, json=_body())
+
+    await _provider(handler, api_key=None).complete(system=None, user="finding")
+
+    assert seen["authorization"] == f"Bearer {KEYLESS_PLACEHOLDER}"
 
 
 async def test_the_reasoning_budget_is_sent_only_when_one_is_configured():

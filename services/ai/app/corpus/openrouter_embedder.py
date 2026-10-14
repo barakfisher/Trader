@@ -19,6 +19,13 @@ streaming, no temperature and no reasoning, and the failure a caller cares about
 is a different type. Folding two shapes into one class to share a base URL would
 put a branch on every method to save a constructor argument.
 
+**The request is the `openai` package's** - the same client as the chat adapter
+(decided with the user 2026-10-07: one client, one key, one base URL). It sends
+and parses; it validates nothing, so every check below is still ours. Its own
+retries are off, for the policy below, and `encoding_format` is sent as "float":
+left unset, the package asks for base64 and decodes it, which is a second
+spelling of the same vectors that OpenRouter is not documented to support.
+
 **The width is verified on arrival rather than requested.** OpenAI's
 `/embeddings` accepts a `dimensions` parameter, and it is deliberately not sent:
 only the `text-embedding-3-*` family supports it, so sending it unconditionally
@@ -52,6 +59,8 @@ from decimal import Decimal
 from typing import Any
 
 import httpx
+import openai
+from openai import AsyncOpenAI
 
 from app.core.logging import get_logger
 from app.corpus.embeddings import EMBEDDING_DIMENSION, Embedding, EmbeddingError
@@ -100,15 +109,24 @@ class OpenRouterEmbedder:
         # offline and keyless without a mocking library.
         self._transport = transport
 
-    def _headers(self) -> dict[str, str]:
-        return {
-            "content-type": "application/json",
+    def _client(self) -> AsyncOpenAI:
+        return AsyncOpenAI(
+            base_url=self._base_url,
             # Never logged. The log lines in this module carry the model, a
             # token count and a cost, and nothing that could carry a credential
             # (guideline 9).
-            "authorization": f"Bearer {self._api_key}",
-            "x-title": "Traders",
-        }
+            api_key=self._api_key,
+            timeout=self._timeout_seconds,
+            max_retries=0,
+            default_headers={"x-title": "Traders"},
+            # Injected by tests as an httpx.MockTransport, which keeps the suite
+            # offline and keyless without a mocking library.
+            http_client=(
+                httpx.AsyncClient(transport=self._transport)
+                if self._transport is not None
+                else None
+            ),
+        )
 
     async def embed_documents(self, texts: list[str]) -> list[Embedding]:
         if not texts:
@@ -122,52 +140,43 @@ class OpenRouterEmbedder:
         return (await self._embed([text]))[0]
 
     async def _embed(self, texts: list[str]) -> list[Embedding]:
-        payload: dict[str, Any] = {"model": self.model, "input": texts}
-        data = await self._post_with_one_retry(payload)
-        return self._parse(data, expected=len(texts))
+        response = await self._post_with_one_retry(texts)
+        return self._parse(response, expected=len(texts))
 
-    async def _post_with_one_retry(self, payload: dict[str, Any]) -> dict[str, Any]:
-        url = f"{self._base_url}/embeddings"
-
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(self._timeout_seconds),
-            transport=self._transport,
-            headers=self._headers(),
-        ) as client:
+    async def _post_with_one_retry(self, texts: list[str]) -> Any:
+        async with self._client() as client:
             for attempt in (1, 2):
                 try:
-                    response = await client.post(url, json=payload)
-                except httpx.TimeoutException as error:
+                    return await client.embeddings.create(
+                        model=self.model, input=texts, encoding_format="float"
+                    )
+                except openai.APITimeoutError as error:
                     raise EmbeddingError(
                         f"{self.model}: no response within {self._timeout_seconds}s"
                     ) from error
-                except httpx.HTTPError as error:
-                    raise EmbeddingError(f"{self.model}: {error}") from error
-
-                if response.status_code < 400:
-                    return response.json()  # type: ignore[no-any-return]
-
-                # A 4xx that is not a rate limit will not fix itself: a revoked
-                # key, a model that does not exist or a malformed body returns
-                # the same answer however many times we ask.
-                if attempt == 2 or response.status_code not in _RETRYABLE_STATUS:
-                    raise EmbeddingError(
-                        f"{self.model}: embeddings endpoint returned "
-                        f"{response.status_code}: {response.text[:200]}"
+                except openai.APIStatusError as error:
+                    # A 4xx that is not a rate limit will not fix itself: a revoked
+                    # key, a model that does not exist or a malformed body returns
+                    # the same answer however many times we ask.
+                    if attempt == 2 or error.status_code not in _RETRYABLE_STATUS:
+                        raise EmbeddingError(
+                            f"{self.model}: embeddings endpoint returned "
+                            f"{error.status_code}: {error.response.text[:200]}"
+                        ) from error
+                    log.warning(
+                        "corpus.embedder_retry",
+                        model=self.model,
+                        status=error.status_code,
+                        inputs=len(texts),
                     )
-
-                log.warning(
-                    "corpus.embedder_retry",
-                    model=self.model,
-                    status=response.status_code,
-                    inputs=len(payload["input"]),
-                )
-                await asyncio.sleep(self._retry_backoff_seconds)
+                    await asyncio.sleep(self._retry_backoff_seconds)
+                except openai.APIError as error:
+                    raise EmbeddingError(f"{self.model}: {error}") from error
 
         raise EmbeddingError(f"{self.model}: exhausted retries")  # pragma: no cover
 
-    def _parse(self, data: dict[str, Any], *, expected: int) -> list[Embedding]:
-        items = data.get("data")
+    def _parse(self, response: Any, *, expected: int) -> list[Embedding]:
+        items = getattr(response, "data", None)
         if not isinstance(items, list):
             raise EmbeddingError(f"{self.model}: response has no `data` list")
 
@@ -177,8 +186,8 @@ class OpenRouterEmbedder:
         # under its neighbour's vector, which nothing downstream could tell from
         # a merely bad embedding model.
         try:
-            items = sorted(items, key=lambda item: item["index"])
-        except (KeyError, TypeError) as error:
+            items = sorted(items, key=lambda item: int(item.index))
+        except (AttributeError, TypeError, ValueError) as error:
             raise EmbeddingError(f"{self.model}: response items have no usable `index`") from error
 
         if len(items) != expected:
@@ -191,7 +200,7 @@ class OpenRouterEmbedder:
 
         vectors: list[Embedding] = []
         for item in items:
-            vector = item.get("embedding")
+            vector = getattr(item, "embedding", None)
             if not isinstance(vector, list):
                 raise EmbeddingError(f"{self.model}: an item carries no `embedding` list")
             if len(vector) != self.dimension:
@@ -204,12 +213,11 @@ class OpenRouterEmbedder:
                 )
             vectors.append(_normalised([float(component) for component in vector]))
 
-        self._log_usage(data, inputs=expected)
+        self._log_usage(getattr(response, "usage", None), inputs=expected)
         return vectors
 
-    def _log_usage(self, data: dict[str, Any], *, inputs: int) -> None:
-        usage = data.get("usage") or {}
-        tokens = int(usage.get("prompt_tokens") or usage.get("total_tokens") or 0)
+    def _log_usage(self, usage: Any, *, inputs: int) -> None:
+        tokens = int(getattr(usage, "prompt_tokens", 0) or getattr(usage, "total_tokens", 0) or 0)
         cost = (Decimal(tokens) / Decimal(1_000_000)) * self._price_usd_per_mtok
         log.info(
             "corpus.embedded",

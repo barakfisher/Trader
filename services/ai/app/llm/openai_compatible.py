@@ -29,6 +29,16 @@ route, the default effort spent ~400-570 tokens on reasoning where "low" spends
 ~120. It is sent only when set, because a model that does not reason has no such
 parameter and gateways differ on whether an unknown field is ignored or refused.
 
+**The request is the `openai` package's; the policy around it is ours.** The
+package builds and posts the body, authenticates, and parses the reply and its
+tool calls into typed objects (decided with the user 2026-10-07; it replaced
+~200 lines of hand-written `httpx`). What stays here is what no client package
+knows: which purposes use which model, reasoning sent as OpenRouter spells it,
+prompt caching for the models that honour it, the price of each call, and the
+retry policy below. The package's own retries are off (`max_retries=0`): it
+would retry a timeout and wait out a Retry-After of up to a minute, and both are
+choices this product made the other way.
+
 Retry policy: exactly one retry, on 429 and on 5xx. A 4xx will not fix itself -
 a malformed request, a revoked key or a model that does not exist returns the
 same answer however many times we ask, so retrying it only spends time and, for
@@ -45,6 +55,8 @@ from decimal import Decimal
 from typing import Any
 
 import httpx
+import openai
+from openai import AsyncOpenAI
 
 from app.core.logging import get_logger
 from app.llm.base import (
@@ -78,6 +90,10 @@ _RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504, 529})
 #: minutes is asking us to hold a scheduled run open; we would rather skip
 #: narration for this finding and let the next run try.
 _MAX_RETRY_AFTER_SECONDS = 10.0
+
+#: Sent as the key by a gateway configured without one (a local Ollama): never
+#: a credential, and never the environment's OPENAI_API_KEY.
+KEYLESS_PLACEHOLDER = "keyless"
 
 #: Models whose gateway honours `cache_control` on a content part. Anthropic's
 #: do through OpenRouter: the marked prefix is billed at a tenth on every later
@@ -319,17 +335,39 @@ class OpenAICompatibleProvider:
     async def record_verdict(self, call_id: int | None, verdict: Verdict) -> None:
         """Nothing is recorded here; see `call_log.RecordingProvider`."""
 
-    async def _post_with_one_retry(self, payload: dict[str, Any]) -> httpx.Response:
-        url = f"{self._base_url}/chat/completions"
-        timeout = httpx.Timeout(self._timeout_seconds)
+    def _client(self) -> AsyncOpenAI:
+        return AsyncOpenAI(
+            base_url=self._base_url,
+            # A key is always passed, so the package never reads OPENAI_API_KEY
+            # from the environment behind the factory's back. With none (a local
+            # Ollama), a placeholder: the package refuses to build a client
+            # without one, and Ollama ignores the header - its own documented use.
+            api_key=self._api_key or KEYLESS_PLACEHOLDER,
+            timeout=self._timeout_seconds,
+            max_retries=0,
+            default_headers=self._extra_headers,
+            # Injected by tests as an httpx.MockTransport, which keeps the suite
+            # offline without a mocking library or a live key.
+            http_client=(
+                httpx.AsyncClient(transport=self._transport)
+                if self._transport is not None
+                else None
+            ),
+        )
 
-        async with httpx.AsyncClient(
-            timeout=timeout, transport=self._transport, headers=self._headers()
-        ) as client:
+    async def _post_with_one_retry(self, payload: dict[str, Any]) -> Any:
+        """The chat completion for `payload`, under this module's retry policy.
+
+        `reasoning` is OpenRouter's field, unknown to the package's signature,
+        so it travels in `extra_body`; everything else is a named argument.
+        """
+        arguments = {key: value for key, value in payload.items() if key != "reasoning"}
+        extra_body = {"reasoning": payload["reasoning"]} if "reasoning" in payload else None
+        async with self._client() as client:
             for attempt in (1, 2):
                 try:
-                    response = await client.post(url, json=payload)
-                except httpx.TimeoutException as exc:
+                    return await client.chat.completions.create(**arguments, extra_body=extra_body)
+                except openai.APITimeoutError as exc:
                     # Not retried. A generation that ran past the timeout was
                     # most likely long rather than unlucky, so the retry would
                     # pay the timeout a second time and fail the same way.
@@ -340,28 +378,28 @@ class OpenAICompatibleProvider:
                         timeout_seconds=self._timeout_seconds,
                     )
                     raise LLMTimeoutError(self.name, self._timeout_seconds) from exc
-                except httpx.HTTPError as exc:
-                    raise LLMRequestError(self.name, f"transport error: {exc}") from exc
-
-                if response.status_code < 400:
-                    return response
-
-                retryable = response.status_code in _RETRYABLE_STATUS
-                log.warning(
-                    "llm.http_error",
-                    provider=self.name,
-                    model=payload["model"],
-                    status=response.status_code,
-                    attempt=attempt,
-                    will_retry=retryable and attempt == 1,
-                )
-                if not retryable or attempt == 2:
-                    raise LLMRequestError(
-                        self.name,
-                        f"HTTP {response.status_code}: {_short_body(response)}",
-                        status_code=response.status_code,
+                except openai.APIStatusError as exc:
+                    status = exc.status_code
+                    retryable = status in _RETRYABLE_STATUS
+                    log.warning(
+                        "llm.http_error",
+                        provider=self.name,
+                        model=payload["model"],
+                        status=status,
+                        attempt=attempt,
+                        will_retry=retryable and attempt == 1,
                     )
-                await asyncio.sleep(self._retry_delay(response))
+                    if not retryable or attempt == 2:
+                        raise LLMRequestError(
+                            self.name,
+                            f"HTTP {status}: {_short_body(exc.response)}",
+                            status_code=status,
+                        ) from exc
+                    await asyncio.sleep(self._retry_delay(exc.response))
+                except openai.APIError as exc:
+                    # A transport failure, or a 200 whose body the package could
+                    # not read as a completion.
+                    raise LLMRequestError(self.name, f"request failed: {exc}") from exc
 
         # Unreachable: the loop either returns or raises on both attempts.
         raise LLMRequestError(self.name, "retry loop ended without a response")
@@ -379,21 +417,20 @@ class OpenAICompatibleProvider:
         return self._retry_backoff_seconds
 
     def _parse(
-        self, response: httpx.Response, *, requested: str, tools_offered: bool = False
+        self, response: Any, *, requested: str, tools_offered: bool = False
     ) -> LLMCompletion:
-        try:
-            body = response.json()
-        except ValueError as exc:
-            raise LLMRequestError(self.name, "response body was not JSON") from exc
+        if not hasattr(response, "choices"):
+            # The package hands back the raw text when a 200 is not JSON.
+            raise LLMRequestError(self.name, "response body was not JSON")
 
-        usage_body = body.get("usage") or {}
+        usage_body = response.usage
         usage = TokenUsage(
-            prompt_tokens=int(usage_body.get("prompt_tokens") or 0),
-            completion_tokens=int(usage_body.get("completion_tokens") or 0),
+            prompt_tokens=int(getattr(usage_body, "prompt_tokens", 0) or 0),
+            completion_tokens=int(getattr(usage_body, "completion_tokens", 0) or 0),
         )
         # The model the gateway actually served, which OpenRouter may resolve to
         # something other than what we asked for. Priced and logged on what ran.
-        model = str(body.get("model") or requested)
+        model = str(getattr(response, "model", None) or requested)
         # A gateway may name a dated variant of what was asked for; when that
         # spelling has no price and the requested one does, the requested price
         # is the honest estimate, not the pessimistic unknown-model rate.
@@ -411,17 +448,17 @@ class OpenAICompatibleProvider:
             charges_per_token=self.charges_per_token,
         )
 
-        choices = body.get("choices") or []
-        message = (choices[0].get("message") or {}) if choices else {}
-        text = str(message.get("content") or "").strip()
-        tool_calls = _tool_calls(message) if tools_offered else ()
+        choices = response.choices or []
+        message = getattr(choices[0], "message", None) if choices else None
+        text = str(getattr(message, "content", None) or "").strip()
+        tool_calls = _tool_calls(message) if tools_offered and message is not None else ()
         if not text and not tool_calls:
             # A 200 with no content still consumed prompt tokens, so the charge
             # travels with the error and the budget guard records it.
             raise LLMRequestError(
                 self.name,
                 "response carried no completion text",
-                status_code=response.status_code,
+                status_code=200,
                 metered_micro_usd=cost,
             )
 
@@ -435,23 +472,23 @@ class OpenAICompatibleProvider:
         )
 
 
-def _tool_calls(message: dict[str, Any]) -> tuple[ToolCall, ...]:
+def _tool_calls(message: Any) -> tuple[ToolCall, ...]:
     """The tool calls in an assistant message, skipping any without a name.
 
     Arguments stay the text the model wrote; a call with none gets "{}" so the
     caller's parser sees an empty object rather than a missing field.
     """
     calls = []
-    for raw in message.get("tool_calls") or []:
-        function = raw.get("function") or {}
-        name = function.get("name")
+    for raw in getattr(message, "tool_calls", None) or []:
+        function = getattr(raw, "function", None)
+        name = getattr(function, "name", None)
         if not name:
             continue
         calls.append(
             ToolCall(
-                id=str(raw.get("id") or f"call_{len(calls)}"),
+                id=str(getattr(raw, "id", None) or f"call_{len(calls)}"),
                 name=str(name),
-                arguments=str(function.get("arguments") or "{}"),
+                arguments=str(getattr(function, "arguments", None) or "{}"),
             )
         )
     return tuple(calls)

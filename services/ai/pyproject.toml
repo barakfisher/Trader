@@ -19,6 +19,10 @@ dependencies = [
     # Topic disambiguation clusters candidate vectors (app/topics/meanings.py).
     # Already present through yfinance; declared because it is now used directly.
     "numpy>=2.0",
+    # The client for every model call and embedding (app/llm/openai_compatible.py,
+    # app/corpus/openrouter_embedder.py), pointed at OpenRouter's base URL.
+    # The floor is the version tested.
+    "openai>=3.31",
 ]
 
 [project.optional-dependencies]
