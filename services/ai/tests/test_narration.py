@@ -9,6 +9,7 @@ import pytest
 
 from app.analysis.findings import Finding
 from app.llm.base import (
+    LEAST_REASONING,
     Caller,
     LLMBudgetExceededError,
     LLMCompletion,
@@ -49,6 +50,7 @@ class StubLLM:
         self._reply = reply
         self._error = error
         self.calls = 0
+        self.reasoning_effort: str | None = None
         self.call_id = 7
         self.verdicts: list[tuple[int | None, str]] = []
 
@@ -63,6 +65,7 @@ class StubLLM:
         caller=None,
     ):
         self.calls += 1
+        self.reasoning_effort = reasoning_effort
         if self._error:
             raise self._error
         return LLMCompletion(
@@ -88,6 +91,14 @@ async def test_a_well_sourced_narration_is_used():
     assert result.source == "llm"
     assert result.fallback_reason == "none"
     assert "8.5%" in result.headline
+
+
+async def test_narration_asks_for_the_least_reasoning_itself():
+    """Its own value, never the deployment's: a refused effort here is a week of
+    template fallbacks, so the call site's choice is pinned."""
+    llm = StubLLM(reply("NVDA fell 8.5% to $118.45", "It went from $129.45 to $118.45."))
+    await narrate(PRICE_MOVE, [], llm)
+    assert llm.reasoning_effort == LEAST_REASONING
 
 
 async def test_an_invented_figure_costs_the_whole_narration():

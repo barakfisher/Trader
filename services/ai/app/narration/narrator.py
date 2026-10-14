@@ -22,7 +22,7 @@ from app.analysis.findings import Finding
 from app.core.logging import get_logger
 from app.core.money import minor_to_decimal_string
 from app.llm.base import (
-    NO_REASONING,
+    LEAST_REASONING,
     Caller,
     LLMBudgetExceededError,
     LLMError,
@@ -170,7 +170,8 @@ async def narrate(
             system=SYSTEM_PROMPT,
             user=_user_prompt(finding, evidence),
             temperature=temperature,
-            # Narration does not think, and says so here rather than relying on
+            # Narration thinks as little as the model allows (`LEAST_REASONING`;
+            # a gateway may refuse "not at all"), and says so here rather than relying on
             # a deployment setting. It restates figures it is forbidden to alter
             # under rules it is given, so there is no judgement for reasoning to
             # improve - and what makes the sentence trustworthy is the evidence
@@ -185,7 +186,7 @@ async def narrate(
             # A caller with a real judgement to make - `/ask` deciding whether
             # its retrieved context supports an answer at all - should pass its
             # own value, or none and inherit the deployment default.
-            reasoning_effort=NO_REASONING,
+            reasoning_effort=LEAST_REASONING,
             caller=Caller(purpose="narration", user_id=user_id),
         )
     except LLMError as error:
