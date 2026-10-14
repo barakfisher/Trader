@@ -1226,8 +1226,11 @@ failure they prevent.
     the model/template boundary is announced.** `services/narrationWatch.ts`, migration 0022.
     `GET /narration` recomputes the state per read, which cannot say what *changed*, so
     `narration_transitions` stores a row only when the state differs from the last one; its newest
-    row is the current state, the first row (`from_state` null) is a baseline and never announced
-    (an upgrade is not a transition), and a lock on the user's row stops a portfolio and a topic
+    row is the current state, the first row (`from_state` null) is a baseline, **announced only
+    when it is a break** (amended 2026-10-14: until then no baseline was announced, and an outage
+    already under way when the first row was written - OpenRouter refusing narration's reasoning
+    setting, 10-07..14 - became the baseline and was found a week later in `llm_calls`; a working
+    or deliberately `off` first state is still silent), and a lock on the user's row stops a portfolio and a topic
     scan finishing together from both recording it (raced live: one row). **Judged over
     `NARRATION_WINDOW` = 3 explanations across scans, not one scan:** replayed over this
     installation's history 2026-09-17..28, a per-scan rule announced a break fifteen minutes after
@@ -3147,7 +3150,6 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 
 | Item | Where | Impact |
 |---|---|---|
-| **A narration outage that becomes the baseline is never announced** | `services/narrationWatch.ts` (`shouldAnnounce`: the first row is a baseline) | Narration failed on every call 2026-10-07..14 (OpenRouter refused `effort: "none"`; fixed by sending `LEAST_REASONING = "minimal"`). The first `narration_transitions` row on compose is 2026-10-11, already `unavailable`, so it was recorded as a baseline and nobody was told; the outage was found only by reading `llm_calls`. Announcing a baseline that is not `narrating` (or `off`) would have caught it; decide whether an upgrade-time "explanations are templates" message is noise or news |
 | **Narration's and the agents' figure checks still read a timestamp's digits as sources, and refuse U+2011 hyphens** | `app/narration/evidence_validator.py`; the assistant fixed it in `app/assistant/reply.py` only | A small whole number (a day, hour or minute) written by a model passes whenever its evidence carries a timestamp that contains it; "7‑day" with a non-breaking hyphen is refused. Moving `_without_dates` and the dash normalisation into the validator fixes both for everyone - and changes narration's behaviour, so measure its rejection rate before and after |
 | **`purpose = 'ask'` outlives `/ask`** | `Purpose` in `app/llm/base.py`, `SCOPE_FOR_PURPOSE`, `llm_calls`' CHECK, `services/llmPanel.ts`, `spend_estimate.py` | Nothing emits it since PR 4; kept so stored rows still read. Retention (30 days) empties them; then drop it with a migration |
 | **The assistant eval runs only by hand** | `scripts/run_assistant_eval.py` | Keyed and paid, so never in CI: a prompt or tool change can regress it unseen. Run it (Flash-Lite, `--repeat 3`, ~$1.30 with the judge) before merging any change to the assistant's prompt, tools or checks |
