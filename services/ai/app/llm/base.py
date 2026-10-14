@@ -98,7 +98,7 @@ class LLMCompletion:
         return micro_usd_to_usd(self.estimated_cost_micro_usd)
 
 
-#: The `reasoning_effort` value meaning "do not think, just answer".
+#: The `reasoning_effort` value meaning "think as little as the model allows".
 #:
 #: It lives on the interface rather than in one adapter because it is part of
 #: the contract every provider honours, and a call site that had to import it
@@ -107,8 +107,15 @@ class LLMCompletion:
 #:
 #: Spelled out rather than expressed as an empty string, because unset must keep
 #: meaning "say nothing and let the model decide" - a different request from
-#: "thinking off", and on a reasoning model a very different bill.
-NO_REASONING = "none"
+#: "think least", and on a reasoning model a very different bill.
+#:
+#: `"minimal"`, not `"none"`. `"none"` was the value until OpenRouter began
+#: refusing it with a 400 ("Reasoning is mandatory for this endpoint and cannot
+#: be disabled") - Sonnet 5.5 from 2026-10-09, Flash-Lite from 2026-10-13 - and
+#: narration fell back to its template on every call for a week without anything
+#: reporting it. Measured 2026-10-14 on both: `"minimal"` is accepted and spends
+#: 0 reasoning tokens, which is all narration ever wanted from `"none"`.
+LEAST_REASONING = "minimal"
 
 
 #: What a call is for. Every call site names itself, so the admin page can say

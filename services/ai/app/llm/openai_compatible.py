@@ -306,21 +306,20 @@ class OpenAICompatibleProvider:
             "stream": False,
         }
         # The call decides, and falls back to the deployment's default only when
-        # it has no opinion. `None` is "no opinion"; the string "none" is an
-        # opinion, and the two must not collapse into each other.
-        # The call decides, and falls back to the deployment's default only when
-        # it has no opinion. `None` is "no opinion"; the string "none" is an
-        # opinion, and the two must not collapse into each other.
+        # it has no opinion. `None` is "no opinion"; a string such as
+        # `LEAST_REASONING` is an opinion, and the two must not collapse into
+        # each other.
         effort = self._reasoning_effort if reasoning_effort is None else reasoning_effort
         if effort:
             # OpenRouter's normalised spelling, which it translates to whatever
-            # the upstream vendor calls the same knob. `NO_REASONING` goes
-            # through as an effort like any other: measured against a free
-            # reasoning model, `{"effort": "none"}` returns
-            # `reasoning_tokens: 0` and clean JSON, which is the whole
-            # requirement. An `{"enabled": false}` special case was written
-            # first and removed - it behaves identically, so it was a second
-            # spelling of something the pass-through already said.
+            # the upstream vendor calls the same knob. `LEAST_REASONING` goes
+            # through as an effort like any other: measured on Flash-Lite and
+            # Sonnet 5.5, `{"effort": "minimal"}` returns `reasoning_tokens: 0`
+            # and clean JSON, which is the whole requirement. (`"none"` did the
+            # same until OpenRouter began refusing it - see `LEAST_REASONING`.)
+            # An `{"enabled": false}` special case was written first and
+            # removed - it behaves identically, so it was a second spelling of
+            # something the pass-through already said.
             #
             # Why it matters at all: reasoning is billed out of
             # `max_output_tokens`, and a reply truncated mid-thought comes back
