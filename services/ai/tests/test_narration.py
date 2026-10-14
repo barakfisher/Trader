@@ -347,8 +347,9 @@ class TestVerdicts:
         assert invented.verdicts == [(7, "unsourced_figures")]
 
 
-def test_the_model_is_shown_money_as_the_decimal_a_sentence_quotes():
-    # 30 of 38 rejected narrations copied a minor-unit figure ("fell to 790" for $7.90).
+def test_the_model_is_shown_each_figure_in_the_form_a_sentence_quotes():
+    # 30 of 38 rejected narrations copied a minor-unit figure ("fell to 790" for $7.90);
+    # on 2026-10-14 a model wrote a bare ratio as "-0.1276923076923077 percent".
     shown = prompt_evidence(
         {
             "symbol": "SMR",
@@ -364,7 +365,7 @@ def test_the_model_is_shown_money_as_the_decimal_a_sentence_quotes():
         "currency": "USD",
         "price": "7.90",
         "high_price": "1000.00",
-        "drawdown_pct": -0.29,
+        "drawdown_pct": "-29%",
         "positions": [{"currency": "JPY", "value": "15000"}],
     }
 
@@ -372,6 +373,29 @@ def test_the_model_is_shown_money_as_the_decimal_a_sentence_quotes():
 def test_the_shown_evidence_never_overwrites_a_field_already_named():
     shown = prompt_evidence({"currency": "USD", "price": "kept", "price_minor": 790})
     assert shown == {"currency": "USD", "price": "kept", "price_minor": 790}
+
+
+def test_ratios_are_shown_as_percentages_by_the_validators_own_rule():
+    shown = prompt_evidence(
+        {
+            "change_pct": -0.1276923076923077,
+            "weight": "0.7000",
+            "thresholds_pct": {"info": 0.02, "high": 0.25},
+            "positions": [{"symbol": "URA", "weight": 0.5, "sample_size": 20}],
+            "z_score": -2.848,
+            "sample_size": 20,
+            "tiny_pct": 0.0000001,
+        }
+    )
+    assert shown == {
+        "change_pct": "-12.77%",
+        "weight": "70%",
+        "thresholds_pct": {"info": "2%", "high": "25%"},
+        "positions": [{"symbol": "URA", "weight": "50%", "sample_size": 20}],
+        "z_score": -2.848,
+        "sample_size": 20,
+        "tiny_pct": "0.00001%",  # not "0%", which the evidence does not say
+    }
 
 
 def test_a_figure_written_from_the_shown_evidence_passes_the_stored_evidence():
