@@ -187,6 +187,8 @@ this milestone is that deferred work. What still assumes one account today:
   no session table (`http/auth.ts`), so a session cannot be revoked before it expires.
 - Scheduled scans run for `SINGLE_USER_ID` only (debt table in `.claude/MEMORY.md`); per-user
   fairness on the queue needs BullMQ Pro's groups (D73).
+- "Today" resolves in `APP_TIMEZONE`, one zone for the installation - and guideline 10 in
+  `CLAUDE.md` is written around it. Several users means a zone per user, which amends a guideline.
 
 **PR 1 - measure, read-only, before any design.** Every query, route, run kind, cache key, budget
 and notification path that assumes one user, listed with where it is. Nothing is decided before
@@ -203,10 +205,14 @@ this list exists.
 - **Shared costs** - the LLM budget and the assistant's daily limit: per user or per installation.
 - **Telegram** - one bot, a binding per user (the binding is already per `user_id`).
 - **Admin** - `users.role` exists (M8); what an admin may see of another user's data.
+- **Time zone** - a zone per user in `user_settings`, and what is still per installation (the
+  scheduled ask's clock, the market calendar).
 
 **Exit:** two users on one installation, each seeing only their own holdings, observations,
 proposals, agents and notifications - proved by a test that signs in as one user and asserts every
-user-facing route returns nothing of the other's; scheduled scans run for both.
+user-facing route returns nothing of the other's; scheduled scans run for both; and no request
+path falls back to `SINGLE_USER_ID` - a run that names no user is refused, not run as the first
+user (today `POST /internal/runs` does exactly that, which a signed-in test cannot see).
 
 ---
 

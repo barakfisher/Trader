@@ -84,7 +84,8 @@ These shape the whole architecture, so they are stated as requirements, not opin
 ## 7. Out of scope for v1
 Order execution and any broker write API (reading holdings is in scope, D67) · tax-lot accounting and tax reporting · options, futures, bonds ·
 backtesting engine · multi-user invitations and billing · mobile app · options-flow or
-alternative data. Multiple users is planned after v1 as M9 (`MILESTONES.md`); billing stays out.
+alternative data. Multiple users is planned after v1 as M9 (`MILESTONES.md`), invitations included if M9
+decides on them; billing stays out.
 
 ## 8. Success criteria
 1. A fresh clone reaches a working dashboard with demo data in one command.
