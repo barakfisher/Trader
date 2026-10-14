@@ -65,8 +65,8 @@ Each of these cost real time. They are listed so the cost is paid once.
    non-trivial code you are about to write (a client, a parser, a retry or scheduling loop, a
    framework's job), stop and ask the user first: name the package, what it would replace, and what
    it costs (a dependency, what it cannot do here). The user decides; a decision either way is
-   recorded. The hand-written LLM client (`openai_compatible.py`) is the example that prompted this,
-   and is listed as debt in `.claude/MEMORY.md`.
+   recorded. The hand-written LLM client (`openai_compatible.py`) is the example that prompted this;
+   it was moved onto the `openai` package in the assistant milestone's PR 5.
 
 ## Repository conventions
 
