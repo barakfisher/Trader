@@ -21,16 +21,18 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from datetime import timedelta
-from decimal import Decimal
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.agents.scan_budget import start_of_utc_day
+from app.agents.scan_schedule import describe_next_scan
 from app.agents.tools import TOOLS_BY_NAME as AGENT_TOOLS
-from app.agents.tools import Tool, ToolContext, _object, money
+from app.agents.tools import Tool, ToolContext, _object, _stored_closes, find_listing, money
 from app.assistant.product_guide import SECTIONS
 from app.llm.base import ToolSpec
 
@@ -52,6 +54,10 @@ RETURN_WINDOWS = {"1d": 1, "7d": 7, "30d": 30}
 #: Topic instruments listed per topic.
 MAX_TOPIC_INSTRUMENTS = 30
 PROPOSAL_STATES = ("pending", "approved", "rejected", "snoozed", "expired")
+#: The currency totals are summed in when no snapshot names one (guideline 10).
+BASE_CURRENCY = "USD"
+#: Calendar days searched back from the month's start for each holding's last close.
+MONTH_START_CLOSE_DAYS = 10
 
 
 def _pct(numerator: Decimal, denominator: Decimal) -> str | None:
@@ -181,6 +187,7 @@ async def get_portfolio(context: ToolContext, arguments: Mapping[str, Any]) -> d
 
     quotes = await _prices(context, [row.symbol for row in holdings])
     latest = snapshots[0] if snapshots else None
+    base = latest.currency if latest is not None else BASE_CURRENCY
     by_symbol = {
         entry["symbol"]: entry for entry in (latest.breakdown if latest is not None else []) or []
     }
@@ -188,6 +195,7 @@ async def get_portfolio(context: ToolContext, arguments: Mapping[str, Any]) -> d
     for row in holdings:
         quote = quotes.get(row.symbol)
         snap = by_symbol.get(row.symbol)
+        day_change = _day_change_minor(Decimal(row.quantity), quote)
         rows.append(
             {
                 "symbol": row.symbol,
@@ -200,7 +208,13 @@ async def get_portfolio(context: ToolContext, arguments: Mapping[str, Any]) -> d
                 "price": money(quote.price_minor, quote.currency) if quote else None,
                 "currency": quote.currency if quote else row.currency,
                 "day_change_percent": quote.day_change_pct if quote else None,
+                "day_change": (
+                    money(day_change, quote.currency)
+                    if quote is not None and day_change is not None
+                    else None
+                ),
                 "price_as_of": quote.as_of.isoformat() if quote else None,
+                "delayed_minutes": quote.delay_seconds // 60 if quote else None,
                 "value_in_base": (
                     money(int(snap["valueMinor"]), latest.currency)
                     if latest is not None and snap and snap.get("valueMinor") is not None
@@ -221,6 +235,18 @@ async def get_portfolio(context: ToolContext, arguments: Mapping[str, Any]) -> d
         "cash": money(cash.balance_minor, cash.currency) if cash else None,
         "link": "/" if agent.is_primary else f"/agents/{agent.id}",
     }
+    if cash is None and agent.is_primary:
+        # Measured 2026-10-12: with `cash: null` and nothing more, "how much cash
+        # do I have?" was answered with a guess or not at all.
+        answer["cash_note"] = (
+            "the real portfolio keeps no cash balance in this app - it records holdings "
+            "only; cash is kept only by simulated agents, as paper money of their own"
+        )
+    if holdings:
+        answer["today"] = _today(
+            [(row.symbol, Decimal(row.quantity), quotes.get(row.symbol)) for row in holdings],
+            base,
+        )
     unpriced = [row["symbol"] for row in rows if row["price"] is None]
     if unpriced:
         answer["unpriced"] = unpriced
@@ -252,6 +278,55 @@ async def get_portfolio(context: ToolContext, arguments: Mapping[str, Any]) -> d
             "change_percent": dict.fromkeys(RETURN_WINDOWS),
             "note": "no daily snapshot of this portfolio exists yet, so its total is unknown",
         }
+    return answer
+
+
+def _day_change_minor(quantity: Decimal, quote: Any) -> int | None:
+    """A holding's change since the previous close, in the quote's currency, rounded once."""
+    if quote is None or quote.previous_close_minor is None:
+        return None
+    change = quantity * (Decimal(quote.price_minor) - Decimal(quote.previous_close_minor))
+    return int(change.quantize(Decimal(1), rounding=ROUND_HALF_UP))
+
+
+def _today(held: Sequence[tuple[str, Decimal, Any]], base: str) -> dict[str, Any]:
+    """Today's change in money and percent, as the Portfolio page's summary has it:
+    live prices against the previous close, summed over the holdings that have both.
+
+    Only holdings quoted in the base currency are summed - this service converts
+    no currency - and every holding left out is named, so a total over part of the
+    portfolio is never read as the whole of it (guideline 7).
+    """
+    counted = [
+        (quantity, quote)
+        for _symbol, quantity, quote in held
+        if quote is not None and quote.previous_close_minor is not None and quote.currency == base
+    ]
+    left_out = [
+        symbol
+        for symbol, _quantity, quote in held
+        if quote is None or quote.previous_close_minor is None or quote.currency != base
+    ]
+    if not counted:
+        return {
+            "change": None,
+            "change_percent": None,
+            "note": f"no holding has a live price and a previous close in {base}",
+        }
+    now_value = sum((q * Decimal(quote.price_minor) for q, quote in counted), Decimal(0))
+    previous = sum((q * Decimal(quote.previous_close_minor) for q, quote in counted), Decimal(0))
+    change = int((now_value - previous).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    answer: dict[str, Any] = {
+        "change": money(change, base),
+        "change_percent": _pct(Decimal(change), previous),
+        "covers": f"{len(counted)} of {len(held)} holdings",
+    }
+    if left_out:
+        answer["left_out"] = left_out
+        answer["note"] = (
+            f"holdings that are unpriced, have no previous close, or are not quoted in {base} "
+            "are left out of today's change"
+        )
     return answer
 
 
@@ -325,8 +400,11 @@ async def get_agents(context: ToolContext, arguments: Mapping[str, Any]) -> dict
             ),
             {"user": context.user_id},
         ).all()
+        month_start = _month_start(context.now)
+        ledger = _ledger_at(connection, context.user_id, month_start)
     last_scan = {row.agent_id: row for row in scans}
     quotes = await _prices(context, [row.symbol for row in holdings])
+    closes: dict[str, int | None] = {}
 
     listed = []
     for agent in agents:
@@ -339,13 +417,24 @@ async def get_agents(context: ToolContext, arguments: Mapping[str, Any]) -> dict
             "link": "/" if agent.is_primary else f"/agents/{agent.id}",
         }
         if not agent.is_primary:
-            entry.update(_simulated(agent, held, cash.get(agent.id), quotes))
+            simulated, worth_minor = _simulated(agent, held, cash.get(agent.id), quotes)
+            entry.update(simulated)
+            entry["month_to_date"] = await _month_to_date(
+                context, agent, worth_minor, ledger, month_start, closes
+            )
             spent = spend.get(agent.id)
             scan = last_scan.get(agent.id)
             entry.update(
                 {
                     "persona": agent.persona,
                     "scan_schedule": agent.scan_schedule,
+                    "next_scan": describe_next_scan(
+                        schedule=agent.scan_schedule,
+                        state=agent.state,
+                        persona=agent.persona,
+                        scheduling=context.scheduling,
+                        now=context.now,
+                    ),
                     "model_budget_per_day_usd": _usd(agent.llm_budget_micro_usd),
                     "model_spend_today_usd": _usd(spent.today if spent else 0),
                     "model_spend_7d_usd": _usd(spent.week if spent else 0),
@@ -366,7 +455,12 @@ async def get_agents(context: ToolContext, arguments: Mapping[str, Any]) -> dict
         "agents": listed,
         "note": (
             "model spend is recorded model cost in USD; a day is a UTC day. "
-            "return_percent is since the agent started, against its paper budget."
+            "return_percent is since the agent started, against its paper budget. "
+            "month_to_date is the change since the month began (UTC) with deposits taken "
+            "out: net worth now against the value at the last close before `since` plus what "
+            "was deposited after it; an agent started this month counts from its start, so "
+            "every agent's month_to_date covers the same month. next_scan.local is the "
+            "next scheduled scan in the user's time zone."
         ),
     }
 
@@ -375,8 +469,11 @@ def _usd(micro: int) -> str:
     return str((Decimal(micro) / Decimal(1_000_000)).quantize(Decimal("0.0001")))
 
 
-def _simulated(agent: Any, held: list[Any], cash: Any, quotes: dict[str, Any]) -> dict[str, Any]:
-    """A simulated agent's paper net worth: cash plus holdings at live prices (USD only, D7)."""
+def _simulated(
+    agent: Any, held: list[Any], cash: Any, quotes: dict[str, Any]
+) -> tuple[dict[str, Any], int | None]:
+    """A simulated agent's paper net worth: cash plus holdings at live prices (USD only,
+    D7) - as the answer reports it, and in minor units, None while anything is unpriced."""
     unpriced = [row.symbol for row in held if row.symbol not in quotes]
     cash_minor = cash.balance_minor if cash else 0
     answer: dict[str, Any] = {
@@ -385,7 +482,7 @@ def _simulated(agent: Any, held: list[Any], cash: Any, quotes: dict[str, Any]) -
     }
     if unpriced:
         answer.update({"net_worth": None, "return_percent": None, "unpriced": unpriced})
-        return answer
+        return answer, None
     worth = Decimal(cash_minor) + sum(
         (Decimal(row.quantity) * Decimal(quotes[row.symbol].price_minor) for row in held),
         Decimal(0),
@@ -395,7 +492,118 @@ def _simulated(agent: Any, held: list[Any], cash: Any, quotes: dict[str, Any]) -
     answer["return_percent"] = _pct(
         Decimal(worth_minor) - Decimal(agent.budget_minor or 0), Decimal(agent.budget_minor or 0)
     )
-    return answer
+    return answer, worth_minor
+
+
+def _month_start(now: datetime) -> datetime:
+    return now.astimezone(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+@dataclass(frozen=True)
+class _LedgerAt:
+    """Each agent's ledger at an instant: cash then, deposits since, shares held then."""
+
+    existed: dict[str, bool]
+    cash_then: dict[str, int]
+    deposited_since: dict[str, int]
+    held_then: dict[str, list[tuple[str, Decimal]]]
+
+
+def _ledger_at(connection: Connection, user_id: str, at: datetime) -> _LedgerAt:
+    """The ledger replayed to `at`, as the agent page's performance does it (D36):
+    cash is every movement before it, holdings every fill before it."""
+    movements = connection.execute(
+        text(
+            """
+            SELECT agent_id::text AS agent_id,
+                   bool_or(created_at < :at) AS existed,
+                   coalesce(sum(amount_minor) FILTER (WHERE created_at < :at), 0) AS cash_then,
+                   coalesce(sum(amount_minor) FILTER (
+                       WHERE created_at >= :at AND kind IN ('opening_deposit', 'top_up')
+                   ), 0) AS deposited_since
+              FROM cash_movements
+             WHERE user_id = CAST(:user AS uuid)
+             GROUP BY agent_id
+            """
+        ),
+        {"user": user_id, "at": at},
+    ).all()
+    fills = connection.execute(
+        text(
+            """
+            SELECT f.agent_id::text AS agent_id, i.symbol,
+                   sum(CASE WHEN f.side = 'buy' THEN f.quantity ELSE -f.quantity END) AS quantity
+              FROM fills f JOIN instruments i ON i.id = f.instrument_id
+             WHERE f.user_id = CAST(:user AS uuid) AND f.created_at < :at
+             GROUP BY f.agent_id, i.symbol
+            HAVING sum(CASE WHEN f.side = 'buy' THEN f.quantity ELSE -f.quantity END) <> 0
+             ORDER BY i.symbol
+            """
+        ),
+        {"user": user_id, "at": at},
+    ).all()
+    held: dict[str, list[tuple[str, Decimal]]] = {}
+    for row in fills:
+        held.setdefault(row.agent_id, []).append((row.symbol, Decimal(row.quantity)))
+    return _LedgerAt(
+        existed={row.agent_id: bool(row.existed) for row in movements},
+        cash_then={row.agent_id: int(row.cash_then) for row in movements},
+        deposited_since={row.agent_id: int(row.deposited_since) for row in movements},
+        held_then=held,
+    )
+
+
+async def _close_before(context: ToolContext, symbol: str, at: datetime) -> int | None:
+    """The last stored close before `at`, within `MONTH_START_CLOSE_DAYS`; None when none is."""
+    listing = find_listing(context.engine, symbol)
+    if listing is None:
+        return None
+    span = (context.now - at).days + MONTH_START_CLOSE_DAYS
+    points = await _stored_closes(context, listing, span)
+    earliest = at - timedelta(days=MONTH_START_CLOSE_DAYS)
+    before = [point for point in points if earliest <= point.as_of < at]
+    return before[-1].price_minor if before else None
+
+
+async def _month_to_date(
+    context: ToolContext,
+    agent: Any,
+    worth_minor: int | None,
+    ledger: _LedgerAt,
+    month_start: datetime,
+    closes: dict[str, int | None],
+) -> dict[str, Any]:
+    """The agent's change this month, deposits taken out (measured 2026-10-12: with
+    only each agent's return since its own start, "which agent did best this month?"
+    compared two different periods). Unavailable, never partial (decision 111)."""
+    existed = ledger.existed.get(agent.id, False)
+    since = month_start if existed else agent.created_at
+    answer: dict[str, Any] = {"since": since.date().isoformat()}
+    if worth_minor is None:
+        return {**answer, "change": None, "change_percent": None, "note": "a holding is unpriced"}
+    start_value = Decimal(ledger.cash_then.get(agent.id, 0)) if existed else Decimal(0)
+    for symbol, quantity in ledger.held_then.get(agent.id, []) if existed else []:
+        if symbol not in closes:
+            closes[symbol] = await _close_before(context, symbol, month_start)
+        close = closes[symbol]
+        if close is None:
+            return {
+                **answer,
+                "change": None,
+                "change_percent": None,
+                "note": f"no close of {symbol} before {since.date().isoformat()} is stored",
+            }
+        start_value += quantity * Decimal(close)
+    start_minor = int(start_value.quantize(Decimal(1), rounding=ROUND_HALF_UP))
+    deposited = ledger.deposited_since.get(agent.id, 0)
+    change = worth_minor - start_minor - deposited
+    return {
+        **answer,
+        "value_at_start": money(start_minor, "USD"),
+        "deposited_since": money(deposited, "USD"),
+        "change": money(change, "USD"),
+        "change_percent": _pct(Decimal(change), Decimal(start_minor + deposited)),
+    }
 
 
 # -- get_proposals -------------------------------------------------------------
@@ -899,9 +1107,10 @@ OWN_TOOLS: tuple[Tool, ...] = (
     Tool(
         ToolSpec(
             "get_portfolio",
-            "The user's real portfolio, or a named agent's: holdings with live prices and "
-            "today's change, value and weight from the daily snapshot, cash, and the total's "
-            "change over 1, 7 and 30 days.",
+            "The user's real portfolio, or a named agent's: holdings with live (delayed) "
+            "prices and today's change in money and percent, the whole portfolio's change "
+            "today, value and weight from the daily snapshot, cash (the real portfolio keeps "
+            "none), and the total's change over 1, 7 and 30 days.",
             _object({"agent": _TEXT}, []),
         ),
         get_portfolio,
@@ -909,8 +1118,9 @@ OWN_TOOLS: tuple[Tool, ...] = (
     Tool(
         ToolSpec(
             "get_agents",
-            "The user's agents: real or simulated, state, persona, holdings, paper net worth "
-            "and return, scan schedule, model budget and spend, and each one's last scan.",
+            "The user's agents: real or simulated, state, persona, holdings, paper cash, net "
+            "worth, return since start and this month, scan schedule and when the next "
+            "scheduled scan is, model budget and spend, and each one's last scan.",
             _object({}, []),
         ),
         get_agents,
@@ -971,9 +1181,10 @@ OWN_TOOLS: tuple[Tool, ...] = (
     Tool(
         ToolSpec(
             "get_universe_info",
-            "The universe of instruments this app knows: when it was screened and loaded, the "
-            "screen's rules, its counts, the last rescreen and what it dropped, and - given a "
-            "symbol - whether that symbol is in it.",
+            "The universe - in this app, the set of US stocks and ETFs it knows, never the "
+            "cosmos: how it was made (the screen's source and rules), when it was screened and "
+            "loaded, its counts, how often it is rescreened, the last rescreen and what it "
+            "dropped, and - given a symbol - whether that symbol is in it.",
             _object({"symbol": _TEXT}, []),
         ),
         get_universe_info,

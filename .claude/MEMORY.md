@@ -4,7 +4,17 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-12 ~13:30 UTC - **Assistant PR 4: the eval runner, the measured limit, the old `/ask`
+Updated: 2026-10-14 - **Assistant PR 4b: the eval's findings, built; the paid re-run is owed.** Tool gaps
+closed: `get_agents` has each agent's `next_scan` (in the user's zone) and `month_to_date`;
+`get_portfolio` has today's change in money (`today`, per holding `day_change`), `delayed_minutes`, and
+a `cash_note` saying the real portfolio keeps no cash; `get_price_history`'s `days` are **trading days**
+(the agents' too). The prompt now says: a price's time and delay, a proposal's state, news sources, a
+replayed scan's conclusion, and "how was the universe made?" is `get_universe_info`. The assistant's
+figure check accepts a date written in words ("12 October", "Oct 12, 2026") when the evidence states it.
+**Not yet measured on a model** - this session had no key; run PR 4's command (below) against PR 4's
+numbers before calling 4b done. Then PR 5 (`openai` package). No migration.
+
+Previous update, 2026-10-12 ~13:30 UTC - **Assistant PR 4: the eval runner, the measured limit, the old `/ask`
 removed.** `scripts/run_assistant_eval.py` runs `data/eval/assistant.json` on a real model in a seeded,
 disposable world and grades each turn mechanically and by a Sonnet 5.5 judge (the user's choice: model
 judge + the user reads failures and disagreements). **Flash-Lite won** (51% of turns pass over 3
@@ -580,7 +590,7 @@ strings and left-to-right assumptions before designing it.
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
 | **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 ✅ #210 (instrument_profiles 155 -> 96 MB); DB3 ✅ #213 (window from 2026-10-11 07:56 UTC); DB4 split (decision 143): first half 2026-10-11 (#218, decisions 143-147), second half - indexes and `runs` retention - on/after 2026-10-18. DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-147. See "Planned: the database sprint" |
-| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 🚧 In progress | Test set #212; #220-#223 deployed 2026-10-12 - core, Admin picker and limit, replay and universe tools, the `/ask` chat screen. **Live.** PR 4 (eval runner, measured limit, old `/ask` removed) done. Next: PR 4b (the eval's findings), then PR 5 (`openai` package). See "Planned: the assistant" and "Next session: the assistant's PR 4" |
+| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | 🚧 In progress | Test set #212; #220-#223 deployed 2026-10-12 - core, Admin picker and limit, replay and universe tools, the `/ask` chat screen. **Live.** PR 4 (eval runner, measured limit, old `/ask` removed) done. PR 4b (the eval's findings) built, its paid re-run owed. Then PR 5 (`openai` package). See "Planned: the assistant" and "Next session: the assistant's PR 4b" |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
 | **Multi-agent sandbox, Stage 4 — the agent that decides** | 🚧 In progress | #172 spec D43-D52 + §14; #173 models on the Admin page (0041, D43-D44); #177 the scan's inputs - tool calling, movers, seven read-only tools, the briefing (0042); #180 the scan - one hand-written loop (D53), the per-agent budget, the step limit, `agent_scans` (0043), `POST /agents/:id/scans`, built on a scripted model (**real scans not yet measured: the account is unfunded**). Next: PR 5, the trade proposal and its approval (D26, D47-D49, D51, D54) |
@@ -3541,6 +3551,27 @@ grant tests fail for the wrong reason.
 ## Where to go next
 
 ### Next session: the assistant's PR 4b - what the eval found (written 2026-10-12)
+
+**Built 2026-10-14; the measurement is owed.** Re-run the eval (command below, `--repeat 3`, ask the
+user first - about $1.60 of the $5 is left) and compare with PR 4's 132/258 turns, mechanical 210/258.
+Decided in 4b, each argued where the code is:
+- **The AI service reads `ENABLE_SCHEDULED_SCANS` too** (`config.py`): compose's shared `.env` and
+  kind's one ConfigMap give both services the same value, so "is there a next scan?" needs no wire
+  change. The slot times are copied from `scanSchedule.ts` into `app/agents/scan_schedule.py`;
+  `tests/test_scan_schedule.py` reads the TypeScript and fails when the two differ.
+- **`month_to_date` replays the ledger** the way the agent page's performance does (D36): value at
+  the last close before the 1st (UTC) = movements before it + fills before it x that close; change =
+  net worth now - that value - deposits since; an agent started this month counts from its start.
+  Missing close -> null with a note, never partial (decision 111).
+- **`get_price_history(days)` counts sessions**, max 252, default 60 (was 365/90 calendar days). It
+  also loads at least the backfill's minimum, so a short window over a stored history stops asking
+  the provider again on every call (it did, for every `days` under ~28).
+- **The eval world's agents own their holdings through fills** (`manual_user_override`, since an
+  agent's fill needs a proposal); the budget is set so cash still ends at the $6000/$7500 the scans'
+  theses quote.
+- **Dates in words pass the assistant's check only** - narration's and the agents' still refuse
+  them (same debt row as the timestamp digits).
+
 
 The user chose (2026-10-12) to fix these in their own PR before PR 5, measured against PR 4's Flash-Lite
 numbers (`--repeat 3`: 132/258 turns pass, mechanical 210/258; 30 of 86 turns pass every sample, 30

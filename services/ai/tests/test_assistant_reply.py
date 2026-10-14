@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import pytest
+
 from app.assistant.reply import MAX_SUGGESTIONS, check, parse, sources
 
 
@@ -231,6 +233,24 @@ def test_a_date_the_evidence_states_passes_whole_and_its_digits_source_nothing()
     assert check(quoted, tool_results=[TIMESTAMPED], user_messages=["hi"]).valid
     assert check(invented, tool_results=[TIMESTAMPED], user_messages=["hi"]).unsourced == ("12",)
     assert not check(wrong_day, tool_results=[TIMESTAMPED], user_messages=["hi"]).valid
+
+
+@pytest.mark.parametrize(
+    "written", ["12 October", "Oct 12, 2026", "October 12th", "12th of October 2026", "24 Sept."]
+)
+def test_a_date_in_words_the_evidence_states_passes(written: str) -> None:
+    """The instructions ask for "12 October"; Haiku wrote "Oct 12, 2026" and was
+    refused for it (measured 2026-10-12, PR 4's eval)."""
+    reply = _raw(outcome="answer", text=f"Loaded on {written}.")
+
+    assert check(reply, tool_results=[TIMESTAMPED], user_messages=["hi"]).valid
+
+
+@pytest.mark.parametrize("written", ["13 October", "Oct 12, 2025", "12 Marketing"])
+def test_a_date_in_words_the_evidence_does_not_state_is_checked(written: str) -> None:
+    reply = _raw(outcome="answer", text=f"Loaded on {written}.")
+
+    assert not check(reply, tool_results=[TIMESTAMPED], user_messages=["hi"]).valid
 
 
 def test_a_link_is_checked_as_a_page_never_read_for_figures() -> None:

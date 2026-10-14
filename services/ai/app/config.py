@@ -102,6 +102,10 @@ class Settings(BaseSettings):
     base_currency: str = "USD"
     app_timezone: str = "Asia/Jerusalem"
     ai_service_port: int = 8000
+    # D71: whether this installation runs agents' scheduled scans. The
+    # orchestrator runs them; this service reads the same variable from the same
+    # environment only to tell the assistant whether a next scan exists.
+    enable_scheduled_scans: bool = False
 
     # Datastores
     database_url: str = "postgresql://traders:traders@localhost:5432/traders"

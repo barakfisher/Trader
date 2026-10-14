@@ -31,6 +31,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from app.agents.scan_schedule import Scheduling
 from app.analysis.backfill import backfill_history
 from app.analysis.drawdown import drawdown_findings
 from app.analysis.price_move import price_move_findings
@@ -51,9 +52,14 @@ from app.topics.resolution import resolve_topic
 #: Symbols one `get_quote` may ask for: enough to compare a few names, few
 #: enough that a quote request stays one cheap call.
 MAX_QUOTE_SYMBOLS = 5
-#: The longest history a tool returns; the backfill stores about a year.
-MAX_HISTORY_DAYS = 365
-DEFAULT_HISTORY_DAYS = 90
+#: The longest history a tool returns, in trading days: about a year of sessions,
+#: which is what the backfill stores.
+MAX_HISTORY_DAYS = 252
+DEFAULT_HISTORY_DAYS = 60
+#: Calendar days loaded beyond `days * 7 / 5`, so that `days` sessions are in the
+#: window across holidays. Measured 2026-10-12: `days=5` read as calendar days
+#: held three closes over a weekend, and the answer's own "5d" was null.
+HOLIDAY_MARGIN_DAYS = 10
 #: Points in a history answer: weekly beyond this, so a year is ~52 rows, not 252.
 MAX_HISTORY_POINTS = 60
 #: How far back the findings rules look, as the portfolio scan does.
@@ -84,6 +90,8 @@ class ToolContext:
     now: datetime
     #: Fetches a symbol's news before `get_news` reads it (D57); None reads only what is stored.
     news: NewsOnDemand | None = None
+    #: When agents' scans are scheduled, for the assistant's `get_agents`; None is unknown.
+    scheduling: Scheduling | None = None
 
 
 Handler = Callable[[ToolContext, Mapping[str, Any]], Awaitable[dict[str, Any]]]
@@ -254,7 +262,12 @@ async def get_price_history(context: ToolContext, arguments: Mapping[str, Any]) 
     listing = find_listing(context.engine, symbol)
     if listing is None:
         return _unknown(symbol)
-    points = await _stored_closes(context, listing, days)
+    # At least the backfill's minimum is loaded, so a short window over a stored
+    # history reads it rather than asking the provider again; then `days` trading
+    # days back from the last close: that close and the `days` before it.
+    span = max(days, MIN_STORED_CLOSES) * 7 // 5 + HOLIDAY_MARGIN_DAYS
+    loaded = await _stored_closes(context, listing, span)
+    points = loaded[-(days + 1) :]
     if len(points) < 2:
         return {"symbol": symbol, "closes": [], "note": "no daily closes are available"}
     currency = points[-1].currency
@@ -496,7 +509,8 @@ TOOLS: tuple[Tool, ...] = (
     Tool(
         ToolSpec(
             "get_price_history",
-            "Daily closes over a period, with returns over 5, 20 and 60 days and the high and low.",
+            "Daily closes over the last `days` trading days (sessions; 5 is a week, 21 a "
+            "month), with returns over 5, 20 and 60 trading days and the high and low.",
             _object(
                 {
                     "symbol": _SYMBOL,
@@ -587,6 +601,7 @@ def scan_context(
     agent_id: str,
     now: datetime | None = None,
     news: NewsOnDemand | None = None,
+    scheduling: Scheduling | None = None,
 ) -> ToolContext:
     return ToolContext(
         engine=engine,
@@ -599,4 +614,5 @@ def scan_context(
         agent_id=agent_id,
         now=now or datetime.now(UTC),
         news=news,
+        scheduling=scheduling,
     )

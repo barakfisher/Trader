@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -18,6 +19,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from app.agents.scan_schedule import Scheduling
 from app.agents.tools import scan_context
 from app.analysis.thresholds import AnalysisThresholds
 from app.assistant.budget import assistant_budget, start_of_local_day
@@ -33,6 +35,7 @@ from app.assistant.tools import (
     primary_agent_id,
     replay_scan,
 )
+from app.core.exchange_calendar import load_calendar
 from app.corpus.hashed_embedder import HashedEmbedder
 from app.corpus.vector_store import PgVectorStore
 from app.llm.base import (
@@ -43,7 +46,8 @@ from app.llm.base import (
     ToolCall,
     UserMessage,
 )
-from tests.integration.conftest import run_script
+from app.models import DailyClose
+from tests.integration.conftest import REPO_ROOT, run_script
 from tests.integration.test_agent_tools_sql import ScriptedMarket
 
 FIXTURE_EMBEDDER = {"EMBEDDINGS_PROVIDER": "fixture"}
@@ -289,6 +293,35 @@ async def test_get_portfolio_reports_live_prices_the_snapshot_and_what_is_unpric
     assert result["snapshot"]["total_value"] == "10500.00"
     assert result["snapshot"]["change_percent"]["7d"] == "5.00"
     assert result["snapshot"]["change_percent"]["30d"] is None
+    assert held[account["held"]]["delayed_minutes"] == 15
+
+
+async def test_get_portfolio_gives_todays_change_in_money_over_what_is_priced(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    """Measured 2026-10-12: with only each holding's percent, "how is my portfolio
+    doing today?" had no change in money to quote."""
+    result = await get_portfolio(_context(loaded, account), {})
+
+    held = {row["symbol"]: row for row in result["holdings"]}
+    # 10 shares, 229.28 against a previous close of 228.28 (ScriptedMarket).
+    assert held[account["held"]]["day_change"] == "10.00"
+    assert held[account["unpriced"]]["day_change"] is None
+    assert result["today"]["change"] == "10.00"
+    assert result["today"]["change_percent"] == "0.44"
+    assert result["today"]["covers"] == "1 of 2 holdings"
+    assert result["today"]["left_out"] == [account["unpriced"]]
+
+
+async def test_the_real_portfolio_says_it_keeps_no_cash(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    """Measured 2026-10-12: `cash: null` alone left "how much cash do I have?" to a guess."""
+    real = await get_portfolio(_context(loaded, account), {})
+    momentum = await get_portfolio(_context(loaded, account), {"agent": "Momentum"})
+
+    assert real["cash"] is None and "no cash" in real["cash_note"]
+    assert momentum["cash"] == "1000.00" and "cash_note" not in momentum
 
 
 async def test_a_portfolio_with_no_snapshot_still_names_its_windows(
@@ -327,6 +360,97 @@ async def test_get_agents_values_a_simulated_agent_and_its_spend(
     assert momentum["paper_budget"] == "1000.00"
     assert momentum["last_scan"] is None
     assert momentum["link"] == f"/agents/{account['agent']}"
+    # Started this month (now): its month counts from its start, its deposit taken out.
+    assert momentum["month_to_date"]["change"] == "0.00"
+    assert momentum["month_to_date"]["deposited_since"] == "1000.00"
+    # No scheduling given: the next scan is unknown, and says why.
+    assert momentum["next_scan"]["at"] is None and momentum["next_scan"]["why_none"]
+
+
+async def test_month_to_date_values_the_month_start_from_the_ledger(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    """An agent that held shares before the month began, and was topped up since:
+    its change is net worth now against the month's start value plus the top-up
+    (measured 2026-10-12: "which agent did best this month?" compared two agents'
+    returns since two different starts)."""
+    symbol = _symbols(loaded, 3)[2]
+    month_start = NOW.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    with loaded.begin() as connection:
+        steady = connection.execute(
+            text(
+                "INSERT INTO agents (user_id, slug, name, persona, budget_minor, created_at) "
+                "VALUES (CAST(:u AS uuid), 'steady', 'Steady', 'Holds.', 100000, :created) "
+                "RETURNING id::text"
+            ),
+            {"u": account["user"], "created": month_start - timedelta(days=20)},
+        ).scalar_one()
+        connection.execute(
+            text(
+                "INSERT INTO fills (user_id, agent_id, instrument_id, side, quantity, "
+                "price_minor, notional_minor, fee_minor, price_source, source, "
+                "idempotency_key, created_at) VALUES (CAST(:u AS uuid), CAST(:a AS uuid), "
+                "CAST(:i AS uuid), 'buy', 2, 20000, 40000, 0, 'user', 'manual_user_override', "
+                "'steady-1', :at)"
+            ),
+            {
+                "u": account["user"],
+                "a": steady,
+                "i": _instrument(loaded, symbol),
+                "at": month_start - timedelta(days=5),
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO holdings (user_id, agent_id, instrument_id, quantity, "
+                "cost_basis_minor) VALUES (CAST(:u AS uuid), CAST(:a AS uuid), "
+                "CAST(:i AS uuid), 2, 20000)"
+            ),
+            {"u": account["user"], "a": steady, "i": _instrument(loaded, symbol)},
+        )
+        # A top-up after the month began (D22: a raised budget is a deposit).
+        connection.execute(
+            text("UPDATE agents SET budget_minor = 150000 WHERE id = CAST(:a AS uuid)"),
+            {"a": steady},
+        )
+    market = account["market"]
+    market.prices[symbol] = 22928
+    market.closes[symbol] = [
+        DailyClose(
+            symbol=symbol,
+            as_of=NOW - timedelta(days=day),
+            price_minor=20000,
+            currency="USD",
+            source="fixture",
+        )
+        for day in range(70, 0, -1)
+    ]
+
+    result = await get_agents(_context(loaded, account), {})
+
+    month = next(a for a in result["agents"] if a["name"] == "Steady")["month_to_date"]
+    # Start: 600.00 cash + 2 x 200.00; since: 500.00 deposited; now: 1100.00 + 2 x 229.28.
+    assert month["since"] == month_start.date().isoformat()
+    assert month["value_at_start"] == "1000.00"
+    assert month["deposited_since"] == "500.00"
+    assert month["change"] == "58.56"
+    assert month["change_percent"] == "3.90"
+
+
+async def test_get_agents_names_the_next_scheduled_scan(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    calendar = load_calendar(str(REPO_ROOT / "data" / "calendar"))
+    context = replace(
+        _context(loaded, account),
+        scheduling=Scheduling(enabled=True, calendar=calendar, timezone=TZ),
+    )
+
+    result = await get_agents(context, {})
+
+    momentum = next(a for a in result["agents"] if a["name"] == "Momentum")
+    assert momentum["next_scan"]["at"] > NOW.isoformat()
+    assert momentum["next_scan"]["local"]["time_zone"] == TZ
 
 
 async def test_get_proposals_reports_a_lapsed_pending_proposal_as_expired(
