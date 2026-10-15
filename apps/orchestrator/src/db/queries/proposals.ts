@@ -28,7 +28,17 @@ export interface ProposalRow {
   agent_is_primary: boolean;
   /** The scan behind a trade proposal (migration 0044); null otherwise. */
   scan_id: string | null;
+  /** That scan's tool calls (`SCAN_TOOL_CALLS`), for the "Evidence checked" line; null without a scan. */
+  scan_tool_calls: unknown[] | null;
 }
+
+/**
+ * Every tool call of a scan's transcript, in order: the assistant steps'
+ * `tool_calls`, without the tools' answers. Extracted here rather than shipping
+ * the whole transcript, which is the large part of a scan, to a list that only
+ * needs the names and arguments (`services/evidenceChecked.ts`).
+ */
+export const SCAN_TOOL_CALLS = `jsonb_path_query_array(s.transcript, '$[*] ? (@.role == "assistant").tool_calls[*]')`;
 
 export interface ProposalToCreate {
   userId: string;
@@ -87,12 +97,14 @@ export async function createProposals(proposals: ProposalToCreate[]): Promise<st
 const PROPOSAL_COLUMNS = `p.id, p.user_id, p.observation_id, p.kind, p.payload, p.state,
        p.expires_at, p.snoozed_until, p.decided_at, p.decided_via, p.created_at,
        o.severity, o.subject_ref, o.headline, o.explanation, o.localized, o.evidence,
-       a.id AS agent_id, a.name AS agent_name, a.is_primary AS agent_is_primary, p.scan_id`;
+       a.id AS agent_id, a.name AS agent_name, a.is_primary AS agent_is_primary, p.scan_id,
+       ${SCAN_TOOL_CALLS} AS scan_tool_calls`;
 
 /** The joins `PROPOSAL_COLUMNS` reads from. */
 const PROPOSAL_FROM = `proposals p
        JOIN observations o ON o.id = p.observation_id
-       JOIN agents a ON a.id = p.agent_id`;
+       JOIN agents a ON a.id = p.agent_id
+       LEFT JOIN agent_scans s ON s.agent_id = p.agent_id AND s.id = p.scan_id`;
 
 export function findProposal(userId: string, proposalId: string): Promise<ProposalRow | null> {
   return queryOne<ProposalRow>(

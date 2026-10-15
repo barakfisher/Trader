@@ -452,6 +452,27 @@
       "agentPrice": "the agent's price {{price}}",
       "thesis": "Why the agent proposes it",
       "paperOnly": "A paper trade: approving it records a fill in the agent's simulated account. No order is placed.",
+      "checked": {
+        "label": "Evidence checked",
+        "none": "nothing - the agent decided from its briefing alone",
+        "tools": {
+          "search_universe": "universe search",
+          "get_quote": "quote",
+          "get_price_history": "price history",
+          "get_findings": "findings",
+          "get_news": "news",
+          "get_position": "position",
+          "explain_concept": "glossary"
+        },
+        "quoted": "“{{text}}”",
+        "tradingDays_one": "{{count}} trading day",
+        "tradingDays_other": "{{count}} trading days",
+        "days_one": "{{count}} day",
+        "days_other": "{{count}} days",
+        "other_one": "{{count}} other tool",
+        "other_other": "{{count}} other tools",
+        "transcript": "Full transcript in the agent's decisions"
+      },
       "distance": "The agent decided at {{agent}}; the live price is {{distance}} from it.",
       "previewFailed": "The live price could not be checked. Try again.",
       "confirmFailed": "The trade could not be recorded. Try again.",

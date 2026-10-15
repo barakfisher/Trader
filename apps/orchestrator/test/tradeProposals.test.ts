@@ -128,6 +128,10 @@ vi.mock('../src/db/queries.js', () => ({
   applyProposalTransition: vi.fn(async () => ({ applied: true, intentId: null })),
   recordProposalAttempt: vi.fn(async () => undefined),
   createTradeProposal: vi.fn(async () => ({ proposalId: PROPOSAL, observationId: 'o-1' })),
+  listScanToolCalls: vi.fn(async () => [
+    { id: 'c1', name: 'get_price_history', arguments: '{"symbol":"AAPL","days":21}' },
+    { id: 'c2', name: 'get_position', arguments: '{}' },
+  ]),
   getUser: vi.fn(async () => USER),
   getOrCreateUserSettings: vi.fn(async () => settingsRow),
   claimNotification: vi.fn(async () => ({ id: 'n-1' })),
@@ -281,9 +285,11 @@ describe('a scan becomes a proposal', () => {
         proposalId: PROPOSAL,
         trade: true,
         title: 'Value proposes to buy 3 AAPL at 200.00',
-        body: 'AAPL fell 3.18% to 200.00.',
+        // The thesis, then what the scan checked, from its transcript.
+        body: 'AAPL fell 3.18% to 200.00.\n\nChecked: price history AAPL (21 trading days) · position',
       }),
     );
+    expect(queries.listScanToolCalls).toHaveBeenCalledWith(USER.id, agentRow().id, SCAN);
   });
 
   it('holds the announcement for the digest during quiet hours, and still writes the proposal', async () => {

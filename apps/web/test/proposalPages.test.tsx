@@ -63,6 +63,7 @@ function proposal(overrides: Partial<Proposal> = {}): Proposal {
     agentName: 'Main portfolio',
     agentIsPrimary: true,
     scanId: null,
+    evidenceChecked: null,
     createdAt: '2026-09-30T05:20:00.000Z',
     ...overrides,
   };
@@ -197,6 +198,15 @@ describe("an agent's trade proposal", () => {
     agentName: 'Value',
     agentIsPrimary: false,
     scanId: 'scan-1',
+    evidenceChecked: {
+      checks: [
+        { tool: 'get_price_history', subject: 'INTC', days: 21 },
+        { tool: 'get_news', subject: 'INTC', days: 7 },
+        { tool: 'get_position', subject: null, days: null },
+        { tool: 'explain_concept', subject: 'drawdown', days: null },
+      ],
+      otherCalls: 1,
+    },
   });
   const PREVIEW = {
     proposalId: 'p-trade',
@@ -223,6 +233,41 @@ describe("an agent's trade proposal", () => {
       warnings: [],
     },
   };
+
+  const serveTrade = (trade: Proposal) =>
+    serve({
+      '/proposals/p-trade': { proposal: trade, transitions: [], attempts: [] },
+      '/proposals?state=open': { proposals: [] },
+      [`/proposals?state=approved&limit=${RECENT_APPROVALS}`]: { proposals: [] },
+    });
+
+  it('says what the scan checked, in words, and links to its transcript', async () => {
+    serveTrade(TRADE);
+    renderAt('/proposals/p-trade');
+    const line = await screen.findByRole('region', { name: 'Evidence checked' });
+    expect(line.querySelector('p')!.textContent).toBe(
+      'Evidence checked: price history INTC (21 trading days) · news INTC (7 days) · position · glossary “drawdown” · 1 other tool',
+    );
+    // Tool names come from the catalogue, never as the scan called them.
+    expect(line.textContent).not.toMatch(/get_|explain_concept/);
+    expect(screen.getByRole('link', { name: "Full transcript in the agent's decisions" }).getAttribute('href')).toBe(
+      '/agents/agent-value?tab=decisions&scan=scan-1',
+    );
+  });
+
+  it('says so when the scan checked nothing', async () => {
+    serveTrade({ ...TRADE, evidenceChecked: { checks: [], otherCalls: 0 } });
+    renderAt('/proposals/p-trade');
+    const line = await screen.findByRole('region', { name: 'Evidence checked' });
+    expect(line.textContent).toContain('nothing - the agent decided from its briefing alone');
+  });
+
+  it('shows no line on a proposal without a scan', async () => {
+    serveTrade({ ...TRADE, scanId: null, evidenceChecked: null });
+    renderAt('/proposals/p-trade');
+    expect(await screen.findByText('INTC fell 3.18% to 112.50 with no news against it.')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Evidence checked' })).toBeNull();
+  });
 
   it('approves through a preview at the live price, then confirms at the price it showed', async () => {
     serve({

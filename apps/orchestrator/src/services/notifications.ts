@@ -28,7 +28,7 @@
  * must not look the same afterwards.
  */
 
-import type { LocalizedTexts } from '@traders/shared';
+import type { EvidenceChecked, LocalizedTexts } from '@traders/shared';
 
 import {
   claimNotification,
@@ -74,6 +74,8 @@ export interface NotifiableFinding {
   trade?: boolean;
   /** D70: a sell made while the market is open is pushed through quiet hours. */
   urgent?: boolean;
+  /** A trade proposal's "Evidence checked" line: what the agent's scan looked at. */
+  evidenceChecked?: EvidenceChecked;
   /**
    * The observation's rule, subject and evidence. Present for scan findings, so
    * a move and a drawdown on one holding can be sent as one message (decision
@@ -122,13 +124,30 @@ function mergedOutbound(
   };
 }
 
+function withEvidenceChecked<T extends { explanation: string | null }>(
+  text: T,
+  finding: Pick<NotifiableFinding, 'evidenceChecked'>,
+  messages: Messages,
+): T {
+  if (finding.evidenceChecked === undefined) return text;
+  const line = messages.evidenceChecked(finding.evidenceChecked);
+  return { ...text, explanation: text.explanation ? `${text.explanation}\n\n${line}` : line };
+}
+
 function toOutbound(finding: NotifiableFinding, userId: string, language: string): OutboundNotification {
   // The explanation is already evidence-validated prose from the scan, in
   // every language it was stored in; a channel never composes its own, because
   // a figure that did not come through the validator is a figure nobody checked.
-  // The one addition is the market line under a move (decision 149): a catalogue
-  // sentence filled from the move's own evidence, so it is checked the same way.
-  const text = withMarketLine(observationTextIn(finding, language), finding, messagesFor(language));
+  // Two catalogue lines may be added, each filled from a record rather than
+  // composed: the market line under a move (decision 149), from the move's own
+  // evidence; and under a trade proposal, what its scan checked, from the scan's
+  // transcript.
+  const messages = messagesFor(language);
+  const text = withEvidenceChecked(
+    withMarketLine(observationTextIn(finding, language), finding, messages),
+    finding,
+    messages,
+  );
   return {
     userId,
     title: text.headline,
