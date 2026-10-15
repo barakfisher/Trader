@@ -12,6 +12,7 @@ import { observationText } from '../lib/observationText.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
 import { useConfirmTradeApproval, usePreviewTradeApproval } from '../queries/proposals.ts';
 import { useStore } from '../stores/context.tsx';
+import { EvidenceCheckedLine } from './EvidenceChecked.tsx';
 import { PreviewSummary } from './TradePanel.tsx';
 import { Button, Card, ErrorNote } from './ui.tsx';
 
@@ -20,7 +21,8 @@ import { Button, Card, ErrorNote } from './ui.tsx';
  *
  * The frame - agent, side, quantity, symbol, the agent's price, the deadline -
  * is the catalogue's; the thesis below it is the agent's own words, in the
- * user's language (D51). Two steps, because the price has moved since the agent
+ * user's language (D51). Under it, what the agent's scan checked before
+ * proposing, with a link to its full transcript. Two steps, because the price has moved since the agent
  * decided: **Approve** asks the server for the trade at the live price beside
  * the agent's, and **Confirm** fills it, through the same path as a manual
  * trade. A refusal - the price too far from the agent's, the market closed, not
@@ -107,6 +109,10 @@ export const TradeProposalCard = observer(function TradeProposalCard({
               {text.explanation}
             </p>
           </section>
+        )}
+
+        {proposal.evidenceChecked && proposal.scanId !== null && (
+          <EvidenceCheckedLine checked={proposal.evidenceChecked} agentId={proposal.agentId} scanId={proposal.scanId} />
         )}
 
         <p className="text-xs text-text-muted">{t('proposal.trade.paperOnly')}</p>

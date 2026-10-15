@@ -246,10 +246,10 @@ function serveAgent(agent: AgentView = AGENT, accountBody: AgentAccountResponse 
   });
 }
 
-function renderAgent() {
+function renderAgent(path = `/agents/${AGENT_ID}`) {
   // jsdom has no layout; the router restores scroll on navigation.
   window.scrollTo = () => {};
-  const router = createAppRouter(createMemoryHistory({ initialEntries: [`/agents/${AGENT_ID}`] }));
+  const router = createAppRouter(createMemoryHistory({ initialEntries: [path] }));
   const result = renderWithServerState(<App router={router} />);
   act(() => {
     result.root.auth.user = { id: 'u', baseCurrency: 'USD', timezone: 'Asia/Jerusalem' } as never;
@@ -457,6 +457,14 @@ describe('AgentPage with the ledger', () => {
     // The final turn is the answer: read once, above; its raw JSON folded, not shown as prose.
     expect(screen.getAllByText('NVDA trades at 237.14.')).toHaveLength(1);
     expect(screen.getByText('Its raw answer')).toBeTruthy();
+  });
+
+  it("opens a trade proposal's scan from its Evidence checked link", async () => {
+    renderAgent(`/agents/${AGENT_ID}?tab=decisions&scan=${SCAN_ID}`);
+    expect(await screen.findByText('NVDA trades at 237.14.')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Decisions', selected: true })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Buy 2 NVDA/, expanded: true })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /No trade/, expanded: false })).toBeTruthy();
   });
 
   it('waits for a persona, and offers no scan until it has one (D52)', async () => {

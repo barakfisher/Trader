@@ -30,6 +30,7 @@ import {
   type ProposalAttemptRow,
   type ProposalRow,
 } from '../../db/queries.js';
+import { evidenceCheckedFrom } from '../../services/evidenceChecked.js';
 import { applyDecision, factsOf } from '../../services/proposals.js';
 import { confirmTradeApproval, previewTradeApproval } from '../../services/tradeApproval.js';
 import type { TradeContext } from '../../services/fills.js';
@@ -127,6 +128,7 @@ function toWire(row: ProposalRow, now: Date) {
     agentName: row.agent_name,
     agentIsPrimary: row.agent_is_primary,
     scanId: row.scan_id,
+    evidenceChecked: row.scan_id ? evidenceCheckedFrom(row.scan_tool_calls ?? []) : null,
   };
 }
 

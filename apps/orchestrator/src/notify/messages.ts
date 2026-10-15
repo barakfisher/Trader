@@ -24,7 +24,9 @@
 
 import type {
   DigestReason,
+  EvidenceChecked,
   LocalizedTexts,
+  ScanToolName,
   TopicSentimentGap,
   TranslatedLanguage,
   UiLanguage,
@@ -166,6 +168,13 @@ export interface Messages {
   marketLine: (figures: MarketLineFigures) => string;
 
   /**
+   * The "Evidence checked" line under a trade proposal: the tools the agent's
+   * scan called and what it asked them, from its transcript. A tool is named by
+   * this catalogue, never by its code name.
+   */
+  evidenceChecked: (checked: EvidenceChecked) => string;
+
+  /**
    * Approving a trade in Telegram (D47, D49, D60-D63): the preview *Approve*
    * answers with, the fill *Confirm* writes, and a refusal. Every figure arrives
    * already formatted in this language's locale; these only frame them.
@@ -215,6 +224,27 @@ const EN_BENCHMARKS: Record<MarketBenchmarkSymbol, string> = {
   IWM: 'the Russell 2000',
   'BTC-USD': 'Bitcoin',
 };
+
+const EN_TOOLS: Record<ScanToolName, string> = {
+  search_universe: 'universe search',
+  get_quote: 'quote',
+  get_price_history: 'price history',
+  get_findings: 'findings',
+  get_news: 'news',
+  get_position: 'position',
+  explain_concept: 'glossary',
+};
+
+/** A search phrase is quoted; a symbol is not. */
+const QUOTED_TOOLS: ReadonlySet<ScanToolName> = new Set(['search_universe', 'explain_concept']);
+
+function enCheck({ tool, subject, days }: EvidenceChecked['checks'][number]): string {
+  const parts = [EN_TOOLS[tool]];
+  if (subject !== null) parts.push(QUOTED_TOOLS.has(tool) ? `“${subject}”` : subject);
+  if (days !== null && tool === 'get_price_history') parts.push(`(${days} trading ${days === 1 ? 'day' : 'days'})`);
+  if (days !== null && tool === 'get_news') parts.push(`(${days} ${days === 1 ? 'day' : 'days'})`);
+  return parts.join(' ');
+}
 
 const en: Messages = {
   locale: 'en-GB',
@@ -283,6 +313,14 @@ const en: Messages = {
 
   marketLine: (f) =>
     `Same day, ${EN_BENCHMARKS[f.benchmark]} (${f.benchmark}) ${f.direction} ${f.change}.`,
+
+  evidenceChecked: ({ checks, otherCalls }) => {
+    const parts = checks.map(enCheck);
+    if (otherCalls > 0) parts.push(otherCalls === 1 ? '1 other tool' : `${otherCalls} other tools`);
+    return parts.length === 0
+      ? 'Checked: nothing - the agent decided from its briefing alone.'
+      : `Checked: ${parts.join(' · ')}`;
+  },
 
   trade: {
     previewToast: 'Check the live price, then Confirm.',
@@ -416,6 +454,34 @@ const HE_BENCHMARKS: Record<MarketBenchmarkSymbol, string> = {
   'BTC-USD': 'הביטקוין',
 };
 
+const HE_TOOLS: Record<ScanToolName, string> = {
+  search_universe: 'חיפוש ביקום המסחר',
+  get_quote: 'מחיר עדכני',
+  get_price_history: 'היסטוריית מחירים',
+  get_findings: 'ממצאים',
+  get_news: 'חדשות',
+  get_position: 'פוזיציה',
+  explain_concept: 'מילון מונחים',
+};
+
+function heDays(days: number): string {
+  if (days === 1) return 'יום אחד';
+  if (days === 2) return 'יומיים';
+  return `${ltr(days)} ימים`;
+}
+
+function heTradingDays(days: number): string {
+  return days === 1 ? 'יום מסחר אחד' : `${ltr(days)} ימי מסחר`;
+}
+
+function heCheck({ tool, subject, days }: EvidenceChecked['checks'][number]): string {
+  const parts = [HE_TOOLS[tool]];
+  if (subject !== null) parts.push(QUOTED_TOOLS.has(tool) ? `"${isolated(subject)}"` : ltr(subject));
+  if (days !== null && tool === 'get_price_history') parts.push(`(${heTradingDays(days)})`);
+  if (days !== null && tool === 'get_news') parts.push(`(${heDays(days)})`);
+  return parts.join(' ');
+}
+
 const he: Messages = {
   locale: 'he-IL',
   numberLocale: 'he-IL',
@@ -482,6 +548,14 @@ const he: Messages = {
 
   marketLine: (f) =>
     `באותו יום ${HE_BENCHMARKS[f.benchmark]} (${ltr(f.benchmark)}) ${f.direction === 'fell' ? 'ירד' : 'עלה'} ב־${ltr(f.change)}.`,
+
+  evidenceChecked: ({ checks, otherCalls }) => {
+    const parts = checks.map(heCheck);
+    if (otherCalls > 0) parts.push(otherCalls === 1 ? 'כלי נוסף אחד' : `${ltr(otherCalls)} כלים נוספים`);
+    return parts.length === 0
+      ? 'נבדק: כלום - הסוכן החליט על סמך התדריך בלבד.'
+      : `נבדק: ${parts.join(' · ')}`;
+  },
 
   trade: {
     previewToast: 'בדקו את המחיר העדכני, ואז אישור סופי.',
