@@ -175,6 +175,47 @@ decision 85).
 
 ---
 
+## M9 — Multiple users *(planned 2026-10-14; not started)*
+
+Added at the user's request. The data model has been multi-tenant since M1 (`user_id` on every
+user-owned row, guideline 5) and DESIGN §2 deferred real multi-user auth "but not designed out";
+this milestone is that deferred work. What still assumes one account today:
+
+- `SINGLE_USER_ID` (`config.ts`) - the login route signs in as that one user, and
+  `POST /internal/runs` falls back to it when a run names no user.
+- Passphrase login with one shared passphrase; the session is a self-describing signed cookie with
+  no session table (`http/auth.ts`), so a session cannot be revoked before it expires.
+- Scheduled scans run for `SINGLE_USER_ID` only (debt table in `.claude/MEMORY.md`); per-user
+  fairness on the queue needs BullMQ Pro's groups (D73).
+- "Today" resolves in `APP_TIMEZONE`, one zone for the installation - and guideline 10 in
+  `CLAUDE.md` is written around it. Several users means a zone per user, which amends a guideline.
+
+**PR 1 - measure, read-only, before any design.** Every query, route, run kind, cache key, budget
+and notification path that assumes one user, listed with where it is. Nothing is decided before
+this list exists.
+
+**Decisions to bring, each with a recommendation, after PR 1:**
+- **Who the users are** - household members on one self-hosted installation, or invited strangers.
+  This sets everything below; billing stays out of scope either way (PRD §7).
+- **Accounts and login** - per-user credentials, or OAuth via an identity provider; how a user is
+  created (admin invites, or nothing self-service).
+- **Sessions** - whether removing a user must end their session at once, which the stateless
+  cookie cannot do.
+- **Scheduling** - scans iterated per user, and fairness between users on one queue.
+- **Shared costs** - the LLM budget and the assistant's daily limit: per user or per installation.
+- **Telegram** - one bot, a binding per user (the binding is already per `user_id`).
+- **Admin** - `users.role` exists (M8); what an admin may see of another user's data.
+- **Time zone** - a zone per user in `user_settings`, and what is still per installation (the
+  scheduled ask's clock, the market calendar).
+
+**Exit:** two users on one installation, each seeing only their own holdings, observations,
+proposals, agents and notifications - proved by a test that signs in as one user and asserts every
+user-facing route returns nothing of the other's; scheduled scans run for both; and no request
+path falls back to `SINGLE_USER_ID` - a run that names no user is refused, not run as the first
+user (today `POST /internal/runs` does exactly that, which a signed-in test cannot see).
+
+---
+
 ## Ordering notes
 - M2 depends on M1's provider layer; M3 is independent of M2 and can be parallelised if you want.
 - The Telegram bot (M4) is deliberately after observations exist — a bot with nothing to say is untestable.
