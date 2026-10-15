@@ -44,9 +44,10 @@ export interface ClaimRunInput {
   trigger: string;
   /**
    * Whether a run under this key that *failed* may be claimed again. Off for
-   * every kind but the rescreen: a failed scan is retried by the next bucket's
-   * key, while a failed rescreen keeps a fetch cache that only a retry under
-   * the same key - the same day - can resume from.
+   * most kinds: a failed scan is retried by the next bucket's key. On for the
+   * rescreen, whose fetch cache only a retry under the same key - the same
+   * day - can resume from, and for the daily backfill (`RETRY_FAILED_KINDS`,
+   * decision 150), whose next key is tomorrow's.
    */
   retryFailed?: boolean;
 }

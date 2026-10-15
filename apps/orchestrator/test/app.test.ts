@@ -472,6 +472,25 @@ describe('API', () => {
     expect(queries.finishRun).toHaveBeenCalledWith('run-1', 'failed', expect.anything());
   });
 
+  it("retries a failed backfill within its day, and no other day's kind (decision 150)", async () => {
+    // The backfill's key is daily, so a failed claim that stayed failed meant
+    // no closes until tomorrow; the next hourly ask must be able to take it.
+    const post = (kind: string) =>
+      app.request('/internal/runs', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+        body: JSON.stringify({ kind }),
+      });
+    await post('backfill');
+    expect(queries.claimRun).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: 'backfill', retryFailed: true }),
+    );
+    await post('daily_digest');
+    expect(queries.claimRun).toHaveBeenLastCalledWith(
+      expect.objectContaining({ kind: 'daily_digest', retryFailed: false }),
+    );
+  });
+
   it("starts a rescreen as the installation's run - no user - and answers 202", async () => {
     const response = await app.request('/internal/runs', {
       method: 'POST',
