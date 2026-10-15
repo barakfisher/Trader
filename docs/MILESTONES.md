@@ -175,7 +175,7 @@ decision 85).
 
 ---
 
-## M9 — Multiple users *(planned 2026-10-14; not started)*
+## M9 — Multiple users *(planned 2026-10-14; PR 1 measured 2026-10-15)*
 
 Added at the user's request. The data model has been multi-tenant since M1 (`user_id` on every
 user-owned row, guideline 5) and DESIGN §2 deferred real multi-user auth "but not designed out";
@@ -192,7 +192,7 @@ this milestone is that deferred work. What still assumes one account today:
 
 **PR 1 - measure, read-only, before any design.** Every query, route, run kind, cache key, budget
 and notification path that assumes one user, listed with where it is. Nothing is decided before
-this list exists.
+this list exists. *Done 2026-10-15: [M9-MEASUREMENT.md](M9-MEASUREMENT.md).*
 
 **Decisions to bring, each with a recommendation, after PR 1:**
 - **Who the users are** - household members on one self-hosted installation, or invited strangers.
