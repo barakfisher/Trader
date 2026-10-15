@@ -287,6 +287,11 @@ export async function runPortfolioScan(
       headline: observation.headline,
       explanation: observation.explanation,
       localized: observation.localized,
+      // So a move and a drawdown on one holding can go out as one message
+      // (decision 148).
+      kind: observation.kind,
+      subjectRef: observation.subject_ref,
+      evidence: observation.evidence,
       // Only set when this finding actually became a question. A channel uses
       // it to render Approve/Reject inline, so attaching one to a finding with
       // no proposal behind it would put buttons on a message that cannot be

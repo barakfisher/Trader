@@ -2413,6 +2413,22 @@ failure they prevent.
     time). A lost or dead Mac loses the simulated history, which decision 137 already priced as
     one cheap failure among many. Do not ask again; revisit only if real money or a real
     broker's data ever lands in this database.
+148. **A move and a drawdown on one holding, from one scan, are one Telegram message** (the user,
+    2026-10-15, after OUST's 9.51% fall arrived as two messages stating the same price twice).
+    Decision 132 merged the move with the sigma move but left the drawdown separate, and that
+    separation is right for the **feed**: the drawdown has its own episode, and "fell today" and
+    "below its 30-day high" are different questions. So the merge is in the **fan-out only**
+    (`holdingAlerts.ts`, called by `fanOut`): the pair is routed once at its stronger severity,
+    each half keeps its own `notifications` row and dedupe key, and both rows settle with the one
+    send. *Rejected:* a merged observation kind in the AI service (episodes, dedupe and Insights
+    would all have to learn it) and stitching the two stored texts into one bubble (fixes the
+    count, not the repetition). **The sentence is the catalogue's** (`moveWithDrawdown` in
+    `notify/messages.ts`), filled from both observations' evidence through `Intl` - the user chose
+    this over the stored model-written texts. When either evidence lacks a figure the sentence
+    states, the pair is sent as two messages in their stored words rather than with a figure
+    missing. Only pairs from the **same scan** merge; when an earlier run already sent one half,
+    the other goes out alone. Market-relative context ("the whole market was red") is a separate,
+    open question: it needs benchmark prices the scan does not collect.
 
 ---
 

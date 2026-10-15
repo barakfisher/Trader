@@ -12,7 +12,8 @@
  * **What is not here.** An observation's own headline and explanation are not
  * composed in the orchestrator at all: they arrive written, in English and in
  * `observations.localized`, from the AI service's templates. This module only
- * frames them.
+ * frames them - with one exception, `moveWithDrawdown` (decision 148), which says
+ * a holding's move and drawdown in one sentence from their stored evidence.
  *
  * Figures and Latin-script fragments in the Hebrew are wrapped in isolates, as
  * the AI service's Hebrew templates are (`hebrew_templates.py`): a left-to-right
@@ -81,6 +82,24 @@ export interface TradeFillFigures {
   at: string;
 }
 
+/**
+ * A move and a drawdown on one holding, found by one scan (decision 148). Every
+ * figure arrives formatted in this language's locale; the percentages are
+ * magnitudes, and `direction` carries the sign.
+ */
+export interface MoveWithDrawdownFigures {
+  symbol: string;
+  direction: 'fell' | 'rose';
+  change: string;
+  price: string;
+  drawdown: string;
+  high: string;
+  /** The drawdown window, or null when the evidence does not say. */
+  windowDays: number | null;
+  /** The move in standard deviations, present only for an unusual (sigma) move. */
+  sigma: string | null;
+}
+
 export type RecordedNarrationState = Exclude<NarrationState, 'unknown'>;
 
 export interface NoticeText {
@@ -128,6 +147,9 @@ export interface Messages {
 
   /** A trade proposal's headline (D51: the frame is the catalogue's; the thesis the model's). */
   tradeProposalHeadline: (agent: string, side: 'buy' | 'sell', quantity: string, symbol: string, price: string) => string;
+
+  /** Decision 148: a holding's move and drawdown from one scan, said in one message. */
+  moveWithDrawdown: (figures: MoveWithDrawdownFigures) => NoticeText;
 
   /**
    * Approving a trade in Telegram (D47, D49, D60-D63): the preview *Approve*
@@ -229,6 +251,13 @@ const en: Messages = {
 
   tradeProposalHeadline: (agent, side, quantity, symbol, price) =>
     `${agent} proposes to ${side} ${quantity} ${symbol} at ${price}`,
+
+  moveWithDrawdown: (f) => ({
+    headline: `${f.symbol} ${f.direction} ${f.change} to ${f.price}`,
+    explanation:
+      `Now ${f.drawdown} below its ${f.windowDays === null ? 'recent' : `${f.windowDays}-day`} high of ${f.high}` +
+      (f.sigma === null ? '.' : `; the move was ${f.sigma} standard deviations from its recent average.`),
+  }),
 
   trade: {
     previewToast: 'Check the live price, then Confirm.',
@@ -410,6 +439,13 @@ const he: Messages = {
 
   tradeProposalHeadline: (agent, side, quantity, symbol, price) =>
     `${isolated(agent)} מציע ${side === 'buy' ? 'לקנות' : 'למכור'} ${ltr(quantity)} ${ltr(symbol)} ב־${ltr(price)}`,
+
+  moveWithDrawdown: (f) => ({
+    headline: `מחיר ${ltr(f.symbol)} ${f.direction === 'fell' ? 'ירד' : 'עלה'} ב־${ltr(f.change)} ל־${ltr(f.price)}`,
+    explanation:
+      `כעת ${ltr(f.drawdown)} מתחת ל${f.windowDays === null ? 'שיא האחרון' : `שיא של ${ltr(f.windowDays)} יום`}, ${ltr(f.high)}` +
+      (f.sigma === null ? '.' : `; התנועה הייתה ${ltr(f.sigma)} סטיות תקן מהממוצע האחרון.`),
+  }),
 
   trade: {
     previewToast: 'בדקו את המחיר העדכני, ואז אישור סופי.',

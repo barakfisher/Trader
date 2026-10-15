@@ -41,6 +41,7 @@ import {
 } from '../db/queries.js';
 import { logger } from '../logger.js';
 import { messagesFor, observationTextIn, type Messages } from '../notify/messages.js';
+import { groupAlerts, type AlertGroup } from './holdingAlerts.js';
 import { announcementFor } from './narrationNotice.js';
 import { gatherTopicDigest, renderTopicSection } from './topicDigest.js';
 import type { Notifier, OutboundNotification } from '../notify/notifier.js';
@@ -73,10 +74,18 @@ export interface NotifiableFinding {
   trade?: boolean;
   /** D70: a sell made while the market is open is pushed through quiet hours. */
   urgent?: boolean;
+  /**
+   * The observation's rule, subject and evidence. Present for scan findings, so
+   * a move and a drawdown on one holding can be sent as one message (decision
+   * 148); a finding without them is always sent on its own.
+   */
+  kind?: string;
+  subjectRef?: string | null;
+  evidence?: unknown;
 }
 
 export interface FanOutResult {
-  /** Sent now, on a real channel. */
+  /** Sent now, on a real channel. Counted per finding: a merged pair is two. */
   pushed: number;
   /** Deferred into the digest: quiet hours, a mute, or below the floor. */
   deferred: number;
@@ -93,6 +102,24 @@ function channelFor(route: NotificationRoute, notifier: Notifier): string | null
   if (route === 'push') return notifier.channel;
   if (route === 'digest') return 'digest';
   return null;
+}
+
+/** A merged pair's one message, in the user's language (decision 148). */
+function mergedOutbound(
+  group: AlertGroup<NotifiableFinding>,
+  lead: NotifiableFinding,
+  userId: string,
+  language: string,
+): OutboundNotification {
+  const text = group.render!(messagesFor(language));
+  return {
+    userId,
+    title: text.headline,
+    body: text.explanation,
+    proposalId: lead.proposalId,
+    severity: group.severity,
+    language,
+  };
 }
 
 function toOutbound(finding: NotifiableFinding, userId: string, language: string): OutboundNotification {
@@ -114,9 +141,12 @@ function toOutbound(finding: NotifiableFinding, userId: string, language: string
 /**
  * Route, claim and deliver a batch of findings.
  *
- * Failures are per-finding: one channel error must not abandon the rest of the
+ * Failures are per-message: one channel error must not abandon the rest of the
  * batch, because the alternative is that a single unreachable message silences
  * every finding behind it in the list.
+ *
+ * A move and a drawdown on one holding go out as one message (decision 148,
+ * `holdingAlerts.ts`), but each keeps its own row and dedupe key.
  */
 export async function fanOut(
   userId: string,
@@ -134,64 +164,84 @@ export async function fanOut(
     reasons: {},
   };
 
-  for (const finding of findings) {
-    const decision = routeFinding(finding.severity, settings, now, {
-      floor: finding.trade === true ? 'ignored' : 'applies',
-      quietHours: finding.urgent === true ? 'ignored' : 'apply',
+  for (const group of groupAlerts(findings)) {
+    // A merged pair is routed once, at its stronger severity: the user is told
+    // about the fall as a whole or not at all, never about half of it.
+    const lead = group.members[0]!;
+    const decision = routeFinding(group.severity, settings, now, {
+      floor: lead.trade === true ? 'ignored' : 'applies',
+      quietHours: lead.urgent === true ? 'ignored' : 'apply',
     });
     const channel = channelFor(decision.route, notifier);
     if (channel === null) continue;
 
-    const record: NotificationToRecord = {
-      userId,
-      agentId,
-      channel,
-      refKind: finding.refKind,
-      refId: finding.refId,
-      route: decision.route,
-      reason: decision.reason,
-      // A digest entry is claimed now and delivered later, so it stays
-      // 'pending' until the digest run collects it. A push is settled below.
-      status: 'pending',
-      dedupeKey: notificationDedupeKey(channel, finding.refKind, finding.refId),
-    };
-
-    const claim = await claimNotification(record);
-    if (claim === null) {
-      // Somebody already holds this key. Not an error and not worth a log line
-      // per finding: on a re-scan this is the common case.
-      result.duplicate += 1;
-      continue;
+    // One row per finding, merged or not: the dedupe key stays the finding's,
+    // so a re-scan of either half is still recognised as already sent.
+    const claimed: { finding: NotifiableFinding; id: string }[] = [];
+    for (const finding of group.members) {
+      const record: NotificationToRecord = {
+        userId,
+        agentId,
+        channel,
+        refKind: finding.refKind,
+        refId: finding.refId,
+        route: decision.route,
+        reason: decision.reason,
+        // A digest entry is claimed now and delivered later, so it stays
+        // 'pending' until the digest run collects it. A push is settled below.
+        status: 'pending',
+        dedupeKey: notificationDedupeKey(channel, finding.refKind, finding.refId),
+      };
+      const claim = await claimNotification(record);
+      if (claim === null) {
+        // Somebody already holds this key. Not an error and not worth a log
+        // line per finding: on a re-scan this is the common case.
+        result.duplicate += 1;
+        continue;
+      }
+      claimed.push({ finding, id: claim.id });
+      result.reasons[decision.reason] = (result.reasons[decision.reason] ?? 0) + 1;
     }
-
-    result.reasons[decision.reason] = (result.reasons[decision.reason] ?? 0) + 1;
+    if (claimed.length === 0) continue;
 
     if (decision.route === 'digest') {
-      result.deferred += 1;
+      result.deferred += claimed.length;
       continue;
     }
 
-    try {
-      const delivery = await notifier.send(toOutbound(finding, userId, settings.language));
-      if (delivery.delivered) {
-        await settleNotification(claim.id, 'sent');
-        result.pushed += 1;
-      } else {
-        // The error is stored on the row, not only logged: the question "why
-        // did this not arrive?" is usually asked long after a log retention
-        // window has closed.
-        await settleNotification(claim.id, 'failed', delivery.error);
-        result.failed += 1;
+    // The merged sentence only when this run holds both halves. If an earlier
+    // run already sent one, the other goes out alone in its own words rather
+    // than repeating what the user has read.
+    const outbound: { message: OutboundNotification; rows: string[] }[] =
+      group.render !== undefined && claimed.length === group.members.length
+        ? [{ message: mergedOutbound(group, lead, userId, settings.language), rows: claimed.map((c) => c.id) }]
+        : claimed.map((c) => ({ message: toOutbound(c.finding, userId, settings.language), rows: [c.id] }));
+
+    for (const { message, rows } of outbound) {
+      try {
+        const delivery = await notifier.send(message);
+        for (const row of rows) {
+          if (delivery.delivered) {
+            await settleNotification(row, 'sent');
+          } else {
+            // The error is stored on the row, not only logged: the question
+            // "why did this not arrive?" is usually asked long after a log
+            // retention window has closed.
+            await settleNotification(row, 'failed', delivery.error);
+          }
+        }
+        if (delivery.delivered) result.pushed += rows.length;
+        else result.failed += rows.length;
+      } catch (error) {
+        // A channel that throws is a channel that failed; it must not take the
+        // rest of the batch with it.
+        for (const row of rows) await settleNotification(row, 'failed', (error as Error).message);
+        result.failed += rows.length;
+        logger().warn(
+          { userId, refIds: claimed.map((c) => c.finding.refId), channel, err: error },
+          'notification.channel_threw',
+        );
       }
-    } catch (error) {
-      // A channel that throws is a channel that failed; it must not take the
-      // rest of the batch with it.
-      await settleNotification(claim.id, 'failed', (error as Error).message);
-      result.failed += 1;
-      logger().warn(
-        { userId, refId: finding.refId, channel, err: error },
-        'notification.channel_threw',
-      );
     }
   }
 

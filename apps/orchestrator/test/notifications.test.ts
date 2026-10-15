@@ -237,6 +237,167 @@ describe('fanOut in the user’s language', () => {
   });
 });
 
+describe('fanOut: a move and a drawdown on one holding (decision 148)', () => {
+  const MOVE_ID = '33333333-3333-3333-3333-333333333333';
+  const DRAWDOWN_ID = '44444444-4444-4444-4444-444444444444';
+
+  function move(overrides: Record<string, unknown> = {}) {
+    return finding({
+      refId: MOVE_ID,
+      kind: 'price_move',
+      subjectRef: 'instrument:OUST',
+      severity: 'high',
+      headline: 'OUST shares fell 9.51% to USD 31.97',
+      explanation: 'The price of OUST decreased by USD 3.36.',
+      evidence: {
+        symbol: 'OUST',
+        currency: 'USD',
+        price_minor: 3197,
+        previous_price_minor: 3533,
+        change_pct: -0.0951,
+      },
+      ...overrides,
+    });
+  }
+
+  function drawdown(overrides: Record<string, unknown> = {}) {
+    return finding({
+      refId: DRAWDOWN_ID,
+      kind: 'drawdown',
+      subjectRef: 'instrument:OUST',
+      severity: 'high',
+      headline: 'OUST experienced a high drawdown of 28.81%',
+      explanation: 'OUST dropped to a price of 31.97 USD.',
+      evidence: {
+        symbol: 'OUST',
+        currency: 'USD',
+        price_minor: 3197,
+        high_price_minor: 4491,
+        drawdown_pct: -0.2881,
+        window_days: 30,
+      },
+      ...overrides,
+    });
+  }
+
+  it('sends one message built from both evidences, and settles both rows', async () => {
+    const { sent, notifier } = workingNotifier();
+    vi.mocked(queries.claimNotification)
+      .mockResolvedValueOnce({ id: 'row-move' })
+      .mockResolvedValueOnce({ id: 'row-drawdown' });
+
+    const result = await fanOut(USER, AGENT, [move(), drawdown()], SETTINGS, notifier, DAYTIME);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      title: 'OUST fell 9.51% to $31.97',
+      body: 'Now 28.81% below its 30-day high of $44.91.',
+    });
+    expect(queries.claimNotification).toHaveBeenCalledTimes(2);
+    expect(queries.settleNotification).toHaveBeenCalledWith('row-move', 'sent');
+    expect(queries.settleNotification).toHaveBeenCalledWith('row-drawdown', 'sent');
+    expect(result).toMatchObject({ pushed: 2, failed: 0, duplicate: 0 });
+  });
+
+  it('says how unusual the move was when it is a sigma move', async () => {
+    const { sent, notifier } = workingNotifier();
+    const sigma = move({
+      kind: 'sigma_move',
+      evidence: { symbol: 'OUST', currency: 'USD', price_minor: 3197, change_pct: -0.0951, z_score: -3.24 },
+    });
+    await fanOut(USER, AGENT, [drawdown(), sigma], SETTINGS, notifier, DAYTIME);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.body).toBe(
+      'Now 28.81% below its 30-day high of $44.91; the move was 3.2 standard deviations from its recent average.',
+    );
+  });
+
+  it('is routed at the stronger severity, so a high move carries a notable drawdown', async () => {
+    const { sent, notifier } = workingNotifier();
+    const result = await fanOut(USER, AGENT, [move(), drawdown({ severity: 'notable' })], SETTINGS, notifier, DAYTIME);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.severity).toBe('high');
+    expect(result.reasons).toEqual({ above_floor: 2 });
+  });
+
+  it('defers both halves into the digest during quiet hours', async () => {
+    const { notifier } = workingNotifier();
+    const result = await fanOut(USER, AGENT, [move(), drawdown()], SETTINGS, notifier, NIGHT);
+
+    expect(notifier.send).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ deferred: 2, pushed: 0 });
+  });
+
+  it('sends nothing on a re-scan that finds both already claimed', async () => {
+    const { notifier } = workingNotifier();
+    vi.mocked(queries.claimNotification).mockResolvedValue(null);
+    const result = await fanOut(USER, AGENT, [move(), drawdown()], SETTINGS, notifier, DAYTIME);
+
+    expect(notifier.send).not.toHaveBeenCalled();
+    expect(result.duplicate).toBe(2);
+  });
+
+  it('sends the unclaimed half in its own words when the other was already sent', async () => {
+    const { sent, notifier } = workingNotifier();
+    vi.mocked(queries.claimNotification).mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'row-drawdown' });
+    await fanOut(USER, AGENT, [move(), drawdown()], SETTINGS, notifier, DAYTIME);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.title).toBe('OUST experienced a high drawdown of 28.81%');
+  });
+
+  it('marks both rows failed when the one message fails', async () => {
+    vi.mocked(queries.claimNotification)
+      .mockResolvedValueOnce({ id: 'row-move' })
+      .mockResolvedValueOnce({ id: 'row-drawdown' });
+    const notifier = {
+      channel: 'telegram',
+      send: vi.fn(async () => ({ delivered: false, error: 'chat not found' })),
+    } satisfies Notifier;
+    const result = await fanOut(USER, AGENT, [move(), drawdown()], SETTINGS, notifier, DAYTIME);
+
+    expect(notifier.send).toHaveBeenCalledTimes(1);
+    expect(queries.settleNotification).toHaveBeenCalledWith('row-move', 'failed', 'chat not found');
+    expect(queries.settleNotification).toHaveBeenCalledWith('row-drawdown', 'failed', 'chat not found');
+    expect(result.failed).toBe(2);
+  });
+
+  it('leaves a lone move, and findings on different holdings, as separate messages', async () => {
+    const { sent, notifier } = workingNotifier();
+    await fanOut(
+      USER,
+      AGENT,
+      [move(), drawdown({ subjectRef: 'instrument:URA', evidence: { symbol: 'URA' } })],
+      SETTINGS,
+      notifier,
+      DAYTIME,
+    );
+    expect(sent.map((message) => message.title)).toEqual([
+      'OUST shares fell 9.51% to USD 31.97',
+      'OUST experienced a high drawdown of 28.81%',
+    ]);
+  });
+
+  it('falls back to the stored words when the evidence lacks a figure the sentence needs', async () => {
+    // A sentence with a missing figure would be a figure invented (guideline 7).
+    const { sent, notifier } = workingNotifier();
+    await fanOut(USER, AGENT, [move(), drawdown({ evidence: { currency: 'USD', drawdown_pct: -0.2881 } })], SETTINGS, notifier, DAYTIME);
+    expect(sent).toHaveLength(2);
+  });
+
+  it('writes the merged sentence in Hebrew from the catalogue', async () => {
+    const { sent, notifier } = workingNotifier();
+    await fanOut(USER, AGENT, [move(), drawdown()], { ...SETTINGS, language: 'he' }, notifier, DAYTIME);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.title).toContain('ירד');
+    expect(sent[0]!.body).toContain('שיא של');
+    expect(sent[0]!.language).toBe('he');
+  });
+});
+
 describe('settingsForNotification', () => {
   it('takes the timezone from the user, not from the settings row', async () => {
     // Quiet hours borrow users.timezone rather than storing a second copy that
