@@ -158,3 +158,4 @@ while this file is out of date.
 | 145 | `db-report.sh` counts rows with `pg_class.reltuples` |
 | 146 | `traders_m5` is dropped; a scratch copy is restored from a dump when a branch needs one |
 | 147 | No backup leaves the laptop, by the user's choice |
+| 148 | A move and a drawdown on one holding, from one scan, are one Telegram message |
