@@ -155,5 +155,7 @@ describe('the backfill', () => {
     const sent = (ai.backfillHistory.mock.calls as unknown[][])[0]![0] as { instruments: { symbol: string }[] };
     expect(sent.instruments.map((row) => row.symbol).sort()).toEqual(['AAPL', 'NVDA', 'SPY']);
     expect(queries.listTradedInstruments).toHaveBeenCalledWith(USER.id);
+    // The market benchmarks' closes too, so a move can be set beside them (decision 149).
+    expect(queries.findInstrumentsBySymbols).toHaveBeenCalledWith(['SPY', 'QQQ', 'IWM', 'BTC-USD']);
   });
 });

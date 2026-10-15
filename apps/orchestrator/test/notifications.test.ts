@@ -398,6 +398,101 @@ describe('fanOut: a move and a drawdown on one holding (decision 148)', () => {
   });
 });
 
+describe('fanOut: the market line under a move (decision 149)', () => {
+  const MARKET = { symbol: 'QQQ', change_pct: -0.0197, as_of: '2026-10-14T20:00:00+00:00', r_squared: 0.52 };
+
+  function move(evidence: Record<string, unknown> = {}, overrides: Record<string, unknown> = {}) {
+    return finding({
+      refId: '55555555-5555-5555-5555-555555555555',
+      kind: 'price_move',
+      subjectRef: 'instrument:OUST',
+      severity: 'high',
+      headline: 'OUST shares fell 9.51% to USD 31.97',
+      explanation: 'The price of OUST decreased by USD 3.36.',
+      evidence: { symbol: 'OUST', currency: 'USD', price_minor: 3197, change_pct: -0.0951, ...evidence },
+      ...overrides,
+    });
+  }
+
+  it('adds what the index did that day under a lone move', async () => {
+    const { sent, notifier } = workingNotifier();
+    await fanOut(USER, AGENT, [move({ market: MARKET })], SETTINGS, notifier, DAYTIME);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      title: 'OUST shares fell 9.51% to USD 31.97',
+      body: 'The price of OUST decreased by USD 3.36.\nSame day, the Nasdaq-100 (QQQ) fell 1.97%.',
+    });
+  });
+
+  it('adds it under a merged move and drawdown too', async () => {
+    const { sent, notifier } = workingNotifier();
+    const drawdown = finding({
+      refId: '66666666-6666-6666-6666-666666666666',
+      kind: 'drawdown',
+      subjectRef: 'instrument:OUST',
+      severity: 'high',
+      headline: 'OUST experienced a high drawdown of 28.81%',
+      explanation: null,
+      evidence: { symbol: 'OUST', currency: 'USD', price_minor: 3197, high_price_minor: 4491, drawdown_pct: -0.2881, window_days: 30 },
+    });
+    await fanOut(USER, AGENT, [move({ market: MARKET }), drawdown], SETTINGS, notifier, DAYTIME);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.body).toBe(
+      'Now 28.81% below its 30-day high of $44.91.\nSame day, the Nasdaq-100 (QQQ) fell 1.97%.',
+    );
+  });
+
+  it('says nothing about the market when the scan found no index moving with it', async () => {
+    const { sent, notifier } = workingNotifier();
+    await fanOut(USER, AGENT, [move()], SETTINGS, notifier, DAYTIME);
+    expect(sent[0]!.body).toBe('The price of OUST decreased by USD 3.36.');
+  });
+
+  it('says nothing for a block it cannot state: an unknown index, or no figure', async () => {
+    const { sent, notifier } = workingNotifier();
+    await fanOut(
+      USER,
+      AGENT,
+      [
+        move({ market: { ...MARKET, symbol: 'DIA' } }),
+        move({ market: { symbol: 'QQQ' } }, { refId: '77777777-7777-7777-7777-777777777777' }),
+      ],
+      SETTINGS,
+      notifier,
+      DAYTIME,
+    );
+    expect(sent.map((message) => message.body)).toEqual([
+      'The price of OUST decreased by USD 3.36.',
+      'The price of OUST decreased by USD 3.36.',
+    ]);
+  });
+
+  it('never frames a drawdown, even one whose evidence carries a market block', async () => {
+    const { sent, notifier } = workingNotifier();
+    await fanOut(
+      USER,
+      AGENT,
+      [move({ market: MARKET }, { kind: 'drawdown', explanation: 'Down from its high.' })],
+      SETTINGS,
+      notifier,
+      DAYTIME,
+    );
+    expect(sent[0]!.body).toBe('Down from its high.');
+  });
+
+  it('writes the line in Hebrew from the catalogue', async () => {
+    const { sent, notifier } = workingNotifier();
+    await fanOut(USER, AGENT, [move({ market: { ...MARKET, symbol: 'BTC-USD', change_pct: 0.031 } })], { ...SETTINGS, language: 'he' }, notifier, DAYTIME);
+
+    const line = sent[0]!.body.split('\n').at(-1)!;
+    expect(line).toContain('באותו יום הביטקוין');
+    expect(line).toContain('עלה');
+    expect(line).toContain('3.10%');
+  });
+});
+
 describe('settingsForNotification', () => {
   it('takes the timezone from the user, not from the settings row', async () => {
     // Quiet hours borrow users.timezone rather than storing a second copy that

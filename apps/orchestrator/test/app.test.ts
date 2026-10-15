@@ -548,6 +548,44 @@ describe('API', () => {
     expect(fakeAi.lastScanRequest).toMatchObject({ user_id: USER.id });
   });
 
+  it('records live quotes for the market benchmarks and hands them to the scan (decision 149)', async () => {
+    vi.mocked(queries.findInstrumentsBySymbols).mockResolvedValueOnce([
+      { id: 'i-BTC', symbol: 'BTC-USD', name: 'Bitcoin', asset_class: 'crypto', exchange: null, currency: 'USD' },
+      { id: 'i-QQQ', symbol: 'QQQ', name: 'Invesco QQQ', asset_class: 'etf', exchange: 'NGM', currency: 'USD' },
+    ] as never);
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'portfolio_scan' }),
+    });
+    expect(response.status).toBe(200);
+    expect(queries.findInstrumentsBySymbols).toHaveBeenCalledWith(['SPY', 'QQQ', 'IWM', 'BTC-USD']);
+    // Only what a provider priced is recorded: an unpriced benchmark is not invented.
+    expect(queries.recordQuotes).toHaveBeenCalledWith([
+      expect.objectContaining({ instrumentId: 'i-BTC', priceMinor: 5841233, currency: 'USD' }),
+    ]);
+    expect((fakeAi.lastScanRequest as { benchmarks?: unknown } | null)?.benchmarks).toEqual([
+      { instrument_id: 'i-BTC', symbol: 'BTC-USD' },
+      { instrument_id: 'i-QQQ', symbol: 'QQQ' },
+    ]);
+  });
+
+  it('still scans, with the benchmarks, when their live quotes cannot be recorded', async () => {
+    vi.mocked(queries.findInstrumentsBySymbols).mockResolvedValueOnce([
+      { id: 'i-BTC', symbol: 'BTC-USD', name: 'Bitcoin', asset_class: 'crypto', exchange: null, currency: 'USD' },
+    ] as never);
+    vi.mocked(queries.recordQuotes).mockRejectedValueOnce(new Error('database unavailable'));
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'portfolio_scan' }),
+    });
+    expect(response.status).toBe(200);
+    expect((fakeAi.lastScanRequest as { benchmarks?: unknown } | null)?.benchmarks).toEqual([
+      { instrument_id: 'i-BTC', symbol: 'BTC-USD' },
+    ]);
+  });
+
   it('stores who wrote each explanation, and why the model did not', async () => {
     // The AI service has always reported both and the insert used to drop them,
     // which left the feed unable to say whether a sentence was a model's or a

@@ -23,12 +23,14 @@ from app.analysis.dedupe import dedupe_key
 from app.analysis.drawdown import drawdown_findings
 from app.analysis.episodes import EpisodeBook, OpenEpisode
 from app.analysis.findings import Finding
+from app.analysis.market_context import Benchmark, with_market_context
 from app.analysis.price_move import price_move_findings
 from app.analysis.price_series import PricePoint
 from app.analysis.quote_history import load_price_series
 from app.analysis.sigma_move import sigma_move_findings
 from app.analysis.thresholds import AnalysisThresholds
 from app.analysis.topic_move import TopicMember, topic_move_findings
+from app.core.cache_policy import is_crypto_symbol
 from app.core.logging import get_logger
 from app.llm.base import LLMProvider
 from app.narration import CandidateArticle, correlate, narrate
@@ -58,6 +60,18 @@ class ScanSubject:
     #: drift, which dates a weight by the stalest price contributing to it - a
     #: weight is only as current as its oldest input.
     as_of: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ScanBenchmark:
+    """An index a holding's move can be set beside (decision 149).
+
+    The caller chooses which instruments are benchmarks and makes sure they are
+    priced; the scan only reads their history and picks one per holding.
+    """
+
+    instrument_id: str
+    symbol: str
 
 
 @dataclass
@@ -112,6 +126,7 @@ async def run_portfolio_scan(
     open_episodes: Iterable[OpenEpisode] = (),
     now: datetime | None = None,
     user_id: str | None = None,
+    benchmarks: Sequence[ScanBenchmark] = (),
 ) -> tuple[list[ScanObservation], ScanStats]:
     """Run every rule over `subjects`, narrate what is new, and report the rest.
 
@@ -130,11 +145,27 @@ async def run_portfolio_scan(
     state is said again only when it reaches a band higher than its episode has
     written, not each day it persists. `stats.seen` still lists every finding,
     so the caller can tell when an episode has ended.
+
+    `benchmarks` are the indices a move can be set beside: a move finding gains a
+    `market` block in its evidence when its best-fitting benchmark moved with it
+    (decision 149). Nothing is muted or re-graded by it.
     """
     moment = now or datetime.now(UTC)
     since = moment - timedelta(days=HISTORY_DAYS)
     stats = ScanStats(subjects=len(subjects))
     findings: list[Finding] = []
+    # Loaded once for the whole scan: every holding is compared with the same few.
+    market = [
+        Benchmark(
+            instrument_id=item.instrument_id,
+            symbol=item.symbol,
+            points=load_price_series(
+                connection, item.instrument_id, since=since, excluded_sources=excluded_sources
+            ),
+            continuous=is_crypto_symbol(item.symbol),
+        )
+        for item in benchmarks
+    ]
 
     for subject in subjects:
         points = load_price_series(
@@ -152,7 +183,17 @@ async def run_portfolio_scan(
         # including a large move that is ordinary for a volatile holding, so a
         # 6% fall is never invisible (the user, 2026-10-09).
         unusual = sigma_move_findings(subject.symbol, points, thresholds)
-        findings.extend(unusual or price_move_findings(subject.symbol, points, thresholds))
+        findings.extend(
+            with_market_context(
+                move,
+                subject.instrument_id,
+                points,
+                market,
+                thresholds,
+                continuous=is_crypto_symbol(subject.symbol),
+            )
+            for move in unusual or price_move_findings(subject.symbol, points, thresholds)
+        )
         findings.extend(drawdown_findings(subject.symbol, points, thresholds))
 
     unpriced = [subject.symbol for subject in subjects if subject.value_minor is None]

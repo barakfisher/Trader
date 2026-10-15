@@ -16,11 +16,17 @@
  * When the evidence is not what the sentence needs, the pair is not merged and
  * each finding goes out with its own stored words - a sentence with a figure
  * missing would be a figure invented.
+ *
+ * A move, merged or alone, also carries one line on what the market did that
+ * day when the scan found its best-fitting index moved with it (decision 149,
+ * `marketLine`). The line is added here rather than to the stored narration so
+ * that it is the catalogue's sentence in the user's language, from evidence.
  */
 
 import { formatMoney } from '@traders/shared';
 
 import type { Messages, NoticeText } from '../notify/messages.js';
+import { isMarketBenchmark } from './marketBenchmarks.js';
 import { SEVERITY_RANK } from './notificationPolicy.js';
 
 /** What grouping needs to know about a finding, beyond what delivers it. */
@@ -141,13 +147,9 @@ function renderer(
   }
 
   return (messages) => {
-    const percent = new Intl.NumberFormat(messages.numberLocale, {
-      style: 'percent',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    const percent = percentFormat(messages);
     const money = (minor: number) => formatMoney(minor, currency, { locale: messages.numberLocale });
-    return messages.moveWithDrawdown({
+    const text = messages.moveWithDrawdown({
       symbol,
       direction: change < 0 ? 'fell' : 'rose',
       change: percent.format(Math.abs(change)),
@@ -163,7 +165,48 @@ function renderer(
               maximumFractionDigits: 1,
             }).format(Math.abs(z)),
     });
+    return withMarketLine(text, move, messages);
   };
+}
+
+/**
+ * `text` with the market line under it, when `finding` is a move whose evidence
+ * says its index moved with it (decision 149); `text` unchanged otherwise.
+ */
+export function withMarketLine<T extends { explanation: string | null }>(
+  text: T,
+  finding: Pick<GroupableFinding, 'kind' | 'evidence'>,
+  messages: Messages,
+): T {
+  const line = marketLine(finding, messages);
+  if (line === null) return text;
+  return { ...text, explanation: text.explanation ? `${text.explanation}\n${line}` : line };
+}
+
+/** The market line for a move, or null when the evidence holds no complete `market` block. */
+export function marketLine(
+  finding: Pick<GroupableFinding, 'kind' | 'evidence'>,
+  messages: Messages,
+): string | null {
+  if (!MOVE_KINDS.has(finding.kind ?? '')) return null;
+  const market = record(record(finding.evidence)?.market);
+  if (market === null) return null;
+  const symbol = market.symbol;
+  const change = market.change_pct;
+  if (!isMarketBenchmark(symbol) || !isFiniteNumber(change) || change === 0) return null;
+  return messages.marketLine({
+    benchmark: symbol,
+    direction: change < 0 ? 'fell' : 'rose',
+    change: percentFormat(messages).format(Math.abs(change)),
+  });
+}
+
+function percentFormat(messages: Messages): Intl.NumberFormat {
+  return new Intl.NumberFormat(messages.numberLocale, {
+    style: 'percent',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function record(value: unknown): Record<string, unknown> | null {

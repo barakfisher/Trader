@@ -35,6 +35,7 @@ import type { FailureCause } from '../services/scheduledScans.js';
 import type { ScanSlot } from '../services/scanSchedule.js';
 import type { NarrationState } from '../services/narrationHealth.js';
 import type { RefusalReason } from '../services/proposalState.js';
+import type { MarketBenchmarkSymbol } from '../services/marketBenchmarks.js';
 
 /** LEFT-TO-RIGHT ISOLATE ... POP: a figure, kept left to right in a Hebrew line. */
 export function ltr(text: string | number): string {
@@ -100,6 +101,13 @@ export interface MoveWithDrawdownFigures {
   sigma: string | null;
 }
 
+/** Decision 149: what the market did the day a holding moved. Figures are pre-formatted. */
+export interface MarketLineFigures {
+  benchmark: MarketBenchmarkSymbol;
+  direction: 'fell' | 'rose';
+  change: string;
+}
+
 export type RecordedNarrationState = Exclude<NarrationState, 'unknown'>;
 
 export interface NoticeText {
@@ -152,6 +160,12 @@ export interface Messages {
   moveWithDrawdown: (figures: MoveWithDrawdownFigures) => NoticeText;
 
   /**
+   * Decision 149: one line under a move, when the holding's best-fitting index
+   * moved the same way that day. A fact beside the move, never a cause of it.
+   */
+  marketLine: (figures: MarketLineFigures) => string;
+
+  /**
    * Approving a trade in Telegram (D47, D49, D60-D63): the preview *Approve*
    * answers with, the fill *Confirm* writes, and a refusal. Every figure arrives
    * already formatted in this language's locale; these only frame them.
@@ -194,6 +208,14 @@ export interface Messages {
 }
 
 /** English: the source, and what a chat with no known user is answered in. */
+/** Each benchmark's name in a sentence; a benchmark without one is a compile error. */
+const EN_BENCHMARKS: Record<MarketBenchmarkSymbol, string> = {
+  SPY: 'the S&P 500',
+  QQQ: 'the Nasdaq-100',
+  IWM: 'the Russell 2000',
+  'BTC-USD': 'Bitcoin',
+};
+
 const en: Messages = {
   locale: 'en-GB',
   numberLocale: 'en-US',
@@ -258,6 +280,9 @@ const en: Messages = {
       `Now ${f.drawdown} below its ${f.windowDays === null ? 'recent' : `${f.windowDays}-day`} high of ${f.high}` +
       (f.sigma === null ? '.' : `; the move was ${f.sigma} standard deviations from its recent average.`),
   }),
+
+  marketLine: (f) =>
+    `Same day, ${EN_BENCHMARKS[f.benchmark]} (${f.benchmark}) ${f.direction} ${f.change}.`,
 
   trade: {
     previewToast: 'Check the live price, then Confirm.',
@@ -383,6 +408,14 @@ function hebrewCount(count: number, one: string, many: string): string {
   return count === 1 ? one : `${ltr(count)} ${many}`;
 }
 
+/** Every one is grammatically masculine, so the verb in `marketLine` agrees with all four. */
+const HE_BENCHMARKS: Record<MarketBenchmarkSymbol, string> = {
+  SPY: `מדד ${ltr('S&P 500')}`,
+  QQQ: `מדד נאסד"ק ${ltr(100)}`,
+  IWM: `מדד ראסל ${ltr(2000)}`,
+  'BTC-USD': 'הביטקוין',
+};
+
 const he: Messages = {
   locale: 'he-IL',
   numberLocale: 'he-IL',
@@ -446,6 +479,9 @@ const he: Messages = {
       `כעת ${ltr(f.drawdown)} מתחת ל${f.windowDays === null ? 'שיא האחרון' : `שיא של ${ltr(f.windowDays)} יום`}, ${ltr(f.high)}` +
       (f.sigma === null ? '.' : `; התנועה הייתה ${ltr(f.sigma)} סטיות תקן מהממוצע האחרון.`),
   }),
+
+  marketLine: (f) =>
+    `באותו יום ${HE_BENCHMARKS[f.benchmark]} (${ltr(f.benchmark)}) ${f.direction === 'fell' ? 'ירד' : 'עלה'} ב־${ltr(f.change)}.`,
 
   trade: {
     previewToast: 'בדקו את המחיר העדכני, ואז אישור סופי.',

@@ -1841,6 +1841,15 @@
             "title": "Base Currency",
             "type": "string"
           },
+          "benchmarks": {
+            "description": "Indices a move can be set beside (decision 149). A move finding gains a `market` block in its evidence when its best-fitting benchmark moved at least the configured amount the same way on the same days. Omit for none.",
+            "items": {
+              "$ref": "#/components/schemas/ScanBenchmarkIn"
+            },
+            "maxItems": 20,
+            "title": "Benchmarks",
+            "type": "array"
+          },
           "holdings": {
             "items": {
               "$ref": "#/components/schemas/ScanHolding"
@@ -2187,6 +2196,25 @@
           "status"
         ],
         "title": "RescreenResponse",
+        "type": "object"
+      },
+      "ScanBenchmarkIn": {
+        "description": "An index a holding's move can be set beside (decision 149).",
+        "properties": {
+          "instrument_id": {
+            "title": "Instrument Id",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id",
+          "symbol"
+        ],
+        "title": "ScanBenchmarkIn",
         "type": "object"
       },
       "ScanHolding": {
