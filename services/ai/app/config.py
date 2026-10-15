@@ -186,6 +186,12 @@ class Settings(BaseSettings):
     # holiday weekend; five covers the awkward ones.
     analysis_max_gap_days: float = 5.0
 
+    # The market line on a move finding (decision 149): said when the holding's
+    # best-fitting benchmark moved this much the same way, fitted over this window.
+    analysis_market_frame_min_move_pct: float = 0.01
+    analysis_market_fit_window_days: int = 90
+    analysis_market_fit_min_observations: int = 20
+
     # Absolute path to the fixture data directory. Resolved for the current
     # runtime; FIXTURES_DIR in the environment always wins.
     fixtures_dir: str = Field(default_factory=_default_fixtures_dir)

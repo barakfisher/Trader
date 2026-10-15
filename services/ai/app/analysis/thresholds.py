@@ -42,7 +42,7 @@ def _drift_bands() -> SeverityBands:
 
 @dataclass(frozen=True, slots=True)
 class AnalysisThresholds:
-    """Thresholds and windows for the four deterministic rules.
+    """Thresholds and windows for the four deterministic rules, and the market line.
 
     Fractions throughout, never percentages: `0.03` is 3%. Allocation drift is a
     difference between two weights, so its bands are in the same units - `0.05`
@@ -80,6 +80,19 @@ class AnalysisThresholds:
 
     allocation_drift: SeverityBands = field(default_factory=_drift_bands)
 
+    #: A move finding says what the market did only when the holding's best-fitting
+    #: benchmark moved at least this much the same way (decision 149). One percent
+    #: is a day a reader would call red or green; below it the line would be noise.
+    market_frame_min_move: float = 0.01
+    #: Calendar days of history the benchmark choice is fitted over. Ninety is about
+    #: sixty trading days: enough pairs for an R² to mean something, short enough to
+    #: follow a holding whose character changes. It must fit inside the history the
+    #: scan loads (`pipeline.HISTORY_DAYS`).
+    market_fit_window_days: int = 90
+    #: Paired daily returns required before a benchmark can be chosen at all. With
+    #: fewer, a newly added holding would be matched to an index by coincidence.
+    market_fit_min_observations: int = 20
+
     #: Widest calendar gap a step may span and still be called a daily move.
     max_gap_days: float = DEFAULT_MAX_GAP_DAYS
 
@@ -96,6 +109,12 @@ class AnalysisThresholds:
             raise ValueError("the minimum sigma move must not be negative")
         if self.max_gap_days <= 0:
             raise ValueError("max_gap_days must be positive")
+        if self.market_frame_min_move < 0:
+            raise ValueError("the market frame's minimum move must not be negative")
+        if self.market_fit_window_days <= 0:
+            raise ValueError("the market fit window must be positive")
+        if self.market_fit_min_observations < 3:
+            raise ValueError("a correlation needs at least three observations")
 
     @classmethod
     def from_settings(cls, settings: object) -> AnalysisThresholds:
@@ -138,4 +157,7 @@ class AnalysisThresholds:
                 high=get("analysis_drift_high_pct"),
             ),
             max_gap_days=get("analysis_max_gap_days"),
+            market_frame_min_move=get("analysis_market_frame_min_move_pct"),
+            market_fit_window_days=get("analysis_market_fit_window_days"),
+            market_fit_min_observations=get("analysis_market_fit_min_observations"),
         )

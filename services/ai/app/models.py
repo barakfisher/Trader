@@ -340,6 +340,13 @@ class OpenEpisodeIn(BaseModel):
     severity: Severity
 
 
+class ScanBenchmarkIn(BaseModel):
+    """An index a holding's move can be set beside (decision 149)."""
+
+    instrument_id: str
+    symbol: str
+
+
 class PortfolioScanRequest(BaseModel):
     #: The account this is for, recorded on each model call it makes
     #: (`llm_calls.user_id`, decision 87). Optional: a caller that sends none
@@ -367,6 +374,15 @@ class PortfolioScanRequest(BaseModel):
             "The caller's open finding episodes (decision 132). A drawdown or drift "
             "finding at or below its episode's band is counted as known and not "
             "written again; a higher band is new."
+        ),
+    )
+    benchmarks: list[ScanBenchmarkIn] = Field(
+        default_factory=list,
+        max_length=20,
+        description=(
+            "Indices a move can be set beside (decision 149). A move finding gains a "
+            "`market` block in its evidence when its best-fitting benchmark moved at "
+            "least the configured amount the same way on the same days. Omit for none."
         ),
     )
 

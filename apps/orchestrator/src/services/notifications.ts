@@ -41,7 +41,7 @@ import {
 } from '../db/queries.js';
 import { logger } from '../logger.js';
 import { messagesFor, observationTextIn, type Messages } from '../notify/messages.js';
-import { groupAlerts, type AlertGroup } from './holdingAlerts.js';
+import { groupAlerts, withMarketLine, type AlertGroup } from './holdingAlerts.js';
 import { announcementFor } from './narrationNotice.js';
 import { gatherTopicDigest, renderTopicSection } from './topicDigest.js';
 import type { Notifier, OutboundNotification } from '../notify/notifier.js';
@@ -126,7 +126,9 @@ function toOutbound(finding: NotifiableFinding, userId: string, language: string
   // The explanation is already evidence-validated prose from the scan, in
   // every language it was stored in; a channel never composes its own, because
   // a figure that did not come through the validator is a figure nobody checked.
-  const text = observationTextIn(finding, language);
+  // The one addition is the market line under a move (decision 149): a catalogue
+  // sentence filled from the move's own evidence, so it is checked the same way.
+  const text = withMarketLine(observationTextIn(finding, language), finding, messagesFor(language));
   return {
     userId,
     title: text.headline,

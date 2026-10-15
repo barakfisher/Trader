@@ -2428,7 +2428,31 @@ failure they prevent.
     states, the pair is sent as two messages in their stored words rather than with a figure
     missing. Only pairs from the **same scan** merge; when an earlier run already sent one half,
     the other goes out alone. Market-relative context ("the whole market was red") is a separate,
-    open question: it needs benchmark prices the scan does not collect.
+    open question: it needs benchmark prices the scan does not collect. *(Answered by 149.)*
+149. **A move is framed by the market, never muted by it** (the user, 2026-10-15, after OUST alerts
+    on a red day). Measured first: the move rules replayed day by day over the real portfolio on
+    compose, 2026-09-15..10-14 - **136 alerts in 22 trading days**. SPY moved >= 1% the same way
+    for only 31 of them, and never 2%. SPY is also the wrong index for this portfolio: on 10-14 it
+    fell 1.08% while QQQ and IWM fell ~2% and SMH 4%. **Rejected: muting.** A beta-adjusted mute
+    would have silenced OUST's 9.51% fall that day (QQQ -1.97% at beta 3.7 leaves a 2.2% residual),
+    and EOSE's 15% and IREN's 12% with it - it fails in the expensive direction, against the
+    user's "a 6% fall is never invisible" (132). **So a move gains one line:** "Same day, the
+    Nasdaq-100 (QQQ) fell 1.97%." The **benchmark is chosen per holding by R²** of daily returns
+    over the 90 days before the move (>= 20 pairs): SPY, QQQ or IWM for an equity, BTC-USD for a
+    crypto pair, never the holding itself (`market_context.py`). It is said only when that index
+    moved **>= 1% the same way on the same pair of days**; a benchmark not priced that day says
+    nothing rather than a stale figure. On the replay this frames **45 of 136** (33 QQQ, 7 IWM,
+    5 SPY), all 14 on 10-14. No R² floor and **no beta sentence** ("about what its sensitivity
+    predicts") - the user's choice: most names fit poorly (MNDY 0.02, TWLO 0.05), so a
+    prediction would be weak; the line states a fact, not a cause. **Drawdown is exempt**: it is
+    a fact about the position since its high. The figures live in the move's evidence
+    (`market` block), so narration and the validator see them; Telegram adds the line from the
+    catalogue (`marketLine`, en + he) under a lone move and a merged pair alike. **Prices:** the
+    orchestrator owns the list (`MARKET_BENCHMARK_SYMBOLS`), backfills their closes hourly and
+    records a live quote on every portfolio scan, because a holding's move is often measured on
+    an intraday dashboard price and the benchmark needs a price the same day. *Not done:* the web
+    feed and the digest do not show the line (the evidence is there for them); thresholds are
+    `ANALYSIS_MARKET_*` settings.
 
 ---
 
@@ -3846,7 +3870,7 @@ What is left needs the full week. Ask the user before starting (no standing gran
    - retention for `runs`: measured 2026-10-11 at **29-37 rows a day** (not ~130), 1.1 MB on kind
      and 1.9 MB on compose - expect "not yet", with a size that would change the answer;
    - anything new in sections 1 and 5 (statements by total time, the slow log).
-   Each answer is a decision (next number: **148**); each change its own PR.
+   Each answer is a decision (next number: **150**); each change its own PR.
 
 ### Planned: the database sprint (agreed 2026-10-09)
 

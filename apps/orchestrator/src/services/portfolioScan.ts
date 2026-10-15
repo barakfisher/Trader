@@ -28,6 +28,7 @@ import { admitCandidates, settleEpisodes } from './proposalEpisodes.js';
 import { watchNarration, type NarrationWatchOutcome } from './narrationWatch.js';
 import { fanOut, settingsForNotification, type NotifiableFinding } from './notifications.js';
 import { mayRaiseProposal, raiseProposals } from './proposals.js';
+import { recordBenchmarkQuotes } from './marketBenchmarks.js';
 import { valuePortfolio } from './valuation.js';
 
 export interface ScanResult {
@@ -109,11 +110,15 @@ export async function runPortfolioScan(
   // The states already said, and the band each reached (decision 132).
   const openEpisodes = await listOpenFindingEpisodes(user.id, agentId);
 
-  const portfolio = await valuePortfolio(rows, {
-    baseCurrency: user.base_currency,
-    ai,
-    requestId,
-  });
+  const [portfolio, benchmarks] = await Promise.all([
+    valuePortfolio(rows, {
+      baseCurrency: user.base_currency,
+      ai,
+      requestId,
+    }),
+    // What the market did, so a move can be set beside it (decision 149).
+    recordBenchmarkQuotes(ai, requestId),
+  ]);
 
   const response = await ai.portfolioScan(
     {
@@ -147,6 +152,7 @@ export async function runPortfolioScan(
         subject_ref: episode.subject_ref,
         severity: episode.severity as 'info' | 'notable' | 'high',
       })),
+      benchmarks: benchmarks.map((row) => ({ instrument_id: row.id, symbol: row.symbol })),
     },
     requestId,
   );
