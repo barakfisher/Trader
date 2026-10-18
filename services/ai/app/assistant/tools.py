@@ -991,7 +991,8 @@ async def replay_scan(context: ToolContext, arguments: Mapping[str, Any]) -> dic
         ),
         "note": (
             "outcomes: trade (a proposal was made), no_trade, invalid_answer (the answer failed "
-            "the server's checks, so nothing was proposed), budget_reached, step_limit, failed"
+            "the server's checks, so nothing was proposed), rule_rejected (the trade broke the "
+            "agent's mandate twice, so nothing was proposed), budget_reached, step_limit, failed"
         ),
     }
 

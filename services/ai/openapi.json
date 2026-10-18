@@ -159,7 +159,8 @@
               "invalid_answer",
               "budget_reached",
               "step_limit",
-              "failed"
+              "failed",
+              "rule_rejected"
             ],
             "title": "Outcome",
             "type": "string"

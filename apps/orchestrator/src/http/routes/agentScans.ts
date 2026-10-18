@@ -98,6 +98,9 @@ export function toScanStep(raw: unknown): AgentScanStep | null {
   if (step?.role === 'tool') {
     return { role: 'tool', callId: String(step.call_id), name: String(step.name), result: step.result };
   }
+  if (step?.role === 'returned' && Array.isArray(step.problems)) {
+    return { role: 'returned', problems: step.problems.map(String) };
+  }
   return null;
 }
 

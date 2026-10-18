@@ -15,6 +15,7 @@ import type { Hono } from 'hono';
 import { z } from 'zod';
 
 import {
+  HORIZON_SCHEDULES,
   SCAN_SCHEDULES,
   type AgentView,
   type AgentsResponse,
@@ -38,6 +39,13 @@ import {
   updateAgent,
   type AgentRow,
 } from '../../db/queries.js';
+import {
+  EMPTY_MANDATE,
+  assertKnownClassifications,
+  mandateSchema,
+  toMandateColumns,
+  toMandateView,
+} from '../agentMandate.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, conflict, notFound, unprocessable } from '../errors.js';
 
@@ -56,6 +64,9 @@ export const MAX_PERSONA_LENGTH = 4000;
 
 export const MAX_NAME_LENGTH = 60;
 
+/** Migration 0042's default: what an agent with neither a schedule nor a horizon gets. */
+export const DEFAULT_SCHEDULE: ScanSchedule = 'pre_open';
+
 /** D45's ceiling, as migration 0042's CHECK has it: $100 a day. */
 export const MAX_LLM_BUDGET_MICRO_USD = 100_000_000;
 
@@ -72,7 +83,15 @@ const name = z.string().trim().min(1).max(MAX_NAME_LENGTH);
 const budget = z.string().trim().regex(BUDGET_PATTERN, 'budget must be an amount in dollars, at most two decimal places');
 const persona = z.string().trim().max(MAX_PERSONA_LENGTH).nullable();
 
-const createSchema = z.object({ name, budget, persona: persona.optional() });
+const createSchema = z
+  .object({
+    name,
+    budget,
+    persona: persona.optional(),
+    mandate: mandateSchema.optional(),
+    scanSchedule: z.enum(SCAN_SCHEDULES).optional(),
+  })
+  .strict();
 const patchSchema = z
   .object({
     name: name.optional(),
@@ -81,6 +100,7 @@ const patchSchema = z
     state: z.enum(['active', 'paused', 'archived']).optional(),
     llmBudget: budget.optional(),
     scanSchedule: z.enum(SCAN_SCHEDULES).optional(),
+    mandate: mandateSchema.optional(),
   })
   .strict();
 
@@ -139,6 +159,7 @@ export function toAgentView(row: AgentRow): AgentView {
     llmSpentTodayMicroUsd: row.is_primary ? null : Number(row.llm_spent_today_micro_usd),
     scanCost: row.is_primary ? null : scanCostOf(row),
     waitingForPersona: !row.is_primary && row.state === 'active' && !row.persona?.trim(),
+    mandate: toMandateView(row),
   };
 }
 
@@ -256,10 +277,12 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
   app.post('/agents', async (context) => {
     const parsed = createSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
-      throw badRequest('invalid_body', 'expected { name, budget, persona? }', parsed.error.issues);
+      throw badRequest('invalid_body', 'expected { name, budget, persona?, mandate?, scanSchedule? }', parsed.error.issues);
     }
     const input = parsed.data;
     const budgetMinor = budgetToMinor(input.budget);
+    const mandate = { ...EMPTY_MANDATE, ...toMandateColumns(input.mandate ?? {}) };
+    await assertKnownClassifications(mandate);
     await assertRoomForAgent(currentUserId(context));
     try {
       const row = await createAgent({
@@ -272,6 +295,10 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
         persona: personaOf(input.persona) ?? null,
         budgetMinor,
         currency: AGENT_CURRENCY,
+        // D166: a horizon brings its schedule unless one was chosen.
+        scanSchedule:
+          input.scanSchedule ?? (input.mandate?.horizon ? HORIZON_SCHEDULES[input.mandate.horizon] : DEFAULT_SCHEDULE),
+        mandate,
       });
       return context.json(toAgentView(row), 201);
     } catch (error) {
@@ -284,7 +311,7 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
     const userId = currentUserId(context);
     const parsed = patchSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
-      throw badRequest('invalid_body', 'expected { name?, budget?, persona?, state?, llmBudget?, scanSchedule? }', parsed.error.issues);
+      throw badRequest('invalid_body', 'expected { name?, budget?, persona?, state?, llmBudget?, scanSchedule?, mandate? }', parsed.error.issues);
     }
     const agentId = agentIdFrom(context.req.param('id'));
     const existing = await getAgent(userId, agentId);
@@ -301,6 +328,8 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
       await assertRoomForAgent(userId);
     }
     const budgetMinor = patch.budget === undefined ? undefined : budgetToMinor(patch.budget);
+    const mandate = patch.mandate === undefined ? undefined : toMandateColumns(patch.mandate);
+    if (mandate) await assertKnownClassifications(mandate);
     // D22: before the first fill a budget edit replaces the opening deposit; after
     // it, a raise is a top-up and a cut is refused. The database enforces the same.
     if (
@@ -318,6 +347,7 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
         state: patch.state,
         llmBudgetMicroUsd: patch.llmBudget === undefined ? undefined : llmBudgetToMicroUsd(patch.llmBudget),
         scanSchedule: patch.scanSchedule,
+        mandate,
       });
       if (!row) throw notFound('agent not found');
       return context.json(toAgentView(row));

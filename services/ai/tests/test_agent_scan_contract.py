@@ -1,4 +1,6 @@
-"""The scan's outcomes and triggers are one list each, in code and in 0043's CHECKs."""
+"""The scan's outcomes and triggers are one list each, in code and in the CHECKs.
+
+Triggers are 0043's; outcomes were last rewritten by 0057 (`rule_rejected`)."""
 
 from __future__ import annotations
 
@@ -10,11 +12,13 @@ from types import ModuleType
 from app.agents.scan_log import ScanOutcome, ScanTrigger
 from app.models import AgentScanRequest, AgentScanResponse
 
-MIGRATION = Path(__file__).parents[1] / "alembic" / "versions" / "0043_agent_scans.py"
+VERSIONS = Path(__file__).parents[1] / "alembic" / "versions"
+MIGRATION = VERSIONS / "0043_agent_scans.py"
+OUTCOMES_MIGRATION = VERSIONS / "0057_agent_mandate.py"
 
 
-def _migration() -> ModuleType:
-    spec = importlib.util.spec_from_file_location(MIGRATION.stem, MIGRATION)
+def _migration(path: Path = MIGRATION) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(path.stem, path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -23,7 +27,7 @@ def _migration() -> ModuleType:
 
 def test_the_database_accepts_exactly_the_outcomes_and_triggers_the_code_writes() -> None:
     migration = _migration()
-    assert set(migration.OUTCOMES) == set(typing.get_args(ScanOutcome))
+    assert set(_migration(OUTCOMES_MIGRATION).OUTCOMES) == set(typing.get_args(ScanOutcome))
     assert set(migration.TRIGGERS) == set(typing.get_args(ScanTrigger))
 
 

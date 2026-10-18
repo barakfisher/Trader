@@ -62,7 +62,9 @@ export function AgentDecisions({ agentId, openScanId }: { agentId: string; openS
 
 function outcomeClass(scan: AgentScanSummary): string {
   if (scan.outcome === 'trade') return 'bg-accent/15 text-accent';
-  if (scan.outcome === 'failed' || scan.outcome === 'invalid_answer') return 'bg-loss/15 text-loss';
+  if (scan.outcome === 'failed' || scan.outcome === 'invalid_answer' || scan.outcome === 'rule_rejected') {
+    return 'bg-loss/15 text-loss';
+  }
   if (scan.outcome === 'budget_reached' || scan.outcome === 'step_limit') return 'bg-warn/15 text-warn';
   return 'bg-surface-hover text-text-muted';
 }
@@ -129,7 +131,16 @@ function ScanDetail({ agentId, scanId }: { agentId: string; scanId: string }) {
       {data.transcript.map((step, index) =>
         isAnswerTurn(step) ? (
           // The model's last turn is its answer, shown read below; here only its raw form.
-          <Folded key={index} label={t('agents.decisions.rawAnswer')} value={parsed(step.text)} />
+          // One the server sent back (D170) is followed by the reasons, and says so.
+          <Folded
+            key={index}
+            label={t(
+              data.transcript[index + 1]?.role === 'returned'
+                ? 'agents.decisions.refusedAnswer'
+                : 'agents.decisions.rawAnswer',
+            )}
+            value={parsed(step.text)}
+          />
         ) : (
           <Step key={index} step={step} />
         ),
@@ -181,6 +192,17 @@ function Step({ step }: { step: AgentScanStep }) {
   const { t } = useTranslation();
   if (step.role === 'tool') {
     return <Folded label={t('agents.decisions.result')} value={step.result} />;
+  }
+  if (step.role === 'returned') {
+    // The reasons are the server's English (they name rules and figures), whatever the UI language.
+    return (
+      <p className="text-warn">
+        <span className="font-medium">{t('agents.decisions.returned')}: </span>
+        <span lang="en" dir="auto">
+          {step.problems.join('; ')}
+        </span>
+      </p>
+    );
   }
   return (
     <div className="space-y-1">

@@ -57,6 +57,7 @@ const AGENT: AgentView = {
   llmSpentTodayMicroUsd: 108_022,
   scanCost: { microUsd: 36_000, basis: 'measured' },
   waitingForPersona: true,
+  mandate: null,
   scheduling: { enabled: true, nextAt: '2026-10-08T13:00:00Z' },
 };
 
@@ -228,6 +229,8 @@ const SCAN_DETAIL: AgentScanDetail = {
   transcript: [
     { role: 'assistant', text: 'NVDA moved; checking its quote.', toolCalls: [{ id: 'c1', name: 'get_quote', arguments: { symbol: 'NVDA' } }] },
     { role: 'tool', callId: 'c1', name: 'get_quote', result: { price: '237.14' } },
+    { role: 'assistant', text: '{"decision": "buy", "quantity": "9"}', toolCalls: [] },
+    { role: 'returned', problems: ['NVDA would be 2134.26 at cost, over the 10% position limit'] },
     { role: 'assistant', text: '{"decision": "buy", "thesis": "NVDA trades at 237.14."}', toolCalls: [] },
   ],
   thesis: 'NVDA trades at 237.14.',
@@ -452,11 +455,16 @@ describe('AgentPage with the ledger', () => {
     expect(await screen.findByText('NVDA trades at 237.14.')).toBeTruthy();
     expect(screen.getByText('Started from: cash $10,000.00, 0 holdings, 1 movers of the day')).toBeTruthy();
     expect(screen.getByText('NVDA moved; checking its quote.')).toBeTruthy();
+    // A buy the mandate refused, sent back once (D170): the server's reason, marked English.
+    const reason = screen.getByText('NVDA would be 2134.26 at cost, over the 10% position limit');
+    expect(reason.getAttribute('lang')).toBe('en');
+    expect(screen.getByText(/Sent back to the agent/)).toBeTruthy();
     expect(screen.getByText(/Looked up get_quote/)).toBeTruthy();
     expect(screen.getByText('The proposal').closest('a')?.getAttribute('href')).toBe('/proposals/p-1');
     // The final turn is the answer: read once, above; its raw JSON folded, not shown as prose.
     expect(screen.getAllByText('NVDA trades at 237.14.')).toHaveLength(1);
     expect(screen.getByText('Its raw answer')).toBeTruthy();
+    expect(screen.getByText('Its answer the rules refused')).toBeTruthy();
   });
 
   it("opens a trade proposal's scan from its Evidence checked link", async () => {

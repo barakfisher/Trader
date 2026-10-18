@@ -277,7 +277,7 @@ const llmCostEstimateSchema = z.object({
 
 export const agentScanResponseSchema = z.object({
   scan_id: z.string(),
-  outcome: z.enum(['trade', 'no_trade', 'invalid_answer', 'budget_reached', 'step_limit', 'failed']),
+  outcome: z.enum(['trade', 'no_trade', 'invalid_answer', 'budget_reached', 'step_limit', 'failed', 'rule_rejected']),
   steps: z.number().int(),
   cost_micro_usd: z.number().int(),
   model: z.string().nullable(),

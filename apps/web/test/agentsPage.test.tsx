@@ -43,6 +43,7 @@ const PRIMARY: AgentView = {
   llmSpentTodayMicroUsd: null,
   scanCost: null,
   waitingForPersona: false,
+  mandate: null,
 };
 const MOMENTUM: AgentView = {
   ...PRIMARY,

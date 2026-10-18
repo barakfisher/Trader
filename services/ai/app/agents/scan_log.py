@@ -22,9 +22,17 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
-#: Matches `0043_agent_scans.OUTCOMES`; a test holds the two equal.
+from app.agents.mandate import Mandate
+
+#: Matches `0057_agent_mandate.OUTCOMES`; a test holds the two equal.
 ScanOutcome = Literal[
-    "trade", "no_trade", "invalid_answer", "budget_reached", "step_limit", "failed"
+    "trade",
+    "no_trade",
+    "invalid_answer",
+    "budget_reached",
+    "step_limit",
+    "failed",
+    "rule_rejected",
 ]
 ScanTrigger = Literal["manual", "schedule"]
 
@@ -43,6 +51,8 @@ class ScanAgent:
     is_primary: bool
     #: `user_settings.language`: the thesis is written in it (D51).
     language: str = "en"
+    #: The template creator's settings (0057); empty for an agent never edited.
+    mandate: Mandate = Mandate()
 
 
 class ScanAlreadyRunningError(RuntimeError):
@@ -55,7 +65,10 @@ def find_agent(engine: Engine, user_id: str, agent_id: str) -> ScanAgent | None:
             text(
                 """
                 SELECT a.id::text AS id, a.user_id::text AS user_id, a.name, a.persona,
-                       a.state, a.is_primary, coalesce(s.language, 'en') AS language
+                       a.state, a.is_primary, coalesce(s.language, 'en') AS language,
+                       a.risk_level, a.horizon, a.thesis_style, a.max_position_bps,
+                       a.cash_buffer_bps, a.max_holdings, a.allow_etfs, a.market_caps,
+                       a.sectors, a.industries, a.etf_categories, a.blocked_symbols
                   FROM agents a
                   LEFT JOIN user_settings s ON s.user_id = a.user_id
                  WHERE a.id = CAST(:agent AS uuid) AND a.user_id = CAST(:user AS uuid)
@@ -73,6 +86,20 @@ def find_agent(engine: Engine, user_id: str, agent_id: str) -> ScanAgent | None:
         state=row.state,
         is_primary=row.is_primary,
         language=row.language,
+        mandate=Mandate(
+            risk_level=row.risk_level,
+            horizon=row.horizon,
+            thesis_style=row.thesis_style,
+            max_position_bps=row.max_position_bps,
+            cash_buffer_bps=row.cash_buffer_bps,
+            max_holdings=row.max_holdings,
+            allow_etfs=row.allow_etfs,
+            market_caps=tuple(row.market_caps),
+            sectors=tuple(row.sectors),
+            industries=tuple(row.industries),
+            etf_categories=tuple(row.etf_categories),
+            blocked_symbols=tuple(row.blocked_symbols),
+        ),
     )
 
 

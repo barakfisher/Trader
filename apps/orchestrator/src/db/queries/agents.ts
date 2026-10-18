@@ -48,7 +48,52 @@ export interface AgentRow {
   agent_scan_cost_micro_usd: string | null;
   /** The user's agents' average over their last scans; null before any. */
   installation_scan_cost_micro_usd: string | null;
+  // The mandate (0057): null or empty is no limit.
+  risk_level: number | null;
+  horizon: string | null;
+  thesis_style: string | null;
+  max_position_bps: number | null;
+  cash_buffer_bps: number | null;
+  max_holdings: number | null;
+  allow_etfs: boolean;
+  market_caps: string[];
+  sectors: string[];
+  industries: string[];
+  etf_categories: string[];
+  blocked_symbols: string[];
 }
+
+/** An agent's mandate as the database columns hold it (0057). */
+export interface MandateColumns {
+  risk_level: number | null;
+  horizon: string | null;
+  thesis_style: string | null;
+  max_position_bps: number | null;
+  cash_buffer_bps: number | null;
+  max_holdings: number | null;
+  allow_etfs: boolean;
+  market_caps: string[];
+  sectors: string[];
+  industries: string[];
+  etf_categories: string[];
+  blocked_symbols: string[];
+}
+
+/** The mandate's columns, in the order every write names them. */
+export const MANDATE_COLUMNS = [
+  'risk_level',
+  'horizon',
+  'thesis_style',
+  'max_position_bps',
+  'cash_buffer_bps',
+  'max_holdings',
+  'allow_etfs',
+  'market_caps',
+  'sectors',
+  'industries',
+  'etf_categories',
+  'blocked_symbols',
+] as const satisfies readonly (keyof MandateColumns)[];
 
 /** Scans averaged for an estimate (D46): recent enough to follow a model change. */
 export const SCAN_COST_WINDOW = 10;
@@ -71,7 +116,8 @@ const AGENT_COLUMNS = `a.id, a.slug, a.name, a.persona, a.is_primary, a.budget_m
           SELECT s.cost_micro_usd FROM agent_scans s
            WHERE s.user_id = a.user_id AND s.finished_at IS NOT NULL
            ORDER BY s.started_at DESC LIMIT ${SCAN_COST_WINDOW}) r
-       ) AS installation_scan_cost_micro_usd`;
+       ) AS installation_scan_cost_micro_usd,
+       ${MANDATE_COLUMNS.map((column) => `a.${column}`).join(', ')}`;
 
 /** The user's agents: the primary first, then the rest oldest first. */
 export function listAgents(userId: string): Promise<AgentRow[]> {
@@ -111,15 +157,20 @@ export interface AgentToCreate {
   persona: string | null;
   budgetMinor: number;
   currency: string;
+  scanSchedule: string;
+  mandate: MandateColumns;
 }
 
 /** A simulated agent. A primary is made only by the trigger on `users` (migration 0036). */
 export async function createAgent(agent: AgentToCreate): Promise<AgentRow> {
+  const fixed = [agent.userId, agent.slug, agent.name, agent.persona, agent.budgetMinor, agent.currency, agent.scanSchedule];
+  const params = [...fixed, ...MANDATE_COLUMNS.map((column) => agent.mandate[column])];
   const row = await queryOne<{ id: string }>(
-    `INSERT INTO agents (user_id, slug, name, persona, budget_minor, currency)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO agents (user_id, slug, name, persona, budget_minor, currency, scan_schedule,
+                         ${MANDATE_COLUMNS.join(', ')})
+     VALUES (${params.map((_, index) => `$${index + 1}`).join(', ')})
      RETURNING id`,
-    [agent.userId, agent.slug, agent.name, agent.persona, agent.budgetMinor, agent.currency],
+    params,
   );
   return (await getAgent(agent.userId, row!.id))!;
 }
@@ -131,6 +182,7 @@ export interface AgentPatch {
   state?: AgentState;
   llmBudgetMicroUsd?: number;
   scanSchedule?: string;
+  mandate?: Partial<MandateColumns>;
 }
 
 /**
@@ -156,6 +208,10 @@ export async function updateAgent(
   if (patch.state !== undefined) push('state', patch.state);
   if (patch.llmBudgetMicroUsd !== undefined) push('llm_budget_micro_usd', patch.llmBudgetMicroUsd);
   if (patch.scanSchedule !== undefined) push('scan_schedule', patch.scanSchedule);
+  for (const column of MANDATE_COLUMNS) {
+    const value = patch.mandate?.[column];
+    if (value !== undefined) push(column, value);
+  }
   if (sets.length === 0) return getAgent(userId, agentId);
   const updated = await queryOne<{ id: string }>(
     `UPDATE agents SET ${sets.join(', ')}

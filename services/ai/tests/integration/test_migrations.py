@@ -57,6 +57,12 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "ALTER TABLE cash_movements DISABLE TRIGGER USER; ALTER TABLE fills DISABLE TRIGGER USER; "
         "DELETE FROM cash_movements WHERE kind <> 'opening_deposit'; DELETE FROM fills",
     ),
+    # A rule_rejected scan is a record of what an agent tried; 0056's outcomes
+    # cannot name it, so 0057 refuses rather than relabel it.
+    "0057_agent_mandate": (
+        "agent_scans holds rule_rejected scans",
+        "DELETE FROM agent_scans WHERE outcome = 'rule_rejected'",
+    ),
     # 0041's `agent` column names only narration and ask; a scan's call has no value there.
     "0042_agent_scan_inputs": (
         "llm_calls holds agent_scan calls",
