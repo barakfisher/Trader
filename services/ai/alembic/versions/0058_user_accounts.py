@@ -47,14 +47,14 @@ no status, so a disabled or rejected user would silently become an ordinary
 one. Activating them - with a zero cap where they have none, so the CHECK holds
 and they can spend nothing - is the deliberate act that lets it proceed.
 
-Revision ID: 0057_user_accounts
-Revises: 0056_universe_taxonomy
+Revision ID: 0058_user_accounts
+Revises: 0057_agent_mandate
 """
 
 from alembic import op
 
-revision = "0057_user_accounts"
-down_revision = "0056_universe_taxonomy"
+revision = "0058_user_accounts"
+down_revision = "0057_agent_mandate"
 branch_labels = None
 depends_on = None
 

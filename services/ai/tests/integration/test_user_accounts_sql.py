@@ -1,4 +1,4 @@
-"""Accounts for several users against a real Postgres (migration 0057, M9).
+"""Accounts for several users against a real Postgres (migration 0058, M9).
 
 What the migration promises, each shown by the database doing or refusing it: a
 user who names no status is pending; a pending user has no agent, and becoming
@@ -25,8 +25,8 @@ OTHER = "00000000-0000-0000-0000-0000000000e2"
 
 
 def _migration() -> ModuleType:
-    """0057 itself, for the defaults it writes (asserted as its constants)."""
-    spec = importlib.util.spec_from_file_location("m0057", VERSIONS / "0057_user_accounts.py")
+    """0058 itself, for the defaults it writes (asserted as its constants)."""
+    spec = importlib.util.spec_from_file_location("m0058", VERSIONS / "0058_user_accounts.py")
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

@@ -10,14 +10,14 @@
 
 -- Three active users because settings are one row per user and each severity
 -- column enumerates three values; one of them is the admin role. An active
--- non-admin needs a spend cap (0057).
+-- non-admin needs a spend cap (0058).
 INSERT INTO users (id, role, status, llm_cap_micro_usd) VALUES
   ('00000000-0000-0000-0000-00000000000a', 'admin', 'active', NULL),
   ('00000000-0000-0000-0000-00000000000b', 'user', 'active', 10000000),
   ('00000000-0000-0000-0000-00000000000c', 'user', 'active', 10000000);
--- The other three statuses (0057). A pending and a rejected user never had an
+-- The other three statuses (0058). A pending and a rejected user never had an
 -- agent; the disabled one was active first, so it keeps its primary. They make
--- 0057's downgrade refuse: the older schema would make them ordinary users.
+-- 0058's downgrade refuse: the older schema would make them ordinary users.
 INSERT INTO users (id, role, email) VALUES
   ('00000000-0000-0000-0000-00000000000d', 'user', 'pending@example.test');
 INSERT INTO users (id, role, email, status) VALUES
