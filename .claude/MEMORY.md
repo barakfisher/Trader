@@ -7,8 +7,13 @@ the reasoning behind it is not, and that is what this file is for. Maintained pe
 Updated: 2026-10-18 ~09:00 UTC - **DB4's second half is reviewed: decisions 151-154, three migration
 PRs in order** (0053 drop the profiles' HNSW index, 0054 drop two unread indexes, 0055 an `articles`
 index for the collector's window read). See "The database sprint's review, second half" for the
-week's numbers. Decisions reached **154** (next: **155**). #243 (0053) and #244 (0054)
-merged; 0055 is the third. None deployed. Nothing below changed otherwise.
+week's numbers. Decisions reached **154** (next: **155**). #243 (0053), #244 (0054) and
+#245 (0055) merged. **Deployed 2026-10-18 ~09:15 UTC: both environments run `a7c3c96` (#245) at
+revision 0055** - this also deployed #241 ("Evidence checked"). Measured after: `instrument_profiles`
+97 -> 54 MB on both, compose `articles` 65 -> 59 MB, kind's database 117 -> 75 MB. **The 0053-0055 index changes
+have not been read back from the statistics yet** - the next report should show `articles_fetched_idx`
+scanned ~48 times a day on compose and `articles`' `seq_scan` no longer climbing per collect. Kind
+keeps 20 `Error` Job pods from 2026-10-10/11 (8d/7d old), predating this deploy; not investigated. Nothing below changed otherwise.
 
 Previous update, 2026-10-18 ~08:00 UTC - **Handoff after six merges (#236-#241) - one past the five-merge
 trigger, noticed late. One draft is still open on purpose (#232).** No migration since `0052` (next
@@ -3764,8 +3769,8 @@ No standing grant: ask before each PR, merge only on "merge", redeploy only on "
    review, second half" below; its decision numbers now start at **151** (148-150 were taken by
    #237-#239). Kind and compose have run #218 since 2026-10-11, so step 3 applies. Note the compose
    stack was restarted 2026-10-18 ~07:36 UTC for #239 - Postgres was not, so the window should hold.
-2. **Redeploy #241 when the user says so** (nothing else is undeployed). First real trade proposal
-   after it is the live check of the "Evidence checked" line.
+2. **#241 is deployed (2026-10-18, with 0053-0055).** The first real trade proposal after it is
+   the live check of the "Evidence checked" line.
 3. **M9's decisions**, one at a time with a recommendation, from `docs/M9-MEASUREMENT.md` - who the
    users are first (MILESTONES' list). Not ordered against DB4; the user chooses.
 4. **2026-10-20 10:00 Israel: Test agent scan review** (scheduled task). Then the two deferred
