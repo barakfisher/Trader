@@ -22,7 +22,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
-from app.agents.mandate import Mandate
+from app.agents.mandate import Mandate, ready_to_scan
 
 #: Matches `0057_agent_mandate.OUTCOMES`; a test holds the two equal.
 ScanOutcome = Literal[
@@ -53,6 +53,11 @@ class ScanAgent:
     language: str = "en"
     #: The template creator's settings (0057); empty for an agent never edited.
     mandate: Mandate = Mandate()
+
+    @property
+    def ready(self) -> bool:
+        """Whether it has anything to decide by: instructions or a mandate (D174)."""
+        return ready_to_scan(self.persona, self.mandate.is_set)
 
 
 class ScanAlreadyRunningError(RuntimeError):

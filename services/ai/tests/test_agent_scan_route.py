@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from app.agents.mandate import Mandate
 from app.agents.scan import ScanResult
 from app.agents.scan_budget import AgentBudget
 from app.agents.scan_log import ScanAgent, ScanAlreadyRunningError
@@ -123,6 +124,13 @@ def test_an_agent_that_cannot_scan_is_refused_before_any_model_call(
     assert response.status_code == status
     assert response.json()["detail"]["code"] == code
     assert scan["ran"] == []
+
+
+def test_settings_alone_are_enough_to_scan_by(client: TestClient, scan: dict[str, Any]) -> None:
+    # D174: the instructions are additional; a mandate with no words is a full brief.
+    scan["agent"] = _agent(persona=None, mandate=Mandate(horizon="long"))
+    assert _post(client).status_code == 200
+    assert scan["ran"]
 
 
 def test_a_scan_asked_for_now_is_refused_with_the_budget_spent(

@@ -39,6 +39,8 @@ export const queryKeys = {
   telegramBinding: ['telegram', 'binding'] as const,
   settings: ['settings'] as const,
   targets: ['targets'] as const,
+  /** The universe's sectors, industries and ETF categories (D164). */
+  taxonomy: ['universe', 'taxonomy'] as const,
   /** The list, and - under it, so a write that invalidates the list reaches them - each agent. */
   agents: ['agents'] as const,
   agent: (agentId: string) => ['agents', agentId] as const,

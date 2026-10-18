@@ -139,7 +139,7 @@ def test_the_next_scan_is_given_in_the_users_time_zone(calendar) -> None:
     described = describe_next_scan(
         schedule="pre_open",
         state="active",
-        persona="Follows strength.",
+        ready=True,
         scheduling=_scheduling(calendar),
         now=now,
     )
@@ -155,18 +155,18 @@ def test_the_next_scan_is_given_in_the_users_time_zone(calendar) -> None:
 
 
 @pytest.mark.parametrize(
-    ("enabled", "state", "persona", "why"),
+    ("enabled", "state", "ready", "why"),
     [
-        (False, "active", "Follows strength.", "does not run scheduled scans"),
-        (True, "paused", "Follows strength.", "paused"),
-        (True, "active", "  ", "no persona"),
+        (False, "active", True, "does not run scheduled scans"),
+        (True, "paused", True, "paused"),
+        (True, "active", False, "neither instructions nor settings"),
     ],
 )
-def test_no_next_scan_says_why(calendar, enabled: bool, state: str, persona: str, why: str) -> None:
+def test_no_next_scan_says_why(calendar, enabled: bool, state: str, ready: bool, why: str) -> None:
     described = describe_next_scan(
         schedule="pre_open",
         state=state,
-        persona=persona,
+        ready=ready,
         scheduling=_scheduling(calendar, enabled),
         now=ny(2026, 10, 16, 10),
     )
@@ -179,7 +179,7 @@ def test_an_unreadable_calendar_leaves_the_next_scan_unknown() -> None:
     described = describe_next_scan(
         schedule="pre_open",
         state="active",
-        persona="Follows strength.",
+        ready=True,
         scheduling=Scheduling(enabled=True, calendar=None, timezone="Asia/Jerusalem"),
         now=ny(2026, 10, 16, 10),
     )

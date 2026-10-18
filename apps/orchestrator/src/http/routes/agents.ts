@@ -27,6 +27,7 @@ import type { AiClient } from '@traders/shared/ai';
 
 import { logger } from '../../logger.js';
 import { nextSlot, type Session } from '../../services/scanSchedule.js';
+import { readyToScan } from '../../services/agentReadiness.js';
 import { SCHEDULE_EXCHANGE } from '../../services/scheduledScans.js';
 
 import {
@@ -158,7 +159,7 @@ export function toAgentView(row: AgentRow): AgentView {
     llmBudgetMicroUsd: row.is_primary ? null : Number(row.llm_budget_micro_usd),
     llmSpentTodayMicroUsd: row.is_primary ? null : Number(row.llm_spent_today_micro_usd),
     scanCost: row.is_primary ? null : scanCostOf(row),
-    waitingForPersona: !row.is_primary && row.state === 'active' && !row.persona?.trim(),
+    waitingForBrief: !row.is_primary && row.state === 'active' && !readyToScan(row),
     mandate: toMandateView(row),
   };
 }
@@ -172,7 +173,7 @@ const NEXT_SLOT_HORIZON_MS = 7 * 24 * 60 * 60 * 1000;
  * rather than failing the page.
  */
 async function schedulingOf(row: AgentRow, enabled: boolean, ai: AiClient, requestId?: string): Promise<AgentScheduling> {
-  if (!enabled || row.state !== 'active' || !row.persona?.trim()) return { enabled, nextAt: null };
+  if (!enabled || row.state !== 'active' || !readyToScan(row)) return { enabled, nextAt: null };
   const now = new Date();
   try {
     const { sessions } = await ai.marketSessions(

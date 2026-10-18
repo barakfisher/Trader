@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 
-import type { AgentView } from '@traders/shared';
+import type { AgentView, UniverseTaxonomyResponse } from '@traders/shared';
 
 const get = vi.fn();
 const post = vi.fn();
@@ -42,7 +42,7 @@ const PRIMARY: AgentView = {
   llmBudgetMicroUsd: null,
   llmSpentTodayMicroUsd: null,
   scanCost: null,
-  waitingForPersona: false,
+  waitingForBrief: false,
   mandate: null,
 };
 const MOMENTUM: AgentView = {
@@ -55,13 +55,29 @@ const MOMENTUM: AgentView = {
   holdingsCount: 0,
 };
 
+const TAXONOMY: UniverseTaxonomyResponse = {
+  sectors: [
+    {
+      name: 'Energy',
+      instruments: 155,
+      industries: [{ name: 'Uranium', instruments: 9 }],
+      etfCategories: [{ name: 'Equity Energy', instruments: 24 }],
+    },
+    { name: 'Technology', instruments: 488, industries: [{ name: 'Semiconductors', instruments: 38 }], etfCategories: [] },
+  ],
+  etfCategories: [{ name: 'Digital Assets', instruments: 33 }],
+  updatedAt: '2026-10-18T00:00:00Z',
+};
+
 describe('AgentsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     get.mockImplementation(async (path: string) =>
       path === '/portfolio/consolidated'
         ? { agents: [{ agentId: MOMENTUM.id, name: 'Momentum', state: 'paused', currency: 'USD', netWorthMinor: 123456 }] }
-        : { agents: [PRIMARY, MOMENTUM] },
+        : path === '/universe/taxonomy'
+          ? TAXONOMY
+          : { agents: [PRIMARY, MOMENTUM] },
     );
   });
   afterEach(cleanup);
@@ -83,7 +99,7 @@ describe('AgentsPage', () => {
     renderPage(<AgentsPage />);
     await openCreateForm();
     expect(screen.getByLabelText('Name').getAttribute('dir')).toBe('auto');
-    expect(screen.getByLabelText('Persona').getAttribute('dir')).toBe('auto');
+    expect(screen.getByLabelText('Additional instructions').getAttribute('dir')).toBe('auto');
   });
 
   it('sends the budget as the decimal string typed, and refuses a third decimal before sending', async () => {
@@ -97,7 +113,14 @@ describe('AgentsPage', () => {
     fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '2500.5' } });
     expect(submit.disabled).toBe(false);
     fireEvent.click(submit);
-    await waitFor(() => expect(post).toHaveBeenCalledWith('/agents', { name: 'Value', budget: '2500.5', persona: null }));
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith('/agents', {
+        name: 'Value',
+        budget: '2500.5',
+        persona: null,
+        mandate: expect.objectContaining({ riskLevel: null, maxPositionBps: null, allowEtfs: true, sectors: [] }),
+      }),
+    );
   });
 
   it('says a taken name in the reader\'s words, not the server\'s', async () => {
@@ -123,7 +146,11 @@ describe('AgentsPage', () => {
 
   it('says the limit in the reader\'s words when the server refuses a racing create', async () => {
     get.mockImplementation(async (path: string) =>
-      path === '/portfolio/consolidated' ? { agents: [] } : { agents: [PRIMARY, MOMENTUM], agentLimit: { used: 2, max: 3 } },
+      path === '/portfolio/consolidated'
+        ? { agents: [] }
+        : path === '/universe/taxonomy'
+          ? TAXONOMY
+          : { agents: [PRIMARY, MOMENTUM], agentLimit: { used: 2, max: 3 } },
     );
     post.mockRejectedValue(new ApiRequestError('limit', 409, 'agent_limit_reached'));
     renderPage(<AgentsPage />);
@@ -139,7 +166,7 @@ describe('AgentsPage', () => {
     renderPage(<AgentsPage />);
     await openCreateForm();
     const name = screen.getByLabelText('Name') as HTMLInputElement;
-    const persona = screen.getByLabelText('Persona') as HTMLTextAreaElement;
+    const persona = screen.getByLabelText('Additional instructions') as HTMLTextAreaElement;
     fireEvent.click(screen.getByRole('button', { name: templateName('warren') }));
     expect(name.value).toBe(templateName('warren'));
     expect(persona.value).toBe(templatePersona('warren'));
@@ -153,7 +180,7 @@ describe('AgentsPage', () => {
     renderPage(<AgentsPage />);
     await openCreateForm();
     const name = screen.getByLabelText('Name') as HTMLInputElement;
-    const persona = screen.getByLabelText('Persona') as HTMLTextAreaElement;
+    const persona = screen.getByLabelText('Additional instructions') as HTMLTextAreaElement;
     fireEvent.change(name, { target: { value: 'My value fund' } });
     fireEvent.click(screen.getByRole('button', { name: templateName('ray') }));
     expect(name.value).toBe('My value fund');
@@ -171,11 +198,11 @@ describe('AgentsPage', () => {
     expect(await screen.findByText('Main portfolio')).toBeTruthy();
     expect(screen.queryByLabelText('Name')).toBeNull();
     await openCreateForm();
-    fireEvent.change(screen.getByLabelText('Persona'), { target: { value: 'Half a thought' } });
+    fireEvent.change(screen.getByLabelText('Additional instructions'), { target: { value: 'Half a thought' } });
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
     await openCreateForm();
-    expect((screen.getByLabelText('Persona') as HTMLTextAreaElement).value).toBe('Half a thought');
+    expect((screen.getByLabelText('Additional instructions') as HTMLTextAreaElement).value).toBe('Half a thought');
   });
 
   it('closes the drawer and clears the draft once the agent is created', async () => {
@@ -188,5 +215,90 @@ describe('AgentsPage', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     await openCreateForm();
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('');
+  });
+
+  it('fills the whole mandate from a template, leaving out what the universe does not hold (D168)', async () => {
+    renderPage(<AgentsPage />);
+    await openCreateForm();
+    fireEvent.click(screen.getByRole('button', { name: templateName('warren') }));
+    expect((screen.getByLabelText('Risk appetite') as HTMLInputElement).value).toBe('3');
+    expect((screen.getByLabelText('Trading horizon') as HTMLSelectElement).value).toBe('long');
+    expect((screen.getByLabelText('Max position (%)') as HTMLInputElement).value).toBe('8');
+    expect((screen.getByLabelText('Mega-cap') as HTMLInputElement).checked).toBe(true);
+    // Cathie names Technology, Healthcare and two digital-asset categories; this universe holds two of them.
+    await screen.findByPlaceholderText('Search sectors, industries, ETF categories');
+    fireEvent.click(screen.getByRole('button', { name: templateName('cathie') }));
+    const chosen = screen.getByRole('list', { name: 'Chosen' });
+    expect(chosen.textContent).toContain('Technology');
+    expect(chosen.textContent).toContain('Digital Assets');
+    expect(chosen.textContent).not.toContain('Healthcare');
+  });
+
+  it('lets the slider propose the limits, but never move one typed by hand (D169)', async () => {
+    renderPage(<AgentsPage />);
+    await openCreateForm();
+    fireEvent.change(screen.getByLabelText('Max holdings'), { target: { value: '7' } });
+    fireEvent.change(screen.getByLabelText('Risk appetite'), { target: { value: '9' } });
+    expect(screen.getByText('Aggressive (9 of 10)')).toBeTruthy();
+    expect((screen.getByLabelText('Max position (%)') as HTMLInputElement).value).toBe('25');
+    expect((screen.getByLabelText('Cash buffer minimum (%)') as HTMLInputElement).value).toBe('5');
+    expect((screen.getByLabelText('Max holdings') as HTMLInputElement).value).toBe('7');
+  });
+
+  it('writes the instructions from the settings until they are edited, and rewrites them on request (D174)', async () => {
+    renderPage(<AgentsPage />);
+    await openCreateForm();
+    const instructions = screen.getByLabelText('Additional instructions') as HTMLTextAreaElement;
+    fireEvent.change(screen.getByLabelText('Risk appetite'), { target: { value: '3' } });
+    fireEvent.change(screen.getByLabelText('Trading horizon'), { target: { value: 'long' } });
+    expect(instructions.value).toBe(
+      'You are a conservative investor: you prefer steady, proven businesses and avoid large swings. ' +
+        'You hold positions for months to years and ignore day-to-day noise.',
+    );
+    // Words, never figures: the limits the slider set are not in the text.
+    expect(instructions.value).not.toMatch(/\d/);
+    fireEvent.change(instructions, { target: { value: 'Mine now.' } });
+    fireEvent.change(screen.getByLabelText('Thesis style'), { target: { value: 'contrarian' } });
+    expect(instructions.value).toBe('Mine now.');
+    fireEvent.click(screen.getByRole('button', { name: 'Rewrite from settings' }));
+    expect(instructions.value).toContain('say why the consensus could be wrong');
+  });
+
+  it('sends the mandate in basis points, and refuses a malformed limit before sending', async () => {
+    post.mockResolvedValue(MOMENTUM);
+    renderPage(<AgentsPage />);
+    await openCreateForm();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Miner' } });
+    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '1000' } });
+    fireEvent.change(screen.getByLabelText('Max position (%)'), { target: { value: '12.555' } });
+    const submit = screen.getByRole('button', { name: 'Create agent' }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Max position (%)'), { target: { value: '12.5' } });
+    fireEvent.click(screen.getByLabelText('Allow ETFs'));
+    fireEvent.change(screen.getByLabelText('Blocked tickers'), { target: { value: 'xom, cvx' } });
+    fireEvent.click(submit);
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        '/agents',
+        expect.objectContaining({
+          mandate: expect.objectContaining({ maxPositionBps: 1250, allowEtfs: false, blockedSymbols: ['XOM', 'CVX'] }),
+        }),
+      ),
+    );
+  });
+
+  it('picks sectors and industries from the universe, and removes one', async () => {
+    renderPage(<AgentsPage />);
+    await openCreateForm();
+    const search = await screen.findByPlaceholderText('Search sectors, industries, ETF categories');
+    fireEvent.change(search, { target: { value: 'uran' } });
+    fireEvent.click(await screen.findByRole('option', { name: /Uranium/ }));
+    fireEvent.change(search, { target: { value: 'tech' } });
+    fireEvent.click(await screen.findByRole('option', { name: /^Technology/ }));
+    const chosen = screen.getByRole('list', { name: 'Chosen' });
+    expect(chosen.textContent).toContain('Uranium');
+    expect(chosen.textContent).toContain('Technology');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Uranium' }));
+    expect(screen.getByRole('list', { name: 'Chosen' }).textContent).not.toContain('Uranium');
   });
 });

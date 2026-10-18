@@ -105,8 +105,8 @@ export interface AgentView {
   llmSpentTodayMicroUsd: number | null;
   /** What one scan is expected to cost (D46); null for the primary. */
   scanCost: ScanCostEstimate | null;
-  /** An active agent with no persona never scans and is never billed (D52). */
-  waitingForPersona: boolean;
+  /** An active agent with neither instructions nor a mandate never scans and is never billed (D52, D174). */
+  waitingForBrief: boolean;
   /** Its scheduled scans on this installation (D71); on `GET /agents/:id` only. */
   scheduling?: AgentScheduling;
   /** The template creator's settings (0057); null for the primary, which has none (D1). */

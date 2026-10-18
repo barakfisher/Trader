@@ -148,7 +148,7 @@ describe('running a scan', () => {
   it.each([
     ['the real portfolio', PRIMARY, {}, 409, 'primary_agent_is_passive'],
     ['a paused agent', AGENT, { state: 'paused' }, 409, 'agent_not_active'],
-    ['an agent with no persona', AGENT, { persona: '  ' }, 409, 'no_persona'],
+    ['an agent with neither instructions nor settings', AGENT, { persona: '  ' }, 409, 'no_persona'],
     ['an unknown agent', '90000000-0000-0000-0000-0000000000ff', {}, 404, 'not_found'],
   ])('refuses %s before any model is paid for', async (_label, id, overrides, status, code) => {
     agent = agentRow(overrides);
@@ -157,6 +157,13 @@ describe('running a scan', () => {
     expect(response.status).toBe(status);
     expect(((await response.json()) as { error: string }).error).toBe(code);
     expect(scanAgent).not.toHaveBeenCalled();
+  });
+
+  it('scans an agent with settings and no instructions (D174)', async () => {
+    agent = agentRow({ persona: null, max_position_bps: 1000 });
+    const { send, scanAgent } = await signedIn(async () => RESULT);
+    expect((await send(`/agents/${AGENT}/scans`)).status).toBe(200);
+    expect(scanAgent).toHaveBeenCalled();
   });
 
   it("keeps the AI service's refusal code: a scan already running", async () => {

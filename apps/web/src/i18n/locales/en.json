@@ -1144,8 +1144,8 @@
       "name": "Name",
       "budget": "Paper budget (USD)",
       "budgetHint": "Simulated money, not taken from your portfolio. Dollars and cents, e.g. 1000 or 1000.50.",
-      "persona": "Persona",
-      "personaHint": "How this agent should think. Every scan decides by it; an agent with no persona does not scan.",
+      "persona": "Additional instructions",
+      "personaHint": "Optional, in your own words. Filled from the settings until you edit it; it never overrides them. An agent with neither instructions nor settings does not scan.",
       "budgetEditHint": "Before the first trade this is the agent's starting cash. After it, the budget can only rise: use Add cash."
     },
     "create": {
@@ -1155,7 +1155,7 @@
     },
     "templates": {
       "label": "Start from a template",
-      "hint": "A template fills an empty name and persona for you to edit. It never replaces a persona you wrote.",
+      "hint": "A template fills the name, the instructions and the mandate for you to edit. It never replaces instructions you wrote.",
       "warren": {
         "name": "Warren",
         "persona": "You invest in the spirit of Warren Buffett: long-term, value first. You look for high-quality companies with steady cash flow, strong management and a lasting competitive advantage, trading below what you believe they are worth. You buy patiently, hold through market swings and rarely react to a single day's move; most days you do nothing. You sell only when the business weakens or the price runs well past its value."
@@ -1313,7 +1313,7 @@
       "winRateValue": "{{rate}} ({{wins}} of {{sells}})",
       "unrealised": "Still held from the agent's own buys, at the latest close: {{value}}."
     },
-    "waitingForPersona": "Waiting for a persona",
+    "waitingForBrief": "Waiting for instructions or settings",
     "scans": {
       "title": "Scans",
       "run": "Run a scan now",
@@ -1336,7 +1336,7 @@
       "openProposal": "Review the proposal",
       "refusals": {
         "agent_not_active": "Resume the agent to scan.",
-        "no_persona": "Give the agent a persona first: it decides by it.",
+        "no_persona": "Give the agent instructions or settings first: it decides by them.",
         "budget_spent": "Today's model budget is spent. It resets at midnight UTC, or raise it below.",
         "scan_running": "This agent is already scanning.",
         "no_model": "No model is chosen for agents. Choose one on the Admin page."
@@ -1402,6 +1402,110 @@
     "limit": {
       "used": "{{used}} of {{max}} agents",
       "full": "You have {{max}} agents, the most this installation allows. Archive one to make room."
+    },
+    "mandate": {
+      "title": "Mandate",
+      "risk": "Risk appetite",
+      "riskValue": "{{band}} ({{level}} of 10)",
+      "riskHint": "Moving it proposes the three limits below; a limit you type yourself stays as you set it.",
+      "clearRisk": "Clear",
+      "bands": {
+        "ultraConservative": "Ultra-conservative",
+        "conservative": "Conservative",
+        "balanced": "Balanced",
+        "growth": "Growth",
+        "aggressive": "Aggressive"
+      },
+      "notSet": "Not set",
+      "horizon": "Trading horizon",
+      "horizonHint": "A new agent scans on its horizon's schedule. You can change the schedule under Scans.",
+      "horizons": {
+        "short": "Short-term (days to weeks)",
+        "medium": "Medium-term (weeks to months)",
+        "long": "Long-term (months to years)"
+      },
+      "horizonWords": {
+        "short": "Short-term",
+        "medium": "Medium-term",
+        "long": "Long-term"
+      },
+      "style": "Thesis style",
+      "styles": {
+        "academic": "Conservative / academic",
+        "growth": "Bullish / growth",
+        "contrarian": "Contrarian"
+      },
+      "enforced": "Checked on every buy. A buy that breaks a limit goes back to the agent once, then is refused. Selling is always allowed.",
+      "maxPosition": "Max position (%)",
+      "maxPositionHint": "Share of capital: cash plus holdings at cost.",
+      "cashBuffer": "Cash buffer minimum (%)",
+      "cashBufferHint": "Share of capital kept in cash after a buy.",
+      "maxHoldings": "Max holdings",
+      "maxHoldingsHint": "Different instruments held at once.",
+      "noLimit": "No limit",
+      "allowEtfs": "Allow ETFs",
+      "marketCaps": "Company size",
+      "marketCapsHint": "Stocks only, by market cap. None ticked means any size.",
+      "caps": {
+        "mega": "Mega-cap",
+        "large": "Large-cap",
+        "mid": "Mid-cap",
+        "small": "Small-cap"
+      },
+      "sectors": "Sectors & industries",
+      "sectorsHint": "Only what the universe holds. None chosen means anywhere. A sector includes the ETFs whose category is about it.",
+      "searchPlaceholder": "Search sectors, industries, ETF categories",
+      "selected": "Chosen",
+      "remove": "Remove {{name}}",
+      "noSector": "No sector",
+      "kinds": {
+        "sector": "sector",
+        "industry": "industry",
+        "etf_category": "ETF category"
+      },
+      "taxonomyLoading": "Loading sectors…",
+      "taxonomyUnavailable": "Sectors and industries are not available until the universe is loaded.",
+      "blocked": "Blocked tickers",
+      "blockedHint": "Never bought, whatever else is set. Separate with commas.",
+      "blockedPlaceholder": "TSLA, GME",
+      "invalid": "Check the highlighted fields: a percentage with at most two decimals, holdings from 1 to 100, tickers such as NVDA or BRK-B.",
+      "rewrite": "Rewrite from settings",
+      "save": "Save mandate",
+      "saved": "Saved. New limits apply to future buys.",
+      "overLimits": "Over its limits now: {{items}}. Limits apply to future buys; nothing is sold.",
+      "over": {
+        "position": "{{symbol}} above the position limit",
+        "cash": "cash below the minimum",
+        "holdings": "more holdings than the limit"
+      },
+      "describe": {
+        "risk": {
+          "ultraConservative": "You are an ultra-conservative investor: preserving capital comes first.",
+          "conservative": "You are a conservative investor: you prefer steady, proven businesses and avoid large swings.",
+          "balanced": "You are a balanced investor, weighing growth against risk.",
+          "growth": "You are a growth investor, willing to accept volatility for stronger returns.",
+          "aggressive": "You are an aggressive investor, seeking outsized gains and accepting large swings."
+        },
+        "horizon": {
+          "short": "You look for opportunities that play out over days to a few weeks.",
+          "medium": "You look for opportunities that play out over weeks to a few months.",
+          "long": "You hold positions for months to years and ignore day-to-day noise."
+        },
+        "style": {
+          "academic": "Your theses are measured and evidence-first, naming the risks before the upside.",
+          "growth": "Your theses say what has to go right for growth, and what the evidence shows of it.",
+          "contrarian": "Your theses look for what the market may be mispricing, and say why the consensus could be wrong."
+        },
+        "focus": "You focus on {{focus}}.",
+        "caps": "You prefer {{caps}} companies.",
+        "capWords": {
+          "mega": "mega-cap",
+          "large": "large-cap",
+          "mid": "mid-cap",
+          "small": "small-cap"
+        },
+        "noEtfs": "You buy individual companies, not ETFs."
+      }
     }
   },
   "consolidated": {

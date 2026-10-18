@@ -31,6 +31,7 @@ import { effectiveState } from '../../services/proposalState.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, conflict, notFound, upstreamFailure } from '../errors.js';
 import { proposeFromScan } from '../../services/tradeProposals.js';
+import { readyToScan } from '../../services/agentReadiness.js';
 import { agentIdFrom } from './agents.js';
 
 /** A page of the *Decisions* tab. */
@@ -125,8 +126,8 @@ export function registerAgentScanRoutes(app: Hono<AppEnv>): void {
     if (agent.state !== 'active') {
       throw conflict('agent_not_active', `the agent is ${agent.state}; resume it to scan`);
     }
-    if (!agent.persona?.trim()) {
-      throw conflict('no_persona', 'give the agent a persona first: it decides by it');
+    if (!readyToScan(agent)) {
+      throw conflict('no_persona', 'give the agent instructions or settings first: it decides by them');
     }
 
     let scan;

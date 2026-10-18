@@ -56,7 +56,7 @@ const AGENT: AgentView = {
   llmBudgetMicroUsd: 500_000,
   llmSpentTodayMicroUsd: 108_022,
   scanCost: { microUsd: 36_000, basis: 'measured' },
-  waitingForPersona: true,
+  waitingForBrief: true,
   mandate: null,
   scheduling: { enabled: true, nextAt: '2026-10-08T13:00:00Z' },
 };
@@ -477,13 +477,13 @@ describe('AgentPage with the ledger', () => {
 
   it('waits for a persona, and offers no scan until it has one (D52)', async () => {
     renderAgent();
-    expect(await screen.findByText('Waiting for a persona')).toBeTruthy();
+    expect(await screen.findByText('Waiting for instructions or settings')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Run a scan now' }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText('Give the agent a persona first: it decides by it.')).toBeTruthy();
+    expect(screen.getByText('Give the agent instructions or settings first: it decides by them.')).toBeTruthy();
   });
 
   it('runs a scan, says what it proposed, and shows its expected cost (D65)', async () => {
-    serveAgent({ ...AGENT, persona: 'Patient.', waitingForPersona: false });
+    serveAgent({ ...AGENT, persona: 'Patient.', waitingForBrief: false });
     post.mockResolvedValueOnce({
       scan_id: SCAN_ID, outcome: 'trade', steps: 1, cost_micro_usd: 41_000, model: 'm', error: null,
       answer: { decision: 'buy', symbol: 'NVDA', quantity: '2', thesis: 't' }, proposal_id: 'p-1',
@@ -497,7 +497,7 @@ describe('AgentPage with the ledger', () => {
   });
 
   it('says why a scan was refused, in the reader\'s words', async () => {
-    serveAgent({ ...AGENT, persona: 'Patient.', waitingForPersona: false });
+    serveAgent({ ...AGENT, persona: 'Patient.', waitingForBrief: false });
     post.mockRejectedValueOnce(new ApiRequestError('busy', 409, 'scan_running'));
     renderAgent();
     fireEvent.click(await screen.findByRole('button', { name: 'Run a scan now' }));
@@ -525,5 +525,42 @@ describe('AgentPage with the ledger', () => {
     serveAgent({ ...AGENT, scheduling: { enabled: false, nextAt: null } });
     renderAgent();
     expect(await screen.findByText(/Scheduled scans don't run on this installation/)).toBeTruthy();
+  });
+
+  it('saves an edited mandate, and says where the agent already stands over a limit (D168)', async () => {
+    const patch = (await import('../src/api/client.ts')).api.patch as ReturnType<typeof vi.fn>;
+    patch.mockResolvedValue(AGENT);
+    const mandate = {
+      riskLevel: 4,
+      horizon: 'long' as const,
+      thesisStyle: null,
+      maxPositionBps: 1000,
+      cashBufferBps: null,
+      maxHoldings: null,
+      allowEtfs: true,
+      marketCaps: [],
+      sectors: [],
+      industries: [],
+      etfCategories: [],
+      blockedSymbols: [],
+    };
+    // AAPL at 1,672.90 of capital 9,998.32 (cash plus holdings at cost) is over a 10% limit.
+    serveAgent({ ...AGENT, persona: 'Patient.', mandate });
+    renderAgent();
+    expect(await screen.findByText(/Over its limits now: AAPL above the position limit/)).toBeTruthy();
+    // A stored limit counts as typed: the slider proposes nothing over it.
+    fireEvent.change(screen.getByLabelText('Risk appetite'), { target: { value: '8' } });
+    expect((screen.getByLabelText('Max position (%)') as HTMLInputElement).value).toBe('10');
+    fireEvent.change(screen.getByLabelText('Max position (%)'), { target: { value: '20' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith(
+        `/agents/${AGENT_ID}`,
+        expect.objectContaining({
+          persona: 'Patient.',
+          mandate: expect.objectContaining({ riskLevel: 8, maxPositionBps: 2000, horizon: 'long' }),
+        }),
+      ),
+    );
   });
 });
