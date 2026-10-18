@@ -4,9 +4,9 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-18 ~11:30 UTC - **M9 decisions 155-159** (users, signup with approval, monthly
-spend cap, enforcement, email+password); decisions reached **159** (next: **160**). Sessions,
-scheduling, admin visibility and the time zone are still to decide, in that order. **#232 is
+Updated: 2026-10-18 ~11:30 UTC - **M9 decisions 155-160** (users, signup with approval, monthly
+spend cap, enforcement, email+password, sessions); decisions reached **160** (next: **161**).
+Scheduling, admin visibility and the time zone are still to decide, in that order. **#232 is
 deployed nowhere** - checked 11:05 UTC: both environments' `instructions.py` is pre-#232 (pods
 started 09:18-09:20). **0055 read back:** the window read uses `articles_fetched_idx`; the market
 prune (`DELETE ... coalesce(published_at, fetched_at)`, deletes 0 rows) has been 278-937 ms on 4
@@ -2645,10 +2645,20 @@ failure they prevent.
     shared `APP_PASSPHRASE` goes away; the seeded admin gets an email and password from a
     one-time script, never from a committed value. *Rejected:* a one-time code over Telegram -
     a pending user has no binding to send it to.
-    **Still to decide before code, in this order:** sessions (removing or rejecting a user must
-    end a session the stateless cookie cannot end - a password login makes a session table the
-    natural answer), scheduling (three changes, M9-MEASUREMENT §2), what the admin sees of
-    another user's data, and the time zone's write path.
+160. **Sessions stay a signed cookie; every request checks the user** (the user, 2026-10-18).
+    The cookie gains `ver`, copied from a new `users.session_version`. Each authenticated request
+    reads the user by primary key and accepts the session only if `status = 'active'` and the
+    versions match. So disabling or rejecting a user ends their sessions on the next request, and
+    a password change bumps the version, ending every session they hold. `users.status` gains
+    `disabled` for this - the reversible removal. The admin read of `users.role` per request
+    (M8) becomes this same read. *Rejected:* a sessions table (per-device sign-out and a session
+    list, at the cost of a table, a cleanup job and the same per-request read - revisit in M10 if
+    per-device sign-out is wanted) and a short-lived cookie (removal would take up to its
+    lifetime, and everyone re-signs-in constantly). *Lesson from deciding it: "a session table"
+    is the reflex, but the requirement was "end at once"; a stateless token plus one read of a
+    row you already read for the role meets it.*
+    **Still to decide before code, in this order:** scheduling (three changes, M9-MEASUREMENT
+    §2), what the admin sees of another user's data, and the time zone's write path.
 
 ---
 
