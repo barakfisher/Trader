@@ -4,9 +4,9 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-18 ~11:30 UTC - **M9 decisions 155-160** (users, signup with approval, monthly
-spend cap, enforcement, email+password, sessions); decisions reached **160** (next: **161**).
-Scheduling, admin visibility and the time zone are still to decide, in that order. **#232 is
+Updated: 2026-10-18 ~11:30 UTC - **M9 decisions 155-161** (users, signup with approval, monthly
+spend cap, enforcement, email+password, sessions, scheduling); decisions reached **161** (next:
+**162**). Admin visibility and the time zone are still to decide, in that order. **#232 is
 deployed nowhere** - checked 11:05 UTC: both environments' `instructions.py` is pre-#232 (pods
 started 09:18-09:20). **0055 read back:** the window read uses `articles_fetched_idx`; the market
 prune (`DELETE ... coalesce(published_at, fetched_at)`, deletes 0 rows) has been 278-937 ms on 4
@@ -2657,8 +2657,27 @@ failure they prevent.
     lifetime, and everyone re-signs-in constantly). *Lesson from deciding it: "a session table"
     is the reflex, but the requirement was "end at once"; a stateless token plus one read of a
     row you already read for the role meets it.*
-    **Still to decide before code, in this order:** scheduling (three changes, M9-MEASUREMENT
-    §2), what the admin sees of another user's data, and the time zone's write path.
+161. **Scheduled work names who it is for; scans interleave; shared work runs once** (the user,
+    2026-10-18). Three parts, from M9-MEASUREMENT §2:
+    - **Fan-out is explicit.** The timer and the 11 CronJobs send `for: "every_active_user"`;
+      `POST /internal/runs` expands it into one run per `active` user, each keyed and dated in
+      that user's zone (the "ask often, the run key decides" pattern already works per user). A
+      body naming neither a user nor `every_active_user` is refused 400 - the `SINGLE_USER_ID`
+      fallback goes. *Rejected:* "no user means everyone" - a mistyped call would quietly do
+      everyone's work, the same silent default M9's exit removes.
+    - **Scans are interleaved at enqueue.** Every user's due scans are planned first, then added
+      round-robin (A1, B1, A2, B2...) to the one BullMQ queue. Not strict fairness, but with a
+      few users bounded by `max_agents_per_user` the worst wait is a few scans. *Rejected:*
+      expanding users in order (the same user always waits) and BullMQ Pro groups (D73: a paid
+      licence for a problem a household does not have).
+    - **Installation work runs once, with no user,** as the rescreen already does:
+      `backfill` and `news_collect` over the union of every active user's instruments plus the
+      benchmarks; `instrument_metadata` and `proposal_sweep` (already unscoped) as they are. Their
+      run keys carry the installation's day (`APP_TIMEZONE`). The per-user kinds - `snapshot`,
+      `portfolio_scan`, `topic_scan`, `topic_discovery`, `daily_digest`, `agent_scans` - fan out.
+      *Rejected:* per-user runs of these - N identical fetches into shared tables.
+    **Still to decide before code, in this order:** what the admin sees of another user's data,
+    and the time zone's write path.
 
 ---
 

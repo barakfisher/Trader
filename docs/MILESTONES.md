@@ -175,7 +175,7 @@ decision 85).
 
 ---
 
-## M9 — Multiple users *(planned 2026-10-14; PR 1 measured 2026-10-15; decisions 155-160 on 2026-10-18)*
+## M9 — Multiple users *(planned 2026-10-14; PR 1 measured 2026-10-15; decisions 155-161 on 2026-10-18)*
 
 Added at the user's request. The data model has been multi-tenant since M1 (`user_id` on every
 user-owned row, guideline 5) and DESIGN §2 deferred real multi-user auth "but not designed out";
@@ -206,7 +206,10 @@ this list exists. *Done 2026-10-15: [M9-MEASUREMENT.md](M9-MEASUREMENT.md).*
   request reads the user and accepts the session only while it is `active` and the versions
   match. Disabling or rejecting a user ends their sessions at once; a password change ends all of
   theirs. No sessions table (M10 may add one for per-device sign-out).
-- **Scheduling** - scans iterated per user, and fairness between users on one queue.
+- **Scheduling** - *decided (161):* triggers say `for: "every_active_user"` and the endpoint
+  fans out per active user; a body naming no user and no fan-out is refused. Due scans are
+  enqueued round-robin across users. `backfill`, `news_collect`, `instrument_metadata` and
+  `proposal_sweep` run once for the installation, over the union of active users' instruments.
 - **Shared costs** - *decided (157, 158):* a monthly LLM spend cap per non-admin user, in the
   user's time zone, set at approval (default from `installation_settings`, $10). Checked before
   each call against the call's maximum cost; a capped user's agent scans and `/ask` are refused
@@ -229,7 +232,7 @@ this list exists. *Done 2026-10-15: [M9-MEASUREMENT.md](M9-MEASUREMENT.md).*
 - The approval message is the admin's Telegram binding, in the admin's language
   (`notify/messages.ts`); its buttons carry a signed request token.
 
-**PRs, after the remaining decisions** (scheduling, admin visibility, time zone): the schema
+**PRs, after the remaining decisions** (admin visibility, time zone): the schema
 (0056 or the next free number), signup and login (web + i18n), the approval flow (Telegram and
 the Admin page), the cap's enforcement, scheduling per user, then the exit test.
 
