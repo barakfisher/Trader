@@ -175,7 +175,7 @@ decision 85).
 
 ---
 
-## M9 — Multiple users *(planned 2026-10-14; PR 1 measured 2026-10-15; decisions 155-161 on 2026-10-18)*
+## M9 — Multiple users *(planned 2026-10-14; PR 1 measured 2026-10-15; decisions 155-162 on 2026-10-18)*
 
 Added at the user's request. The data model has been multi-tenant since M1 (`user_id` on every
 user-owned row, guideline 5) and DESIGN §2 deferred real multi-user auth "but not designed out";
@@ -216,7 +216,11 @@ this list exists. *Done 2026-10-15: [M9-MEASUREMENT.md](M9-MEASUREMENT.md).*
   with a reason, and narration falls back to the template so alerts still arrive. The per-agent
   and assistant allowances and the installation ceiling stay underneath.
 - **Telegram** - one bot, a binding per user (the binding is already per `user_id`).
-- **Admin** - `users.role` exists (M8); what an admin may see of another user's data.
+- **Admin** - *decided (162):* operations only - a user list (status, cap, spent, last sign-in)
+  and runs, gaps and LLM calls per user without prompts or completions; never holdings,
+  proposals, observations, agents or conversations. Account reset becomes each user's own. The
+  admin can set a one-time password, changed at the next sign-in. The operator can still read
+  the database; this governs the app.
 - **Time zone** - a zone per user in `user_settings`, and what is still per installation (the
   scheduled ask's clock, the market calendar).
 
@@ -232,7 +236,7 @@ this list exists. *Done 2026-10-15: [M9-MEASUREMENT.md](M9-MEASUREMENT.md).*
 - The approval message is the admin's Telegram binding, in the admin's language
   (`notify/messages.ts`); its buttons carry a signed request token.
 
-**PRs, after the remaining decisions** (admin visibility, time zone): the schema
+**PRs, after the last decision** (time zone): the schema
 (0056 or the next free number), signup and login (web + i18n), the approval flow (Telegram and
 the Admin page), the cap's enforcement, scheduling per user, then the exit test.
 

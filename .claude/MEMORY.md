@@ -4,9 +4,9 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-18 ~11:30 UTC - **M9 decisions 155-161** (users, signup with approval, monthly
-spend cap, enforcement, email+password, sessions, scheduling); decisions reached **161** (next:
-**162**). Admin visibility and the time zone are still to decide, in that order. **#232 is
+Updated: 2026-10-18 ~11:30 UTC - **M9 decisions 155-162** (users, signup with approval, monthly
+spend cap, enforcement, email+password, sessions, scheduling, admin); decisions reached **162**
+(next: **163**). The time zone is the last M9 decision before code. **#232 is
 deployed nowhere** - checked 11:05 UTC: both environments' `instructions.py` is pre-#232 (pods
 started 09:18-09:20). **0055 read back:** the window read uses `articles_fetched_idx`; the market
 prune (`DELETE ... coalesce(published_at, fetched_at)`, deletes 0 rows) has been 278-937 ms on 4
@@ -2676,8 +2676,24 @@ failure they prevent.
       run keys carry the installation's day (`APP_TIMEZONE`). The per-user kinds - `snapshot`,
       `portfolio_scan`, `topic_scan`, `topic_discovery`, `daily_digest`, `agent_scans` - fan out.
       *Rejected:* per-user runs of these - N identical fetches into shared tables.
-    **Still to decide before code, in this order:** what the admin sees of another user's data,
-    and the time zone's write path.
+162. **The admin sees operations, never a user's finances; each user resets their own account;
+    the admin can set a one-time password** (the user, 2026-10-18).
+    - **What the app shows the admin of another user:** a user list (status, cap, spent this
+      month, last sign-in), and runs, gaps and LLM calls per user - cost, tokens, outcome, never
+      prompt or completion (already so, `llmCalls.ts`). Holdings, proposals, observations, agents
+      and `/ask` conversations are not shown. Accepted leak: a price gap names its instrument,
+      which can reveal a holding - the admin needs it to fix the gap. *Rejected:* a read-only
+      "view as user" (every household member's finances in the admin's view).
+    - **Said plainly, so nobody believes otherwise:** the operator of a self-hosted installation
+      can read the database - holdings, conversations, stored prompts. This is a promise about
+      the app's interface, not a technical wall.
+    - **Account reset is the user's own**, moved out from behind the admin gate
+      (M9-MEASUREMENT §8); the admin cannot reset another user's account.
+    - **A forgotten password:** the admin sets a one-time password, which the user must change at
+      the next sign-in; setting it bumps `session_version` (160), ending their sessions.
+      *Rejected:* nothing until M10's self-service reset - a forgotten password would lock a user
+      out, or be fixed by hand in the database.
+    **Still to decide before code:** the time zone's write path.
 
 ---
 
