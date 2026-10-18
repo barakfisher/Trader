@@ -89,6 +89,17 @@ const RUN_BUCKET_MINUTES: Record<string, number> = {
   agent_scans: 15,
 };
 
+/**
+ * The kinds whose failed run is claimed again under the same key - the next
+ * hourly ask retries it the same day (decision 150). The backfill: its key is
+ * daily, so without a retry one failure - the AI service answering 500 for a
+ * minute after the Mac wakes - leaves the day's closes, the benchmarks' among
+ * them, missing until tomorrow, while every other kind recovers within the
+ * hour. A day-long outage costs at most one attempt an hour. Not the other
+ * daily kinds: a failed digest may have sent part of its message.
+ */
+export const RETRY_FAILED_KINDS: ReadonlySet<string> = new Set(['backfill']);
+
 /** The bucket a moment falls into, as a readable suffix for the run key. */
 export function runBucket(kind: string, localDate: string, now: Date = new Date()): string {
   const minutes = RUN_BUCKET_MINUTES[kind] ?? 24 * 60;
@@ -180,6 +191,7 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
       kind: parsed.data.kind,
       runKey,
       trigger: parsed.data.trigger ?? 'unknown',
+      retryFailed: RETRY_FAILED_KINDS.has(parsed.data.kind),
     });
 
     if (!claim.claimed) {

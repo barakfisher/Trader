@@ -2453,6 +2453,21 @@ failure they prevent.
     an intraday dashboard price and the benchmark needs a price the same day. *Not done:* the web
     feed and the digest do not show the line (the evidence is there for them); thresholds are
     `ANALYSIS_MARKET_*` settings.
+150. **A failed backfill is retried within its day** (the user, 2026-10-15, found while verifying
+    149: compose's 05:53 UTC backfill failed right after the Mac woke, and QQQ/IWM/BTC-USD's
+    10-14 closes were missing until a manual run under its own key at 08:25). Measured first:
+    compose had **3 failed backfills in 25** since 2026-09-16 (10-02, 10-05, 10-15), every one
+    "AI service unreachable: Internal Server Error" on the first ask after a wake, and every
+    other kind ran clean within the hour - the next hourly ask would have worked, but the daily
+    key was taken. Kind: 0 failed in 17. **So the route passes `retryFailed` for the kinds in
+    `RETRY_FAILED_KINDS`** (`routes/internal.ts`; today only `backfill`), the same re-claim the
+    rescreen already had; the scheduler's and the CronJob's hourly asks are the retry. A
+    day-long outage costs at most ~24 provider passes instead of 1. *Rejected:* a capped retry
+    count (an attempt counter in `claimRun` for a cost the quota absorbs) and leaving it (the
+    next day's 30-day backfill does catch up, but a day of stale benchmarks once every ~10 days
+    is what 149's line would read). **`degraded` is not retried** - a symbol without history
+    stays so. **Not the other daily kinds:** a failed digest may already have sent part of its
+    message, and discovery/metadata have not failed.
 
 ---
 
