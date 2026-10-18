@@ -175,7 +175,7 @@ decision 85).
 
 ---
 
-## M9 — Multiple users *(planned 2026-10-14; PR 1 measured 2026-10-15)*
+## M9 — Multiple users *(planned 2026-10-14; PR 1 measured 2026-10-15; decisions 155-159 on 2026-10-18)*
 
 Added at the user's request. The data model has been multi-tenant since M1 (`user_id` on every
 user-owned row, guideline 5) and DESIGN §2 deferred real multi-user auth "but not designed out";
@@ -195,24 +195,56 @@ and notification path that assumes one user, listed with where it is. Nothing is
 this list exists. *Done 2026-10-15: [M9-MEASUREMENT.md](M9-MEASUREMENT.md).*
 
 **Decisions to bring, each with a recommendation, after PR 1:**
-- **Who the users are** - household members on one self-hosted installation, or invited strangers.
-  This sets everything below; billing stays out of scope either way (PRD §7).
-- **Accounts and login** - per-user credentials, or OAuth via an identity provider; how a user is
-  created (admin invites, or nothing self-service).
+- **Who the users are** - *decided (155):* trusted people - household and friends - on the
+  self-hosted installation, reached over Tailscale; the user is its one admin. Invited strangers
+  are M10. Billing stays out of scope either way (PRD §7).
+- **Accounts and login** - *decided (156, 159):* email and password (argon2id, a maintained
+  package). A new user signs up into `pending`; the admin approves or rejects from Telegram
+  (three buttons: default budget, reject, custom budget) or the Admin page. A pending user has no
+  agent and no scans; a rejected request is kept as `rejected`.
 - **Sessions** - whether removing a user must end their session at once, which the stateless
   cookie cannot do.
 - **Scheduling** - scans iterated per user, and fairness between users on one queue.
-- **Shared costs** - the LLM budget and the assistant's daily limit: per user or per installation.
+- **Shared costs** - *decided (157, 158):* a monthly LLM spend cap per non-admin user, in the
+  user's time zone, set at approval (default from `installation_settings`, $10). Checked before
+  each call against the call's maximum cost; a capped user's agent scans and `/ask` are refused
+  with a reason, and narration falls back to the template so alerts still arrive. The per-agent
+  and assistant allowances and the installation ceiling stay underneath.
 - **Telegram** - one bot, a binding per user (the binding is already per `user_id`).
 - **Admin** - `users.role` exists (M8); what an admin may see of another user's data.
 - **Time zone** - a zone per user in `user_settings`, and what is still per installation (the
   scheduled ask's clock, the market calendar).
+
+**The shape the decided parts imply** (a sketch; each PR measures and refines it):
+- `users` gains `status` (`pending` / `active` / `rejected`, plus `disabled` if the sessions
+  decision asks for it), `password_hash`, `llm_cap_micro_usd` (null for the admin: uncapped),
+  `approved_at` and `approved_by`. The primary agent is seeded on the transition to `active`,
+  not on insert. `installation_settings` gains the default cap and the pending-request ceiling.
+- The cap check wraps the provider in the AI service's LLM factory, beside the installation
+  ceiling (`BudgetedProvider`, `llm/factory.py`), so narration, agent scans, the assistant and
+  `/ask` pass through it (guideline 6). That wrapper does not know the user today; how a call
+  carries its user to it is that PR's first measurement.
+- The approval message is the admin's Telegram binding, in the admin's language
+  (`notify/messages.ts`); its buttons carry a signed request token.
+
+**PRs, after the remaining decisions** (sessions first - it changes the login PR): the schema
+(0056 or the next free number), signup and login (web + i18n), the approval flow (Telegram and
+the Admin page), the cap's enforcement, scheduling per user, then the exit test.
 
 **Exit:** two users on one installation, each seeing only their own holdings, observations,
 proposals, agents and notifications - proved by a test that signs in as one user and asserts every
 user-facing route returns nothing of the other's; scheduled scans run for both; and no request
 path falls back to `SINGLE_USER_ID` - a run that names no user is refused, not run as the first
 user (today `POST /internal/runs` does exactly that, which a signed-in test cannot see).
+
+---
+
+## M10 — Public access *(roadmap, added 2026-10-18; decision 155)*
+
+Self-signup for people the admin does not know, with OAuth (Google, GitHub), automated free-tier
+limits and self-service password reset - **without changing the isolated data layer** M9 relies
+on. Not started; planned only after M9's exit. It brings what M9 deliberately leaves out:
+internet exposure, abuse handling and holding strangers' financial data.
 
 ---
 

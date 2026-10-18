@@ -4,7 +4,18 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-18 ~10:30 UTC - **Handoff after five merges since #242 (#243-#246, #232). One
+Updated: 2026-10-18 ~11:30 UTC - **M9 decisions 155-159** (users, signup with approval, monthly
+spend cap, enforcement, email+password); decisions reached **159** (next: **160**). Sessions,
+scheduling, admin visibility and the time zone are still to decide, in that order. **#232 is
+deployed nowhere** - checked 11:05 UTC: both environments' `instructions.py` is pre-#232 (pods
+started 09:18-09:20). **0055 read back:** the window read uses `articles_fetched_idx`; the market
+prune (`DELETE ... coalesce(published_at, fetched_at)`, deletes 0 rows) has been 278-937 ms on 4
+of 5 collects since, likely cache eviction by 09:00's scratch restore. **Re-read on 2026-10-19**
+against the 11:07 snapshot (prune calls 138 / 6,027 ms total; `articles` seq_scan 442) before
+deciding a partial index on `coalesce(...) WHERE feed = 'market'`; restore nothing onto compose's
+server until then.
+
+Previous update, 2026-10-18 ~10:30 UTC - **Handoff after five merges since #242 (#243-#246, #232). One
 draft is open on purpose (#247).** Decisions reached **154** (next: **155**); no migration since
 `0055` (next free: `0056`). **Deployed:** both environments run `a7c3c96` (#245, revision 0055) -
 **#232 is merged (`fb4547a`) but deployed nowhere**; redeploy only on the user's "redeploy". This
@@ -2586,6 +2597,58 @@ failure they prevent.
     (`news/entities.py`), topic discovery turns headlines into topics resolved *against* the
     universe. A possible follow-up: list discovered topics that match nothing well as
     candidates for on-demand profiling, each approved by the user.
+155. **M9's users are trusted people on the self-hosted installation; the user is its one admin**
+    (the user, 2026-10-18). Household members and friends, reached the way the installation is
+    reached today - Tailscale, compose ports on 127.0.0.1 - never the public internet. Being on the
+    tailnet is the first gate; the admin's approval (156) is the second. This sets the threat model
+    for the rest of M9: mistakes (one user seeing another's rows), not attackers. *Rejected for M9:*
+    invited strangers - that is internet exposure, abuse handling and other people's financial
+    data, and it is **M10** (OAuth, self-signup, free-tier limits, self-service password reset)
+    without changing the data layer, which M9-MEASUREMENT showed is already tenant-safe.
+156. **A new user signs up and waits for the admin's approval** (the user, 2026-10-18). Signing up
+    writes a `users` row in state `pending` and sends the admin a Telegram message with three
+    buttons: *Approve with the default budget*, *Reject*, *Custom budget* (a reply asks for the
+    amount). The Admin page can do the same. Approval sets `active` and the spend cap (157).
+    **Settled alongside:**
+    - **A pending user has no agent and no scans.** Today `users_seed_primary_agent` creates the
+      primary agent on `INSERT`; it moves to the transition to `active`, so the scheduler never
+      works for someone not yet approved.
+    - **A rejected request is kept as `rejected`**, not deleted: the same email cannot ping the
+      admin again, and the Admin page can undo it. *Rejected:* deleting it - every retry is a new
+      Telegram message.
+    - **The signup route is the one page that works signed out**, and each submission messages the
+      admin, so it is limited: one pending request per email, and a small installation-wide
+      ceiling on pending requests at once.
+    - The Telegram callback names the request by a signed token, never a bare user id (as the
+      bind token does today).
+157. **Every non-admin user has a monthly LLM spend cap; the admin has none** (the user,
+    2026-10-18). Integer micro-USD on the user (`users`, like `agents.llm_budget_micro_usd`),
+    set at approval. The default ($10) is `installation_settings`, editable on the Admin page, not
+    a constant. **The month is the user's calendar month, in the user's time zone.** Spent is
+    `sum(llm_calls.cost_micro_usd)` for the user since the month began - every call already
+    carries `user_id` (measured 2026-10-18 on compose: 355 of 355, all four purposes), so nothing
+    new is attributed. It sits above what exists: the per-agent daily allowance and the
+    per-user assistant allowance still apply underneath, and `LLM_DAILY_BUDGET_USD` still guards
+    the installation, the admin included. *Rejected:* a daily cap (the period of the existing
+    allowances; $10 a day is not a household budget) and a lifetime balance the admin tops up.
+158. **The cap is enforced before each call, and a capped user's alerts still arrive** (the user,
+    2026-10-18). "Before" is the only honest form of strict: a call's cost is known after it
+    returns, so the check is `spent + the call's maximum cost (its max_tokens at the model's
+    price) > cap` -> refuse. An agent scan and an `/ask` turn are refused with a reason code the
+    UI explains (the user's language, guideline 1). **Narration falls back to the template**, as
+    it does for the installation ceiling today: the observation is still written and sent,
+    explained by its template wording. *Rejected:* refusing all model work, which would silence
+    portfolio alerts for a budget reason - guideline 7 says nothing is hidden.
+159. **Login is email and password, hashed with argon2id from a maintained package** (the user,
+    2026-10-18). Convention 5: the user approved the dependency by choosing this; the package is
+    named in the PR (`@node-rs/argon2` is the likely one - the orchestrator owns login). The
+    shared `APP_PASSPHRASE` goes away; the seeded admin gets an email and password from a
+    one-time script, never from a committed value. *Rejected:* a one-time code over Telegram -
+    a pending user has no binding to send it to.
+    **Still to decide before code, in this order:** sessions (removing or rejecting a user must
+    end a session the stateless cookie cannot end - a password login makes a session table the
+    natural answer), scheduling (three changes, M9-MEASUREMENT §2), what the admin sees of
+    another user's data, and the time zone's write path.
 
 ---
 
