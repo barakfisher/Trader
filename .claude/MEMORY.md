@@ -6,7 +6,7 @@ the reasoning behind it is not, and that is what this file is for. Maintained pe
 
 Updated: 2026-10-18 ~14:30 UTC - **Handoff after six merges since ea2c3a7 (#249-#254; #255 is the
 seventh, the fix below).** **M9 has its decisions and its schema; the next M9 PR is signup and
-login.** Decisions reached **173** (next: **174**). Migrations: **`0058_user_accounts` is head**
+login.** Decisions reached **175** (next: **176**; 174-175 came with the template creator's form, #257). Migrations: **`0058_user_accounts` is head**
 (next free: **`0059`**). **Deployed nowhere past 0055:** both environments run `a7c3c96`; #232,
 #249-#255 are merged and undeployed - redeploy only on the user's "redeploy" (0056-0058 run then).
 This session:
