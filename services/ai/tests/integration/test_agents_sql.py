@@ -1,10 +1,11 @@
 """Agents and agent ownership against a real Postgres (migration 0036).
 
 What the migration promises, each shown by the database refusing or doing it:
-every user has exactly one primary agent, made by a trigger rather than by a
-writer remembering; the primary cannot carry a budget, a persona or a pause; an
-owned row cannot be written without an agent, nor with another user's agent;
-and a run carries an agent exactly when it carries a user. The services connect
+every active user has exactly one primary agent, made by a trigger rather than
+by a writer remembering (0057: on becoming active, not on insert); the primary
+cannot carry a budget, a persona or a pause; an owned row cannot be written
+without an agent, nor with another user's agent; and a run carries an agent
+exactly when it carries a user. The services connect
 as `traders_app`, so the last test proves that role can use the new table.
 """
 
@@ -44,7 +45,13 @@ def _primary(connection: Connection, user_id: str) -> str:
 
 
 def _add_user(connection: Connection, user_id: str) -> None:
-    connection.execute(text("INSERT INTO users (id) VALUES (CAST(:id AS uuid))"), {"id": user_id})
+    connection.execute(
+        text(
+            "INSERT INTO users (id, status, llm_cap_micro_usd) "
+            "VALUES (CAST(:id AS uuid), 'active', 10000000)"
+        ),
+        {"id": user_id},
+    )
 
 
 @pytest.fixture()

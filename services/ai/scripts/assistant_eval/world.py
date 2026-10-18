@@ -362,7 +362,10 @@ async def seed_account(engine: Engine, market: EvalMarket, fixture: str, now: da
     ]
     with engine.begin() as connection:
         user = connection.execute(
-            text("INSERT INTO users (role) VALUES ('user') RETURNING id::text")
+            text(
+                "INSERT INTO users (role, status, llm_cap_micro_usd) "
+                "VALUES ('user', 'active', 10000000) RETURNING id::text"
+            )
         ).scalar_one()
         primary = primary_agent_id(connection, user)
         assert primary is not None
