@@ -41,7 +41,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     if (rows[0]?.t === null) {
       throw new Error('the schema is not at head: run the Python integration suite first');
     }
-    await getPool().query('INSERT INTO users (id) VALUES ($1)', [USER]);
+    await getPool().query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 10000000)", [USER]);
     AGENT = await queries.primaryAgentId(USER);
   });
 
@@ -325,7 +325,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     const LLM_USER = randomUUID();
 
     beforeAll(async () => {
-      await getPool().query('INSERT INTO users (id) VALUES ($1)', [LLM_USER]);
+      await getPool().query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 10000000)", [LLM_USER]);
       await getPool().query(
         `INSERT INTO llm_calls (user_id, purpose, provider, model, outcome, verdict, latency_ms,
                                 prompt_tokens, completion_tokens, cost_micro_usd, prompt, completion,
@@ -1153,7 +1153,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     it('puts a scan\'s most severe finding first, filters by severity, and pages by id', async () => {
       const pool = getPool();
       const user = randomUUID();
-      await pool.query('INSERT INTO users (id) VALUES ($1)', [user]);
+      await pool.query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 10000000)", [user]);
       const agent = await queries.primaryAgentId(user);
       try {
         // One scan: one timestamp, microseconds included, three severities.
@@ -1192,7 +1192,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     it('reads the pending entries, and the last delivered batch alone', async () => {
       const pool = getPool();
       const user = randomUUID();
-      await pool.query('INSERT INTO users (id) VALUES ($1)', [user]);
+      await pool.query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 10000000)", [user]);
       try {
         const finding = async (headline: string) =>
           (
@@ -1318,7 +1318,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       try {
         await client.query('BEGIN');
         const user = randomUUID();
-        await client.query('INSERT INTO users (id) VALUES ($1)', [user]);
+        await client.query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 10000000)", [user]);
         const { max_agents_per_user: max } = (await client.query('SELECT max_agents_per_user FROM installation_settings')).rows[0];
         expect(max).toBe(3);
         for (const slug of ['limit-1', 'limit-2', 'limit-3']) await insertAgent(client, user, slug);
@@ -1347,7 +1347,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       const first = await getPool().connect();
       const second = await getPool().connect();
       try {
-        await getPool().query('INSERT INTO users (id) VALUES ($1)', [user]);
+        await getPool().query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 10000000)", [user]);
         await insertAgent(getPool(), user, 'race-1');
         await insertAgent(getPool(), user, 'race-2');
         // Two creates of the third at once. Without the lock both would count two.
@@ -1506,7 +1506,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
 
     it('erases the chosen groups through the one function this role may call, and backs them up', async () => {
-      await getPool().query('INSERT INTO users (id) VALUES ($1)', [OWNER]);
+      await getPool().query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 10000000)", [OWNER]);
       const { rows } = await getPool().query<{ id: string }>(
         `INSERT INTO agents (user_id, slug, name, budget_minor)
          VALUES ($1, 'resettable', 'Resettable', 250000) RETURNING id`,
@@ -1597,7 +1597,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     let conversation = '';
 
     beforeAll(async () => {
-      await getPool().query('INSERT INTO users (id) VALUES ($1)', [OTHER]);
+      await getPool().query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 10000000)", [OTHER]);
       const { rows } = await getPool().query<{ id: string }>(
         `INSERT INTO assistant_conversations (user_id, title) VALUES ($1, 'How am I doing?') RETURNING id`,
         [USER],

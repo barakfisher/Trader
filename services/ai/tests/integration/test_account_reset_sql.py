@@ -80,7 +80,13 @@ def _one(connection: Connection, statement: str, **params: object) -> object:
 def _account(connection: Connection) -> dict[str, str]:
     """A user with a row of every kind a reset erases, in every group."""
     user = str(uuid4())
-    connection.execute(text("INSERT INTO users (id) VALUES (CAST(:u AS uuid))"), {"u": user})
+    connection.execute(
+        text(
+            "INSERT INTO users (id, status, llm_cap_micro_usd) "
+            "VALUES (CAST(:u AS uuid), 'active', 10000000)"
+        ),
+        {"u": user},
+    )
     primary = str(
         _one(connection, "SELECT id FROM agents WHERE user_id = CAST(:u AS uuid)", u=user)
     )

@@ -285,9 +285,10 @@ jobs:
             -d "{\"passphrase\":\"$pass\"}" $H/api/auth/login > /dev/null
           test "$(code $H/api/admin/runs)" = 200
           sql() { $KUBECTL exec postgres-0 -- psql -U traders -d traders -tAc "$1"; }
-          sql "update users set role = 'user' where id = '00000000-0000-0000-0000-000000000001'"
+          # A non-admin who is active must have a spend cap (0058), so demoting takes one.
+          sql "update users set role = 'user', llm_cap_micro_usd = 0 where id = '00000000-0000-0000-0000-000000000001'"
           test "$(code $H/api/admin/runs)" = 403
-          sql "update users set role = 'admin' where id = '00000000-0000-0000-0000-000000000001'"
+          sql "update users set role = 'admin', llm_cap_micro_usd = null where id = '00000000-0000-0000-0000-000000000001'"
           test "$(code $H/api/admin/runs)" = 200
       - name: A Job from a CronJob records a run
         run: |

@@ -139,7 +139,10 @@ def account(loaded: Engine) -> Iterator[dict[str, Any]]:
     held, unpriced = _symbols(loaded, 2)
     with loaded.begin() as connection:
         user = connection.execute(
-            text("INSERT INTO users (role) VALUES ('user') RETURNING id::text")
+            text(
+                "INSERT INTO users (role, status, llm_cap_micro_usd) "
+                "VALUES ('user', 'active', 10000000) RETURNING id::text"
+            )
         ).scalar_one()
         primary = primary_agent_id(connection, user)
         agent = connection.execute(
@@ -486,7 +489,10 @@ async def test_get_observations_and_get_topics_read_the_users_rows(
 async def test_another_users_rows_are_never_read(loaded: Engine, account: dict[str, Any]) -> None:
     with loaded.begin() as connection:
         stranger = connection.execute(
-            text("INSERT INTO users (role) VALUES ('user') RETURNING id::text")
+            text(
+                "INSERT INTO users (role, status, llm_cap_micro_usd) "
+                "VALUES ('user', 'active', 10000000) RETURNING id::text"
+            )
         ).scalar_one()
         stranger_primary = primary_agent_id(connection, stranger)
     context = _context(loaded, {**account, "user": stranger, "primary": stranger_primary})
@@ -588,7 +594,10 @@ async def test_replay_scan_finds_one_scan_by_id_and_only_the_users_own(
     scan = _record_scan(loaded, account, symbol=account["held"], minutes_ago=1)
     with loaded.begin() as connection:
         stranger = connection.execute(
-            text("INSERT INTO users (role) VALUES ('user') RETURNING id::text")
+            text(
+                "INSERT INTO users (role, status, llm_cap_micro_usd) "
+                "VALUES ('user', 'active', 10000000) RETURNING id::text"
+            )
         ).scalar_one()
         stranger_primary = primary_agent_id(connection, stranger)
 
@@ -738,7 +747,10 @@ async def test_another_users_conversation_is_not_found(
     )
     with loaded.begin() as connection:
         stranger = connection.execute(
-            text("INSERT INTO users (role) VALUES ('user') RETURNING id::text")
+            text(
+                "INSERT INTO users (role, status, llm_cap_micro_usd) "
+                "VALUES ('user', 'active', 10000000) RETURNING id::text"
+            )
         ).scalar_one()
         stranger_primary = primary_agent_id(connection, stranger)
     llm = ScriptedLLM()
@@ -913,7 +925,10 @@ async def test_starting_a_conversation_deletes_the_users_old_ones_and_nobody_els
             {"d": RETENTION_DAYS + 1, "id": old.conversation_id},
         )
         stranger = connection.execute(
-            text("INSERT INTO users (role) VALUES ('user') RETURNING id::text")
+            text(
+                "INSERT INTO users (role, status, llm_cap_micro_usd) "
+                "VALUES ('user', 'active', 10000000) RETURNING id::text"
+            )
         ).scalar_one()
         stranger_primary = primary_agent_id(connection, stranger)
     theirs = await _ask(
