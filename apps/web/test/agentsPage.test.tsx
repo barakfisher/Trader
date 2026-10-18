@@ -19,6 +19,13 @@ const { AgentsPage } = await import('../src/pages/AgentsPage.tsx');
 const { renderPage } = await import('./serverStateHarness.tsx');
 const { templateName, templatePersona } = await import('../src/lib/personaTemplates.ts');
 
+/** The form lives in a drawer the header's button opens. */
+async function openCreateForm() {
+  await screen.findByText('Main portfolio');
+  fireEvent.click(screen.getByRole('button', { name: 'New agent' }));
+  return screen.getByRole('dialog', { name: 'New agent' });
+}
+
 const PRIMARY: AgentView = {
   id: '90000000-0000-0000-0000-000000000001',
   // Stored English; the page must not show it.
@@ -73,7 +80,7 @@ describe('AgentsPage', () => {
     // A Hebrew page with an English persona put its full stop on the wrong side
     // until these followed their content (found in the preview).
     renderPage(<AgentsPage />);
-    await screen.findByText('Main portfolio');
+    await openCreateForm();
     expect(screen.getByLabelText('Name').getAttribute('dir')).toBe('auto');
     expect(screen.getByLabelText('Persona').getAttribute('dir')).toBe('auto');
   });
@@ -81,7 +88,7 @@ describe('AgentsPage', () => {
   it('sends the budget as the decimal string typed, and refuses a third decimal before sending', async () => {
     post.mockResolvedValue(MOMENTUM);
     renderPage(<AgentsPage />);
-    await screen.findByText('Main portfolio');
+    await openCreateForm();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Value' } });
     fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '10.005' } });
     const submit = screen.getByRole('button', { name: 'Create agent' }) as HTMLButtonElement;
@@ -95,7 +102,7 @@ describe('AgentsPage', () => {
   it('says a taken name in the reader\'s words, not the server\'s', async () => {
     post.mockRejectedValue(new ApiRequestError('you already have an agent with that name', 409, 'agent_name_taken'));
     renderPage(<AgentsPage />);
-    await screen.findByText('Main portfolio');
+    await openCreateForm();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Momentum' } });
     fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
@@ -109,9 +116,8 @@ describe('AgentsPage', () => {
     renderPage(<AgentsPage />);
     expect(await screen.findByText('3 of 3 agents')).toBeTruthy();
     expect(screen.getByText(/You have 3 agents, the most this installation allows/)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Fourth' } });
-    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
-    expect((screen.getByRole('button', { name: 'Create agent' }) as HTMLButtonElement).disabled).toBe(true);
+    // At the limit the form does not open at all.
+    expect((screen.getByRole('button', { name: 'New agent' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('says the limit in the reader\'s words when the server refuses a racing create', async () => {
@@ -121,6 +127,7 @@ describe('AgentsPage', () => {
     post.mockRejectedValue(new ApiRequestError('limit', 409, 'agent_limit_reached'));
     renderPage(<AgentsPage />);
     expect(await screen.findByText('2 of 3 agents')).toBeTruthy();
+    await openCreateForm();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Third' } });
     fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
@@ -129,7 +136,7 @@ describe('AgentsPage', () => {
 
   it('fills an empty name and persona from a template, and switches between templates', async () => {
     renderPage(<AgentsPage />);
-    await screen.findByText('Main portfolio');
+    await openCreateForm();
     const name = screen.getByLabelText('Name') as HTMLInputElement;
     const persona = screen.getByLabelText('Persona') as HTMLTextAreaElement;
     fireEvent.click(screen.getByRole('button', { name: templateName('warren') }));
@@ -143,7 +150,7 @@ describe('AgentsPage', () => {
 
   it('never replaces a persona or a name the user wrote', async () => {
     renderPage(<AgentsPage />);
-    await screen.findByText('Main portfolio');
+    await openCreateForm();
     const name = screen.getByLabelText('Name') as HTMLInputElement;
     const persona = screen.getByLabelText('Persona') as HTMLTextAreaElement;
     fireEvent.change(name, { target: { value: 'My value fund' } });
@@ -156,5 +163,29 @@ describe('AgentsPage', () => {
     expect(george.disabled).toBe(true);
     fireEvent.click(george);
     expect(persona.value).toBe(`${templatePersona('ray')} Avoid China.`);
+  });
+
+  it('opens the form in a drawer, and keeps the draft when the drawer is closed', async () => {
+    renderPage(<AgentsPage />);
+    expect(await screen.findByText('Main portfolio')).toBeTruthy();
+    expect(screen.queryByLabelText('Name')).toBeNull();
+    await openCreateForm();
+    fireEvent.change(screen.getByLabelText('Persona'), { target: { value: 'Half a thought' } });
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await openCreateForm();
+    expect((screen.getByLabelText('Persona') as HTMLTextAreaElement).value).toBe('Half a thought');
+  });
+
+  it('closes the drawer and clears the draft once the agent is created', async () => {
+    post.mockResolvedValue(MOMENTUM);
+    renderPage(<AgentsPage />);
+    await openCreateForm();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Value' } });
+    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    await openCreateForm();
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('');
   });
 });
