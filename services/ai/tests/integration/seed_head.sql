@@ -8,12 +8,23 @@
 -- from `pg_constraint` and fails if one is missing here, so a migration that
 -- adds a value cannot pass CI until a row carries it through the downgrade.
 
--- Three users because settings are one row per user and each severity column
--- enumerates three values; one of them is the admin role.
-INSERT INTO users (id, role) VALUES
-  ('00000000-0000-0000-0000-00000000000a', 'admin'),
-  ('00000000-0000-0000-0000-00000000000b', 'user'),
-  ('00000000-0000-0000-0000-00000000000c', 'user');
+-- Three active users because settings are one row per user and each severity
+-- column enumerates three values; one of them is the admin role. An active
+-- non-admin needs a spend cap (0057).
+INSERT INTO users (id, role, status, llm_cap_micro_usd) VALUES
+  ('00000000-0000-0000-0000-00000000000a', 'admin', 'active', NULL),
+  ('00000000-0000-0000-0000-00000000000b', 'user', 'active', 10000000),
+  ('00000000-0000-0000-0000-00000000000c', 'user', 'active', 10000000);
+-- The other three statuses (0057). A pending and a rejected user never had an
+-- agent; the disabled one was active first, so it keeps its primary. They make
+-- 0057's downgrade refuse: the older schema would make them ordinary users.
+INSERT INTO users (id, role, email) VALUES
+  ('00000000-0000-0000-0000-00000000000d', 'user', 'pending@example.test');
+INSERT INTO users (id, role, email, status) VALUES
+  ('00000000-0000-0000-0000-00000000000e', 'user', 'rejected@example.test', 'rejected');
+INSERT INTO users (id, role, email, status, llm_cap_micro_usd) VALUES
+  ('00000000-0000-0000-0000-00000000000f', 'user', 'disabled@example.test', 'active', 0);
+UPDATE users SET status = 'disabled' WHERE id = '00000000-0000-0000-0000-00000000000f';
 -- `language` (0034) enumerates two values; the third row keeps the default.
 INSERT INTO user_settings (user_id, proposal_severity, notify_severity, quiet_hours_start, quiet_hours_end, language) VALUES
   ('00000000-0000-0000-0000-00000000000a', 'notable', 'info', '22:00', '07:00', 'en'),

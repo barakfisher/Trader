@@ -78,6 +78,13 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "account_resets holds backups",
         "DELETE FROM account_resets",
     ),
+    # 0056 has no status, so a disabled or rejected user would silently become
+    # an ordinary one; letting them in takes a deliberate act (D160).
+    "0057_user_accounts": (
+        "users holds users who are not active",
+        "UPDATE users SET status = 'active', llm_cap_micro_usd = coalesce(llm_cap_micro_usd, 0) "
+        "WHERE status <> 'active'",
+    ),
 }
 
 #: `col = ANY (ARRAY['a'::text, 'b'::text])` as `pg_get_constraintdef` prints it.

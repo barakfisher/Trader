@@ -120,7 +120,10 @@ def owner(loaded: Engine) -> Iterator[tuple[str, str, str]]:
     """A user, a simulated agent with $1,000 of cash, and a second agent of theirs."""
     with loaded.begin() as connection:
         user = connection.execute(
-            text("INSERT INTO users (role) VALUES ('user') RETURNING id::text")
+            text(
+                "INSERT INTO users (role, status, llm_cap_micro_usd) "
+                "VALUES ('user', 'active', 10000000) RETURNING id::text"
+            )
         ).scalar_one()
         agents = [
             connection.execute(
@@ -547,7 +550,10 @@ async def test_the_briefing_carries_holdings_with_findings_movers_and_topics(
 ) -> None:
     with loaded.begin() as connection:
         user = connection.execute(
-            text("INSERT INTO users (role) VALUES ('user') RETURNING id::text")
+            text(
+                "INSERT INTO users (role, status, llm_cap_micro_usd) "
+                "VALUES ('user', 'active', 10000000) RETURNING id::text"
+            )
         ).scalar_one()
         agent = connection.execute(
             text(
