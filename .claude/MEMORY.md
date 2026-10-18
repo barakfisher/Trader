@@ -4,9 +4,9 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-18 ~11:30 UTC - **M9 decisions 155-162** (users, signup with approval, monthly
-spend cap, enforcement, email+password, sessions, scheduling, admin); decisions reached **162**
-(next: **163**). The time zone is the last M9 decision before code. **#232 is
+Updated: 2026-10-18 ~11:30 UTC - **M9 decisions 155-163 - all of M9's decisions** (users, signup
+with approval, monthly spend cap, enforcement, email+password, sessions, scheduling, admin, time
+zone); decisions reached **163** (next: **164**). Next is M9's code, PR by PR (MILESTONES). **#232 is
 deployed nowhere** - checked 11:05 UTC: both environments' `instructions.py` is pre-#232 (pods
 started 09:18-09:20). **0055 read back:** the window read uses `articles_fetched_idx`; the market
 prune (`DELETE ... coalesce(published_at, fetched_at)`, deletes 0 rows) has been 278-937 ms on 4
@@ -2693,7 +2693,27 @@ failure they prevent.
       the next sign-in; setting it bumps `session_version` (160), ending their sessions.
       *Rejected:* nothing until M10's self-service reset - a forgotten password would lock a user
       out, or be fixed by hand in the database.
-    **Still to decide before code:** the time zone's write path.
+163. **A user's zone comes from their browser at signup; "today" is the user's, the market and
+    the installation keep their own clocks** (the user, 2026-10-18).
+    - **Set:** signup prefills `Intl.DateTimeFormat().resolvedOptions().timeZone`; Settings edits
+      it; the server accepts only a valid IANA name. *Rejected:* the admin entering it at approval
+      (one more field, and the admin may not know it) and Settings-only with the installation's
+      default (a user abroad who never opens Settings gets Jerusalem's day and quiet hours).
+    - **Already the user's** (M9-MEASUREMENT §6): run keys, the digest's "today", quiet hours.
+      **Moved to the user's:** the AI service's two `APP_TIMEZONE` reads - the assistant's
+      next-scan answer and its allowance's midnight (`routers/assistant.py`).
+    - **Stays per installation, on purpose - do not "fix":** agent scan slots on the market's
+      clock (`scanSchedule.ts`: read from the session, 10:00 is the open + 30 min); installation
+      runs (161) and the rescreen on `APP_TIMEZONE`'s day; `LLM_DAILY_BUDGET_USD` on the UTC
+      day (it models the provider's bill).
+    - **Guideline 10 is amended** in the PR that moves the two reads (so the guideline never
+      describes code that is not there): "today" resolves in the user's zone
+      (`users.timezone`); installation clocks use `APP_TIMEZONE`.
+    - **A zone change mid-day is accepted, not engineered around:** run keys are kind + user +
+      local date, so on the day of the change one daily run (the digest) may run twice or not
+      at all, once, for that user. *Rejected:* a pending zone applied at the next local midnight
+      (a new state, and the next-scan answer and quiet hours would be wrong until then).
+    **M9's decisions are complete (155-163).** Next is code, PR by PR, in MILESTONES' order.
 
 ---
 

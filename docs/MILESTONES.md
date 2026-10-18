@@ -175,7 +175,7 @@ decision 85).
 
 ---
 
-## M9 — Multiple users *(planned 2026-10-14; PR 1 measured 2026-10-15; decisions 155-162 on 2026-10-18)*
+## M9 — Multiple users *(planned 2026-10-14; PR 1 measured 2026-10-15; decisions 155-163 on 2026-10-18)*
 
 Added at the user's request. The data model has been multi-tenant since M1 (`user_id` on every
 user-owned row, guideline 5) and DESIGN §2 deferred real multi-user auth "but not designed out";
@@ -221,8 +221,11 @@ this list exists. *Done 2026-10-15: [M9-MEASUREMENT.md](M9-MEASUREMENT.md).*
   proposals, observations, agents or conversations. Account reset becomes each user's own. The
   admin can set a one-time password, changed at the next sign-in. The operator can still read
   the database; this governs the app.
-- **Time zone** - a zone per user in `user_settings`, and what is still per installation (the
-  scheduled ask's clock, the market calendar).
+- **Time zone** - *decided (163):* `users.timezone`, prefilled from the browser at signup and
+  editable in Settings (valid IANA names only). The AI service's two `APP_TIMEZONE` reads move to
+  the user's zone, and guideline 10 is amended with them. Scan slots stay on the market's clock;
+  installation runs on `APP_TIMEZONE`; the LLM ceiling on UTC. A mid-day zone change may run or
+  skip one daily run once - accepted.
 
 **The shape the decided parts imply** (a sketch; each PR measures and refines it):
 - `users` gains `status` (`pending` / `active` / `rejected` / `disabled`), `password_hash`,
@@ -236,9 +239,10 @@ this list exists. *Done 2026-10-15: [M9-MEASUREMENT.md](M9-MEASUREMENT.md).*
 - The approval message is the admin's Telegram binding, in the admin's language
   (`notify/messages.ts`); its buttons carry a signed request token.
 
-**PRs, after the last decision** (time zone): the schema
-(0056 or the next free number), signup and login (web + i18n), the approval flow (Telegram and
-the Admin page), the cap's enforcement, scheduling per user, then the exit test.
+**PRs, in order** (decisions complete): the schema (0056 or the next free number), signup and
+login (web + i18n, the zone prefill, the one-time password), the approval flow (Telegram and the
+Admin page), the cap's enforcement, scheduling per user, the time zone's reads and guideline 10,
+the admin's user list and own-account reset, then the exit test.
 
 **Exit:** two users on one installation, each seeing only their own holdings, observations,
 proposals, agents and notifications - proved by a test that signs in as one user and asserts every
