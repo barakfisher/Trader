@@ -165,3 +165,10 @@ while this file is out of date.
 | 152 | Two indexes with no reader in the code are dropped; `intents_ledger_idx` is kept |
 | 153 | `runs` is not pruned yet; revisit on a trigger |
 | 154 | `articles` gets an index for the collector's window read |
+| 155 | The sector/industry taxonomy is built from our own universe, not fetched from Yahoo |
+| 156 | An agent's position and universe rules are enforced in code; tone, horizon and risk go to the prompt |
+| 157 | No "Day Trading" horizon |
+| 158 | "Topics" keeps its name; the new agent field is "Sectors & industries" |
+| 159 | Templates are presets; the settings live on the agent |
+| 160 | The 1-10 risk slider proposes rule values and gives the prompt a five-word band |
+| 161 | Thesis style and the persona both stay; the persona becomes "Additional instructions" |

@@ -5,8 +5,8 @@ the reasoning behind it is not, and that is what this file is for. Maintained pe
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
 Updated: 2026-10-18 ~10:30 UTC - **Handoff after five merges since #242 (#243-#246, #232). One
-draft is open on purpose (#247).** Decisions reached **154** (next: **155**); no migration since
-`0055` (next free: `0056`). **Deployed:** both environments run `a7c3c96` (#245, revision 0055) -
+draft is open on purpose (#247).** Decisions reached **161** (next: **162**; 155-161 are the agent template creator's design, agreed
+2026-10-18). Newest migration `0056` (`universe_taxonomy`, template creator PR 1; next free: `0057`). **Deployed:** both environments run `a7c3c96` (#245, revision 0055) -
 **#232 is merged (`fb4547a`) but deployed nowhere**; redeploy only on the user's "redeploy". This
 session:
 - **#232 measured and merged.** One eval run (`--repeat 3`, the user's new budget: cap $1.50,
@@ -2586,6 +2586,53 @@ failure they prevent.
     (`news/entities.py`), topic discovery turns headlines into topics resolved *against* the
     universe. A possible follow-up: list discovered topics that match nothing well as
     candidates for on-demand profiling, each approved by the user.
+155. **The sector/industry taxonomy is built from our own universe, not fetched from Yahoo**
+    (the user, 2026-10-18; 0056, agent template creator PR 1). `universe_taxonomy` is rewritten
+    from screened `instrument_profiles` inside every universe load (startup loader and rescreen,
+    same transaction, write-free when unchanged as DB2 requires). Measured on kind: 2,535
+    equities over 11 sectors / 142 industries, 2,689 ETFs over 115 categories, 3 with neither.
+    **ETFs have no sector, only a category**, so the categories about one sector are mapped onto
+    the 11 equity sectors in `app/universe/taxonomy.py` (14 mapped; "Infrastructure" and
+    "Miscellaneous Sector" deliberately not), and every other category is listed as sectorless;
+    a contract test holds both lists to the committed snapshot. A category a rescreen brings that
+    nobody has classified is stored with no sector and reported (`taxonomy_unmapped`), never
+    guessed. *Rejected:* Yahoo's full `yf.Sector(...).industries` list - extra calls on every
+    rescreen, and it offers industries with no member, so an agent could be restricted to
+    nothing. **yfinance has no sub-industry**; two levels is what exists.
+156. **An agent's position and universe rules are enforced in code; tone, horizon and risk go to
+    the prompt** (the user, 2026-10-18; agent template creator PR 2). Max position, cash buffer,
+    max holdings, ETF ban, market caps, sectors/industries and the ticker lists are checked
+    after `price_answer`, before a proposal is saved. A rule written only into the prompt is a
+    suggestion the model sometimes ignores, and a simulated portfolio compared with the real one
+    would then be wrong silently. Sells are always allowed, so tightening a rule never traps a
+    position. Null means no limit: existing agents behave as before until edited.
+157. **No "Day Trading" horizon** (the user, 2026-10-18). A scan runs at most twice a session on
+    daily closes and proposes one trade; a day-trading label would test something the agent
+    cannot do. Three horizons (short, medium, long), each setting a default scan schedule the
+    user can change. Real intraday is its own milestone, with its own cost.
+158. **"Topics" keeps its name; the new agent field is "Sectors & industries"** (the user,
+    2026-10-18). A topic is a user's theme with confirmed instruments, which crosses sectors
+    (uranium is miners, utilities and ETFs); a sector is Yahoo's fixed label used as a filter.
+    One name for both would make them look interchangeable. Restricting an agent to a topic is a
+    possible follow-up, not part of this.
+159. **Templates are presets; the settings live on the agent** (the user, 2026-10-18). The four
+    built-in personas (#249) gain full parameter values and fill the whole form; the agent stores
+    its own copy, so a template change never rewrites an agent. Settings stay editable and apply
+    to future proposals only; a holding above a new limit is reported, never sold (there is no
+    execution). *Rejected for now:* user-saved templates (a table, CRUD and a manager for a
+    handful of agents) - "duplicate this agent" covers it more cheaply if it is ever needed.
+160. **The 1-10 risk slider proposes rule values and gives the prompt a five-word band** (the
+    user, 2026-10-18). Moving it fills max position, cash buffer and max holdings; a rule the
+    user edited by hand is never overwritten (the #249 rule for persona text). The model gets
+    Ultra-conservative / Conservative / Balanced / Growth / Aggressive, which it can act on,
+    rather than a number it cannot tell from its neighbour. *Rejected:* a prompt-only slider,
+    which can contradict the hard rules beside it.
+161. **Thesis style and the persona both stay; the persona becomes "Additional instructions"**
+    (the user, 2026-10-18). A contradiction with a hard rule loses to the code check; one with a
+    prompt-only setting is settled by the model, inconsistently. So: the label says it cannot
+    override the settings, the prompt ranks settings above it, a proposal the check rejects is
+    sent back once in the same scan ("breaks rule X - propose again or pass"), and saving runs
+    one model call that warns - never blocks - when the instructions contradict the settings.
 
 ---
 

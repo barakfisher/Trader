@@ -125,6 +125,12 @@ def main() -> int:
                 f"{held.implausible} skipped as not a fraction of the fund, "
                 f"{held.of_unprofiled_etf} of a fund with no profile"
             )
+            taxonomy = loaded.taxonomy
+            print(
+                f"taxonomy: {taxonomy.rows} industries and etf categories, "
+                f"{taxonomy.written} written, {taxonomy.removed} removed"
+                + (f", unmapped etf categories: {taxonomy.unmapped}" if taxonomy.unmapped else "")
+            )
         if args.no_embed:
             return 0
         try:

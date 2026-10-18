@@ -789,6 +789,36 @@ export interface UniverseStatusResponse {
   reconciliation: UniverseReconciliation[];
 }
 
+/** One industry or ETF category, and how many screened instruments it covers. */
+export interface TaxonomyEntry {
+  name: string;
+  instruments: number;
+}
+
+/**
+ * A Yahoo sector: the equity industries filed under it, and the ETF categories
+ * mapped onto it (D155). `instruments` is the sum of both.
+ */
+export interface TaxonomySector {
+  name: string;
+  instruments: number;
+  industries: TaxonomyEntry[];
+  etfCategories: TaxonomyEntry[];
+}
+
+/**
+ * What the "Sectors & industries" picker offers: only classifications the
+ * screened universe holds, so no selection can match nothing. Empty until the
+ * universe loader has run since migration 0056.
+ */
+export interface UniverseTaxonomyResponse {
+  sectors: TaxonomySector[];
+  /** ETF categories that are not about one sector ("Large Blend", "Muni National Long"). */
+  etfCategories: TaxonomyEntry[];
+  /** When the newest row last changed; null while the table is empty. */
+  updatedAt: string | null;
+}
+
 /**
  * The answer to "rescreen now" (decision 90). `running`: claimed and handed to
  * the AI service, which finishes the run - follow it in the runs list.

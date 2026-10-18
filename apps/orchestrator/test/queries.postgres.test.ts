@@ -159,6 +159,27 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('the universe taxonomy (0056, D155)', () => {
+    it('reads its rows with counts as numbers and a null sector kept null', async () => {
+      const name = `test-${randomUUID()}`;
+      await getPool().query(
+        `INSERT INTO universe_taxonomy (kind, name, sector, instruments)
+         VALUES ('industry', $1, 'Energy', 3), ('etf_category', $1, NULL, 2)`,
+        [name],
+      );
+      try {
+        const rows = (await queries.listTaxonomy()).filter((row) => row.name === name);
+        expect(rows).toEqual([
+          expect.objectContaining({ kind: 'industry', sector: 'Energy', instruments: 3 }),
+          expect.objectContaining({ kind: 'etf_category', sector: null, instruments: 2 }),
+        ]);
+        expect(rows[0]?.updated_at).toBeInstanceOf(Date);
+      } finally {
+        await getPool().query('DELETE FROM universe_taxonomy WHERE name = $1', [name]);
+      }
+    });
+  });
+
   describe('claiming a rescreen', () => {
     const keys: string[] = [];
     const key = (label: string) => {

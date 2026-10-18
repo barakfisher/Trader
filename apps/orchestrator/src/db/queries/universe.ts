@@ -1,4 +1,4 @@
-import { queryOne } from '../pool.js';
+import { query, queryOne } from '../pool.js';
 
 export interface UniverseLoadRow {
   snapshot_as_of: Date;
@@ -47,5 +47,26 @@ export async function countUniverse(): Promise<UniverseCountsRow> {
   );
   return (
     row ?? { profiles: 0, equities: 0, etfs: 0, embedded: 0, etf_holdings: 0, on_demand: 0, dropped: 0 }
+  );
+}
+
+export interface TaxonomyRow {
+  kind: 'industry' | 'etf_category';
+  name: string;
+  /** Always set for an industry; null for an ETF category that is not about one sector. */
+  sector: string | null;
+  instruments: number;
+  updated_at: Date;
+}
+
+/**
+ * The sectors, industries and ETF categories the screened universe holds (D155),
+ * as the universe loader last wrote them. Installation data: no `user_id`.
+ */
+export function listTaxonomy(): Promise<TaxonomyRow[]> {
+  return query<TaxonomyRow>(
+    `SELECT kind, name, sector, instruments, updated_at
+       FROM universe_taxonomy
+      ORDER BY sector NULLS LAST, kind, name`,
   );
 }
