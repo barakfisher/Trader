@@ -161,3 +161,7 @@ while this file is out of date.
 | 148 | A move and a drawdown on one holding, from one scan, are one Telegram message |
 | 149 | A move is framed by the market, never muted by it |
 | 150 | A failed backfill is retried within its day |
+| 151 | `instrument_profiles_embedding_idx` (HNSW) is dropped |
+| 152 | Two indexes with no reader in the code are dropped; `intents_ledger_idx` is kept |
+| 153 | `runs` is not pruned yet; revisit on a trigger |
+| 154 | `articles` gets an index for the collector's window read |
