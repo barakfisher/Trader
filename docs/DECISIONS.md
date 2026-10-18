@@ -165,3 +165,12 @@ while this file is out of date.
 | 152 | Two indexes with no reader in the code are dropped; `intents_ledger_idx` is kept |
 | 153 | `runs` is not pruned yet; revisit on a trigger |
 | 154 | `articles` gets an index for the collector's window read |
+| 155 | M9's users are trusted people on the self-hosted installation; the user is its one admin |
+| 156 | A new user signs up and waits for the admin's approval |
+| 157 | Every non-admin user has a monthly LLM spend cap; the admin has none |
+| 158 | The cap is enforced before each call, and a capped user's alerts still arrive |
+| 159 | Login is email and password, hashed with argon2id from a maintained package |
+| 160 | Sessions stay a signed cookie; every request checks the user |
+| 161 | Scheduled work names who it is for; scans interleave; shared work runs once |
+| 162 | The admin sees operations, never a user's finances; each user resets their own account; the admin can set a one-time password |
+| 163 | A user's zone comes from their browser at signup; "today" is the user's, the market and the installation keep their own clocks |
