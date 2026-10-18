@@ -1,4 +1,4 @@
-"""The taxonomy rebuild through the real SQL (D155).
+"""The taxonomy rebuild through the real SQL (D164).
 
 The startup loader fills `universe_taxonomy` from the committed snapshot; the
 rest is `rebuild_taxonomy` called directly on that database, because a dropped

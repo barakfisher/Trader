@@ -16,7 +16,7 @@ decides whether a rescreen survives a restart:
 
 Loading is the same either way: profiles written (`load_universe`), members the
 snapshot no longer holds marked `dropped`, the sector/industry taxonomy brought
-in step with them (D155), ETF holdings replaced, and the loader's own account
+in step with them (D164), ETF holdings replaced, and the loader's own account
 recorded for the admin page (decision 86).
 """
 

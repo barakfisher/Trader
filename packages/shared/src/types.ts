@@ -797,7 +797,7 @@ export interface TaxonomyEntry {
 
 /**
  * A Yahoo sector: the equity industries filed under it, and the ETF categories
- * mapped onto it (D155). `instruments` is the sum of both.
+ * mapped onto it (D164). `instruments` is the sum of both.
  */
 export interface TaxonomySector {
   name: string;

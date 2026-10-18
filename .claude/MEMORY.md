@@ -4,9 +4,20 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-18 ~10:30 UTC - **Handoff after five merges since #242 (#243-#246, #232). One
-draft is open on purpose (#247).** Decisions reached **161** (next: **162**; 155-161 are the agent template creator's design, agreed
-2026-10-18). Newest migration `0056` (`universe_taxonomy`, template creator PR 1; next free: `0057`). **Deployed:** both environments run `a7c3c96` (#245, revision 0055) -
+Updated: 2026-10-18 ~11:30 UTC - **M9 decisions 155-163 - all of M9's decisions** (users, signup
+with approval, monthly spend cap, enforcement, email+password, sessions, scheduling, admin, time
+zone); decisions reached **170** (next: **171**; 164-170 are the agent template creator's design, agreed the same day; its PR 1, #252, adds migration `0056_universe_taxonomy`). Next is M9's code, PR by PR (MILESTONES). **#232 is
+deployed nowhere** - checked 11:05 UTC: both environments' `instructions.py` is pre-#232 (pods
+started 09:18-09:20). **0055 read back:** the window read uses `articles_fetched_idx`; the market
+prune (`DELETE ... coalesce(published_at, fetched_at)`, deletes 0 rows) has been 278-937 ms on 4
+of 5 collects since, likely cache eviction by 09:00's scratch restore. **Re-read on 2026-10-19**
+against the 11:07 snapshot (prune calls 138 / 6,027 ms total; `articles` seq_scan 442) before
+deciding a partial index on `coalesce(...) WHERE feed = 'market'`; restore nothing onto compose's
+server until then.
+
+Previous update, 2026-10-18 ~10:30 UTC - **Handoff after five merges since #242 (#243-#246, #232). One
+draft is open on purpose (#247).** Decisions reached **154** (next: **155**); no migration since
+`0055` (next free: `0056`). **Deployed:** both environments run `a7c3c96` (#245, revision 0055) -
 **#232 is merged (`fb4547a`) but deployed nowhere**; redeploy only on the user's "redeploy". This
 session:
 - **#232 measured and merged.** One eval run (`--repeat 3`, the user's new budget: cap $1.50,
@@ -2586,8 +2597,125 @@ failure they prevent.
     (`news/entities.py`), topic discovery turns headlines into topics resolved *against* the
     universe. A possible follow-up: list discovered topics that match nothing well as
     candidates for on-demand profiling, each approved by the user.
-155. **The sector/industry taxonomy is built from our own universe, not fetched from Yahoo**
-    (the user, 2026-10-18; 0056, agent template creator PR 1). `universe_taxonomy` is rewritten
+155. **M9's users are trusted people on the self-hosted installation; the user is its one admin**
+    (the user, 2026-10-18). Household members and friends, reached the way the installation is
+    reached today - Tailscale, compose ports on 127.0.0.1 - never the public internet. Being on the
+    tailnet is the first gate; the admin's approval (156) is the second. This sets the threat model
+    for the rest of M9: mistakes (one user seeing another's rows), not attackers. *Rejected for M9:*
+    invited strangers - that is internet exposure, abuse handling and other people's financial
+    data, and it is **M10** (OAuth, self-signup, free-tier limits, self-service password reset)
+    without changing the data layer, which M9-MEASUREMENT showed is already tenant-safe.
+156. **A new user signs up and waits for the admin's approval** (the user, 2026-10-18). Signing up
+    writes a `users` row in state `pending` and sends the admin a Telegram message with three
+    buttons: *Approve with the default budget*, *Reject*, *Custom budget* (a reply asks for the
+    amount). The Admin page can do the same. Approval sets `active` and the spend cap (157).
+    **Settled alongside:**
+    - **A pending user has no agent and no scans.** Today `users_seed_primary_agent` creates the
+      primary agent on `INSERT`; it moves to the transition to `active`, so the scheduler never
+      works for someone not yet approved.
+    - **A rejected request is kept as `rejected`**, not deleted: the same email cannot ping the
+      admin again, and the Admin page can undo it. *Rejected:* deleting it - every retry is a new
+      Telegram message.
+    - **The signup route is the one page that works signed out**, and each submission messages the
+      admin, so it is limited: one pending request per email, and a small installation-wide
+      ceiling on pending requests at once.
+    - The Telegram callback names the request by a signed token, never a bare user id (as the
+      bind token does today).
+157. **Every non-admin user has a monthly LLM spend cap; the admin has none** (the user,
+    2026-10-18). Integer micro-USD on the user (`users`, like `agents.llm_budget_micro_usd`),
+    set at approval. The default ($10) is `installation_settings`, editable on the Admin page, not
+    a constant. **The month is the user's calendar month, in the user's time zone.** Spent is
+    `sum(llm_calls.cost_micro_usd)` for the user since the month began - every call already
+    carries `user_id` (measured 2026-10-18 on compose: 355 of 355, all four purposes), so nothing
+    new is attributed. It sits above what exists: the per-agent daily allowance and the
+    per-user assistant allowance still apply underneath, and `LLM_DAILY_BUDGET_USD` still guards
+    the installation, the admin included. *Rejected:* a daily cap (the period of the existing
+    allowances; $10 a day is not a household budget) and a lifetime balance the admin tops up.
+158. **The cap is enforced before each call, and a capped user's alerts still arrive** (the user,
+    2026-10-18). "Before" is the only honest form of strict: a call's cost is known after it
+    returns, so the check is `spent + the call's maximum cost (its max_tokens at the model's
+    price) > cap` -> refuse. An agent scan and an `/ask` turn are refused with a reason code the
+    UI explains (the user's language, guideline 1). **Narration falls back to the template**, as
+    it does for the installation ceiling today: the observation is still written and sent,
+    explained by its template wording. *Rejected:* refusing all model work, which would silence
+    portfolio alerts for a budget reason - guideline 7 says nothing is hidden.
+159. **Login is email and password, hashed with argon2id from a maintained package** (the user,
+    2026-10-18). Convention 5: the user approved the dependency by choosing this; the package is
+    named in the PR (`@node-rs/argon2` is the likely one - the orchestrator owns login). The
+    shared `APP_PASSPHRASE` goes away; the seeded admin gets an email and password from a
+    one-time script, never from a committed value. *Rejected:* a one-time code over Telegram -
+    a pending user has no binding to send it to.
+160. **Sessions stay a signed cookie; every request checks the user** (the user, 2026-10-18).
+    The cookie gains `ver`, copied from a new `users.session_version`. Each authenticated request
+    reads the user by primary key and accepts the session only if `status = 'active'` and the
+    versions match. So disabling or rejecting a user ends their sessions on the next request, and
+    a password change bumps the version, ending every session they hold. `users.status` gains
+    `disabled` for this - the reversible removal. The admin read of `users.role` per request
+    (M8) becomes this same read. *Rejected:* a sessions table (per-device sign-out and a session
+    list, at the cost of a table, a cleanup job and the same per-request read - revisit in M10 if
+    per-device sign-out is wanted) and a short-lived cookie (removal would take up to its
+    lifetime, and everyone re-signs-in constantly). *Lesson from deciding it: "a session table"
+    is the reflex, but the requirement was "end at once"; a stateless token plus one read of a
+    row you already read for the role meets it.*
+161. **Scheduled work names who it is for; scans interleave; shared work runs once** (the user,
+    2026-10-18). Three parts, from M9-MEASUREMENT §2:
+    - **Fan-out is explicit.** The timer and the 11 CronJobs send `for: "every_active_user"`;
+      `POST /internal/runs` expands it into one run per `active` user, each keyed and dated in
+      that user's zone (the "ask often, the run key decides" pattern already works per user). A
+      body naming neither a user nor `every_active_user` is refused 400 - the `SINGLE_USER_ID`
+      fallback goes. *Rejected:* "no user means everyone" - a mistyped call would quietly do
+      everyone's work, the same silent default M9's exit removes.
+    - **Scans are interleaved at enqueue.** Every user's due scans are planned first, then added
+      round-robin (A1, B1, A2, B2...) to the one BullMQ queue. Not strict fairness, but with a
+      few users bounded by `max_agents_per_user` the worst wait is a few scans. *Rejected:*
+      expanding users in order (the same user always waits) and BullMQ Pro groups (D73: a paid
+      licence for a problem a household does not have).
+    - **Installation work runs once, with no user,** as the rescreen already does:
+      `backfill` and `news_collect` over the union of every active user's instruments plus the
+      benchmarks; `instrument_metadata` and `proposal_sweep` (already unscoped) as they are. Their
+      run keys carry the installation's day (`APP_TIMEZONE`). The per-user kinds - `snapshot`,
+      `portfolio_scan`, `topic_scan`, `topic_discovery`, `daily_digest`, `agent_scans` - fan out.
+      *Rejected:* per-user runs of these - N identical fetches into shared tables.
+162. **The admin sees operations, never a user's finances; each user resets their own account;
+    the admin can set a one-time password** (the user, 2026-10-18).
+    - **What the app shows the admin of another user:** a user list (status, cap, spent this
+      month, last sign-in), and runs, gaps and LLM calls per user - cost, tokens, outcome, never
+      prompt or completion (already so, `llmCalls.ts`). Holdings, proposals, observations, agents
+      and `/ask` conversations are not shown. Accepted leak: a price gap names its instrument,
+      which can reveal a holding - the admin needs it to fix the gap. *Rejected:* a read-only
+      "view as user" (every household member's finances in the admin's view).
+    - **Said plainly, so nobody believes otherwise:** the operator of a self-hosted installation
+      can read the database - holdings, conversations, stored prompts. This is a promise about
+      the app's interface, not a technical wall.
+    - **Account reset is the user's own**, moved out from behind the admin gate
+      (M9-MEASUREMENT §8); the admin cannot reset another user's account.
+    - **A forgotten password:** the admin sets a one-time password, which the user must change at
+      the next sign-in; setting it bumps `session_version` (160), ending their sessions.
+      *Rejected:* nothing until M10's self-service reset - a forgotten password would lock a user
+      out, or be fixed by hand in the database.
+163. **A user's zone comes from their browser at signup; "today" is the user's, the market and
+    the installation keep their own clocks** (the user, 2026-10-18).
+    - **Set:** signup prefills `Intl.DateTimeFormat().resolvedOptions().timeZone`; Settings edits
+      it; the server accepts only a valid IANA name. *Rejected:* the admin entering it at approval
+      (one more field, and the admin may not know it) and Settings-only with the installation's
+      default (a user abroad who never opens Settings gets Jerusalem's day and quiet hours).
+    - **Already the user's** (M9-MEASUREMENT §6): run keys, the digest's "today", quiet hours.
+      **Moved to the user's:** the AI service's two `APP_TIMEZONE` reads - the assistant's
+      next-scan answer and its allowance's midnight (`routers/assistant.py`).
+    - **Stays per installation, on purpose - do not "fix":** agent scan slots on the market's
+      clock (`scanSchedule.ts`: read from the session, 10:00 is the open + 30 min); installation
+      runs (161) and the rescreen on `APP_TIMEZONE`'s day; `LLM_DAILY_BUDGET_USD` on the UTC
+      day (it models the provider's bill).
+    - **Guideline 10 is amended** in the PR that moves the two reads (so the guideline never
+      describes code that is not there): "today" resolves in the user's zone
+      (`users.timezone`); installation clocks use `APP_TIMEZONE`.
+    - **A zone change mid-day is accepted, not engineered around:** run keys are kind + user +
+      local date, so on the day of the change one daily run (the digest) may run twice or not
+      at all, once, for that user. *Rejected:* a pending zone applied at the next local midnight
+      (a new state, and the next-scan answer and quiet hours would be wrong until then).
+    **M9's decisions are complete (155-163).** Next is code, PR by PR, in MILESTONES' order.
+164. **The sector/industry taxonomy is built from our own universe, not fetched from Yahoo**
+    (the user, 2026-10-18; 0056, agent template creator PR 1, #252). `universe_taxonomy` is rewritten
     from screened `instrument_profiles` inside every universe load (startup loader and rescreen,
     same transaction, write-free when unchanged as DB2 requires). Measured on kind: 2,535
     equities over 11 sectors / 142 industries, 2,689 ETFs over 115 categories, 3 with neither.
@@ -2599,35 +2727,35 @@ failure they prevent.
     guessed. *Rejected:* Yahoo's full `yf.Sector(...).industries` list - extra calls on every
     rescreen, and it offers industries with no member, so an agent could be restricted to
     nothing. **yfinance has no sub-industry**; two levels is what exists.
-156. **An agent's position and universe rules are enforced in code; tone, horizon and risk go to
+165. **An agent's position and universe rules are enforced in code; tone, horizon and risk go to
     the prompt** (the user, 2026-10-18; agent template creator PR 2). Max position, cash buffer,
     max holdings, ETF ban, market caps, sectors/industries and the ticker lists are checked
     after `price_answer`, before a proposal is saved. A rule written only into the prompt is a
     suggestion the model sometimes ignores, and a simulated portfolio compared with the real one
     would then be wrong silently. Sells are always allowed, so tightening a rule never traps a
     position. Null means no limit: existing agents behave as before until edited.
-157. **No "Day Trading" horizon** (the user, 2026-10-18). A scan runs at most twice a session on
+166. **No "Day Trading" horizon** (the user, 2026-10-18). A scan runs at most twice a session on
     daily closes and proposes one trade; a day-trading label would test something the agent
     cannot do. Three horizons (short, medium, long), each setting a default scan schedule the
     user can change. Real intraday is its own milestone, with its own cost.
-158. **"Topics" keeps its name; the new agent field is "Sectors & industries"** (the user,
+167. **"Topics" keeps its name; the new agent field is "Sectors & industries"** (the user,
     2026-10-18). A topic is a user's theme with confirmed instruments, which crosses sectors
     (uranium is miners, utilities and ETFs); a sector is Yahoo's fixed label used as a filter.
     One name for both would make them look interchangeable. Restricting an agent to a topic is a
     possible follow-up, not part of this.
-159. **Templates are presets; the settings live on the agent** (the user, 2026-10-18). The four
+168. **Templates are presets; the settings live on the agent** (the user, 2026-10-18). The four
     built-in personas (#249) gain full parameter values and fill the whole form; the agent stores
     its own copy, so a template change never rewrites an agent. Settings stay editable and apply
     to future proposals only; a holding above a new limit is reported, never sold (there is no
     execution). *Rejected for now:* user-saved templates (a table, CRUD and a manager for a
     handful of agents) - "duplicate this agent" covers it more cheaply if it is ever needed.
-160. **The 1-10 risk slider proposes rule values and gives the prompt a five-word band** (the
+169. **The 1-10 risk slider proposes rule values and gives the prompt a five-word band** (the
     user, 2026-10-18). Moving it fills max position, cash buffer and max holdings; a rule the
     user edited by hand is never overwritten (the #249 rule for persona text). The model gets
     Ultra-conservative / Conservative / Balanced / Growth / Aggressive, which it can act on,
     rather than a number it cannot tell from its neighbour. *Rejected:* a prompt-only slider,
     which can contradict the hard rules beside it.
-161. **Thesis style and the persona both stay; the persona becomes "Additional instructions"**
+170. **Thesis style and the persona both stay; the persona becomes "Additional instructions"**
     (the user, 2026-10-18). A contradiction with a hard rule loses to the code check; one with a
     prompt-only setting is settled by the model, inconsistently. So: the label says it cannot
     override the settings, the prompt ranks settings above it, a proposal the check rejects is

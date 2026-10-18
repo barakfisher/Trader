@@ -165,10 +165,19 @@ while this file is out of date.
 | 152 | Two indexes with no reader in the code are dropped; `intents_ledger_idx` is kept |
 | 153 | `runs` is not pruned yet; revisit on a trigger |
 | 154 | `articles` gets an index for the collector's window read |
-| 155 | The sector/industry taxonomy is built from our own universe, not fetched from Yahoo |
-| 156 | An agent's position and universe rules are enforced in code; tone, horizon and risk go to the prompt |
-| 157 | No "Day Trading" horizon |
-| 158 | "Topics" keeps its name; the new agent field is "Sectors & industries" |
-| 159 | Templates are presets; the settings live on the agent |
-| 160 | The 1-10 risk slider proposes rule values and gives the prompt a five-word band |
-| 161 | Thesis style and the persona both stay; the persona becomes "Additional instructions" |
+| 155 | M9's users are trusted people on the self-hosted installation; the user is its one admin |
+| 156 | A new user signs up and waits for the admin's approval |
+| 157 | Every non-admin user has a monthly LLM spend cap; the admin has none |
+| 158 | The cap is enforced before each call, and a capped user's alerts still arrive |
+| 159 | Login is email and password, hashed with argon2id from a maintained package |
+| 160 | Sessions stay a signed cookie; every request checks the user |
+| 161 | Scheduled work names who it is for; scans interleave; shared work runs once |
+| 162 | The admin sees operations, never a user's finances; each user resets their own account; the admin can set a one-time password |
+| 163 | A user's zone comes from their browser at signup; "today" is the user's, the market and the installation keep their own clocks |
+| 164 | The sector/industry taxonomy is built from our own universe, not fetched from Yahoo |
+| 165 | An agent's position and universe rules are enforced in code; tone, horizon and risk go to the prompt |
+| 166 | No "Day Trading" horizon |
+| 167 | "Topics" keeps its name; the new agent field is "Sectors & industries" |
+| 168 | Templates are presets; the settings live on the agent |
+| 169 | The 1-10 risk slider proposes rule values and gives the prompt a five-word band |
+| 170 | Thesis style and the persona both stay; the persona becomes "Additional instructions" |

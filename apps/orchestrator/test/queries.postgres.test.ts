@@ -159,7 +159,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
-  describe('the universe taxonomy (0056, D155)', () => {
+  describe('the universe taxonomy (0056, D164)', () => {
     it('reads its rows with counts as numbers and a null sector kept null', async () => {
       const name = `test-${randomUUID()}`;
       await getPool().query(

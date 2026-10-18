@@ -1,4 +1,4 @@
-"""`universe_taxonomy`: the sectors, industries and ETF categories the universe holds (D155).
+"""`universe_taxonomy`: the sectors, industries and ETF categories the universe holds (D164).
 
 The agent template creator's "Sectors & industries" picker reads this table and
 nothing else, so no keystroke ever reaches Yahoo. It is derived, not entered:
@@ -7,7 +7,7 @@ universe load - the startup loader's and the rescreen's - in the same
 transaction, so the picker never offers a classification the profiles have
 stopped holding.
 
-- **Built from the universe, not from Yahoo's full list** (D155). Every row has
+- **Built from the universe, not from Yahoo's full list** (D164). Every row has
   screened instruments behind it, and `instruments` says how many, so an agent
   restricted to a selection can never be restricted to nothing.
 - **Two kinds.** `industry` rows come from equities and always name their

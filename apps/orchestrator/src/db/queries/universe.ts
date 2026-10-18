@@ -60,7 +60,7 @@ export interface TaxonomyRow {
 }
 
 /**
- * The sectors, industries and ETF categories the screened universe holds (D155),
+ * The sectors, industries and ETF categories the screened universe holds (D164),
  * as the universe loader last wrote them. Installation data: no `user_id`.
  */
 export function listTaxonomy(): Promise<TaxonomyRow[]> {
