@@ -17,6 +17,7 @@ vi.mock('../src/api/client.ts', async () => {
 const { ApiRequestError } = await import('../src/api/client.ts');
 const { AgentsPage } = await import('../src/pages/AgentsPage.tsx');
 const { renderPage } = await import('./serverStateHarness.tsx');
+const { templateName, templatePersona } = await import('../src/lib/personaTemplates.ts');
 
 const PRIMARY: AgentView = {
   id: '90000000-0000-0000-0000-000000000001',
@@ -124,5 +125,36 @@ describe('AgentsPage', () => {
     fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
     expect(await screen.findByText(/You already have as many agents as this installation allows/)).toBeTruthy();
+  });
+
+  it('fills an empty name and persona from a template, and switches between templates', async () => {
+    renderPage(<AgentsPage />);
+    await screen.findByText('Main portfolio');
+    const name = screen.getByLabelText('Name') as HTMLInputElement;
+    const persona = screen.getByLabelText('Persona') as HTMLTextAreaElement;
+    fireEvent.click(screen.getByRole('button', { name: templateName('warren') }));
+    expect(name.value).toBe(templateName('warren'));
+    expect(persona.value).toBe(templatePersona('warren'));
+    // Untouched template words are the template's, not the user's: a second click replaces them.
+    fireEvent.click(screen.getByRole('button', { name: templateName('cathie') }));
+    expect(name.value).toBe(templateName('cathie'));
+    expect(persona.value).toBe(templatePersona('cathie'));
+  });
+
+  it('never replaces a persona or a name the user wrote', async () => {
+    renderPage(<AgentsPage />);
+    await screen.findByText('Main portfolio');
+    const name = screen.getByLabelText('Name') as HTMLInputElement;
+    const persona = screen.getByLabelText('Persona') as HTMLTextAreaElement;
+    fireEvent.change(name, { target: { value: 'My value fund' } });
+    fireEvent.click(screen.getByRole('button', { name: templateName('ray') }));
+    expect(name.value).toBe('My value fund');
+    expect(persona.value).toBe(templatePersona('ray'));
+    // An edited template is the user's persona now.
+    fireEvent.change(persona, { target: { value: `${templatePersona('ray')} Avoid China.` } });
+    const george = screen.getByRole('button', { name: templateName('george') }) as HTMLButtonElement;
+    expect(george.disabled).toBe(true);
+    fireEvent.click(george);
+    expect(persona.value).toBe(`${templatePersona('ray')} Avoid China.`);
   });
 });
