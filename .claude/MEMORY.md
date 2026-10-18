@@ -7,7 +7,8 @@ the reasoning behind it is not, and that is what this file is for. Maintained pe
 Updated: 2026-10-18 ~09:00 UTC - **DB4's second half is reviewed: decisions 151-154, three migration
 PRs in order** (0053 drop the profiles' HNSW index, 0054 drop two unread indexes, 0055 an `articles`
 index for the collector's window read). See "The database sprint's review, second half" for the
-week's numbers. Decisions reached **154** (next: **155**). Nothing below changed otherwise.
+week's numbers. Decisions reached **154** (next: **155**). #243 (0053) and #244 (0054)
+merged; 0055 is the third. None deployed. Nothing below changed otherwise.
 
 Previous update, 2026-10-18 ~08:00 UTC - **Handoff after six merges (#236-#241) - one past the five-merge
 trigger, noticed late. One draft is still open on purpose (#232).** No migration since `0052` (next
@@ -2537,10 +2538,14 @@ failure they prevent.
     of the 117 slow-log lines, and with no index on `fetched_at` every 30-minute collect read the
     whole table (`articles` seq-read 27 M rows in the week). Nothing prunes linked articles, and
     the table grew 44k -> 86k rows since 10-09 (~4.6k a day), so the cost grows linearly - ~3 s
-    a collect within a year. `articles (fetched_at) INCLUDE (url_hash, content_hash)` is meant to
-    make it an index-only range scan; the plan is measured on a scratch copy restored from a dump (D146) before
-    merge. *Rejected:* waiting for a 500 ms trigger (the growth is certain and the fix small)
-    and articles retention instead (linked articles are evidence behind observations - its own
+    a collect within a year. **Amended the same day, after measuring:** a plain
+    `articles (fetched_at)` index (`articles_fetched_idx`, 0055), not the covering `INCLUDE (url_hash,
+    content_hash)` first proposed. On a copy of compose restored from the 10-18 dump (D146; 85,251
+    articles, a 10,708-row window): full scan 101 ms cold / 20 ms warm; covering index 8.7 / 1.6 ms
+    at **15 MB**; plain 4.8 / 2.4 ms at **616 kB**. Rows arrive in `fetched_at` order, so the heap
+    pages a window needs are few and adjacent. *Lesson: a covering index over hash columns is
+    mostly hashes - measure the plain one first when the table is insert-ordered on the key.*
+    *Rejected:* waiting for a 500 ms trigger (the growth is certain and the fix small) and articles retention instead (linked articles are evidence behind observations - its own
     question if size ever asks it). The `coalesce(published_at, fetched_at)` reads (the daily
     headline window, 705 ms; the market prune, 25 ms) are left alone. **Asked alongside, not
     decided:** news does not feed the universe - matching is a closed set by design

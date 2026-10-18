@@ -35,6 +35,7 @@ log = get_logger("news.queries")
 #: Both hashes for the articles we fetched inside the window being ingested.
 #: Bounded by `fetched_at` rather than `published_at`: the question is "have we
 #: seen this?", which is about our fetch history, and `published_at` is nullable.
+#: `articles_fetched_idx` (0055) serves it; before it, every collect read the table.
 SQL_KNOWN_HASHES = text(
     """
     SELECT url_hash, content_hash
