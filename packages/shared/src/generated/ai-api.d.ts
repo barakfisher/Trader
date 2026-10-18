@@ -523,7 +523,7 @@ export interface components {
              * Outcome
              * @enum {string}
              */
-            outcome: "trade" | "no_trade" | "invalid_answer" | "budget_reached" | "step_limit" | "failed";
+            outcome: "trade" | "no_trade" | "invalid_answer" | "budget_reached" | "step_limit" | "failed" | "rule_rejected";
             /**
              * Scan Id
              * Format: uuid

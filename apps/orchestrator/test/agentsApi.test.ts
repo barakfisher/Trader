@@ -35,6 +35,18 @@ function row(overrides: Record<string, unknown> = {}) {
     llm_spent_today_micro_usd: '108022',
     agent_scan_cost_micro_usd: null,
     installation_scan_cost_micro_usd: null,
+    risk_level: null,
+    horizon: null,
+    thesis_style: null,
+    max_position_bps: null,
+    cash_buffer_bps: null,
+    max_holdings: null,
+    allow_etfs: true,
+    market_caps: [],
+    sectors: [],
+    industries: [],
+    etf_categories: [],
+    blocked_symbols: [],
     ...overrides,
   };
 }
@@ -50,6 +62,10 @@ vi.mock('../src/db/pool.js', () => ({
 
 vi.mock('../src/db/queries.js', () => ({
   getUser: vi.fn(async () => USER),
+  listTaxonomy: vi.fn(async () => [
+    { kind: 'industry', name: 'Uranium', sector: 'Energy', instruments: 9, updated_at: new Date() },
+    { kind: 'etf_category', name: 'Large Blend', sector: null, instruments: 207, updated_at: new Date() },
+  ]),
   agentHasTraded: vi.fn(async () => false),
   getInstallationSettings: vi.fn(async () => ({ max_agents_per_user: 3, updated_at: new Date() })),
   countLiveAgents: vi.fn(async () => 1),
@@ -321,6 +337,100 @@ describe('the agents API', () => {
     vi.mocked(queries.getAgent).mockResolvedValueOnce(row({ persona: 'Patient.' }) as never);
     const body = await (await on.request(`/agents/${SIMULATED}`, { headers: { ...ORIGIN, cookie } })).json();
     expect(body.scheduling).toEqual({ enabled: true, nextAt: '2099-01-05T14:00:00.000Z' });
+  });
+});
+
+describe("an agent's mandate (0057, D165)", () => {
+  let app: ReturnType<typeof buildApp>;
+  let cookie: string;
+
+  const send = (method: string, path: string, body?: unknown) =>
+    app.request(path, {
+      method,
+      headers: { ...ORIGIN, cookie },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    app = buildApp();
+    const login = await app.request('/auth/login', {
+      method: 'POST',
+      headers: ORIGIN,
+      body: JSON.stringify({ passphrase: 'test-passphrase' }),
+    });
+    cookie = (login.headers.get('set-cookie') as string).split(';')[0]!;
+  });
+
+  it('creates an agent with a mandate, and its horizon brings its schedule (D166)', async () => {
+    const response = await send('POST', '/agents', {
+      name: 'Miner',
+      budget: '1000',
+      mandate: { horizon: 'short', maxPositionBps: 1000, sectors: ['Energy'], blockedSymbols: ['xom', 'XOM'] },
+    });
+    expect(response.status).toBe(201);
+    const created = vi.mocked(queries.createAgent).mock.calls[0]![0];
+    expect(created.scanSchedule).toBe('intraday_twice');
+    expect(created.mandate).toMatchObject({
+      horizon: 'short',
+      max_position_bps: 1000,
+      cash_buffer_bps: null,
+      allow_etfs: true,
+      sectors: ['Energy'],
+      blocked_symbols: ['XOM'],
+    });
+  });
+
+  it('keeps a chosen schedule over the horizon, and gives an agent with neither the default', async () => {
+    await send('POST', '/agents', { name: 'A', budget: '1', mandate: { horizon: 'long' }, scanSchedule: 'intraday_once' });
+    await send('POST', '/agents', { name: 'B', budget: '1' });
+    const calls = vi.mocked(queries.createAgent).mock.calls.map(([agent]) => agent.scanSchedule);
+    expect(calls).toEqual(['intraday_once', 'pre_open']);
+  });
+
+  it('refuses a sector, industry or ETF category the universe does not hold, naming it', async () => {
+    const response = await send('POST', '/agents', {
+      name: 'Typo',
+      budget: '1000',
+      mandate: { sectors: ['Technolgy'], industries: ['Uranium'], etfCategories: ['Large Blend', 'Gold'] },
+    });
+    expect(response.status).toBe(422);
+    const body = await response.json();
+    expect(body).toMatchObject({ error: 'unknown_classification' });
+    expect(body.details).toEqual({ sectors: ['Technolgy'], industries: [], etfCategories: ['Gold'] });
+    expect(queries.createAgent).not.toHaveBeenCalled();
+  });
+
+  it('refuses limits outside what the database allows, before any SQL', async () => {
+    for (const mandate of [
+      { maxPositionBps: 0 },
+      { maxPositionBps: 10_001 },
+      { cashBufferBps: 10_000 },
+      { maxHoldings: 0 },
+      { riskLevel: 11 },
+      { horizon: 'day' },
+      { marketCaps: ['nano'] },
+      { blockedSymbols: ['not a ticker'] },
+      { allowList: ['NVDA'] },
+    ]) {
+      const response = await send('PATCH', `/agents/${SIMULATED}`, { mandate });
+      expect(response.status, JSON.stringify(mandate)).toBe(400);
+    }
+    expect(queries.updateAgent).not.toHaveBeenCalled();
+  });
+
+  it('changes only the mandate fields an edit names', async () => {
+    const response = await send('PATCH', `/agents/${SIMULATED}`, { mandate: { allowEtfs: false, marketCaps: ['large'] } });
+    expect(response.status).toBe(200);
+    expect(vi.mocked(queries.updateAgent).mock.calls[0]![2].mandate).toEqual({ allow_etfs: false, market_caps: ['large'] });
+  });
+
+  it('reads the mandate back on a simulated agent, and none on the primary (D1)', async () => {
+    vi.mocked(queries.getAgent).mockResolvedValueOnce(row({ max_position_bps: 1250, sectors: ['Energy'] }) as never);
+    const agent = await (await send('GET', `/agents/${SIMULATED}`)).json();
+    expect(agent.mandate).toMatchObject({ maxPositionBps: 1250, sectors: ['Energy'], allowEtfs: true, horizon: null });
+    const primary = await (await send('GET', `/agents/${PRIMARY}`)).json();
+    expect(primary.mandate).toBeNull();
   });
 });
 

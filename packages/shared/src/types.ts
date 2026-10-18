@@ -109,6 +109,49 @@ export interface AgentView {
   waitingForPersona: boolean;
   /** Its scheduled scans on this installation (D71); on `GET /agents/:id` only. */
   scheduling?: AgentScheduling;
+  /** The template creator's settings (0057); null for the primary, which has none (D1). */
+  mandate: AgentMandate | null;
+}
+
+/** How long an agent means to hold (D166). There is no day trading. */
+export const HORIZONS = ['short', 'medium', 'long'] as const;
+export type Horizon = (typeof HORIZONS)[number];
+
+/** The voice of a thesis (D170). */
+export const THESIS_STYLES = ['academic', 'growth', 'contrarian'] as const;
+export type ThesisStyle = (typeof THESIS_STYLES)[number];
+
+/** Equity size bands by stored market cap (D172): mega >= $200B, large >= $10B, mid >= $2B. */
+export const MARKET_CAPS = ['mega', 'large', 'mid', 'small'] as const;
+export type MarketCap = (typeof MARKET_CAPS)[number];
+
+/** The schedule a new agent gets from its horizon when none is chosen (D166). */
+export const HORIZON_SCHEDULES: Record<Horizon, ScanSchedule> = {
+  short: 'intraday_twice',
+  medium: 'pre_open_post_close',
+  long: 'pre_open',
+};
+
+/**
+ * An agent's mandate (D165). Risk, horizon and style shape the prompt; the rest
+ * is checked in code on every buy. Null or empty means no limit. Position and
+ * cash limits are basis points of capital - cash plus holdings at cost (D171).
+ */
+export interface AgentMandate {
+  riskLevel: number | null;
+  horizon: Horizon | null;
+  thesisStyle: ThesisStyle | null;
+  maxPositionBps: number | null;
+  cashBufferBps: number | null;
+  maxHoldings: number | null;
+  allowEtfs: boolean;
+  marketCaps: MarketCap[];
+  /** Names as `GET /universe/taxonomy` gives them; the server refuses others. */
+  sectors: string[];
+  industries: string[];
+  etfCategories: string[];
+  /** Never bought. There is no allow-list (D173). */
+  blockedSymbols: string[];
 }
 
 /**
@@ -142,7 +185,14 @@ export interface ScanCostEstimate {
   basis: 'agent' | 'installation' | 'measured';
 }
 
-export type AgentScanOutcome = 'trade' | 'no_trade' | 'invalid_answer' | 'budget_reached' | 'step_limit' | 'failed';
+export type AgentScanOutcome =
+  | 'trade'
+  | 'no_trade'
+  | 'invalid_answer'
+  | 'budget_reached'
+  | 'step_limit'
+  | 'failed'
+  | 'rule_rejected';
 
 /** One scan, as a row of the *Decisions* tab (D50). */
 export interface AgentScanSummary {
@@ -175,7 +225,9 @@ export interface AgentScansResponse {
 /** One step of a scan as stored (D15): the model's turn, or a tool's result. */
 export type AgentScanStep =
   | { role: 'assistant'; text: string | null; toolCalls: { id: string; name: string; arguments: unknown }[] }
-  | { role: 'tool'; callId: string; name: string; result: unknown };
+  | { role: 'tool'; callId: string; name: string; result: unknown }
+  /** A buy the mandate refused, sent back to the model once (D170). */
+  | { role: 'returned'; problems: string[] };
 
 /**
  * What `POST /agents/:id/scans` answers: the AI service's result as it gave it
@@ -414,6 +466,10 @@ export interface AgentInput {
   name: string;
   budget: string;
   persona?: string | null;
+  /** Fields left out take their no-limit default. */
+  mandate?: Partial<AgentMandate>;
+  /** When left out, the horizon's schedule (D166), else pre-open. */
+  scanSchedule?: ScanSchedule;
 }
 
 export interface AgentPatchInput {
@@ -424,6 +480,8 @@ export interface AgentPatchInput {
   /** Dollars and cents a day (D45). */
   llmBudget?: string;
   scanSchedule?: ScanSchedule;
+  /** Fields given replace the stored ones; fields left out stay as they are. */
+  mandate?: Partial<AgentMandate>;
 }
 
 export interface PortfolioResponse {

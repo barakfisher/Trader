@@ -918,7 +918,13 @@ class AgentScanResponse(BaseModel):
 
     scan_id: UUID
     outcome: Literal[
-        "trade", "no_trade", "invalid_answer", "budget_reached", "step_limit", "failed"
+        "trade",
+        "no_trade",
+        "invalid_answer",
+        "budget_reached",
+        "step_limit",
+        "failed",
+        "rule_rejected",
     ]
     steps: int = Field(description="Tool calls made (D15's step limit counts these).")
     cost_micro_usd: int

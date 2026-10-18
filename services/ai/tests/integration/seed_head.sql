@@ -28,6 +28,18 @@ UPDATE agents SET id = ('90000000-0000-0000-0000-00000000000' || right(user_id::
 INSERT INTO agents (id, user_id, slug, name, persona, budget_minor, state) VALUES
   ('90000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-00000000000a', 'paused-agent', 'Paused agent', 'Cautious.', 100000, 'paused'),
   ('90000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-00000000000a', 'archived-agent', 'Archived agent', NULL, 50000, 'archived');
+-- Mandates (0057): every horizon and thesis style, each rule set somewhere.
+INSERT INTO agents (id, user_id, slug, name, persona, budget_minor, state) VALUES
+  ('90000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-00000000000a', 'mandated-agent', 'Mandated agent', NULL, 100000, 'archived');
+UPDATE agents SET risk_level = 2, horizon = 'long', thesis_style = 'academic', max_position_bps = 1000,
+       cash_buffer_bps = 2000, max_holdings = 8, allow_etfs = false, market_caps = '{large,mega}',
+       sectors = '{Energy}', industries = '{Uranium}', etf_categories = '{"Large Blend"}',
+       blocked_symbols = '{EQTY}'
+ WHERE id = '90000000-0000-0000-0000-0000000000a1';
+UPDATE agents SET risk_level = 9, horizon = 'short', thesis_style = 'growth'
+ WHERE id = '90000000-0000-0000-0000-0000000000a2';
+UPDATE agents SET risk_level = 5, horizon = 'medium', thesis_style = 'contrarian'
+ WHERE id = '90000000-0000-0000-0000-0000000000a3';
 
 INSERT INTO instruments (id, symbol, asset_class) VALUES
   ('10000000-0000-0000-0000-000000000001', 'EQTY', 'equity'),
@@ -184,6 +196,7 @@ INSERT INTO agent_scans (user_id, agent_id, trigger, started_at, finished_at, ou
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'manual', now() - interval '6 days', now() - interval '6 days', 'trade', 3, 41000, 'm', '{}', '[]', '{"decision": "buy", "symbol": "EQTY", "quantity": "2", "thesis": "t"}', NULL),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', now() - interval '5 days', now() - interval '5 days', 'no_trade', 1, 9000, 'm', '{}', '[]', '{"decision": "none", "thesis": "t"}', NULL),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', now() - interval '4 days', now() - interval '4 days', 'invalid_answer', 2, 12000, 'm', '{}', '[]', '{"problems": ["p"]}', NULL),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', now() - interval '4 days', now() - interval '4 days', 'rule_rejected', 2, 12000, 'm', '{}', '[{"role": "returned", "problems": ["p"]}]', '{"decision": "buy", "symbol": "EQTY", "quantity": "2", "thesis": "t", "problems": ["p"]}', NULL),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', now() - interval '3 days', now() - interval '3 days', 'budget_reached', 0, 0, NULL, '{}', '[]', NULL, NULL),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', now() - interval '2 days', now() - interval '2 days', 'step_limit', 12, 380000, 'm', '{}', '[]', NULL, NULL),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'manual', now() - interval '1 day', now() - interval '1 day', 'failed', 0, 0, NULL, '{}', '[]', NULL, 'LLMRequestError: x'),

@@ -26,6 +26,7 @@ if (DATABASE_URL === '' && process.env.INTEGRATION_REQUIRED === '1') {
 describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => {
   const { getPool, initPool } = await import('../src/db/pool.js');
   const queries = await import('../src/db/queries.js');
+  const { EMPTY_MANDATE } = await import('../src/http/agentMandate.js');
   const USER = randomUUID();
   /** USER's primary agent, made by the trigger on `users` (migration 0036). */
   let AGENT = '';
@@ -432,8 +433,26 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         persona: 'Buys strength.',
         budgetMinor: 100050,
         currency: 'USD',
+        scanSchedule: 'intraday_twice',
+        mandate: { ...EMPTY_MANDATE, max_position_bps: 1000, sectors: ['Energy'], blocked_symbols: ['XOM'] },
       });
       expect(agent).toMatchObject({ is_primary: false, budget_minor: '100050', state: 'active', holdings_count: 0 });
+      // The mandate (0057) round-trips: integers as numbers, text[] as arrays.
+      expect(agent).toMatchObject({
+        scan_schedule: 'intraday_twice',
+        max_position_bps: 1000,
+        cash_buffer_bps: null,
+        allow_etfs: true,
+        sectors: ['Energy'],
+        market_caps: [],
+        blocked_symbols: ['XOM'],
+      });
+      const edited = await queries.updateAgent(USER, agent.id, { mandate: { market_caps: ['large', 'mega'], sectors: [] } });
+      expect(edited).toMatchObject({ market_caps: ['large', 'mega'], sectors: [], max_position_bps: 1000 });
+      // The primary has no mandate, whatever a writer asks (agents_primary_has_no_mandate).
+      await expect(
+        getPool().query('UPDATE agents SET max_holdings = 3 WHERE id = $1', [AGENT]),
+      ).rejects.toMatchObject({ code: '23514' });
 
       const listed = await queries.listAgents(USER);
       expect(listed[0]).toMatchObject({ id: AGENT, is_primary: true });
@@ -445,7 +464,16 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
       // The route maps this to 409 by the constraint's name, so pin the name.
       const duplicate = await queries
-        .createAgent({ userId: USER, slug: 'agent-dup00000', name: `${agent.name} II`, persona: null, budgetMinor: 1, currency: 'USD' })
+        .createAgent({
+          userId: USER,
+          slug: 'agent-dup00000',
+          name: `${agent.name} II`,
+          persona: null,
+          budgetMinor: 1,
+          currency: 'USD',
+          scanSchedule: 'pre_open',
+          mandate: EMPTY_MANDATE,
+        })
         .catch((error: { code?: string; constraint?: string }) => error);
       expect(duplicate).toMatchObject({ code: '23505', constraint: 'agents_user_id_name_key' });
 

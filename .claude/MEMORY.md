@@ -6,7 +6,7 @@ the reasoning behind it is not, and that is what this file is for. Maintained pe
 
 Updated: 2026-10-18 ~11:30 UTC - **M9 decisions 155-163 - all of M9's decisions** (users, signup
 with approval, monthly spend cap, enforcement, email+password, sessions, scheduling, admin, time
-zone); decisions reached **170** (next: **171**; 164-170 are the agent template creator's design, agreed the same day; its PR 1, #252, adds migration `0056_universe_taxonomy`). Next is M9's code, PR by PR (MILESTONES). **#232 is
+zone); decisions reached **173** (next: **174**; 164-173 are the agent template creator's design, agreed the same day; PR 1 #252 merged with `0056_universe_taxonomy`, PR 2 adds `0057_agent_mandate`). Next is M9's code, PR by PR (MILESTONES). **#232 is
 deployed nowhere** - checked 11:05 UTC: both environments' `instructions.py` is pre-#232 (pods
 started 09:18-09:20). **0055 read back:** the window read uses `articles_fetched_idx`; the market
 prune (`DELETE ... coalesce(published_at, fetched_at)`, deletes 0 rows) has been 278-937 ms on 4
@@ -2761,6 +2761,26 @@ failure they prevent.
     override the settings, the prompt ranks settings above it, a proposal the check rejects is
     sent back once in the same scan ("breaks rule X - propose again or pass"), and saving runs
     one model call that warns - never blocks - when the instructions contradict the settings.
+171. **Position and cash limits are a share of capital at cost: cash plus holdings at cost** (the
+    user, 2026-10-18; 0057, template creator PR 2). The request said "% of cash", which limits
+    trade size, not position size - cash shrinks with each buy, and ten 10% buys can all land in
+    one stock. Capital at cost uses only what the ledger holds exactly (cost basis is per unit),
+    so no unpriced holding makes the rule unanswerable (guideline 7). The position after a buy is
+    its cost so far plus the new notional; the buffer is cash after notional **and fee**.
+    Compared exactly (`after * 10000 > bps * capital`), never rounded. *Rejected:* market value
+    (needs a live quote for every holding at check time) and per-trade % of cash.
+172. **Market-cap bands apply to equities; the selection matches by sector or industry, an ETF by
+    category or its category's sector** (2026-10-18, PR 2, under 165/171's grant). Bands from
+    stored `market_cap_minor`: mega >= $200B, large >= $10B, mid >= $2B, small below (the screen's
+    $1B floor bounds it). An equity with no stored USD size is refused while a band is set -
+    "unsized" is not assumed to fit. ETFs have no market cap, so bands never touch them; the ETF
+    switch does. A sector ETF ("Equity Precious Metals") is inside its mapped sector (164); a broad
+    one ("Large Blend") only by naming its category. Names are refused at the API unless
+    `universe_taxonomy` holds them, so a typo cannot restrict an agent to nothing.
+173. **No whitelist; the blacklist stays** (the user, 2026-10-18). An agent's job is to find ideas in
+    its universe; a ticker allow-list makes it a timing bot for names already chosen, and with a
+    holdings cap and a cash buffer it can leave an agent nothing to do, scan after paid scan. The
+    sector selection and the blocked list cover the real needs. Revisit only on a concrete need.
 
 ---
 

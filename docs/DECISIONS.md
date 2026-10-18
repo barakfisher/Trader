@@ -181,3 +181,6 @@ while this file is out of date.
 | 168 | Templates are presets; the settings live on the agent |
 | 169 | The 1-10 risk slider proposes rule values and gives the prompt a five-word band |
 | 170 | Thesis style and the persona both stay; the persona becomes "Additional instructions" |
+| 171 | Position and cash limits are a share of capital at cost: cash plus holdings at cost |
+| 172 | Market-cap bands apply to equities; the selection matches by sector or industry, an ETF by category or its category's sector |
+| 173 | No whitelist; the blacklist stays |
