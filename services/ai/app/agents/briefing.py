@@ -7,7 +7,10 @@ user's followed topics. Everything after that the model asks for with tools.
 
 It is assembled from the tools' own answers (`get_position`, `get_findings`),
 so a figure reads the same in the briefing as in a tool result - one form for
-the thesis to quote and the evidence validator to match (§6.2). Like the tools,
+the thesis to quote and the evidence validator to match (§6.2). Each mover
+carries `affordable_shares`, the most whole shares the agent's cash buys at the
+mover's price with the fee included, so a buy's size is a figure the model
+copies, never one it computes (guideline 7). Like the tools,
 it is JSON and it is stored with the scan's transcript (D50).
 
 It makes no model call. Its provider calls are bounded: one movers list (cached
@@ -23,7 +26,9 @@ from typing import Any
 
 from sqlalchemy import text
 
+from app.agents.answer import agent_cash_minor
 from app.agents.tools import ToolContext, get_findings, get_position, money
+from app.core.fees import affordable_shares
 from app.models import Mover, MoverList
 
 #: Movers shown per list, after the universe filter.
@@ -65,8 +70,13 @@ def _tradable_symbols(context: ToolContext, symbols: list[str]) -> set[str]:
         return set(rows)
 
 
-def movers_section(context: ToolContext, movers: list[Mover]) -> dict[str, Any]:
-    """The day's movers an agent may trade, largest first, per list."""
+def movers_section(context: ToolContext, movers: list[Mover], cash_minor: int) -> dict[str, Any]:
+    """The day's movers an agent may trade, largest first, per list.
+
+    `affordable_shares` is at the mover's price; the server checks the buy at
+    the quote when the answer comes, so it is a ceiling to stay under, not a
+    promise.
+    """
     tradable = _tradable_symbols(context, sorted({mover.symbol for mover in movers}))
     section: dict[str, Any] = {}
     for kind in _LISTS:
@@ -78,6 +88,7 @@ def movers_section(context: ToolContext, movers: list[Mover]) -> dict[str, Any]:
                 "symbol": mover.symbol,
                 "change_percent": _pct(mover.change_pct),
                 "price": money(mover.price_minor, mover.currency),
+                "affordable_shares": str(affordable_shares(cash_minor, mover.price_minor)),
             }
             for mover in listed[:MOVERS_PER_LIST]
         ]
@@ -121,6 +132,8 @@ async def build_briefing(context: ToolContext, movers: list[Mover]) -> dict[str,
         "as_of": context.now.isoformat(),
         "cash": position["cash"],
         "holdings": holdings,
-        "movers": movers_section(context, movers),
+        "movers": movers_section(
+            context, movers, agent_cash_minor(context.engine, context.user_id, context.agent_id)
+        ),
         "followed_topics": followed_topics(context),
     }

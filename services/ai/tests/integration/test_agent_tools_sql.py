@@ -41,6 +41,7 @@ from app.agents.tools import (
     search_universe,
 )
 from app.analysis.thresholds import AnalysisThresholds
+from app.core.fees import affordable_shares
 from app.corpus.hashed_embedder import HashedEmbedder
 from app.corpus.vector_store import PgVectorStore
 from app.models import DailyClose, Mover, Quote
@@ -606,6 +607,7 @@ async def test_the_briefing_carries_holdings_with_findings_movers_and_topics(
         "symbol": "NXE",
         "change_percent": "9.88",
         "price": "100.00",
+        "affordable_shares": str(affordable_shares(250_000, 10_000)),
     }
     assert [m["symbol"] for m in briefing["movers"]["losers"]] == ["LEU"]
     assert [m["symbol"] for m in briefing["movers"]["most_active"]] == ["XOM"]
@@ -617,6 +619,6 @@ async def test_the_briefing_says_when_there_are_no_movers(
     loaded: Engine, owner: tuple[str, str, str]
 ) -> None:
     context = _context(loaded, owner, ScriptedMarket())
-    assert "note" in movers_section(context, [])
-    outside = movers_section(context, [_mover("TSLA", "gainers", 12.0)])
+    assert "note" in movers_section(context, [], 0)
+    outside = movers_section(context, [_mover("TSLA", "gainers", 12.0)], 0)
     assert outside["gainers"] == [] and "universe" in outside["note"]

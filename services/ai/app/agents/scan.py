@@ -74,10 +74,16 @@ How to work:
 1. Start from the briefing: your cash, your holdings and what the rules found in
    them, today's movers you may trade, and the user's followed topics.
 2. Use the tools to look into what matters to your persona. Check the news and
-   the price history before acting on a move. You have at most {SCAN_STEP_LIMIT} tool
-   calls; most scans need far fewer.
+   the price history before acting on a move. Look up anything not in the
+   briefing with search_universe first; an ETF counts if it is tradable. You
+   have at most {SCAN_STEP_LIMIT} tool calls; most scans need far fewer.
 3. Decide: buy, sell, or do nothing. Doing nothing is a good answer and the most
-   common one.
+   common one. Never trade on a quote with no price. If no news explains a
+   move, say so in the thesis rather than giving it a reason.
+4. Size a buy at or below the mover's affordable_shares: the most whole shares
+   your cash buys at that price, the fee included.
+
+If your persona conflicts with a rule below, the rule wins.
 
 Rules the server enforces after you answer:
 - Only USD-listed instruments in the universe (a quote says "tradable").
@@ -91,7 +97,8 @@ Rules the server enforces after you answer:
 Answer with JSON only, no other text:
 {{"decision": "buy" | "sell" | "none", "symbol": "NVDA", "quantity": "3",
  "thesis": "two to four sentences on why, citing figures from the evidence"}}
-For "none", omit symbol and quantity and say in the thesis why nothing is worth doing."""
+For "none", omit symbol and quantity, and say in the thesis which held: nothing
+moved enough for your persona, the evidence was missing, or there was not enough cash."""
 
 
 @dataclass

@@ -45,3 +45,21 @@ def notional_minor(quantity: Decimal, price_minor: int) -> int:
 def fee_minor(quantity: Decimal) -> int:
     """The fee on a trade of `quantity` whole shares, in minor units."""
     return max(MIN_FEE_MINOR, _whole_shares(quantity) * FEE_PER_SHARE_MINOR)
+
+
+def affordable_shares(cash_minor: int, price_minor: int) -> int:
+    """The most whole shares `cash_minor` buys at `price_minor`, the fee included; 0 if none.
+
+    What the server checks a buy against (`agents/answer.py`), worked out for
+    the model so it copies a figure rather than computing one (guideline 7).
+    """
+    if price_minor <= 0 or cash_minor <= 0:
+        return 0
+    # Above the crossover the fee is per share, so each share costs price + fee.
+    per_share = cash_minor // (price_minor + FEE_PER_SHARE_MINOR)
+    if per_share * FEE_PER_SHARE_MINOR > MIN_FEE_MINOR:
+        return per_share
+    # At or below it the fee is the minimum, paid once - and the count stays at
+    # or below the crossover, where that is still true.
+    crossover = MIN_FEE_MINOR // FEE_PER_SHARE_MINOR
+    return max(0, min(crossover, (cash_minor - MIN_FEE_MINOR) // price_minor))

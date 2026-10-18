@@ -387,6 +387,8 @@ def test_the_instructions_carry_the_persona_and_the_limits(agent: ScanAgent) -> 
     assert str(SCAN_STEP_LIMIT) in prompt
     assert '"decision"' in prompt
     assert "Write the thesis in English" in prompt
+    assert "affordable_shares" in prompt
+    assert "If your persona conflicts with a rule below, the rule wins." in prompt
 
 
 def test_the_thesis_is_asked_for_in_the_users_language(agent: ScanAgent) -> None:
