@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Bot, Plus } from 'lucide-react';
 
@@ -11,6 +11,13 @@ import { errorMessage } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { formatMoney } from '../i18n/format.ts';
 import { BUDGET_INPUT, agentErrorMessage, agentName, agentStateWord } from '../lib/agentPresentation.ts';
+import {
+  PERSONA_TEMPLATES,
+  replaceableBy,
+  templateName,
+  templatePersona,
+  type PersonaTemplate,
+} from '../lib/personaTemplates.ts';
 import { useAgentLimitQuery, useAgentsQuery, useCreateAgent } from '../queries/agents.ts';
 import { useConsolidatedQuery } from '../queries/portfolio.ts';
 
@@ -127,6 +134,13 @@ function CreateAgentForm() {
   const [budget, setBudget] = useState('');
   const [persona, setPersona] = useState('');
   const budgetValid = BUDGET_INPUT.test(budget.trim());
+  // A persona the user wrote is never replaced by a click.
+  const templatesAvailable = replaceableBy(persona, templatePersona);
+
+  const applyTemplate = (template: PersonaTemplate) => {
+    if (replaceableBy(name, templateName)) setName(templateName(template));
+    setPersona(templatePersona(template));
+  };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -153,6 +167,7 @@ function CreateAgentForm() {
     >
       {full && <p className="mb-3 text-sm text-text-muted">{t('agents.limit.full', { max: limit.max })}</p>}
       <form onSubmit={submit} className="space-y-3">
+        <PersonaTemplatePicker disabled={full || !templatesAvailable} onPick={applyTemplate} />
         <AgentField label={t('agents.fields.name')}>
           <input
             value={name}
@@ -194,5 +209,32 @@ function CreateAgentForm() {
         </Button>
       </form>
     </Card>
+  );
+}
+
+function PersonaTemplatePicker({ disabled, onPick }: { disabled: boolean; onPick: (template: PersonaTemplate) => void }) {
+  const { t } = useTranslation();
+  const id = useId();
+  return (
+    <div role="group" aria-labelledby={`${id}-label`} aria-describedby={`${id}-hint`} className="text-sm">
+      <p id={`${id}-label`} className="mb-1 text-text-muted">
+        {t('agents.templates.label')}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {PERSONA_TEMPLATES.map((template) => (
+          <Button
+            key={template}
+            variant="secondary"
+            disabled={disabled}
+            onClick={() => onPick(template)}
+          >
+            {templateName(template)}
+          </Button>
+        ))}
+      </div>
+      <p id={`${id}-hint`} className="mt-1 text-xs text-text-muted">
+        {t('agents.templates.hint')}
+      </p>
+    </div>
   );
 }
