@@ -4,7 +4,41 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-18 ~11:30 UTC - **M9 decisions 155-163 - all of M9's decisions** (users, signup
+Updated: 2026-10-18 ~14:30 UTC - **Handoff after six merges since ea2c3a7 (#249-#254; #255 is the
+seventh, the fix below).** **M9 has its decisions and its schema; the next M9 PR is signup and
+login.** Decisions reached **173** (next: **174**). Migrations: **`0058_user_accounts` is head**
+(next free: **`0059`**). **Deployed nowhere past 0055:** both environments run `a7c3c96`; #232,
+#249-#255 are merged and undeployed - redeploy only on the user's "redeploy" (0056-0058 run then).
+This session:
+- **M9 decisions 155-163** (#251), one question at a time with the user. The short version:
+  - trusted users over Tailscale, one admin;
+  - signup into `pending`, approved from Telegram or the Admin page;
+  - a monthly cap per non-admin, checked before each call, with alerts on template text when capped;
+  - email + argon2id;
+  - a cookie with `session_version`, checked against the user on every request;
+  - explicit `every_active_user` fan-out, scans interleaved, shared kinds run once;
+  - the admin sees operations only, each user resets their own account, the admin can set a one-time password;
+  - the zone from the browser.
+
+  M10 (OAuth, strangers) is on the roadmap.
+- **M9 schema #253, renumbered by #255 to `0058_user_accounts`.**
+  - `users`: `status` defaulting to `pending`, password columns, `session_version`, and `llm_cap_micro_usd`, required for an active non-admin by `users_active_user_has_cap`.
+  - Email is unique by `lower(email)`; the primary agent is seeded on activation.
+  - The downgrade refuses while any user isn't active.
+  - Rehearsed on the 10-18 01:00 compose backup, restored into `traders-agents-ci` (0052 -> head -> 0052 -> head, counts identical).
+  - **Every new user insert must say `status = 'active'` and give a cap** - the test inserts do.
+- **#255 fixed two Alembic heads on `main`**: #253 and #254 (another session, template creator
+  PR 2) both merged a 0057 on 0056. See Bugs ("two green PRs, one broken main").
+- **#232 is still deployed nowhere** (checked 11:05: both pods pre-#232).
+- **0055 read back, and the prune question open:** the window read uses `articles_fetched_idx`.
+  The market prune has been 278-937 ms on 4 of 5 collects since the deploy, probably cache
+  eviction by 09:00's scratch restore. **Re-read on 2026-10-19** against the 11:07 snapshot (prune
+  138 calls / 6,027 ms total; `articles` seq_scan 442), then decide on a partial index on
+  `coalesce(published_at, fetched_at) WHERE feed = 'market'`. Restoring a *backup* into a separate
+  container does not touch the compose server - that is how #253 was rehearsed.
+**Next:** "Next session: after M9's schema" under "Where to go next".
+
+Previous update, 2026-10-18 ~11:30 UTC - **M9 decisions 155-163 - all of M9's decisions** (users, signup
 with approval, monthly spend cap, enforcement, email+password, sessions, scheduling, admin, time
 zone); decisions reached **175** (next: **176**; 164-175 are the agent template creator's design, agreed the same day; PR 1 #252 (`0056`) and PR 2 #254 (`0057`) merged, PR 3 the form, PR 4 the save-time warning). Next is M9's code, PR by PR (MILESTONES). **#232 is
 deployed nowhere** - checked 11:05 UTC: both environments' `instructions.py` is pre-#232 (pods
@@ -2805,6 +2839,15 @@ failure they prevent.
 
 ## Bugs that cost real time, and the lesson from each
 
+**Two green PRs, one broken `main` (2026-10-18, #253 + #254, fixed by #255).** Two sessions each
+added a `0057` on `0056_universe_taxonomy`; each branch's CI was green, and they merged minutes
+apart, leaving two Alembic heads - `alembic upgrade head` refuses, so `main`'s CI and any redeploy
+would fail. The first renumber (0056 -> 0057, after #252) was caught only because the PR number
+skipped one; the second was caught by checking content after the merge. **Lesson: a PR's green
+CI is against the `main` it was tested on. Immediately before merging anything with a migration,
+`git fetch` and list `services/ai/alembic/versions` on `origin/main`; if a migration landed since
+the branch was tested, renumber and re-run first.** Parallel sessions make this routine, not rare.
+
 **The assistant (2026-10-11/12, #220-#223) - lessons, newest first:**
 - **A provider's spending cap is not the credit balance** (PR 4, 2026-10-12). OpenRouter answered 403
   "Workspace lifetime budget of $1.00 exceeded" with $8.80 of credit left; the first Haiku run graded
@@ -4004,6 +4047,30 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after M9's schema (written 2026-10-18)
+
+No standing grant: ask before each PR, merge only on "merge", redeploy only on "redeploy". Count
+merges since this handoff's commit with `git log --oneline <sha>..origin/main` - other sessions
+merge too (four of this stretch's seven were theirs or fixed theirs). In order:
+1. **2026-10-19: re-read the market prune** (above) before anything restores onto compose's
+   server. If it is back near ~40 ms, close the database sprint's row; if not, measure the partial
+   index on a restored backup in a separate container and bring decision 174.
+2. **2026-10-20 10:00 Israel: the Test agent scan review** with the user, as "after #232" item 2
+   says - it is #247's baseline. Note the template creator (#252, #254) changed scans since
+   (`rule_rejected`, mandates); read the review with that in mind.
+3. **M9's next PR: signup and login** (MILESTONES' order). Measure first: `http/routes/auth.ts`,
+   `http/auth.ts` (add `ver`), the login page and its i18n (`en.json` `intro` names the
+   passphrase), `APP_PASSPHRASE`'s readers, CI's login step (`ci.yml` posts `passphrase`). Name
+   the argon2 package in the PR (D159; `@node-rs/argon2` likely) - the user approved a package,
+   not a specific one. The bootstrap script that gives the seeded admin an email and password
+   comes with it. Then: approval flow, cap enforcement (`BudgetedProvider` needs the user - its
+   first measurement), scheduling fan-out, time-zone reads + guideline 10, admin list + own
+   reset, the exit test.
+4. **Redeploy when the user says** - #232 and #249-#255 are waiting; 0056-0058 run on it.
+5. The rest of "after #232" (4-6) still stands.
+6. **The agent template creator belongs to another session** (decisions 164-173). Do not pick up its
+   PRs from here without the user saying so.
 
 ### Next session: after #232 (written 2026-10-18)
 
