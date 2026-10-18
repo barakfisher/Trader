@@ -2,7 +2,7 @@
 
 What the migration promises, each shown by the database refusing or doing it:
 every active user has exactly one primary agent, made by a trigger rather than
-by a writer remembering (0057: on becoming active, not on insert); the primary
+by a writer remembering (0058: on becoming active, not on insert); the primary
 cannot carry a budget, a persona or a pause; an owned row cannot be written
 without an agent, nor with another user's agent; and a run carries an agent
 exactly when it carries a user. The services connect
