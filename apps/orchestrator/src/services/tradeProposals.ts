@@ -27,11 +27,18 @@ import {
 } from '@traders/shared';
 import { AiServiceError, type AgentScanResponse, type AiClient } from '@traders/shared/ai';
 
-import { createTradeProposal, getOrCreateUserSettings, getUser, type AgentRow } from '../db/queries.js';
+import {
+  createTradeProposal,
+  getOrCreateUserSettings,
+  getUser,
+  listScanToolCalls,
+  type AgentRow,
+} from '../db/queries.js';
 import { upstreamFailure } from '../http/errors.js';
 import { logger } from '../logger.js';
 import { messagesFor } from '../notify/messages.js';
 import type { Notifier } from '../notify/notifier.js';
+import { evidenceCheckedFrom } from './evidenceChecked.js';
 import { resolveTradable } from './fills.js';
 import { fanOut, settingsForNotification } from './notifications.js';
 
@@ -118,6 +125,7 @@ export async function proposeFromScan(
   await announce(userId, agent, context.notifier, now, {
     observationId,
     proposalId,
+    scanId: scan.scan_id,
     // D70: a sell that can be approved right now does not wait for the morning.
     urgent: kind === 'sell' && calendar.is_open,
     headline: headlineIn('en'),
@@ -128,7 +136,8 @@ export async function proposeFromScan(
 }
 
 /**
- * Tell the user, with Approve and Reject on the message (D60, D61). Every scan
+ * Tell the user, with Approve and Reject on the message (D60, D61), and what the
+ * scan checked before proposing, so the trade can be judged from the message. Every scan
  * that proposes announces it - a manual one too: whoever pressed *Run* may have
  * left the page by the time it answers, and the proposal lives an hour.
  *
@@ -145,6 +154,7 @@ async function announce(
   proposal: {
     observationId: string;
     proposalId: string;
+    scanId: string;
     urgent: boolean;
     headline: string;
     thesis: string;
@@ -152,7 +162,11 @@ async function announce(
   },
 ): Promise<void> {
   try {
-    const [settings, user] = await Promise.all([getOrCreateUserSettings(userId), getUser(userId)]);
+    const [settings, user, toolCalls] = await Promise.all([
+      getOrCreateUserSettings(userId),
+      getUser(userId),
+      listScanToolCalls(userId, agent.id, proposal.scanId),
+    ]);
     await fanOut(
       userId,
       agent.id,
@@ -167,6 +181,7 @@ async function announce(
           proposalId: proposal.proposalId,
           trade: true,
           urgent: proposal.urgent,
+          evidenceChecked: evidenceCheckedFrom(toolCalls),
         },
       ],
       settingsForNotification(settings, user?.timezone ?? 'UTC'),

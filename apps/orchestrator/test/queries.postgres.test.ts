@@ -366,6 +366,42 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe("a scan's tool calls, for the Evidence checked line", () => {
+    // Evaluated over a literal transcript rather than a stored scan: `agent_scans`
+    // is append-only for the app role (0043), so a row written here would outlive
+    // the user this file deletes.
+    it('reads every assistant step\'s calls in order, and nothing from tool steps', async () => {
+      const transcript = [
+        { role: 'assistant', text: null, tool_calls: [
+          { id: 'c1', name: 'get_price_history', arguments: '{"symbol":"NVDA","days":21}' },
+          { id: 'c2', name: 'get_news', arguments: '{"symbol":"NVDA"}' },
+        ] },
+        { role: 'tool', call_id: 'c1', name: 'get_price_history', result: { closes: [] } },
+        { role: 'assistant', text: null, tool_calls: [{ id: 'c3', name: 'get_position', arguments: '{}' }] },
+        { role: 'assistant', text: '{"decision":"buy"}', tool_calls: [] },
+      ];
+      const { rows } = await getPool().query<{ calls: { name: string; arguments: string }[] }>(
+        `SELECT ${queries.SCAN_TOOL_CALLS} AS calls FROM (SELECT $1::jsonb AS transcript) s`,
+        [JSON.stringify(transcript)],
+      );
+      expect(rows[0]!.calls.map((call) => [call.name, call.arguments])).toEqual([
+        ['get_price_history', '{"symbol":"NVDA","days":21}'],
+        ['get_news', '{"symbol":"NVDA"}'],
+        ['get_position', '{}'],
+      ]);
+      const empty = await getPool().query<{ calls: unknown[] }>(
+        `SELECT ${queries.SCAN_TOOL_CALLS} AS calls FROM (SELECT '[]'::jsonb AS transcript) s`,
+      );
+      expect(empty.rows[0]!.calls).toEqual([]);
+    });
+
+    it('runs the proposal read with its scan join, and reads an unknown scan as no calls', async () => {
+      const row = await queries.findProposal(USER, randomUUID());
+      expect(row).toBeNull();
+      expect(await queries.listScanToolCalls(USER, AGENT, randomUUID())).toEqual([]);
+    });
+  });
+
   describe('agents (Stage 2)', () => {
     it('creates, lists, renames and pauses a simulated agent, and never changes the primary', async () => {
       const agent = await queries.createAgent({

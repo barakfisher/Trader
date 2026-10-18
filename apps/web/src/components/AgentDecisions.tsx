@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
@@ -22,7 +22,8 @@ import { Button, Card, EmptyState, ErrorNote, Spinner } from './ui.tsx';
  * a fill to the Activity tab. Showing the scans that did nothing is the point:
  * the money spent on "no trade" is real, and so is the reasoning behind it.
  */
-export function AgentDecisions({ agentId }: { agentId: string }) {
+/** `openScanId`: a scan to show expanded, as a trade proposal's link asks. */
+export function AgentDecisions({ agentId, openScanId }: { agentId: string; openScanId?: string }) {
   const { t } = useTranslation();
   const scans = useAgentScansQuery(agentId);
   if (scans.isPending) return <Spinner label={t('agents.decisions.loading')} />;
@@ -42,7 +43,7 @@ export function AgentDecisions({ agentId }: { agentId: string }) {
     <Card>
       <ul className="divide-y divide-border-subtle/60">
         {rows.map((scan) => (
-          <ScanRow key={scan.id} agentId={agentId} scan={scan} />
+          <ScanRow key={scan.id} agentId={agentId} scan={scan} linked={scan.id === openScanId} />
         ))}
       </ul>
       {scans.hasNextPage && (
@@ -66,11 +67,16 @@ function outcomeClass(scan: AgentScanSummary): string {
   return 'bg-surface-hover text-text-muted';
 }
 
-function ScanRow({ agentId, scan }: { agentId: string; scan: AgentScanSummary }) {
+function ScanRow({ agentId, scan, linked }: { agentId: string; scan: AgentScanSummary; linked: boolean }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
+  // The scan a proposal's "Evidence checked" link names starts open, in view.
+  const [open, setOpen] = useState(linked);
+  const row = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (linked) row.current?.scrollIntoView?.({ block: 'start' });
+  }, [linked]);
   return (
-    <li className="py-3 first:pt-0 last:pb-0">
+    <li ref={row} className="py-3 first:pt-0 last:pb-0">
       <button
         type="button"
         onClick={() => setOpen(!open)}

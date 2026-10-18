@@ -195,6 +195,33 @@ describe('the proposals inbox', () => {
     });
   });
 
+  it("says what a trade proposal's scan checked, and nothing for a proposal without a scan", async () => {
+    vi.mocked(queries.listProposals).mockResolvedValueOnce([
+      proposalRow({
+        id: 'p-trade',
+        kind: 'buy',
+        scan_id: '33333333-3333-3333-3333-333333333333',
+        scan_tool_calls: [
+          { id: 'c1', name: 'get_price_history', arguments: '{"symbol":"NVDA","days":21}' },
+          { id: 'c2', name: 'get_news', arguments: '{"symbol":"NVDA","days":7}' },
+          { id: 'c3', name: 'get_position', arguments: '{}' },
+        ],
+      }),
+      proposalRow({ id: 'p-rebalance', scan_id: null, scan_tool_calls: null }),
+    ] as never);
+    const response = await app.request('/proposals', { headers: auth() });
+    const body = (await response.json()) as { proposals: { id: string; evidenceChecked: unknown }[] };
+    expect(body.proposals.find((p) => p.id === 'p-trade')!.evidenceChecked).toEqual({
+      checks: [
+        { tool: 'get_price_history', subject: 'NVDA', days: 21 },
+        { tool: 'get_news', subject: 'NVDA', days: 7 },
+        { tool: 'get_position', subject: null, days: null },
+      ],
+      otherCalls: 0,
+    });
+    expect(body.proposals.find((p) => p.id === 'p-rebalance')!.evidenceChecked).toBeNull();
+  });
+
   it('answers 404 for a proposal belonging to somebody else', async () => {
     // findProposal is scoped by user_id, so another user's id reads as absent.
     vi.mocked(queries.findProposal).mockResolvedValueOnce(null);
