@@ -32,6 +32,7 @@ def _row_versions(engine: Engine) -> dict[str, dict[str, str]]:
         "etf_holdings": (
             "SELECT etf_instrument_id::text || ':' || position, xmin::text FROM etf_holdings"
         ),
+        "universe_taxonomy": "SELECT kind || ':' || name, xmin::text FROM universe_taxonomy",
     }
     with engine.connect() as connection:
         return {
@@ -59,6 +60,7 @@ def test_the_first_load_writes_and_says_so(loaded_once: Engine) -> None:
     assert report["holdings_replaced"] == 1
     versions = _row_versions(loaded_once)
     assert versions["instrument_profiles"] and versions["etf_holdings"]
+    assert versions["universe_taxonomy"]
 
 
 def test_a_reload_of_the_same_snapshot_writes_no_row(

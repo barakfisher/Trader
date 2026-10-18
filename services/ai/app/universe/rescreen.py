@@ -157,6 +157,8 @@ async def run_rescreen(
             "unchanged": report.unchanged,
             "undescribed": report.undescribed,
             "dropped": loaded.dropped,
+            "taxonomy_rows": loaded.taxonomy.rows,
+            "taxonomy_unmapped": loaded.taxonomy.unmapped,
             "holdings_stored": loaded.holdings.total,
             "embedded": embedded,
             "build_seconds": built_seconds,

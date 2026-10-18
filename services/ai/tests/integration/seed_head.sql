@@ -265,3 +265,9 @@ INSERT INTO assistant_messages (conversation_id, user_id, role, content, outcome
   ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'x', 'budget_reached', NULL, '[]', '[]', '[]', NULL, 0),
   ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'x', 'no_model', NULL, '[]', '[]', '[]', NULL, 0);
 UPDATE installation_settings SET assistant_daily_budget_micro_usd = 750000;
+-- The universe taxonomy (0056): an equity industry, a sector ETF category and
+-- one with no sector.
+INSERT INTO universe_taxonomy (kind, name, sector, instruments) VALUES
+  ('industry', 'Uranium', 'Energy', 2),
+  ('etf_category', 'Technology', 'Technology', 1),
+  ('etf_category', 'Large Blend', NULL, 1);

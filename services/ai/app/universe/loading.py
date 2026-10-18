@@ -15,8 +15,9 @@ decides whether a rescreen survives a restart:
   says so.
 
 Loading is the same either way: profiles written (`load_universe`), members the
-snapshot no longer holds marked `dropped`, ETF holdings replaced, and the
-loader's own account recorded for the admin page (decision 86).
+snapshot no longer holds marked `dropped`, the sector/industry taxonomy brought
+in step with them (D164), ETF holdings replaced, and the loader's own account
+recorded for the admin page (decision 86).
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ from app.universe.profiles import (
     mark_dropped,
 )
 from app.universe.snapshot import DESCRIPTIONS_FILE, MANIFEST_FILE, load_snapshot, read_holdings
+from app.universe.taxonomy import TaxonomyReport, rebuild_taxonomy
 
 #: Where a rescreen writes complete snapshots, under the snapshot volume.
 SNAPSHOTS_SUBDIR = "snapshots"
@@ -106,6 +108,7 @@ class LoadSummary:
     report: LoadReport
     holdings: HoldingsReport
     dropped: int
+    taxonomy: TaxonomyReport
 
 
 def load_into_database(
@@ -120,6 +123,8 @@ def load_into_database(
     snapshot = load_snapshot(directory, descriptions or directory / DESCRIPTIONS_FILE)
     report = load_universe(connection, snapshot, source=source, license=license)
     dropped = mark_dropped(connection, {member.symbol for member in snapshot.instruments})
+    # After the drops, so a former member's industry is not offered to an agent.
+    taxonomy = rebuild_taxonomy(connection)
     # After the profiles, because a holding can only match a profiled instrument.
     holding_rows = read_holdings(directory)
     held = load_holdings(connection, holding_rows, as_of=snapshot.as_of)
@@ -136,6 +141,10 @@ def load_into_database(
                 holdings=held,
             ),
             "dropped": dropped,
+            "taxonomy_rows": taxonomy.rows,
+            "taxonomy_written": taxonomy.written,
+            "taxonomy_removed": taxonomy.removed,
+            "taxonomy_unmapped": len(taxonomy.unmapped),
         },
     )
-    return LoadSummary(snapshot.as_of, len(snapshot.instruments), report, held, dropped)
+    return LoadSummary(snapshot.as_of, len(snapshot.instruments), report, held, dropped, taxonomy)

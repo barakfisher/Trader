@@ -174,3 +174,10 @@ while this file is out of date.
 | 161 | Scheduled work names who it is for; scans interleave; shared work runs once |
 | 162 | The admin sees operations, never a user's finances; each user resets their own account; the admin can set a one-time password |
 | 163 | A user's zone comes from their browser at signup; "today" is the user's, the market and the installation keep their own clocks |
+| 164 | The sector/industry taxonomy is built from our own universe, not fetched from Yahoo |
+| 165 | An agent's position and universe rules are enforced in code; tone, horizon and risk go to the prompt |
+| 166 | No "Day Trading" horizon |
+| 167 | "Topics" keeps its name; the new agent field is "Sectors & industries" |
+| 168 | Templates are presets; the settings live on the agent |
+| 169 | The 1-10 risk slider proposes rule values and gives the prompt a five-word band |
+| 170 | Thesis style and the persona both stay; the persona becomes "Additional instructions" |
