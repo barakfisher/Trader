@@ -4,7 +4,12 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-18 ~08:00 UTC - **Handoff after six merges (#236-#241) - one past the five-merge
+Updated: 2026-10-18 ~09:00 UTC - **DB4's second half is reviewed: decisions 151-154, three migration
+PRs in order** (0053 drop the profiles' HNSW index, 0054 drop two unread indexes, 0055 an `articles`
+index for the collector's window read). See "The database sprint's review, second half" for the
+week's numbers. Decisions reached **154** (next: **155**). Nothing below changed otherwise.
+
+Previous update, 2026-10-18 ~08:00 UTC - **Handoff after six merges (#236-#241) - one past the five-merge
 trigger, noticed late. One draft is still open on purpose (#232).** No migration since `0052` (next
 free: `0053`); decisions reached **150** (next: **151**). **Deployed:** compose and kind both run
 `8d42fdf` (#239) - **#241 is merged but deployed nowhere**; redeploy only on the user's "redeploy".
@@ -673,7 +678,7 @@ strings and left-to-right assumptions before designing it.
 | **M5 — Market discovery & topics** | ✅ Complete | #50–#51: eval set, universe, resolver. #53–#55: resolve, CRUD + confirm, Topics screen. #57: topic observations. #58–#59: news collection, GDELT. #60: topic sentiment. Digest topic section (this handoff's PR). **Recall on held-out topics: 14/35.** Auto-discovery with rejection memory (decisions 55-56). Topic cards: news and tone on the topic's card, with the last collection's state so an empty list is never called a quiet week. #79-#81: discovery collapses wordings of one story and drops one company's news (decision 59). #83-#86: indexed discovery, the market feed, the one-country rule, weak proposals (decisions 60-62). **Exit shown live 2026-09-29** ("data center" proposed; a rejection held) |
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
-| **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 ✅ #210 (instrument_profiles 155 -> 96 MB); DB3 ✅ #213 (window from 2026-10-11 07:56 UTC); DB4 split (decision 143): first half 2026-10-11 (#218, decisions 143-147), second half - indexes and `runs` retention - on/after 2026-10-18. DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-147. See "Planned: the database sprint" |
+| **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 ✅ #210 (instrument_profiles 155 -> 96 MB); DB3 ✅ #213 (window from 2026-10-11 07:56 UTC); DB4 split (decision 143): first half 2026-10-11 (#218, decisions 143-147), second half 2026-10-18 (decisions 151-154: migrations 0053-0055 in three PRs). DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-147, 151-154. See "Planned: the database sprint" |
 | **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | ✅ Built (checks owed) | Test set #212; #220-#223 deployed 2026-10-12 - core, Admin picker and limit, replay and universe tools, the `/ask` chat screen. **Live.** PR 4 (eval runner, measured limit, old `/ask` removed) done. #225 PR 4, #226 PR 4b, #227 PR 5 (`openai` package) merged 2026-10-14 - **all planned PRs built**; owed: redeploy, PR 5's live check, the 4b eval re-run. Post-milestone candidates in "Next session: after the assistant milestone". See "Planned: the assistant" and "Next session: the assistant's PR 4b" |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
@@ -2493,6 +2498,55 @@ failure they prevent.
     is what 149's line would read). **`degraded` is not retried** - a symbol without history
     stays so. **Not the other daily kinds:** a failed digest may already have sent part of its
     message, and discovery/metadata have not failed.
+151. **`instrument_profiles_embedding_idx` (HNSW) is dropped** (the user, 2026-10-18; DB4's second
+    half, 0053). A full week (2026-10-11 07:56 -> 10-18 08:12 UTC) showed it never scanned on
+    either environment, and unlike 143's 29-minute reading, its reader *did* run: topic
+    matching's `search_profiles`, 9 calls on compose at ~514 ms. The planner was right to refuse
+    it. `EXPLAIN ANALYZE` on compose, read-only: the default exact scan answered LIMIT 200 in
+    **264 ms with 200 rows**; the index, forced (`enable_seqscan`/`enable_sort` off), took **2.8 s
+    and returned 199** - an HNSW scan is approximate and its `WHERE` filters after it searches.
+    It was 41 MB on each environment, ~40% of `instrument_profiles`, and every embedding write
+    and every restore paid for it. *Rejected:* keeping it for a larger universe - a rebuild takes
+    seconds at this size and the downgrade is 0015's statement. **Revisit past ~50k screened
+    profiles.** `search_profiles` keeps its `SET LOCAL hnsw.ef_search` (inert now, honest if the
+    index returns). **`kb_chunks_embedding_idx` stays**: under 1 MB, /ask's retrieval ran twice on
+    compose (none on kind), and the corpus is the table that grows by design.
+152. **Two indexes with no reader in the code are dropped; `intents_ledger_idx` is kept** (the
+    user, 2026-10-18; 0054). `articles_content_hash_idx` (6.9 MB on compose, paid on ~5k article
+    inserts a day): dedupe loads the 48 h window's hashes and matches in memory
+    (`news/queries.py` `load_known_hashes`), so no statement looks a hash up.
+    `instrument_profiles_search_idx` (2.6 MB GIN): nothing queries `instrument_profiles.text_search`
+    - the only `@@` is on `kb_chunks`; the generated column stays (dropping it rewrites the
+    table). `intents_ledger_idx` (16 kB, no reader, decision 138) is kept: it costs nothing and a
+    per-user audit view (M9) is its obvious reader. **Every other never-scanned index is kept on
+    purpose** (~25 of 8-16 kB): each has a reader in the code - feed, digest, proposals, ledger,
+    `kb_chunks` GIN - on tables of under ~100 rows per user, where the planner rightly scans;
+    M9's users are what makes them selective. *Lesson: "never scanned" splits three ways - no
+    reader (drop), a reader the planner rightly refuses at this size (decide on measured
+    plans), a reader on a tiny table (keep). Only the first is read off the report.*
+153. **`runs` is not pruned yet; revisit on a trigger** (the user, 2026-10-18). Measured: ~100
+    rows a day (60-240; up from 10-11's 29-37 since `agent_scans` and `proposal_sweep` tick for
+    a funded agent), kind 1,943 rows / 1.7 MB, compose 2,905 / 2.6 MB, ~0.1 MB a day - ~40 MB a
+    year. Its readers use indexes (#218) or are bounded (the admin view, LIMIT 400, 22 ms). Run
+    rows are the idempotency record and the "what ran when" answer, so pruning has a cost the
+    size does not yet repay. **Revisit when `runs` passes 50 MB or 100k rows on either
+    environment, or a `runs` statement enters the report's top 15 by total time.**
+154. **`articles` gets an index for the collector's window read** (the user, 2026-10-18; 0055).
+    The week's top app statement on compose was `load_known_hashes` - `SELECT url_hash,
+    content_hash FROM articles WHERE fetched_at >= :since` (48 h): 133 calls, 149 ms mean, 24
+    of the 117 slow-log lines, and with no index on `fetched_at` every 30-minute collect read the
+    whole table (`articles` seq-read 27 M rows in the week). Nothing prunes linked articles, and
+    the table grew 44k -> 86k rows since 10-09 (~4.6k a day), so the cost grows linearly - ~3 s
+    a collect within a year. `articles (fetched_at) INCLUDE (url_hash, content_hash)` is meant to
+    make it an index-only range scan; the plan is measured on a scratch copy restored from a dump (D146) before
+    merge. *Rejected:* waiting for a 500 ms trigger (the growth is certain and the fix small)
+    and articles retention instead (linked articles are evidence behind observations - its own
+    question if size ever asks it). The `coalesce(published_at, fetched_at)` reads (the daily
+    headline window, 705 ms; the market prune, 25 ms) are left alone. **Asked alongside, not
+    decided:** news does not feed the universe - matching is a closed set by design
+    (`news/entities.py`), topic discovery turns headlines into topics resolved *against* the
+    universe. A possible follow-up: list discovered topics that match nothing well as
+    candidates for on-demand profiling, each approved by the user.
 
 ---
 
@@ -3701,7 +3755,7 @@ grant tests fail for the wrong reason.
 ### Next session: after #241 (written 2026-10-18)
 
 No standing grant: ask before each PR, merge only on "merge", redeploy only on "redeploy". In order:
-1. **DB4's second half - due now (on or after 2026-10-18).** "Next session: the database sprint's
+1. **DB4's second half - done 2026-10-18 (decisions 151-154; PRs 0053, 0054, 0055 in order).** "Next session: the database sprint's
    review, second half" below; its decision numbers now start at **151** (148-150 were taken by
    #237-#239). Kind and compose have run #218 since 2026-10-11, so step 3 applies. Note the compose
    stack was restarted 2026-10-18 ~07:36 UTC for #239 - Postgres was not, so the window should hold.
@@ -3912,6 +3966,26 @@ before taking the next.
 
 
 ### Next session: the database sprint's review, second half (DB4, due on or after 2026-10-18)
+
+**Done 2026-10-18 (decisions 151-154).** What the full week (10-11 07:56 -> 10-18 08:12 UTC, both
+windows intact) showed:
+- **Backups:** 8 launchd runs, all exit 0 - 7 inside the window, one per night 10-12..10-18
+  (compose's 10-12 ran at 05:26, the Mac asleep at 04:00). Newest: kind 5.2 MB, compose 60 MB, 44 tables.
+- **#218 worked.** `runs.seq_scan` for the week: kind 109, compose 86 (1,768 before). They are
+  the old statement's 46/55 calls before #218 deployed on 10-11, 7/13 `pg_dump`s and ~20 ad-hoc
+  reads; the new lookup ran 506/619 times without one. Across a tick (2 and 8 claims) the counter
+  did not move. **Trap:** a watcher that polls `count(*)`/`max(started_at)` on `runs` adds two
+  scans per poll - it moved the counter by 31 before it was noticed. Read `pg_stat_user_tables`
+  and `pg_stat_statements` only.
+- **Indexes:** see 151 (HNSW: reader ran, planner rightly refused it) and 152 (two with no
+  reader dropped, the rest kept). **Retention:** 153, not yet. **New:** 154, the news
+  collector's window read on compose.
+- **Noise, discounted:** kind's 31-minute `SELECT 1` (the Mac asleep), `admin_audit_id_seq` at
+  2.7 s (`pg_dump`), 13 no-op universe reloads (DB2 by design), and compose's slow log includes
+  other databases' `CREATE INDEX` (restores into scratch copies) - section 1 is filtered by
+  `dbid`, section 5 is not.
+
+**The plan as written before it ran:**
 
 **The first half ran 2026-10-11** on the user's request, 29 minutes into the window (decision 143):
 backups checked, both reports read, decisions 144-147 taken, #218 opened (the `runs` predicate).

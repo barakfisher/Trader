@@ -480,6 +480,9 @@ def search_profiles(
     returns at most that many rows (default 40) whatever the LIMIT says: asking
     for 50 would silently return 40, and a recall measured at 50 would really be
     a recall at 40. `SET LOCAL` does not take a bind parameter, hence the int().
+    There is no such index since 0053 (decision 151: the exact scan was faster
+    and complete at this size), so today the setting is inert; it stays so a
+    rebuilt index cannot quietly cap the result.
     """
     connection.execute(text(f"SET LOCAL hnsw.ef_search = {max(int(limit), 40)}"))
     rows = connection.execute(
