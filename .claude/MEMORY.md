@@ -4,7 +4,32 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-14 ~15:00 UTC - **Handoff after five merges (#229, #230, #231, #233, #234). One draft
+Updated: 2026-10-18 ~08:00 UTC - **Handoff after six merges (#236-#241) - one past the five-merge
+trigger, noticed late. One draft is still open on purpose (#232).** No migration since `0052` (next
+free: `0053`); decisions reached **150** (next: **151**). **Deployed:** compose and kind both run
+`8d42fdf` (#239) - **#241 is merged but deployed nowhere**; redeploy only on the user's "redeploy".
+What happened, in order:
+- **#236** - M9 (multiple users) added to the plan (MILESTONES, PRD §7). Docs only.
+- **#237 (decision 148)** - a move and a drawdown on one holding from one scan are one Telegram
+  message, merged at the fan-out (`services/holdingAlerts.ts`); each half keeps its own row and
+  dedupe key. Not yet seen on the real bot.
+- **#238 (decision 149)** - a move alert carries a market line: the best-fitting index (highest R²
+  over 90 days among SPY/QQQ/IWM, BTC-USD for crypto) when it moved >=1% the same way. Framed, never
+  muted - a beta-adjusted mute would have silenced OUST -9.51%, EOSE -15%, IREN -12% on 10-14.
+  **The web feed and the digest do not show the line yet** (evidence is stored for them).
+- **#240 (M9 PR 1)** - `docs/M9-MEASUREMENT.md`: the data layer is already tenant-safe; what assumes
+  one user is the schedule (never names a user), installation-wide kinds run as a user's run, one
+  `LLM_DAILY_BUDGET_USD`, `users.timezone` unwritable, user delete blocked by 7 FKs, irrevocable
+  cookie, self-reset behind the admin gate.
+- **#239 (decision 150)** - a failed `backfill` is re-claimable the same day (`RETRY_FAILED_KINDS`);
+  compose had 3 of 25 fail on the first ask after the Mac woke.
+- **#241** - "Evidence checked" on an agent's trade proposal (web card + Telegram): the scan's tool
+  calls, derived at read time from `agent_scans.transcript` (`SCAN_TOOL_CALLS`), no migration.
+  Unknown tool names are counted, never named - a future research sub-agent shows as "1 other tool".
+  Checked on fixtures only (no real proposal existed locally).
+**Next:** "Next session: after #241" under "Where to go next".
+
+Previous update, 2026-10-14 ~15:00 UTC - **Handoff after five merges (#229, #230, #231, #233, #234). One draft
 is open on purpose (#232).** Both environments run `main` at `6248524`, no migration since `0052`
 (next free: `0053`; decisions reached 147). What happened, in order:
 - **Redeploy + PR 5's live check:** `/ask` answered first time on the `openai` package. **Narration had
@@ -658,7 +683,7 @@ strings and left-to-right assumptions before designing it.
 | Mastra retired (D11) | ✅ Complete | #157, migration 0039: proposals are the row, `applyDecision` and `proposal_sweep` |
 | Multi-agent sandbox, Stage 1 — isolation (no M-number; `docs/PROPOSAL-MULTI-AGENT.md`) | ✅ Complete | #151 spec amendment D1-D16; #152 `agents` + `agent_id` (0036); #153 agent-scoped reads + contract; #154 per-agent uniques (0037); #155 passive primary (0038). Nothing user-visible, by design. Stages 2-4 to come - see "Next session: multi-agent Stage 2" |
 | M8 — Admin operations & observability | ✅ Complete | #120-#124, #126-#130: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel, on-demand profiles, the rescreen run and its CronJob. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event and profiled within one background fetch ✅ (#127, decision 89); rescreen button ✅ (#128, decision 90; shown in kind); button and CronJob are one run ✅ (#129, decision 91; shown in kind). Checked live 2026-10-01 - see "M8 is complete, and how it was verified" |
-| M9 — Multiple users | 📋 Planned | Added to the plan at the user's request, 2026-10-14; not started and not ordered against the database sprint or the assistant's owed checks. PR 1 is a read-only measurement of every single-user assumption; the decisions (who the users are, login, sessions, scheduling, shared costs) come after it. See `docs/MILESTONES.md` |
+| M9 — Multiple users | 🔄 In progress | PR 1 (measurement, `docs/M9-MEASUREMENT.md`) merged as #240, 2026-10-15; decisions next. Added to the plan at the user's request, 2026-10-14; not ordered against the database sprint or the assistant's owed checks. PR 1 is a read-only measurement of every single-user assumption; the decisions (who the users are, login, sessions, scheduling, shared costs) come after it. See `docs/MILESTONES.md` |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
 not anticipate, found by running the thing rather than by reading it. M1.5 came from auditing the
@@ -3673,6 +3698,30 @@ grant tests fail for the wrong reason.
 
 ## Where to go next
 
+### Next session: after #241 (written 2026-10-18)
+
+No standing grant: ask before each PR, merge only on "merge", redeploy only on "redeploy". In order:
+1. **DB4's second half - due now (on or after 2026-10-18).** "Next session: the database sprint's
+   review, second half" below; its decision numbers now start at **151** (148-150 were taken by
+   #237-#239). Kind and compose have run #218 since 2026-10-11, so step 3 applies. Note the compose
+   stack was restarted 2026-10-18 ~07:36 UTC for #239 - Postgres was not, so the window should hold.
+2. **Redeploy #241 when the user says so** (nothing else is undeployed). First real trade proposal
+   after it is the live check of the "Evidence checked" line.
+3. **M9's decisions**, one at a time with a recommendation, from `docs/M9-MEASUREMENT.md` - who the
+   users are first (MILESTONES' list). Not ordered against DB4; the user chooses.
+4. **2026-10-20 10:00 Israel: Test agent scan review** (scheduled task). Then the two deferred
+   decisions: the research sub-agent and the per-agent tool picker (bring tool-call counts from
+   `agent_scans`/`llm_calls`). #241's `otherCalls` already makes room for a sub-agent's tool name.
+5. **#232** - unchanged from "after the assistant follow-ups" item 4 (budget first, two open
+   questions, then remove `traders-assistant-ci`).
+6. **Small follow-ups the user has not asked for yet:** the market line (149) on the web feed and
+   the digest; watch the first real merged move+drawdown and market line on Telegram.
+
+**Lesson from this stretch:** the handoff trigger is countable only if someone counts. Six merges
+went by because #239 and #241 merged from other sessions on the same morning. Count merges on
+`main` since the last handoff commit (`git log --oneline <handoff-sha>..origin/main`), not the ones
+this session made.
+
 ### Next session: after the assistant follow-ups (written 2026-10-14, evening)
 
 Ask the user before starting anything; there is no standing grant ("merge" per PR, "redeploy" only
@@ -3885,7 +3934,7 @@ What is left needs the full week. Ask the user before starting (no standing gran
    - retention for `runs`: measured 2026-10-11 at **29-37 rows a day** (not ~130), 1.1 MB on kind
      and 1.9 MB on compose - expect "not yet", with a size that would change the answer;
    - anything new in sections 1 and 5 (statements by total time, the slow log).
-   Each answer is a decision (next number: **150**); each change its own PR.
+   Each answer is a decision (next number: **151** - 148-150 went to #237-#239); each change its own PR.
 
 ### Planned: the database sprint (agreed 2026-10-09)
 
