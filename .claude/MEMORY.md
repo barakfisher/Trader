@@ -4,7 +4,36 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-18 ~09:00 UTC - **DB4's second half is reviewed: decisions 151-154, three migration
+Updated: 2026-10-18 ~10:30 UTC - **Handoff after five merges since #242 (#243-#246, #232). One
+draft is open on purpose (#247).** Decisions reached **154** (next: **155**); no migration since
+`0055` (next free: `0056`). **Deployed:** both environments run `a7c3c96` (#245, revision 0055) -
+**#232 is merged (`fb4547a`) but deployed nowhere**; redeploy only on the user's "redeploy". This
+session:
+- **#232 measured and merged.** One eval run (`--repeat 3`, the user's new budget: cap $1.50,
+  spent $1.42): **166/258** graded as the baseline was (4b re-run: 143), 171 with the new link rule.
+  Targeted cases: 7 of 11 improved, none worse; still 0/3: `account-cash`, `advice-yes-or-no`,
+  `more-agents-vs-portfolio`, `user-news-today`. Elsewhere 15 cases gained and 9 lost; the two
+  losses probably caused by the new lines: `topic-agent-traded-on-topic` (quotes the thesis and
+  claims a cause the records don't show) and `account-why-sell-ura` (links `/proposals`, not the
+  proposal). Prompt tokens per question 4,695 -> 5,456. Full numbers in #232's body.
+- **The user's two eval-grading answers:** a link to `/agents` passes where a case expects
+  `/agents/$agentId` (the 4 cases now list both); a decline must still give the expected reason
+  code, because the code decides what the UI tells the user.
+- **`traders-assistant-ci` is removed.** The next paid eval or local integration run needs a
+  disposable `_ci` Postgres again (any name ending `_ci`/`_test`; integration tests read
+  `TEST_DATABASE_URL`).
+- **#247 (draft, on purpose): the agent scan's prompt.** The user brought a full rewrite of the
+  scan prompt; it was reviewed against the code and not adopted. It dropped the thesis language
+  (D51), the step limit and "doing nothing is the most common answer"; it named a tool that does
+  not exist (`lookup_share_price`); and it asked the model to check cash by arithmetic it is told
+  never to do, against a fee the briefing never showed. What #247 does instead: each briefing mover
+  carries `affordable_shares` (`fees.affordable_shares`, fee included), and four prompt lines
+  (search_universe first and ETFs count; never trade an unpriced quote, say when no news explains a
+  move; size at or below `affordable_shares`; rules beat the persona; a `none` names its reason).
+  **Merge only after the 2026-10-20 Test agent scan review**, which is its baseline.
+**Next:** "Next session: after #232" under "Where to go next".
+
+Previous update, 2026-10-18 ~09:00 UTC - **DB4's second half is reviewed: decisions 151-154, three migration
 PRs in order** (0053 drop the profiles' HNSW index, 0054 drop two unread indexes, 0055 an `articles`
 index for the collector's window read). See "The database sprint's review, second half" for the
 week's numbers. Decisions reached **154** (next: **155**). #243 (0053), #244 (0054) and
@@ -685,7 +714,7 @@ strings and left-to-right assumptions before designing it.
 | M6 — Frontend completion & polish | ✅ Complete | #88-#107. TanStack Query and Router; equity curve; holding pages; proposals inbox with history and pages; `/ask`; feed paging and filters; mobile pass; times in the user's zone; the digest in the UI. Four correctness bugs found by measuring on the way (#89, #96, #98, #101) plus the feed ordering (#104). Exit checked 2026-09-30 - see "M6 is complete" |
 | M7 — Kubernetes & documentation | ✅ Complete | #109-#118: production images, the kind cluster with one command, services with probes that cannot cascade, Traefik Ingress at traders.localhost, a CronJob per run kind, the AI autoscaler, a kind job in CI, README/runbook/decision index. Five faults found only by deploying (#111), one by measuring (#117). Exit checked 2026-09-30 - see "M7 is complete". **Telegram's webhook leg is still unproven** (optional, user's go-ahead) |
 | **Database sprint** (no M-number; agreed 2026-10-09) | 🚧 In progress | DB1 ✅ #208; DB2 ✅ #210 (instrument_profiles 155 -> 96 MB); DB3 ✅ #213 (window from 2026-10-11 07:56 UTC); DB4 split (decision 143): first half 2026-10-11 (#218, decisions 143-147), second half 2026-10-18 (decisions 151-154: migrations 0053-0055 in three PRs). DB1 backup and restore, DB2 the universe loader writes only what changed, DB3 query statistics, DB4 the review a week later. Decisions 137-147, 151-154. See "Planned: the database sprint" |
-| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | ✅ Built (checks owed) | Test set #212; #220-#223 deployed 2026-10-12 - core, Admin picker and limit, replay and universe tools, the `/ask` chat screen. **Live.** PR 4 (eval runner, measured limit, old `/ask` removed) done. #225 PR 4, #226 PR 4b, #227 PR 5 (`openai` package) merged 2026-10-14 - **all planned PRs built**; owed: redeploy, PR 5's live check, the 4b eval re-run. Post-milestone candidates in "Next session: after the assistant milestone". See "Planned: the assistant" and "Next session: the assistant's PR 4b" |
+| **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | ✅ Built (checks owed) | Test set #212; #220-#223 deployed 2026-10-12 - core, Admin picker and limit, replay and universe tools, the `/ask` chat screen. **Live.** PR 4 (eval runner, measured limit, old `/ask` removed) done. #225 PR 4, #226 PR 4b, #227 PR 5 (`openai` package) merged 2026-10-14 - **all planned PRs built**; #232 (prompt lines) measured 166/258 and merged 2026-10-18, not yet redeployed. Post-milestone candidates in "Next session: after the assistant milestone". See "Planned: the assistant" and "Next session: the assistant's PR 4b" |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
 | Multi-agent sandbox, Stage 4 — the agent that decides | ✅ Complete | #172 spec D43-D52 + §14; #173 models on the Admin page (0041, D43-D44); #177 the scan's inputs - tool calling, movers, seven read-only tools, the briefing (0042); #180 the scan - one hand-written loop (D53), the per-agent budget, the step limit, `agent_scans` (0043), `POST /agents/:id/scans`, built on a scripted model (**real scans not yet measured: the account is unfunded**). Then #182/#183 PR 5 (the trade proposal and its approval), #186 PR 5b, #188 PR 6, #197, #199 - see "Stage 4 is complete" |
@@ -3762,6 +3791,42 @@ grant tests fail for the wrong reason.
 
 ## Where to go next
 
+### Next session: after #232 (written 2026-10-18)
+
+No standing grant: ask before each PR, merge only on "merge", redeploy only on "redeploy". In order:
+1. **Redeploy #232 when the user says so** - the only merged change not yet deployed.
+2. **2026-10-20 10:00 Israel: the Test agent scan review** (scheduled task, read-only). Read it
+   with the user. Record its numbers as #247's baseline: `invalid_answer` rate, trades per scan,
+   theses refused for unsourced figures, and any buy refused for cash. Then #247 can be marked
+   ready, merged on "merge" and deployed on "redeploy"; compare the following week's scans with
+   the baseline. After that, the two deferred decisions (research sub-agent, per-agent tool picker).
+3. **M9's decisions**, one at a time with a recommendation, from `docs/M9-MEASUREMENT.md` - who the
+   users are first. The user chooses the order against everything else.
+4. **Read 0053-0055 back from the statistics** (`db-report.sh`): `articles_fetched_idx` scanned
+   ~48 times a day on compose, `articles`' `seq_scan` no longer climbing per collect. Then the
+   database sprint's row can close.
+5. **Task 17's re-measurement** (narration's rejection rate on the free model) - still open in the
+   queue.
+6. **Follow-ups nobody has asked for yet, each needing the user's yes:**
+   - #247's gaps: `affordable_shares` on `get_quote` for instruments outside the movers list;
+     one repair turn after a refused scan answer (today one mistake ends the scan as
+     `invalid_answer`).
+   - The two #232 regressions above, if the next eval keeps showing them.
+   - The market line (149) on the web feed and the digest.
+
+**Lessons from this stretch:**
+- **Fuzz a closed form against the function it inverts.** `affordable_shares` looked right and its
+  hand-picked cases passed; 200,000 random cash/price pairs checked against `fee_minor` found one
+  share too many just past the fee's crossover (price 1¢, cash 1,501¢ gave 751). When code inverts
+  a cost rule, test it against the rule itself, not against figures worked out by hand.
+- **An eval baseline from an older `main` cannot attribute what changed outside the targeted
+  cases.** #232's baseline predated #231 and the merges after it, so its 15 gains and 9 losses
+  elsewhere mix the new lines, other changes and run-to-run noise. Only the targeted cases are
+  clean evidence. When a decision rests on the untargeted cases, run the baseline on the same
+  `main` first (about $1.30 more).
+- **Count merges, again.** Four of this stretch's five merges came from other sessions the same
+  morning; `git log --oneline ff5943b..origin/main` found them, not memory.
+
 ### Next session: after #241 (written 2026-10-18)
 
 No standing grant: ask before each PR, merge only on "merge", redeploy only on "redeploy". In order:
@@ -3776,8 +3841,7 @@ No standing grant: ask before each PR, merge only on "merge", redeploy only on "
 4. **2026-10-20 10:00 Israel: Test agent scan review** (scheduled task). Then the two deferred
    decisions: the research sub-agent and the per-agent tool picker (bring tool-call counts from
    `agent_scans`/`llm_calls`). #241's `otherCalls` already makes room for a sub-agent's tool name.
-5. **#232** - unchanged from "after the assistant follow-ups" item 4 (budget first, two open
-   questions, then remove `traders-assistant-ci`).
+5. **#232 - done 2026-10-18** (measured, merged; see "after #232").
 6. **Small follow-ups the user has not asked for yet:** the market line (149) on the web feed and
    the digest; watch the first real merged move+drawdown and market line on Telegram.
 
