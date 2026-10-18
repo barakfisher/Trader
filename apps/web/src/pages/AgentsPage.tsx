@@ -6,7 +6,8 @@ import type { AgentView, SimulatedAgentStanding } from '@traders/shared';
 
 import { AgentField } from '../components/AgentField.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
-import { Button, Card, ErrorNote, Spinner } from '../components/ui.tsx';
+import { Drawer } from '../components/Drawer.tsx';
+import { Button, ErrorNote, Spinner } from '../components/ui.tsx';
 import { errorMessage } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { formatMoney } from '../i18n/format.ts';
@@ -35,6 +36,13 @@ export function AgentsPage() {
   const standings = new Map(
     (useConsolidatedQuery(hasSimulated).data?.agents ?? []).map((standing) => [standing.agentId, standing]),
   );
+  const limit = useAgentLimitQuery().data ?? null;
+  // D72: at the limit the page says so before anyone opens the form.
+  const full = limit !== null && limit.used >= limit.max;
+  const [creating, setCreating] = useState(false);
+  // The draft outlives the drawer: Escape or a stray click on the shade closes
+  // it, and a persona half-written is not lost to that.
+  const [draft, setDraft] = useState(EMPTY_DRAFT);
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
@@ -43,9 +51,21 @@ export function AgentsPage() {
           <Bot className="size-5 text-accent" aria-hidden />
           <h1 className="text-base font-semibold">{t('agents.title')}</h1>
         </div>
+        <div className="flex items-center gap-3">
+          {limit && (
+            <span className="text-xs text-text-muted">{t('agents.limit.used', { used: limit.used, max: limit.max })}</span>
+          )}
+          <Button disabled={full} onClick={() => setCreating(true)}>
+            <span className="flex items-center gap-1">
+              <Plus className="size-4" aria-hidden />
+              {t('agents.create.title')}
+            </span>
+          </Button>
+        </div>
       </header>
 
       <p className="max-w-3xl text-sm text-text-muted">{t('agents.intro')}</p>
+      {full && <p className="text-sm text-text-muted">{t('agents.limit.full', { max: limit.max })}</p>}
 
       {agents.isPending && <Spinner label={t('agents.loading')} />}
       {agents.error && (
@@ -64,7 +84,18 @@ export function AgentsPage() {
         </ul>
       )}
 
-      <CreateAgentForm />
+      {creating && (
+        <Drawer title={t('agents.create.title')} closeLabel={t('common.close')} onClose={() => setCreating(false)}>
+          <CreateAgentForm
+            draft={draft}
+            onChange={setDraft}
+            onCreated={() => {
+              setDraft(EMPTY_DRAFT);
+              setCreating(false);
+            }}
+          />
+        </Drawer>
+      )}
       <Disclaimer />
     </div>
   );
@@ -124,91 +155,88 @@ export function KindBadge({ agent }: { agent: Pick<AgentView, 'isPrimary'> }) {
   );
 }
 
-function CreateAgentForm() {
+interface AgentDraft {
+  name: string;
+  budget: string;
+  persona: string;
+}
+
+const EMPTY_DRAFT: AgentDraft = { name: '', budget: '', persona: '' };
+
+function CreateAgentForm({
+  draft,
+  onChange,
+  onCreated,
+}: {
+  draft: AgentDraft;
+  onChange: (draft: AgentDraft) => void;
+  onCreated: () => void;
+}) {
   const { t } = useTranslation();
   const create = useCreateAgent();
-  const limit = useAgentLimitQuery().data ?? null;
-  // D72: at the limit the form says so before anyone types a name.
-  const full = limit !== null && limit.used >= limit.max;
-  const [name, setName] = useState('');
-  const [budget, setBudget] = useState('');
-  const [persona, setPersona] = useState('');
+  const { name, budget, persona } = draft;
   const budgetValid = BUDGET_INPUT.test(budget.trim());
   // A persona the user wrote is never replaced by a click.
   const templatesAvailable = replaceableBy(persona, templatePersona);
 
-  const applyTemplate = (template: PersonaTemplate) => {
-    if (replaceableBy(name, templateName)) setName(templateName(template));
-    setPersona(templatePersona(template));
-  };
+  const applyTemplate = (template: PersonaTemplate) =>
+    onChange({
+      ...draft,
+      name: replaceableBy(name, templateName) ? templateName(template) : name,
+      persona: templatePersona(template),
+    });
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     create.mutate(
       { name: name.trim(), budget: budget.trim(), persona: persona.trim() || null },
-      {
-        onSuccess: () => {
-          setName('');
-          setBudget('');
-          setPersona('');
-        },
-      },
+      { onSuccess: onCreated },
     );
   };
 
   return (
-    <Card
-      title={t('agents.create.title')}
-      action={
-        limit && (
-          <span className="text-xs text-text-muted">{t('agents.limit.used', { used: limit.used, max: limit.max })}</span>
-        )
-      }
-    >
-      {full && <p className="mb-3 text-sm text-text-muted">{t('agents.limit.full', { max: limit.max })}</p>}
-      <form onSubmit={submit} className="space-y-3">
-        <PersonaTemplatePicker disabled={full || !templatesAvailable} onPick={applyTemplate} />
-        <AgentField label={t('agents.fields.name')}>
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            maxLength={60}
-            dir="auto"
-            required
-            className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2"
-          />
-        </AgentField>
-        <AgentField label={t('agents.fields.budget')} hint={t('agents.fields.budgetHint')}>
-          <input
-            value={budget}
-            onChange={(event) => setBudget(event.target.value)}
-            inputMode="decimal"
-            dir="ltr"
-            placeholder="1000"
-            required
-            aria-invalid={budget !== '' && !budgetValid}
-            className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
-          />
-        </AgentField>
-        <AgentField label={t('agents.fields.persona')} hint={t('agents.fields.personaHint')}>
-          <textarea
-            value={persona}
-            onChange={(event) => setPersona(event.target.value)}
-            maxLength={4000}
-            dir="auto"
-            rows={4}
-            className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2"
-          />
-        </AgentField>
-        {create.error && <ErrorNote message={agentErrorMessage(create.error, t('agents.create.failed'))} />}
-        <Button type="submit" disabled={full || create.isPending || !name.trim() || !budgetValid}>
-          <span className="flex items-center gap-1">
-            <Plus className="size-4" aria-hidden />
-            {t('agents.create.submit')}
-          </span>
-        </Button>
-      </form>
-    </Card>
+    <form onSubmit={submit} className="space-y-3">
+      <PersonaTemplatePicker disabled={!templatesAvailable} onPick={applyTemplate} />
+      <AgentField label={t('agents.fields.name')}>
+        <input
+          value={name}
+          onChange={(event) => onChange({ ...draft, name: event.target.value })}
+          maxLength={60}
+          dir="auto"
+          required
+          className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2"
+        />
+      </AgentField>
+      <AgentField label={t('agents.fields.budget')} hint={t('agents.fields.budgetHint')}>
+        <input
+          value={budget}
+          onChange={(event) => onChange({ ...draft, budget: event.target.value })}
+          inputMode="decimal"
+          dir="ltr"
+          placeholder="1000"
+          required
+          aria-invalid={budget !== '' && !budgetValid}
+          className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
+        />
+      </AgentField>
+      <AgentField label={t('agents.fields.persona')} hint={t('agents.fields.personaHint')}>
+        <textarea
+          value={persona}
+          onChange={(event) => onChange({ ...draft, persona: event.target.value })}
+          maxLength={4000}
+          dir="auto"
+          rows={10}
+          className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2"
+        />
+      </AgentField>
+      {create.error && <ErrorNote message={agentErrorMessage(create.error, t('agents.create.failed'))} />}
+      <Button type="submit" disabled={create.isPending || !name.trim() || !budgetValid}>
+        <span className="flex items-center gap-1">
+          <Plus className="size-4" aria-hidden />
+          {t('agents.create.submit')}
+        </span>
+      </Button>
+    </form>
   );
 }
 
