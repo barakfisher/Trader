@@ -58,6 +58,9 @@ def test_windows_and_guards_come_from_settings_too():
             analysis_drawdown_window_days=90,
             analysis_drawdown_min_observations=8,
             analysis_max_gap_days=4,
+            analysis_market_frame_min_move_pct=0.015,
+            analysis_market_fit_window_days=60,
+            analysis_market_fit_min_observations=30,
         )
     )
     assert tuned.sigma_window_days == 45
@@ -67,6 +70,9 @@ def test_windows_and_guards_come_from_settings_too():
     assert tuned.drawdown_window_days == 90
     assert tuned.drawdown_min_observations == 8
     assert tuned.max_gap_days == 4
+    assert tuned.market_frame_min_move == 0.015
+    assert tuned.market_fit_window_days == 60
+    assert tuned.market_fit_min_observations == 30
 
 
 # -- bad configuration fails at construction ----------------------------------
@@ -90,6 +96,9 @@ def test_mis_ordered_bands_are_rejected_when_the_thresholds_are_built():
         {"sigma_stdev_floor": 0.0},
         {"sigma_min_move": -0.01},
         {"max_gap_days": 0},
+        {"market_frame_min_move": -0.01},
+        {"market_fit_window_days": 0},
+        {"market_fit_min_observations": 2},
     ],
 )
 def test_impossible_windows_and_guards_are_rejected(overrides):

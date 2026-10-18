@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Request
 
 from app.analysis.episodes import OpenEpisode
 from app.analysis.pipeline import (
+    ScanBenchmark,
     ScanObservation,
     ScanSubject,
     TopicInstrument,
@@ -84,6 +85,10 @@ async def portfolio_scan(
             ],
             excluded_sources=excluded_price_sources(settings.market_data_chain),
             user_id=str(payload.user_id) if payload.user_id else None,
+            benchmarks=[
+                ScanBenchmark(instrument_id=item.instrument_id, symbol=item.symbol.upper())
+                for item in payload.benchmarks
+            ],
         )
 
     return PortfolioScanResponse(

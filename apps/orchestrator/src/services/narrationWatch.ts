@@ -24,8 +24,12 @@
  *   Both go through `fanOut`, so quiet hours, a mute and the notification ledger
  *   apply exactly as they do to a finding.
  *
- * The very first state recorded is a baseline and is not announced: an upgrade
- * is not a transition.
+ * The very first state recorded is a baseline, announced only when it is a
+ * break: an upgrade that finds the model writing is not news, and one that finds
+ * it broken is. Until 2026-10-14 no baseline was announced, and an outage that
+ * was already under way when the first row was written (OpenRouter refusing
+ * narration's reasoning setting, 2026-10-07..14) became the baseline and was
+ * never reported - it was found a week later by reading `llm_calls`.
  */
 
 import type { AiClient } from '@traders/shared/ai';
@@ -49,17 +53,22 @@ export type NarrationWatchOutcome =
   /** Nothing to judge, or the AI service could not say how narration is configured. */
   | 'not_measured'
   | 'unchanged'
-  /** The first state ever recorded for this user. */
+  /** The first state ever recorded for this user, and not a break. */
   | 'baseline'
   /** A change on one side of the boundary, e.g. rate-limited to refused. */
   | 'recorded'
   | 'announced';
 
-/** Whether a recorded transition is worth a message. A baseline never is. */
+/**
+ * Whether a recorded transition is worth a message. A baseline is when it is a
+ * break: templates for want of a working model, not by configuration (`off`).
+ */
 export function shouldAnnounce(
   transition: Pick<NarrationTransitionRow, 'from_state' | 'to_state'>,
 ): boolean {
-  if (transition.from_state === null) return false;
+  if (transition.from_state === null) {
+    return !byModel(transition.to_state) && transition.to_state !== 'off';
+  }
   return byModel(transition.from_state) !== byModel(transition.to_state);
 }
 
@@ -92,8 +101,9 @@ export async function watchNarration(
 
     const transition = await recordNarrationState(userId, state, lastFallbackReason, runId);
     if (transition === null) return 'unchanged';
-    if (transition.from_state === null) return 'baseline';
-    if (!shouldAnnounce(transition)) return 'recorded';
+    if (!shouldAnnounce(transition)) {
+      return transition.from_state === null ? 'baseline' : 'recorded';
+    }
 
     const notice = announcementFor(transition.to_state);
     await fanOut(

@@ -32,6 +32,7 @@ import { marketRetentionDays, runTopicDiscovery } from '../../services/topicDisc
 import { HISTORY_BACKFILL_DAYS, runTopicScan } from '../../services/topicScan.js';
 import { sendDigest } from '../../services/notifications.js';
 import { RESCREEN_KIND, startRescreen } from '../../services/universeRescreen.js';
+import { MARKET_BENCHMARK_SYMBOLS } from '../../services/marketBenchmarks.js';
 import { BENCHMARK_SYMBOL } from '../../services/performance.js';
 import { sweepExpiredProposals } from '../../services/proposals.js';
 import { planScheduledScans } from '../../services/scheduledScans.js';
@@ -87,6 +88,17 @@ const RUN_BUCKET_MINUTES: Record<string, number> = {
   // start a slot within minutes of its time, and a slot's window is hours long.
   agent_scans: 15,
 };
+
+/**
+ * The kinds whose failed run is claimed again under the same key - the next
+ * hourly ask retries it the same day (decision 150). The backfill: its key is
+ * daily, so without a retry one failure - the AI service answering 500 for a
+ * minute after the Mac wakes - leaves the day's closes, the benchmarks' among
+ * them, missing until tomorrow, while every other kind recovers within the
+ * hour. A day-long outage costs at most one attempt an hour. Not the other
+ * daily kinds: a failed digest may have sent part of its message.
+ */
+export const RETRY_FAILED_KINDS: ReadonlySet<string> = new Set(['backfill']);
 
 /** The bucket a moment falls into, as a readable suffix for the run key. */
 export function runBucket(kind: string, localDate: string, now: Date = new Date()): string {
@@ -179,6 +191,7 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
       kind: parsed.data.kind,
       runKey,
       trigger: parsed.data.trigger ?? 'unknown',
+      retryFailed: RETRY_FAILED_KINDS.has(parsed.data.kind),
     });
 
     if (!claim.claimed) {
@@ -195,12 +208,13 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
     try {
       if (parsed.data.kind === 'backfill') {
         // Beside what is held and followed: every instrument an agent has ever
-        // traded, so a past day stays valued after a sale, and the benchmark,
-        // always, so its closes are there before the first agent is (PR 7, D24).
+        // traded, so a past day stays valued after a sale, and the benchmarks,
+        // always: SPY's closes are there before the first agent is (PR 7, D24),
+        // and every index a move is set beside has its closes too (decision 149).
         const [analysed, traded, benchmark] = await Promise.all([
           listAnalysedInstruments(userId),
           listTradedInstruments(userId),
-          findInstrumentsBySymbols([BENCHMARK_SYMBOL]),
+          findInstrumentsBySymbols([...new Set([BENCHMARK_SYMBOL, ...MARKET_BENCHMARK_SYMBOLS])]),
         ]);
         const instruments = [
           ...new Map([...analysed, ...traded, ...benchmark].map((row) => [row.id, row])).values(),

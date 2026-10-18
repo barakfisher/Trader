@@ -1393,6 +1393,11 @@ export interface components {
              * @default USD
              */
             base_currency: string;
+            /**
+             * Benchmarks
+             * @description Indices a move can be set beside (decision 149). A move finding gains a `market` block in its evidence when its best-fitting benchmark moved at least the configured amount the same way on the same days. Omit for none.
+             */
+            benchmarks?: components["schemas"]["ScanBenchmarkIn"][];
             /** Holdings */
             holdings: components["schemas"]["ScanHolding"][];
             /**
@@ -1570,6 +1575,16 @@ export interface components {
              * @enum {string}
              */
             status: "started" | "in_progress" | "unavailable" | "not_running";
+        };
+        /**
+         * ScanBenchmarkIn
+         * @description An index a holding's move can be set beside (decision 149).
+         */
+        ScanBenchmarkIn: {
+            /** Instrument Id */
+            instrument_id: string;
+            /** Symbol */
+            symbol: string;
         };
         /**
          * ScanHolding

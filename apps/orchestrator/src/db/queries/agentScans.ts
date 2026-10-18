@@ -1,4 +1,5 @@
 import { query, queryOne } from '../pool.js';
+import { SCAN_TOOL_CALLS } from './proposals.js';
 
 /**
  * An agent's scans, read for the *Decisions* tab (D50). The AI service writes
@@ -64,4 +65,15 @@ export function getAgentScan(userId: string, agentId: string, scanId: string): P
       WHERE s.user_id = $1 AND s.agent_id = $2 AND s.id = $3`,
     [userId, agentId, scanId],
   );
+}
+
+/** A scan's tool calls in order, for the "Evidence checked" line; empty for an unknown scan. */
+export async function listScanToolCalls(userId: string, agentId: string, scanId: string): Promise<unknown[]> {
+  const row = await queryOne<{ calls: unknown[] | null }>(
+    `SELECT ${SCAN_TOOL_CALLS} AS calls
+       FROM agent_scans s
+      WHERE s.user_id = $1 AND s.agent_id = $2 AND s.id = $3`,
+    [userId, agentId, scanId],
+  );
+  return row?.calls ?? [];
 }

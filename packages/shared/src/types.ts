@@ -1205,6 +1205,45 @@ export interface Proposal {
   agentIsPrimary: boolean;
   /** The scan that proposed a trade (migration 0044); null for every other kind. */
   scanId: string | null;
+  /** What that scan looked at before proposing, read from its transcript; null without a scan. */
+  evidenceChecked: EvidenceChecked | null;
+}
+
+/**
+ * The read-only tools an agent's scan may call (`services/ai/app/agents/tools.py`).
+ * A name the scan called that is not here is counted, never shown raw: every
+ * surface renders a tool through its catalogue.
+ */
+export const SCAN_TOOLS = [
+  'search_universe',
+  'get_quote',
+  'get_price_history',
+  'get_findings',
+  'get_news',
+  'get_position',
+  'explain_concept',
+] as const;
+export type ScanToolName = (typeof SCAN_TOOLS)[number];
+
+export function isScanToolName(name: string): name is ScanToolName {
+  return (SCAN_TOOLS as readonly string[]).includes(name);
+}
+
+/** One thing a scan checked: a tool, what it asked about, and how far back. */
+export interface ToolCheck {
+  tool: ScanToolName;
+  /** A symbol, a list of them, or a search phrase, as the scan passed it; null when it passed none. */
+  subject: string | null;
+  /** The window it asked for: trading days for price history, calendar days for news; null when unstated. */
+  days: number | null;
+}
+
+/** The "Evidence checked" line under a trade proposal, derived from its scan's transcript. */
+export interface EvidenceChecked {
+  /** In the order the scan first made each check; a repeated check is one entry. */
+  checks: ToolCheck[];
+  /** Calls to a tool not in `SCAN_TOOLS`: counted, so the line never claims less than happened. */
+  otherCalls: number;
 }
 
 /** The proposal kinds an agent's scan writes (migration 0044, D26). */

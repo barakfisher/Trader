@@ -12,7 +12,8 @@
  * **What is not here.** An observation's own headline and explanation are not
  * composed in the orchestrator at all: they arrive written, in English and in
  * `observations.localized`, from the AI service's templates. This module only
- * frames them.
+ * frames them - with one exception, `moveWithDrawdown` (decision 148), which says
+ * a holding's move and drawdown in one sentence from their stored evidence.
  *
  * Figures and Latin-script fragments in the Hebrew are wrapped in isolates, as
  * the AI service's Hebrew templates are (`hebrew_templates.py`): a left-to-right
@@ -23,7 +24,9 @@
 
 import type {
   DigestReason,
+  EvidenceChecked,
   LocalizedTexts,
+  ScanToolName,
   TopicSentimentGap,
   TranslatedLanguage,
   UiLanguage,
@@ -34,6 +37,7 @@ import type { FailureCause } from '../services/scheduledScans.js';
 import type { ScanSlot } from '../services/scanSchedule.js';
 import type { NarrationState } from '../services/narrationHealth.js';
 import type { RefusalReason } from '../services/proposalState.js';
+import type { MarketBenchmarkSymbol } from '../services/marketBenchmarks.js';
 
 /** LEFT-TO-RIGHT ISOLATE ... POP: a figure, kept left to right in a Hebrew line. */
 export function ltr(text: string | number): string {
@@ -79,6 +83,31 @@ export interface TradeFillFigures {
   fee: string;
   cash: string;
   at: string;
+}
+
+/**
+ * A move and a drawdown on one holding, found by one scan (decision 148). Every
+ * figure arrives formatted in this language's locale; the percentages are
+ * magnitudes, and `direction` carries the sign.
+ */
+export interface MoveWithDrawdownFigures {
+  symbol: string;
+  direction: 'fell' | 'rose';
+  change: string;
+  price: string;
+  drawdown: string;
+  high: string;
+  /** The drawdown window, or null when the evidence does not say. */
+  windowDays: number | null;
+  /** The move in standard deviations, present only for an unusual (sigma) move. */
+  sigma: string | null;
+}
+
+/** Decision 149: what the market did the day a holding moved. Figures are pre-formatted. */
+export interface MarketLineFigures {
+  benchmark: MarketBenchmarkSymbol;
+  direction: 'fell' | 'rose';
+  change: string;
 }
 
 export type RecordedNarrationState = Exclude<NarrationState, 'unknown'>;
@@ -129,6 +158,22 @@ export interface Messages {
   /** A trade proposal's headline (D51: the frame is the catalogue's; the thesis the model's). */
   tradeProposalHeadline: (agent: string, side: 'buy' | 'sell', quantity: string, symbol: string, price: string) => string;
 
+  /** Decision 148: a holding's move and drawdown from one scan, said in one message. */
+  moveWithDrawdown: (figures: MoveWithDrawdownFigures) => NoticeText;
+
+  /**
+   * Decision 149: one line under a move, when the holding's best-fitting index
+   * moved the same way that day. A fact beside the move, never a cause of it.
+   */
+  marketLine: (figures: MarketLineFigures) => string;
+
+  /**
+   * The "Evidence checked" line under a trade proposal: the tools the agent's
+   * scan called and what it asked them, from its transcript. A tool is named by
+   * this catalogue, never by its code name.
+   */
+  evidenceChecked: (checked: EvidenceChecked) => string;
+
   /**
    * Approving a trade in Telegram (D47, D49, D60-D63): the preview *Approve*
    * answers with, the fill *Confirm* writes, and a refusal. Every figure arrives
@@ -172,6 +217,35 @@ export interface Messages {
 }
 
 /** English: the source, and what a chat with no known user is answered in. */
+/** Each benchmark's name in a sentence; a benchmark without one is a compile error. */
+const EN_BENCHMARKS: Record<MarketBenchmarkSymbol, string> = {
+  SPY: 'the S&P 500',
+  QQQ: 'the Nasdaq-100',
+  IWM: 'the Russell 2000',
+  'BTC-USD': 'Bitcoin',
+};
+
+const EN_TOOLS: Record<ScanToolName, string> = {
+  search_universe: 'universe search',
+  get_quote: 'quote',
+  get_price_history: 'price history',
+  get_findings: 'findings',
+  get_news: 'news',
+  get_position: 'position',
+  explain_concept: 'glossary',
+};
+
+/** A search phrase is quoted; a symbol is not. */
+const QUOTED_TOOLS: ReadonlySet<ScanToolName> = new Set(['search_universe', 'explain_concept']);
+
+function enCheck({ tool, subject, days }: EvidenceChecked['checks'][number]): string {
+  const parts = [EN_TOOLS[tool]];
+  if (subject !== null) parts.push(QUOTED_TOOLS.has(tool) ? `“${subject}”` : subject);
+  if (days !== null && tool === 'get_price_history') parts.push(`(${days} trading ${days === 1 ? 'day' : 'days'})`);
+  if (days !== null && tool === 'get_news') parts.push(`(${days} ${days === 1 ? 'day' : 'days'})`);
+  return parts.join(' ');
+}
+
 const en: Messages = {
   locale: 'en-GB',
   numberLocale: 'en-US',
@@ -229,6 +303,24 @@ const en: Messages = {
 
   tradeProposalHeadline: (agent, side, quantity, symbol, price) =>
     `${agent} proposes to ${side} ${quantity} ${symbol} at ${price}`,
+
+  moveWithDrawdown: (f) => ({
+    headline: `${f.symbol} ${f.direction} ${f.change} to ${f.price}`,
+    explanation:
+      `Now ${f.drawdown} below its ${f.windowDays === null ? 'recent' : `${f.windowDays}-day`} high of ${f.high}` +
+      (f.sigma === null ? '.' : `; the move was ${f.sigma} standard deviations from its recent average.`),
+  }),
+
+  marketLine: (f) =>
+    `Same day, ${EN_BENCHMARKS[f.benchmark]} (${f.benchmark}) ${f.direction} ${f.change}.`,
+
+  evidenceChecked: ({ checks, otherCalls }) => {
+    const parts = checks.map(enCheck);
+    if (otherCalls > 0) parts.push(otherCalls === 1 ? '1 other tool' : `${otherCalls} other tools`);
+    return parts.length === 0
+      ? 'Checked: nothing - the agent decided from its briefing alone.'
+      : `Checked: ${parts.join(' · ')}`;
+  },
 
   trade: {
     previewToast: 'Check the live price, then Confirm.',
@@ -354,6 +446,42 @@ function hebrewCount(count: number, one: string, many: string): string {
   return count === 1 ? one : `${ltr(count)} ${many}`;
 }
 
+/** Every one is grammatically masculine, so the verb in `marketLine` agrees with all four. */
+const HE_BENCHMARKS: Record<MarketBenchmarkSymbol, string> = {
+  SPY: `מדד ${ltr('S&P 500')}`,
+  QQQ: `מדד נאסד"ק ${ltr(100)}`,
+  IWM: `מדד ראסל ${ltr(2000)}`,
+  'BTC-USD': 'הביטקוין',
+};
+
+const HE_TOOLS: Record<ScanToolName, string> = {
+  search_universe: 'חיפוש ביקום המסחר',
+  get_quote: 'מחיר עדכני',
+  get_price_history: 'היסטוריית מחירים',
+  get_findings: 'ממצאים',
+  get_news: 'חדשות',
+  get_position: 'פוזיציה',
+  explain_concept: 'מילון מונחים',
+};
+
+function heDays(days: number): string {
+  if (days === 1) return 'יום אחד';
+  if (days === 2) return 'יומיים';
+  return `${ltr(days)} ימים`;
+}
+
+function heTradingDays(days: number): string {
+  return days === 1 ? 'יום מסחר אחד' : `${ltr(days)} ימי מסחר`;
+}
+
+function heCheck({ tool, subject, days }: EvidenceChecked['checks'][number]): string {
+  const parts = [HE_TOOLS[tool]];
+  if (subject !== null) parts.push(QUOTED_TOOLS.has(tool) ? `"${isolated(subject)}"` : ltr(subject));
+  if (days !== null && tool === 'get_price_history') parts.push(`(${heTradingDays(days)})`);
+  if (days !== null && tool === 'get_news') parts.push(`(${heDays(days)})`);
+  return parts.join(' ');
+}
+
 const he: Messages = {
   locale: 'he-IL',
   numberLocale: 'he-IL',
@@ -410,6 +538,24 @@ const he: Messages = {
 
   tradeProposalHeadline: (agent, side, quantity, symbol, price) =>
     `${isolated(agent)} מציע ${side === 'buy' ? 'לקנות' : 'למכור'} ${ltr(quantity)} ${ltr(symbol)} ב־${ltr(price)}`,
+
+  moveWithDrawdown: (f) => ({
+    headline: `מחיר ${ltr(f.symbol)} ${f.direction === 'fell' ? 'ירד' : 'עלה'} ב־${ltr(f.change)} ל־${ltr(f.price)}`,
+    explanation:
+      `כעת ${ltr(f.drawdown)} מתחת ל${f.windowDays === null ? 'שיא האחרון' : `שיא של ${ltr(f.windowDays)} יום`}, ${ltr(f.high)}` +
+      (f.sigma === null ? '.' : `; התנועה הייתה ${ltr(f.sigma)} סטיות תקן מהממוצע האחרון.`),
+  }),
+
+  marketLine: (f) =>
+    `באותו יום ${HE_BENCHMARKS[f.benchmark]} (${ltr(f.benchmark)}) ${f.direction === 'fell' ? 'ירד' : 'עלה'} ב־${ltr(f.change)}.`,
+
+  evidenceChecked: ({ checks, otherCalls }) => {
+    const parts = checks.map(heCheck);
+    if (otherCalls > 0) parts.push(otherCalls === 1 ? 'כלי נוסף אחד' : `${ltr(otherCalls)} כלים נוספים`);
+    return parts.length === 0
+      ? 'נבדק: כלום - הסוכן החליט על סמך התדריך בלבד.'
+      : `נבדק: ${parts.join(' · ')}`;
+  },
 
   trade: {
     previewToast: 'בדקו את המחיר העדכני, ואז אישור סופי.',

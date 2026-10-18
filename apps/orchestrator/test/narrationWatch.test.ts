@@ -54,6 +54,7 @@ const SETTINGS = {
 const llm = { narration_source: 'llm', fallback_reason: 'none' };
 const refused = { narration_source: 'template', fallback_reason: 'unsourced_figures' };
 const refusedByProvider = { narration_source: 'template', fallback_reason: 'provider_error' };
+const narrated = { narration_source: 'llm', fallback_reason: null };
 
 function ai(tier: 'free' | 'paid' | 'none' = 'free') {
   return { narrationConfig: vi.fn(async () => ({ tier, model: 'some/model', provider: 'openrouter' })) };
@@ -76,7 +77,13 @@ beforeEach(() => {
 
 describe('shouldAnnounce', () => {
   it.each([
-    [null, 'rejected', false], // the first state ever recorded is a baseline
+    // A first state is announced when it is a break, and only then (2026-10-14:
+    // a week-long outage became the baseline and nobody was told).
+    [null, 'rejected', true],
+    [null, 'unavailable', true],
+    [null, 'exhausted', true],
+    [null, 'narrating', false],
+    [null, 'off', false],
     ['narrating', 'rejected', true],
     ['narrating', 'unavailable', true],
     ['rejected', 'narrating', true],
@@ -109,14 +116,26 @@ describe('announcementFor', () => {
 });
 
 describe('watchNarration', () => {
-  it('records the first state as a baseline and says nothing', async () => {
-    db.provenance = [refused, refused, refused];
-    db.transition = { id: 'tr1', from_state: null, to_state: 'rejected' };
+  it('records a working first state as a baseline and says nothing', async () => {
+    db.provenance = [narrated, narrated, narrated];
+    db.transition = { id: 'tr1', from_state: null, to_state: 'narrating' };
     const notifier = channel();
 
     expect(await watch(ai(), notifier)).toBe('baseline');
     expect(notifier.send).not.toHaveBeenCalled();
     expect(queries.claimNotification).not.toHaveBeenCalled();
+  });
+
+  it('pushes a first state that is already a break', async () => {
+    db.provenance = [refused, refused, refused];
+    db.transition = { id: 'tr1', from_state: null, to_state: 'rejected' };
+    const notifier = channel();
+
+    expect(await watch(ai(), notifier)).toBe('announced');
+    expect(queries.claimNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ refKind: 'narration', refId: 'tr1', route: 'push' }),
+    );
+    expect(notifier.send).toHaveBeenCalledTimes(1);
   });
 
   it('pushes a break, once, as a narration notice', async () => {

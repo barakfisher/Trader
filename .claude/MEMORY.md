@@ -4,7 +4,62 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-14 ~12:00 UTC - **Assistant milestone handoff: every planned PR is merged (#225 PR 4,
+Updated: 2026-10-18 ~08:00 UTC - **Handoff after six merges (#236-#241) - one past the five-merge
+trigger, noticed late. One draft is still open on purpose (#232).** No migration since `0052` (next
+free: `0053`); decisions reached **150** (next: **151**). **Deployed:** compose and kind both run
+`8d42fdf` (#239) - **#241 is merged but deployed nowhere**; redeploy only on the user's "redeploy".
+What happened, in order:
+- **#236** - M9 (multiple users) added to the plan (MILESTONES, PRD §7). Docs only.
+- **#237 (decision 148)** - a move and a drawdown on one holding from one scan are one Telegram
+  message, merged at the fan-out (`services/holdingAlerts.ts`); each half keeps its own row and
+  dedupe key. Not yet seen on the real bot.
+- **#238 (decision 149)** - a move alert carries a market line: the best-fitting index (highest R²
+  over 90 days among SPY/QQQ/IWM, BTC-USD for crypto) when it moved >=1% the same way. Framed, never
+  muted - a beta-adjusted mute would have silenced OUST -9.51%, EOSE -15%, IREN -12% on 10-14.
+  **The web feed and the digest do not show the line yet** (evidence is stored for them).
+- **#240 (M9 PR 1)** - `docs/M9-MEASUREMENT.md`: the data layer is already tenant-safe; what assumes
+  one user is the schedule (never names a user), installation-wide kinds run as a user's run, one
+  `LLM_DAILY_BUDGET_USD`, `users.timezone` unwritable, user delete blocked by 7 FKs, irrevocable
+  cookie, self-reset behind the admin gate.
+- **#239 (decision 150)** - a failed `backfill` is re-claimable the same day (`RETRY_FAILED_KINDS`);
+  compose had 3 of 25 fail on the first ask after the Mac woke.
+- **#241** - "Evidence checked" on an agent's trade proposal (web card + Telegram): the scan's tool
+  calls, derived at read time from `agent_scans.transcript` (`SCAN_TOOL_CALLS`), no migration.
+  Unknown tool names are counted, never named - a future research sub-agent shows as "1 other tool".
+  Checked on fixtures only (no real proposal existed locally).
+**Next:** "Next session: after #241" under "Where to go next".
+
+Previous update, 2026-10-14 ~15:00 UTC - **Handoff after five merges (#229, #230, #231, #233, #234). One draft
+is open on purpose (#232).** Both environments run `main` at `6248524`, no migration since `0052`
+(next free: `0053`; decisions reached 147). What happened, in order:
+- **Redeploy + PR 5's live check:** `/ask` answered first time on the `openai` package. **Narration had
+  failed on every call since 2026-10-07**: OpenRouter began refusing `reasoning: {effort: "none"}`
+  ("Reasoning is mandatory for this endpoint") - Sonnet 5.5 from 10-09, Flash-Lite from 10-13. Not PR
+  5 (the old client got the same 400). **#229:** `NO_REASONING="none"` -> `LEAST_REASONING="minimal"`
+  (measured: 0 reasoning tokens on both models, the same as "none" gave).
+- **#230:** the first narration after #229 wrote CIFR's -12.8% as "-0.1276923076923077 percent" (the
+  stored ratio, a hundredfold too small) and the validator passed it - its percent rule saw only `%`.
+  Now the word counts (percent / per cent / percentage / אחוז), for narration, the assistant and the
+  agents' theses alike, and the prompt shows ratios as percentages (`"-12.77%"`) by the validator's
+  own `is_ratio_key`. Live: 3/3 then wrote 12.77%.
+- **The 4b eval re-run:** 143/258 turns (PR 4: 132), mechanical 201 (210), judge 161 (152), $1.28.
+  Report: `services/ai/eval-results/assistant-google_gemini-3.5-flash-lite-20261014T121135.*` (main
+  checkout, gitignored). **#231 (4c, the tested half):** Gemini's `MALFORMED_FUNCTION_CALL` (a 200
+  with `finish_reason: "error"`, zero usage - 12 of the "no completion text" turns) is retried once;
+  `get_portfolio`'s snapshot says what its total leaves out (`total_covers`; `edge-unpriced` was 0/3);
+  `get_price_history` reports `trading_days`; the eval reads a judge verdict whose JSON broke after
+  it decided. **#232 (the prompt half) is a DRAFT on purpose** - see "Next session" below.
+- **#233:** task 19's after-measurement (closed: 0 repeated drawdown rows, 0 merged-move overlaps) and
+  the scheduled scans' review (measured nothing: compose's one agent had no money).
+- **The user gave "Test agent" (compose, `pre_open`) $10,000 paper** via the top-up route (it is its
+  `opening_deposit`), so Flash-Lite's trading can be measured; a one-time scheduled task
+  `traders-test-agent-scan-review` reviews its scans read-only on **2026-10-20 10:00 Israel**.
+- **#234:** the narration watch now announces a *first* state that is already a break (decision 58
+  amended) - the week-long outage had become the watch's silent baseline.
+**Eval spend:** ~$4.82 of the user's $5 (this session $1.42); #232's run needs a new budget.
+**`traders-assistant-ci` (127.0.0.1:55435) is kept on purpose** until #232 is measured (the user).
+
+Previous update, 2026-10-14 ~12:00 UTC - **Assistant milestone handoff: every planned PR is merged (#225 PR 4,
 #226 PR 4b, #227 PR 5). Nothing is in flight.** The trigger is the milestone boundary (CLAUDE.md).
 **Owed, in order:** (1) **redeploy** - this session (a cloud container) deployed nothing, so both
 environments still run what the last session left (`1d7d754` per the update below, unless the user
@@ -588,7 +643,6 @@ strings and left-to-right assumptions before designing it.
 
 | # | Task | Milestone | Size | Where, and what "done" means |
 |---|---|---|---|---|
-| 19 | **Insights noise: states fire on a band crossing; an unusual move absorbs the price move** (the user, 2026-10-08; decision 132) | — | M | **Built in the PR that added migration 0049** (`finding_episodes`; decision 132's 2026-10-09 paragraph). **Before**, on kind 30 Sep-9 Oct: 14 drawdown rows (SMR *high* x7, URA *info*/*notable* x7) where the rule gives 3, and 1 of 8 `price_move` rows repeating a `sigma_move`. **What remains:** after deploy, re-run the before query (drawdown rows per subject and band, `price_move` sharing a subject and New York day with `sigma_move`) over kind's observations written after the deploy, record it here, then remove this row. Compose cannot measure it until the main portfolio has holdings again (reset 2026-10-07) |
 | 17 | **Narration: why two of three model texts are rejected, fixed on the free model** (the user, 2026-10-07) | — | S | **Measured 2026-10-07** over the 38 `unsourced_figures` rejections on compose (all `nvidia/nemotron-3.5-lightning:free`, the validator re-run on each): **34 of 38 mention a threshold** ("crossed the 25% high threshold") that is true but refused, because `thresholds_pct` / `thresholds_weight` are nested and their keys (`info`, `notable`, `high`) carry no ratio marker - **5 were refused for that alone**; **30 of 38 copy a price in minor units** ("fell to 790" for $7.90), rightly refused, but the evidence invites it by handing the model `*_minor` integers; **3 are real inventions** ("$10.14M" for $101,427.80). **One error passed:** "the 0.03% information threshold" for 0.03 = 3%, accepted because the bare digits are in the evidence. **Fixes, one PR:** (1) the validator reads values under a `thresholds_*` key as ratios; (2) narration's evidence gives money as decimal strings ("7.90"), as the agent tools do since #177; (3) a ratio's bare digits followed by `%` are refused ("0.03%" for 0.03), while "0.03%" for a true 0.0003 stays accepted. **Then measure again on the free model** - the user's choice, because a paid model costs money and the fixes may make it unnecessary for narration (estimated at $0.03-0.07 a week on Flash-Lite or Haiku, against the agents' $0.04-0.38 a scan; the Admin page already sets narration's model separately). **The three fixes landed in the PR after #178; what remains is the re-measurement** on the free model once compose and kind run it - re-run the 2026-10-07 export (`llm_calls` where `purpose = 'narration'`) over the narrations written after the deploy. Done when that rate is recorded here, and this row is then removed |
 
 **Not in the queue, and why** - so they are not added back by the next sweep:
@@ -623,12 +677,13 @@ strings and left-to-right assumptions before designing it.
 | **The assistant - `/ask` with tools** (no M-number; the user's request, 2026-10-07) | ✅ Built (checks owed) | Test set #212; #220-#223 deployed 2026-10-12 - core, Admin picker and limit, replay and universe tools, the `/ask` chat screen. **Live.** PR 4 (eval runner, measured limit, old `/ask` removed) done. #225 PR 4, #226 PR 4b, #227 PR 5 (`openai` package) merged 2026-10-14 - **all planned PRs built**; owed: redeploy, PR 5's live check, the 4b eval re-run. Post-milestone candidates in "Next session: after the assistant milestone". See "Planned: the assistant" and "Next session: the assistant's PR 4b" |
 | Hebrew & RTL (no M-number; the user's request after M8) | ✅ Complete | #142 layout (logical classes, guard test), #143 react-i18next catalogue + `Intl` formatting, #144 `user_settings.language` (0034), `he.json`, he-IL. UI only: server-generated text stays English (decision 96). See "Hebrew and RTL is complete" |
 | Hebrew server text (no M-number; the user's choice after Hebrew & RTL) | ✅ Complete | #147 `observations.localized` (0035) + Hebrew templates, backfilled 78/78; #148 Telegram and digest catalogue. `/ask`, news and the corpus stay English (decision 96 as amended). See "Hebrew server text is complete" |
-| **Multi-agent sandbox, Stage 4 — the agent that decides** | 🚧 In progress | #172 spec D43-D52 + §14; #173 models on the Admin page (0041, D43-D44); #177 the scan's inputs - tool calling, movers, seven read-only tools, the briefing (0042); #180 the scan - one hand-written loop (D53), the per-agent budget, the step limit, `agent_scans` (0043), `POST /agents/:id/scans`, built on a scripted model (**real scans not yet measured: the account is unfunded**). Next: PR 5, the trade proposal and its approval (D26, D47-D49, D51, D54) |
+| Multi-agent sandbox, Stage 4 — the agent that decides | ✅ Complete | #172 spec D43-D52 + §14; #173 models on the Admin page (0041, D43-D44); #177 the scan's inputs - tool calling, movers, seven read-only tools, the briefing (0042); #180 the scan - one hand-written loop (D53), the per-agent budget, the step limit, `agent_scans` (0043), `POST /agents/:id/scans`, built on a scripted model (**real scans not yet measured: the account is unfunded**). Then #182/#183 PR 5 (the trade proposal and its approval), #186 PR 5b, #188 PR 6, #197, #199 - see "Stage 4 is complete" |
 | Multi-agent sandbox, Stage 3 — the ledger | ✅ Complete | #161 spec D21-D26 + §13; #162 exchange calendar; #163 ledger (0040); #164 manual trades (D27-D30); #165 the agent page (D31); #167 the consolidated holdings view (D32-D35); #168 performance against a shadow SPY and the score (D36-D42). Trade proposals and their approval moved to Stage 4 (D26). Handoff #169 |
 | Multi-agent sandbox, Stage 2 — agent management | ✅ Complete | #158 `/agents` API + the every-route-behind-a-session test; #159 the Agents page and a page per agent (en/he). D17-D20. The consolidated view moved to Stage 3 (D17) |
 | Mastra retired (D11) | ✅ Complete | #157, migration 0039: proposals are the row, `applyDecision` and `proposal_sweep` |
 | Multi-agent sandbox, Stage 1 — isolation (no M-number; `docs/PROPOSAL-MULTI-AGENT.md`) | ✅ Complete | #151 spec amendment D1-D16; #152 `agents` + `agent_id` (0036); #153 agent-scoped reads + contract; #154 per-agent uniques (0037); #155 passive primary (0038). Nothing user-visible, by design. Stages 2-4 to come - see "Next session: multi-agent Stage 2" |
 | M8 — Admin operations & observability | ✅ Complete | #120-#124, #126-#130: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel, on-demand profiles, the rescreen run and its CronJob. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event and profiled within one background fetch ✅ (#127, decision 89); rescreen button ✅ (#128, decision 90; shown in kind); button and CronJob are one run ✅ (#129, decision 91; shown in kind). Checked live 2026-10-01 - see "M8 is complete, and how it was verified" |
+| M9 — Multiple users | 🔄 In progress | PR 1 (measurement, `docs/M9-MEASUREMENT.md`) merged as #240, 2026-10-15; decisions next. Added to the plan at the user's request, 2026-10-14; not ordered against the database sprint or the assistant's owed checks. PR 1 is a read-only measurement of every single-user assumption; the decisions (who the users are, login, sessions, scheduling, shared costs) come after it. See `docs/MILESTONES.md` |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
 not anticipate, found by running the thing rather than by reading it. M1.5 came from auditing the
@@ -1227,8 +1282,11 @@ failure they prevent.
     the model/template boundary is announced.** `services/narrationWatch.ts`, migration 0022.
     `GET /narration` recomputes the state per read, which cannot say what *changed*, so
     `narration_transitions` stores a row only when the state differs from the last one; its newest
-    row is the current state, the first row (`from_state` null) is a baseline and never announced
-    (an upgrade is not a transition), and a lock on the user's row stops a portfolio and a topic
+    row is the current state, the first row (`from_state` null) is a baseline, **announced only
+    when it is a break** (amended 2026-10-14: until then no baseline was announced, and an outage
+    already under way when the first row was written - OpenRouter refusing narration's reasoning
+    setting, 10-07..14 - became the baseline and was found a week later in `llm_calls`; a working
+    or deliberately `off` first state is still silent), and a lock on the user's row stops a portfolio and a topic
     scan finishing together from both recording it (raced live: one row). **Judged over
     `NARRATION_WINDOW` = 3 explanations across scans, not one scan:** replayed over this
     installation's history 2026-09-17..28, a per-scan rule announced a break fifteen minutes after
@@ -2230,7 +2288,13 @@ failure they prevent.
     An episode is closed only when the rule *measured* the subject (drift ran; the holding had
     history) - closing re-arms the finding, so "did not look" must not count as "went away". An
     empty portfolio closes every open episode. `observation_id` cascades, so `reset_account` needed
-    no change. **Before:** kind, 30 Sep-9 Oct, 14 drawdown rows for SMR and URA, 3 under the rule.
+    no change. **Before:** kind, 30 Sep-9 Oct, 14 drawdown rows for SMR and URA, 3 under the rule. **After** (measured
+    2026-10-14 on kind, observations written 2026-10-11..14, 88 portfolio scans): **0** new
+    drawdown rows for SMR or URA - each holds one open episode (SMR *high*, URA *notable*, both
+    opened 2026-10-09) and every scan counted both as `heldInEpisode` (176 in all); ETH-USD's two
+    *info* rows are two episodes (closed 2026-10-11 08:08 when it recovered, reopened 2026-10-14),
+    which is the rule working. **0** `price_move` rows sharing a subject and New York day with a
+    `sigma_move` (3 `price_move`, 1 `sigma_move`). Queue task 19 closed.
 133. **Insights shows today, back seven days, with unread state** (the user, 2026-10-08; queue
     task 21, after tasks 19 and 20). The feed opens on **today's findings** ("today" in the user's
     timezone, guideline 10) and steps back **one day at a time, at most 7 days**; older findings
@@ -2374,6 +2438,61 @@ failure they prevent.
     time). A lost or dead Mac loses the simulated history, which decision 137 already priced as
     one cheap failure among many. Do not ask again; revisit only if real money or a real
     broker's data ever lands in this database.
+148. **A move and a drawdown on one holding, from one scan, are one Telegram message** (the user,
+    2026-10-15, after OUST's 9.51% fall arrived as two messages stating the same price twice).
+    Decision 132 merged the move with the sigma move but left the drawdown separate, and that
+    separation is right for the **feed**: the drawdown has its own episode, and "fell today" and
+    "below its 30-day high" are different questions. So the merge is in the **fan-out only**
+    (`holdingAlerts.ts`, called by `fanOut`): the pair is routed once at its stronger severity,
+    each half keeps its own `notifications` row and dedupe key, and both rows settle with the one
+    send. *Rejected:* a merged observation kind in the AI service (episodes, dedupe and Insights
+    would all have to learn it) and stitching the two stored texts into one bubble (fixes the
+    count, not the repetition). **The sentence is the catalogue's** (`moveWithDrawdown` in
+    `notify/messages.ts`), filled from both observations' evidence through `Intl` - the user chose
+    this over the stored model-written texts. When either evidence lacks a figure the sentence
+    states, the pair is sent as two messages in their stored words rather than with a figure
+    missing. Only pairs from the **same scan** merge; when an earlier run already sent one half,
+    the other goes out alone. Market-relative context ("the whole market was red") is a separate,
+    open question: it needs benchmark prices the scan does not collect. *(Answered by 149.)*
+149. **A move is framed by the market, never muted by it** (the user, 2026-10-15, after OUST alerts
+    on a red day). Measured first: the move rules replayed day by day over the real portfolio on
+    compose, 2026-09-15..10-14 - **136 alerts in 22 trading days**. SPY moved >= 1% the same way
+    for only 31 of them, and never 2%. SPY is also the wrong index for this portfolio: on 10-14 it
+    fell 1.08% while QQQ and IWM fell ~2% and SMH 4%. **Rejected: muting.** A beta-adjusted mute
+    would have silenced OUST's 9.51% fall that day (QQQ -1.97% at beta 3.7 leaves a 2.2% residual),
+    and EOSE's 15% and IREN's 12% with it - it fails in the expensive direction, against the
+    user's "a 6% fall is never invisible" (132). **So a move gains one line:** "Same day, the
+    Nasdaq-100 (QQQ) fell 1.97%." The **benchmark is chosen per holding by R²** of daily returns
+    over the 90 days before the move (>= 20 pairs): SPY, QQQ or IWM for an equity, BTC-USD for a
+    crypto pair, never the holding itself (`market_context.py`). It is said only when that index
+    moved **>= 1% the same way on the same pair of days**; a benchmark not priced that day says
+    nothing rather than a stale figure. On the replay this frames **45 of 136** (33 QQQ, 7 IWM,
+    5 SPY), all 14 on 10-14. No R² floor and **no beta sentence** ("about what its sensitivity
+    predicts") - the user's choice: most names fit poorly (MNDY 0.02, TWLO 0.05), so a
+    prediction would be weak; the line states a fact, not a cause. **Drawdown is exempt**: it is
+    a fact about the position since its high. The figures live in the move's evidence
+    (`market` block), so narration and the validator see them; Telegram adds the line from the
+    catalogue (`marketLine`, en + he) under a lone move and a merged pair alike. **Prices:** the
+    orchestrator owns the list (`MARKET_BENCHMARK_SYMBOLS`), backfills their closes hourly and
+    records a live quote on every portfolio scan, because a holding's move is often measured on
+    an intraday dashboard price and the benchmark needs a price the same day. *Not done:* the web
+    feed and the digest do not show the line (the evidence is there for them); thresholds are
+    `ANALYSIS_MARKET_*` settings.
+150. **A failed backfill is retried within its day** (the user, 2026-10-15, found while verifying
+    149: compose's 05:53 UTC backfill failed right after the Mac woke, and QQQ/IWM/BTC-USD's
+    10-14 closes were missing until a manual run under its own key at 08:25). Measured first:
+    compose had **3 failed backfills in 25** since 2026-09-16 (10-02, 10-05, 10-15), every one
+    "AI service unreachable: Internal Server Error" on the first ask after a wake, and every
+    other kind ran clean within the hour - the next hourly ask would have worked, but the daily
+    key was taken. Kind: 0 failed in 17. **So the route passes `retryFailed` for the kinds in
+    `RETRY_FAILED_KINDS`** (`routes/internal.ts`; today only `backfill`), the same re-claim the
+    rescreen already had; the scheduler's and the CronJob's hourly asks are the retry. A
+    day-long outage costs at most ~24 provider passes instead of 1. *Rejected:* a capped retry
+    count (an attempt counter in `claimRun` for a cost the quota absorbs) and leaving it (the
+    next day's 30-day backfill does catch up, but a day of stale benchmarks once every ~10 days
+    is what 149's line would read). **`degraded` is not retried** - a symbol without history
+    stays so. **Not the other daily kinds:** a failed digest may already have sent part of its
+    message, and discovery/metadata have not failed.
 
 ---
 
@@ -3142,7 +3261,6 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 
 | Item | Where | Impact |
 |---|---|---|
-| **A narration outage that becomes the baseline is never announced** | `services/narrationWatch.ts` (`shouldAnnounce`: the first row is a baseline) | Narration failed on every call 2026-10-07..14 (OpenRouter refused `effort: "none"`; fixed by sending `LEAST_REASONING = "minimal"`). The first `narration_transitions` row on compose is 2026-10-11, already `unavailable`, so it was recorded as a baseline and nobody was told; the outage was found only by reading `llm_calls`. Announcing a baseline that is not `narrating` (or `off`) would have caught it; decide whether an upgrade-time "explanations are templates" message is noise or news |
 | **Narration's and the agents' figure checks still read a timestamp's digits as sources, and refuse U+2011 hyphens** | `app/narration/evidence_validator.py`; the assistant fixed it in `app/assistant/reply.py` only | A small whole number (a day, hour or minute) written by a model passes whenever its evidence carries a timestamp that contains it; "7‑day" with a non-breaking hyphen is refused. Moving `_without_dates` and the dash normalisation into the validator fixes both for everyone - and changes narration's behaviour, so measure its rejection rate before and after |
 | **`purpose = 'ask'` outlives `/ask`** | `Purpose` in `app/llm/base.py`, `SCOPE_FOR_PURPOSE`, `llm_calls`' CHECK, `services/llmPanel.ts`, `spend_estimate.py` | Nothing emits it since PR 4; kept so stored rows still read. Retention (30 days) empties them; then drop it with a migration |
 | **The assistant eval runs only by hand** | `scripts/run_assistant_eval.py` | Keyed and paid, so never in CI: a prompt or tool change can regress it unseen. Run it (Flash-Lite, `--repeat 3`, ~$1.30 with the judge) before merging any change to the assistant's prompt, tools or checks |
@@ -3580,7 +3698,80 @@ grant tests fail for the wrong reason.
 
 ## Where to go next
 
-### Next session: after the assistant milestone (written 2026-10-14)
+### Next session: after #241 (written 2026-10-18)
+
+No standing grant: ask before each PR, merge only on "merge", redeploy only on "redeploy". In order:
+1. **DB4's second half - due now (on or after 2026-10-18).** "Next session: the database sprint's
+   review, second half" below; its decision numbers now start at **151** (148-150 were taken by
+   #237-#239). Kind and compose have run #218 since 2026-10-11, so step 3 applies. Note the compose
+   stack was restarted 2026-10-18 ~07:36 UTC for #239 - Postgres was not, so the window should hold.
+2. **Redeploy #241 when the user says so** (nothing else is undeployed). First real trade proposal
+   after it is the live check of the "Evidence checked" line.
+3. **M9's decisions**, one at a time with a recommendation, from `docs/M9-MEASUREMENT.md` - who the
+   users are first (MILESTONES' list). Not ordered against DB4; the user chooses.
+4. **2026-10-20 10:00 Israel: Test agent scan review** (scheduled task). Then the two deferred
+   decisions: the research sub-agent and the per-agent tool picker (bring tool-call counts from
+   `agent_scans`/`llm_calls`). #241's `otherCalls` already makes room for a sub-agent's tool name.
+5. **#232** - unchanged from "after the assistant follow-ups" item 4 (budget first, two open
+   questions, then remove `traders-assistant-ci`).
+6. **Small follow-ups the user has not asked for yet:** the market line (149) on the web feed and
+   the digest; watch the first real merged move+drawdown and market line on Telegram.
+
+**Lesson from this stretch:** the handoff trigger is countable only if someone counts. Six merges
+went by because #239 and #241 merged from other sessions on the same morning. Count merges on
+`main` since the last handoff commit (`git log --oneline <handoff-sha>..origin/main`), not the ones
+this session made.
+
+### Next session: after the assistant follow-ups (written 2026-10-14, evening)
+
+Ask the user before starting anything; there is no standing grant ("merge" per PR, "redeploy" only
+when said). In date order:
+1. **IBI check, 2026-10-15** - its scheduled task runs it (decision 135); nothing IBI unless it shows
+   other MCP clients can connect and the user says go.
+2. **DB4's second half, on or after 2026-10-18** - "Next session: the database sprint's review,
+   second half" below.
+3. **Test agent's scan review, 2026-10-20** - the scheduled task reports it; read it with the user.
+   First time Flash-Lite trades with money: check its proposals against its persona (3% drop rule,
+   20% of cash per trade, 5 positions) and its theses' figures (#230's rule is now live for them).
+4. **#232, the assistant's prompt lines (draft)** - the user chose to measure it **after this sprint**
+   with one full eval (`--repeat 3`, cap $1.50, command in the PR body), compare the targeted 0/3
+   cases and look for any case that loses passes; merge only if it does not cost more than it fixes.
+   **Ask for a budget first** (~$0.18 of the $5 is left). One more run only if it shows a regression,
+   and ask before that too. Then remove `traders-assistant-ci` (`docker rm -f traders-assistant-ci`).
+   **Unanswered, ask before that run:** should `/agents` count where a case expects
+   `/agents/$agentId`, and should a correct decline pass whatever `reason` code it gives?
+5. **Assistant candidates, each needing the user's yes:** answers in the user's language (amends
+   guideline 1), `/ask` in Telegram, live progress while it looks things up.
+
+**Lessons from this stretch worth keeping:**
+- **A gateway can start refusing a request it accepted for months, and a fallback hides it.**
+  Narration's template fallback is the right product behaviour and it turned a total outage into
+  silence for a week. A health signal must speak at first sight too: a watch whose first reading
+  is a baseline will baseline an outage (#234). When something "works", check `llm_calls.outcome`,
+  not the feed.
+- **A validator that recognises a symbol must recognise its words.** The `%` rule had existed since
+  the 0.03% bug; the model wrote "percent" and walked past it. And show a model each figure in the
+  form a sentence quotes it - money as `7.90`, ratios as `-12.77%` - from the validator's own rule, so
+  what is shown and what is checked cannot drift apart.
+- **Read the raw body before designing a retry.** "No completion text" looked like transport
+  flakiness; the body said `finish_reason: "error"`, `MALFORMED_FUNCTION_CALL`, zero usage - a model
+  failure that is free to retry, and only that one. A five-cent `--no-judge --cases` run with a
+  temporary dump of the response found it; the error now names the reason itself.
+- **Attribute a regression by A/B, not by suspicion.** The empty replies rose after PR 5 changed the
+  client; running the same cases on 4b's commit (old client) showed the same failure (3/27 vs 5/27).
+  A scratch `git worktree add --detach <sha>` plus `--no-judge` costs cents.
+- **Split a PR by how it can be verified.** 4c's code fixes were proven by tests and shipped; its
+  prompt lines change every question and wait for a paid eval (#232). One PR would have held the
+  honesty fix (`total_covers`) hostage to a budget.
+- **After a dependency PR, the local environments lag.** The main checkout's `.venv` lacked `openai`
+  after #227 (`uv pip install --python .venv/bin/python -e ".[dev]"`); a fresh worktree has no
+  `node_modules` (`pnpm install --frozen-lockfile`) - `npx vitest` there fetches an unrelated vitest
+  and fails on a native binding.
+- **Integration tests in one module share a database**: an assertion on a count of stored closes
+  broke when an earlier test had stored more. Assert the relation (`< asked for`), not the count.
+
+
+### Next session: after the assistant milestone (history - written 2026-10-14; items 1-2 done, see above)
 
 Ask the user before starting anything: the assistant grant (`traders-assistant-grant`) covered the
 milestone's planned PRs, and they are all merged. In order:
@@ -3685,13 +3876,20 @@ guideline 1), then `/ask` in Telegram.
 ### Next session: after the Insights work (#206, #209, #214, #216, 2026-10-11)
 
 Ask the user before starting anything (the Insights grant ended with task 21). In date order:
-1. **Task 19's after-measurement - after Monday 2026-10-12's scans, on kind.** Kind's 9 Oct scan
+1. ~~**Task 19's after-measurement - after Monday 2026-10-12's scans, on kind.**~~ **Done 2026-10-14** (decision 132's *After*: 0 repeated drawdown rows, 0 merged-move overlaps). Kind's 9 Oct scan
    showed no `heldInEpisode` only because the day key caught SMR and URA first. Re-run the before
    query (drawdown rows per subject and band; `price_move` sharing a subject and New York day with
    `sigma_move`) over kind's observations written after 2026-10-11, check `runs.stats.heldInEpisode`
    and `finding_episodes`, record it in queue row 19 and remove the row. SMR should still have
    exactly one open *high* episode and no new *high* row.
-2. **Review the scheduled scans** (now three trading days after Monday): outcomes, refusals, cost
+2. ~~**Review the scheduled scans**~~ **Done 2026-10-14, and it measured nothing worth having:** kind runs
+   no scans (`LLM_PROVIDER=null`); compose has one agent, "Test agent" (created 2026-10-07,
+   `pre_open`), with **$0.00 cash, no holdings and no deposit**, so every scan (10-12, 10-13, 10-14,
+   one per trading day at ~09:05 New York, none missed) concluded `no_trade` because it cannot buy,
+   for ~$0.001 each. The scheduler works; Flash-Lite's trading judgement is unmeasured until an agent
+   has paper money. Also moot: narration's rejection rate on D75's choice - narration failed every
+   call 10-07..14 (#229) and the explain model is now Flash-Lite. Original note:
+   (now three trading days after Monday): outcomes, refusals, cost
    per day from `agent_scan_runs` and `llm_calls WHERE purpose = 'agent_scan'`. **The agents run on
    `google/gemini-3.5-flash-lite` since 2026-10-08 19:47 - intended (the user, 2026-10-09)**, so the
    review measures Flash-Lite, not Sonnet. D75's *explain* choice is set (Sonnet, 2026-10-08 19:45):
@@ -3736,7 +3934,7 @@ What is left needs the full week. Ask the user before starting (no standing gran
    - retention for `runs`: measured 2026-10-11 at **29-37 rows a day** (not ~130), 1.1 MB on kind
      and 1.9 MB on compose - expect "not yet", with a size that would change the answer;
    - anything new in sections 1 and 5 (statements by total time, the slow log).
-   Each answer is a decision (next number: **148**); each change its own PR.
+   Each answer is a decision (next number: **151** - 148-150 went to #237-#239); each change its own PR.
 
 ### Planned: the database sprint (agreed 2026-10-09)
 

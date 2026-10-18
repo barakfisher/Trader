@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useParams } from '@tanstack/react-router';
+import { Link, useParams, useSearch } from '@tanstack/react-router';
 import { Archive, ArrowLeft, ArrowLeftRight, Pause, Play, RotateCcw, Save } from 'lucide-react';
 
 import type { AgentState, AgentView, TradeSide } from '@traders/shared';
@@ -87,7 +87,11 @@ function PrimaryNote() {
 
 function SimulatedAgent({ agent }: { agent: AgentView }) {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<Tab>('holdings');
+  // A trade proposal links here to the scan behind it (`EvidenceChecked.tsx`):
+  // the Decisions tab, with that scan open.
+  const search = useSearch({ strict: false }) as { tab?: unknown; scan?: unknown };
+  const [tab, setTab] = useState<Tab>(search.tab === 'decisions' ? 'decisions' : 'holdings');
+  const openScanId = typeof search.scan === 'string' ? search.scan : undefined;
   const [trading, setTrading] = useState<{ symbol: string; side: TradeSide } | null>(null);
   const canTrade = agent.state !== 'archived';
   return (
@@ -128,7 +132,7 @@ function SimulatedAgent({ agent }: { agent: AgentView }) {
         <AgentHoldings agent={agent} onSell={(symbol) => setTrading({ symbol, side: 'sell' })} />
       )}
       {tab === 'activity' && <AgentActivity agent={agent} />}
-      {tab === 'decisions' && <AgentDecisions agentId={agent.id} />}
+      {tab === 'decisions' && <AgentDecisions agentId={agent.id} openScanId={openScanId} />}
       <AgentScans agent={agent} />
       <SettingsForm agent={agent} />
       {trading && (
