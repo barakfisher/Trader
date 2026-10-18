@@ -196,7 +196,10 @@
               "replay_scan"
             ],
             "links": [
-              "/agents/$agentId"
+              [
+                "/agents/$agentId",
+                "/agents"
+              ]
             ],
             "behaviour": "From Momentum's last recorded scan: the tools it called in order, what each returned in a phrase, and the conclusion (the SMR buy proposal). Figures quoted come from the recorded tool results."
           }
@@ -671,7 +674,10 @@
               "get_product_guide"
             ],
             "links": [
-              "/agents/$agentId"
+              [
+                "/agents/$agentId",
+                "/agents"
+              ]
             ],
             "behaviour": "Points to the setting and links to it; changes nothing."
           }
@@ -952,7 +958,10 @@
               "replay_scan"
             ],
             "links": [
-              "/agents/$agentId"
+              [
+                "/agents/$agentId",
+                "/agents"
+              ]
             ],
             "behaviour": "Momentum's scan that proposed SMR: tool calls in order, what each returned, the conclusion."
           }
@@ -1521,7 +1530,10 @@
             "outcome": "decline",
             "reason": "action",
             "links": [
-              "/agents/$agentId"
+              [
+                "/agents/$agentId",
+                "/agents"
+              ]
             ],
             "behaviour": "Declines; tells the user where they can change it themselves."
           }
