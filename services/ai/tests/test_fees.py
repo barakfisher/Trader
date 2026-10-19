@@ -40,3 +40,14 @@ def test_notional_refuses_what_is_not_a_whole_positive_quantity(quantity):
 def test_fee_refuses_what_is_not_a_whole_positive_quantity(quantity):
     with pytest.raises(ValueError):
         fee_minor(quantity)
+
+
+def test_the_agent_is_told_the_fee_the_ledger_charges() -> None:
+    """The scan prompt quotes the charged rate, so the agent weighs the cost it will pay."""
+    from app.agents.scan import instructions
+    from app.agents.scan_log import ScanAgent
+    from app.agents.tools import money
+
+    prompt = instructions(ScanAgent("a", "u", "Ada", None, "active", False))
+    assert f"{money(FEE_PER_SHARE_MINOR, 'USD')} USD a share" in prompt
+    assert f"least {money(MIN_FEE_MINOR, 'USD')} USD a trade" in prompt

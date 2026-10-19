@@ -43,7 +43,8 @@ from app.agents.scan_log import (
     finish_scan,
     start_scan,
 )
-from app.agents.tools import TOOLS, ToolContext, run_tool
+from app.agents.tools import TOOLS, ToolContext, money, run_tool
+from app.core.fees import FEE_PER_SHARE_MINOR, MIN_FEE_MINOR
 from app.core.logging import get_logger
 from app.llm.base import Caller, LLMProvider, UserMessage
 from app.llm.tool_loop import LoopState, run_tool_loop
@@ -118,6 +119,14 @@ How to work:
    calls; most scans need far fewer.
 3. Decide: buy, sell, or do nothing. Doing nothing is a good answer and the most
    common one.
+
+What a trade costs (the broker's published rate, charged by the ledger):
+- Every buy and every sell pays a fee of {money(FEE_PER_SHARE_MINOR, "USD")} USD a share, at
+  least {money(MIN_FEE_MINOR, "USD")} USD a trade. A round trip pays it twice.
+- A buy needs the shares' cost plus the fee in cash. A small trade pays the
+  minimum fee, which can outweigh the move it hopes to catch; weigh it before
+  trading, and do not trade back and forth on small moves.
+- The fee is not in the evidence: do not quote it in your thesis.
 
 Rules the server enforces after you answer:
 - Only USD-listed instruments in the universe (a quote says "tradable").
