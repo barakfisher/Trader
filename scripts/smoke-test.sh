@@ -27,8 +27,12 @@ ORIGIN="${SMOKE_ORIGIN:-http://localhost:5173}"
 COOKIE_JAR="$(mktemp)"
 trap 'rm -f "$COOKIE_JAR"' EXIT
 
+# The caller's sign-in wins over the env file's: .env carries ADMIN_EMAIL for the
+# start scripts, and sourcing it would replace the address the caller set.
+caller_email="${ADMIN_EMAIL:-}"
 # shellcheck disable=SC1090,SC1091
 set -a; source "${SMOKE_ENV_FILE:-$(dirname "$0")/../.env}"; set +a
+ADMIN_EMAIL="${caller_email:-${ADMIN_EMAIL:-}}"
 
 say() { printf '\n=== %s\n' "$1"; }
 fail() { printf 'FAIL: %s\n' "$1" >&2; exit 1; }
