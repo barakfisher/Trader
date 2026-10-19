@@ -7,8 +7,10 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SnapshotsResponse } from '@traders/shared';
+import { ACTIVE_SESSION, sessionCookie } from './session.js';
 
 const USER = {
+  ...ACTIVE_SESSION,
   id: '00000000-0000-0000-0000-000000000001',
   email: null,
   base_currency: 'USD',
@@ -116,7 +118,6 @@ function stubRunClaims() {
 const ENV = {
   APP_ENV: 'test',
   LOG_LEVEL: 'error',
-  APP_PASSPHRASE: 'test-passphrase',
   SESSION_SECRET: 'test-session-secret-value',
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   AI_SERVICE_URL: 'http://ai-service:8000',
@@ -131,18 +132,6 @@ let scanStats: Record<string, unknown> = {};
 function buildApp() {
   resetConfigForTests();
   return createApp(loadConfig(ENV), createFakeAi({ scanStats }));
-}
-
-async function loginCookie(app: ReturnType<typeof buildApp>): Promise<string> {
-  const response = await app.request('/auth/login', {
-    method: 'POST',
-    headers: ORIGIN,
-    body: JSON.stringify({ passphrase: 'test-passphrase' }),
-  });
-  expect(response.status).toBe(200);
-  const cookie = response.headers.get('set-cookie');
-  expect(cookie).toBeTruthy();
-  return (cookie as string).split(';')[0]!;
 }
 
 describe('API', () => {
@@ -214,28 +203,11 @@ describe('API', () => {
     expect(open).toEqual([]);
   });
 
-  it('rejects a wrong passphrase without revealing anything', async () => {
-    const response = await app.request('/auth/login', {
-      method: 'POST',
-      headers: ORIGIN,
-      body: JSON.stringify({ passphrase: 'wrong' }),
-    });
-    expect(response.status).toBe(401);
-  });
-
-  it('issues an httpOnly session cookie on login', async () => {
-    const response = await app.request('/auth/login', {
-      method: 'POST',
-      headers: ORIGIN,
-      body: JSON.stringify({ passphrase: 'test-passphrase' }),
-    });
-    const cookie = response.headers.get('set-cookie') ?? '';
-    expect(cookie).toContain('HttpOnly');
-    expect(cookie).toContain('SameSite=Lax');
-  });
+  // Signing in itself - the cookie's flags, wrong passwords, the session
+  // version - is authApi.test.ts.
 
   it('returns a valued portfolio for an authenticated session', async () => {
-    const cookie = await loginCookie(app);
+    const cookie = sessionCookie();
     const response = await app.request('/portfolio', { headers: { cookie } });
     expect(response.status).toBe(200);
     const body = (await response.json()) as { summary: { totalValueMinor: number }; holdings: unknown[] };
@@ -257,7 +229,7 @@ describe('API', () => {
       },
     ] as never);
 
-    const cookie = await loginCookie(app);
+    const cookie = sessionCookie();
     const response = await app.request('/portfolio/snapshots', { headers: { cookie } });
     expect(response.status).toBe(200);
     const body = (await response.json()) as SnapshotsResponse;
@@ -274,7 +246,7 @@ describe('API', () => {
   });
 
   it('blocks a state-changing request from an unknown origin', async () => {
-    const cookie = await loginCookie(app);
+    const cookie = sessionCookie();
     const response = await app.request('/holdings', {
       method: 'POST',
       headers: { cookie, origin: 'https://evil.example', 'content-type': 'application/json' },
@@ -285,7 +257,7 @@ describe('API', () => {
   });
 
   it('rejects a holding whose symbol no provider can price', async () => {
-    const cookie = await loginCookie(app);
+    const cookie = sessionCookie();
     const response = await app.request('/holdings', {
       method: 'POST',
       headers: { ...ORIGIN, cookie },
@@ -301,7 +273,7 @@ describe('API', () => {
       loadConfig(ENV),
       createFakeAi({ outsideUniverse: { 'SAP.DE': 'exchange' } }),
     );
-    const cookie = await loginCookie(outside);
+    const cookie = sessionCookie();
     const response = await outside.request('/holdings', {
       method: 'POST',
       headers: { ...ORIGIN, cookie },
@@ -327,7 +299,7 @@ describe('API', () => {
     vi.mocked(queries.recordOpsEvent).mockRejectedValueOnce(new Error('connection lost'));
     resetConfigForTests();
     const outside = createApp(loadConfig(ENV), createFakeAi({ outsideUniverse: { 'SAP.DE': null } }));
-    const cookie = await loginCookie(outside);
+    const cookie = sessionCookie();
     const response = await outside.request('/holdings', {
       method: 'POST',
       headers: { ...ORIGIN, cookie },
@@ -337,7 +309,7 @@ describe('API', () => {
   });
 
   it('records nothing for a symbol the universe holds', async () => {
-    const cookie = await loginCookie(app);
+    const cookie = sessionCookie();
     await app.request('/holdings', {
       method: 'POST',
       headers: { ...ORIGIN, cookie },
@@ -347,7 +319,7 @@ describe('API', () => {
   });
 
   it('validates the holding payload', async () => {
-    const cookie = await loginCookie(app);
+    const cookie = sessionCookie();
     const response = await app.request('/holdings', {
       method: 'POST',
       headers: { ...ORIGIN, cookie },
@@ -362,7 +334,7 @@ describe('API', () => {
       ...holdingRow,
       currency: 'JPY',
     } as unknown as Awaited<ReturnType<typeof queries.getHolding>>);
-    const cookie = await loginCookie(app);
+    const cookie = sessionCookie();
     const response = await app.request('/holdings/holding-1', {
       method: 'PATCH',
       headers: { ...ORIGIN, cookie },
@@ -376,7 +348,7 @@ describe('API', () => {
   });
 
   it('reads a cost sent with a currency at that currency', async () => {
-    const cookie = await loginCookie(app);
+    const cookie = sessionCookie();
     const response = await app.request('/holdings/holding-1', {
       method: 'PATCH',
       headers: { ...ORIGIN, cookie },
@@ -391,7 +363,7 @@ describe('API', () => {
   });
 
   it('previews an import without writing anything', async () => {
-    const cookie = await loginCookie(app);
+    const cookie = sessionCookie();
     const response = await app.request('/imports/preview', {
       method: 'POST',
       headers: { ...ORIGIN, cookie },
@@ -413,7 +385,7 @@ describe('API', () => {
   });
 
   it('rejects an unparseable import as a whole', async () => {
-    const cookie = await loginCookie(app);
+    const cookie = sessionCookie();
     const response = await app.request('/imports/preview', {
       method: 'POST',
       headers: { ...ORIGIN, cookie },
@@ -424,7 +396,7 @@ describe('API', () => {
   });
 
   it('refuses a commit for an expired or unknown preview', async () => {
-    const cookie = await loginCookie(app);
+    const cookie = sessionCookie();
     const response = await app.request('/imports/commit', {
       method: 'POST',
       headers: { ...ORIGIN, cookie },
@@ -659,7 +631,7 @@ describe('API', () => {
         created_at: new Date('2026-09-16T14:00:00Z'),
       },
     ] as never);
-    const cookie = await loginCookie(app);
+    const cookie = sessionCookie();
     const response = await app.request('/observations', { headers: { cookie } });
     const body = (await response.json()) as { observations: { evidence: unknown }[] };
     // Evidence is returned whole: a claim the reader cannot check is the thing

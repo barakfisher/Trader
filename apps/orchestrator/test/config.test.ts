@@ -22,7 +22,6 @@ import { loadConfig, resetConfigForTests } from '../src/config.js';
 
 /** The minimum a deployment must supply for the service to boot at all. */
 const REQUIRED = {
-  APP_PASSPHRASE: 'test-passphrase',
   SESSION_SECRET: 'test-session-secret-value',
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   AI_SERVICE_URL: 'http://ai-service:8000',

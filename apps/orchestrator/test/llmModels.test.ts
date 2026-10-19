@@ -7,8 +7,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { LlmModelsResponse } from '@traders/shared/ai';
+import { ACTIVE_SESSION, sessionCookie } from './session.js';
 
 const ADMIN = {
+  ...ACTIVE_SESSION,
   id: '00000000-0000-0000-0000-000000000001',
   email: null,
   base_currency: 'USD',
@@ -40,7 +42,6 @@ const queries = await import('../src/db/queries.js');
 const ENV = {
   APP_ENV: 'test',
   LOG_LEVEL: 'error',
-  APP_PASSPHRASE: 'test-passphrase',
   SESSION_SECRET: 'test-session-secret-value',
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   AI_SERVICE_URL: 'http://ai-service:8000',
@@ -117,15 +118,6 @@ function buildApp() {
 
 type App = ReturnType<typeof buildApp>;
 
-async function sessionCookie(app: App): Promise<string> {
-  const response = await app.request('/auth/login', {
-    method: 'POST',
-    headers: HEADERS,
-    body: JSON.stringify({ passphrase: 'test-passphrase' }),
-  });
-  return (response.headers.get('set-cookie') as string).split(';')[0]!;
-}
-
 describe('the model pickers', () => {
   let app: App;
   let cookie: string;
@@ -136,7 +128,7 @@ describe('the model pickers', () => {
     listed = catalogue();
     unavailable = false;
     app = buildApp();
-    cookie = await sessionCookie(app);
+    cookie = sessionCookie();
   });
 
   const choose = (scope: string, body: unknown) =>

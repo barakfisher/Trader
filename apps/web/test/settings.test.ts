@@ -219,7 +219,14 @@ describe('SettingsStore', () => {
   it('switches the page language only once the server holds the new one', async () => {
     const root = storeWithSettings();
     await readSettings(root);
-    root.auth.user = { id: 'u', baseCurrency: 'USD', timezone: 'UTC', role: 'user', language: 'en' };
+    root.auth.user = {
+      id: 'u',
+      baseCurrency: 'USD',
+      timezone: 'UTC',
+      role: 'user',
+      language: 'en',
+      mustChangePassword: false,
+    };
     root.settings.setLanguage('he');
     expect(root.settings.isDirty).toBe(true);
     // Chosen but not saved: the page stays in the language that is in force.

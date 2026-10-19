@@ -8,8 +8,10 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ACTIVE_SESSION, sessionCookie } from './session.js';
 
 const ADMIN = {
+  ...ACTIVE_SESSION,
   id: '00000000-0000-0000-0000-000000000001',
   email: null,
   base_currency: 'USD',
@@ -47,7 +49,6 @@ const queries = await import('../src/db/queries.js');
 const ENV = {
   APP_ENV: 'test',
   LOG_LEVEL: 'error',
-  APP_PASSPHRASE: 'test-passphrase',
   SESSION_SECRET: 'test-session-secret-value',
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   AI_SERVICE_URL: 'http://ai-service:8000',
@@ -74,15 +75,6 @@ function buildApp() {
 
 type App = ReturnType<typeof buildApp>;
 
-async function sessionCookie(app: App): Promise<string> {
-  const response = await app.request('/auth/login', {
-    method: 'POST',
-    headers: HEADERS,
-    body: JSON.stringify({ passphrase: 'test-passphrase' }),
-  });
-  return (response.headers.get('set-cookie') as string).split(';')[0]!;
-}
-
 describe('the admin audit', () => {
   let app: App;
   let cookie: string;
@@ -96,7 +88,7 @@ describe('the admin audit', () => {
       events.push('audit');
     });
     app = buildApp();
-    cookie = await sessionCookie(app);
+    cookie = sessionCookie();
   });
 
   it('records an admin action before it runs, with who, what and the request', async () => {
@@ -256,7 +248,7 @@ describe('the universe gaps', () => {
       },
     ]);
     const app = buildApp();
-    const cookie = await sessionCookie(app);
+    const cookie = sessionCookie();
     const response = await app.request('/admin/gaps?kind=universe_gap_missing_ticker', {
       headers: { cookie },
     });

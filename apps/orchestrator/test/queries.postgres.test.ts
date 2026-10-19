@@ -51,6 +51,39 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     await getPool().end();
   });
 
+  describe('users and passwords (D159, D160)', () => {
+    it('finds a user by email whatever its case', async () => {
+      const email = `${USER.slice(0, 8)}@Example.com`;
+      await getPool().query('UPDATE users SET email = $2 WHERE id = $1', [USER, email]);
+      const found = await queries.getUserCredentialsByEmail(email.toLowerCase());
+      expect(found).toEqual({ id: USER, status: 'active', password_hash: null });
+      expect(await queries.getUserCredentialsByEmail(`nobody-${USER}@example.com`)).toBeNull();
+    });
+
+    it('changes a password: a new hash, the version bumped, the one-time flag cleared', async () => {
+      await getPool().query('UPDATE users SET password_must_change = true WHERE id = $1', [USER]);
+      const before = await queries.getUser(USER);
+      const after = await queries.changePassword(USER, '$argon2id$v=19$m=19456,t=2,p=1$test');
+      expect(after).toMatchObject({
+        id: USER,
+        status: 'active',
+        password_must_change: false,
+        session_version: before!.session_version + 1,
+      });
+      expect(await queries.getPasswordHash(USER)).toBe('$argon2id$v=19$m=19456,t=2,p=1$test');
+    });
+
+    it('records the sign-in time', async () => {
+      await queries.recordSignIn(USER);
+      const { rows } = await getPool().query('SELECT last_sign_in_at FROM users WHERE id = $1', [USER]);
+      expect(rows[0]?.last_sign_in_at).toBeInstanceOf(Date);
+    });
+
+    it('counts the admins, as the bootstrap script checks', async () => {
+      expect((await queries.adminPasswordState()).admins).toBe(1);
+    });
+  });
+
   describe('the admin audit', () => {
     // Written as the seeded admin, not USER: an audit row can never be deleted
     // and neither can the admin it names, so USER's cleanup would be refused.

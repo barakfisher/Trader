@@ -12,8 +12,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MIN_FEE_MINOR } from '@traders/shared';
+import { ACTIVE_SESSION, sessionCookie } from './session.js';
 
 const USER = {
+  ...ACTIVE_SESSION,
   id: '00000000-0000-0000-0000-000000000001',
   email: null,
   base_currency: 'USD',
@@ -428,8 +430,7 @@ describe('the trades routes', async () => {
   const ENV = {
     APP_ENV: 'test',
     LOG_LEVEL: 'error',
-    APP_PASSPHRASE: 'test-passphrase',
-    SESSION_SECRET: 'test-session-secret-value',
+      SESSION_SECRET: 'test-session-secret-value',
     DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
     AI_SERVICE_URL: 'http://ai-service:8000',
     INTERNAL_API_KEY: 'internal-test-key',
@@ -440,12 +441,7 @@ describe('the trades routes', async () => {
   async function signedIn() {
     resetConfigForTests();
     const app = createApp(loadConfig(ENV), stubAi() as unknown as AiClient);
-    const login = await app.request('/auth/login', {
-      method: 'POST',
-      headers: ORIGIN,
-      body: JSON.stringify({ passphrase: 'test-passphrase' }),
-    });
-    const cookie = (login.headers.get('set-cookie') as string).split(';')[0]!;
+    const cookie = sessionCookie();
     return (method: string, path: string, body?: unknown) =>
       app.request(path, {
         method,

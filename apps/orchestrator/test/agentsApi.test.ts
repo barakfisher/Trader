@@ -8,8 +8,10 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ACTIVE_SESSION, sessionCookie } from './session.js';
 
 const USER = {
+  ...ACTIVE_SESSION,
   id: '00000000-0000-0000-0000-000000000001',
   email: null,
   base_currency: 'USD',
@@ -104,7 +106,6 @@ const queries = await import('../src/db/queries.js');
 const ENV = {
   APP_ENV: 'test',
   LOG_LEVEL: 'error',
-  APP_PASSPHRASE: 'test-passphrase',
   SESSION_SECRET: 'test-session-secret-value',
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   AI_SERVICE_URL: 'http://ai-service:8000',
@@ -133,12 +134,7 @@ describe('the agents API', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     app = buildApp();
-    const login = await app.request('/auth/login', {
-      method: 'POST',
-      headers: ORIGIN,
-      body: JSON.stringify({ passphrase: 'test-passphrase' }),
-    });
-    cookie = (login.headers.get('set-cookie') as string).split(';')[0]!;
+    cookie = sessionCookie();
   });
 
   it('lists the primary first, with no budget, and the simulated agents after it', async () => {
@@ -354,12 +350,7 @@ describe("an agent's mandate (0057, D165)", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     app = buildApp();
-    const login = await app.request('/auth/login', {
-      method: 'POST',
-      headers: ORIGIN,
-      body: JSON.stringify({ passphrase: 'test-passphrase' }),
-    });
-    cookie = (login.headers.get('set-cookie') as string).split(';')[0]!;
+    cookie = sessionCookie();
   });
 
   it('creates an agent with a mandate, and its horizon brings its schedule (D166)', async () => {

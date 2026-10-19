@@ -12,8 +12,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createFakeAi } from './fakeAi.js';
+import { ACTIVE_SESSION, sessionCookie } from './session.js';
 
-const USER = { id: '00000000-0000-0000-0000-000000000001', email: null, base_currency: 'USD', timezone: 'Asia/Jerusalem' };
+const USER = { ...ACTIVE_SESSION, id: '00000000-0000-0000-0000-000000000001', email: null, base_currency: 'USD', timezone: 'Asia/Jerusalem' };
 const PRIMARY = '90000000-0000-0000-0000-000000000001';
 const AGENT = '90000000-0000-0000-0000-0000000000a1';
 
@@ -106,7 +107,6 @@ const { createApp } = await import('../src/http/app.js');
 const ENV = {
   APP_ENV: 'test',
   LOG_LEVEL: 'error',
-  APP_PASSPHRASE: 'test-passphrase',
   SESSION_SECRET: 'test-session-secret-value',
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   AI_SERVICE_URL: 'http://ai-service:8000',
@@ -118,12 +118,7 @@ const ORIGIN = { origin: 'http://localhost:5173', 'content-type': 'application/j
 async function signedIn(ai = createFakeAi()) {
   resetConfigForTests();
   const app = createApp(loadConfig(ENV), ai);
-  const login = await app.request('/auth/login', {
-    method: 'POST',
-    headers: ORIGIN,
-    body: JSON.stringify({ passphrase: 'test-passphrase' }),
-  });
-  const cookie = (login.headers.get('set-cookie') as string).split(';')[0]!;
+  const cookie = sessionCookie();
   return (method: string, path: string, body?: unknown) =>
     app.request(path, { method, headers: { ...ORIGIN, cookie }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 }

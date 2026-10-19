@@ -9,8 +9,10 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ACTIVE_SESSION, sessionCookie } from './session.js';
 
 const ADMIN = {
+  ...ACTIVE_SESSION,
   id: '00000000-0000-0000-0000-000000000001',
   email: null,
   base_currency: 'USD',
@@ -52,7 +54,6 @@ const queries = await import('../src/db/queries.js');
 const ENV = {
   APP_ENV: 'test',
   LOG_LEVEL: 'error',
-  APP_PASSPHRASE: 'test-passphrase',
   SESSION_SECRET: 'test-session-secret-value',
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   AI_SERVICE_URL: 'http://ai-service:8000',
@@ -83,16 +84,6 @@ function adminRoutes(app: App): { method: string; path: string }[] {
     routes.push({ method: route.method, path });
   }
   return routes;
-}
-
-async function sessionCookie(app: App): Promise<string> {
-  const response = await app.request('/auth/login', {
-    method: 'POST',
-    headers: { origin: ORIGIN, 'content-type': 'application/json' },
-    body: JSON.stringify({ passphrase: 'test-passphrase' }),
-  });
-  expect(response.status).toBe(200);
-  return (response.headers.get('set-cookie') as string).split(';')[0]!;
 }
 
 function call(app: App, route: { method: string; path: string }, cookie?: string) {
@@ -127,7 +118,7 @@ describe('the admin guard', () => {
   });
 
   it('answers 403 on every admin route for a signed-in user who is not an admin', async () => {
-    const cookie = await sessionCookie(app);
+    const cookie = sessionCookie();
     vi.mocked(queries.getUser).mockResolvedValue({ ...ADMIN, role: 'user' } as never);
     for (const route of adminRoutes(app)) {
       const response = await call(app, route, cookie);
@@ -137,7 +128,7 @@ describe('the admin guard', () => {
   });
 
   it('lets an admin through to every admin route', async () => {
-    const cookie = await sessionCookie(app);
+    const cookie = sessionCookie();
     for (const route of adminRoutes(app)) {
       const response = await call(app, route, cookie);
       expect([401, 403], `${route.method} ${route.path}`).not.toContain(response.status);
@@ -145,16 +136,17 @@ describe('the admin guard', () => {
   });
 
   it('reads the role on every request, so a demotion takes effect at once', async () => {
-    const cookie = await sessionCookie(app);
+    const cookie = sessionCookie();
     expect((await app.request('/admin/runs', { headers: { cookie } })).status).toBe(200);
     vi.mocked(queries.getUser).mockResolvedValue({ ...ADMIN, role: 'user' } as never);
     expect((await app.request('/admin/runs', { headers: { cookie } })).status).toBe(403);
   });
 
   it('refuses a session whose user no longer exists', async () => {
-    const cookie = await sessionCookie(app);
+    const cookie = sessionCookie();
     vi.mocked(queries.getUser).mockResolvedValue(null);
-    expect((await app.request('/admin/runs', { headers: { cookie } })).status).toBe(403);
+    // A cookie for a user who is gone is no session at all (D160): 401, as signed out.
+    expect((await app.request('/admin/runs', { headers: { cookie } })).status).toBe(401);
   });
 
   it('gates paths under the prefix that have no route, so a probe learns nothing', async () => {
@@ -181,7 +173,7 @@ describe('the admin guard', () => {
         finished_at: new Date('2026-09-30T06:46:00Z'),
       },
     ]);
-    const cookie = await sessionCookie(app);
+    const cookie = sessionCookie();
     const response = await app.request('/admin/runs?kind=backfill', { headers: { cookie } });
     expect(response.status).toBe(200);
     expect(queries.listAllRuns).toHaveBeenCalledWith('backfill', expect.any(Number));
@@ -202,7 +194,7 @@ describe('the admin guard', () => {
   });
 
   it('refuses a kind that is not a run kind', async () => {
-    const cookie = await sessionCookie(app);
+    const cookie = sessionCookie();
     const response = await app.request('/admin/runs?kind=DROP%20TABLE', { headers: { cookie } });
     expect(response.status).toBe(400);
   });

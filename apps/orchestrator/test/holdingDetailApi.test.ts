@@ -8,9 +8,11 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ACTIVE_SESSION, sessionCookie } from './session.js';
 
 const AGENT = '90000000-0000-0000-0000-000000000001';
 const USER = {
+  ...ACTIVE_SESSION,
   id: '00000000-0000-0000-0000-000000000001',
   email: null,
   base_currency: 'USD',
@@ -66,7 +68,6 @@ const { AiServiceError } = await import('@traders/shared/ai');
 const ENV = {
   APP_ENV: 'test',
   LOG_LEVEL: 'error',
-  APP_PASSPHRASE: 'test-passphrase',
   SESSION_SECRET: 'test-session-secret-value',
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   AI_SERVICE_URL: 'http://ai-service:8000',
@@ -90,12 +91,7 @@ beforeEach(async () => {
   // one-shot answer it leaves behind would be the next test's holding.
   queries.getHolding.mockReset();
   app = buildApp();
-  const response = await app.request('/auth/login', {
-    method: 'POST',
-    headers: { origin: 'http://localhost:5173', 'content-type': 'application/json' },
-    body: JSON.stringify({ passphrase: 'test-passphrase' }),
-  });
-  cookie = (response.headers.get('set-cookie') as string).split(';')[0]!;
+  cookie = sessionCookie();
 });
 
 const get = (path: string) => app.request(path, { headers: { cookie } });

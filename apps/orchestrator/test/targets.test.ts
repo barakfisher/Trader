@@ -9,8 +9,10 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ACTIVE_SESSION, sessionCookie } from './session.js';
 
 const USER = {
+  ...ACTIVE_SESSION,
   id: '00000000-0000-0000-0000-000000000001',
   email: null,
   base_currency: 'USD',
@@ -102,7 +104,6 @@ const queries = await import('../src/db/queries.js');
 const ENV = {
   APP_ENV: 'test',
   LOG_LEVEL: 'error',
-  APP_PASSPHRASE: 'test-passphrase',
   SESSION_SECRET: 'test-session-secret-value',
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   AI_SERVICE_URL: 'http://ai-service:8000',
@@ -118,16 +119,6 @@ function buildApp() {
   resetConfigForTests();
   ai = createFakeAi();
   return createApp(loadConfig(ENV), ai);
-}
-
-async function loginCookie(app: ReturnType<typeof buildApp>): Promise<string> {
-  const response = await app.request('/auth/login', {
-    method: 'POST',
-    headers: ORIGIN,
-    body: JSON.stringify({ passphrase: 'test-passphrase' }),
-  });
-  const cookie = response.headers.get('set-cookie') as string;
-  return cookie.split(';')[0]!;
 }
 
 async function putTargets(
@@ -149,7 +140,7 @@ describe('target weights', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     app = buildApp();
-    cookie = await loginCookie(app);
+    cookie = sessionCookie();
   });
 
   it('requires a session to read or write targets', async () => {

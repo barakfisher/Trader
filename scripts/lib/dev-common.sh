@@ -30,10 +30,9 @@ require_env_file() {
   say "No .env found - creating one from .env.example"
   cp "$REPO_ROOT/.env.example" "$env_file"
 
-  local session_secret internal_key passphrase
+  local session_secret internal_key
   session_secret="$(openssl rand -hex 32)"
   internal_key="$(openssl rand -hex 16)"
-  passphrase="dev-$(openssl rand -hex 6)"
 
   # BSD sed (macOS) needs an argument to -i; GNU sed does not.
   local sed_inplace=(-i)
@@ -42,16 +41,21 @@ require_env_file() {
   sed "${sed_inplace[@]}" \
     -e "s|^SESSION_SECRET=.*|SESSION_SECRET=${session_secret}|" \
     -e "s|^INTERNAL_API_KEY=.*|INTERNAL_API_KEY=${internal_key}|" \
-    -e "s|^APP_PASSPHRASE=.*|APP_PASSPHRASE=${passphrase}|" \
     "$env_file"
 
   ok "Created .env with generated secrets."
-  printf '     %sYour sign-in passphrase is: %s%s%s\n' "$C_DIM" "$C_BOLD" "$passphrase" "$C_RESET"
-  printf '     %s(it is stored in .env, which is git-ignored)%s\n' "$C_DIM" "$C_RESET"
+}
+
+# The admin signs in with an email and password kept in the database (D179).
+# The first start gives them one and prints it once; every later start finds
+# it set and leaves it alone. ADMIN_EMAIL picks the address.
+ensure_admin_password() {
+  bash "$REPO_ROOT/scripts/admin-password.sh" "$1" "${ADMIN_EMAIL:-admin@traders.localhost}" \
+    --if-unset --generate
 }
 
 # Export every variable from .env into this shell, so both scripts can read the
-# ports and the passphrase the user actually configured.
+# ports the user actually configured.
 load_env() {
   set -a
   # shellcheck disable=SC1091
@@ -114,7 +118,7 @@ print_urls() {
   printf '%s  Dashboard   %shttp://127.0.0.1:%s%s\n' "$C_BOLD" "$C_RESET" "$web_port" ""
   printf '%s  API         %shttp://127.0.0.1:%s/readyz\n' "$C_BOLD" "$C_RESET" "$api_port"
   printf '%s  AI service  %shttp://127.0.0.1:%s/docs\n' "$C_BOLD" "$C_RESET" "$ai_port"
-  printf '%s  Passphrase  %s%s\n' "$C_BOLD" "$C_RESET" "${APP_PASSPHRASE:-see .env}"
+  printf '%s  Sign in     %sas the admin; lost the password? bash scripts/admin-password.sh\n' "$C_BOLD" "$C_RESET"
   # macOS resolves "localhost" to IPv6 first, and another project may be
   # listening there. 127.0.0.1 is unambiguous.
   printf '%s              use 127.0.0.1, not localhost%s\n' "$C_DIM" "$C_RESET"

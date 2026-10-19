@@ -14,10 +14,11 @@
 #
 # Usage: bash scripts/smoke-test.sh [orchestrator_url]
 #
-# SMOKE_ENV_FILE names the file holding APP_PASSPHRASE and INTERNAL_API_KEY
-# (default: the repository's .env), and SMOKE_ORIGIN the Origin the requests
-# claim (default: the compose web app's). Against the kind cluster:
-#   SMOKE_ENV_FILE=infra/k8s/overlays/kind/secrets.env \
+# ADMIN_EMAIL and ADMIN_PASSWORD are the admin's sign-in (D179; set them with
+# scripts/admin-password.sh). SMOKE_ENV_FILE names the file holding
+# INTERNAL_API_KEY (default: the repository's .env), and SMOKE_ORIGIN the Origin
+# the requests claim (default: the compose web app's). Against the kind cluster:
+#   ADMIN_EMAIL=... ADMIN_PASSWORD=... SMOKE_ENV_FILE=infra/k8s/overlays/kind/secrets.env \
 #   SMOKE_ORIGIN=http://traders.localhost bash scripts/smoke-test.sh http://127.0.0.1:8089
 set -euo pipefail
 
@@ -35,17 +36,25 @@ fail() { printf 'FAIL: %s\n' "$1" >&2; exit 1; }
 say "readiness"
 curl -fsS "$BASE_URL/readyz" | tee /dev/stderr | grep -q '"status"' || fail "orchestrator not ready"
 
+[ -n "${ADMIN_EMAIL:-}" ] && [ -n "${ADMIN_PASSWORD:-}" ] \
+  || fail "set ADMIN_EMAIL and ADMIN_PASSWORD - the address and password scripts/admin-password.sh gave the admin"
+
+# The body built by Python, so a password with a quote in it is still JSON.
+login_body() {
+  python3 -c 'import json,sys; print(json.dumps({"email": sys.argv[1], "password": sys.argv[2]}))' "$1" "$2"
+}
+
 say "login"
-curl -fsS -c "$COOKIE_JAR" -X POST "$BASE_URL/auth/login" \
+login_body "$ADMIN_EMAIL" "$ADMIN_PASSWORD" | curl -fsS -c "$COOKIE_JAR" -X POST "$BASE_URL/auth/login" \
   -H 'content-type: application/json' \
   -H "origin: $ORIGIN" \
-  -d "{\"passphrase\":\"${APP_PASSPHRASE}\"}" > /dev/null || fail "login rejected"
+  --data-binary @- > /dev/null || fail "login rejected"
 
-say "login with a wrong passphrase is rejected"
-status=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE_URL/auth/login" \
-  -H 'content-type: application/json' -H "origin: $ORIGIN" \
-  -d '{"passphrase":"definitely-not-it"}')
-[ "$status" = "401" ] || fail "expected 401 for a wrong passphrase, got $status"
+say "login with a wrong password is rejected"
+status=$(login_body "$ADMIN_EMAIL" "definitely-not-it" | curl -s -o /dev/null -w '%{http_code}' \
+  -X POST "$BASE_URL/auth/login" -H 'content-type: application/json' -H "origin: $ORIGIN" \
+  --data-binary @-)
+[ "$status" = "401" ] || fail "expected 401 for a wrong password, got $status"
 
 say "import preview"
 preview=$(curl -fsS -b "$COOKIE_JAR" -X POST "$BASE_URL/imports/preview" \

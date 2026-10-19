@@ -8,8 +8,8 @@
 #      and copies them into the cluster - kind's node is a separate container
 #      with its own image store, and cannot see the images on your Mac.
 #   3. Writes infra/k8s/overlays/kind/secrets.env on first run: fresh random
-#      secrets, including the cluster's own sign-in passphrase, printed once
-#      (read it again with: grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.env).
+#      secrets; the admin's sign-in password is set after the rollout and
+#      printed once (replace it with: bash scripts/admin-password.sh kind <email>).
 #      The cluster needs no .env. Kept after that - the database password in
 #      particular is fixed when Postgres first creates its data directory - and
 #      recovered from the cluster's own Secret when the file is missing but the
@@ -139,12 +139,10 @@ if [ -f "$SECRETS_FILE" ]; then
   fi
 else
   say "Generating $(basename "$SECRETS_FILE") (git-ignored; kept from now on)"
-  passphrase="cluster-$(openssl rand -hex 6)"
   db_password="$(openssl rand -hex 16)"
   app_password="$(openssl rand -hex 16)"
   umask 077
   cat > "$SECRETS_FILE" << EOF
-APP_PASSPHRASE=$passphrase
 SESSION_SECRET=$(openssl rand -hex 32)
 INTERNAL_API_KEY=$(openssl rand -hex 16)
 POSTGRES_PASSWORD=$db_password
@@ -152,7 +150,6 @@ APP_DB_PASSWORD=$app_password
 DATABASE_URL=postgresql://traders_app:$app_password@postgres:5432/traders
 MIGRATION_DATABASE_URL=postgresql://traders:$db_password@postgres:5432/traders
 EOF
-  printf '     %sSign-in passphrase for the cluster: %s%s%s\n' "$C_DIM" "$C_BOLD" "$passphrase" "$C_RESET"
 fi
 
 # --- 4. apply ----------------------------------------------------------------
@@ -272,6 +269,8 @@ done
 kubectl --context "$CONTEXT" -n traefik rollout status deployment/traefik --timeout=120s
 kubectl --context "$CONTEXT" -n kube-system rollout status deployment/metrics-server --timeout=120s
 
+ensure_admin_password kind
+
 say "Cluster state"
 kc get pods
 echo
@@ -283,5 +282,5 @@ if [ -n "$TAILNET_HOST" ] && [ "$TAILNET_HOST" != "none" ]; then
     warn "tailscale serve is not forwarding to the cluster yet - run once: tailscale serve --bg http://127.0.0.1:80"
   fi
 fi
-echo "     sign in with: grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.env"
+echo "     sign in as the admin; lost the password? bash scripts/admin-password.sh kind <email>"
 warn_if_backup_stale kind

@@ -239,9 +239,9 @@ this list exists. *Done 2026-10-15: [M9-MEASUREMENT.md](M9-MEASUREMENT.md).*
 - The approval message is the admin's Telegram binding, in the admin's language
   (`notify/messages.ts`); its buttons carry a signed request token.
 
-**PRs, in order** (decisions complete): the schema (0056 or the next free number), signup and
-login (web + i18n, the zone prefill, the one-time password), the approval flow (Telegram and the
-Admin page), the cap's enforcement, scheduling per user, the time zone's reads and guideline 10,
+**PRs, in order** (decisions complete): the schema (0058), login (email + password, the admin's
+bootstrap script, `session_version`, the one-time password; D179-D182), signup and the approval
+flow together (the zone prefill, Telegram and the Admin page; D180), the cap's enforcement, scheduling per user, the time zone's reads and guideline 10,
 the admin's user list and own-account reset, then the exit test.
 
 **Exit:** two users on one installation, each seeing only their own holdings, observations,

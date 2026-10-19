@@ -191,6 +191,7 @@ wait_for_http "http://127.0.0.1:${AI_PORT}/healthz" 30 "ai-service"
 
 start "api" "$C_BLUE" "$REPO_ROOT/apps/orchestrator" pnpm dev
 wait_for_http "${API_URL}/healthz" 30 "orchestrator"
+ensure_admin_password local
 
 start "web" "$C_GREEN" "$REPO_ROOT/apps/web" pnpm dev --port "$WEB_PORT" --host 127.0.0.1
 wait_for_http "http://127.0.0.1:${WEB_PORT}/" 30 "web"

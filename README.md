@@ -28,7 +28,8 @@ bash scripts/dev-docker.sh
 
 That is the whole setup: it creates `.env` with generated secrets on first run, builds the
 images, starts everything, waits until the stack is genuinely ready, and prints the dashboard URL
-and your sign-in passphrase. Then import `data/fixtures/demo-portfolio.csv`.
+and, on the first start, the admin's sign-in email and password (printed once;
+`bash scripts/admin-password.sh compose <email>` sets a new one). Then import `data/fixtures/demo-portfolio.csv`.
 
 ### Two ways to run it
 
@@ -73,8 +74,8 @@ One command: it creates the cluster, builds the three production images and load
 generates the cluster's secrets (git-ignored), migrates the database, loads the concept corpus and
 the instrument universe, starts the services, and waits until every one is ready. The first run
 spends most of its time building the images - a few minutes (four in CI, from nothing); later
-runs reuse Docker's build cache and take about two. Then open **http://traders.localhost**, sign in with the passphrase it
-printed (`grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.env` shows it again), and use
+runs reuse Docker's build cache and take about two. Then open **http://traders.localhost**, sign in with the admin password it
+printed (`bash scripts/admin-password.sh kind <email>` sets a new one), and use
 **Import** to load `data/fixtures/demo-portfolio.csv` - the cluster starts with an empty
 portfolio of its own.
 

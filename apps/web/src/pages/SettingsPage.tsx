@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { BellOff, Settings as SettingsIcon } from 'lucide-react';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
+import { PasswordChange } from '../components/PasswordChange.tsx';
 import { TelegramConnect } from '../components/TelegramConnect.tsx';
 import { Button, Card, ErrorNote, Spinner } from '../components/ui.tsx';
 import {
@@ -248,6 +249,10 @@ export const SettingsPage = observer(function SettingsPage() {
           </Card>
 
           <AccountCard />
+
+          <Card title={t('password.title')}>
+            <PasswordChange />
+          </Card>
 
           <Card title={t('settings.severityTitle')}>
             <p className="mb-3 text-sm text-text-muted">

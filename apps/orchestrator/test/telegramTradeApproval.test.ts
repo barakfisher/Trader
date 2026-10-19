@@ -10,6 +10,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ACTIVE_SESSION } from './session.js';
 
 const USER = '00000000-0000-0000-0000-000000000001';
 const PROPOSAL = '11111111-2222-3333-4444-555555555555';
@@ -75,7 +76,6 @@ const { bpsAsPercent } = await import('../src/telegram/tradeApproval.js');
 const ENV = {
   APP_ENV: 'test',
   LOG_LEVEL: 'error',
-  APP_PASSPHRASE: 'test-passphrase',
   SESSION_SECRET: 'test-session-secret-value',
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   AI_SERVICE_URL: 'http://ai-service:8000',

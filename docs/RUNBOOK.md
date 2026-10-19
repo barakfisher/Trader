@@ -26,7 +26,7 @@ is replaced.
 
 | Secret | Read by | What rotating it does |
 |---|---|---|
-| `APP_PASSPHRASE` | orchestrator | the sign-in passphrase changes; existing sessions stay valid |
+| the admin's password | the database, not a setting | `bash scripts/admin-password.sh <compose\|kind\|local> <email>` - a new password, printed once; **every session the admin holds ends** (D179) |
 | `SESSION_SECRET` | orchestrator | **every session ends** - everyone signs in again |
 | `INTERNAL_API_KEY` | orchestrator, AI service, CronJobs | service-to-service calls; all readers must change together, or runs and quotes fail with 401 |
 | `TELEGRAM_SIGNING_SECRET` | orchestrator | **buttons in already-sent Telegram messages stop working**, and unused bind links die; new messages work. Must differ from the webhook secret (decision 20) |

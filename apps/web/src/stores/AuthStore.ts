@@ -65,24 +65,35 @@ export class AuthStore {
     }
   }
 
-  async login(passphrase: string): Promise<void> {
+  async login(email: string, password: string): Promise<void> {
     this.submitting = true;
     this.error = null;
     try {
-      const user = await api.post<SessionUser>('/auth/login', { passphrase });
+      const user = await api.post<SessionUser>('/auth/login', { email, password });
       runInAction(() => {
         this.user = user;
       });
     } catch (error) {
       runInAction(() => {
-        this.error =
-          error instanceof ApiRequestError ? error.message : t('errors.loginFailed');
+        this.error = loginErrorMessage(error);
       });
     } finally {
       runInAction(() => {
         this.submitting = false;
       });
     }
+  }
+
+  /**
+   * Change this account's password. The server ends every other session and
+   * reissues this one, and the returned user no longer must change it, so the
+   * one-time password screen gives way to the app. Throws for the form to show.
+   */
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    const user = await api.post<SessionUser>('/auth/password', { currentPassword, newPassword });
+    runInAction(() => {
+      this.user = user;
+    });
   }
 
   async logout(): Promise<void> {
@@ -113,4 +124,12 @@ export class AuthStore {
       });
     }
   }
+}
+
+/** The server's refusal as a sentence in the user's language, by its code. */
+function loginErrorMessage(error: unknown): string {
+  if (!(error instanceof ApiRequestError)) return t('errors.loginFailed');
+  if (error.status === 401) return t('login.errors.incorrect');
+  if (error.code === 'account_not_active') return t('login.errors.notActive');
+  return error.message;
 }
