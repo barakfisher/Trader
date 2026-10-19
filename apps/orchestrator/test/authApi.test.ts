@@ -1,0 +1,277 @@
+/**
+ * Signing in, the session's checks against the user (D160) and changing one's
+ * own password (D159, D162, D181). The database is mocked; the hashing is the
+ * real argon2id, because "the stored hash verifies" is the behaviour.
+ */
+
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { ACTIVE_SESSION, TEST_USER_ID, sessionCookie } from './session.js';
+
+const PASSWORD = 'correct horse battery staple';
+
+const USER = {
+  ...ACTIVE_SESSION,
+  id: TEST_USER_ID,
+  email: 'dana@example.com',
+  base_currency: 'USD',
+  timezone: 'Asia/Jerusalem',
+  role: 'user' as const,
+};
+
+vi.mock('../src/db/pool.js', () => ({
+  queryOne: vi.fn(async () => ({ ok: 1 })),
+  query: vi.fn(async () => []),
+  transaction: vi.fn(),
+  initPool: vi.fn(),
+  getPool: vi.fn(),
+  closePool: vi.fn(),
+}));
+
+vi.mock('../src/db/queries.js', () => ({
+  getUser: vi.fn(),
+  getUserCredentialsByEmail: vi.fn(),
+  getPasswordHash: vi.fn(),
+  recordSignIn: vi.fn(async () => undefined),
+  changePassword: vi.fn(),
+  getOrCreateUserSettings: vi.fn(async () => ({ language: 'en' })),
+  insertAdminAudit: vi.fn(),
+}));
+
+const { createApp } = await import('../src/http/app.js');
+const { loadConfig, resetConfigForTests } = await import('../src/config.js');
+const { SESSION_COOKIE, verifySessionToken } = await import('../src/http/auth.js');
+const { hashPassword, PASSWORD_MIN_LENGTH } = await import('../src/http/password.js');
+const queries = await import('../src/db/queries.js');
+const { createFakeAi } = await import('./fakeAi.js');
+
+const ENV = {
+  APP_ENV: 'test',
+  LOG_LEVEL: 'error',
+  SESSION_SECRET: 'test-session-secret-value',
+  DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
+  AI_SERVICE_URL: 'http://ai-service:8000',
+  INTERNAL_API_KEY: 'internal-test-key',
+  ALLOWED_ORIGINS: 'http://localhost:5173',
+} as unknown as NodeJS.ProcessEnv;
+
+const HEADERS = { origin: 'http://localhost:5173', 'content-type': 'application/json' };
+
+function buildApp() {
+  resetConfigForTests();
+  return createApp(loadConfig(ENV), createFakeAi());
+}
+
+type App = ReturnType<typeof buildApp>;
+
+let passwordHash: string;
+
+beforeAll(async () => {
+  passwordHash = await hashPassword(PASSWORD);
+});
+
+function login(app: App, email: string, password: string) {
+  return app.request('/auth/login', {
+    method: 'POST',
+    headers: HEADERS,
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+function changePassword(app: App, cookie: string, currentPassword: string, newPassword: string) {
+  return app.request('/auth/password', {
+    method: 'POST',
+    headers: { ...HEADERS, cookie },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
+async function session(app: App, cookie: string) {
+  const response = await app.request('/auth/session', { headers: { cookie } });
+  return (await response.json()) as { authenticated: boolean; user?: { mustChangePassword: boolean } };
+}
+
+/** The `name=value` part of a Set-Cookie header. */
+function cookieOf(response: Response): string {
+  return (response.headers.get('set-cookie') ?? '').split(';')[0]!;
+}
+
+describe('signing in', () => {
+  let app: App;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(queries.getUser).mockResolvedValue(USER);
+    vi.mocked(queries.getUserCredentialsByEmail).mockResolvedValue({
+      id: USER.id,
+      status: 'active',
+      password_hash: passwordHash,
+    });
+    app = buildApp();
+  });
+
+  it('issues an httpOnly session cookie carrying the session version', async () => {
+    const response = await login(app, 'Dana@Example.com', PASSWORD);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ id: USER.id, mustChangePassword: false });
+
+    const header = response.headers.get('set-cookie') ?? '';
+    expect(header).toContain('HttpOnly');
+    expect(header).toContain('SameSite=Lax');
+    const token = cookieOf(response).slice(`${SESSION_COOKIE}=`.length);
+    expect(verifySessionToken(token, 'test-session-secret-value')).toEqual({
+      userId: USER.id,
+      sessionVersion: USER.session_version,
+    });
+    expect(queries.getUserCredentialsByEmail).toHaveBeenCalledWith('Dana@Example.com');
+    expect(queries.recordSignIn).toHaveBeenCalledWith(USER.id);
+    expect((await session(app, cookieOf(response))).authenticated).toBe(true);
+  });
+
+  it('gives a wrong password and an unknown email the same answer', async () => {
+    const wrong = await login(app, USER.email, 'not the password at all');
+    vi.mocked(queries.getUserCredentialsByEmail).mockResolvedValue(null);
+    const unknown = await login(app, 'nobody@example.com', PASSWORD);
+
+    expect(wrong.status).toBe(401);
+    expect(unknown.status).toBe(401);
+    const strip = ({ requestId: _, ...body }: Record<string, unknown>) => body;
+    expect(strip(await wrong.json())).toEqual(strip(await unknown.json()));
+    expect(wrong.headers.get('set-cookie')).toBeNull();
+    expect(queries.recordSignIn).not.toHaveBeenCalled();
+  });
+
+  it('refuses a user who has never been given a password', async () => {
+    vi.mocked(queries.getUserCredentialsByEmail).mockResolvedValue({
+      id: USER.id,
+      status: 'active',
+      password_hash: null,
+    });
+    expect((await login(app, USER.email, PASSWORD)).status).toBe(401);
+  });
+
+  it.each(['pending', 'rejected', 'disabled'] as const)(
+    'tells a %s user with the right password that the account is not active',
+    async (status) => {
+      vi.mocked(queries.getUserCredentialsByEmail).mockResolvedValue({
+        id: USER.id,
+        status,
+        password_hash: passwordHash,
+      });
+      const response = await login(app, USER.email, PASSWORD);
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ error: 'account_not_active' });
+      expect(response.headers.get('set-cookie')).toBeNull();
+    },
+  );
+});
+
+describe('a session is checked against the user on every request (D160)', () => {
+  let app: App;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    app = buildApp();
+  });
+
+  it('holds while the user is active and the versions match', async () => {
+    vi.mocked(queries.getUser).mockResolvedValue(USER);
+    expect((await session(app, sessionCookie())).authenticated).toBe(true);
+  });
+
+  it.each(['pending', 'rejected', 'disabled'] as const)('ends once the user is %s', async (status) => {
+    vi.mocked(queries.getUser).mockResolvedValue({ ...USER, status });
+    expect((await session(app, sessionCookie())).authenticated).toBe(false);
+    expect((await app.request('/settings', { headers: { cookie: sessionCookie() } })).status).toBe(401);
+  });
+
+  it('ends once the version moves on - a password changed elsewhere', async () => {
+    vi.mocked(queries.getUser).mockResolvedValue({ ...USER, session_version: 2 });
+    expect((await session(app, sessionCookie(USER.id, 1))).authenticated).toBe(false);
+    expect((await session(app, sessionCookie(USER.id, 2))).authenticated).toBe(true);
+  });
+
+  it('ends when the user no longer exists', async () => {
+    vi.mocked(queries.getUser).mockResolvedValue(null);
+    expect((await session(app, sessionCookie())).authenticated).toBe(false);
+  });
+
+  it('reads no user for a request without a cookie', async () => {
+    await app.request('/auth/session');
+    expect(queries.getUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('the one-time password (D162)', () => {
+  let app: App;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(queries.getUser).mockResolvedValue({ ...USER, password_must_change: true });
+    app = buildApp();
+  });
+
+  it('allows nothing but the session and a password change until it is changed', async () => {
+    const cookie = sessionCookie();
+    expect((await session(app, cookie)).user?.mustChangePassword).toBe(true);
+    const refused = await app.request('/settings', { headers: { cookie } });
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ error: 'password_change_required' });
+    const admin = await app.request('/admin/runs', { headers: { cookie } });
+    expect(admin.status).toBe(403);
+  });
+});
+
+describe('changing one\'s own password', () => {
+  let app: App;
+  const NEW_PASSWORD = 'a new and longer passphrase';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(queries.getUser).mockResolvedValue(USER);
+    vi.mocked(queries.getPasswordHash).mockResolvedValue(passwordHash);
+    vi.mocked(queries.changePassword).mockResolvedValue({
+      ...USER,
+      session_version: USER.session_version + 1,
+    });
+    app = buildApp();
+  });
+
+  it('needs a session', async () => {
+    const response = await app.request('/auth/password', {
+      method: 'POST',
+      headers: HEADERS,
+      body: JSON.stringify({ currentPassword: PASSWORD, newPassword: NEW_PASSWORD }),
+    });
+    expect(response.status).toBe(401);
+  });
+
+  it('needs the current password', async () => {
+    const response = await changePassword(app, sessionCookie(), 'not the password at all', NEW_PASSWORD);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: 'incorrect_password' });
+    expect(queries.changePassword).not.toHaveBeenCalled();
+  });
+
+  it('refuses a new password shorter than the rule, or the same one', async () => {
+    const short = await changePassword(app, sessionCookie(), PASSWORD, 'x'.repeat(PASSWORD_MIN_LENGTH - 1));
+    expect(await short.json()).toMatchObject({ error: 'password_too_short' });
+    const same = await changePassword(app, sessionCookie(), PASSWORD, PASSWORD);
+    expect(await same.json()).toMatchObject({ error: 'password_unchanged' });
+    expect(queries.changePassword).not.toHaveBeenCalled();
+  });
+
+  it('stores an argon2id hash and reissues this session at the new version', async () => {
+    const response = await changePassword(app, sessionCookie(), PASSWORD, NEW_PASSWORD);
+    expect(response.status).toBe(200);
+
+    const [userId, storedHash] = vi.mocked(queries.changePassword).mock.calls[0]!;
+    expect(userId).toBe(USER.id);
+    expect(storedHash).toMatch(/^\$argon2id\$/);
+
+    const token = cookieOf(response).slice(`${SESSION_COOKIE}=`.length);
+    expect(verifySessionToken(token, 'test-session-secret-value')?.sessionVersion).toBe(
+      USER.session_version + 1,
+    );
+  });
+});

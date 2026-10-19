@@ -9,8 +9,8 @@ bash scripts/k8s-up.sh      # create the cluster if needed, build, load, deploy
 bash scripts/k8s-down.sh    # delete the cluster and its database (asks first)
 ```
 
-Then open **http://traders.localhost** and sign in with the cluster's passphrase
-(`grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.env`).
+Then open **http://traders.localhost** and sign in as the admin, with the password the first
+`k8s-up.sh` printed (D179). Lost it: `bash scripts/admin-password.sh kind <email>` sets a new one.
 
 Every `kubectl` command below names the context, so it cannot reach another cluster:
 `kubectl --context kind-traders -n traders get pods`.
@@ -44,7 +44,7 @@ so `kubectl kustomize infra/k8s/.deploy` prints exactly what gets applied.
 |---|---|---|
 | Namespace `traders` | a named folder for objects | nothing collides with other apps; one command lists or removes everything |
 | ConfigMap `traders-config-<hash>` | settings injected as environment variables | the non-secret half of `.env`; the hash makes pods restart when a setting changes |
-| Secret `traders-secrets-<hash>` | the same, for secrets | passphrase, session key, internal key, DB password - never in git or an image. Base64, not encryption |
+| Secret `traders-secrets-<hash>` | the same, for secrets | session key, internal key, DB password - never in git or an image. Base64, not encryption |
 | Service `postgres`, `redis` | a fixed name and address in front of changing pods | every connection string names the Service, never a pod |
 | StatefulSet `postgres`, `redis` | keeps one pod with a stable identity and its own disk | a database must get the *same* disk back after a restart |
 | PersistentVolumeClaim `data-postgres-0` | a request for a disk that outlives any pod | without it, deleting the pod deletes the data |
@@ -97,9 +97,9 @@ service's own `AI_SERVICE_PORT` setting and stopped it at startup.
 **Secrets.** `scripts/k8s-up.sh` writes `overlays/kind/secrets.env` on the first run: random
 session and internal keys, random passwords for the database owner (`POSTGRES_PASSWORD`, used by
 the `migrate` Job through `MIGRATION_DATABASE_URL`) and for `traders_app`, the role every other pod
-connects as (`APP_DB_PASSWORD`, `DATABASE_URL`; migration 0033), and the cluster's own sign-in
-passphrase, printed once (`grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.env` to read it
-again). The cluster needs no `.env`. The owner password is never rewritten, because Postgres reads it
+connects as (`APP_DB_PASSWORD`, `DATABASE_URL`; migration 0033). The admin's sign-in is not
+a secret here: it is a hash in the database, set by `scripts/admin-password.sh` after the rollout.
+The cluster needs no `.env`. The owner password is never rewritten, because Postgres reads it
 only when it first creates its data directory - a new one would lock the migrations out of the
 existing database. A file from before the app role is upgraded in place: the app role's lines are
 added and nothing else changes. A missing file next to an existing cluster is recovered from the

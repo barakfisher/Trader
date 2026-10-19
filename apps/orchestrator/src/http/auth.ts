@@ -1,10 +1,12 @@
 /**
- * Session handling for single-user v1.
+ * The session cookie (D160).
  *
  * A session is `base64url(payload).base64url(hmac)`. There is no session table:
- * the cookie is self-describing and the HMAC makes it unforgeable, which is all
- * a one-account deployment needs. When real multi-user auth arrives, only this
- * file and the login route change.
+ * the HMAC makes the cookie unforgeable, and it carries the user's
+ * `session_version` as `ver`. The request pipeline reads the user on every
+ * request and accepts the session only while the user is `active` and the
+ * versions match, so disabling a user or changing a password ends sessions at
+ * once without a table to keep.
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
@@ -13,7 +15,14 @@ export const SESSION_COOKIE = 'traders_session';
 
 interface SessionPayload {
   uid: string;
+  ver: number;
   exp: number;
+}
+
+/** What a valid cookie claims; the caller still checks it against the user. */
+export interface SessionClaim {
+  userId: string;
+  sessionVersion: number;
 }
 
 function sign(data: string, secret: string): string {
@@ -27,35 +36,34 @@ function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(bufferA, bufferB);
 }
 
-export function createSessionToken(userId: string, secret: string, ttlHours: number): string {
+export function createSessionToken(
+  claim: SessionClaim,
+  secret: string,
+  ttlHours: number,
+): string {
   const payload: SessionPayload = {
-    uid: userId,
+    uid: claim.userId,
+    ver: claim.sessionVersion,
     exp: Date.now() + ttlHours * 3600 * 1000,
   };
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
   return `${encoded}.${sign(encoded, secret)}`;
 }
 
-export function verifySessionToken(token: string | undefined, secret: string): string | null {
+export function verifySessionToken(token: string | undefined, secret: string): SessionClaim | null {
   if (!token) return null;
   const [encoded, signature] = token.split('.');
   if (!encoded || !signature) return null;
   if (!safeEqual(signature, sign(encoded, secret))) return null;
   try {
     const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as SessionPayload;
-    if (!payload.uid || typeof payload.exp !== 'number') return null;
+    // A cookie from before `ver` existed is not a session: its holder signs in once more.
+    if (!payload.uid || typeof payload.exp !== 'number' || typeof payload.ver !== 'number') {
+      return null;
+    }
     if (payload.exp <= Date.now()) return null;
-    return payload.uid;
+    return { userId: payload.uid, sessionVersion: payload.ver };
   } catch {
     return null;
   }
-}
-
-/**
- * Compare the submitted passphrase with the configured one in constant time.
- * Digesting first keeps the comparison length-independent.
- */
-export function passphraseMatches(submitted: string, expected: string): boolean {
-  const digest = (value: string) => createHmac('sha256', 'passphrase').update(value).digest();
-  return timingSafeEqual(digest(submitted), digest(expected));
 }

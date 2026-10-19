@@ -9,7 +9,7 @@ the failure branches we actually handle, and the state it touches.
 
 ```mermaid
 flowchart TD
-  A[Login with passphrase] --> B[Empty dashboard]
+  A[Sign in with email and password] --> B[Empty dashboard]
   B --> C{Add holdings}
   C -->|CSV/JSON upload| D[Parse + validate rows]
   C -->|Manual form| G

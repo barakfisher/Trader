@@ -132,7 +132,6 @@ jobs:
       - name: Prepare environment
         run: |
           cp .env.example .env
-          sed -i 's/^APP_PASSPHRASE=.*/APP_PASSPHRASE=ci-passphrase/' .env
           sed -i 's/^SESSION_SECRET=.*/SESSION_SECRET=ci-session-secret-value-long-enough/' .env
           sed -i 's/^MARKET_DATA_PROVIDERS=.*/MARKET_DATA_PROVIDERS=fixture/' .env
       - name: Start the stack
@@ -173,8 +172,17 @@ jobs:
           done
           docker compose -f infra/compose/docker-compose.yml logs
           exit 1
+      # The bootstrap script (D179) as an operator runs it: the password on stdin.
+      - name: Give the admin an email and password
+        run: printf '%s' "$ADMIN_PASSWORD" | bash scripts/admin-password.sh compose "$ADMIN_EMAIL"
+        env:
+          ADMIN_EMAIL: admin@ci.test
+          ADMIN_PASSWORD: ci-admin-password
       - name: Smoke test the vertical slice
         run: bash scripts/smoke-test.sh
+        env:
+          ADMIN_EMAIL: admin@ci.test
+          ADMIN_PASSWORD: ci-admin-password
       # Query statistics (migration 0050, DB3): the server was started with the
       # library preloaded, the extension exists, and the report reads it - after
       # the smoke test, so there are statements to report.
@@ -271,24 +279,30 @@ jobs:
           curl -fsS $R -o /dev/null $H/
           curl -fsS $R $H/api/readyz | tee /dev/stderr | grep -q '"postgres":"ok"'
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST $H/api/internal/runs)" = 404
-      - name: The admin surface refuses no session, admits an admin, and refuses a demoted one
+      - name: The admin surface refuses no session, admits an admin, and refuses a demoted or disabled one
         # M8's guard against the real stack: the cookie, the migration that
-        # made the seeded account an admin, and the per-request role lookup
-        # (decision 83) - a demotion takes effect on the very next request,
-        # with the same cookie. The role is restored afterwards.
+        # made the seeded account an admin, and the per-request user read
+        # (decisions 83, 160) - a demotion or a disabling takes effect on the
+        # very next request, with the same cookie. Both are restored afterwards.
         run: |
           H='--resolve traders.localhost:80:127.0.0.1 http://traders.localhost'
           code() { curl -s -o /dev/null -w '%{http_code}' -b jar "$@"; }
           test "$(curl -s -o /dev/null -w '%{http_code}' $H/api/admin/runs)" = 401
-          pass=$(grep '^APP_PASSPHRASE=' infra/k8s/overlays/kind/secrets.env | cut -d= -f2-)
+          # k8s-up.sh gave the admin a generated password; this replaces it with a known one.
+          printf '%s' ci-admin-password | bash scripts/admin-password.sh kind admin@ci.test
           curl -fsS -c jar -H 'content-type: application/json' \
-            -d "{\"passphrase\":\"$pass\"}" $H/api/auth/login > /dev/null
+            -d '{"email":"admin@ci.test","password":"ci-admin-password"}' $H/api/auth/login > /dev/null
           test "$(code $H/api/admin/runs)" = 200
           sql() { $KUBECTL exec postgres-0 -- psql -U traders -d traders -tAc "$1"; }
           # A non-admin who is active must have a spend cap (0058), so demoting takes one.
           sql "update users set role = 'user', llm_cap_micro_usd = 0 where id = '00000000-0000-0000-0000-000000000001'"
           test "$(code $H/api/admin/runs)" = 403
           sql "update users set role = 'admin', llm_cap_micro_usd = null where id = '00000000-0000-0000-0000-000000000001'"
+          test "$(code $H/api/admin/runs)" = 200
+          # D160: the same cookie ends the moment the user is disabled, and holds again once active.
+          sql "update users set status = 'disabled' where id = '00000000-0000-0000-0000-000000000001'"
+          test "$(code $H/api/admin/runs)" = 401
+          sql "update users set status = 'active' where id = '00000000-0000-0000-0000-000000000001'"
           test "$(code $H/api/admin/runs)" = 200
       - name: A Job from a CronJob records a run
         run: |

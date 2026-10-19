@@ -773,6 +773,11 @@ export interface SessionUser {
    * settings page instead, every page would draw in English first.
    */
   language: UiLanguage;
+  /**
+   * The admin set a one-time password (D162): the app shows nothing but the
+   * password change, and the server refuses everything else until it is done.
+   */
+  mustChangePassword: boolean;
 }
 
 // --- Admin (M8) --------------------------------------------------------------

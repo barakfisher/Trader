@@ -40,7 +40,6 @@ const schema = z.object({
   ORCHESTRATOR_PORT: z.coerce.number().int().positive().default(8080),
   ALLOWED_ORIGINS: z.string().default('http://localhost:5173'),
 
-  APP_PASSPHRASE: z.string().min(8, 'APP_PASSPHRASE must be at least 8 characters'),
   SESSION_SECRET: z.string().min(16, 'SESSION_SECRET must be at least 16 characters'),
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(24 * 7),
 

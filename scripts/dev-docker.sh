@@ -94,6 +94,7 @@ fi
 # The containers being "up" is not the same as the app being usable: migrations
 # have to finish and both services have to answer their readiness probes.
 wait_for_http "http://127.0.0.1:${ORCHESTRATOR_HOST_PORT:-8080}/readyz" 60 "orchestrator"
+ensure_admin_password compose
 wait_for_http "http://127.0.0.1:${AI_SERVICE_HOST_PORT:-8000}/healthz" 30 "ai-service"
 wait_for_http "http://127.0.0.1:${WEB_HOST_PORT:-5173}/" 60 "web"
 

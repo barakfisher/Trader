@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { RouterProvider } from '@tanstack/react-router';
 
 import { LoginPage } from './pages/LoginPage.tsx';
+import { PasswordRequiredPage } from './pages/PasswordRequiredPage.tsx';
 import { Spinner } from './components/ui.tsx';
 import { createAppRouter } from './router.tsx';
 import { useStore } from './stores/context.tsx';
@@ -30,6 +31,8 @@ export const App = observer(function App({
 
   // The address is left as it is, so signing in lands on the view that was asked for.
   if (!auth.isAuthenticated) return <LoginPage />;
+  // The admin's one-time password (D162): nothing else until it is changed.
+  if (auth.user?.mustChangePassword) return <PasswordRequiredPage />;
 
   return <RouterProvider router={router} />;
 });

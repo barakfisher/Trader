@@ -8,6 +8,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AiServiceError } from '@traders/shared/ai';
+import { ACTIVE_SESSION } from './session.js';
 
 const USER = '00000000-0000-0000-0000-000000000001';
 const AGENT = '90000000-0000-0000-0000-0000000000a1';
@@ -220,8 +221,7 @@ describe('the ask, through POST /internal/runs (D71)', () => {
   const ENV = {
     APP_ENV: 'test',
     LOG_LEVEL: 'error',
-    APP_PASSPHRASE: 'test-passphrase',
-    SESSION_SECRET: 'test-session-secret-value',
+      SESSION_SECRET: 'test-session-secret-value',
     DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
     AI_SERVICE_URL: 'http://ai-service:8000',
     INTERNAL_API_KEY: 'internal-test-key',
@@ -258,8 +258,7 @@ describe('the settings', () => {
   it('schedule nothing unless ENABLE_SCHEDULED_SCANS is exactly true', async () => {
     const { loadConfig, resetConfigForTests } = await import('../src/config.js');
     const base = {
-      APP_PASSPHRASE: 'test-passphrase',
-      SESSION_SECRET: 'test-session-secret-value',
+          SESSION_SECRET: 'test-session-secret-value',
       DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
       AI_SERVICE_URL: 'http://ai-service:8000',
       INTERNAL_API_KEY: 'internal-test-key',

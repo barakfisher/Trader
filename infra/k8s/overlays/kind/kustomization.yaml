@@ -9,9 +9,8 @@ resources:
   - ../../base
 
 # The Secret, from secrets.env beside this file. scripts/k8s-up.sh writes that
-# file on first run with freshly generated values (the sign-in passphrase is
-# copied from your .env) and never rewrites it; it is git-ignored. Hash-suffixed
-# like the ConfigMap, so a changed secret rolls the pods that read it.
+# file on first run with freshly generated values and never rewrites it; it is
+# git-ignored. Hash-suffixed like the ConfigMap, so a changed secret rolls the pods that read it.
 #
 # A Secret is not encrypted - it is base64, readable by anyone who can read
 # the namespace. What it buys is separation: it is never in git, never in an

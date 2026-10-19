@@ -812,7 +812,7 @@ plan describes features, and the gaps have all been in the layers underneath the
 ## Orientation: running and verifying
 
 ```bash
-bash scripts/dev-docker.sh          # everything in containers; prints URLs and the passphrase
+bash scripts/dev-docker.sh          # everything in containers; prints URLs (and the admin password, first start only)
 bash scripts/dev-local.sh           # app processes native, Postgres+Redis in containers
 bash scripts/smoke-test.sh          # end-to-end against a running stack
 ```
@@ -2892,6 +2892,28 @@ failure they prevent.
     is non-null only while the fingerprint matches and it is not dismissed; the agents list shows
     an "Instructions conflict" badge, so a warning from the create drawer (which closes) is not
     lost. *Rejected:* form-only display (gone on reload; the create drawer would have to wait).
+179. **The admin's email and password come from an explicit script; `APP_PASSPHRASE` is
+    retired** (the user, 2026-10-19). `pnpm --filter @traders/orchestrator admin:password`
+    (`src/adminPassword.ts`) reads the password from stdin - never an argument, which lands in
+    shell history and `ps` - and sets the email and argon2id hash on the one admin. Idempotent:
+    re-running sets the same email and a fresh hash, and bumps `session_version`, so it is also
+    the "I lost my password" path. `dev-common.sh`, `k8s-up.sh` and CI call it with a generated
+    value, exactly where they generated the passphrase. **A redeploy past this PR needs one step**:
+    run the script, then sign in. *Rejected:* seeding from `ADMIN_EMAIL` + `APP_PASSPHRASE` at
+    startup when the admin has no hash - no manual step, but a password lives in the environment
+    for good, and a startup that writes credentials is a surprise nobody looks for.
+180. **Signup moves to the approval PR; this one is login, bootstrap, sessions and the one-time
+    password** (the user, 2026-10-19). MILESTONES put signup with login, but nobody can answer a
+    request until the approval PR: a signup shipped first creates `pending` rows only SQL can
+    resolve, and the person who signed up waits with nobody told. *Rejected:* MILESTONES' order -
+    harmless (a pending user has no access) but a dead end.
+181. **A password is 12 to 128 characters, with no composition rules** (the user, 2026-10-19).
+    Length is what resists guessing; rules about digits and symbols push people to `Password1!`.
+    The ceiling bounds argon2's input, not security. The rule is `passwordProblem` in
+    `packages/shared/src/password.ts`, so the server's refusal and the web form's hint are one rule.
+182. **No login rate limit in M9** (the user, 2026-10-19). Users are trusted people over
+    Tailscale (D155) and argon2id already costs each guess tens of milliseconds. It is debt that
+    M10 (strangers) must pay before the app faces the internet.
 
 ---
 
@@ -3823,8 +3845,10 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
     `DATABASE_URL` as `traders_app:traders_app` on the copy, `REDIS_URL=redis://127.0.0.1:6379/0`,
     `UNIVERSE_SNAPSHOT_DIR` = main checkout's `data/universe`); orchestrator `npx tsx src/server.ts`
     on 8082 with `AI_SERVICE_URL=http://127.0.0.1:8002`, `SCHEDULER_ENABLED=false`, Telegram vars
-    empty, a **throwaway `APP_PASSPHRASE`** (generated into the scratchpad; typing it is allowed - a
-    test value on localhost - typing the real one is not), `ALLOWED_ORIGINS=http://localhost:5179`;
+    empty, and the copy's admin given a **throwaway password** (since D179:
+    `printf '%s' "$throwaway" | DATABASE_URL=<copy> pnpm --filter @traders/orchestrator --silent
+    admin:password --email admin@copy.test`, the value generated into the scratchpad; typing it is
+    allowed - a test value on localhost - typing the real one is not), `ALLOWED_ORIGINS=http://localhost:5179`;
     web `API_PROXY_TARGET=http://127.0.0.1:8082 npx vite --port 5179`. **Both 8082 and vite bind
     every interface (Tailscale too)** - stop them as soon as the check is done, by port.
   - *Scripting the API:* a urllib cookie-jar script against 8082 (no `Origin` header). A scan
@@ -3952,8 +3976,8 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
   portfolio (10 holdings). Deploy it from the main checkout from now on (debt table). kind 0.33 is installed with Homebrew; kubectl 1.36. Every command
   names `--context kind-traders`. `bash scripts/k8s-up.sh` redeploys in ~1-2 minutes;
   `k8s-down.sh` deletes it (its DB holds only the demo portfolio). App:
-  **http://traders.localhost**, passphrase `grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.env`
-  in the main checkout.
+  **http://traders.localhost**, as the admin (D179: a password in the database, printed once by
+  `k8s-up.sh`; `bash scripts/admin-password.sh kind <email>` sets a new one).
   Docker has 7.75 GB; compose and the cluster together used well under half.
 - **Docker Hub pulls time out inside the session's sandbox**, every time in M7: run
   `docker pull`, `build-images.sh` and `k8s-up.sh` outside the sandbox.

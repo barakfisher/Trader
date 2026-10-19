@@ -41,7 +41,7 @@ One datastore: Postgres. One cache/queue: Redis.
 | Ownership of schedule | **The orchestrator owns run logic; the *trigger* is external** — local: an in-process timer; K8s: CronJob → `POST /internal/runs` | two schedulers (a local timer *and* a K8s CronJob) would double-fire; one trigger path, dedupe on run key |
 | HITL mechanism | A durable `proposals` row is the question and its deadline; `applyDecision` answers it, `proposal_sweep` expires it. (Mastra `suspend`/`resume` sat beside it from M4 and was retired in 0039, decision D11: every path already fell back to the row.) | never trust in-memory suspension across restarts |
 | LLM access | single gateway module, provider-agnostic (OpenRouter / Anthropic / OpenAI / local Ollama fallback) | keys already present in `.env`; model choice must not leak into business logic |
-| Auth (v1) | single account, session cookie from a passphrase login; `user_id` present on every table | real multi-user auth deferred but not designed out |
+| Auth | email + argon2id password per user (M9, D159); a signed session cookie checked against the user on every request (D160); `user_id` present on every table | v1's single shared passphrase, retired by D179 |
 | Money | integer minor units + explicit currency; `Decimal` in Python, never float | float drift in P&L is unacceptable |
 
 ## 3. Data model (Postgres, core tables)
@@ -218,7 +218,7 @@ Traders/
 - **Migrations:** Alembic owns the schema (ai-service ships it); orchestrator reads/writes via the same schema with its own typed queries.
 
 ## 10. Security
-Passphrase login + httpOnly session cookie · CSRF on state-changing routes · `/internal/*`
+Email + argon2id password login; httpOnly session cookie carrying `session_version`, checked against the user on every request · CSRF on state-changing routes · `/internal/*`
 routes reachable only in-cluster + shared-secret header · Telegram binding tokens signed and
 single-use · outbound URL allowlist for article fetching (SSRF) · article text is *data*:
 never treated as instructions by any prompt, and prompts state so explicitly · no secret in

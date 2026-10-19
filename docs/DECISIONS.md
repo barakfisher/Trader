@@ -189,3 +189,7 @@ while this file is out of date.
 | 176 | The contradiction check names conflicts; the catalogue writes the warning |
 | 177 | The check is its own purpose, on the agents' model and the agent's budget; every failure is a quiet skip |
 | 178 | The result is stored on the agent with a fingerprint; shown until dismissed or changed |
+| 179 | The admin's email and password come from an explicit script; `APP_PASSPHRASE` is retired |
+| 180 | Signup moves to the approval PR; this one is login, bootstrap, sessions and the one-time password |
+| 181 | A password is 12 to 128 characters, with no composition rules |
+| 182 | No login rate limit in M9 |

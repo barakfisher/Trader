@@ -30,8 +30,7 @@ phone -> https://<mac>.<tailnet>.ts.net         (Tailscale: only your signed-in 
    per-deploy file, because the name belongs to this machine. It prints the phone's address at the
    end.
 
-Open that address on the phone (Tailscale connected) and sign in with the cluster's passphrase:
-`grep APP_PASSPHRASE infra/k8s/overlays/kind/secrets.env`.
+Open that address on the phone (Tailscale connected) and sign in with your email and password.
 
 ## Why it is built this way
 

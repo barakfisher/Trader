@@ -22,10 +22,37 @@
   "disclaimer": "Educational and informational only. Nothing here is investment advice, no orders are ever placed, and prices may be delayed. Verify every figure before acting on it.",
   "login": {
     "title": "Traders",
-    "intro": "Portfolio copilot. Sign in with this installation's passphrase - its <code>APP_PASSPHRASE</code>, in <code>.env</code> for docker compose or in the cluster's <code>secrets.env</code>.",
-    "passphrase": "Passphrase",
+    "intro": "Portfolio copilot. Sign in with your email and password.",
+    "email": "Email",
+    "password": "Password",
     "signIn": "Sign in",
-    "signingIn": "Signing in…"
+    "signingIn": "Signing in…",
+    "forgotten": "Forgot your password? Ask the installation's admin to set a one-time password.",
+    "errors": {
+      "incorrect": "That email and password do not match an account.",
+      "notActive": "This account is not active. Ask the installation's admin."
+    }
+  },
+  "password": {
+    "title": "Password",
+    "current": "Current password",
+    "new": "New password",
+    "repeat": "New password, again",
+    "rule": "{{min}} to {{max}} characters. Any characters at all - length is what makes a password hard to guess.",
+    "save": "Change password",
+    "saving": "Changing…",
+    "changed": "Password changed. Every other device you were signed in on is signed out.",
+    "requiredTitle": "Choose a new password",
+    "requiredIntro": "You signed in with a one-time password from the admin. Choose your own to continue: the one-time password is the current one.",
+    "signOut": "Sign out",
+    "errors": {
+      "incorrect": "The current password is not right.",
+      "tooShort": "The new password needs at least {{min}} characters.",
+      "tooLong": "The new password can have at most {{max}} characters.",
+      "unchanged": "The new password is the same as the current one.",
+      "mismatch": "The two new passwords are different.",
+      "failed": "Could not change the password."
+    }
   },
   "api": {
     "unreachable": "Cannot reach the server. Is the orchestrator running?",

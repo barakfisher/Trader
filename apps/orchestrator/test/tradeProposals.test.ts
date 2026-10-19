@@ -10,8 +10,9 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ACTIVE_SESSION } from './session.js';
 
-const USER = { id: '00000000-0000-0000-0000-000000000001', email: null, base_currency: 'USD', timezone: 'Asia/Jerusalem' };
+const USER = { ...ACTIVE_SESSION, id: '00000000-0000-0000-0000-000000000001', email: null, base_currency: 'USD', timezone: 'Asia/Jerusalem' };
 const AGENT = '90000000-0000-0000-0000-0000000000a1';
 const PROPOSAL = '50000000-0000-0000-0000-000000000001';
 const SCAN = '70000000-0000-0000-0000-000000000001';

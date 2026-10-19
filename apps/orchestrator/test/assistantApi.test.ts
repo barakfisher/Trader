@@ -5,6 +5,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ACTIVE_SESSION, sessionCookie } from './session.js';
 
 const USER_ID = '00000000-0000-0000-0000-000000000001';
 const CONVERSATION = '80000000-0000-0000-0000-000000000001';
@@ -19,7 +20,13 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
-  getUser: vi.fn(async () => ({ id: USER_ID, email: null, base_currency: 'USD', timezone: 'Asia/Jerusalem' })),
+  getUser: vi.fn(async () => ({
+    ...ACTIVE_SESSION,
+    id: USER_ID,
+    email: null,
+    base_currency: 'USD',
+    timezone: 'Asia/Jerusalem',
+  })),
   listAssistantConversations: vi.fn(async () => [
     {
       id: CONVERSATION,
@@ -41,7 +48,6 @@ const queries = await import('../src/db/queries.js');
 const ENV = {
   APP_ENV: 'test',
   LOG_LEVEL: 'error',
-  APP_PASSPHRASE: 'test-passphrase',
   SESSION_SECRET: 'test-session-secret-value',
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   AI_SERVICE_URL: 'http://ai-service:8000',
@@ -74,12 +80,7 @@ describe('the assistant routes', () => {
     vi.clearAllMocks();
     resetConfigForTests();
     app = createApp(loadConfig(ENV), { assistantMessage } as never);
-    const login = await app.request('/auth/login', {
-      method: 'POST',
-      headers: HEADERS,
-      body: JSON.stringify({ passphrase: 'test-passphrase' }),
-    });
-    cookie = (login.headers.get('set-cookie') as string).split(';')[0]!;
+    cookie = sessionCookie();
   });
 
   const send = (body: unknown) =>

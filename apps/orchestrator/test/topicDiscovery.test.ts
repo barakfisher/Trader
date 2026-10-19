@@ -17,6 +17,7 @@ import type { DiscoveredPhrase, TopicResolveResponse } from '@traders/shared/ai'
 import { AiServiceError } from '@traders/shared/ai';
 
 import type { KnownThemeRow, ProposalInput } from '../src/db/queries.js';
+import { ACTIVE_SESSION } from './session.js';
 
 const USER = {
   id: '00000000-0000-0000-0000-000000000001',
@@ -24,6 +25,7 @@ const USER = {
   base_currency: 'USD',
   timezone: 'Asia/Jerusalem',
   role: 'admin' as const,
+  ...ACTIVE_SESSION,
 };
 const COOLDOWN = 30;
 const TTL = 11;

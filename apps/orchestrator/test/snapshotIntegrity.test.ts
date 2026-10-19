@@ -11,6 +11,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { HoldingRow } from '../src/db/queries.js';
+import { ACTIVE_SESSION } from './session.js';
 
 /** The user's primary agent; its id is opaque to everything under test. */
 const AGENT = '90000000-0000-0000-0000-000000000001';
@@ -20,6 +21,7 @@ const USER = {
   base_currency: 'USD',
   timezone: 'Asia/Jerusalem',
   role: 'admin' as const,
+  ...ACTIVE_SESSION,
 };
 
 function holding(symbol: string, quantity: string, assetClass = 'equity'): HoldingRow {

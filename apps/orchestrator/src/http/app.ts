@@ -20,7 +20,7 @@ import type { Notifier } from '../notify/notifier.js';
 import type { Config } from '../config.js';
 import { logger } from '../logger.js';
 import { SESSION_COOKIE, verifySessionToken } from './auth.js';
-import { getUser, insertAdminAudit } from '../db/queries.js';
+import { getUser, insertAdminAudit, type UserRow } from '../db/queries.js';
 import { auditEntry } from './adminAudit.js';
 import { forbidden, toErrorResponse, unauthorized, ApiProblem } from './errors.js';
 import { registerAdminRoutes } from './routes/admin.js';
@@ -53,6 +53,8 @@ export interface AppEnv {
   Variables: {
     requestId: string;
     userId?: string;
+    /** The signed-in user, read once per request by the session middleware (D160). */
+    user?: UserRow;
     config: Config;
     ai: AiClient;
     notifier: Notifier;
@@ -167,11 +169,23 @@ export function createApp(
     return next();
   });
 
-  // Resolve the session for every request; individual routes decide if it is required.
+  /**
+   * Resolve the session for every request; individual routes decide if it is
+   * required. A valid cookie is not enough (D160): the user is read by primary
+   * key and the session holds only while they are `active` and their
+   * `session_version` is still the cookie's, so disabling a user or changing a
+   * password ends a session on its next request. A request without a cookie
+   * costs no read.
+   */
   app.use('*', async (context, next) => {
-    const token = getCookie(context, SESSION_COOKIE);
-    const userId = verifySessionToken(token, config.SESSION_SECRET);
-    if (userId) context.set('userId', userId);
+    const claim = verifySessionToken(getCookie(context, SESSION_COOKIE), config.SESSION_SECRET);
+    if (claim) {
+      const user = await getUser(claim.userId);
+      if (user && user.status === 'active' && user.session_version === claim.sessionVersion) {
+        context.set('userId', user.id);
+        context.set('user', user);
+      }
+    }
     return next();
   });
 
@@ -202,26 +216,32 @@ export function createApp(
     const isProtected = PROTECTED_PREFIXES.some(
       (prefix) => path === prefix || path.startsWith(`${prefix}/`),
     );
-    if (isProtected && !context.get('userId')) throw unauthorized();
+    if (!isProtected && !isAdminPath(path)) return next();
+    const user = context.get('user');
+    if (!user) throw unauthorized();
+    // The admin's one-time password (D162): until it is changed, the account
+    // can do nothing but change it - `/auth/*` is outside both gates.
+    if (user.password_must_change) {
+      throw new ApiProblem(403, 'password_change_required', 'set a new password first');
+    }
     return next();
   });
 
   /**
    * Admin gate: 401 without a session, 403 for a session whose user is not an
    * admin. The role is read from `users` on every request rather than carried
-   * in the cookie (decision 83): the cookie is self-describing and lives for
-   * days, so a role copied into it would survive a demotion until it expired.
-   * One indexed read per admin request is the whole cost.
+   * in the cookie (decision 83): the cookie lives for days, so a role copied
+   * into it would survive a demotion until it expired. The read is the session
+   * middleware's, which every signed-in request already makes (D160).
    *
    * Unknown paths under the prefix are gated too, so a signed-out probe of
    * `/admin/anything` learns nothing about which admin routes exist.
    */
   app.use('*', async (context, next) => {
     if (!isAdminPath(context.req.path)) return next();
-    const userId = context.get('userId');
-    if (!userId) throw unauthorized();
-    const user = await getUser(userId);
-    if (user?.role !== 'admin') throw forbidden('this account is not an administrator');
+    const user = context.get('user');
+    if (!user) throw unauthorized();
+    if (user.role !== 'admin') throw forbidden('this account is not an administrator');
     // Every admin request that can change something is recorded before it
     // runs, and does not run if the record cannot be written (decision 84).
     // Here rather than in each route for the same reason as the role check:
@@ -229,7 +249,7 @@ export function createApp(
     if (!SAFE_METHODS.has(context.req.method)) {
       const entry = await auditEntry(context);
       await insertAdminAudit({
-        adminUserId: userId,
+        adminUserId: user.id,
         action: entry.action,
         detail: entry.detail,
         ipAddress: entry.ipAddress,
