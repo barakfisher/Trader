@@ -896,6 +896,40 @@ class AgentScanRequest(BaseModel):
     trigger: Literal["manual", "schedule"] = "manual"
 
 
+class MandateCheckRequest(BaseModel):
+    """Check one agent's instructions against its settings (D176)."""
+
+    user_id: UUID
+
+
+class MandateConflict(BaseModel):
+    """A setting the instructions contradict, and the user's own words that do."""
+
+    setting: Literal[
+        "risk",
+        "horizon",
+        "style",
+        "max_position",
+        "cash_buffer",
+        "max_holdings",
+        "etfs",
+        "market_caps",
+        "sectors",
+        "blocked",
+    ]
+    quote: str = Field(description="Copied exactly from the instructions; checked to be there.")
+
+
+class MandateCheckResponse(BaseModel):
+    """`checked` with zero or more conflicts, or `skipped` and why - never an error (D177)."""
+
+    status: Literal["checked", "skipped"]
+    reason: (
+        Literal["no_instructions", "no_settings", "budget_spent", "no_model", "failed"] | None
+    ) = None
+    conflicts: list[MandateConflict] = Field(default_factory=list)
+
+
 class AgentScanAnswer(BaseModel):
     """The agent's answer as it wrote it, with the server's reasons if it failed (D14)."""
 

@@ -39,6 +39,10 @@ export function createFakeAi(options: FakeAiOptions = {}): AiClient {
   const missingFx = new Set(options.missingFx ?? []);
 
   const client = {
+    /** D176: no conflicts, unless a test replaces this. */
+    async checkMandate() {
+      return { status: 'checked' as const, reason: null, conflicts: [] };
+    },
     /** A claimed rescreen, accepted: the real one builds in the background. */
     async rescreen(runId: string) {
       return { run_id: runId, status: 'started' as const, reason: null };

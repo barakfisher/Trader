@@ -44,6 +44,7 @@ import { registerProposalsRoutes } from './routes/proposals.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerTelegramRoutes } from '../telegram/webhook.js';
 import { registerTargetsRoutes } from './routes/targets.js';
+import { registerInstructionsCheckRoutes } from './routes/instructionsCheck.js';
 import { registerTaxonomyRoutes } from './routes/taxonomy.js';
 import { registerTradesRoutes } from './routes/trades.js';
 import { registerTopicsRoutes } from './routes/topics.js';
@@ -258,6 +259,7 @@ export function createApp(
   registerAssistantRoutes(app);
   registerTopicsRoutes(app);
   registerTaxonomyRoutes(app);
+  registerInstructionsCheckRoutes(app);
   registerInternalRoutes(app);
   registerAdminRoutes(app);
 

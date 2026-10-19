@@ -28,6 +28,7 @@ import type { AiClient } from '@traders/shared/ai';
 import { logger } from '../../logger.js';
 import { nextSlot, type Session } from '../../services/scanSchedule.js';
 import { readyToScan } from '../../services/agentReadiness.js';
+import { currentConflicts } from '../../services/instructionsCheck.js';
 import { SCHEDULE_EXCHANGE } from '../../services/scheduledScans.js';
 
 import {
@@ -161,6 +162,7 @@ export function toAgentView(row: AgentRow): AgentView {
     scanCost: row.is_primary ? null : scanCostOf(row),
     waitingForBrief: !row.is_primary && row.state === 'active' && !readyToScan(row),
     mandate: toMandateView(row),
+    instructionsConflicts: row.is_primary ? null : currentConflicts(row),
   };
 }
 

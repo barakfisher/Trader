@@ -44,6 +44,7 @@ const PRIMARY: AgentView = {
   scanCost: null,
   waitingForBrief: false,
   mandate: null,
+  instructionsConflicts: null,
 };
 const MOMENTUM: AgentView = {
   ...PRIMARY,
@@ -300,5 +301,37 @@ describe('AgentsPage', () => {
     expect(chosen.textContent).toContain('Technology');
     fireEvent.click(screen.getByRole('button', { name: 'Remove Uranium' }));
     expect(screen.getByRole('list', { name: 'Chosen' }).textContent).not.toContain('Uranium');
+  });
+
+  it("checks the user's own instructions after creating, and never text the settings wrote (D176)", async () => {
+    post.mockResolvedValue(MOMENTUM);
+    renderPage(<AgentsPage />);
+    await openCreateForm();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'A' } });
+    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Trading horizon'), { target: { value: 'long' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(post).not.toHaveBeenCalledWith(`/agents/${MOMENTUM.id}/instructions-check`);
+
+    await openCreateForm();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'B' } });
+    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Trading horizon'), { target: { value: 'long' } });
+    fireEvent.change(screen.getByLabelText('Additional instructions'), { target: { value: 'Day-trade momentum.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(`/agents/${MOMENTUM.id}/instructions-check`));
+  });
+
+  it('marks an agent whose instructions conflict with its settings', async () => {
+    get.mockImplementation(async (path: string) =>
+      path === '/universe/taxonomy'
+        ? TAXONOMY
+        : path === '/portfolio/consolidated'
+          ? { agents: [] }
+          : { agents: [PRIMARY, { ...MOMENTUM, instructionsConflicts: [{ setting: 'horizon', quote: 'x' }] }] },
+    );
+    renderPage(<AgentsPage />);
+    expect(await screen.findByText('Instructions conflict')).toBeTruthy();
   });
 });

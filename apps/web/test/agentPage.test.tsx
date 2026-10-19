@@ -58,6 +58,7 @@ const AGENT: AgentView = {
   scanCost: { microUsd: 36_000, basis: 'measured' },
   waitingForBrief: true,
   mandate: null,
+  instructionsConflicts: null,
   scheduling: { enabled: true, nextAt: '2026-10-08T13:00:00Z' },
 };
 
@@ -562,5 +563,35 @@ describe('AgentPage with the ledger', () => {
         }),
       ),
     );
+  });
+
+  it("shows where the instructions contradict the settings, in the reader's words around the user's quote, and dismisses it (D178)", async () => {
+    serveAgent({
+      ...AGENT,
+      persona: 'Day-trade momentum.',
+      waitingForBrief: false,
+      instructionsConflicts: [{ setting: 'horizon', quote: 'Day-trade momentum.' }],
+    });
+    renderAgent();
+    const warning = await screen.findByText(/Your instructions say/);
+    expect(warning.textContent).toBe('Your instructions say Day-trade momentum., which conflicts with the trading horizon.');
+    // The user's words are a <q>: the browser quotes them, and they keep their own direction.
+    const quote = warning.querySelector('q');
+    expect(quote?.textContent).toBe('Day-trade momentum.');
+    expect(quote?.getAttribute('dir')).toBe('auto');
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(`/agents/${AGENT_ID}/instructions-check/dismiss`));
+  });
+
+  it('checks edited instructions after a save, and says so when they fit', async () => {
+    const patch = (await import('../src/api/client.ts')).api.patch as ReturnType<typeof vi.fn>;
+    patch.mockResolvedValue(AGENT);
+    post.mockResolvedValue({ status: 'checked', reason: null, conflicts: [] });
+    serveAgent({ ...AGENT, persona: 'Patient.', waitingForBrief: false });
+    renderAgent();
+    fireEvent.change(await screen.findByLabelText('Additional instructions'), { target: { value: 'Patient and picky.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith(`/agents/${AGENT_ID}/instructions-check`));
+    expect(await screen.findByText('Your instructions fit the settings.')).toBeTruthy();
   });
 });

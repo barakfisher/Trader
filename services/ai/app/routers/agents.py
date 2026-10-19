@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.engine import Engine
 
+from app.agents.mandate_check import check_instructions
 from app.agents.scan import run_scan
 from app.agents.scan_budget import agent_budget
 from app.agents.scan_log import ScanAlreadyRunningError, find_agent
@@ -37,7 +38,14 @@ from app.deps import (
     require_internal_key,
 )
 from app.llm.factory import configured_model
-from app.models import AgentScanAnswer, AgentScanRequest, AgentScanResponse
+from app.models import (
+    AgentScanAnswer,
+    AgentScanRequest,
+    AgentScanResponse,
+    MandateCheckRequest,
+    MandateCheckResponse,
+    MandateConflict,
+)
 from app.news.on_demand import news_on_demand
 from app.providers.price_provenance import excluded_price_sources
 from app.providers.registry import MarketDataService
@@ -120,4 +128,36 @@ async def scan_agent(
         model=result.model,
         answer=AgentScanAnswer(**result.answer) if result.answer else None,
         error=result.error,
+    )
+
+
+@router.post("/{agent_id}/mandate-check", response_model=MandateCheckResponse)
+async def mandate_check(
+    agent_id: str,
+    payload: MandateCheckRequest,
+    request: Request,
+    settings: SettingsDep,
+    engine: Engine = Depends(get_engine),
+) -> MandateCheckResponse:
+    """D176-D177: one call reading the agent's instructions against its settings.
+
+    Refused only for an agent that is not the user's or is the primary; every
+    other reason not to check is a `skipped` answer, because a check is a
+    courtesy after a save and its absence is never the user's problem.
+    """
+    agent = find_agent(engine, str(payload.user_id), agent_id)
+    if agent is None:
+        raise _refuse("agent_not_found", "no such agent", status.HTTP_404_NOT_FOUND)
+    if agent.is_primary:
+        raise _refuse("primary_agent", "the main portfolio has no instructions to check (D1)")
+    llm = getattr(request.app.state, "llm", None)
+    if llm is None or configured_model(settings) is None:
+        return MandateCheckResponse(status="skipped", reason="no_model")
+    if agent_budget(engine, agent.agent_id, _now()).exhausted:
+        return MandateCheckResponse(status="skipped", reason="budget_spent")
+    result = await check_instructions(llm, agent)
+    return MandateCheckResponse(
+        status=result.status,
+        reason=result.reason,
+        conflicts=[MandateConflict(setting=c.setting, quote=c.quote) for c in result.conflicts],
     )

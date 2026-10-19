@@ -1389,6 +1389,96 @@
         "title": "LocalizedTextOut",
         "type": "object"
       },
+      "MandateCheckRequest": {
+        "description": "Check one agent's instructions against its settings (D176).",
+        "properties": {
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "MandateCheckRequest",
+        "type": "object"
+      },
+      "MandateCheckResponse": {
+        "description": "`checked` with zero or more conflicts, or `skipped` and why - never an error (D177).",
+        "properties": {
+          "conflicts": {
+            "items": {
+              "$ref": "#/components/schemas/MandateConflict"
+            },
+            "title": "Conflicts",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_instructions",
+                  "no_settings",
+                  "budget_spent",
+                  "no_model",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "enum": [
+              "checked",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "MandateCheckResponse",
+        "type": "object"
+      },
+      "MandateConflict": {
+        "description": "A setting the instructions contradict, and the user's own words that do.",
+        "properties": {
+          "quote": {
+            "description": "Copied exactly from the instructions; checked to be there.",
+            "title": "Quote",
+            "type": "string"
+          },
+          "setting": {
+            "enum": [
+              "risk",
+              "horizon",
+              "style",
+              "max_position",
+              "cash_buffer",
+              "max_holdings",
+              "etfs",
+              "market_caps",
+              "sectors",
+              "blocked"
+            ],
+            "title": "Setting",
+            "type": "string"
+          }
+        },
+        "required": [
+          "setting",
+          "quote"
+        ],
+        "title": "MandateConflict",
+        "type": "object"
+      },
       "MarketCalendarStatus": {
         "description": "Whether an instrument's exchange is open now, and when it next opens (D25).\n\nRead from the committed exchange calendar, holidays and early closes\nincluded. The orchestrator asks before a fill at the live quote (D21) rather\nthan keeping a second copy of the calendar.",
         "properties": {
@@ -2942,6 +3032,75 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/agents/{agent_id}/mandate-check": {
+      "post": {
+        "description": "D176-D177: one call reading the agent's instructions against its settings.\n\nRefused only for an agent that is not the user's or is the primary; every\nother reason not to check is a `skipped` answer, because a check is a\ncourtesy after a save and its absence is never the user's problem.",
+        "operationId": "mandate_check_agents__agent_id__mandate_check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MandateCheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MandateCheckResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mandate Check",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
     "/agents/{agent_id}/scans": {
       "post": {
         "operationId": "scan_agent_agents__agent_id__scans_post",

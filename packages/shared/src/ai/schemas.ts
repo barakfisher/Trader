@@ -295,6 +295,30 @@ export const agentScanResponseSchema = z.object({
   error: z.string().nullable(),
 });
 
+export const mandateCheckResponseSchema = z.object({
+  status: z.enum(['checked', 'skipped']),
+  reason: z.enum(['no_instructions', 'no_settings', 'budget_spent', 'no_model', 'failed']).nullable().optional(),
+  conflicts: z
+    .array(
+      z.object({
+        setting: z.enum([
+          'risk',
+          'horizon',
+          'style',
+          'max_position',
+          'cash_buffer',
+          'max_holdings',
+          'etfs',
+          'market_caps',
+          'sectors',
+          'blocked',
+        ]),
+        quote: z.string(),
+      }),
+    )
+    .optional(),
+});
+
 export const assistantReplySchema = z.object({
   conversation_id: z.string().nullable(),
   message_id: z.string().nullable(),
@@ -407,6 +431,9 @@ export type _AssertMarketSessions = Expect<
 >;
 export type _AssertAgentScan = Expect<
   Equal<z.infer<typeof agentScanResponseSchema>, Schemas['AgentScanResponse']>
+>;
+export type _AssertMandateCheckResponse = Expect<
+  Equal<z.infer<typeof mandateCheckResponseSchema>, Schemas['MandateCheckResponse']>
 >;
 export type _AssertAssistantReply = Expect<
   Equal<z.infer<typeof assistantReplySchema>, Schemas['AssistantReply']>

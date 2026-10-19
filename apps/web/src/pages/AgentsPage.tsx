@@ -31,7 +31,7 @@ import {
   templatePersona,
   type PersonaTemplate,
 } from '../lib/personaTemplates.ts';
-import { useAgentLimitQuery, useAgentsQuery, useCreateAgent } from '../queries/agents.ts';
+import { useAgentLimitQuery, useAgentsQuery, useCheckInstructions, useCreateAgent } from '../queries/agents.ts';
 import { useConsolidatedQuery } from '../queries/portfolio.ts';
 import { useTaxonomyQuery } from '../queries/taxonomy.ts';
 
@@ -56,6 +56,8 @@ export function AgentsPage() {
   // The draft outlives the drawer: Escape or a stray click on the shade closes
   // it, and a persona half-written is not lost to that.
   const [draft, setDraft] = useState(EMPTY_DRAFT);
+  // Here, not in the form: the drawer closes on create, and the check outlives it (D178).
+  const check = useCheckInstructions();
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
@@ -102,9 +104,10 @@ export function AgentsPage() {
           <CreateAgentForm
             draft={draft}
             onChange={setDraft}
-            onCreated={() => {
+            onCreated={(agentId, needsCheck) => {
               setDraft(EMPTY_DRAFT);
               setCreating(false);
+              if (needsCheck) check.mutate(agentId);
             }}
           />
         </Drawer>
@@ -131,6 +134,9 @@ function AgentRow({ agent, standing }: { agent: AgentView; standing: SimulatedAg
           </span>
         )}
         {agent.waitingForBrief && <WaitingForBrief />}
+        {agent.instructionsConflicts && (
+          <span className="rounded-full bg-warn/15 px-2 py-0.5 text-xs text-warn">{t('agents.check.badge')}</span>
+        )}
         <MandateSummary agent={agent} />
       </span>
       <span className="text-sm text-text-muted">
@@ -200,7 +206,8 @@ function CreateAgentForm({
 }: {
   draft: AgentDraft;
   onChange: (draft: AgentDraft) => void;
-  onCreated: () => void;
+  /** `needsCheck`: the instructions are the user's own words, so they may contradict the settings (D176). */
+  onCreated: (agentId: string, needsCheck: boolean) => void;
 }) {
   const { t } = useTranslation();
   const create = useCreateAgent();
@@ -233,7 +240,7 @@ function CreateAgentForm({
         persona: persona.trim() || null,
         mandate: mandateInput(mandate),
       },
-      { onSuccess: onCreated },
+      { onSuccess: (agent) => onCreated(agent.id, persona.trim() !== '' && persona !== generated) },
     );
   };
 

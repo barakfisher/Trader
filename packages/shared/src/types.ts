@@ -111,6 +111,40 @@ export interface AgentView {
   scheduling?: AgentScheduling;
   /** The template creator's settings (0057); null for the primary, which has none (D1). */
   mandate: AgentMandate | null;
+  /**
+   * Where the instructions contradict the settings (D176-D178): the last check's
+   * conflicts, while the instructions and settings it judged are unchanged and the
+   * user has not dismissed it. Null otherwise, and when it found none.
+   */
+  instructionsConflicts: InstructionsConflict[] | null;
+}
+
+/** What a conflict may name (D176): the settings the check states to the model. */
+export const CONFLICT_SETTINGS = [
+  'risk',
+  'horizon',
+  'style',
+  'max_position',
+  'cash_buffer',
+  'max_holdings',
+  'etfs',
+  'market_caps',
+  'sectors',
+  'blocked',
+] as const;
+export type ConflictSetting = (typeof CONFLICT_SETTINGS)[number];
+
+/** A setting the instructions contradict, and the user's own words that do - checked to be theirs. */
+export interface InstructionsConflict {
+  setting: ConflictSetting;
+  quote: string;
+}
+
+/** `POST /agents/:id/instructions-check`: checked, or skipped and why - never an error (D177). */
+export interface InstructionsCheckResult {
+  status: 'checked' | 'skipped';
+  reason: 'no_instructions' | 'no_settings' | 'budget_spent' | 'no_model' | 'failed' | null;
+  conflicts: InstructionsConflict[];
 }
 
 /** How long an agent means to hold (D166). There is no day trading. */

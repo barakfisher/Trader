@@ -1506,6 +1506,27 @@
         },
         "noEtfs": "You buy individual companies, not ETFs."
       }
+    },
+    "check": {
+      "title": "Your instructions may contradict the settings",
+      "conflict": "Your instructions say <quote>{{quote}}</quote>, which conflicts with {{setting}}.",
+      "dismiss": "Dismiss",
+      "checking": "Checking your instructions against the settings…",
+      "fine": "Your instructions fit the settings.",
+      "unavailable": "Couldn't check your instructions right now. Your changes are saved.",
+      "badge": "Instructions conflict",
+      "settings": {
+        "risk": "the risk appetite",
+        "horizon": "the trading horizon",
+        "style": "the thesis style",
+        "max_position": "the position limit",
+        "cash_buffer": "the cash buffer",
+        "max_holdings": "the holdings limit",
+        "etfs": "the ETF setting",
+        "market_caps": "the company size",
+        "sectors": "the sectors and industries",
+        "blocked": "the blocked tickers"
+      }
     }
   },
   "consolidated": {

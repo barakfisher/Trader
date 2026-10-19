@@ -122,8 +122,9 @@ LEAST_REASONING = "minimal"
 #: which purpose is slow, costly or failing - and never has to guess from a
 #: prompt. Called `agent` until migration 0041: Stage 4 brought real agents
 #: (`Caller.agent_id`), and one word for both would confuse every reader.
-#: `assistant` is `/ask` with tools (migration 0052).
-Purpose = Literal["narration", "ask", "agent_scan", "assistant"]
+#: `assistant` is `/ask` with tools (migration 0052). `mandate_check` reads an
+#: agent's instructions against its settings once after a save (0059, D177).
+Purpose = Literal["narration", "ask", "agent_scan", "assistant", "mandate_check"]
 
 
 @dataclass(frozen=True)

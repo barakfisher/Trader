@@ -10,6 +10,7 @@ import { AgentPerformance } from '../components/AgentPerformance.tsx';
 import { AgentScans } from '../components/AgentScans.tsx';
 import { TradePanel } from '../components/TradePanel.tsx';
 import { AgentField } from '../components/AgentField.tsx';
+import { InstructionsCheckStatus, InstructionsConflicts } from '../components/InstructionsCheck.tsx';
 import { InstructionsField } from '../components/InstructionsField.tsx';
 import { MandateFields } from '../components/MandateFields.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
@@ -29,7 +30,7 @@ import {
 } from '../lib/agentMandate.ts';
 import { BUDGET_INPUT, agentErrorMessage, agentName, agentStateWord } from '../lib/agentPresentation.ts';
 import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
-import { useAgentAccountQuery, useAgentQuery, useUpdateAgent } from '../queries/agents.ts';
+import { useAgentAccountQuery, useAgentQuery, useCheckInstructions, useUpdateAgent } from '../queries/agents.ts';
 import { KindBadge, WaitingForBrief } from './AgentsPage.tsx';
 
 type Tab = 'holdings' | 'activity' | 'decisions';
@@ -218,6 +219,7 @@ function storedDraft(agent: AgentView, storedBudget: string): SettingsDraft {
 function SettingsForm({ agent }: { agent: AgentView }) {
   const { t } = useTranslation();
   const update = useUpdateAgent(agent.id);
+  const check = useCheckInstructions();
   const storedBudget = agent.budgetMinor === null ? '' : minorToDecimalString(agent.budgetMinor, agent.currency);
   const storedMandate = JSON.stringify(mandateInput(draftFromMandate(agent.mandate)));
   const [draft, setDraft] = useState(() => storedDraft(agent, storedBudget));
@@ -235,12 +237,18 @@ function SettingsForm({ agent }: { agent: AgentView }) {
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    update.mutate({
-      name: name.trim(),
-      budget: budget.trim(),
-      persona: persona.trim() || null,
-      ...(mandateChanged ? { mandate: mandateInput(mandate) } : {}),
-    });
+    // D176: checked when the user's own words, or the settings they sit beside, just changed.
+    const needsCheck =
+      persona.trim() !== '' && persona !== generated && (persona !== (agent.persona ?? '') || mandateChanged);
+    update.mutate(
+      {
+        name: name.trim(),
+        budget: budget.trim(),
+        persona: persona.trim() || null,
+        ...(mandateChanged ? { mandate: mandateInput(mandate) } : {}),
+      },
+      { onSuccess: () => (needsCheck ? check.mutate(agent.id) : check.reset()) },
+    );
   };
 
   return (
@@ -275,6 +283,8 @@ function SettingsForm({ agent }: { agent: AgentView }) {
           rows={6}
           onChange={(value) => setDraft({ ...draft, persona: value })}
         />
+        <InstructionsConflicts agent={agent} />
+        <InstructionsCheckStatus pending={check.isPending} result={check.data} />
         {!mandateValid && <p className="text-xs text-loss">{t('agents.mandate.invalid')}</p>}
         {update.error && <ErrorNote message={agentErrorMessage(update.error, t('agents.saveFailed'))} />}
         <Button type="submit" disabled={!dirty || update.isPending || !name.trim() || !budgetValid || !mandateValid}>

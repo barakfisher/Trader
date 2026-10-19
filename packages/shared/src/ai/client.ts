@@ -18,6 +18,7 @@ import type { z } from 'zod';
 import type { components } from '../generated/ai-api.js';
 import {
   agentScanResponseSchema,
+  mandateCheckResponseSchema,
   assistantReplySchema,
   conceptDocumentSchema,
   conceptSearchResponseSchema,
@@ -63,6 +64,8 @@ export type MarketSessions = components['schemas']['MarketSessions'];
 export type LlmModelsResponse = components['schemas']['LlmModelsResponse'];
 export type AgentScanRequest = components['schemas']['AgentScanRequest'];
 export type AgentScanResponse = components['schemas']['AgentScanResponse'];
+export type MandateCheckResponse = components['schemas']['MandateCheckResponse'];
+export type MandateConflict = components['schemas']['MandateConflict'];
 export type AssistantMessageRequest = components['schemas']['AssistantMessageRequest'];
 export type AssistantReply = components['schemas']['AssistantReply'];
 export type LlmOfferedModel = components['schemas']['LlmOfferedModel'];
@@ -364,6 +367,18 @@ export class AiClient {
       `/agents/${encodeURIComponent(agentId)}/scans`,
       agentScanResponseSchema,
       { method: 'POST', body: JSON.stringify(payload), requestId, timeoutMs: AGENT_SCAN_TIMEOUT_MS },
+    );
+  }
+
+  /**
+   * Whether an agent's instructions contradict its settings (D176, D177). One
+   * model call; every reason not to check is a `skipped` answer, never an error.
+   */
+  checkMandate(agentId: string, userId: string, requestId?: string): Promise<MandateCheckResponse> {
+    return this.request<MandateCheckResponse>(
+      `/agents/${encodeURIComponent(agentId)}/mandate-check`,
+      mandateCheckResponseSchema,
+      { method: 'POST', body: JSON.stringify({ user_id: userId }), requestId },
     );
   }
 

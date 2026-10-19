@@ -30,7 +30,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.agents.mandate import MANDATE_SET_SQL, ready_to_scan
-from app.agents.scan_budget import start_of_utc_day
+from app.agents.scan_budget import AGENT_PURPOSES_SQL, start_of_utc_day
 from app.agents.scan_schedule import describe_next_scan
 from app.agents.tools import TOOLS_BY_NAME as AGENT_TOOLS
 from app.agents.tools import Tool, ToolContext, _object, _stored_closes, find_listing, money
@@ -400,7 +400,9 @@ async def get_agents(context: ToolContext, arguments: Mapping[str, Any]) -> dict
                                AS today,
                            coalesce(sum(cost_micro_usd), 0) AS week
                       FROM llm_calls
-                     WHERE user_id = CAST(:user AS uuid) AND purpose = 'agent_scan'
+                     WHERE user_id = CAST(:user AS uuid) AND purpose IN """
+                    + AGENT_PURPOSES_SQL
+                    + """
                        AND started_at >= :week
                      GROUP BY agent_id
                     """

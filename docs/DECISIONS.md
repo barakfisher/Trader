@@ -186,3 +186,6 @@ while this file is out of date.
 | 173 | No whitelist; the blacklist stays |
 | 174 | Settings alone are enough to scan by; the form writes the instructions from them |
 | 175 | Downshift for the "Sectors & industries" autocomplete |
+| 176 | The contradiction check names conflicts; the catalogue writes the warning |
+| 177 | The check is its own purpose, on the agents' model and the agent's budget; every failure is a quiet skip |
+| 178 | The result is stored on the agent with a fingerprint; shown until dismissed or changed |

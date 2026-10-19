@@ -63,6 +63,12 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "agent_scans holds rule_rejected scans",
         "DELETE FROM agent_scans WHERE outcome = 'rule_rejected'",
     ),
+    # A check's calls are spend records; relabelling them as scans would put
+    # them in the scan averages, so 0059 refuses.
+    "0059_mandate_check": (
+        "llm_calls holds mandate_check calls",
+        "DELETE FROM llm_calls WHERE purpose = 'mandate_check'",
+    ),
     # 0041's `agent` column names only narration and ask; a scan's call has no value there.
     "0042_agent_scan_inputs": (
         "llm_calls holds agent_scan calls",
