@@ -4,7 +4,25 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-19 ~08:00 UTC - **Handoff: the agent template creator is complete (#252, #254,
+Updated: 2026-10-19 ~17:00 UTC - **Handoff after five merges since #259: M9 has login (#260) and
+signup with the admin's approval (#264); the next M9 PR is the cap's enforcement.** Decisions
+reached **188** (next: **189**). Migrations: **`0059_mandate_check` is head** (next free: **`0060`**;
+`git fetch` and check `main` has one head before writing one). **Deployed:** compose and kind both
+run `796cf3d` (#263) at `0059`. **#264 is merged and undeployed, and must stay so until the cap PR
+is merged (D186)** - redeploy only on the user's "redeploy". This stretch:
+- **#260 (D179-D182):** email + password login (argon2id), `session_version` checked on every
+  request, the admin's `admin:password` script; `APP_PASSPHRASE` retired.
+- **#261 (D183):** the contradiction check names a sentence by number; the server quotes it.
+- **#262:** the agents form's fixes from its first browser walk; Change email on Settings.
+- **#263:** every agent's prompt says what a trade costs (D6, D76), from the ledger's constants.
+- **#264 (D184-D188):** ask to join (one answer for every email, "closed" at the waiting limit);
+  the admin's Telegram message (default cap, Custom budget = $5/$20/$50 + Admin link, Reject) and
+  the Admin page's requests card, settings and count; conditional transitions instead of nonces;
+  `account_pending` at sign-in. Walked end to end in the browser on `traders-agents-ci`; Telegram
+  covered by tests only (no bot token in the preview).
+**Next:** "Next session: after M9's signup" under "Where to go next".
+
+Earlier update, 2026-10-19 ~08:00 UTC - **Handoff: the agent template creator is complete (#252, #254,
 #257, #258).** Decisions reached **188** (next: **189**; 179-188 since this header: login, D183, signup). Migrations: **`0059_mandate_check` is head**
 (next free: **`0060`**) - **before writing a migration, `git fetch` and check `main` has one head**:
 two sessions merging 40 s apart left two 0057s (#253/#254, fixed by #255). **Deployed nowhere past
@@ -4213,6 +4231,59 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after M9's signup (written 2026-10-19, evening)
+
+Five merges since handoff #259 (#260 login, #261 D183, #262 form fixes, #263 trade cost in the
+prompt, #264 signup + approval) - this handoff is the count's. **Deployed:** compose and kind both
+run `796cf3d` (#263), schema `0059_mandate_check`; login is live, so everyone signs in with email
+and password (`APP_PASSPHRASE` is gone; the admin's came from `admin:password`). **#264 is merged
+and NOT deployed - and must not be until the cap PR is merged too (D186).** No standing grant: ask
+before each PR, merge only on "merge", redeploy only on "redeploy". Count merges with
+`git log --oneline <this handoff's sha>..origin/main`. In order:
+
+1. **2026-10-20 10:00 Israel: the Test agent scan review** with the user ("after #232" item 2;
+   a scheduled task opens it). It is #247's baseline, and it brings back two deferred decisions:
+   the research sub-agent and the per-agent tool picker. Read it knowing what changed under the
+   scans since it was planned: the mandate and `rule_rejected` (#254), and **#263's "What a trade
+   costs" section** in every agent's prompt - fewer small round trips is the expected effect.
+2. **M9's next PR: the cap's enforcement (D157, D158).** Measure first, read-only:
+   - how a model call reaches `BudgetedProvider` (`services/ai/app/llm/factory.py`) and whether
+     the user travels with it - narration, agent scans, `/ask` and `mandate_check` each enter
+     differently; every `llm_calls` row already carries `user_id` (355 of 355 on 2026-10-18);
+   - "this month" in the user's zone (`users.timezone`), spent = `sum(cost_micro_usd)`;
+   - the call's maximum cost: `max_tokens` at the model's price (`llm_models` / the catalogue);
+   - the refusal: reason codes for a scan and an `/ask` turn, the UI's sentence in both languages,
+     and narration falling back to its template (alerts still arrive);
+   - the admin (cap NULL) is never capped.
+   Then bring the open questions one at a time. **After it merges, #264 and the cap PR redeploy
+   together** (D186) - until then an approved user's cap is checked by nothing.
+3. **Then M9 continues:** scheduling fan-out (`for: "every_active_user"`, D161; today
+   `/internal/runs` still falls back to `SINGLE_USER_ID` - an approved user gets no scheduled
+   scans), the time zone's reads + guideline 10 (D163; Settings cannot edit the zone yet), the
+   admin's user list + own-account reset + one-time password (D162), the exit test.
+4. **The template creator's first real data** ("after the template creator" items 3-4):
+   `llm_calls` with `purpose = 'mandate_check'` since D183 (sentence numbers), and the first
+   `rule_rejected` scans - does the retry help?
+5. **Waiting on the user, not scheduled:** whether to translate the Yahoo taxonomy names (#262 -
+   they are also what the server validates and scans match on); turning on GitHub's "require
+   branches to be up to date before merging" on `main` (admin only; the ruleset has no required
+   checks at all today, so a red PR can be merged).
+6. **Unknown:** whether the 2026-10-19 market-prune re-read ("after M9's schema" item 1) was done.
+   Nothing in this session did it. Check before anything restores onto compose's server.
+
+**Three things from this session that cost time:**
+- **`docs/DECISIONS.md` is generated** (`python3 scripts/build_decision_index.py`) from the bold
+  first sentence of each MEMORY decision, and `test_decision_index.py` fails CI's Python job when
+  it is hand-edited or stale. Add decisions to MEMORY, then run the script - never type the table.
+- **The in-app browser's `form_input` does not reach React's state.** On a controlled input it
+  sets the DOM value and React never hears it: the field looks filled, the submit sends `''`, and
+  typing afterwards *appends* to the stale DOM text. Click the field and `type` instead.
+- **`queries.postgres.test.ts` against `traders-agents-ci` as `traders` fails two tests** (the
+  append-only `admin_audit`, model choices that may not be deleted): they assert the *app role's*
+  missing privileges, and `traders` owns the tables. Expected locally; CI connects as the app
+  role. `traders-agents-ci` is at `0059` now (migrated this session) and its admin has a throwaway
+  email `admin-ci@example.com` - set a new password with `admin:password` when you need one.
 
 ### Next session: after the template creator (written 2026-10-19)
 
