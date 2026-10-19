@@ -258,14 +258,14 @@ describe('the agents API', () => {
       llmSpentTodayMicroUsd: 108_022,
       scanCost: { microUsd: MEASURED_SCAN_COST_MICRO_USD, basis: 'measured' },
       // Active with no persona: it waits, and is never billed (D52).
-      waitingForPersona: true,
+      waitingForBrief: true,
     });
     expect(agents[0]).toMatchObject({
       scanSchedule: null,
       llmBudgetMicroUsd: null,
       llmSpentTodayMicroUsd: null,
       scanCost: null,
-      waitingForPersona: false,
+      waitingForBrief: false,
     });
   });
 

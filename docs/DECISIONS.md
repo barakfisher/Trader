@@ -184,3 +184,5 @@ while this file is out of date.
 | 171 | Position and cash limits are a share of capital at cost: cash plus holdings at cost |
 | 172 | Market-cap bands apply to equities; the selection matches by sector or industry, an ETF by category or its category's sector |
 | 173 | No whitelist; the blacklist stays |
+| 174 | Settings alone are enough to scan by; the form writes the instructions from them |
+| 175 | Downshift for the "Sectors & industries" autocomplete |

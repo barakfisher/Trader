@@ -29,6 +29,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
+from app.agents.mandate import MANDATE_SET_SQL, ready_to_scan
 from app.agents.scan_budget import start_of_utc_day
 from app.agents.scan_schedule import describe_next_scan
 from app.agents.tools import TOOLS_BY_NAME as AGENT_TOOLS
@@ -80,11 +81,14 @@ def _agents(connection: Connection, user_id: str) -> list[Any]:
         connection.execute(
             text(
                 """
-                SELECT id::text AS id, name, is_primary, state, persona, scan_schedule,
-                       budget_minor, currency, llm_budget_micro_usd, created_at
-                  FROM agents
-                 WHERE user_id = CAST(:user AS uuid)
-                 ORDER BY is_primary DESC, created_at
+                SELECT a.id::text AS id, a.name, a.is_primary, a.state, a.persona,
+                       a.scan_schedule, a.budget_minor, a.currency, a.llm_budget_micro_usd,
+                       a.created_at, """
+                + MANDATE_SET_SQL
+                + """ AS mandate_set
+                  FROM agents a
+                 WHERE a.user_id = CAST(:user AS uuid)
+                 ORDER BY a.is_primary DESC, a.created_at
                 """
             ),
             {"user": user_id},
@@ -451,7 +455,7 @@ async def get_agents(context: ToolContext, arguments: Mapping[str, Any]) -> dict
                     "next_scan": describe_next_scan(
                         schedule=agent.scan_schedule,
                         state=agent.state,
-                        persona=agent.persona,
+                        ready=ready_to_scan(agent.persona, agent.mandate_set),
                         scheduling=context.scheduling,
                         now=context.now,
                     ),

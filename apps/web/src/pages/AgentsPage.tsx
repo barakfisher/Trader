@@ -5,12 +5,24 @@ import { Bot, Plus } from 'lucide-react';
 import type { AgentView, SimulatedAgentStanding } from '@traders/shared';
 
 import { AgentField } from '../components/AgentField.tsx';
+import { InstructionsField } from '../components/InstructionsField.tsx';
+import { MandateFields } from '../components/MandateFields.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Drawer } from '../components/Drawer.tsx';
 import { Button, ErrorNote, Spinner } from '../components/ui.tsx';
 import { errorMessage } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { formatMoney } from '../i18n/format.ts';
+import {
+  EMPTY_MANDATE_DRAFT,
+  describeMandate,
+  mandateInput,
+  mandateProblems,
+  riskBand,
+  templateMandate,
+  withMandate,
+  type MandateDraft,
+} from '../lib/agentMandate.ts';
 import { BUDGET_INPUT, agentErrorMessage, agentName, agentStateWord } from '../lib/agentPresentation.ts';
 import {
   PERSONA_TEMPLATES,
@@ -21,6 +33,7 @@ import {
 } from '../lib/personaTemplates.ts';
 import { useAgentLimitQuery, useAgentsQuery, useCreateAgent } from '../queries/agents.ts';
 import { useConsolidatedQuery } from '../queries/portfolio.ts';
+import { useTaxonomyQuery } from '../queries/taxonomy.ts';
 
 /**
  * Agents: the user's real portfolio and their simulated ones (multi-agent
@@ -117,7 +130,8 @@ function AgentRow({ agent, standing }: { agent: AgentView; standing: SimulatedAg
             {agentStateWord(agent.state)}
           </span>
         )}
-        {agent.waitingForPersona && <WaitingForPersona />}
+        {agent.waitingForBrief && <WaitingForBrief />}
+        <MandateSummary agent={agent} />
       </span>
       <span className="text-sm text-text-muted">
         {agent.isPrimary
@@ -133,12 +147,25 @@ function AgentRow({ agent, standing }: { agent: AgentView; standing: SimulatedAg
   );
 }
 
+/** The prompt-side of a mandate in words, beside the agent's name: how bold, how long. */
+function MandateSummary({ agent }: { agent: AgentView }) {
+  const { t } = useTranslation();
+  const band = riskBand(agent.mandate?.riskLevel ?? null);
+  const horizon = agent.mandate?.horizon ?? null;
+  if (!band && !horizon) return null;
+  const words = [
+    band ? t(`agents.mandate.bands.${band}`) : null,
+    horizon ? t(`agents.mandate.horizonWords.${horizon}`) : null,
+  ].filter((word): word is string => word !== null);
+  return <span className="text-xs text-text-muted">{words.join(' · ')}</span>;
+}
+
 /** Real or simulated, on every agent the page shows: the label is the point (P2). */
 /** An active agent with no persona never scans and is never billed (D52). */
-export function WaitingForPersona() {
+export function WaitingForBrief() {
   const { t } = useTranslation();
   return (
-    <span className="rounded-full bg-warn/15 px-2 py-0.5 text-xs text-warn">{t('agents.waitingForPersona')}</span>
+    <span className="rounded-full bg-warn/15 px-2 py-0.5 text-xs text-warn">{t('agents.waitingForBrief')}</span>
   );
 }
 
@@ -159,9 +186,12 @@ interface AgentDraft {
   name: string;
   budget: string;
   persona: string;
+  /** The instructions last written from the settings (D174): while `persona` equals it, it is rewritten. */
+  generated: string;
+  mandate: MandateDraft;
 }
 
-const EMPTY_DRAFT: AgentDraft = { name: '', budget: '', persona: '' };
+const EMPTY_DRAFT: AgentDraft = { name: '', budget: '', persona: '', generated: '', mandate: EMPTY_MANDATE_DRAFT };
 
 function CreateAgentForm({
   draft,
@@ -174,22 +204,35 @@ function CreateAgentForm({
 }) {
   const { t } = useTranslation();
   const create = useCreateAgent();
-  const { name, budget, persona } = draft;
+  const taxonomy = useTaxonomyQuery();
+  const { name, budget, persona, generated, mandate } = draft;
   const budgetValid = BUDGET_INPUT.test(budget.trim());
-  // A persona the user wrote is never replaced by a click.
-  const templatesAvailable = replaceableBy(persona, templatePersona);
+  const mandateValid = mandateProblems(mandate).length === 0;
+  // Instructions the user wrote are never replaced by a click; text a template
+  // or the settings wrote may be.
+  const templatesAvailable = replaceableBy(persona, templatePersona) || persona === generated;
 
-  const applyTemplate = (template: PersonaTemplate) =>
+  const applyTemplate = (template: PersonaTemplate) => {
+    // A template is a full preset (D168): its mandate, and its own words as the instructions.
+    const next = templateMandate(template, taxonomy.data);
     onChange({
       ...draft,
       name: replaceableBy(name, templateName) ? templateName(template) : name,
       persona: templatePersona(template),
+      generated: describeMandate(next),
+      mandate: next,
     });
+  };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     create.mutate(
-      { name: name.trim(), budget: budget.trim(), persona: persona.trim() || null },
+      {
+        name: name.trim(),
+        budget: budget.trim(),
+        persona: persona.trim() || null,
+        mandate: mandateInput(mandate),
+      },
       { onSuccess: onCreated },
     );
   };
@@ -219,18 +262,16 @@ function CreateAgentForm({
           className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
         />
       </AgentField>
-      <AgentField label={t('agents.fields.persona')} hint={t('agents.fields.personaHint')}>
-        <textarea
-          value={persona}
-          onChange={(event) => onChange({ ...draft, persona: event.target.value })}
-          maxLength={4000}
-          dir="auto"
-          rows={10}
-          className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2"
-        />
-      </AgentField>
+      <MandateFields draft={mandate} onChange={(next) => onChange(withMandate(draft, next))} />
+      <InstructionsField
+        value={persona}
+        generated={generated}
+        rows={8}
+        onChange={(value) => onChange({ ...draft, persona: value })}
+      />
+      {!mandateValid && <p className="text-xs text-loss">{t('agents.mandate.invalid')}</p>}
       {create.error && <ErrorNote message={agentErrorMessage(create.error, t('agents.create.failed'))} />}
-      <Button type="submit" disabled={create.isPending || !name.trim() || !budgetValid}>
+      <Button type="submit" disabled={create.isPending || !name.trim() || !budgetValid || !mandateValid}>
         <span className="flex items-center gap-1">
           <Plus className="size-4" aria-hidden />
           {t('agents.create.submit')}

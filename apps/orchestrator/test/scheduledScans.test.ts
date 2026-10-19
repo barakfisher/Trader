@@ -130,6 +130,13 @@ describe('the 15-minute plan', () => {
     expect(queue.add).not.toHaveBeenCalled();
   });
 
+  it('plans an agent with settings and no instructions (D174)', async () => {
+    vi.mocked(queries.listAgents).mockResolvedValueOnce([agentRow({ persona: null, horizon: 'long' })] as never);
+    const ai = fakeAi();
+    const plan = await planScheduledScans({ userId: USER, ai, queue: { add: vi.fn() }, now: NOW });
+    expect(plan.agents).toBe(1);
+  });
+
   it('asks nothing of the calendar when no agent can scan', async () => {
     vi.mocked(queries.listAgents).mockResolvedValueOnce([agentRow({ persona: null }), agentRow({ state: 'paused' })] as never);
     const ai = fakeAi();

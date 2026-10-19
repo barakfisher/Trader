@@ -40,6 +40,7 @@ import { logger } from '../logger.js';
 import { messagesFor } from '../notify/messages.js';
 import type { Notifier } from '../notify/notifier.js';
 import { dueSlots, slotKey, type DueSlot, type ScanSlot, type Session } from './scanSchedule.js';
+import { readyToScan } from './agentReadiness.js';
 import { proposeFromScan } from './tradeProposals.js';
 
 /** D69: one attempt and at most two retries per slot. */
@@ -118,7 +119,7 @@ export async function planScheduledScans(input: {
   requestId?: string;
 }): Promise<PlanResult> {
   const agents = (await listAgents(input.userId)).filter(
-    (agent) => !agent.is_primary && agent.state === 'active' && agent.persona?.trim(),
+    (agent) => !agent.is_primary && agent.state === 'active' && readyToScan(agent),
   );
   if (agents.length === 0) return { agents: 0, due: 0, enqueued: 0 };
 
@@ -193,7 +194,7 @@ export async function runSlotAttempt(job: SlotAttemptJob, deps: AttemptDeps): Pr
     return;
   }
   const agent = await getAgent(job.userId, job.agentId);
-  if (!agent || agent.state !== 'active' || !agent.persona?.trim()) {
+  if (!agent || agent.state !== 'active' || !readyToScan(agent)) {
     await finishRun(runId, 'skipped', { reason: 'agent_not_scannable' });
     return;
   }

@@ -59,7 +59,7 @@ function RunScan({ agent }: { agent: AgentView }) {
   const blocked: RunRefusal | null =
     agent.state !== 'active'
       ? 'agent_not_active'
-      : agent.waitingForPersona
+      : agent.waitingForBrief
         ? 'no_persona'
         : spent
           ? 'budget_spent'

@@ -7,8 +7,9 @@ the session and calls this with the user it authenticated; the schedule (Stage
 
 **Refusals, and why each is a 409 rather than a 400:** the request is well
 formed, but the agent is not in a state to scan - the primary never scans (D1),
-a paused or archived agent does not (D18), an agent with no persona has nothing
-to decide by, one asked to scan now with its day's budget spent is refused (D52),
+a paused or archived agent does not (D18), an agent with neither instructions nor
+a mandate has nothing to decide by (D174; the code keeps its old name,
+`no_persona`), one asked to scan now with its day's budget spent is refused (D52),
 and one already scanning would be billed twice. A model that is
 not configured is a 503: the service cannot do this at all right now.
 """
@@ -71,8 +72,8 @@ async def scan_agent(
         raise _refuse("primary_agent", "the main portfolio does not scan (D1)")
     if agent.state != "active":
         raise _refuse("agent_not_active", f"the agent is {agent.state}")
-    if not (agent.persona or "").strip():
-        raise _refuse("no_persona", "the agent needs a persona to decide by")
+    if not agent.ready:
+        raise _refuse("no_persona", "the agent needs instructions or settings to decide by")
 
     # D52: a scan asked for now is refused with the day's budget spent. A
     # scheduled one is run and recorded as `budget_reached`, so the Decisions tab

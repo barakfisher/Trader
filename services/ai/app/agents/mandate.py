@@ -70,6 +70,28 @@ class Mandate:
     def selects_classifications(self) -> bool:
         return bool(self.sectors or self.industries or self.etf_categories)
 
+    @property
+    def is_set(self) -> bool:
+        """Whether any setting differs from no-limit: enough, alone, to scan by (D174)."""
+        return self != Mandate()
+
+
+#: `Mandate.is_set` in SQL, over an `agents` row aliased `a`. The orchestrator's
+#: `agentReadiness.ts` says the same; `test_agent_readiness_contract.py` holds them equal.
+MANDATE_SET_SQL = (
+    "(a.risk_level IS NOT NULL OR a.horizon IS NOT NULL OR a.thesis_style IS NOT NULL"
+    " OR a.max_position_bps IS NOT NULL OR a.cash_buffer_bps IS NOT NULL"
+    " OR a.max_holdings IS NOT NULL OR NOT a.allow_etfs"
+    " OR cardinality(a.market_caps) > 0 OR cardinality(a.sectors) > 0"
+    " OR cardinality(a.industries) > 0 OR cardinality(a.etf_categories) > 0"
+    " OR cardinality(a.blocked_symbols) > 0)"
+)
+
+
+def ready_to_scan(persona: str | None, mandate_set: bool) -> bool:
+    """D174: an agent decides by its instructions, its mandate, or both - never by neither."""
+    return bool((persona or "").strip()) or mandate_set
+
 
 def risk_band(level: int | None) -> str | None:
     return None if level is None else RISK_BANDS[(level - 1) // 2]

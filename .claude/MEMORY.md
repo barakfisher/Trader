@@ -6,7 +6,7 @@ the reasoning behind it is not, and that is what this file is for. Maintained pe
 
 Updated: 2026-10-18 ~14:30 UTC - **Handoff after six merges since ea2c3a7 (#249-#254; #255 is the
 seventh, the fix below).** **M9 has its decisions and its schema; the next M9 PR is signup and
-login.** Decisions reached **173** (next: **174**). Migrations: **`0058_user_accounts` is head**
+login.** Decisions reached **175** (next: **176**; 174-175 came with the template creator's form, #257). Migrations: **`0058_user_accounts` is head**
 (next free: **`0059`**). **Deployed nowhere past 0055:** both environments run `a7c3c96`; #232,
 #249-#255 are merged and undeployed - redeploy only on the user's "redeploy" (0056-0058 run then).
 This session:
@@ -40,7 +40,7 @@ This session:
 
 Previous update, 2026-10-18 ~11:30 UTC - **M9 decisions 155-163 - all of M9's decisions** (users, signup
 with approval, monthly spend cap, enforcement, email+password, sessions, scheduling, admin, time
-zone); decisions reached **173** (next: **174**; 164-173 are the agent template creator's design, agreed the same day; PR 1 #252 merged with `0056_universe_taxonomy`, PR 2 adds `0057_agent_mandate`). Next is M9's code, PR by PR (MILESTONES). **#232 is
+zone); decisions reached **175** (next: **176**; 164-175 are the agent template creator's design, agreed the same day; PR 1 #252 (`0056`) and PR 2 #254 (`0057`) merged, PR 3 the form, PR 4 the save-time warning). Next is M9's code, PR by PR (MILESTONES). **#232 is
 deployed nowhere** - checked 11:05 UTC: both environments' `instructions.py` is pre-#232 (pods
 started 09:18-09:20). **0055 read back:** the window read uses `articles_fetched_idx`; the market
 prune (`DELETE ... coalesce(published_at, fetched_at)`, deletes 0 rows) has been 278-937 ms on 4
@@ -2815,6 +2815,25 @@ failure they prevent.
     its universe; a ticker allow-list makes it a timing bot for names already chosen, and with a
     holdings cap and a cash buffer it can leave an agent nothing to do, scan after paid scan. The
     sector selection and the blocked list cover the real needs. Revisit only on a concrete need.
+174. **Settings alone are enough to scan by; the form writes the instructions from them** (the
+    user, 2026-10-18; template creator PR 3). The persona became "Additional instructions", so an
+    agent built from the form with no words must not sit at "Waiting for a persona". One rule now:
+    ready = instructions **or** any mandate setting (`Mandate.is_set` / `agentReadiness.ts`, a
+    contract test holds their column lists equal; the refusal code stays `no_persona` for the
+    wire, `waitingForPersona` became `waitingForBrief`). A blank agent still never scans or bills
+    (D52). The form fills the instructions from the settings in code (no model), in the UI
+    language, **in words, never figures** - a limit changed later must not leave a stale "10%"
+    in the text for PR 4's warning to find - and only while the text is empty or still exactly
+    what it last wrote; once edited it is the user's, with "Rewrite from settings" to opt back in
+    (the #249 rule). A template's own words are the user's choice, so settings changes do not
+    overwrite them. *Rejected:* keeping the persona required (a form that says "optional" and
+    then refuses to scan) and rewriting on every change (loses the user's edits).
+175. **Downshift for the "Sectors & industries" autocomplete** (the user, 2026-10-18, under
+    convention 5). `useCombobox` + `useMultipleSelection`: the WAI-ARIA combobox, keyboard and
+    announcements are the library's; grouping by sector, chips and counts are ours
+    (`TaxonomyPicker.tsx`). ~10 kB gzipped, headless, React 18. *Rejected:* a hand-written
+    combobox (every accessibility detail ours, with no test here that would catch one) and a
+    grouped checklist (not the autocomplete asked for).
 
 ---
 

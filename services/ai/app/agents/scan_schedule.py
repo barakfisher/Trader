@@ -94,7 +94,7 @@ def describe_next_scan(
     *,
     schedule: str | None,
     state: str,
-    persona: str | None,
+    ready: bool,
     scheduling: Scheduling | None,
     now: datetime,
 ) -> dict[str, object]:
@@ -108,8 +108,11 @@ def describe_next_scan(
         return {"at": None, "why_none": "this installation does not run scheduled scans"}
     if state != "active":
         return {"at": None, "why_none": f"the agent is {state}, so it does not scan"}
-    if not (persona or "").strip():
-        return {"at": None, "why_none": "the agent has no persona, so it does not scan"}
+    if not ready:
+        return {
+            "at": None,
+            "why_none": "the agent has neither instructions nor settings, so it does not scan",
+        }
     try:
         found = next_scan(schedule or "", scheduling.calendar, now)
     except CalendarNotCovered:
