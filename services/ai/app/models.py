@@ -917,7 +917,9 @@ class MandateConflict(BaseModel):
         "sectors",
         "blocked",
     ]
-    quote: str = Field(description="Copied exactly from the instructions; checked to be there.")
+    quote: str = Field(
+        description="The sentence of the instructions that says it, cut from them by the server."
+    )
 
 
 class MandateCheckResponse(BaseModel):

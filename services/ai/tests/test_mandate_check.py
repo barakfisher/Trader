@@ -1,8 +1,9 @@
 """The contradiction check (D176-D178): what the model may say, and what reaches the user.
 
-The model is scripted. What is pinned is the code's side: a quote the
-instructions do not contain is dropped, a malformed answer is a quiet skip,
-and every reason not to check is `skipped`, never an error.
+The model is scripted. What is pinned is the code's side: the model names a
+sentence by number and the quote is cut from the user's text (D183), a number
+with no sentence behind it is dropped, a malformed answer is a quiet skip, and
+every reason not to check is `skipped`, never an error.
 """
 
 from __future__ import annotations
@@ -16,9 +17,11 @@ from fastapi.testclient import TestClient
 from app.agents.mandate import Mandate
 from app.agents.mandate_check import (
     MAX_CONFLICTS,
+    MAX_QUOTE_CHARS,
     SETTINGS,
     check_instructions,
     parse_conflicts,
+    sentences,
     settings_text,
 )
 from app.agents.scan_budget import AgentBudget
@@ -99,43 +102,71 @@ def test_the_wire_names_the_same_settings() -> None:
     assert set(typing.get_args(MandateConflict.model_fields["setting"].annotation)) == set(SETTINGS)
 
 
-def test_a_quote_is_kept_only_if_the_instructions_say_it() -> None:
+def test_the_instructions_are_numbered_by_sentence() -> None:
+    assert sentences(WORDS) == [
+        "Trade momentum daily and sell within the week.",
+        "Avoid ETFs entirely.",
+    ]
+    # A colon does not end a sentence; a line break always does.
+    assert sentences("You day-trade: buy movers.\nNo lists") == [
+        "You day-trade: buy movers.",
+        "No lists",
+    ]
+
+
+def test_the_quote_is_the_numbered_sentence_never_the_models_words() -> None:
     stated = settings_text(LONG_TERM)
     raw = """```json
     {"conflicts": [
-      {"setting": "horizon", "quote": "Trade momentum daily"},
-      {"setting": "horizon", "quote": "Hold for a decade"},
-      {"setting": "etfs", "quote": "Avoid ETFs entirely."},
-      {"setting": "made_up", "quote": "sell within the week"}
+      {"setting": "horizon", "sentence": 1, "quote": "Hold for a decade"},
+      {"setting": "horizon", "sentence": 9},
+      {"setting": "etfs", "sentence": 2},
+      {"setting": "made_up", "sentence": 1},
+      {"setting": "horizon", "sentence": "1"},
+      {"setting": "horizon", "sentence": true}
     ]}
     ```"""
     conflicts = parse_conflicts(raw, WORDS, stated)
-    # Whitespace is the only thing forgiven; an invented quote, a setting that is not set
-    # (ETFs are allowed here) and a setting that does not exist are all dropped.
+    # A quote the model adds is ignored; a sentence that does not exist, a setting that is
+    # not set (ETFs are allowed here), a setting that does not exist and a number that is
+    # not an integer are all dropped.
     assert conflicts is not None
-    assert [(c.setting, c.quote) for c in conflicts] == [("horizon", "Trade momentum daily")]
+    assert [(c.setting, c.quote) for c in conflicts] == [
+        ("horizon", "Trade momentum daily and sell within the week.")
+    ]
 
 
-def test_a_quote_in_the_users_own_language_is_kept() -> None:
-    hebrew = "אני רוצה לסחור במומנטום יומי."
+def test_a_hebrew_sentence_is_quoted_letter_for_letter() -> None:
+    # The first real check (2026-10-19) found this conflict and lost it: the model's copied
+    # quote read מנויות for מניות, and an exact match dropped it.
+    hebrew = "אתה סוחר יומי: אתה קונה מניות שזזו חזק היום. אתה אף פעם לא מחזיק פוזיציה יותר משבוע."
     conflicts = parse_conflicts(
-        '{"conflicts": [{"setting": "horizon", "quote": "לסחור במומנטום יומי"}]}',
-        hebrew,
-        settings_text(LONG_TERM),
+        '{"conflicts": [{"setting": "horizon", "sentence": 1}]}', hebrew, settings_text(LONG_TERM)
     )
-    assert conflicts is not None and conflicts[0].quote == "לסחור במומנטום יומי"
+    assert conflicts is not None
+    assert conflicts[0].quote == "אתה סוחר יומי: אתה קונה מניות שזזו חזק היום."
+
+
+def test_a_long_sentence_is_cut_at_a_word() -> None:
+    long = "word " * 100
+    conflicts = parse_conflicts(
+        '{"conflicts": [{"setting": "horizon", "sentence": 1}]}', long, settings_text(LONG_TERM)
+    )
+    assert conflicts is not None
+    quote = conflicts[0].quote
+    assert len(quote) <= MAX_QUOTE_CHARS and quote.endswith("word…")
 
 
 def test_at_most_three_conflicts_and_none_twice() -> None:
-    words = "a b c d e f"
+    words = "A. B. C. D. E."
     raw = (
         '{"conflicts": ['
-        + ",".join(f'{{"setting": "horizon", "quote": "{letter}"}}' for letter in "aabcde")
+        + ",".join(f'{{"setting": "horizon", "sentence": {n}}}' for n in (1, 1, 2, 3, 4, 5))
         + "]}"
     )
     conflicts = parse_conflicts(raw, words, settings_text(LONG_TERM))
     assert conflicts is not None
-    assert [c.quote for c in conflicts] == ["a", "b", "c"][:MAX_CONFLICTS]
+    assert [c.quote for c in conflicts] == ["A.", "B.", "C."][:MAX_CONFLICTS]
 
 
 def test_an_answer_that_is_not_the_json_asked_for_is_none() -> None:
@@ -146,12 +177,14 @@ def test_an_answer_that_is_not_the_json_asked_for_is_none() -> None:
 
 
 async def test_a_check_is_an_agent_call_on_the_agents_budget() -> None:
-    llm = ScriptedLLM('{"conflicts": [{"setting": "horizon", "quote": "Trade momentum daily"}]}')
+    llm = ScriptedLLM('{"conflicts": [{"setting": "horizon", "sentence": 1}]}')
     result = await check_instructions(llm, _agent())  # type: ignore[arg-type]
     assert result.status == "checked" and result.conflicts[0].setting == "horizon"
     caller = llm.calls[0]["caller"]
     assert (caller.purpose, caller.agent_id, caller.user_id) == ("mandate_check", AGENT, USER)
-    assert "Trade momentum" in llm.calls[0]["user"]
+    assert (
+        "1. Trade momentum daily and sell within the week.\n2. Avoid ETFs" in llm.calls[0]["user"]
+    )
     assert llm.verdicts == ["accepted"]
 
 
@@ -187,9 +220,7 @@ def route(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, Any]]:
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_engine] = lambda: object()
     previous = getattr(app.state, "llm", None)
-    app.state.llm = ScriptedLLM(
-        '{"conflicts": [{"setting": "horizon", "quote": "sell within the week"}]}'
-    )
+    app.state.llm = ScriptedLLM('{"conflicts": [{"setting": "horizon", "sentence": 1}]}')
     state["client"] = TestClient(app)
     yield state
     app.state.llm = previous
@@ -210,7 +241,9 @@ def test_the_route_answers_the_conflicts(route: dict[str, Any]) -> None:
     assert response.json() == {
         "status": "checked",
         "reason": None,
-        "conflicts": [{"setting": "horizon", "quote": "sell within the week"}],
+        "conflicts": [
+            {"setting": "horizon", "quote": "Trade momentum daily and sell within the week."}
+        ],
     }
 
 

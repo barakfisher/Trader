@@ -1166,7 +1166,7 @@ export interface components {
         MandateConflict: {
             /**
              * Quote
-             * @description Copied exactly from the instructions; checked to be there.
+             * @description The sentence of the instructions that says it, cut from them by the server.
              */
             quote: string;
             /**
