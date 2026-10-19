@@ -138,6 +138,7 @@ export class AuthStore {
 function loginErrorMessage(error: unknown): string {
   if (!(error instanceof ApiRequestError)) return t('errors.loginFailed');
   if (error.status === 401) return t('login.errors.incorrect');
+  if (error.code === 'account_pending') return t('login.errors.pending');
   if (error.code === 'account_not_active') return t('login.errors.notActive');
   return error.message;
 }

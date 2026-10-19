@@ -6,8 +6,11 @@ import {
   ACCOUNT_RESET_CONFIRMATION,
   ACCOUNT_RESET_GROUPS,
   ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD,
+  LLM_CAP_CEILING_MICRO_USD,
   MAX_AGENTS_PER_USER_CEILING,
+  MAX_PENDING_SIGNUPS_CEILING,
   type AccountResetGroup,
+  type SignupRequestView,
 } from '@traders/shared';
 import type {
   AdminAuditEntry,
@@ -47,8 +50,10 @@ import {
   useAdminLlmQuery,
   useAdminRunsQuery,
   useAdminSettingsQuery,
+  useAdminSignupsQuery,
   useAdminUniverseQuery,
   useChooseLlmModel,
+  useDecideSignup,
   useRescreen,
   useResetAccount,
   useUpdateAdminSettings,
@@ -88,11 +93,13 @@ export const AdminPage = observer(function AdminPage() {
 
       {isAdmin ? (
         <>
+          <SignupRequestsCard />
           <UniverseCard />
           <GapsCard />
           <ModelsCard />
           <AgentLimitCard />
           <AssistantLimitCard />
+          <SignupSettingsCard />
           <LlmCard />
           <RunsCard />
           <AuditCard />
@@ -449,6 +456,196 @@ function GapItem({ gap }: { gap: UniverseGap }) {
  * is saved; saving is an audited admin action. The balance beside the totals
  * answers "how much should I add to the account".
  */
+/** Dollars and cents typed into a field, as integer micro-USD; null for anything else. */
+function dollarsTextToMicro(value: string): number | null {
+  return /^\d+(\.\d{1,2})?$/.test(value.trim()) ? decimalUsdToMicro(value) : null;
+}
+
+/**
+ * Sign-up requests (D156, D188), first on the page because someone is waiting
+ * on each. A waiting request is approved with a monthly cap - prefilled with
+ * the default, any amount up to the ceiling - or rejected; a rejection can be
+ * undone, which puts the request back to waiting. A request already decided
+ * in Telegram simply leaves the list when it is read again.
+ */
+function SignupRequestsCard() {
+  const { t } = useTranslation();
+  const signups = useAdminSignupsQuery();
+  return (
+    <Card title={t('admin.signups.title')}>
+      {signups.isPending && <Spinner label={t('admin.signups.title')} />}
+      {signups.error && <ErrorNote message={errorMessage(signups.error, t('admin.signups.title'))} />}
+      {signups.data && (
+        <div className="space-y-3 text-sm">
+          {signups.data.pending.length === 0 ? (
+            <p className="text-text-muted">{t('admin.signups.none')}</p>
+          ) : (
+            <ul className="divide-y divide-border-subtle">
+              {signups.data.pending.map((request) => (
+                <PendingSignup key={request.userId} request={request} defaultCap={signups.data.defaultLlmCapMicroUsd} />
+              ))}
+            </ul>
+          )}
+          {signups.data.rejected.length > 0 && (
+            <details>
+              <summary className="cursor-pointer text-text-muted">
+                {t('admin.signups.rejected', { count: signups.data.rejected.length })}
+              </summary>
+              <ul className="mt-2 divide-y divide-border-subtle">
+                {signups.data.rejected.map((request) => (
+                  <RejectedSignup key={request.userId} request={request} />
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function SignupWho({ request }: { request: SignupRequestView }) {
+  const { t } = useTranslation();
+  return (
+    <div className="min-w-0">
+      <bdi dir="ltr" className="block truncate font-medium">{request.email}</bdi>
+      <span className="text-xs text-text-muted" title={formatExactTime(request.requestedAt)}>
+        {t('admin.signups.asked', { age: formatAge(request.requestedAt) })} · <bdi dir="ltr">{request.timezone}</bdi>
+      </span>
+    </div>
+  );
+}
+
+function PendingSignup({ request, defaultCap }: { request: SignupRequestView; defaultCap: number }) {
+  const { t } = useTranslation();
+  const decide = useDecideSignup();
+  const [cap, setCap] = useState(microToDollarsText(defaultCap));
+  const micro = dollarsTextToMicro(cap);
+  const valid = micro !== null && micro <= LLM_CAP_CEILING_MICRO_USD;
+  return (
+    <li className="flex flex-wrap items-end justify-between gap-3 py-2">
+      <SignupWho request={request} />
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-text-muted">{t('admin.signups.cap')}</span>
+          <input
+            value={cap}
+            onChange={(event) => setCap(event.target.value)}
+            inputMode="decimal"
+            dir="ltr"
+            aria-invalid={!valid}
+            className="w-24 rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
+          />
+        </label>
+        <Button
+          disabled={!valid || decide.isPending}
+          onClick={() => micro !== null && decide.mutate({ userId: request.userId, action: 'approve', llmCapMicroUsd: micro })}
+        >
+          {t('admin.signups.approve')}
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={decide.isPending}
+          onClick={() => decide.mutate({ userId: request.userId, action: 'reject' })}
+        >
+          {t('admin.signups.reject')}
+        </Button>
+      </div>
+      {decide.error && <ErrorNote message={errorMessage(decide.error, t('admin.signups.title'))} />}
+    </li>
+  );
+}
+
+function RejectedSignup({ request }: { request: SignupRequestView }) {
+  const { t } = useTranslation();
+  const decide = useDecideSignup();
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-3 py-2">
+      <SignupWho request={request} />
+      <Button
+        variant="ghost"
+        disabled={decide.isPending}
+        onClick={() => decide.mutate({ userId: request.userId, action: 'restore' })}
+      >
+        {t('admin.signups.undo')}
+      </Button>
+      {decide.error && <ErrorNote message={errorMessage(decide.error, t('admin.signups.title'))} />}
+    </li>
+  );
+}
+
+/**
+ * The two sign-up settings (D156, D157): the monthly cap an approval offers,
+ * and how many requests may wait at once - 0 closes sign-up. Neither changes
+ * an approval already made or a request already waiting.
+ */
+function SignupSettingsCard() {
+  const { t } = useTranslation();
+  const settings = useAdminSettingsQuery();
+  const update = useUpdateAdminSettings();
+  const storedCap = settings.data ? microToDollarsText(settings.data.defaultLlmCapMicroUsd) : '';
+  const storedMax = settings.data ? String(settings.data.maxPendingSignups) : '';
+  const [cap, setCap] = useState(storedCap);
+  const [max, setMax] = useState(storedMax);
+  useEffect(() => setCap(storedCap), [storedCap]);
+  useEffect(() => setMax(storedMax), [storedMax]);
+  const micro = dollarsTextToMicro(cap);
+  const capValid = micro !== null && micro <= LLM_CAP_CEILING_MICRO_USD;
+  const maxValid = /^\d+$/.test(max) && Number(max) <= MAX_PENDING_SIGNUPS_CEILING;
+  const unchanged = cap === storedCap && max === storedMax;
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (micro !== null) update.mutate({ defaultLlmCapMicroUsd: micro, maxPendingSignups: Number(max) });
+  };
+  return (
+    <Card title={t('admin.signupSettings.title')}>
+      {settings.isPending && <Spinner label={t('admin.signupSettings.title')} />}
+      {settings.error && <ErrorNote message={errorMessage(settings.error, t('admin.signupSettings.title'))} />}
+      {settings.data && (
+        <form onSubmit={submit} className="flex flex-wrap items-end gap-3 text-sm">
+          <label className="flex flex-col gap-1">
+            <span className="text-text-muted">{t('admin.signupSettings.cap')}</span>
+            <input
+              value={cap}
+              onChange={(event) => setCap(event.target.value)}
+              inputMode="decimal"
+              dir="ltr"
+              aria-invalid={!capValid}
+              className="w-28 rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-text-muted">{t('admin.signupSettings.max')}</span>
+            <input
+              value={max}
+              onChange={(event) => setMax(event.target.value)}
+              inputMode="numeric"
+              dir="ltr"
+              aria-invalid={!maxValid}
+              className="w-24 rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
+            />
+          </label>
+          <Button type="submit" disabled={!capValid || !maxValid || unchanged || update.isPending}>
+            {t('admin.signupSettings.save')}
+          </Button>
+          {update.isSuccess && unchanged && (
+            <span role="status" className="text-xs text-text-muted">
+              {t('admin.signupSettings.saved')}
+            </span>
+          )}
+          <p className="basis-full text-xs text-text-muted">
+            {t('admin.signupSettings.hint', {
+              cap: formatMicroUsd(LLM_CAP_CEILING_MICRO_USD),
+              max: MAX_PENDING_SIGNUPS_CEILING,
+            })}
+          </p>
+          {update.error && <ErrorNote message={errorMessage(update.error, t('admin.signupSettings.title'))} />}
+        </form>
+      )}
+    </Card>
+  );
+}
+
 /** Integer micro-USD as dollars and cents for an input ("0.50"), with no float. */
 function microToDollarsText(micro: number): string {
   const cents = Math.floor(micro / 10_000);

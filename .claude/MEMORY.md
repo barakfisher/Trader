@@ -5,7 +5,7 @@ the reasoning behind it is not, and that is what this file is for. Maintained pe
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
 Updated: 2026-10-19 ~08:00 UTC - **Handoff: the agent template creator is complete (#252, #254,
-#257, #258).** Decisions reached **178** (next: **179**). Migrations: **`0059_mandate_check` is head**
+#257, #258).** Decisions reached **188** (next: **189**; 179-188 since this header: login, D183, signup). Migrations: **`0059_mandate_check` is head**
 (next free: **`0060`**) - **before writing a migration, `git fetch` and check `main` has one head**:
 two sessions merging 40 s apart left two 0057s (#253/#254, fixed by #255). **Deployed nowhere past
 0055:** both environments run `a7c3c96`; #232 and #249-#258 are merged and undeployed - redeploy only
@@ -2927,6 +2927,55 @@ failure they prevent.
     and needs a tolerance someone tunes); only logging drops (Hebrew warnings keep vanishing
     meanwhile). Cost: the warning quotes a whole sentence, not a phrase. A number with no sentence
     behind it is dropped and logged (`agents.mandate_check_no_such_sentence`).
+
+184. **Telegram's *Custom budget* offers preset amounts, not a typed reply** (the user, 2026-10-19;
+    supersedes D156's "a reply asks for the amount"). The tap swaps the buttons for $5, $20 and
+    $50 a month, an *Other amount* link to the Admin page, and Reject. **Why:** the bot keeps no
+    conversation state - a typed reply would need a table or column saying which request it
+    answers (migration 0060) and a parser for "25", "$25", "25.50" in two languages. The amount
+    instead rides in the signed button, as a trade's Confirm carries its price (cap + 1 on the
+    wire, so a $0 cap - approved, spending nothing - fits a varint). *Rejected:* the typed reply.
+    Cost: three amounts in the chat; any other is one link away.
+185. **Signup gives one answer whatever the email already is** (the user, 2026-10-19). New,
+    already waiting, rejected or an existing account: all get "Request received", and only a new
+    email messages the admin - a rejected person asking again pings nobody, as D156 intended. At
+    the limit on waiting requests the answer is "Sign-up is closed right now", which says nothing
+    about any account. The hash is computed for every email and the Telegram announcement is not
+    awaited, so the time taken does not tell them apart either. *Rejected:* honest answers per
+    state - friendlier, but anyone on the tailnet could test whether an email has an account, and
+    login already refuses to say (D159). Someone who forgot they asked learns their state by
+    signing in (D187).
+186. **Signup is merged in order but redeployed only together with the cap's enforcement**
+    (the user, 2026-10-19). Until the cap PR, an approved user's `llm_cap_micro_usd` is stored
+    and checked by nothing; what still bounds them is the per-agent daily allowance ($0.50, up to
+    3 agents), the assistant's $0.50 a day and `LLM_DAILY_BUDGET_USD` - about $2 a day at most.
+    **Do not redeploy past the signup PR without the cap PR also merged.** No code enforces this:
+    redeploys happen only on the user's word, so the rule is this sentence and the handoff's.
+    *Rejected:* no rule (the gap reaches a running system) and the cap PR first (signup waits a
+    PR for an ordering the redeploy already gives).
+187. **A waiting user is told so at sign-in; nobody else's state is spelled out** (the user,
+    2026-10-19). With the right password, `pending` gets its own sentence ("waiting for the
+    admin's approval", code `account_pending`); `rejected` and `disabled` keep the generic "not
+    active - ask the admin" - a rejection can be undone, and a household member need not read
+    "declined". There is no channel to tell someone they were approved (no binding, no email
+    before M10), so two sentences carry it: the Request received screen says they can sign in
+    once approved, and the admin's Telegram outcome line says "Approved with $X/month. Let them
+    know they can sign in." *Rejected:* a "check my status" page - it would have to answer
+    without a password, undoing D185.
+188. **The Admin page decides requests with the same transitions as Telegram; neither keeps
+    message state** (the user, 2026-10-19). A *Sign-up requests* card first on the page: each
+    waiting request with its email, zone and age, a cap field prefilled with the default, Approve
+    and Reject; rejections folded below with *Undo rejection* (back to `pending`, outside the
+    waiting limit, no message - the admin is the one doing it). The default cap and the waiting
+    limit (0 closes sign-up) are two fields in Admin settings. A count on the Admin link and a dot
+    on the closed account menu while requests wait. **Every decision is an UPDATE conditional on
+    the state it starts from**, so Telegram buttons need no nonce table: a replay, a second admin
+    tab or a tap on a message already decided on the page changes nothing and is answered with
+    where the request is now - and the stale buttons are removed then, as a stale proposal
+    message heals. Telegram decisions write `admin_audit` before applying, as the page's gate
+    does. *Rejected:* listing requests inside the admin's user list now (that PR's scope, D162),
+    and editing the Telegram message when the page decides (it would need the message ids
+    stored).
 
 ---
 

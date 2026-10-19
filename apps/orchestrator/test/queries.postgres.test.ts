@@ -84,6 +84,79 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('sign-up requests (0058, D156, D185, D188)', () => {
+    const tag = USER.slice(0, 8);
+    const email = (name: string) => `${name}-${tag}@example.com`;
+    let savedLimit = 5;
+
+    beforeAll(async () => {
+      const { rows } = await getPool().query('SELECT max_pending_signups FROM installation_settings');
+      savedLimit = rows[0].max_pending_signups;
+      // Room for this block's requests whatever else waits in the database.
+      await getPool().query('UPDATE installation_settings SET max_pending_signups = 50');
+    });
+
+    afterAll(async () => {
+      await getPool().query('UPDATE installation_settings SET max_pending_signups = $1', [savedLimit]);
+      await getPool().query(`DELETE FROM users WHERE email LIKE $1`, [`%-${tag}@example.com`]);
+    });
+
+    const ask = (address: string) =>
+      queries.createSignupRequest({ email: address, passwordHash: 'hash', timezone: 'Europe/London', language: 'he' });
+
+    it('writes a pending user with no agent and no cap, its settings in the language asked in', async () => {
+      const created = await ask(email('noa'));
+      expect(created.outcome).toBe('created');
+      const userId = (created as { userId: string }).userId;
+      const { rows } = await getPool().query(
+        `SELECT u.status, u.llm_cap_micro_usd, u.timezone, s.language,
+                (SELECT count(*)::int FROM agents a WHERE a.user_id = u.id) AS agents
+           FROM users u JOIN user_settings s ON s.user_id = u.id WHERE u.id = $1`,
+        [userId],
+      );
+      expect(rows[0]).toEqual({ status: 'pending', llm_cap_micro_usd: null, timezone: 'Europe/London', language: 'he', agents: 0 });
+    });
+
+    it('writes nothing for an email that already asked, whatever its case', async () => {
+      expect(await ask(email('NOA').replace('NOA', 'Noa'))).toEqual({ outcome: 'exists' });
+    });
+
+    it('is closed at the limit, and open again below it', async () => {
+      const { rows } = await getPool().query(`SELECT count(*)::int AS n FROM users WHERE status = 'pending'`);
+      await getPool().query('UPDATE installation_settings SET max_pending_signups = $1', [rows[0].n]);
+      expect(await ask(email('late'))).toEqual({ outcome: 'closed' });
+      await getPool().query('UPDATE installation_settings SET max_pending_signups = $1', [rows[0].n + 1]);
+      expect((await ask(email('late'))).outcome).toBe('created');
+      await getPool().query('UPDATE installation_settings SET max_pending_signups = 50');
+    });
+
+    it('approves once: the cap and approver set, the primary agent seeded; a second decision changes nothing', async () => {
+      const created = (await ask(email('dana'))) as { userId: string };
+      expect(await queries.approveSignup(created.userId, 20_000_000, USER)).toMatchObject({ applied: true, status: 'active' });
+      const { rows } = await getPool().query(
+        `SELECT u.llm_cap_micro_usd::int AS cap, u.approved_by, u.approved_at IS NOT NULL AS approved,
+                (SELECT count(*)::int FROM agents a WHERE a.user_id = u.id AND a.is_primary) AS primaries
+           FROM users u WHERE u.id = $1`,
+        [created.userId],
+      );
+      expect(rows[0]).toEqual({ cap: 20_000_000, approved_by: USER, approved: true, primaries: 1 });
+      expect(await queries.rejectSignup(created.userId)).toMatchObject({ applied: false, status: 'active' });
+      expect(await queries.approveSignup(created.userId, 5_000_000, USER)).toMatchObject({ applied: false, status: 'active' });
+    });
+
+    it('rejects, lists the rejection, and undoes it back to waiting', async () => {
+      const created = (await ask(email('omer'))) as { userId: string };
+      expect(await queries.rejectSignup(created.userId)).toMatchObject({ applied: true, status: 'rejected' });
+      expect((await queries.listSignupRequests()).rejected.map((row) => row.user_id)).toContain(created.userId);
+      expect(await queries.restoreSignup(created.userId)).toMatchObject({ applied: true, status: 'pending' });
+      expect((await queries.listSignupRequests()).pending.map((row) => row.user_id)).toContain(created.userId);
+    });
+
+    it('never decides an admin, and answers an unknown id as gone', async () => {
+      expect(await queries.approveSignup(randomUUID(), 0, USER)).toEqual({ applied: false, status: 'gone', email: null });
+    });
+  });
+
   describe('the admin audit', () => {
     // Written as the seeded admin, not USER: an audit row can never be deleted
     // and neither can the admin it names, so USER's cleanup would be refused.

@@ -35,6 +35,8 @@
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
+import { bytesToUint, bytesToUuid, uintToBytes, uuidToBytes } from './callbackBytes.js';
+
 /** Telegram refuses `callback_data` longer than this, in bytes. */
 export const MAX_CALLBACK_DATA_BYTES = 64;
 
@@ -76,62 +78,15 @@ export interface CallbackPayload {
   priceMinor?: bigint;
 }
 
-/**
- * A price as an unsigned LEB128 varint: seven bits a byte, the high bit set on
- * every byte but the last. $238.68 is three bytes - four base64url characters -
- * where its decimal spelling would be five and a fixed-width integer eight.
- */
 function priceToBytes(price: bigint): Buffer {
-  if (price <= 0n || price > MAX_CALLBACK_PRICE_MINOR) {
-    throw new Error(`price ${price} cannot be carried by a callback`);
-  }
-  const bytes: number[] = [];
-  let rest = price;
-  while (rest >= 0x80n) {
-    bytes.push(Number(rest & 0x7fn) | 0x80);
-    rest >>= 7n;
-  }
-  bytes.push(Number(rest));
-  return Buffer.from(bytes);
+  return uintToBytes(price, MAX_CALLBACK_PRICE_MINOR);
 }
 
-/** The inverse of `priceToBytes`; null for anything it would not have written. */
 function bytesToPrice(bytes: Buffer): bigint | null {
-  let price = 0n;
-  for (const [index, byte] of bytes.entries()) {
-    price |= BigInt(byte & 0x7f) << BigInt(7 * index);
-    const last = index === bytes.length - 1;
-    if (last !== ((byte & 0x80) === 0)) return null;
-  }
-  return price > 0n && price <= MAX_CALLBACK_PRICE_MINOR ? price : null;
+  return bytesToUint(bytes, MAX_CALLBACK_PRICE_MINOR);
 }
 
 const base64url = (buffer: Buffer): string => buffer.toString('base64url');
-
-/**
- * A UUID as its 16 raw bytes rather than its 36-character spelling.
- *
- * This single choice is most of the byte budget: base64url of 16 bytes is 22
- * characters against the 36 a hyphenated UUID costs.
- */
-function uuidToBytes(uuid: string): Buffer {
-  const hex = uuid.replace(/-/g, '');
-  if (hex.length !== 32 || !/^[0-9a-f]+$/i.test(hex)) {
-    throw new Error(`not a uuid: ${uuid}`);
-  }
-  return Buffer.from(hex, 'hex');
-}
-
-function bytesToUuid(buffer: Buffer): string {
-  const hex = buffer.toString('hex');
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    hex.slice(12, 16),
-    hex.slice(16, 20),
-    hex.slice(20, 32),
-  ].join('-');
-}
 
 /** See bindToken.ts: the tag keeps one token type from passing as the other. */
 const DOMAIN = 'telegram-callback-v1';

@@ -1,6 +1,6 @@
 /**
- * Sign-in, sign-out, "who am I" and changing one's own password or email
- * (D159, D160).
+ * Sign-up, sign-in, sign-out, "who am I" and changing one's own password or
+ * email (D156, D159, D160, D185).
  *
  * Email and password, the password hashed with argon2id. A session is the
  * signed cookie of `http/auth.ts`, carrying the user's `session_version`, so a
@@ -12,11 +12,20 @@ import type { Context, Hono } from 'hono';
 import { deleteCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
 
-import { emailProblem, normaliseEmail, type SessionUser, type UiLanguage } from '@traders/shared';
+import {
+  emailProblem,
+  normaliseEmail,
+  timeZoneProblem,
+  UI_LANGUAGES,
+  type SessionUser,
+  type SignupResponse,
+  type UiLanguage,
+} from '@traders/shared';
 
 import {
   changeEmail,
   changePassword,
+  createSignupRequest,
   getOrCreateUserSettings,
   getPasswordHash,
   getUser,
@@ -24,6 +33,7 @@ import {
   recordSignIn,
   type UserRow,
 } from '../../db/queries.js';
+import { announceSignupRequest } from '../../telegram/signupApproval.js';
 import type { AppEnv } from '../app.js';
 import { SESSION_COOKIE, createSessionToken } from '../auth.js';
 import { ApiProblem, badRequest, conflict, unauthorized } from '../errors.js';
@@ -39,6 +49,13 @@ const submittedPassword = z.string().min(1).max(PASSWORD_MAX_LENGTH * 4);
 const loginSchema = z.object({
   email: z.string().trim().min(1).max(320),
   password: submittedPassword,
+});
+
+const signupSchema = z.object({
+  email: z.string().max(1000),
+  password: submittedPassword,
+  timezone: z.string().max(200),
+  language: z.enum(UI_LANGUAGES),
 });
 
 const passwordChangeSchema = z.object({
@@ -98,6 +115,9 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     if (!credentials || !matches) throw unauthorized('incorrect email or password');
 
     // Only someone who knows the password learns the account's state.
+    if (credentials.status === 'pending') {
+      throw new ApiProblem(403, 'account_pending', 'this account is waiting for the admin\'s approval');
+    }
     if (credentials.status !== 'active') {
       throw new ApiProblem(403, 'account_not_active', `this account is ${credentials.status}`);
     }
@@ -107,6 +127,49 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     await recordSignIn(user.id);
     issueSession(context, user);
     return context.json(await sessionUser(user));
+  });
+
+  /**
+   * Ask to join (D156). The one route that writes while signed out, so it says
+   * as little as it can (D185): `received` for a new email, one already
+   * waiting, one rejected and an existing account alike - only a new email
+   * messages the admin - and `closed` while the limit on waiting requests is
+   * reached, which says nothing about any account. The password is hashed
+   * whatever the email, so the time taken does not tell them apart either.
+   * A malformed address, password or zone is refused, as the form refuses it.
+   */
+  app.post('/auth/signup', async (context) => {
+    const parsed = signupSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) {
+      throw badRequest('invalid_body', 'expected { email, password, timezone, language }');
+    }
+    const email = normaliseEmail(parsed.data.email);
+    const emailIssue = emailProblem(email);
+    if (emailIssue !== null) throw badRequest(`email_${emailIssue}`, `the address is ${emailIssue.replace('_', ' ')}`);
+    const passwordIssue = passwordProblem(parsed.data.password);
+    if (passwordIssue !== null) {
+      throw badRequest(`password_${passwordIssue}`, `the password is ${passwordIssue.replace('_', ' ')}`);
+    }
+    if (timeZoneProblem(parsed.data.timezone) !== null) {
+      throw badRequest('timezone_invalid', 'the time zone is not an IANA zone name');
+    }
+
+    const created = await createSignupRequest({
+      email,
+      passwordHash: await hashPassword(parsed.data.password),
+      timezone: parsed.data.timezone,
+      language: parsed.data.language,
+    });
+    if (created.outcome === 'created') {
+      // Not awaited: a Telegram round trip only for new emails would itself tell
+      // them apart, and the request waits on the Admin page whatever it does.
+      void announceSignupRequest(
+        { notifier: context.get('notifier'), signingSecret: context.get('config').TELEGRAM_SIGNING_SECRET },
+        created.userId,
+      );
+    }
+    const body: SignupResponse = { outcome: created.outcome === 'closed' ? 'closed' : 'received' };
+    return context.json(body);
   });
 
   app.post('/auth/logout', (context) => {

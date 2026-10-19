@@ -194,3 +194,8 @@ while this file is out of date.
 | 181 | A password is 12 to 128 characters, with no composition rules |
 | 182 | No login rate limit in M9 |
 | 183 | The contradiction check names a sentence by number; the server quotes it |
+| 184 | Telegram's Custom budget offers preset amounts, not a typed reply |
+| 185 | Signup gives one answer whatever the email already is |
+| 186 | Signup is redeployed only together with the cap's enforcement |
+| 187 | A waiting user is told so at sign-in; nobody else's state is spelled out |
+| 188 | The Admin page and Telegram decide requests with the same conditional transitions |

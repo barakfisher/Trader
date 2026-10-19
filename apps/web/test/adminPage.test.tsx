@@ -154,6 +154,24 @@ const LLM_PANEL = {
   ],
 };
 
+const SETTINGS = {
+  maxAgentsPerUser: 3,
+  assistantDailyBudgetMicroUsd: 500_000,
+  defaultLlmCapMicroUsd: 10_000_000,
+  maxPendingSignups: 5,
+  updatedAt: '2026-10-08T09:00:00Z',
+};
+
+const SIGNUPS = {
+  pending: [
+    { userId: 'u-noa', email: 'noa@example.com', timezone: 'Europe/London', status: 'pending', requestedAt: '2026-10-19T08:00:00Z' },
+  ],
+  rejected: [
+    { userId: 'u-omer', email: 'omer@example.com', timezone: 'Asia/Jerusalem', status: 'rejected', requestedAt: '2026-10-18T08:00:00Z' },
+  ],
+  defaultLlmCapMicroUsd: 10_000_000,
+};
+
 function renderAt(path: string, user: typeof ADMIN) {
   const router = createAppRouter(createMemoryHistory({ initialEntries: [path] }));
   const result = renderWithServerState(<App router={router} />);
@@ -242,7 +260,11 @@ describe('the admin page', () => {
           : path === '/admin/llm/models'
             ? Promise.resolve(MODELS)
           : path === '/admin/settings'
-            ? Promise.resolve({ maxAgentsPerUser: 3, assistantDailyBudgetMicroUsd: 500_000, updatedAt: '2026-10-08T09:00:00Z' })
+            ? Promise.resolve(SETTINGS)
+          : path === '/admin/signups'
+            ? Promise.resolve(SIGNUPS)
+          : path === '/admin/signups/count'
+            ? Promise.resolve({ pending: SIGNUPS.pending.length })
           : path.startsWith('/admin/llm')
             ? Promise.resolve(LLM_PANEL)
             : new Promise(() => {}),
@@ -256,6 +278,62 @@ describe('the admin page', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
     const link = await screen.findByRole('link', { name: /Admin/ });
     expect(link.getAttribute('href')).toBe('/admin');
+  });
+
+  it('counts the sign-up requests waiting on the Admin link (D188)', async () => {
+    renderAt('/', ADMIN);
+    fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
+    expect(await screen.findByRole('link', { name: /Admin\s*1/ })).toBeTruthy();
+  });
+
+  it('approves a request at the cap typed, in integer micro-USD, and rejects another (D188)', async () => {
+    post.mockResolvedValue({ applied: true, status: 'active' });
+    renderAt('/admin', ADMIN);
+    const cap = (await screen.findByLabelText('Monthly AI cap ($)')) as HTMLInputElement;
+    expect(cap.value).toBe('10.00');
+    const row = within(cap.closest('li')!);
+    expect(row.getByText('noa@example.com')).toBeTruthy();
+    const approve = row.getByRole('button', { name: 'Approve' }) as HTMLButtonElement;
+    for (const refused of ['1.255', 'abc', '1000.01']) {
+      fireEvent.change(cap, { target: { value: refused } });
+      expect(approve.disabled, refused).toBe(true);
+    }
+    fireEvent.change(cap, { target: { value: '25' } });
+    await act(async () => {
+      fireEvent.click(approve);
+    });
+    expect(post).toHaveBeenCalledWith('/admin/signups/u-noa/approve', { llmCapMicroUsd: 25_000_000 });
+    await act(async () => {
+      fireEvent.click(row.getByRole('button', { name: 'Reject' }));
+    });
+    expect(post).toHaveBeenCalledWith('/admin/signups/u-noa/reject', undefined);
+  });
+
+  it('keeps rejected requests folded away, each with an undo', async () => {
+    post.mockResolvedValue({ applied: true, status: 'pending' });
+    renderAt('/admin', ADMIN);
+    fireEvent.click(await screen.findByText('1 rejected request'));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Undo rejection' }));
+    });
+    expect(post).toHaveBeenCalledWith('/admin/signups/u-omer/restore', undefined);
+  });
+
+  it('sets the default cap and how many requests may wait, 0 closing sign-up', async () => {
+    put.mockResolvedValue({ ...SETTINGS, defaultLlmCapMicroUsd: 7_500_000, maxPendingSignups: 0 });
+    renderAt('/admin', ADMIN);
+    const cap = (await screen.findByLabelText('Default monthly AI cap ($)')) as HTMLInputElement;
+    const max = screen.getByLabelText('Requests that may wait at once') as HTMLInputElement;
+    expect([cap.value, max.value]).toEqual(['10.00', '5']);
+    const save = within(cap.closest('form')!).getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    fireEvent.change(max, { target: { value: '51' } });
+    expect(save.disabled).toBe(true);
+    fireEvent.change(cap, { target: { value: '7.50' } });
+    fireEvent.change(max, { target: { value: '0' } });
+    await act(async () => {
+      fireEvent.click(save);
+    });
+    expect(put).toHaveBeenCalledWith('/admin/settings', { defaultLlmCapMicroUsd: 7_500_000, maxPendingSignups: 0 });
   });
 
   it('is not linked for anyone else', async () => {
@@ -336,7 +414,7 @@ describe('the admin page', () => {
   });
 
   it('sets how many agents a user may have, within 1 and the ceiling (D72)', async () => {
-    put.mockResolvedValue({ maxAgentsPerUser: 5, assistantDailyBudgetMicroUsd: 500_000, updatedAt: '2026-10-08T10:00:00Z' });
+    put.mockResolvedValue({ ...SETTINGS, maxAgentsPerUser: 5, updatedAt: '2026-10-08T10:00:00Z' });
     renderAt('/admin', ADMIN);
     const field = (await screen.findByLabelText('Most simulated agents a user may have')) as HTMLInputElement;
     expect(field.value).toBe('3');
@@ -354,7 +432,7 @@ describe('the admin page', () => {
   });
 
   it("sets the assistant's daily limit in dollars and cents, sent as integer micro-USD", async () => {
-    put.mockResolvedValue({ maxAgentsPerUser: 3, assistantDailyBudgetMicroUsd: 1_250_000, updatedAt: '2026-10-12T10:00:00Z' });
+    put.mockResolvedValue({ ...SETTINGS, assistantDailyBudgetMicroUsd: 1_250_000, updatedAt: '2026-10-12T10:00:00Z' });
     renderAt('/admin', ADMIN);
     const field = (await screen.findByLabelText("Most one user's questions may cost a day, in US dollars")) as HTMLInputElement;
     expect(field.value).toBe('0.50');
