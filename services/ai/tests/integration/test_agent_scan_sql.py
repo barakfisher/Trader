@@ -72,9 +72,11 @@ class ScriptedLLM:
         self.turns = list(turns)
         self.offered: list[int] = []
         self.verdicts: list[str] = []
+        self.heard: list[Any] = []
 
     async def converse(self, **kwargs: Any) -> LLMCompletion:
         self.offered.append(len(kwargs["tools"]))
+        self.heard.append(kwargs["messages"][-1])
         turn = self.turns.pop(0)
         if isinstance(turn, Exception):
             raise turn
@@ -202,16 +204,64 @@ async def test_tools_run_and_a_sourced_trade_is_accepted(loaded: Engine, agent: 
     assert row.transcript[1]["result"]["quotes"]["CCJ"]["price"] == "54.32"
 
 
-async def test_an_invented_figure_makes_the_answer_invalid(
+async def test_an_invented_figure_twice_makes_the_answer_invalid(
     loaded: Engine, agent: ScanAgent
 ) -> None:
     llm = ScriptedLLM(
-        _answer(decision="buy", symbol="CCJ", quantity="2", thesis="CCJ will reach 80.00 soon.")
+        _answer(decision="buy", symbol="CCJ", quantity="2", thesis="CCJ will reach 80.00 soon."),
+        _answer(decision="buy", symbol="CCJ", quantity="2", thesis="CCJ will reach 90.00 soon."),
     )
     result = await _scan(loaded, agent, llm)
     assert result.outcome == "invalid_answer"
-    assert any("80.00" in problem for problem in result.problems)
-    assert llm.verdicts == ["unsourced_figures"]
+    assert result.problems == ("figures not in the evidence: 90.00",)
+    assert llm.verdicts == ["unsourced_figures", "unsourced_figures"]
+    row = _stored(loaded, result.scan_id)
+    assert [entry["role"] for entry in row.transcript] == ["assistant", "returned", "assistant"]
+    assert row.transcript[1]["problems"] == ["figures not in the evidence: 80.00"]
+    assert "90.00" in row.answer["thesis"]
+
+
+async def test_an_invented_figure_goes_back_once_and_a_sourced_answer_is_a_trade(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    market = ScriptedMarket()
+    market.prices = {"CCJ": 5_432}
+    llm = ScriptedLLM(
+        _answer(decision="buy", symbol="CCJ", quantity="2", thesis="CCJ will reach 80.00."),
+        _answer(decision="buy", symbol="CCJ", quantity="2", thesis="CCJ is a uranium miner."),
+    )
+    result = await _scan(loaded, agent, llm, market)
+    assert result.outcome == "trade", result.problems
+    assert llm.verdicts == ["unsourced_figures", "accepted"]
+    # The model hears which figure, as it wrote it.
+    assert "figures not in the evidence: 80.00" in str(llm.heard[-1])
+
+
+async def test_a_pass_with_an_invented_figure_also_goes_back_once(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    llm = ScriptedLLM(
+        _answer(decision="none", thesis="Nothing moved more than 777% today."),
+        _answer(decision="none", thesis="Nothing worth buying today."),
+    )
+    result = await _scan(loaded, agent, llm)
+    assert result.outcome == "no_trade", result.problems
+    assert len(llm.verdicts) == 2
+
+
+async def test_an_answer_with_another_fault_is_not_sent_back(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    # Not tradable as well as unsourced: a second answer is not owed. The script
+    # holding one turn is itself the assertion - a retry would run out of it.
+    llm = ScriptedLLM(
+        _answer(decision="buy", symbol="TSLA", quantity="1", thesis="TSLA will reach 999.00.")
+    )
+    result = await _scan(loaded, agent, llm)
+    assert result.outcome == "invalid_answer"
+    assert len(result.problems) == 2
+    roles = [entry["role"] for entry in _stored(loaded, result.scan_id).transcript]
+    assert "returned" not in roles
 
 
 @pytest.mark.parametrize(
@@ -270,9 +320,8 @@ async def test_the_thesis_may_state_the_quantity_it_proposes(
     # Only the quantity it proposes: any other number is still a figure. 777 is
     # no part of a date or a time: the briefing's `as_of` is today's timestamp,
     # so a small number such as 8 is sourced by it on the 8th of the month.
-    llm = ScriptedLLM(
-        _answer(decision="buy", symbol="CCJ", quantity="7", thesis="7 now, 777 next week.")
-    )
+    bad = _answer(decision="buy", symbol="CCJ", quantity="7", thesis="7 now, 777 next week.")
+    llm = ScriptedLLM(bad, bad)
     assert (await _scan(loaded, agent, llm, market)).problems == (
         "figures not in the evidence: 777",
     )

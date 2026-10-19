@@ -15,7 +15,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.agents.mandate import Mandate
-from app.agents.scan import RETRY_PREFIX, instructions
+from app.agents.scan import FIGURES_RETRY_PREFIX, RETRY_PREFIX, instructions
 from app.agents.scan_log import ScanAgent, find_agent
 from tests.integration.conftest import run_script
 from tests.integration.test_agent_scan_sql import (
@@ -125,6 +125,27 @@ async def test_a_buy_that_breaks_the_mandate_twice_is_rule_rejected(
     assert row.outcome == "rule_rejected"
     assert row.answer["quantity"] == "3"
     assert "position limit" in row.answer["problems"][0]
+
+
+async def test_the_figures_and_the_mandate_each_send_an_answer_back_once(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    # D189 beside D170: a thesis with an invented figure, then a fixed one over
+    # the position limit, then one that fits - three answers, one scan.
+    invented = _answer(
+        decision="buy", symbol="CCJ", quantity="2", thesis="CCJ will reach 80.00 soon."
+    )
+    llm = ScriptedLLM(invented, _buy_ccj(2), _buy_ccj(1))
+
+    result = await _scan(loaded, agent, llm, _market())
+
+    assert result.outcome == "trade", result.problems
+    row = _stored(loaded, result.scan_id)
+    roles = [entry["role"] for entry in row.transcript]
+    assert roles == ["assistant", "returned", "assistant", "returned", "assistant"]
+    assert FIGURES_RETRY_PREFIX in llm.heard[1].text
+    assert RETRY_PREFIX in llm.heard[2].text
+    assert llm.verdicts == ["unsourced_figures", "accepted", "accepted"]
 
 
 async def test_passing_after_the_refusal_is_no_trade(loaded: Engine, agent: ScanAgent) -> None:
