@@ -19,11 +19,9 @@ import { parseArgs } from 'node:util';
 
 import { closePool, initPool } from './db/pool.js';
 import { adminPasswordState, setAdminCredentials } from './db/queries.js';
-import { hashPassword, passwordProblem } from './http/password.js';
+import { emailProblem, normaliseEmail } from '@traders/shared';
 
-/** Enough to catch a pasted name or a missing `@`; delivery is never attempted. */
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+$/;
-const EMAIL_MAX_LENGTH = 320;
+import { hashPassword, passwordProblem } from './http/password.js';
 
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
@@ -54,8 +52,8 @@ async function main(): Promise<void> {
       return;
     }
 
-    const email = values.email?.trim();
-    if (!email || email.length > EMAIL_MAX_LENGTH || !EMAIL_SHAPE.test(email)) {
+    const email = normaliseEmail(values.email ?? '');
+    if (emailProblem(email) !== null) {
       fail('pass the admin\'s address as --email you@example.com');
     }
     if (process.stdin.isTTY) fail('pipe the password on stdin; scripts/admin-password.sh can generate one');

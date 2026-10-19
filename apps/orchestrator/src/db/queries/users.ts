@@ -67,6 +67,31 @@ export async function changePassword(userId: string, passwordHash: string): Prom
   );
 }
 
+const UNIQUE_VIOLATION = '23505';
+
+/**
+ * A new sign-in address, which ends every session the user holds - this one
+ * included, so the caller reissues its cookie - as a password change does
+ * (D160). `'taken'` when another account already signs in with it: the unique
+ * index on `lower(email)` decides, so two users racing for one address cannot
+ * both win.
+ */
+export async function changeEmail(userId: string, email: string): Promise<UserRow | 'taken' | null> {
+  try {
+    return await queryOne<UserRow>(
+      `UPDATE users
+          SET email = $2,
+              session_version = session_version + 1
+        WHERE id = $1
+    RETURNING ${USER_COLUMNS}`,
+      [userId, email],
+    );
+  } catch (error) {
+    if ((error as { code?: string }).code === UNIQUE_VIOLATION) return 'taken';
+    throw error;
+  }
+}
+
 /**
  * The bootstrap script's one statement (D179): the installation's admin gets
  * this email and password, and every session they held ends. Null when there

@@ -21,7 +21,7 @@ export function InstructionsConflicts({ agent }: { agent: AgentView }) {
           <li key={`${conflict.setting}:${conflict.quote}`}>
             <Trans
               i18nKey="agents.check.conflict"
-              values={{ quote: conflict.quote, setting: t(`agents.check.settings.${conflict.setting}`) }}
+              values={{ quote: quotedInSentence(conflict.quote), setting: t(`agents.check.settings.${conflict.setting}`) }}
               components={{ quote: <q dir="auto" /> }}
             />
           </li>
@@ -32,6 +32,15 @@ export function InstructionsConflicts({ agent }: { agent: AgentView }) {
       </Button>
     </div>
   );
+}
+
+/**
+ * The user's sentence as it sits inside ours: its own closing full stop, '!' or
+ * '?' dropped, or it lands before our comma ("...days.", and that contradicts).
+ * Display only - the stored quote stays the user's exact words (D183).
+ */
+export function quotedInSentence(quote: string): string {
+  return quote.trimEnd().replace(/[.!?]$/, '');
 }
 
 /** What the check just did, after a save on the agent's page: running, fine, or not possible now. */

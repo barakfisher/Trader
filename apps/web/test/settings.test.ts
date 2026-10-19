@@ -221,6 +221,7 @@ describe('SettingsStore', () => {
     await readSettings(root);
     root.auth.user = {
       id: 'u',
+      email: 'dana@example.com',
       baseCurrency: 'USD',
       timezone: 'UTC',
       role: 'user',
