@@ -52,6 +52,8 @@ import { MESSAGES, messagesFor, observationTextIn, type Messages } from '../noti
 import { decodeBindToken } from './bindToken.js';
 import { BUSY_CALLBACK_DATA, decodeCallbackData } from './callbackToken.js';
 import { TelegramNotifier, type Keyboard } from './client.js';
+import { handleSignupCallback } from './signupApproval.js';
+import { decodeSignupData } from './signupToken.js';
 import { handleTradeCallback } from './tradeApproval.js';
 
 /** What handling an update needs, whichever transport delivered it. */
@@ -385,15 +387,31 @@ async function handleCallback(
   }
 
   // Verified before the payload is interpreted, so nothing an attacker writes
-  // steers what happens next.
-  const payload = decodeCallbackData(callback.data, config.TELEGRAM_SIGNING_SECRET);
+  // steers what happens next. A sign-up button is signed under its own domain,
+  // so at most one of the two decodes succeeds.
+  const signup = decodeSignupData(callback.data, config.TELEGRAM_SIGNING_SECRET);
+  const payload = signup === null ? decodeCallbackData(callback.data, config.TELEGRAM_SIGNING_SECRET) : null;
   const binding = await findTelegramBindingByChat(chatId);
+
+  if (signup !== null && binding !== null) {
+    await handleSignupCallback({
+      telegram,
+      signingSecret: config.TELEGRAM_SIGNING_SECRET,
+      userId: binding.user_id,
+      language: (await getOrCreateUserSettings(binding.user_id)).language,
+      callbackId: callback.id,
+      chatId,
+      ...(callback.message === undefined ? {} : { message: callback.message }),
+      payload: signup,
+    });
+    return;
+  }
 
   if (payload === null || binding === null) {
     // Both failures answer the same way. A forwarded message reaches an unbound
     // chat and a tampered payload fails the MAC; telling them apart would only
     // help whoever is trying.
-    logger().warn({ chatId, signed: payload !== null }, 'telegram.callback_rejected');
+    logger().warn({ chatId, signed: payload !== null || signup !== null }, 'telegram.callback_rejected');
     await telegram?.answerCallback(callback.id, messagesFor('en').buttonInvalid);
     return;
   }

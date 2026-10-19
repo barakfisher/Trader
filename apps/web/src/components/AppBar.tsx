@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { observer } from 'mobx-react-lite';
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router';
 import {
@@ -16,6 +17,7 @@ import {
 
 import { useTranslation } from '../i18n/index.ts';
 import { Disclosure } from './Disclosure.tsx';
+import { useAdminSignupCountQuery } from '../queries/admin.ts';
 import { unreadCount, useInsightsDaysQuery } from '../queries/insightsDays.ts';
 import { openProposals, useProposalsQuery } from '../queries/proposals.ts';
 import { useStore } from '../stores/context.tsx';
@@ -48,6 +50,8 @@ export const AppBar = observer(function AppBar() {
   // 2026-10-11): the number is what has a deadline.
   const hasUnread = unreadCount(useInsightsDaysQuery().data) > 0;
   const isAdmin = auth.user?.role === 'admin';
+  // Sign-up requests waiting for the admin (D188), so one is noticed without Telegram.
+  const pendingSignups = useAdminSignupCountQuery(isAdmin).data?.pending ?? 0;
 
   const places: Place[] = [
     // Proposals is a tab of Insights (decision 134), so its count is here.
@@ -60,7 +64,7 @@ export const AppBar = observer(function AppBar() {
   const account: Place[] = [
     { to: '/settings', label: t('nav.settings'), icon: Settings },
     // Hiding it is courtesy: the server refuses every /admin request from anyone else (decision 83).
-    ...(isAdmin ? [{ to: '/admin', label: t('nav.admin'), icon: ShieldCheck } as const] : []),
+    ...(isAdmin ? [{ to: '/admin', label: t('nav.admin'), icon: ShieldCheck, count: pendingSignups } as const] : []),
   ];
   // Back to the top, so the next sign-in starts at the portfolio rather than
   // wherever this session last was.
@@ -92,7 +96,7 @@ export const AppBar = observer(function AppBar() {
         <div className="hidden md:block">
           <Disclosure
             label={t('nav.account')}
-            icon={<CircleUser className="size-5" aria-hidden />}
+            icon={<Flagged show={pendingSignups > 0}><CircleUser className="size-5" aria-hidden /></Flagged>}
           >
             {account.map((place) => (
               <li key={place.to}>
@@ -106,7 +110,7 @@ export const AppBar = observer(function AppBar() {
         <div className="md:hidden">
           <Disclosure
             label={t('nav.menu')}
-            icon={<Menu className="size-5" aria-hidden />}
+            icon={<Flagged show={pendingSignups > 0}><Menu className="size-5" aria-hidden /></Flagged>}
             openIcon={<X className="size-5" aria-hidden />}
           >
             {[...places, ...account].map((place) => (
@@ -163,6 +167,19 @@ function PlaceLink({ place, pathname, wide = false }: { place: Place; pathname: 
         />
       )}
     </Link>
+  );
+}
+
+/**
+ * A dot on a closed menu's icon while something inside it is waiting - the
+ * Admin link's sign-up count (D188) is otherwise out of sight until opened.
+ */
+function Flagged({ show, children }: { show: boolean; children: ReactNode }) {
+  return (
+    <span className="relative inline-flex">
+      {children}
+      {show && <span className="absolute -end-0.5 -top-0.5 size-2 rounded-full bg-accent" aria-hidden />}
+    </span>
   );
 }
 

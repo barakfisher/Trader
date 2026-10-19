@@ -91,6 +91,72 @@ describe('the sign-in page', () => {
   });
 });
 
+describe('asking to join (D156, D185, D187)', () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(cleanup);
+
+  function openSignup() {
+    renderWithServerState(<LoginPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'New here? Ask to join' }));
+  }
+
+  function fill(email: string, password: string, repeat = password) {
+    type('Email', email);
+    type('Password', password);
+    type('Password, again', repeat);
+    fireEvent.click(screen.getByRole('button', { name: 'Ask to join' }));
+  }
+
+  it("sends the email, the password, this browser's zone and the page's language", async () => {
+    post.mockResolvedValue({ outcome: 'received' });
+    openSignup();
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(screen.getByText(zone)).toBeTruthy();
+    fill(' noa@example.com ', 'a long enough passphrase');
+    expect(await screen.findByText('Request received')).toBeTruthy();
+    expect(screen.getByText(/You can sign in once they approve/)).toBeTruthy();
+    expect(post).toHaveBeenCalledWith('/auth/signup', {
+      email: 'noa@example.com',
+      password: 'a long enough passphrase',
+      timezone: zone,
+      language: 'en',
+    });
+  });
+
+  it('says sign-up is closed when the server does', async () => {
+    post.mockResolvedValue({ outcome: 'closed' });
+    openSignup();
+    fill('noa@example.com', 'a long enough passphrase');
+    expect(await screen.findByText('Sign-up is closed right now')).toBeTruthy();
+  });
+
+  it('refuses a short password, two that differ, or no address, before asking the server', async () => {
+    openSignup();
+    fill('noa@example.com', 'short');
+    expect(await screen.findByText('The new password needs at least 12 characters.')).toBeTruthy();
+    fill('noa@example.com', 'a long enough passphrase', 'another long passphrase');
+    expect(await screen.findByText('The two passwords are different.')).toBeTruthy();
+    fill('Noa Levi', 'a long enough passphrase');
+    expect(await screen.findByText('That is not an email address.')).toBeTruthy();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('goes back to signing in', () => {
+    openSignup();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to sign in' }));
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
+  });
+
+  it('tells someone still waiting that their request is waiting', async () => {
+    post.mockRejectedValue(new ApiRequestError('waiting', 403, 'account_pending'));
+    renderWithServerState(<LoginPage />);
+    type('Email', 'noa@example.com');
+    type('Password', 'a long enough passphrase');
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await screen.findByText("Your request is waiting for the admin's approval.")).toBeTruthy();
+  });
+});
+
 describe('changing the email', () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(cleanup);

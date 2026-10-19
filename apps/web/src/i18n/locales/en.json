@@ -30,7 +30,27 @@
     "forgotten": "Forgot your password? Ask the installation's admin to set a one-time password.",
     "errors": {
       "incorrect": "That email and password do not match an account.",
-      "notActive": "This account is not active. Ask the installation's admin."
+      "notActive": "This account is not active. Ask the installation's admin.",
+      "pending": "Your request is waiting for the admin's approval."
+    },
+    "askToJoin": "New here? Ask to join"
+  },
+  "signup": {
+    "title": "Ask to join",
+    "intro": "The installation's admin approves every new account.",
+    "repeat": "Password, again",
+    "timezone": "Time zone, from this browser:",
+    "submit": "Ask to join",
+    "submitting": "Sending…",
+    "receivedTitle": "Request received",
+    "received": "The admin will review it. You can sign in once they approve - try again later, or ask them.",
+    "closedTitle": "Sign-up is closed right now",
+    "closed": "Too many requests are already waiting. Ask the installation's admin.",
+    "backToSignIn": "Back to sign in",
+    "errors": {
+      "mismatch": "The two passwords are different.",
+      "timezoneInvalid": "This browser's time zone ({{zone}}) is not one the app knows.",
+      "failed": "Could not send the request."
     }
   },
   "password": {
@@ -1139,6 +1159,25 @@
       "hint": "Starts again at midnight in each user's time zone. 0 switches the assistant off. At most {{max}}.",
       "save": "Save",
       "saved": "Saved"
+    },
+    "signups": {
+      "title": "Sign-up requests",
+      "none": "No requests are waiting.",
+      "asked": "asked {{age}}",
+      "cap": "Monthly AI cap ($)",
+      "approve": "Approve",
+      "reject": "Reject",
+      "undo": "Undo rejection",
+      "rejected_one": "{{count}} rejected request",
+      "rejected_other": "{{count}} rejected requests"
+    },
+    "signupSettings": {
+      "title": "Sign-up",
+      "cap": "Default monthly AI cap ($)",
+      "max": "Requests that may wait at once",
+      "save": "Save",
+      "saved": "Saved",
+      "hint": "An approval offers the default cap; approvals already made keep theirs. The cap is $0 to {{cap}}. Up to {{max}} requests may wait; 0 closes sign-up."
     }
   },
   "languages": {

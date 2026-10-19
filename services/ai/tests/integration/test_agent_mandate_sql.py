@@ -130,7 +130,7 @@ async def test_a_buy_that_breaks_the_mandate_twice_is_rule_rejected(
 async def test_the_figures_and_the_mandate_each_send_an_answer_back_once(
     loaded: Engine, agent: ScanAgent
 ) -> None:
-    # D184 beside D170: a thesis with an invented figure, then a fixed one over
+    # D189 beside D170: a thesis with an invented figure, then a fixed one over
     # the position limit, then one that fits - three answers, one scan.
     invented = _answer(
         decision="buy", symbol="CCJ", quantity="2", thesis="CCJ will reach 80.00 soon."

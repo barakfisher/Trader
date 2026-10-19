@@ -201,7 +201,8 @@ this list exists. *Done 2026-10-15: [M9-MEASUREMENT.md](M9-MEASUREMENT.md).*
 - **Accounts and login** - *decided (156, 159):* email and password (argon2id, a maintained
   package). A new user signs up into `pending`; the admin approves or rejects from Telegram
   (three buttons: default budget, reject, custom budget) or the Admin page. A pending user has no
-  agent and no scans; a rejected request is kept as `rejected`.
+  agent and no scans; a rejected request is kept as `rejected`. *Custom budget* offers $5 / $20 /
+  $50 and a link to the Admin page (184); signup answers the same for every email (185).
 - **Sessions** - *decided (160):* the signed cookie stays and carries a `session_version`; every
   request reads the user and accepts the session only while it is `active` and the versions
   match. Disabling or rejecting a user ends their sessions at once; a password change ends all of
@@ -241,7 +242,8 @@ this list exists. *Done 2026-10-15: [M9-MEASUREMENT.md](M9-MEASUREMENT.md).*
 
 **PRs, in order** (decisions complete): the schema (0058), login (email + password, the admin's
 bootstrap script, `session_version`, the one-time password; D179-D182), signup and the approval
-flow together (the zone prefill, Telegram and the Admin page; D180), the cap's enforcement, scheduling per user, the time zone's reads and guideline 10,
+flow together (the zone prefill, Telegram and the Admin page; D180, D184-D188 - **redeployed only
+with the cap PR**, D186), the cap's enforcement, scheduling per user, the time zone's reads and guideline 10,
 the admin's user list and own-account reset, then the exit test.
 
 **Exit:** two users on one installation, each seeing only their own holdings, observations,

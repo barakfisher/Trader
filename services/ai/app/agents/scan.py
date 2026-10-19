@@ -282,7 +282,7 @@ async def _converse(
     if checked is None:
         return
     if checked.only_unsourced:
-        # D184: once, the model hears which figures and may answer again or pass. The
+        # D189: once, the model hears which figures and may answer again or pass. The
         # mandate's own chance below is separate: at most three answers a scan.
         returned = FIGURES_RETRY_PREFIX + "\n" + "\n".join(f"- {p}" for p in checked.problems)
         returned += (

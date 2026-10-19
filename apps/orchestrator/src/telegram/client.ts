@@ -69,6 +69,14 @@ export type UpdatesResult =
   | { ok: true; updates: TelegramUpdate[] }
   | { ok: false; status: number | null; error: string };
 
+/** A ready-made inline keyboard, for messages that are not about a proposal. */
+export interface InlineButton {
+  text: string;
+  callback_data?: string;
+  url?: string;
+}
+export type InlineKeyboard = InlineButton[][];
+
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
 export interface TelegramClientOptions {
@@ -333,6 +341,44 @@ export class TelegramNotifier implements Notifier {
     } catch {
       return { ok: false, status: response.status, error: 'unreadable body' };
     }
+  }
+
+  /** The app's https origin for a link button, or null when Telegram would refuse one. */
+  get linkBase(): string | null {
+    return this.options.webBaseUrl ?? null;
+  }
+
+  /** Send text with buttons someone else built: the sign-up request (D156). */
+  async sendWithButtons(chatId: string, text: string, keyboard: InlineKeyboard): Promise<DeliveryResult> {
+    return this.call('sendMessage', {
+      chat_id: chatId,
+      text: clampMessage(text),
+      reply_markup: { inline_keyboard: keyboard },
+    });
+  }
+
+  /** Replace a message's text and buttons; an empty keyboard removes them. */
+  async editWithButtons(
+    chatId: string,
+    messageId: number,
+    text: string,
+    keyboard: InlineKeyboard,
+  ): Promise<DeliveryResult> {
+    return this.call('editMessageText', {
+      chat_id: chatId,
+      message_id: messageId,
+      text: clampMessage(text),
+      reply_markup: { inline_keyboard: keyboard },
+    });
+  }
+
+  /** Replace only a message's buttons. */
+  async setButtons(chatId: string, messageId: number, keyboard: InlineKeyboard): Promise<DeliveryResult> {
+    return this.call('editMessageReplyMarkup', {
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: { inline_keyboard: keyboard },
+    });
   }
 
   /** Send plain text with no buttons: command replies and confirmations. */

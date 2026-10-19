@@ -21,20 +21,35 @@ import {
   type LlmModelChoiceInput,
   type AdminRunsResponse,
   type AdminSettingsResponse,
+  type AdminSignupsResponse,
+  type SignupApprovalInput,
+  type SignupDecisionResponse,
+  type SignupRequestView,
   ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD,
+  LLM_CAP_CEILING_MICRO_USD,
   MAX_AGENTS_PER_USER_CEILING,
+  MAX_PENDING_SIGNUPS_CEILING,
   type RescreenStartResponse,
   type UniverseGapsResponse,
 } from '@traders/shared';
 
 import {
+  approveSignup,
   countNarrationFallbacks,
+  countPendingSignups,
+  listSignupRequests,
+  rejectSignup,
+  restoreSignup,
+  type SignupDecision,
+  type SignupRequestRow,
   countUniverse,
   firstLlmCallAt,
   chooseLlmModel,
   getInstallationSettings,
   setAssistantDailyBudget,
+  setDefaultLlmCap,
   setMaxAgentsPerUser,
+  setMaxPendingSignups,
   getLatestUniverseLoad,
   groupLlmCalls,
   listAdminAudit,
@@ -76,6 +91,8 @@ const settingsSchema = z
       .min(0)
       .max(ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD)
       .optional(),
+    defaultLlmCapMicroUsd: z.number().int().min(0).max(LLM_CAP_CEILING_MICRO_USD).optional(),
+    maxPendingSignups: z.number().int().min(0).max(MAX_PENDING_SIGNUPS_CEILING).optional(),
   })
   .strict()
   .refine((input) => Object.keys(input).length > 0, { message: 'name at least one setting' });
@@ -85,8 +102,37 @@ async function adminSettings(): Promise<AdminSettingsResponse> {
   return {
     maxAgentsPerUser: row.max_agents_per_user,
     assistantDailyBudgetMicroUsd: row.assistant_daily_budget_micro_usd,
+    defaultLlmCapMicroUsd: row.default_llm_cap_micro_usd,
+    maxPendingSignups: row.max_pending_signups,
     updatedAt: row.updated_at.toISOString(),
   };
+}
+
+const approvalSchema = z
+  .object({ llmCapMicroUsd: z.number().int().min(0).max(LLM_CAP_CEILING_MICRO_USD) })
+  .strict() satisfies z.ZodType<SignupApprovalInput>;
+
+const uuidParam = z.string().uuid();
+
+function signupView(row: SignupRequestRow): SignupRequestView {
+  return {
+    userId: row.user_id,
+    email: row.email,
+    timezone: row.timezone,
+    status: row.status,
+    requestedAt: row.created_at.toISOString(),
+  };
+}
+
+function decisionBody(decision: SignupDecision): SignupDecisionResponse {
+  return { applied: decision.applied, status: decision.status };
+}
+
+/** The request a decision names; a malformed id is no request at all. */
+function signupId(context: Context<AppEnv>): string {
+  const parsed = uuidParam.safeParse(context.req.param('userId'));
+  if (!parsed.success) throw badRequest('invalid_user_id', 'expected a user id');
+  return parsed.data;
 }
 
 const resetSchema = z
@@ -244,6 +290,47 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
     return context.json(body);
   });
 
+  /**
+   * Sign-up requests (D156, D188): waiting ones oldest first, then recent
+   * rejections, which can be undone. Email and zone only - never anything of
+   * the account itself (D162).
+   */
+  app.get('/admin/signups', async (context) => {
+    const [requests, settings] = await Promise.all([listSignupRequests(), getInstallationSettings()]);
+    const body: AdminSignupsResponse = {
+      pending: requests.pending.map(signupView),
+      rejected: requests.rejected.map(signupView),
+      defaultLlmCapMicroUsd: settings.default_llm_cap_micro_usd,
+    };
+    return context.json(body);
+  });
+
+  /** The count on the Admin link (D188). */
+  app.get('/admin/signups/count', async (context) => context.json({ pending: await countPendingSignups() }));
+
+  /**
+   * Decide a request. Each is conditional on the state it starts from, so a
+   * request already decided from Telegram answers `applied: false` with where
+   * it is now, rather than an error. Audited by the gate before this runs.
+   */
+  app.post('/admin/signups/:userId/approve', async (context) => {
+    const userId = signupId(context);
+    const parsed = approvalSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) {
+      throw badRequest('invalid_body', `expected { llmCapMicroUsd: 0-${LLM_CAP_CEILING_MICRO_USD} }`, parsed.error.issues);
+    }
+    return context.json(decisionBody(await approveSignup(userId, parsed.data.llmCapMicroUsd, currentUserId(context))));
+  });
+
+  app.post('/admin/signups/:userId/reject', async (context) =>
+    context.json(decisionBody(await rejectSignup(signupId(context)))),
+  );
+
+  /** Undo a rejection: the request waits again (D188). */
+  app.post('/admin/signups/:userId/restore', async (context) =>
+    context.json(decisionBody(await restoreSignup(signupId(context)))),
+  );
+
   /** The installation's settings (D72). */
   app.get('/admin/settings', async (context) => context.json(await adminSettings()));
 
@@ -257,7 +344,9 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
       throw badRequest(
         'invalid_body',
         `expected { maxAgentsPerUser?: 1-${MAX_AGENTS_PER_USER_CEILING}, ` +
-          `assistantDailyBudgetMicroUsd?: 0-${ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD} }`,
+          `assistantDailyBudgetMicroUsd?: 0-${ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD}, ` +
+          `defaultLlmCapMicroUsd?: 0-${LLM_CAP_CEILING_MICRO_USD}, ` +
+          `maxPendingSignups?: 0-${MAX_PENDING_SIGNUPS_CEILING} }`,
         parsed.error.issues,
       );
     }
@@ -266,6 +355,8 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
     if (parsed.data.assistantDailyBudgetMicroUsd !== undefined) {
       await setAssistantDailyBudget(parsed.data.assistantDailyBudgetMicroUsd, admin);
     }
+    if (parsed.data.defaultLlmCapMicroUsd !== undefined) await setDefaultLlmCap(parsed.data.defaultLlmCapMicroUsd, admin);
+    if (parsed.data.maxPendingSignups !== undefined) await setMaxPendingSignups(parsed.data.maxPendingSignups, admin);
     return context.json(await adminSettings());
   });
 

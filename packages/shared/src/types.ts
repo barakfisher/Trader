@@ -297,18 +297,61 @@ export const MAX_AGENTS_PER_USER_CEILING = 50;
 /** The most the assistant's daily limit may be set to: migration 0052's CHECK, $100. */
 export const ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD = 100_000_000;
 
-/** The installation's settings on the Admin page (migrations 0047, 0052). */
+/** The most a monthly LLM cap, or its default, may be: migration 0058's CHECK, $1,000. */
+export const LLM_CAP_CEILING_MICRO_USD = 1_000_000_000;
+
+/** The most waiting sign-up requests the setting may allow at once: 0058's CHECK. */
+export const MAX_PENDING_SIGNUPS_CEILING = 50;
+
+/** The installation's settings on the Admin page (migrations 0047, 0052, 0058). */
 export interface AdminSettingsResponse {
   maxAgentsPerUser: number;
   /** What one user's questions to the assistant may spend a day, integer micro-USD. */
   assistantDailyBudgetMicroUsd: number;
+  /** The monthly cap an approval offers (D157), integer micro-USD. */
+  defaultLlmCapMicroUsd: number;
+  /** Waiting sign-up requests allowed at once (D156); 0 closes sign-up. */
+  maxPendingSignups: number;
   updatedAt: string;
 }
 
-/** Either setting, or both; what is left out is unchanged. */
+/** Any of the settings; what is left out is unchanged. */
 export interface AdminSettingsInput {
   maxAgentsPerUser?: number;
   assistantDailyBudgetMicroUsd?: number;
+  defaultLlmCapMicroUsd?: number;
+  maxPendingSignups?: number;
+}
+
+/** One sign-up request on the Admin page (D188). Never a user's finances (D162). */
+export interface SignupRequestView {
+  userId: string;
+  email: string;
+  timezone: string;
+  status: 'pending' | 'rejected';
+  requestedAt: string;
+}
+
+export interface AdminSignupsResponse {
+  pending: SignupRequestView[];
+  rejected: SignupRequestView[];
+  /** What the cap field is prefilled with. */
+  defaultLlmCapMicroUsd: number;
+}
+
+/** Approving a request sets the user's monthly cap (D157). */
+export interface SignupApprovalInput {
+  llmCapMicroUsd: number;
+}
+
+/**
+ * What a decision on a request did. `applied` false when the request had
+ * already left the state the decision starts from - decided from Telegram, or
+ * by another tab - and `status` is where it is now.
+ */
+export interface SignupDecisionResponse {
+  applied: boolean;
+  status: 'pending' | 'active' | 'rejected' | 'disabled' | 'gone';
 }
 
 export type TradeSide = 'buy' | 'sell';
@@ -780,6 +823,27 @@ export interface SessionUser {
    * password change, and the server refuses everything else until it is done.
    */
   mustChangePassword: boolean;
+}
+
+/**
+ * A request to join the installation (D156). The zone is the browser's
+ * (D163) and the language the page was shown in, so the account's first
+ * screen after approval is already in it.
+ */
+export interface SignupInput {
+  email: string;
+  password: string;
+  timezone: string;
+  language: UiLanguage;
+}
+
+/**
+ * The one answer signup gives (D185): `received` whether the email was new,
+ * already waiting, rejected or an account - only the admin learns which -
+ * and `closed` while the installation's limit on waiting requests is reached.
+ */
+export interface SignupResponse {
+  outcome: 'received' | 'closed';
 }
 
 // --- Admin (M8) --------------------------------------------------------------

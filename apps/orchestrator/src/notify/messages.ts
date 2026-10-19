@@ -193,6 +193,32 @@ export interface Messages {
     confirmInApp: string;
   };
 
+  /**
+   * A sign-up request, said to the admin (D156, D184, D187). Figures - the cap,
+   * the time - arrive formatted in this language's locale; the email and zone
+   * are the requester's own text.
+   */
+  signup: {
+    request: (email: string, timezone: string) => string;
+    buttons: {
+      approveDefault: (cap: string) => string;
+      reject: string;
+      custom: string;
+      amount: (cap: string) => string;
+      otherAmount: string;
+    };
+    /** Under the preset amounts when there is no link to the Admin page to show. */
+    otherAmountInApp: string;
+    approvedToast: string;
+    rejectedToast: string;
+    chooseAmountToast: string;
+    /** The outcome lines under the message; approval reminds the admin to tell them. */
+    approvedLine: (cap: string, at: string) => string;
+    rejectedLine: (at: string) => string;
+    /** A tap on a request that had already moved on - decided on the page, say. */
+    already: Record<'pending' | 'active' | 'rejected' | 'disabled' | 'gone', string>;
+  };
+
   /** D74: a scheduled slot that gave up, said once. */
   scheduledScans: {
     slots: Record<ScanSlot, string>;
@@ -349,6 +375,31 @@ const en: Messages = {
     farFromAgent: (agentPrice, livePrice, distance) =>
       `The price is ${livePrice}, ${distance} from the agent's ${agentPrice} - more than 3%.`,
     confirmInApp: 'This price is too large for a Telegram button: confirm it in the app.',
+  },
+
+  signup: {
+    request: (email, timezone) =>
+      `New sign-up request\n\n${email}\nTime zone: ${timezone}\n\nApprove to let them in with a monthly AI spending cap.`,
+    buttons: {
+      approveDefault: (cap) => `Approve, ${cap}/month`,
+      reject: 'Reject',
+      custom: 'Custom budget',
+      amount: (cap) => `${cap}/month`,
+      otherAmount: 'Other amount',
+    },
+    otherAmountInApp: 'For another amount, approve on the Admin page.',
+    approvedToast: 'Approved.',
+    rejectedToast: 'Rejected.',
+    chooseAmountToast: 'Choose a monthly cap.',
+    approvedLine: (cap, at) => `✅ Approved with ${cap}/month (${at}). Let them know they can sign in.`,
+    rejectedLine: (at) => `❌ Rejected (${at}).`,
+    already: {
+      pending: 'This request is still waiting.',
+      active: 'Already approved.',
+      rejected: 'Already rejected.',
+      disabled: 'This account has been disabled.',
+      gone: 'This request no longer exists.',
+    },
   },
 
   scheduledScans: {
@@ -584,6 +635,31 @@ const he: Messages = {
     farFromAgent: (agentPrice, livePrice, distance) =>
       `המחיר ${ltr(livePrice)}, ${ltr(distance)} מהמחיר של הסוכן ${ltr(agentPrice)} - יותר מ־${ltr('3%')}.`,
     confirmInApp: 'המחיר גדול מדי לכפתור בטלגרם: אשרו אותו באפליקציה.',
+  },
+
+  signup: {
+    request: (email, timezone) =>
+      `בקשת הרשמה חדשה\n\n${ltr(email)}\nאזור זמן: ${ltr(timezone)}\n\nאשרו כדי לצרף אותם עם תקרת הוצאה חודשית על בינה מלאכותית.`,
+    buttons: {
+      approveDefault: (cap) => `אישור, ${ltr(cap)} לחודש`,
+      reject: 'דחייה',
+      custom: 'תקציב אחר',
+      amount: (cap) => `${ltr(cap)} לחודש`,
+      otherAmount: 'סכום אחר',
+    },
+    otherAmountInApp: 'לסכום אחר, אשרו בעמוד הניהול.',
+    approvedToast: 'אושר.',
+    rejectedToast: 'נדחה.',
+    chooseAmountToast: 'בחרו תקרה חודשית.',
+    approvedLine: (cap, at) => `✅ אושר עם ${ltr(cap)} לחודש (${ltr(at)}). עדכנו אותם שאפשר להתחבר.`,
+    rejectedLine: (at) => `❌ נדחה (${ltr(at)}).`,
+    already: {
+      pending: 'הבקשה עדיין ממתינה.',
+      active: 'כבר אושר.',
+      rejected: 'כבר נדחה.',
+      disabled: 'החשבון הושבת.',
+      gone: 'הבקשה כבר לא קיימת.',
+    },
   },
 
   scheduledScans: {

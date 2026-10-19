@@ -151,9 +151,13 @@ describe('signing in', () => {
     expect((await login(app, USER.email, PASSWORD)).status).toBe(401);
   });
 
-  it.each(['pending', 'rejected', 'disabled'] as const)(
-    'tells a %s user with the right password that the account is not active',
-    async (status) => {
+  it.each([
+    ['pending', 'account_pending'],
+    ['rejected', 'account_not_active'],
+    ['disabled', 'account_not_active'],
+  ] as const)(
+    'tells a %s user with the right password %s (D187)',
+    async (status, code) => {
       vi.mocked(queries.getUserCredentialsByEmail).mockResolvedValue({
         id: USER.id,
         status,
@@ -161,7 +165,7 @@ describe('signing in', () => {
       });
       const response = await login(app, USER.email, PASSWORD);
       expect(response.status).toBe(403);
-      expect(await response.json()).toMatchObject({ error: 'account_not_active' });
+      expect(await response.json()).toMatchObject({ error: code });
       expect(response.headers.get('set-cookie')).toBeNull();
     },
   );
