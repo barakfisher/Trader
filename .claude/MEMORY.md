@@ -4,7 +4,36 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-18 ~14:30 UTC - **Handoff after six merges since ea2c3a7 (#249-#254; #255 is the
+Updated: 2026-10-19 ~08:00 UTC - **Handoff: the agent template creator is complete (#252, #254,
+#257, #258).** Decisions reached **178** (next: **179**). Migrations: **`0059_mandate_check` is head**
+(next free: **`0060`**) - **before writing a migration, `git fetch` and check `main` has one head**:
+two sessions merging 40 s apart left two 0057s (#253/#254, fixed by #255). **Deployed nowhere past
+0055:** both environments run `a7c3c96`; #232 and #249-#258 are merged and undeployed - redeploy only
+on the user's "redeploy" (0056-0059 run then; the startup loader then fills `universe_taxonomy`).
+The template creator, designed one question at a time with the user (decisions 164-178):
+- **#252 (0056, D164):** `universe_taxonomy` - industries and ETF categories the screened universe
+  holds, with counts, rewritten inside every universe load (write-free when unchanged); ETF
+  categories mapped onto Yahoo's 11 sectors in `app/universe/taxonomy.py` (14 mapped, 101 listed
+  sectorless, contract-tested against the committed snapshot); `GET /universe/taxonomy`.
+- **#254 (0057, D165-D173):** the mandate on `agents`; `app/agents/mandate.py` checks every **buy**
+  (never a sell) after `price_answer` - limits in bps of **capital at cost** (D171), market-cap bands
+  for equities, the sector selection, the ETF switch, the blocked list (no whitelist, D173); one
+  retry with the reasons, then `rule_rejected`. The prompt states the mandate above the persona.
+- **#257 (D174-D175):** the form - risk slider proposing limits, horizon, style, limits, ETFs, size,
+  the Downshift "Sectors & industries" picker, blocked tickers; templates as full presets; the
+  persona relabelled "Additional instructions" and **written from the settings in words, never
+  figures, only while untouched**. **Settings alone are enough to scan** (one readiness rule in the
+  AI service, scheduler and views; `waitingForPersona` -> `waitingForBrief`; wire code stays
+  `no_persona`).
+- **#258 (0059, D176-D178):** after a save whose instructions are the user's own words, one
+  `mandate_check` call returns `{setting, quote}` pairs; quotes not in the text are dropped; stored
+  on the agent with a fingerprint; warning + Dismiss on the agent page, a badge on the list.
+- **Not verified in a browser, and no real model has run the check** - both are the first items
+  under "Next session: after the template creator".
+**Next:** "Next session: after the template creator" under "Where to go next" - or M9's signup and
+login ("after M9's schema"), whichever the user picks.
+
+Previous update, 2026-10-18 ~14:30 UTC - **Handoff after six merges since ea2c3a7 (#249-#254; #255 is the
 seventh, the fix below).** **M9 has its decisions and its schema; the next M9 PR is signup and
 login.** Decisions reached **178** (next: **179**; 174-178 came with the template creator's form #257 and its contradiction check, PR 4 with `0059_mandate_check`). Migrations: **`0059_mandate_check` is head**
 (next free: **`0060`**; check `main` for a head before writing one - #253 and #254 merged 40 s apart and
@@ -769,6 +798,7 @@ strings and left-to-right assumptions before designing it.
 | Mastra retired (D11) | ✅ Complete | #157, migration 0039: proposals are the row, `applyDecision` and `proposal_sweep` |
 | Multi-agent sandbox, Stage 1 — isolation (no M-number; `docs/PROPOSAL-MULTI-AGENT.md`) | ✅ Complete | #151 spec amendment D1-D16; #152 `agents` + `agent_id` (0036); #153 agent-scoped reads + contract; #154 per-agent uniques (0037); #155 passive primary (0038). Nothing user-visible, by design. Stages 2-4 to come - see "Next session: multi-agent Stage 2" |
 | M8 — Admin operations & observability | ✅ Complete | #120-#124, #126-#130: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel, on-demand profiles, the rescreen run and its CronJob. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event and profiled within one background fetch ✅ (#127, decision 89); rescreen button ✅ (#128, decision 90; shown in kind); button and CronJob are one run ✅ (#129, decision 91; shown in kind). Checked live 2026-10-01 - see "M8 is complete, and how it was verified" |
+| Agent template creator (no M-number; the user's request, 2026-10-18) | ✅ Complete | #252 taxonomy (0056), #254 mandate + code check + retry (0057), #257 the form, Downshift picker, settings-alone readiness, #258 save-time contradiction check (0059). Decisions 164-178. Not yet checked in a browser or against a real model; undeployed |
 | M9 — Multiple users | 🔄 In progress | PR 1 (measurement, `docs/M9-MEASUREMENT.md`) merged as #240, 2026-10-15; decisions next. Added to the plan at the user's request, 2026-10-14; not ordered against the database sprint or the assistant's owed checks. PR 1 is a read-only measurement of every single-user assumption; the decisions (who the users are, login, sessions, scheduling, shared costs) come after it. See `docs/MILESTONES.md` |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
@@ -2876,6 +2906,21 @@ CI is against the `main` it was tested on. Immediately before merging anything w
 `git fetch` and list `services/ai/alembic/versions` on `origin/main`; if a migration landed since
 the branch was tested, renumber and re-run first.** Parallel sessions make this routine, not rare.
 
+**A worktree's scripts imported the main checkout's code (2026-10-18, template creator PR 2).**
+Worktrees borrow the main checkout's `services/ai/.venv`, which has `app` installed in editable mode
+from the *main checkout*. `pytest` puts the worktree first (rootdir), so the tests were right; but
+`python scripts/export_openapi.py` puts `scripts/` first and imported the main checkout's `app` -
+the exported `openapi.json` silently lacked the branch's change, and `pnpm gen:api` regenerated
+nothing. *Lesson: in a worktree, run every service script as `PYTHONPATH=$PWD .venv/bin/python
+scripts/...` (from `services/ai`), and grep the generated file for the change before committing.*
+
+**A clean merge carried a wrong "next decision" number (2026-10-18, #257).** Another session's
+handoff (#256) rewrote MEMORY's header to "decisions reached 173 (next: 174)" while #257 was adding
+174-175; git merged both texts without a conflict, so the header would have sent the next session
+to reuse 174. *Lesson: after merging `main` into a branch that adds decisions or a migration,
+re-read the header's "reached / next" lines and `alembic` heads - a textual merge cannot see a
+numbering collision.*
+
 **The assistant (2026-10-11/12, #220-#223) - lessons, newest first:**
 - **A provider's spending cap is not the credit balance** (PR 4, 2026-10-12). OpenRouter answered 403
   "Workspace lifetime budget of $1.00 exceeded" with $8.80 of credit left; the first Haiku run graded
@@ -3639,6 +3684,10 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 
 | Item | Where | Impact |
 |---|---|---|
+| **The template creator's UI has not been seen in a browser** | `MandateFields.tsx`, `TaxonomyPicker.tsx`, `InstructionsCheck.tsx` | jsdom covers the behaviour; layout, Hebrew RTL and the picker's menu are unseen. The UX4 rehearsal method (below, "Running a branch's orchestrator against a copy of the live DB") does it without touching the dev database |
+| **No real model has run `mandate_check`** | `app/agents/mandate_check.py` | Tested with scripted answers only. A model that paraphrases instead of copying quotes has every conflict dropped - safe, but it then looks like it never finds one. Read the first real `llm_calls` rows with `purpose = 'mandate_check'` |
+| **Mandate limits are not re-checked at approval** | `services/tradeApproval.ts`, `fills.ts` | The scan checks a buy against capital at cost; a proposal approved later, after another approval moved cash, can land past a limit. The fill still refuses what cash cannot cover. Approving is the user's explicit act |
+| **The instructions are still `persona` underneath** | `agents.persona`, `AgentView.persona`, wire code `no_persona` | Relabelled in the UI only ("Additional instructions", D170/D174); renaming the column and the code is churn with no behaviour, left on purpose |
 | **Narration's and the agents' figure checks still read a timestamp's digits as sources, and refuse U+2011 hyphens** | `app/narration/evidence_validator.py`; the assistant fixed it in `app/assistant/reply.py` only | A small whole number (a day, hour or minute) written by a model passes whenever its evidence carries a timestamp that contains it; "7‑day" with a non-breaking hyphen is refused. Moving `_without_dates` and the dash normalisation into the validator fixes both for everyone - and changes narration's behaviour, so measure its rejection rate before and after |
 | **`purpose = 'ask'` outlives `/ask`** | `Purpose` in `app/llm/base.py`, `SCOPE_FOR_PURPOSE`, `llm_calls`' CHECK, `services/llmPanel.ts`, `spend_estimate.py` | Nothing emits it since PR 4; kept so stored rows still read. Retention (30 days) empties them; then drop it with a migration |
 | **The assistant eval runs only by hand** | `scripts/run_assistant_eval.py` | Keyed and paid, so never in CI: a prompt or tool change can regress it unseen. Run it (Flash-Lite, `--repeat 3`, ~$1.30 with the judge) before merging any change to the assistant's prompt, tools or checks |
@@ -4056,6 +4105,9 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
   over 3 min; a refusal 0.6 s. The in-app browser's JS tool gives up after 45 s, so measure it
   with `curl` against `http://127.0.0.1:8001/ask` (`x-internal-key` from the main `.env`), not
   from the page.
+- **Service scripts in a worktree need `PYTHONPATH=$PWD`** (from `services/ai`): the borrowed venv's
+  editable install points at the main checkout, so `scripts/export_openapi.py` and friends otherwise
+  import the wrong `app` (see Bugs, "A worktree's scripts imported the main checkout's code").
 - **Run a topic eval with the main checkout's `.env` sourced** — the worktree has none:
   `set -a && source /Users/a/projects/Traders/.env && set +a`, then override `DATABASE_URL` and set
   `CORPUS_DIR` to the worktree's `data/corpus` (the eval file is found beside it).
@@ -4075,6 +4127,28 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after the template creator (written 2026-10-19)
+
+The four PRs are merged (#252, #254, #257, #258); nothing of them is deployed. In order:
+
+1. **On the user's "redeploy":** 0056-0059 run, and the startup loader fills `universe_taxonomy`
+   (check `SELECT count(*) FROM universe_taxonomy` - ~257 rows on kind's universe; 0 means the
+   loader has not run since the migration).
+2. **Look at it.** Open the new-agent drawer in English and Hebrew: the slider and its band, the
+   picker's grouped menu and chips, the generated instructions and "Rewrite from settings", the
+   over-limit note on an agent page. Then edit an agent's instructions to contradict its horizon
+   and confirm the warning, Dismiss, and the list badge.
+3. **Read the first real checks:** `llm_calls` where `purpose = 'mandate_check'` - verdicts, cost
+   (expected about a tenth of a scan), and whether conflicts came back or were all dropped for
+   paraphrased quotes (the AI service logs nothing for a dropped quote; compare the completion
+   with the stored `instructions_check`).
+4. **Read the first `rule_rejected` scans** on a funded agent with a mandate: did the retry help
+   (a `returned` step followed by a `trade`), or does the model break the same rule twice?
+5. Ideas the user heard and did not schedule: a "what the agent is told" preview; "duplicate
+   agent" instead of saved templates (D168); a notice when an agent proposes nothing for N scans.
+6. **Ask the user** to turn on GitHub's "require branches to be up to date before merging" on
+   `main` (admin only) - the structural fix for two-sessions-one-broken-main.
 
 ### Next session: after M9's schema (written 2026-10-18)
 
