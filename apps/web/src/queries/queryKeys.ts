@@ -65,4 +65,6 @@ export const queryKeys = {
   adminLlm: (days: number) => ['admin', 'llm', days] as const,
   adminLlmModels: ['admin', 'llm-models'] as const,
   adminSettings: ['admin', 'settings'] as const,
+  adminSignups: ['admin', 'signups'] as const,
+  adminSignupCount: ['admin', 'signups', 'count'] as const,
 };

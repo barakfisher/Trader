@@ -12,6 +12,7 @@ export type { TopicEvidence } from '@traders/shared';
 export { transaction } from './pool.js';
 
 export * from './queries/users.js';
+export * from './queries/signups.js';
 export * from './queries/agents.js';
 export * from './queries/agentScans.js';
 export * from './queries/assistant.js';

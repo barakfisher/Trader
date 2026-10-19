@@ -9,6 +9,8 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type {
+  AdminSignupsResponse,
+  SignupDecisionResponse,
   AdminSettingsInput,
   AdminSettingsResponse,
   AccountResetGroup,
@@ -146,6 +148,47 @@ export function useUpdateAdminSettings() {
       client.setQueryData(queryKeys.adminSettings, body);
       void client.invalidateQueries({ queryKey: queryKeys.adminAudit });
       void client.invalidateQueries({ queryKey: queryKeys.agents });
+    },
+  });
+}
+
+/** Sign-up requests (D188): waiting ones, then recent rejections. */
+export function useAdminSignupsQuery() {
+  return useQuery({
+    queryKey: queryKeys.adminSignups,
+    queryFn: () => api.get<AdminSignupsResponse>('/admin/signups'),
+  });
+}
+
+/** The count on the Admin link, asked only for an admin: anyone else is refused it. */
+export function useAdminSignupCountQuery(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.adminSignupCount,
+    queryFn: () => api.get<{ pending: number }>('/admin/signups/count'),
+    enabled,
+  });
+}
+
+export type SignupDecisionInput =
+  | { userId: string; action: 'approve'; llmCapMicroUsd: number }
+  | { userId: string; action: 'reject' | 'restore' };
+
+/**
+ * Approve, reject or undo a rejection. Whatever the answer - applied, or the
+ * request had already moved on in Telegram - the list is read again, so the
+ * page shows where every request is now.
+ */
+export function useDecideSignup() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SignupDecisionInput) =>
+      api.post<SignupDecisionResponse>(
+        `/admin/signups/${encodeURIComponent(input.userId)}/${input.action}`,
+        input.action === 'approve' ? { llmCapMicroUsd: input.llmCapMicroUsd } : undefined,
+      ),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.adminSignups });
+      void client.invalidateQueries({ queryKey: queryKeys.adminAudit });
     },
   });
 }
