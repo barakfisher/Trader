@@ -295,3 +295,8 @@ INSERT INTO universe_taxonomy (kind, name, sector, instruments) VALUES
   ('industry', 'Uranium', 'Energy', 2),
   ('etf_category', 'Technology', 'Technology', 1),
   ('etf_category', 'Large Blend', NULL, 1);
+-- The contradiction check (0059): its purpose, and a stored result.
+INSERT INTO llm_calls (user_id, agent_id, purpose, provider, model, outcome, verdict, latency_ms, cost_micro_usd, prompt) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'mandate_check', 'openrouter', 'm', 'ok', 'accepted', 800, 300, 'p');
+UPDATE agents SET instructions_check = '{"fingerprint": "f", "conflicts": [{"setting": "horizon", "quote": "Cautious."}], "checked_at": "2026-10-19T08:00:00Z", "dismissed": false}'
+ WHERE id = '90000000-0000-0000-0000-0000000000a1';

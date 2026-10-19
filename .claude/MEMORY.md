@@ -6,8 +6,9 @@ the reasoning behind it is not, and that is what this file is for. Maintained pe
 
 Updated: 2026-10-18 ~14:30 UTC - **Handoff after six merges since ea2c3a7 (#249-#254; #255 is the
 seventh, the fix below).** **M9 has its decisions and its schema; the next M9 PR is signup and
-login.** Decisions reached **175** (next: **176**; 174-175 came with the template creator's form, #257). Migrations: **`0058_user_accounts` is head**
-(next free: **`0059`**). **Deployed nowhere past 0055:** both environments run `a7c3c96`; #232,
+login.** Decisions reached **178** (next: **179**; 174-178 came with the template creator's form #257 and its contradiction check, PR 4 with `0059_mandate_check`). Migrations: **`0059_mandate_check` is head**
+(next free: **`0060`**; check `main` for a head before writing one - #253 and #254 merged 40 s apart and
+left two 0057 heads). **Deployed nowhere past 0055:** both environments run `a7c3c96`; #232,
 #249-#255 are merged and undeployed - redeploy only on the user's "redeploy" (0056-0058 run then).
 This session:
 - **M9 decisions 155-163** (#251), one question at a time with the user. The short version:
@@ -2834,6 +2835,33 @@ failure they prevent.
     (`TaxonomyPicker.tsx`). ~10 kB gzipped, headless, React 18. *Rejected:* a hand-written
     combobox (every accessibility detail ours, with no test here that would catch one) and a
     grouped checklist (not the autocomplete asked for).
+176. **The contradiction check names conflicts; the catalogue writes the warning** (2026-10-19,
+    template creator PR 4, under the user's go-ahead). One model call after a save whose
+    instructions are the user's own words (non-empty, not the text the form generated from the
+    settings, and changed - or beside changed settings). The model answers `{setting, quote}`
+    pairs only; the sentence is `agents.check.conflict` in the reader's language around the quote
+    (a `<q dir="auto">`). **A quote the instructions do not contain is dropped** (whitespace is the
+    only thing forgiven), as the evidence validator drops unsourced figures: nothing a model
+    invents is shown as the user's words. At most three. Guideline 1 keeps server text English
+    and the thesis the one model text in the user's language; this keeps it that way.
+177. **The check is its own purpose, on the agents' model and the agent's budget; every failure is
+    a quiet skip** (the user, 2026-10-19; 0059). `mandate_check` in `llm_calls` (and in
+    `llm_calls_scan_names_its_agent`, now "a scan or a check names its agent"), scope `agent`,
+    summed with scans in the daily allowance (`scan_budget.AGENT_PURPOSES_SQL` /
+    `agents.ts AGENT_SPEND_PURPOSES`) but never in a scan's cost (D46 reads `agent_scans`).
+    Budget spent, no model, a provider error, malformed JSON or an unreachable AI service all
+    answer `skipped` - the save already happened and never waits on the model. *Rejected:*
+    logging it as `agent_scan` (pollutes per-scan cost) and the narration model on the
+    installation budget (no per-agent limit).
+178. **The result is stored on the agent with a fingerprint; shown until dismissed or changed**
+    (the user, 2026-10-19; 0059). `agents.instructions_check` = `{fingerprint, conflicts,
+    checked_at, dismissed}`; the fingerprint is SHA-256 of the trimmed instructions and every
+    mandate column (`instructionsCheck.ts`, the one implementation). The route re-reads the
+    agent after the model call and stores only if the fingerprint still matches, so a save that
+    landed meanwhile is never labelled with the old text's answer. `AgentView.instructionsConflicts`
+    is non-null only while the fingerprint matches and it is not dismissed; the agents list shows
+    an "Instructions conflict" badge, so a warning from the create drawer (which closes) is not
+    lost. *Rejected:* form-only display (gone on reload; the create drawer would have to wait).
 
 ---
 

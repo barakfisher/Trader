@@ -42,7 +42,7 @@ export interface AgentRow {
   /** D45: the daily model allowance, integer micro-USD as text. */
   llm_budget_micro_usd: string;
   scan_schedule: string;
-  /** Spent on scans since midnight UTC, as text - the sum `scan_budget.py` checks. */
+  /** Spent on scans and instruction checks since midnight UTC, as text - the sum `scan_budget.py` checks. */
   llm_spent_today_micro_usd: string;
   /** This agent's average over its last scans (D46); null before its first. */
   agent_scan_cost_micro_usd: string | null;
@@ -61,6 +61,17 @@ export interface AgentRow {
   industries: string[];
   etf_categories: string[];
   blocked_symbols: string[];
+  /** The last contradiction check (0059, D178); null before the first. */
+  instructions_check: StoredInstructionsCheck | null;
+}
+
+/** `agents.instructions_check` (0059): a result and what it judged. */
+export interface StoredInstructionsCheck {
+  /** Of the instructions and mandate the check read (`instructionsCheck.ts`). */
+  fingerprint: string;
+  conflicts: { setting: string; quote: string }[];
+  checked_at: string;
+  dismissed: boolean;
 }
 
 /** An agent's mandate as the database columns hold it (0057). */
@@ -95,6 +106,12 @@ export const MANDATE_COLUMNS = [
   'blocked_symbols',
 ] as const satisfies readonly (keyof MandateColumns)[];
 
+/**
+ * The purposes an agent's daily model allowance pays for (D45, D177): its scans and
+ * the checks of its instructions. `scan_budget.AGENT_PURPOSES_SQL` says the same.
+ */
+export const AGENT_SPEND_PURPOSES = "('agent_scan', 'mandate_check')";
+
 /** Scans averaged for an estimate (D46): recent enough to follow a model change. */
 export const SCAN_COST_WINDOW = 10;
 
@@ -104,7 +121,7 @@ const AGENT_COLUMNS = `a.id, a.slug, a.name, a.persona, a.is_primary, a.budget_m
        (SELECT c.balance_minor::text FROM agent_cash c WHERE c.agent_id = a.id) AS cash_minor,
        a.llm_budget_micro_usd::text AS llm_budget_micro_usd, a.scan_schedule,
        (SELECT coalesce(sum(l.cost_micro_usd), 0)::text FROM llm_calls l
-         WHERE l.agent_id = a.id AND l.purpose = 'agent_scan'
+         WHERE l.agent_id = a.id AND l.purpose IN ${AGENT_SPEND_PURPOSES}
            AND l.started_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
        ) AS llm_spent_today_micro_usd,
        (SELECT round(avg(r.cost_micro_usd))::text FROM (
@@ -117,7 +134,7 @@ const AGENT_COLUMNS = `a.id, a.slug, a.name, a.persona, a.is_primary, a.budget_m
            WHERE s.user_id = a.user_id AND s.finished_at IS NOT NULL
            ORDER BY s.started_at DESC LIMIT ${SCAN_COST_WINDOW}) r
        ) AS installation_scan_cost_micro_usd,
-       ${MANDATE_COLUMNS.map((column) => `a.${column}`).join(', ')}`;
+       ${MANDATE_COLUMNS.map((column) => `a.${column}`).join(', ')}, a.instructions_check`;
 
 /** The user's agents: the primary first, then the rest oldest first. */
 export function listAgents(userId: string): Promise<AgentRow[]> {
@@ -220,4 +237,32 @@ export async function updateAgent(
     params,
   );
   return updated ? getAgent(userId, agentId) : null;
+}
+
+/**
+ * Store a contradiction check (D178) - only while the agent still holds what was
+ * judged: `fingerprint` must equal the one computed from the row just read, so a
+ * save that landed during the model call is never labelled with the old answer.
+ * The comparison is the caller's; this write is one statement.
+ */
+export async function saveInstructionsCheck(
+  userId: string,
+  agentId: string,
+  check: StoredInstructionsCheck,
+): Promise<void> {
+  await query(
+    `UPDATE agents SET instructions_check = $3::jsonb
+      WHERE user_id = $1 AND id = $2 AND NOT is_primary`,
+    [userId, agentId, JSON.stringify(check)],
+  );
+}
+
+/** Dismiss the stored check, if it is still the one for `fingerprint`. */
+export async function dismissInstructionsCheck(userId: string, agentId: string, fingerprint: string): Promise<void> {
+  await query(
+    `UPDATE agents SET instructions_check = instructions_check || '{"dismissed": true}'::jsonb
+      WHERE user_id = $1 AND id = $2 AND NOT is_primary
+        AND instructions_check->>'fingerprint' = $3`,
+    [userId, agentId, fingerprint],
+  );
 }

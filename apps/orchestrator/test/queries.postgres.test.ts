@@ -477,6 +477,22 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         .catch((error: { code?: string; constraint?: string }) => error);
       expect(duplicate).toMatchObject({ code: '23505', constraint: 'agents_user_id_name_key' });
 
+      // The contradiction check (0059): stored as jsonb, dismissed only for its own fingerprint.
+      const check = { fingerprint: 'f1', conflicts: [{ setting: 'horizon', quote: 'q' }], checked_at: '2026-10-19T08:00:00Z', dismissed: false };
+      await queries.saveInstructionsCheck(USER, agent.id, check);
+      await queries.dismissInstructionsCheck(USER, agent.id, 'another');
+      expect((await queries.getAgent(USER, agent.id))?.instructions_check).toEqual(check);
+      await queries.dismissInstructionsCheck(USER, agent.id, 'f1');
+      expect((await queries.getAgent(USER, agent.id))?.instructions_check).toEqual({ ...check, dismissed: true });
+      // A check's call counts against the agent's daily allowance, beside its scans (D177).
+      await getPool().query(
+        `INSERT INTO llm_calls (user_id, agent_id, purpose, provider, model, outcome, latency_ms, cost_micro_usd, prompt)
+         VALUES ($1, $2, 'mandate_check', 'p', 'm', 'ok', 1, 1234, 'p')`,
+        [USER, agent.id],
+      );
+      expect((await queries.getAgent(USER, agent.id))?.llm_spent_today_micro_usd).toBe('1234');
+      await getPool().query('DELETE FROM llm_calls WHERE agent_id = $1', [agent.id]);
+
       await getPool().query('DELETE FROM agents WHERE id = $1', [agent.id]);
     });
   });

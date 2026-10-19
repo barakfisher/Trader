@@ -4,6 +4,30 @@
  */
 
 export interface paths {
+    "/agents/{agent_id}/mandate-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mandate Check
+         * @description D176-D177: one call reading the agent's instructions against its settings.
+         *
+         *     Refused only for an agent that is not the user's or is the primary; every
+         *     other reason not to check is a `skipped` answer, because a check is a
+         *     courtesy after a save and its absence is never the user's problem.
+         */
+        post: operations["mandate_check_agents__agent_id__mandate_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/{agent_id}/scans": {
         parameters: {
             query?: never;
@@ -1110,6 +1134,48 @@ export interface components {
             headline: string;
         };
         /**
+         * MandateCheckRequest
+         * @description Check one agent's instructions against its settings (D176).
+         */
+        MandateCheckRequest: {
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
+         * MandateCheckResponse
+         * @description `checked` with zero or more conflicts, or `skipped` and why - never an error (D177).
+         */
+        MandateCheckResponse: {
+            /** Conflicts */
+            conflicts?: components["schemas"]["MandateConflict"][];
+            /** Reason */
+            reason?: ("no_instructions" | "no_settings" | "budget_spent" | "no_model" | "failed") | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "checked" | "skipped";
+        };
+        /**
+         * MandateConflict
+         * @description A setting the instructions contradict, and the user's own words that do.
+         */
+        MandateConflict: {
+            /**
+             * Quote
+             * @description Copied exactly from the instructions; checked to be there.
+             */
+            quote: string;
+            /**
+             * Setting
+             * @enum {string}
+             */
+            setting: "risk" | "horizon" | "style" | "max_position" | "cash_buffer" | "max_holdings" | "etfs" | "market_caps" | "sectors" | "blocked";
+        };
+        /**
          * MarketCalendarStatus
          * @description Whether an instrument's exchange is open now, and when it next opens (D25).
          *
@@ -1965,6 +2031,43 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    mandate_check_agents__agent_id__mandate_check_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MandateCheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MandateCheckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     scan_agent_agents__agent_id__scans_post: {
         parameters: {
             query?: never;

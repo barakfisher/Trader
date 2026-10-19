@@ -18,6 +18,7 @@ import type {
   AgentScansResponse,
   AgentView,
   AgentsResponse,
+  InstructionsCheckResult,
   RunScanResult,
   TopUpInput,
   TradeInput,
@@ -72,6 +73,27 @@ export function useUpdateAgent(agentId: string) {
   const invalidate = useInvalidateAgents();
   return useMutation({
     mutationFn: (patch: AgentPatchInput) => api.patch<AgentView>(`/agents/${agentId}`, patch),
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * Ask whether an agent's instructions contradict its settings (D176-D178), right
+ * after a save. The result is stored on the agent, so the agent list and page read
+ * it from their own queries once this invalidates them.
+ */
+export function useCheckInstructions() {
+  const invalidate = useInvalidateAgents();
+  return useMutation({
+    mutationFn: (agentId: string) => api.post<InstructionsCheckResult>(`/agents/${agentId}/instructions-check`),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDismissInstructionsCheck(agentId: string) {
+  const invalidate = useInvalidateAgents();
+  return useMutation({
+    mutationFn: () => api.post<void>(`/agents/${agentId}/instructions-check/dismiss`),
     onSuccess: invalidate,
   });
 }
