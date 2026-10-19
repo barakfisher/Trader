@@ -267,6 +267,16 @@ def _is_named_window(token: str, text: str, end: int, windows: set[tuple[int, st
     )
 
 
+def _as_written(token: str, text: str, start: int) -> str:
+    """The figure as its writer meant it. A hyphen glued to a word is the word's, not a
+    minus: Hebrew joins a prefix to a number with one ("ב-39.69", "in 39.69"), and an agent
+    sent back "-39.69" is corrected for a figure it never wrote. Matching is unaffected, as
+    a sign is optional there."""
+    if token.startswith("-") and start > 0 and text[start - 1].isalpha():
+        return token[1:]
+    return token
+
+
 def unsourced_figures(text: str, evidence: Mapping[str, object]) -> list[str]:
     """Figures in `text` that the evidence does not support, in order of appearance."""
     sourced = sourced_values(evidence)
@@ -284,7 +294,7 @@ def unsourced_figures(text: str, evidence: Mapping[str, object]) -> list[str]:
             continue
         is_percent = _PERCENT_AFTER.match(text, match.end()) is not None
         if not _supported(written, places, as_percent if is_percent else sourced):
-            offenders.append(token)
+            offenders.append(_as_written(token, text, match.start()))
 
     return offenders
 

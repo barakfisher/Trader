@@ -54,6 +54,18 @@ def test_invented_figures_are_rejected(text, offender):
     assert offender in unsourced_figures(text, EVIDENCE)
 
 
+@pytest.mark.parametrize(
+    ("text", "reported"),
+    [
+        ("NVDA זינקה ב-39.69%.", "39.69"),  # a Hebrew prefix's hyphen, not a minus
+        ("NVDA moved -39.69% today.", "-39.69"),  # a minus after a space is the writer's
+        ("NVDA moved (-39.69%) today.", "-39.69"),
+    ],
+)
+def test_a_figure_is_reported_as_its_writer_wrote_it(text, reported):
+    assert unsourced_figures(text, EVIDENCE) == [reported]
+
+
 def test_a_single_bad_figure_condemns_the_whole_narration():
     # Partial trust in a sentence is not something this product can offer.
     text = "NVDA fell 8.5% to $118.45, its worst day in 14 months."

@@ -2927,6 +2927,22 @@ failure they prevent.
     and needs a tolerance someone tunes); only logging drops (Hebrew warnings keep vanishing
     meanwhile). Cost: the warning quotes a whole sentence, not a phrase. A number with no sentence
     behind it is dropped and logged (`agents.mandate_check_no_such_sentence`).
+184. **An answer whose only fault is an unsourced figure goes back to the model once** (the user,
+    2026-10-19; beside D170's mandate retry, not sharing it). The message names each figure and
+    asks for figures copied as given, or none; the first reply keeps its `unsourced_figures`
+    verdict, a second failure is `invalid_answer` with the second answer stored. Any other fault
+    (malformed, not tradable, oversold, cash) is still final. The figures and the mandate each
+    get one chance: at most three answers a scan. A figure is reported without a hyphen glued
+    to a letter (`_as_written`), so Hebrew's "ב-39.69" reads "39.69", not "-39.69"; matching
+    was already sign-blind. **Why:** "agressive"'s first scan (compose, 2026-10-19) chose to buy
+    3 IRON on a Phase 3 jump and was thrown away whole for writing 39.69% where the quote said
+    39.6987 - truncated, not rounded - and the validator said "-39.69". One slipped decimal cost
+    a scan's only decision. *Rejected:* accepting truncation (loosens guideline 7 for every
+    narration, `/ask` included); naming the nearest evidence value in the message (an invented
+    figure would be handed a plausible number to paste - one belonging to another stock or
+    window - and pass a check it should fail); one retry shared with the mandate's (a fixed
+    thesis that then breaks a limit would get no chance). Cost: ~$0.001 per extra answer at
+    Flash-Lite rates, inside the agent's daily budget.
 
 ---
 

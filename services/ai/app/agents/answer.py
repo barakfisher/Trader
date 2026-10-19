@@ -44,6 +44,8 @@ DECISIONS: tuple[Decision, ...] = ("buy", "sell", "none")
 
 #: A thesis long enough to say why, short enough to read before approving.
 MAX_THESIS_CHARS = 1500
+#: How a problem naming unsourced figures begins; the scan sends such an answer back once.
+UNSOURCED_PREFIX = "figures not in the evidence"
 
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
 
@@ -77,6 +79,15 @@ class CheckedAnswer:
     @property
     def valid(self) -> bool:
         return self.answer is not None and not self.problems
+
+    @property
+    def only_unsourced(self) -> bool:
+        """A well-formed answer whose one fault is figures the evidence does not hold."""
+        return (
+            self.answer is not None
+            and bool(self.problems)
+            and all(problem.startswith(UNSOURCED_PREFIX) for problem in self.problems)
+        )
 
 
 def parse_answer(raw: str) -> tuple[Answer | None, list[str]]:
@@ -160,7 +171,7 @@ def check_answer(
         evidence = {**evidence, "proposed_quantity": answer.quantity}
     unsourced = unsourced_figures(answer.thesis, evidence)
     if unsourced:
-        problems.append(f"figures not in the evidence: {', '.join(unsourced)}")
+        problems.append(f"{UNSOURCED_PREFIX}: {', '.join(unsourced)}")
 
     if answer.decision != "none" and answer.symbol and answer.quantity:
         listing = find_listing(engine, answer.symbol)
