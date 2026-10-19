@@ -96,6 +96,14 @@ export class AuthStore {
     });
   }
 
+  /** A new sign-in address: the server reissues this session, as for a password change. */
+  async changeEmail(email: string, currentPassword: string): Promise<void> {
+    const user = await api.post<SessionUser>('/auth/email', { email, currentPassword });
+    runInAction(() => {
+      this.user = user;
+    });
+  }
+
   async logout(): Promise<void> {
     try {
       await api.post('/auth/logout');

@@ -1,9 +1,10 @@
 /**
- * Sign-in, sign-out, "who am I" and changing one's own password (D159, D160).
+ * Sign-in, sign-out, "who am I" and changing one's own password or email
+ * (D159, D160).
  *
  * Email and password, the password hashed with argon2id. A session is the
  * signed cookie of `http/auth.ts`, carrying the user's `session_version`, so a
- * password change - which bumps it - ends every other session the user holds
+ * password or email change - which bumps it - ends every other session the user holds
  * and reissues this one.
  */
 
@@ -11,9 +12,10 @@ import type { Context, Hono } from 'hono';
 import { deleteCookie, setCookie } from 'hono/cookie';
 import { z } from 'zod';
 
-import type { SessionUser, UiLanguage } from '@traders/shared';
+import { emailProblem, normaliseEmail, type SessionUser, type UiLanguage } from '@traders/shared';
 
 import {
+  changeEmail,
   changePassword,
   getOrCreateUserSettings,
   getPasswordHash,
@@ -24,7 +26,7 @@ import {
 } from '../../db/queries.js';
 import type { AppEnv } from '../app.js';
 import { SESSION_COOKIE, createSessionToken } from '../auth.js';
-import { ApiProblem, badRequest, unauthorized } from '../errors.js';
+import { ApiProblem, badRequest, conflict, unauthorized } from '../errors.js';
 import { PASSWORD_MAX_LENGTH, hashPassword, passwordMatches, passwordProblem } from '../password.js';
 
 /**
@@ -44,6 +46,11 @@ const passwordChangeSchema = z.object({
   newPassword: submittedPassword,
 });
 
+const emailChangeSchema = z.object({
+  email: z.string().max(1000),
+  currentPassword: submittedPassword,
+});
+
 /**
  * The signed-in user as the web app needs it before drawing anything: who,
  * which currency and timezone - and which language, read from the settings row
@@ -54,6 +61,7 @@ async function sessionUser(user: UserRow): Promise<SessionUser> {
   const settings = await getOrCreateUserSettings(user.id);
   return {
     id: user.id,
+    email: user.email,
     baseCurrency: user.base_currency,
     timezone: user.timezone,
     role: user.role,
@@ -140,6 +148,36 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     const updated = await changePassword(user.id, await hashPassword(newPassword));
     if (!updated) throw unauthorized();
     // The bump ended this session too; the new cookie carries the new version.
+    issueSession(context, updated);
+    return context.json(await sessionUser(updated));
+  });
+
+  /**
+   * Change one's own sign-in address. The current password is asked for, as
+   * for a password change: a session left open is not the account. Nothing is
+   * sent to the new address - there is no outbound email before M10 (decided
+   * 2026-10-19) - so a typo is corrected the same way, while still signed in.
+   */
+  app.post('/auth/email', async (context) => {
+    const user = context.get('user');
+    if (!user) throw unauthorized();
+    // `/auth/*` is outside the session gate's refusal so the one-time password can be changed (D162); nothing else can.
+    if (user.password_must_change) throw new ApiProblem(403, 'password_change_required', 'set a new password first');
+    const parsed = emailChangeSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) throw badRequest('invalid_body', 'expected { email: string, currentPassword: string }');
+    const email = normaliseEmail(parsed.data.email);
+
+    if (!(await passwordMatches(parsed.data.currentPassword, await getPasswordHash(user.id)))) {
+      throw new ApiProblem(403, 'incorrect_password', 'the current password is incorrect');
+    }
+    const problem = emailProblem(email);
+    if (problem !== null) throw badRequest(`email_${problem}`, `the address is ${problem.replace('_', ' ')}`);
+    if (email === user.email?.toLowerCase()) throw badRequest('email_unchanged', 'the address is the current one');
+
+    const updated = await changeEmail(user.id, email);
+    // Said only to someone who knows this account's password.
+    if (updated === 'taken') throw conflict('email_taken', 'another account uses this address');
+    if (!updated) throw unauthorized();
     issueSession(context, updated);
     return context.json(await sessionUser(updated));
   });

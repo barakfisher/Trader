@@ -54,6 +54,25 @@
       "failed": "Could not change the password."
     }
   },
+  "email": {
+    "title": "Email",
+    "current": "You sign in as",
+    "none": "no email yet",
+    "new": "New email",
+    "password": "Current password",
+    "note": "Nothing is sent to the new address: check it before saving. Every other device you are signed in on is signed out.",
+    "save": "Change email",
+    "saving": "Changing…",
+    "changed": "Email changed. Sign in with the new address from now on.",
+    "errors": {
+      "incorrect": "The current password is not right.",
+      "invalid": "That is not an email address.",
+      "tooLong": "An email address can have at most {{max}} characters.",
+      "unchanged": "That is already your email.",
+      "taken": "Another account already uses this address.",
+      "failed": "Could not change the email."
+    }
+  },
   "api": {
     "unreachable": "Cannot reach the server. Is the orchestrator running?",
     "failedWithStatus": "Request failed with status {{status}}"
@@ -1146,7 +1165,7 @@
   },
   "agents": {
     "title": "Agents",
-    "intro": "Your real portfolio, and simulated portfolios that each run on a paper budget. You can trade into a simulated agent by hand; agents don't make decisions themselves yet.",
+    "intro": "Your real portfolio, and simulated portfolios that each run on a paper budget. A simulated agent scans the market on its schedule, or when you ask, and proposes trades for you to approve or decline; its Decisions tab shows why it chose what it did. You can also trade into one by hand. Nothing ever reaches a broker.",
     "loading": "Loading agents…",
     "loadFailed": "Could not load your agents.",
     "primaryName": "Main portfolio",

@@ -2,7 +2,7 @@
 /** The Agents page: the real portfolio named by the catalogue, every other agent labelled simulated. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 
 import type { AgentView, UniverseTaxonomyResponse } from '@traders/shared';
 
@@ -301,6 +301,22 @@ describe('AgentsPage', () => {
     expect(chosen.textContent).toContain('Technology');
     fireEvent.click(screen.getByRole('button', { name: 'Remove Uranium' }));
     expect(screen.getByRole('list', { name: 'Chosen' }).textContent).not.toContain('Uranium');
+  });
+
+  it('closes only the menu on Escape after a pick, and the drawer on the next one', async () => {
+    renderPage(<AgentsPage />);
+    await openCreateForm();
+    const search = await screen.findByPlaceholderText('Search sectors, industries, ETF categories');
+    fireEvent.change(search, { target: { value: 'tech' } });
+    fireEvent.click(await screen.findByRole('option', { name: /^Technology/ }));
+    // Choosing keeps the menu open on the next match.
+    const menu = screen.getByRole('listbox');
+    expect(within(menu).getAllByRole('option').length).toBeGreaterThan(0);
+    fireEvent.keyDown(search, { key: 'Escape' });
+    expect(within(menu).queryAllByRole('option')).toHaveLength(0);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    fireEvent.keyDown(search, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it("checks the user's own instructions after creating, and never text the settings wrote (D176)", async () => {

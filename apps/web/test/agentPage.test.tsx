@@ -574,10 +574,11 @@ describe('AgentPage with the ledger', () => {
     });
     renderAgent();
     const warning = await screen.findByText(/Your instructions say/);
-    expect(warning.textContent).toBe('Your instructions say Day-trade momentum., which conflicts with the trading horizon.');
+    // The quote's own full stop is dropped where it sits inside the sentence, never stored without it (D183).
+    expect(warning.textContent).toBe('Your instructions say Day-trade momentum, which conflicts with the trading horizon.');
     // The user's words are a <q>: the browser quotes them, and they keep their own direction.
     const quote = warning.querySelector('q');
-    expect(quote?.textContent).toBe('Day-trade momentum.');
+    expect(quote?.textContent).toBe('Day-trade momentum');
     expect(quote?.getAttribute('dir')).toBe('auto');
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith(`/agents/${AGENT_ID}/instructions-check/dismiss`));

@@ -47,6 +47,33 @@ export function taxonomyChoices(taxonomy: UniverseTaxonomyResponse): TaxonomyCho
   return choices;
 }
 
+const KIND_ORDER: Record<TaxonomyKind, number> = { sector: 0, industry: 1, etf_category: 2 };
+
+/**
+ * The choices matching a typed query, best first: the name itself, then a name
+ * that starts with it, then one that contains it, then a row matched only by its
+ * sector's name. Sectors before industries before categories on a tie, and the
+ * menu's own order after that - "tech" lists Technology before Biotechnology.
+ * An empty query keeps the menu's grouped order.
+ */
+export function matchingChoices(choices: TaxonomyChoice[], query: string): TaxonomyChoice[] {
+  const typed = query.trim().toLowerCase();
+  if (typed === '') return choices;
+  const rank = (choice: TaxonomyChoice): number | null => {
+    const name = choice.name.toLowerCase();
+    if (name === typed) return 0;
+    if (name.startsWith(typed)) return 1;
+    if (name.includes(typed)) return 2;
+    if ((choice.group ?? '').toLowerCase().includes(typed)) return 3;
+    return null;
+  };
+  return choices
+    .map((choice, order) => ({ choice, order, rank: rank(choice) }))
+    .filter((entry): entry is { choice: TaxonomyChoice; order: number; rank: number } => entry.rank !== null)
+    .sort((a, b) => a.rank - b.rank || KIND_ORDER[a.choice.kind] - KIND_ORDER[b.choice.kind] || a.order - b.order)
+    .map((entry) => entry.choice);
+}
+
 function selectedChoices(selection: TaxonomySelection, choices: TaxonomyChoice[]): TaxonomyChoice[] {
   const byKey = new Map(choices.map((choice) => [key(choice), choice]));
   const wanted: Pick<TaxonomyChoice, 'kind' | 'name'>[] = [
@@ -81,12 +108,7 @@ export function TaxonomyPicker({
   const choices = useMemo(() => taxonomyChoices(taxonomy), [taxonomy]);
   const selected = selectedChoices(selection, choices);
   const chosen = new Set(selected.map(key));
-  const query = inputValue.trim().toLowerCase();
-  const items = choices.filter(
-    (choice) =>
-      !chosen.has(key(choice)) &&
-      (query === '' || choice.name.toLowerCase().includes(query) || (choice.group ?? '').toLowerCase().includes(query)),
-  );
+  const items = matchingChoices(choices, inputValue).filter((choice) => !chosen.has(key(choice)));
 
   const { getSelectedItemProps, getDropdownProps, removeSelectedItem } = useMultipleSelection<TaxonomyChoice>({
     selectedItems: selected,
@@ -165,7 +187,17 @@ export function TaxonomyPicker({
           </ul>
         )}
         <input
-          {...getInputProps(getDropdownProps({ preventKeyAction: isOpen }))}
+          {...getInputProps({
+            ...getDropdownProps({ preventKeyAction: isOpen }),
+            // Escape closes the menu (or clears what was typed) and goes no further: the
+            // drawer around the form listens for Escape on the window and would close too.
+            // Here rather than in getDropdownProps, which drops its handler while the menu is open.
+            onKeyDown: (event) => {
+              if (event.key === 'Escape' && ((isOpen && items.length > 0) || inputValue !== '')) {
+                event.stopPropagation();
+              }
+            },
+          })}
           placeholder={t('agents.mandate.searchPlaceholder')}
           aria-describedby={hintId}
           className="w-full bg-transparent px-1 py-1 outline-none"

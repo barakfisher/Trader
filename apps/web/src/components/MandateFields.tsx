@@ -32,7 +32,7 @@ export function MandateFields({ draft, onChange }: { draft: MandateDraft; onChan
   const band = riskBand(draft.riskLevel);
 
   const rule = (name: SizedRule, label: string, hint: string) => (
-    <AgentField label={label} hint={hint}>
+    <AgentField label={label} hint={hint} aligned>
       <input
         value={draft[name]}
         onChange={(event) => onChange(editRule(draft, name, event.target.value))}
@@ -51,7 +51,8 @@ export function MandateFields({ draft, onChange }: { draft: MandateDraft; onChan
 
       <RiskSlider level={draft.riskLevel} band={band} onChange={(level) => onChange(applyRisk(draft, level))} />
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      {/* One per row: two side by side cut "Long-term (months to years)" in a drawer's width. */}
+      <div className="grid gap-3">
         <AgentField label={t('agents.mandate.horizon')} hint={t('agents.mandate.horizonHint')}>
           <select
             value={draft.horizon ?? ''}

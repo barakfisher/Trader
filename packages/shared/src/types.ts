@@ -763,6 +763,8 @@ export type UserRole = 'user' | 'admin';
 
 export interface SessionUser {
   id: string;
+  /** What the user signs in with; null only for a user never given one. */
+  email: string | null;
   baseCurrency: string;
   timezone: string;
   /** Display only: the server re-reads the role on every `/admin/*` request. */

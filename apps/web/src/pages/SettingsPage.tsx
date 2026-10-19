@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { BellOff, Settings as SettingsIcon } from 'lucide-react';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
+import { EmailChange } from '../components/EmailChange.tsx';
 import { PasswordChange } from '../components/PasswordChange.tsx';
 import { TelegramConnect } from '../components/TelegramConnect.tsx';
 import { Button, Card, ErrorNote, Spinner } from '../components/ui.tsx';
@@ -249,6 +250,10 @@ export const SettingsPage = observer(function SettingsPage() {
           </Card>
 
           <AccountCard />
+
+          <Card title={t('email.title')}>
+            <EmailChange />
+          </Card>
 
           <Card title={t('password.title')}>
             <PasswordChange />

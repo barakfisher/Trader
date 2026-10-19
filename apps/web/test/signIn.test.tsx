@@ -36,12 +36,14 @@ vi.mock('../src/api/client.ts', () => {
 const { ApiRequestError } = await import('../src/api/client.ts');
 const { App } = await import('../src/App.tsx');
 const { LoginPage } = await import('../src/pages/LoginPage.tsx');
+const { EmailChange } = await import('../src/components/EmailChange.tsx');
 const { PasswordChange } = await import('../src/components/PasswordChange.tsx');
 const { renderWithServerState, testQueryClient } = await import('./serverStateHarness.tsx');
 const { RootStore } = await import('../src/stores/RootStore.ts');
 
 const USER: SessionUser = {
   id: 'u',
+  email: 'dana@example.com',
   baseCurrency: 'USD',
   timezone: 'UTC',
   role: 'user',
@@ -86,6 +88,58 @@ describe('the sign-in page', () => {
     type('Password', 'right');
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
     expect(await screen.findByText(/This account is not active/)).toBeTruthy();
+  });
+});
+
+describe('changing the email', () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(cleanup);
+
+  function fill(email: string, password: string) {
+    type('New email', email);
+    type('Current password', password);
+    fireEvent.click(screen.getByRole('button', { name: 'Change email' }));
+  }
+
+  function renderSignedIn() {
+    const root = new RootStore(testQueryClient());
+    runInAction(() => {
+      root.auth.user = USER;
+    });
+    return renderWithServerState(<EmailChange />, root);
+  }
+
+  it('shows the current address, and refuses one that is not an address before asking the server', async () => {
+    renderSignedIn();
+    expect(screen.getByText('dana@example.com')).toBeTruthy();
+    fill('Dana Levi', 'current password');
+    expect(await screen.findByText('That is not an email address.')).toBeTruthy();
+    fill(' DANA@example.com', 'current password');
+    expect(await screen.findByText('That is already your email.')).toBeTruthy();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('sends the normalised address and the password, and shows the new one', async () => {
+    post.mockResolvedValue({ ...USER, email: 'dana.levi@example.com' });
+    const { root } = renderSignedIn();
+    fill('  Dana.Levi@Example.com ', 'current password');
+    expect(await screen.findByText(/Email changed/)).toBeTruthy();
+    expect(post).toHaveBeenCalledWith('/auth/email', {
+      email: 'dana.levi@example.com',
+      currentPassword: 'current password',
+    });
+    expect(root.auth.user?.email).toBe('dana.levi@example.com');
+    expect(screen.getByText('dana.levi@example.com')).toBeTruthy();
+  });
+
+  it.each([
+    ['incorrect_password', 403, 'The current password is not right.'],
+    ['email_taken', 409, 'Another account already uses this address.'],
+  ])('says %s in the reader\'s words', async (code, status, sentence) => {
+    post.mockRejectedValue(new ApiRequestError('refused', status, code));
+    renderSignedIn();
+    fill('new@example.com', 'current password');
+    expect(await screen.findByText(sentence)).toBeTruthy();
   });
 });
 

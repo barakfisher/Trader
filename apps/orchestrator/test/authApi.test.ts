@@ -34,6 +34,7 @@ vi.mock('../src/db/queries.js', () => ({
   getPasswordHash: vi.fn(),
   recordSignIn: vi.fn(async () => undefined),
   changePassword: vi.fn(),
+  changeEmail: vi.fn(),
   getOrCreateUserSettings: vi.fn(async () => ({ language: 'en' })),
   insertAdminAudit: vi.fn(),
 }));
@@ -268,6 +269,82 @@ describe('changing one\'s own password', () => {
     const [userId, storedHash] = vi.mocked(queries.changePassword).mock.calls[0]!;
     expect(userId).toBe(USER.id);
     expect(storedHash).toMatch(/^\$argon2id\$/);
+
+    const token = cookieOf(response).slice(`${SESSION_COOKIE}=`.length);
+    expect(verifySessionToken(token, 'test-session-secret-value')?.sessionVersion).toBe(
+      USER.session_version + 1,
+    );
+  });
+});
+
+describe('changing one\'s own email', () => {
+  let app: App;
+  const NEW_EMAIL = 'dana.levi@example.com';
+
+  function changeEmail(cookie: string, email: string, currentPassword: string) {
+    return app.request('/auth/email', {
+      method: 'POST',
+      headers: { ...HEADERS, cookie },
+      body: JSON.stringify({ email, currentPassword }),
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(queries.getUser).mockResolvedValue(USER);
+    vi.mocked(queries.getPasswordHash).mockResolvedValue(passwordHash);
+    vi.mocked(queries.changeEmail).mockResolvedValue({
+      ...USER,
+      email: NEW_EMAIL,
+      session_version: USER.session_version + 1,
+    });
+    app = buildApp();
+  });
+
+  it('needs a session', async () => {
+    const response = await app.request('/auth/email', {
+      method: 'POST',
+      headers: HEADERS,
+      body: JSON.stringify({ email: NEW_EMAIL, currentPassword: PASSWORD }),
+    });
+    expect(response.status).toBe(401);
+  });
+
+  it('needs the current password', async () => {
+    const response = await changeEmail(sessionCookie(), NEW_EMAIL, 'not the password at all');
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: 'incorrect_password' });
+    expect(queries.changeEmail).not.toHaveBeenCalled();
+  });
+
+  it('waits for the one-time password to be changed (D162)', async () => {
+    vi.mocked(queries.getUser).mockResolvedValue({ ...USER, password_must_change: true });
+    const response = await changeEmail(sessionCookie(), NEW_EMAIL, PASSWORD);
+    expect(await response.json()).toMatchObject({ error: 'password_change_required' });
+    expect(queries.changeEmail).not.toHaveBeenCalled();
+  });
+
+  it('refuses an address that is not one, or the current one in another case', async () => {
+    const invalid = await changeEmail(sessionCookie(), 'Dana Levi', PASSWORD);
+    expect(await invalid.json()).toMatchObject({ error: 'email_invalid' });
+    const same = await changeEmail(sessionCookie(), ' DANA@example.com ', PASSWORD);
+    expect(await same.json()).toMatchObject({ error: 'email_unchanged' });
+    expect(queries.changeEmail).not.toHaveBeenCalled();
+  });
+
+  it('refuses an address another account uses, and keeps this session', async () => {
+    vi.mocked(queries.changeEmail).mockResolvedValue('taken');
+    const response = await changeEmail(sessionCookie(), NEW_EMAIL, PASSWORD);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: 'email_taken' });
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('stores the normalised address and reissues this session at the new version', async () => {
+    const response = await changeEmail(sessionCookie(), '  Dana.Levi@Example.com ', PASSWORD);
+    expect(response.status).toBe(200);
+    expect(queries.changeEmail).toHaveBeenCalledWith(USER.id, NEW_EMAIL);
+    expect(await response.json()).toMatchObject({ email: NEW_EMAIL });
 
     const token = cookieOf(response).slice(`${SESSION_COOKIE}=`.length);
     expect(verifySessionToken(token, 'test-session-secret-value')?.sessionVersion).toBe(
