@@ -1451,7 +1451,7 @@
         "description": "A setting the instructions contradict, and the user's own words that do.",
         "properties": {
           "quote": {
-            "description": "Copied exactly from the instructions; checked to be there.",
+            "description": "The sentence of the instructions that says it, cut from them by the server.",
             "title": "Quote",
             "type": "string"
           },

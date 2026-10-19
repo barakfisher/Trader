@@ -6,11 +6,13 @@ when the instructions are the user's own words. The answer never blocks
 anything: a contradiction is shown, and the user decides.
 
 **The model names conflicts; it does not write the warning.** It answers which
-setting each conflict is with and an exact quote from the instructions. The
-sentence the user reads is built from the catalogue in their language around
-that quote (D176). A quote the instructions do not contain is dropped - the
-same rule the evidence validator applies to figures (guideline 7): nothing a
-model invents reaches the user as if the user had written it.
+setting each conflict is with and the number of the sentence that says it; the
+instructions reach it as numbered sentences, and the quote is that sentence,
+cut from the user's text here (D183). The sentence the user reads is built from
+the catalogue in their language around that quote (D176). Nothing a model
+writes reaches the user as if the user had written it (guideline 7) - by
+construction, not by a check: the first real check found a contradiction and
+lost it, because its copied Hebrew quote had one letter wrong.
 
 **Skipped, quietly, rather than failed** when there is nothing to judge (no
 instructions, no settings), when the agent's day's budget is spent, or when no
@@ -66,6 +68,9 @@ MAX_QUOTE_CHARS = 160
 
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
 _SPACE = re.compile(r"\s+")
+#: A sentence ends at . ! ? followed by space, or at a line break. A colon or a
+#: semicolon does not end one: "You day-trade: you buy ..." is one thought.
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+|\n+")
 
 SYSTEM = """You compare an investor's written instructions with the settings of their
 simulated trading agent, and report clear contradictions only: places where the
@@ -73,12 +78,11 @@ instructions ask for something a setting rules out, or rule out something a
 setting asks for. A difference of emphasis is not a contradiction, and neither is
 something the settings do not cover.
 
-Answer with JSON only, no other text:
+The instructions are given as numbered sentences. Answer with JSON only, no
+other text:
 {"conflicts": [{"setting": "<one of the setting names given>",
-                "quote": "<words copied exactly from the instructions>"}]}
-Copy each quote character for character from the instructions, in their own
-language, at most 160 characters. At most 3 conflicts. When there are none,
-answer {"conflicts": []}."""
+                "sentence": <the number of the sentence that contradicts it>}]}
+At most 3 conflicts. When there are none, answer {"conflicts": []}."""
 
 
 @dataclass(frozen=True)
@@ -135,6 +139,19 @@ def _normal(text: str) -> str:
     return _SPACE.sub(" ", text).strip()
 
 
+def sentences(instructions: str) -> list[str]:
+    """The instructions as the model sees them numbered: 1 is the first."""
+    return [_normal(part) for part in _SENTENCE_END.split(instructions) if part.strip()]
+
+
+def _quote(sentence: str) -> str:
+    """The sentence, or its first words when it is too long to read inside the warning."""
+    if len(sentence) <= MAX_QUOTE_CHARS:
+        return sentence
+    cut = sentence[: MAX_QUOTE_CHARS - 1]
+    return (cut.rsplit(" ", 1)[0] or cut) + "…"
+
+
 def parse_conflicts(
     raw: str, instructions: str, stated: dict[Setting, str]
 ) -> tuple[Conflict, ...] | None:
@@ -146,18 +163,19 @@ def parse_conflicts(
     items = data.get("conflicts") if isinstance(data, dict) else None
     if not isinstance(items, list):
         return None
-    haystack = _normal(instructions)
+    numbered = sentences(instructions)
     kept: list[Conflict] = []
     for item in items:
         if not isinstance(item, dict):
             continue
-        setting, quote = item.get("setting"), item.get("quote")
-        if setting not in stated or not isinstance(quote, str):
+        setting, number = item.get("setting"), item.get("sentence")
+        # bool is an int in Python; `true` is not a sentence number.
+        if setting not in stated or not isinstance(number, int) or isinstance(number, bool):
             continue
-        quote = _normal(quote)
-        # The quote must be the user's words, or it is not shown as theirs.
-        if not quote or len(quote) > MAX_QUOTE_CHARS or quote not in haystack:
+        if not 1 <= number <= len(numbered):
+            log.warning("agents.mandate_check_no_such_sentence", sentence=number, of=len(numbered))
             continue
+        quote = _quote(numbered[number - 1])
         if any(conflict.setting == setting and conflict.quote == quote for conflict in kept):
             continue
         kept.append(Conflict(setting, quote))  # type: ignore[arg-type]
@@ -166,7 +184,8 @@ def parse_conflicts(
 
 def _user_prompt(instructions: str, stated: dict[Setting, str]) -> str:
     settings = "\n".join(f"- {name}: {text}" for name, text in stated.items())
-    return f"Settings, by name:\n{settings}\n\nInstructions:\n{instructions}"
+    numbered = "\n".join(f"{n}. {text}" for n, text in enumerate(sentences(instructions), 1))
+    return f"Settings, by name:\n{settings}\n\nInstructions, by sentence:\n{numbered}"
 
 
 async def check_instructions(llm: LLMProvider, agent: ScanAgent) -> CheckResult:

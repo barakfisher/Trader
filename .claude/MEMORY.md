@@ -2914,6 +2914,19 @@ failure they prevent.
 182. **No login rate limit in M9** (the user, 2026-10-19). Users are trusted people over
     Tailscale (D155) and argon2id already costs each guess tens of milliseconds. It is debt that
     M10 (strangers) must pay before the app faces the internet.
+183. **The contradiction check names a sentence by number; the server quotes it** (the user,
+    2026-10-19; supersedes D176's copied quote). The instructions reach the model as numbered
+    sentences (`.`/`!`/`?` + space, or a line break; a colon does not end one) and it answers
+    `{setting, sentence}`; the quote is that sentence cut from the user's text, shortened at a
+    word past 160 characters. **Why:** the first real check (compose, 2026-10-19) found a Hebrew
+    day-trader brief contradicting a long horizon and lost it - Flash-Lite wrote Hebrew as
+    `\uXXXX` escapes and its quote read מנויות for מניות, so the exact-match rule dropped it, with
+    nothing logged and the call recorded `accepted`. The escapes also made it 354 output tokens
+    ($0.00098, more than an average scan); by number it is 21 ($0.00014), conflict kept, and
+    Warren's own words still come back clean. *Rejected:* fuzzy matching (still pays the escapes,
+    and needs a tolerance someone tunes); only logging drops (Hebrew warnings keep vanishing
+    meanwhile). Cost: the warning quotes a whole sentence, not a phrase. A number with no sentence
+    behind it is dropped and logged (`agents.mandate_check_no_such_sentence`).
 
 ---
 
