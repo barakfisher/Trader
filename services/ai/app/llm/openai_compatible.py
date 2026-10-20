@@ -50,7 +50,9 @@ The same single retry applies to a 200 whose generation failed upstream
 (`finish_reason: "error"`). Measured 2026-10-14: Gemini Flash-Lite ends about one
 assistant turn in ten that reads the product guide with Google's
 `MALFORMED_FUNCTION_CALL` - a tool call it wrote and could not emit - reported as
-an empty 200 with zero usage, so the retry costs nothing. Any other empty reply
+an empty 200 with zero usage, so the retry costs nothing. (Much of that was one
+cause: the guide named a tool the assistant lacks, and the model tried to call it -
+D226.) Any other empty reply
 is not retried: a model that finished normally and said nothing will say
 nothing again.
 """

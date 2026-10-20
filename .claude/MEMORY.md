@@ -3433,9 +3433,34 @@ failure they prevent.
     the budget becomes the agent's first deposit, D22, and a figure the user never chose would be
     the one every return is measured against); keeping the placeholder (it looked filled in).
 
+226. **The product guide names only tools the assistant has, and says how an agent is created**
+    (2026-10-20; `product_guide.py`, `test_the_guide_names_only_tools_the_assistant_has`).
+    Measured before acting (the own-key live check's `MALFORMED_FUNCTION_CALL`, llm_calls
+    448/449/455/456): every failure followed the guide's `agents` section, and the eval
+    reproduced it - "why cant I create an agent?" failed 9 of 10 on Flash-Lite, two other agent
+    questions 0 of 20. The section listed the agents' tools by name, `get_position` among them,
+    which the assistant does not have; with nothing in the guide about *creating* an agent, the
+    model reached for a tool it had just read about and Google refused the call it wrote. A/B,
+    10 samples each: name removed 1/10 failed; creation sentence added, name kept 0/10; both 0/30
+    across the three questions, and the product group (30 turns) had no failure. Both ship: the
+    test makes the cause impossible to reintroduce, the sentence answers the question. The user's
+    two questions are U12-U13 in `ASSISTANT_QUESTIONS.md` and eval cases. *Rejected:* switching
+    the Ask model (the user's choice, and 0 of 20 on the other questions says the model is fine
+    when the guide is); a second retry (it fails the same way: the retry read the same guide);
+    leaving the tool names in with "an agent's tool only" (a name in the text is still a name to
+    call - describe the tool, do not name it).
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
+
+**A tool name in text the model reads is an invitation to call it (2026-10-20, D226).** The
+product guide listed the agents' tools by name; the assistant, asked something the guide did not
+answer, called `get_position` - which it does not have - and Gemini ended the turn
+`MALFORMED_FUNCTION_CALL`, twice with the retry, 9 times in 10. It looked like model flakiness
+("about one turn in ten that reads the guide", 2026-10-14) and was a sentence. **Lesson: before
+blaming a model's failure rate, find the turns that fail and read what they read last; an eval
+case with `--repeat 10` and a one-line A/B costs cents and names the cause.**
 
 **Two green PRs, one broken `main` (2026-10-18, #253 + #254, fixed by #255).** Two sessions each
 added a `0057` on `0056_universe_taxonomy`; each branch's CI was green, and they merged minutes

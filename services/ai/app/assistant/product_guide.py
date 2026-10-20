@@ -86,9 +86,13 @@ SECTIONS = MappingProxyType(
             "most common answer. Every agent has the same tools: search_universe (find "
             "instruments by what they do), get_quote (delayed quotes), get_price_history "
             "(daily closes and returns), get_findings (what the rules find in a symbol), "
-            "get_news (stored news with sources), get_position (its own cash and holdings) and "
+            "get_news (stored news with sources), its own cash and holdings, and "
             "explain_concept (the reference notes). A scan has at most 12 tool calls and "
-            "a daily model budget. Every scan is recorded step by step."
+            "a daily model budget. Every scan is recorded step by step. "
+            "The user creates an agent on the Agents page (/agents) with New agent: a name, "
+            "a paper budget in dollars (simulated money, not taken from the portfolio), its "
+            "settings - risk, sectors, limits - or a template that fills them, and optional "
+            "instructions in the user's own words. This assistant cannot create one."
         ),
         "evidence_check": (
             "Every figure in an agent's thesis must appear in its briefing or in a tool "

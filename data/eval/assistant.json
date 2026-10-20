@@ -724,6 +724,42 @@
       ]
     },
     {
+      "id": "user-why-cannot-create-agent",
+      "group": "product",
+      "source": "user",
+      "fixture": "demo",
+      "turns": [
+        {
+          "user": "why cant I create an agent?",
+          "expect": {
+            "outcome": "answer",
+            "tools_any": [
+              "get_product_guide"
+            ],
+            "behaviour": "Says where agents are created (the Agents page) and what the form needs - a name and a paper budget - and that the assistant cannot create one itself."
+          }
+        }
+      ]
+    },
+    {
+      "id": "user-set-up-simulated-agent",
+      "group": "product",
+      "source": "user",
+      "fixture": "demo",
+      "turns": [
+        {
+          "user": "How do I set up a simulated agent?",
+          "expect": {
+            "outcome": "answer",
+            "tools_any": [
+              "get_product_guide"
+            ],
+            "behaviour": "Walks through creating an agent on the Agents page: a name, a paper budget, the settings or a template, optional instructions; says the assistant cannot create it."
+          }
+        }
+      ]
+    },
+    {
       "id": "topic-membership-rule",
       "group": "topics",
       "source": "claude",
