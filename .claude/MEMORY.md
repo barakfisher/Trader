@@ -4,7 +4,32 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-19 ~17:00 UTC - **Handoff after five merges since #259: M9 has login (#260) and
+Updated: 2026-10-20 ~09:30 UTC - **Handoff at the user's request after four merges (#268, #269, #270,
+#272): agents got their controls - four tabs, scans every N hours, several decisions a scan. The
+next PR is M9's cap enforcement, and it is now urgent: compose runs signup without it.** Decisions
+reached **198** (next: **199**). Migrations: **`0061_max_decisions` is head** (next free: **`0062`**;
+`git fetch` and check `main` has one head first). **Deployed:** compose runs `6f17ac1` (#272) at
+`0061`, redeployed three times this session on the user's word, each after a backup for a
+migration. **D186 is broken on compose:** it already ran past #264 (signup) before this session
+began - its AI service had #265's code at the start - and today one user signed up and was
+approved (`users`: admin, one `active` user with a cap stored, one `rejected`). That user's
+`llm_cap_micro_usd` is checked by nothing; the bound is D186's ~$2/day of per-agent and assistant
+allowances. kind still runs `796cf3d` at `0059`. **#271** (another session: password eye toggle,
+agent Performance tab, Settings sign-in card) is merged and not deployed. This session:
+- **Telegram trade approval tested live** (2026-10-19 19:49-19:51 UTC): a hand-made "buy 1 AAPL"
+  proposal for Test agent (its scan row's briefing says `hand-made test scan for Telegram
+  buttons`), Approve -> Confirm from the phone, filled at 342.80 + 7.50. The first live proof of the
+  Telegram leg; refusals still untested live.
+- **#268 (D194):** an agent's page is Holdings / Activity / Scans / Settings.
+- **#269 (D195, D196, 0060):** schedule = every 1-6 h in market hours + pre-open + post-close, any
+  combination or none; Run a scan now waits for a running scan and names one due in 30 min.
+- **#270 (D197, D198, 0061):** up to 10 trades a scan, each its own proposal (sells reviewed first;
+  a buy may name the sell that funds it); the briefing lists waiting proposals and a repeat is
+  refused; `trade_review.py` is the new cumulative check.
+- **#272:** old one-trade scans read right in the new history.
+**Next:** "Next session: after the agent controls" under "Where to go next".
+
+Earlier update, 2026-10-19 ~17:00 UTC - **Handoff after five merges since #259: M9 has login (#260) and
 signup with the admin's approval (#264); the next M9 PR is the cap's enforcement.** Decisions
 reached **193** (next: **194**; D189 figures retry #265, D190-D193 taxonomy names in Hebrew). Migrations: **`0059_mandate_check` is head** (next free: **`0060`**;
 `git fetch` and check `main` has one head before writing one). **Deployed:** compose and kind both
@@ -4346,6 +4371,53 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after the agent controls (written 2026-10-20)
+
+Four merges since handoff #266 (#268 tabs, #269 schedule, #270 decisions, #272 old scans; #271 by
+another session). Handoff at the user's request. **Deployed:** compose `6f17ac1` at `0061`; kind
+`796cf3d` at `0059`; #271 merged, undeployed. No standing grant: ask before each PR, merge only on
+"merge", redeploy only on "redeploy". Count merges with `git log --oneline <this sha>..origin/main`.
+In order:
+
+1. **M9's cap enforcement (D157, D158) - first, because D186's gap is live on compose.** One
+   approved user runs uncapped today. The plan from "after M9's signup" item 2 stands unchanged:
+   measure first (how a call reaches `BudgetedProvider` and whether the user travels with it, for
+   narration, scans, `/ask` and `mandate_check`; "this month" in `users.timezone`; a call's maximum
+   cost from `max_tokens` x price; the refusal codes and sentences; the admin never capped), then
+   the questions one at a time. **New since that plan:** a scan now writes up to 10 proposals and
+   may answer up to three times (D197's figure and mandate rounds), so a scan's worst-case cost is
+   larger than when D158 was argued - include it in the measurement. Until it merges, ask the
+   user whether to pause or cap that user by hand; do not decide it.
+2. **Watch the new controls on real scans** (read-only, then report): every agent is at
+   `max_decisions = 1` and agressive at every 4 h until the user changes them. After the user
+   raises one: `agent_scans.answer -> 'trades'` with `refused` entries, `transcript` `returned`
+   rounds (D189/D170 per trade), proposals per scan, and any `waiting_for_approval` repeats
+   refused (D198). The question to answer: do several decisions produce rebalances, or several
+   unrelated buys?
+3. **The 2026-10-20 10:00 Test agent scan review** ("after M9's signup" item 1, #247's baseline,
+   the research sub-agent and tool picker) - not done by this session; ask the user whether it
+   happened. Read it knowing #268-#272 changed the schedule, the answer shape and the briefing.
+4. **Small debt this session left, as consequences:**
+   - While editing the schedule, "Next scheduled scan" still names the *stored* schedule's next
+     slot until Save - the preview line above it is right, this one is not.
+   - Approving a funded buy before its sell is refused as plain "insufficient cash" on web and
+     Telegram; the reason could name the sell (the payload has `fundedBy`).
+   - Telegram's refusal paths (market closed, price moved, expired) are covered by tests only.
+5. **Then M9 continues** as "after M9's signup" item 3 lists (scheduling fan-out D161 - an approved
+   user still gets no scheduled scans; time-zone reads D163; the admin's user list D162; exit test).
+
+**Things from this session that cost time:**
+- **A worktree's Python scripts run the main checkout's code** (the shared venv is an editable
+  install): `export_openapi.py` exported `main`'s models and `openapi.json` came out unchanged. Run
+  scripts with `PYTHONPATH=.`; pytest is unaffected. (Also under "Local environment".)
+- **Compose's CSRF origin list has no :5175**, so a worktree dev server there cannot sign in (403
+  `bad_origin` before the password is read). A local, git-excluded `vite.worktree.local.config.ts`
+  that sends `origin: http://localhost:5173` from the proxy solved it; port 5173 itself is held by a
+  stale Vite from `~/.Trash/frontend`.
+- **Redeploys may sign the browser pane out** (it happened after #270's): budget a sign-in from the
+  user before a browser check, and never type their password.
+- **Port 55432 is compose's Postgres.** The throwaway for integration tests goes on another port.
 
 ### Next session: after M9's signup (written 2026-10-19, evening)
 
