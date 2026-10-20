@@ -23,7 +23,9 @@ function agentRow(overrides: Record<string, unknown> = {}) {
     persona: 'Patient.',
     is_primary: false,
     state: 'active',
-    scan_schedule: 'pre_open',
+    scan_every_hours: null,
+    scan_pre_open: true,
+    scan_post_close: false,
     ...overrides,
   };
 }

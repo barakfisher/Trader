@@ -31,7 +31,7 @@ from sqlalchemy.engine import Connection
 
 from app.agents.mandate import MANDATE_SET_SQL, ready_to_scan
 from app.agents.scan_budget import AGENT_PURPOSES_SQL, start_of_utc_day
-from app.agents.scan_schedule import describe_next_scan
+from app.agents.scan_schedule import ScanSchedule, describe_next_scan
 from app.agents.tools import TOOLS_BY_NAME as AGENT_TOOLS
 from app.agents.tools import Tool, ToolContext, _object, _stored_closes, find_listing, money
 from app.assistant.product_guide import SECTIONS
@@ -82,7 +82,8 @@ def _agents(connection: Connection, user_id: str) -> list[Any]:
             text(
                 """
                 SELECT a.id::text AS id, a.name, a.is_primary, a.state, a.persona,
-                       a.scan_schedule, a.budget_minor, a.currency, a.llm_budget_micro_usd,
+                       a.scan_every_hours, a.scan_pre_open, a.scan_post_close,
+                       a.budget_minor, a.currency, a.llm_budget_micro_usd,
                        a.created_at, """
                 + MANDATE_SET_SQL
                 + """ AS mandate_set
@@ -450,12 +451,19 @@ async def get_agents(context: ToolContext, arguments: Mapping[str, Any]) -> dict
             )
             spent = spend.get(agent.id)
             scan = last_scan.get(agent.id)
+            schedule = ScanSchedule(
+                agent.scan_every_hours, agent.scan_pre_open, agent.scan_post_close
+            )
             entry.update(
                 {
                     "persona": agent.persona,
-                    "scan_schedule": agent.scan_schedule,
+                    "scan_schedule": {
+                        "every_hours_in_market_hours": schedule.every_hours,
+                        "before_the_open": schedule.pre_open,
+                        "after_the_close": schedule.post_close,
+                    },
                     "next_scan": describe_next_scan(
-                        schedule=agent.scan_schedule,
+                        schedule=schedule,
                         state=agent.state,
                         ready=ready_to_scan(agent.persona, agent.mandate_set),
                         scheduling=context.scheduling,

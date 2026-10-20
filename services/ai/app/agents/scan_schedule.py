@@ -28,20 +28,25 @@ from app.core.exchange_calendar import CalendarNotCovered, ExchangeCalendar
 PRE_OPEN_LEAD = timedelta(minutes=30)
 #: D68: fifteen minutes after the close, an early one included.
 POST_CLOSE_LAG = timedelta(minutes=15)
-#: 10:00 and 14:00 New York, from an open that is always 09:30 there.
-NY_1000_AFTER_OPEN = timedelta(minutes=30)
-NY_1400_AFTER_OPEN = timedelta(hours=4, minutes=30)
-
-#: Which slots each schedule runs, in the order of the day (D46's four choices).
-SCHEDULE_SLOTS: dict[str, tuple[str, ...]] = {
-    "pre_open": ("pre_open",),
-    "pre_open_post_close": ("pre_open", "post_close"),
-    "intraday_twice": ("ny_1000", "ny_1400"),
-    "intraday_once": ("ny_1000",),
-}
+#: The first market-hours scan, 10:00 New York, from an open that is always 09:30 there
+#: (`FIRST_MARKET_SCAN_AFTER_OPEN_MINUTES` in `packages/shared/src/types.ts`).
+FIRST_MARKET_SCAN_AFTER_OPEN = timedelta(minutes=30)
+#: Its hour, New York: market-hours slots are named `ny_1000` to `ny_1500`.
+FIRST_MARKET_SCAN_HOUR = 10
 #: A week of sessions ahead holds the next slot even across a long weekend
 #: (the orchestrator's `NEXT_SLOT_HORIZON_MS`).
 NEXT_SLOT_HORIZON = timedelta(days=7)
+
+
+@dataclass(frozen=True)
+class ScanSchedule:
+    """When an agent's scheduled scans run (D195): every `every_hours` hours
+    from 10:00 New York while the market is open (None: not during market
+    hours), and before the open and after the close, each on its own."""
+
+    every_hours: int | None
+    pre_open: bool
+    post_close: bool
 
 
 @dataclass(frozen=True)
@@ -60,39 +65,38 @@ class NextScan:
     at: datetime
 
 
-def _slot_time(slot: str, opens_at: datetime, closes_at: datetime) -> datetime:
-    if slot == "pre_open":
-        return opens_at - PRE_OPEN_LEAD
-    if slot == "ny_1000":
-        return opens_at + NY_1000_AFTER_OPEN
-    if slot == "ny_1400":
-        return opens_at + NY_1400_AFTER_OPEN
-    if slot == "post_close":
-        return closes_at + POST_CLOSE_LAG
-    raise ValueError(f"unknown scan slot {slot!r}")
+def slots_of(schedule: ScanSchedule, opens_at: datetime, closes_at: datetime) -> list[NextScan]:
+    """One session's slots, in the order of the day - `slotsOf` in `scanSchedule.ts`.
+    A market-hours slot at or after the close, an early one included, does not happen."""
+    slots: list[NextScan] = []
+    if schedule.pre_open:
+        slots.append(NextScan(slot="pre_open", at=opens_at - PRE_OPEN_LEAD))
+    if schedule.every_hours is not None:
+        hours = 0
+        while (at := opens_at + FIRST_MARKET_SCAN_AFTER_OPEN + timedelta(hours=hours)) < closes_at:
+            slots.append(NextScan(slot=f"ny_{FIRST_MARKET_SCAN_HOUR + hours}00", at=at))
+            hours += schedule.every_hours
+    if schedule.post_close:
+        slots.append(NextScan(slot="post_close", at=closes_at + POST_CLOSE_LAG))
+    return slots
 
 
-def next_scan(schedule: str, calendar: ExchangeCalendar, now: datetime) -> NextScan | None:
+def next_scan(schedule: ScanSchedule, calendar: ExchangeCalendar, now: datetime) -> NextScan | None:
     """The first slot of `schedule` that starts after `now`; None when the
     horizon holds none. Raises `CalendarNotCovered` past the calendar's years."""
-    slots = SCHEDULE_SLOTS.get(schedule)
-    if slots is None:
-        return None
     start = now.date() - timedelta(days=1)
-    upcoming: list[NextScan] = []
-    for session in calendar.sessions_between(start, (now + NEXT_SLOT_HORIZON).date()):
-        for slot in slots:
-            at = _slot_time(slot, session.opens_at, session.closes_at)
-            if slot in ("ny_1000", "ny_1400") and at >= session.closes_at:
-                continue
-            if at > now:
-                upcoming.append(NextScan(slot=slot, at=at))
+    upcoming = [
+        slot
+        for session in calendar.sessions_between(start, (now + NEXT_SLOT_HORIZON).date())
+        for slot in slots_of(schedule, session.opens_at, session.closes_at)
+        if slot.at > now
+    ]
     return min(upcoming, key=lambda scan: scan.at, default=None)
 
 
 def describe_next_scan(
     *,
-    schedule: str | None,
+    schedule: ScanSchedule | None,
     state: str,
     ready: bool,
     scheduling: Scheduling | None,
@@ -113,8 +117,12 @@ def describe_next_scan(
             "at": None,
             "why_none": "the agent has neither instructions nor settings, so it does not scan",
         }
+    if schedule is None or (
+        schedule.every_hours is None and not schedule.pre_open and not schedule.post_close
+    ):
+        return {"at": None, "why_none": "no scans are scheduled: it scans only when asked"}
     try:
-        found = next_scan(schedule or "", scheduling.calendar, now)
+        found = next_scan(schedule, scheduling.calendar, now)
     except CalendarNotCovered:
         found = None
     if found is None:

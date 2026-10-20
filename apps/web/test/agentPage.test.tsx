@@ -21,6 +21,7 @@ import type {
   AgentPerformanceResponse,
   AgentScanDetail,
   AgentScansResponse,
+  AgentMandate,
   AgentView,
   HoldingView,
   TradePreview,
@@ -52,7 +53,8 @@ const AGENT: AgentView = {
   state: 'active',
   holdingsCount: 1,
   createdAt: '2026-10-05T10:00:00Z',
-  scanSchedule: 'pre_open',
+  scanSchedule: { everyHours: null, preOpen: true, postClose: false },
+  runningScan: null,
   llmBudgetMicroUsd: 500_000,
   llmSpentTodayMicroUsd: 108_022,
   scanCost: { microUsd: 36_000, basis: 'measured' },
@@ -60,6 +62,21 @@ const AGENT: AgentView = {
   mandate: null,
   instructionsConflicts: null,
   scheduling: { enabled: true, nextAt: '2026-10-08T13:00:00Z' },
+};
+
+const MANDATE: AgentMandate = {
+  riskLevel: null,
+  horizon: null,
+  thesisStyle: null,
+  maxPositionBps: null,
+  cashBufferBps: null,
+  maxHoldings: null,
+  allowEtfs: true,
+  marketCaps: [],
+  sectors: [],
+  industries: [],
+  etfCategories: [],
+  blockedSymbols: [],
 };
 
 const AAPL: HoldingView = {
@@ -456,10 +473,10 @@ describe('AgentPage with the ledger', () => {
     expect(await screen.findByRole('tab', { name: 'Holdings', selected: true })).toBeTruthy();
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Holdings', 'Activity', 'Scans', 'Settings']);
     expect(screen.queryByRole('button', { name: 'Run a scan now' })).toBeNull();
-    expect(screen.queryByLabelText('When it scans')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'When it scans' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
-    expect(screen.getByLabelText('When it scans')).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'When it scans' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Archive' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Run a scan now' })).toBeNull();
   });
@@ -516,6 +533,30 @@ describe('AgentPage with the ledger', () => {
     expect(screen.getByText('Review the proposal').closest('a')?.getAttribute('href')).toBe('/proposals/p-1');
   });
 
+  it('waits for a scheduled scan that is running, and names one about to start (D195)', async () => {
+    serveAgent({
+      ...AGENT,
+      persona: 'Patient.',
+      waitingForBrief: false,
+      runningScan: { trigger: 'schedule', startedAt: '2026-10-20T14:00:00Z' },
+    });
+    await renderAgentTab('Scans');
+    expect(await screen.findByText('A scheduled scan is running now (since 17:00).')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Run a scan now' }) as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+
+    serveAgent({
+      ...AGENT,
+      persona: 'Patient.',
+      waitingForBrief: false,
+      scheduling: { enabled: true, nextAt: new Date(Date.now() + 12 * 60_000 - 1000).toISOString() },
+    });
+    await renderAgentTab('Scans');
+    expect(await screen.findByText(/Next scheduled scan in 12 minutes \(\d\d:\d\d\)/)).toBeTruthy();
+    // Shown, not blocked: the choice is the user's.
+    expect((screen.getByRole('button', { name: 'Run a scan now' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('says why a scan was refused, in the reader\'s words', async () => {
     serveAgent({ ...AGENT, persona: 'Patient.', waitingForBrief: false });
     post.mockRejectedValueOnce(new ApiRequestError('busy', 409, 'scan_running'));
@@ -524,21 +565,53 @@ describe('AgentPage with the ledger', () => {
     expect(await screen.findByText('This agent is already scanning.')).toBeTruthy();
   });
 
-  it('saves the schedule and the model budget, with the cost per day and the next scheduled scan (D45, D46, D66, D71)', async () => {
+  it('saves every N hours with the pre-open scan, showing the times in your zone, the count and the cost a day (D45, D195)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-20T08:00:00Z'));
     const patch = (await import('../src/api/client.ts')).api.patch as ReturnType<typeof vi.fn>;
     patch.mockResolvedValue(AGENT);
     await renderAgentTab('Settings');
-    const schedule = (await screen.findByLabelText('When it scans')) as HTMLSelectElement;
-    expect(screen.getByText(/About \$0\.036 a trading day/)).toBeTruthy();
-    expect(screen.getByText(/Next scheduled scan: /)).toBeTruthy();
+    expect(await screen.findByText('On a trading day: 16:00, your time.')).toBeTruthy();
+    expect(screen.getByText(/1 scan a trading day · about \$0\.036 a day\. Next scheduled scan: /)).toBeTruthy();
     expect(screen.getByText(/Spent today: \$0\.108 of \$0\.50/)).toBeTruthy();
-    fireEvent.change(schedule, { target: { value: 'pre_open_post_close' } });
-    expect(screen.getByText(/About \$0\.072 a trading day/)).toBeTruthy();
+    const hours = screen.getByLabelText('Hours between market-hours scans') as HTMLInputElement;
+    expect(hours.disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText('During market hours,'));
+    fireEvent.change(hours, { target: { value: '2' } });
+    // New York 09:00 (pre-open), 10:00, 12:00, 14:00 is 16:00, 17:00, 19:00, 21:00 in Israel.
+    expect(screen.getByText('On a trading day: 16:00, 17:00, 19:00, 21:00, your time.')).toBeTruthy();
+    expect(screen.getByText(/4 scans a trading day · about \$0\.144 a day/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Model budget per day (USD)'), { target: { value: '1.25' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save scan settings' }));
     await waitFor(() =>
-      expect(patch).toHaveBeenCalledWith(`/agents/${AGENT_ID}`, { scanSchedule: 'pre_open_post_close', llmBudget: '1.25' }),
+      expect(patch).toHaveBeenCalledWith(`/agents/${AGENT_ID}`, {
+        scanSchedule: { everyHours: 2, preOpen: true, postClose: false },
+        llmBudget: '1.25',
+      }),
     );
+    vi.useRealTimers();
+  });
+
+  it('refuses hours outside 1 to 6, and says when nothing is scheduled at all (D195)', async () => {
+    await renderAgentTab('Settings');
+    fireEvent.click(await screen.findByLabelText('During market hours,'));
+    fireEvent.change(screen.getByLabelText('Hours between market-hours scans'), { target: { value: '7' } });
+    expect(screen.getByText('A whole number of hours, 1 to 6.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Save scan settings' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText('During market hours,'));
+    fireEvent.click(screen.getByLabelText('Before the open'));
+    expect(screen.getByText('No scheduled scans: it scans only when you press Run a scan now.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Save scan settings' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("suggests a schedule from the agent's horizon, and applies it in one press (D195)", async () => {
+    serveAgent({ ...AGENT, mandate: { ...MANDATE, horizon: 'short' } });
+    await renderAgentTab('Settings');
+    expect(await screen.findByText(/Short horizon: frequent scans, one decision each/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Use the suggestion' }));
+    expect((screen.getByLabelText('Hours between market-hours scans') as HTMLInputElement).value).toBe('2');
+    expect((screen.getByLabelText('Before the open') as HTMLInputElement).checked).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Use the suggestion' })).toBeNull();
   });
 
   it("says when this installation does not schedule scans (D71)", async () => {

@@ -3,9 +3,11 @@ import { Link } from '@tanstack/react-router';
 import { Play, Save } from 'lucide-react';
 
 import {
+  HORIZON_SCHEDULES,
+  MAX_SCAN_EVERY_HOURS,
+  MIN_SCAN_EVERY_HOURS,
   minorToDecimalString,
-  SCAN_SCHEDULES,
-  SCANS_PER_DAY,
+  scansPerDay,
   type AgentView,
   type RunScanResult,
   type ScanSchedule,
@@ -15,7 +17,8 @@ import { ApiRequestError } from '../api/client.ts';
 import { t, useTranslation } from '../i18n/index.ts';
 import { BUDGET_INPUT, agentErrorMessage } from '../lib/agentPresentation.ts';
 import { formatMicroUsd } from '../lib/llmCalls.ts';
-import { formatExactTime } from '../lib/relativeTime.ts';
+import { formatClockTime, formatExactTime } from '../lib/relativeTime.ts';
+import { minutesUntilSoonScan, sameSchedule, scheduleTimes, schedulesAnything } from '../lib/scanTimes.ts';
 import { useRunScan, useUpdateAgent } from '../queries/agents.ts';
 import { AgentField } from './AgentField.tsx';
 import { Button, Card, ErrorNote } from './ui.tsx';
@@ -61,6 +64,8 @@ export function ScanScheduleCard({ agent }: { agent: AgentView }) {
 function RunScan({ agent }: { agent: AgentView }) {
   const { t } = useTranslation();
   const run = useRunScan(agent.id);
+  const running = agent.runningScan;
+  const soon = running ? null : minutesUntilSoonScan(agent.scheduling?.nextAt);
   const spent = (agent.llmSpentTodayMicroUsd ?? 0) >= (agent.llmBudgetMicroUsd ?? 0);
   const blocked: RunRefusal | null =
     agent.state !== 'active'
@@ -79,7 +84,7 @@ function RunScan({ agent }: { agent: AgentView }) {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={() => run.mutate()} disabled={run.isPending || blocked !== null}>
+        <Button onClick={() => run.mutate()} disabled={run.isPending || blocked !== null || running !== null}>
           <span className="flex items-center gap-1">
             <Play className="size-4" aria-hidden />
             {t('agents.scans.run')}
@@ -95,6 +100,16 @@ function RunScan({ agent }: { agent: AgentView }) {
         )}
       </div>
       {blocked !== null && <p className="text-xs text-text-muted">{t(`agents.scans.refusals.${blocked}`)}</p>}
+      {running && !run.isPending && (
+        <p role="status" className="text-sm text-text-muted">
+          {t(`agents.scans.runningNow.${running.trigger}`, { since: formatClockTime(running.startedAt) })}
+        </p>
+      )}
+      {soon !== null && blocked === null && (
+        <p className="text-xs text-text-muted">
+          {t('agents.scans.nextSoon', { count: soon, at: formatClockTime(agent.scheduling!.nextAt!) })}
+        </p>
+      )}
       {run.isPending && (
         <p role="status" className="text-sm text-text-muted">
           {t('agents.scans.running')}
@@ -143,22 +158,57 @@ function scheduleState(agent: AgentView): string {
     : t('agents.scans.scheduleNext', { when: formatExactTime(scheduling.nextAt) });
 }
 
+const MANUAL_ONLY: ScanSchedule = { everyHours: null, preOpen: false, postClose: false };
+/** What the hours field offers when market-hours scans are switched on: the short horizon's (D195). */
+const DEFAULT_EVERY_HOURS = HORIZON_SCHEDULES.short.everyHours ?? MIN_SCAN_EVERY_HOURS;
+
+/**
+ * When the agent scans (D195): market hours every N hours, before the open,
+ * after the close - any of them, or none. Below, the times that makes on a
+ * regular day in the user's own time, what it costs a day, and a suggestion from
+ * the agent's horizon that one press applies.
+ */
 function ScanSettings({ agent }: { agent: AgentView }) {
   const { t } = useTranslation();
   const update = useUpdateAgent(agent.id);
-  const storedSchedule = agent.scanSchedule ?? 'pre_open';
+  const stored = agent.scanSchedule ?? MANUAL_ONLY;
   const storedBudget = llmBudgetText(agent.llmBudgetMicroUsd ?? 0);
-  const [schedule, setSchedule] = useState<ScanSchedule>(storedSchedule);
+  const [schedule, setSchedule] = useState<ScanSchedule>(stored);
+  // The hours typed are kept while market-hours scans are off, so switching back restores them.
+  const [hoursText, setHoursText] = useState(String(stored.everyHours ?? DEFAULT_EVERY_HOURS));
   const [budget, setBudget] = useState(storedBudget);
   useEffect(() => {
-    setSchedule(storedSchedule);
+    setSchedule(stored);
+    setHoursText(String(stored.everyHours ?? DEFAULT_EVERY_HOURS));
     setBudget(storedBudget);
-  }, [storedSchedule, storedBudget]);
+    // The three parts stand for `agent.scanSchedule`, whose identity changes on every read.
+  }, [stored.everyHours, stored.preOpen, stored.postClose, storedBudget]);
 
+  const hours = Number(hoursText);
+  const hoursValid = Number.isInteger(hours) && hours >= MIN_SCAN_EVERY_HOURS && hours <= MAX_SCAN_EVERY_HOURS;
+  const marketOn = schedule.everyHours !== null;
   const budgetValid = BUDGET_INPUT.test(budget.trim());
-  const dirty = schedule !== storedSchedule || budget.trim() !== storedBudget;
+  const dirty = !sameSchedule(schedule, stored) || budget.trim() !== storedBudget;
   const perScan = agent.scanCost?.microUsd ?? 0;
+  const horizon = agent.mandate?.horizon ?? null;
+  const suggested = horizon ? HORIZON_SCHEDULES[horizon] : null;
 
+  const setHours = (text: string) => {
+    setHoursText(text);
+    const value = Number(text);
+    if (Number.isInteger(value) && value >= MIN_SCAN_EVERY_HOURS && value <= MAX_SCAN_EVERY_HOURS) {
+      setSchedule({ ...schedule, everyHours: value });
+    }
+  };
+  // On again: the hours last typed, or the default when what was typed is not a choice.
+  const switchMarketHours = (on: boolean) => {
+    if (on && !hoursValid) setHoursText(String(DEFAULT_EVERY_HOURS));
+    setSchedule({ ...schedule, everyHours: on ? (hoursValid ? hours : DEFAULT_EVERY_HOURS) : null });
+  };
+  const apply = (next: ScanSchedule) => {
+    setSchedule(next);
+    if (next.everyHours !== null) setHoursText(String(next.everyHours));
+  };
   const submit = (event: FormEvent) => {
     event.preventDefault();
     update.mutate({ scanSchedule: schedule, llmBudget: budget.trim() });
@@ -166,22 +216,66 @@ function ScanSettings({ agent }: { agent: AgentView }) {
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <AgentField
-        label={t('agents.scans.schedule')}
-        hint={`${t('agents.scans.scheduleCost', { perDay: formatMicroUsd(perScan * SCANS_PER_DAY[schedule]) })} ${scheduleState(agent)}`}
-      >
-        <select
-          value={schedule}
-          onChange={(event) => setSchedule(event.target.value as ScanSchedule)}
-          className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2"
-        >
-          {SCAN_SCHEDULES.map((choice) => (
-            <option key={choice} value={choice}>
-              {t(`agents.scans.schedules.${choice}`)}
-            </option>
-          ))}
-        </select>
-      </AgentField>
+      <fieldset className="space-y-2">
+        <legend className="mb-1 text-sm font-medium">{t('agents.scans.schedule')}</legend>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={marketOn}
+              onChange={(event) => switchMarketHours(event.target.checked)}
+            />
+            {t('agents.scans.marketHours')}
+          </label>
+          <label className="flex items-center gap-2">
+            <span className={marketOn ? '' : 'text-text-muted'}>{t('agents.scans.every')}</span>
+            <input
+              type="number"
+              min={MIN_SCAN_EVERY_HOURS}
+              max={MAX_SCAN_EVERY_HOURS}
+              step={1}
+              value={hoursText}
+              disabled={!marketOn}
+              onChange={(event) => setHours(event.target.value)}
+              aria-invalid={marketOn && !hoursValid}
+              aria-label={t('agents.scans.everyHoursLabel')}
+              dir="ltr"
+              className="w-16 rounded-md border border-border-subtle bg-surface px-2 py-1 text-center disabled:opacity-50"
+            />
+            <span className={marketOn ? '' : 'text-text-muted'}>{t('agents.scans.hours', { count: hoursValid ? hours : DEFAULT_EVERY_HOURS })}</span>
+          </label>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={schedule.preOpen}
+            onChange={(event) => setSchedule({ ...schedule, preOpen: event.target.checked })}
+          />
+          {t('agents.scans.preOpen')}
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={schedule.postClose}
+            onChange={(event) => setSchedule({ ...schedule, postClose: event.target.checked })}
+          />
+          {t('agents.scans.postClose')}
+        </label>
+        {marketOn && !hoursValid && (
+          <p className="text-xs text-loss">
+            {t('agents.scans.everyInvalid', { min: MIN_SCAN_EVERY_HOURS, max: MAX_SCAN_EVERY_HOURS })}
+          </p>
+        )}
+        <SchedulePreview schedule={schedule} perScan={perScan} agent={agent} />
+        <p className="text-xs text-text-muted">
+          {t(`agents.scans.guidance.${horizon ?? 'none'}`)}{' '}
+          {suggested && !sameSchedule(suggested, schedule) && (
+            <button type="button" onClick={() => apply(suggested)} className="font-medium text-accent hover:underline">
+              {t('agents.scans.useSuggestion')}
+            </button>
+          )}
+        </p>
+      </fieldset>
       <AgentField
         label={t('agents.scans.budget')}
         hint={t('agents.scans.budgetHint', {
@@ -200,12 +294,33 @@ function ScanSettings({ agent }: { agent: AgentView }) {
         />
       </AgentField>
       {update.error && <ErrorNote message={agentErrorMessage(update.error, t('agents.saveFailed'))} />}
-      <Button type="submit" variant="secondary" disabled={!dirty || !budgetValid || update.isPending}>
+      <Button
+        type="submit"
+        variant="secondary"
+        disabled={!dirty || !budgetValid || (marketOn && !hoursValid) || update.isPending}
+      >
         <span className="flex items-center gap-1">
           <Save className="size-4" aria-hidden />
           {t('agents.scans.save')}
         </span>
       </Button>
     </form>
+  );
+}
+
+/** The times a schedule makes on a regular day, in the user's time, with its count and cost; or that it makes none. */
+function SchedulePreview({ schedule, perScan, agent }: { schedule: ScanSchedule; perScan: number; agent: AgentView }) {
+  const { t } = useTranslation();
+  if (!schedulesAnything(schedule)) {
+    return <p className="text-sm text-text-muted">{t('agents.scans.manualOnly')}</p>;
+  }
+  const count = scansPerDay(schedule);
+  return (
+    <div className="rounded-md bg-surface px-3 py-2 text-sm">
+      <p>{t('agents.scans.times', { times: scheduleTimes(schedule).map(formatClockTime).join(', ') })}</p>
+      <p className="text-xs text-text-muted">
+        {t('agents.scans.perDay', { count, cost: formatMicroUsd(perScan * count) })} {scheduleState(agent)}
+      </p>
+    </div>
   );
 }

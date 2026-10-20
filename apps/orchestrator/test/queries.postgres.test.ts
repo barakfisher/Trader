@@ -539,13 +539,16 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         persona: 'Buys strength.',
         budgetMinor: 100050,
         currency: 'USD',
-        scanSchedule: 'intraday_twice',
+        scanSchedule: { everyHours: 2, preOpen: true, postClose: false },
         mandate: { ...EMPTY_MANDATE, max_position_bps: 1000, sectors: ['Energy'], blocked_symbols: ['XOM'] },
       });
       expect(agent).toMatchObject({ is_primary: false, budget_minor: '100050', state: 'active', holdings_count: 0 });
       // The mandate (0057) round-trips: integers as numbers, text[] as arrays.
       expect(agent).toMatchObject({
-        scan_schedule: 'intraday_twice',
+        scan_every_hours: 2,
+        scan_pre_open: true,
+        scan_post_close: false,
+        running_scan: null,
         max_position_bps: 1000,
         cash_buffer_bps: null,
         allow_etfs: true,
@@ -577,7 +580,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           persona: null,
           budgetMinor: 1,
           currency: 'USD',
-          scanSchedule: 'pre_open',
+          scanSchedule: { everyHours: null, preOpen: true, postClose: false },
           mandate: EMPTY_MANDATE,
         })
         .catch((error: { code?: string; constraint?: string }) => error);
@@ -1411,7 +1414,9 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         const row = await queries.getAgent(SEED_ADMIN, agent);
         expect(row).toMatchObject({
           llm_budget_micro_usd: '500000',
-          scan_schedule: 'pre_open',
+          scan_every_hours: null,
+          scan_pre_open: true,
+          scan_post_close: false,
           llm_spent_today_micro_usd: '7000',
           agent_scan_cost_micro_usd: '30000',
         });
@@ -1420,8 +1425,18 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         const primary = await queries.getAgent(USER, AGENT);
         expect(primary).toMatchObject({ llm_spent_today_micro_usd: '0', agent_scan_cost_micro_usd: null });
 
-        const patched = await queries.updateAgent(SEED_ADMIN, agent, { llmBudgetMicroUsd: 1_250_000, scanSchedule: 'intraday_twice' });
-        expect(patched).toMatchObject({ llm_budget_micro_usd: '1250000', scan_schedule: 'intraday_twice' });
+        const none = { everyHours: null, preOpen: false, postClose: false };
+        const patched = await queries.updateAgent(SEED_ADMIN, agent, { llmBudgetMicroUsd: 1_250_000, scanSchedule: none });
+        expect(patched).toMatchObject({
+          llm_budget_micro_usd: '1250000',
+          scan_every_hours: null,
+          scan_pre_open: false,
+          scan_post_close: false,
+        });
+        // 0060's CHECK: hours between market-hours scans are 1 to 6.
+        await expect(
+          getPool().query('UPDATE agents SET scan_every_hours = 7 WHERE id = $1', [agent]),
+        ).rejects.toMatchObject({ code: '23514' });
         // Archived, so a reused database never reaches the admin's agent limit (D72).
         await queries.updateAgent(SEED_ADMIN, agent, { state: 'archived' });
       }

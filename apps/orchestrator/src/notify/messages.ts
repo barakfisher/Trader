@@ -34,7 +34,7 @@ import type {
 
 import type { CallbackAction } from '../telegram/callbackToken.js';
 import type { FailureCause } from '../services/scheduledScans.js';
-import type { ScanSlot } from '../services/scanSchedule.js';
+import { slotClock, type ScanSlot } from '../services/scanSchedule.js';
 import type { NarrationState } from '../services/narrationHealth.js';
 import type { RefusalReason } from '../services/proposalState.js';
 import type { MarketBenchmarkSymbol } from '../services/marketBenchmarks.js';
@@ -221,7 +221,8 @@ export interface Messages {
 
   /** D74: a scheduled slot that gave up, said once. */
   scheduledScans: {
-    slots: Record<ScanSlot, string>;
+    /** A slot by name: before the open, after the close, or its New York time (D195). */
+    slot: (slot: ScanSlot) => string;
     causes: Record<FailureCause, string>;
     gaveUp: (agent: string, slot: string, day: string, cause: string) => NoticeText;
   };
@@ -403,12 +404,8 @@ const en: Messages = {
   },
 
   scheduledScans: {
-    slots: {
-      pre_open: 'pre-open',
-      post_close: 'post-close',
-      ny_1000: '10:00 New York',
-      ny_1400: '14:00 New York',
-    },
+    slot: (slot) =>
+      slot === 'pre_open' ? 'pre-open' : slot === 'post_close' ? 'post-close' : `${slotClock(slot)} New York`,
     causes: {
       rate_limited: 'the model provider is rate-limiting requests',
       provider_error: 'the model provider or the AI service returned an error',
@@ -663,12 +660,12 @@ const he: Messages = {
   },
 
   scheduledScans: {
-    slots: {
-      pre_open: 'לפני הפתיחה',
-      post_close: 'אחרי הסגירה',
-      ny_1000: `${ltr('10:00')} שעון ניו יורק`,
-      ny_1400: `${ltr('14:00')} שעון ניו יורק`,
-    },
+    slot: (slot) =>
+      slot === 'pre_open'
+        ? 'לפני הפתיחה'
+        : slot === 'post_close'
+          ? 'אחרי הסגירה'
+          : `${ltr(slotClock(slot))} שעון ניו יורק`,
     causes: {
       rate_limited: 'ספק המודל מגביל את קצב הבקשות',
       provider_error: 'ספק המודל או שירות ה־AI החזירו שגיאה',

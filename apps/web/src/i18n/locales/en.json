@@ -1413,28 +1413,46 @@
       "result": {
         "trade": "Proposed: {{side}} {{quantity}} {{symbol}}.",
         "no_trade": "No trade: nothing fit the persona today.",
-        "invalid_answer": "The answer was refused; see Decisions for why.",
-        "rule_rejected": "The trade broke this agent's rules twice; see Decisions for why.",
+        "invalid_answer": "The answer was refused; the scan below says why.",
+        "rule_rejected": "The trade broke this agent's rules twice; the scan below says why.",
         "budget_reached": "Stopped: today's model budget is spent.",
         "step_limit": "Stopped at the step limit without an answer.",
-        "failed": "The scan failed; see Decisions for why."
+        "failed": "The scan failed; the scan below says why."
       },
       "openProposal": "Review the proposal",
       "refusals": {
         "agent_not_active": "Resume the agent to scan.",
         "no_persona": "Give the agent instructions or settings first: it decides by them.",
-        "budget_spent": "Today's model budget is spent. It resets at midnight UTC, or raise it below.",
+        "budget_spent": "Today's model budget is spent. It resets at midnight UTC, or raise it on the Settings tab.",
         "scan_running": "This agent is already scanning.",
         "no_model": "No model is chosen for agents. Choose one on the Admin page."
       },
       "schedule": "When it scans",
-      "schedules": {
-        "pre_open": "Before the open, once a day",
-        "pre_open_post_close": "Before the open and after the close",
-        "intraday_twice": "10:00 and 14:00 New York",
-        "intraday_once": "10:00 New York"
+      "runningNow": {
+        "manual": "A scan is running now (since {{since}}).",
+        "schedule": "A scheduled scan is running now (since {{since}})."
       },
-      "scheduleCost": "About {{perDay}} a trading day",
+      "nextSoon_one": "Next scheduled scan in {{count}} minute ({{at}}). Running one now makes two scans close together, often on the same idea.",
+      "nextSoon_other": "Next scheduled scan in {{count}} minutes ({{at}}). Running one now makes two scans close together, often on the same idea.",
+      "marketHours": "During market hours,",
+      "every": "every",
+      "everyHoursLabel": "Hours between market-hours scans",
+      "hours_one": "hour",
+      "hours_other": "hours",
+      "everyInvalid": "A whole number of hours, {{min}} to {{max}}.",
+      "preOpen": "Before the open",
+      "postClose": "After the close",
+      "manualOnly": "No scheduled scans: it scans only when you press Run a scan now.",
+      "times": "On a trading day: {{times}}, your time.",
+      "perDay_one": "{{count}} scan a trading day · about {{cost}} a day.",
+      "perDay_other": "{{count}} scans a trading day · about {{cost}} a day.",
+      "guidance": {
+        "short": "Short horizon: frequent scans, one decision each, catch moves while they last - every 2 hours suits it.",
+        "medium": "Medium horizon: a scan before the open and one after the close is usually enough.",
+        "long": "Long horizon: one scan before the open is enough; more scans mostly repeat the same idea.",
+        "none": "More scans react faster but cost more, and often repeat an idea already proposed. Day trading suits every 1-2 hours; long-term investing, one scan before the open."
+      },
+      "useSuggestion": "Use the suggestion",
       "scheduleElsewhere": "Scheduled scans don't run on this installation; here this agent scans only when you press Run a scan now.",
       "scheduleNext": "Next scheduled scan: {{when}}.",
       "scheduleNone": "No scheduled scan is coming: the agent is paused, has no persona, or the market calendar could not be read.",

@@ -453,6 +453,10 @@ def _snapshots(
         )
 
 
+#: The schedules the world's agents use, as (every hours, pre-open, post-close) (0060).
+_SCHEDULES = {"pre_open": (None, True, False), "pre_open_post_close": (None, True, True)}
+
+
 def _agent(
     connection: Connection,
     account: Account,
@@ -474,9 +478,9 @@ def _agent(
     }
     agent = connection.execute(
         text(
-            "INSERT INTO agents (user_id, slug, name, persona, budget_minor, scan_schedule, "
-            "created_at) VALUES (CAST(:u AS uuid), :slug, :name, :persona, :budget, :schedule, "
-            ":created) RETURNING id::text"
+            "INSERT INTO agents (user_id, slug, name, persona, budget_minor, scan_every_hours, "
+            "scan_pre_open, scan_post_close, created_at) VALUES (CAST(:u AS uuid), :slug, :name, "
+            ":persona, :budget, :every, :pre_open, :post_close, :created) RETURNING id::text"
         ),
         {
             "u": account.user_id,
@@ -484,7 +488,9 @@ def _agent(
             "name": name,
             "persona": persona,
             "budget": cash_minor + sum(spent.values()),
-            "schedule": schedule,
+            "every": _SCHEDULES[schedule][0],
+            "pre_open": _SCHEDULES[schedule][1],
+            "post_close": _SCHEDULES[schedule][2],
             "created": now - timedelta(days=40),
         },
     ).scalar_one()

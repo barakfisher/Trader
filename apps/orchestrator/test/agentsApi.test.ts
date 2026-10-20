@@ -8,6 +8,8 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { HORIZON_SCHEDULES, MAX_SCAN_EVERY_HOURS, type ScanSchedule } from '@traders/shared';
+
 import { ACTIVE_SESSION, sessionCookie } from './session.js';
 
 const USER = {
@@ -33,7 +35,10 @@ function row(overrides: Record<string, unknown> = {}) {
     created_at: new Date('2026-10-05T10:00:00Z'),
     holdings_count: 0,
     llm_budget_micro_usd: '500000',
-    scan_schedule: 'pre_open',
+    scan_every_hours: null,
+    scan_pre_open: true,
+    scan_post_close: false,
+    running_scan: null,
     llm_spent_today_micro_usd: '108022',
     agent_scan_cost_micro_usd: null,
     installation_scan_cost_micro_usd: null,
@@ -91,7 +96,13 @@ vi.mock('../src/db/queries.js', () => ({
       ...(patch.state === undefined ? {} : { state: patch.state }),
       ...(patch.budgetMinor === undefined ? {} : { budget_minor: String(patch.budgetMinor) }),
       ...(patch.llmBudgetMicroUsd === undefined ? {} : { llm_budget_micro_usd: String(patch.llmBudgetMicroUsd) }),
-      ...(patch.scanSchedule === undefined ? {} : { scan_schedule: patch.scanSchedule }),
+      ...(patch.scanSchedule === undefined
+        ? {}
+        : (({ everyHours, preOpen, postClose }) => ({
+            scan_every_hours: everyHours,
+            scan_pre_open: preOpen,
+            scan_post_close: postClose,
+          }))(patch.scanSchedule as ScanSchedule)),
     }),
   ),
 }));
@@ -249,7 +260,8 @@ describe('the agents API', () => {
   it("shows a simulated agent's schedule, model budget and today's spend, and none of it for the primary", async () => {
     const { agents } = await (await send('GET', '/agents')).json();
     expect(agents[1]).toMatchObject({
-      scanSchedule: 'pre_open',
+      scanSchedule: { everyHours: null, preOpen: true, postClose: false },
+      runningScan: null,
       llmBudgetMicroUsd: 500_000,
       llmSpentTodayMicroUsd: 108_022,
       scanCost: { microUsd: MEASURED_SCAN_COST_MICRO_USD, basis: 'measured' },
@@ -265,14 +277,28 @@ describe('the agents API', () => {
     });
   });
 
-  it('sets the model budget in dollars and the schedule from its four choices (D45, D46)', async () => {
-    const response = await send('PATCH', `/agents/${SIMULATED}`, { llmBudget: '1.25', scanSchedule: 'intraday_twice' });
+  it('sets the model budget in dollars and the schedule in its three parts (D45, D195)', async () => {
+    const schedule = { everyHours: 2, preOpen: true, postClose: false };
+    const response = await send('PATCH', `/agents/${SIMULATED}`, { llmBudget: '1.25', scanSchedule: schedule });
     expect(response.status).toBe(200);
     expect(queries.updateAgent).toHaveBeenCalledWith(USER.id, SIMULATED, expect.objectContaining({
       llmBudgetMicroUsd: 1_250_000,
-      scanSchedule: 'intraday_twice',
+      scanSchedule: schedule,
     }));
-    expect(await response.json()).toMatchObject({ llmBudgetMicroUsd: 1_250_000, scanSchedule: 'intraday_twice' });
+    expect(await response.json()).toMatchObject({ llmBudgetMicroUsd: 1_250_000, scanSchedule: schedule });
+  });
+
+  it('accepts no scheduled scans at all: the agent then scans only when asked (D195)', async () => {
+    const none = { everyHours: null, preOpen: false, postClose: false };
+    expect((await send('PATCH', `/agents/${SIMULATED}`, { scanSchedule: none })).status).toBe(200);
+  });
+
+  it('says which scan is running now, so Run a scan now can wait for it (D195)', async () => {
+    vi.mocked(queries.listAgents).mockResolvedValueOnce([
+      row({ running_scan: { trigger: 'schedule', started_at: '2026-10-20T14:00:01.5+00:00' } }) as never,
+    ]);
+    const { agents } = await (await send('GET', '/agents')).json();
+    expect(agents[0].runningScan).toEqual({ trigger: 'schedule', startedAt: '2026-10-20T14:00:01.500Z' });
   });
 
   it('refuses a model budget of nothing or above the ceiling, and an unknown schedule', async () => {
@@ -280,7 +306,15 @@ describe('the agents API', () => {
     const over = (MAX_LLM_BUDGET_MICRO_USD / 1_000_000 + 0.01).toFixed(2);
     expect((await send('PATCH', `/agents/${SIMULATED}`, { llmBudget: over })).status).toBe(422);
     expect((await send('PATCH', `/agents/${SIMULATED}`, { llmBudget: '0.001' })).status).toBe(400);
-    expect((await send('PATCH', `/agents/${SIMULATED}`, { scanSchedule: 'hourly' })).status).toBe(400);
+    for (const scanSchedule of [
+      'pre_open',
+      { everyHours: 0, preOpen: false, postClose: false },
+      { everyHours: MAX_SCAN_EVERY_HOURS + 1, preOpen: false, postClose: false },
+      { everyHours: 1.5, preOpen: false, postClose: false },
+      { everyHours: 2, preOpen: true },
+    ]) {
+      expect((await send('PATCH', `/agents/${SIMULATED}`, { scanSchedule })).status).toBe(400);
+    }
     expect(queries.updateAgent).not.toHaveBeenCalled();
   });
 
@@ -361,7 +395,7 @@ describe("an agent's mandate (0057, D165)", () => {
     });
     expect(response.status).toBe(201);
     const created = vi.mocked(queries.createAgent).mock.calls[0]![0];
-    expect(created.scanSchedule).toBe('intraday_twice');
+    expect(created.scanSchedule).toEqual(HORIZON_SCHEDULES.short);
     expect(created.mandate).toMatchObject({
       horizon: 'short',
       max_position_bps: 1000,
@@ -373,10 +407,11 @@ describe("an agent's mandate (0057, D165)", () => {
   });
 
   it('keeps a chosen schedule over the horizon, and gives an agent with neither the default', async () => {
-    await send('POST', '/agents', { name: 'A', budget: '1', mandate: { horizon: 'long' }, scanSchedule: 'intraday_once' });
+    const chosen = { everyHours: 6, preOpen: false, postClose: false };
+    await send('POST', '/agents', { name: 'A', budget: '1', mandate: { horizon: 'long' }, scanSchedule: chosen });
     await send('POST', '/agents', { name: 'B', budget: '1' });
     const calls = vi.mocked(queries.createAgent).mock.calls.map(([agent]) => agent.scanSchedule);
-    expect(calls).toEqual(['intraday_once', 'pre_open']);
+    expect(calls).toEqual([chosen, { everyHours: null, preOpen: true, postClose: false }]);
   });
 
   it('refuses a sector, industry or ETF category the universe does not hold, naming it', async () => {
