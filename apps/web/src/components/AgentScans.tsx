@@ -35,19 +35,25 @@ type RunRefusal = (typeof RUN_REFUSALS)[number];
 const isRunRefusal = (code: string): code is RunRefusal => (RUN_REFUSALS as readonly string[]).includes(code);
 
 /**
- * How an agent scans (D45, D46, D52, D65, D66): *Run a scan now* with what it
- * is expected to cost, the schedule with its cost per day and when the next
+ * How an agent scans (D45, D46, D52, D65, D66), in two cards on two tabs: *Run
+ * a scan now* with what it is expected to cost, above the scans it has run; and
+ * among the settings, the schedule with its cost per day and when the next
  * scheduled scan runs - or that this installation does not schedule them
  * (D71) - and the model budget with what today has spent.
  */
-export function AgentScans({ agent }: { agent: AgentView }) {
+export function RunScanCard({ agent }: { agent: AgentView }) {
+  return (
+    <Card>
+      <RunScan agent={agent} />
+    </Card>
+  );
+}
+
+export function ScanScheduleCard({ agent }: { agent: AgentView }) {
   const { t } = useTranslation();
   return (
-    <Card title={t('agents.scans.title')}>
-      <div className="space-y-4">
-        <RunScan agent={agent} />
-        <ScanSettings agent={agent} />
-      </div>
+    <Card title={t('agents.scans.settingsTitle')}>
+      <ScanSettings agent={agent} />
     </Card>
   );
 }
@@ -159,7 +165,7 @@ function ScanSettings({ agent }: { agent: AgentView }) {
   };
 
   return (
-    <form onSubmit={submit} className="space-y-3 border-t border-border-subtle pt-3">
+    <form onSubmit={submit} className="space-y-3">
       <AgentField
         label={t('agents.scans.schedule')}
         hint={`${t('agents.scans.scheduleCost', { perDay: formatMicroUsd(perScan * SCANS_PER_DAY[schedule]) })} ${scheduleState(agent)}`}

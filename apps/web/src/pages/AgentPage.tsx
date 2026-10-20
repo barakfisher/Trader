@@ -7,7 +7,7 @@ import type { AgentState, AgentView, TradeSide } from '@traders/shared';
 import { AccountSummary, AgentActivity, AgentHoldings } from '../components/AgentAccount.tsx';
 import { AgentDecisions } from '../components/AgentDecisions.tsx';
 import { AgentPerformance } from '../components/AgentPerformance.tsx';
-import { AgentScans } from '../components/AgentScans.tsx';
+import { RunScanCard, ScanScheduleCard } from '../components/AgentScans.tsx';
 import { TradePanel } from '../components/TradePanel.tsx';
 import { AgentField } from '../components/AgentField.tsx';
 import { InstructionsCheckStatus, InstructionsConflicts } from '../components/InstructionsCheck.tsx';
@@ -33,15 +33,27 @@ import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import { useAgentAccountQuery, useAgentQuery, useCheckInstructions, useUpdateAgent } from '../queries/agents.ts';
 import { KindBadge, WaitingForBrief } from './AgentsPage.tsx';
 
-type Tab = 'holdings' | 'activity' | 'decisions';
+const TABS = ['holdings', 'activity', 'scans', 'settings'] as const;
+type Tab = (typeof TABS)[number];
+
+/**
+ * The tab a link names. `decisions` is the Scans tab's old name, still in links
+ * written before the scans and their history shared one tab.
+ */
+function tabFrom(search: unknown): Tab {
+  if (search === 'decisions') return 'scans';
+  return (TABS as readonly unknown[]).includes(search) ? (search as Tab) : 'holdings';
+}
 
 /**
  * One agent (decision D19): its account, its settings and persona, and the
  * Holdings and Activity tabs filled by Stage 3's ledger - trades placed by
  * hand from the Trade panel (D21), cash added (D22), every movement listed
- * with the balance it left (D31). The primary has no account or settings - it
- * is the real portfolio, and passive (D1) - so its page points to the
- * dashboard, where the real portfolio lives.
+ * with the balance it left (D31). Scans holds *Run a scan now* above every scan
+ * the agent ran; Settings holds the mandate, the schedule and model budget, and
+ * pause/archive - none of it on the page until asked for. The primary has no
+ * account or settings - it is the real portfolio, and passive (D1) - so its
+ * page points to the dashboard, where the real portfolio lives.
  */
 export function AgentPage() {
   const { agentId } = useParams({ from: '/agents/$agentId' });
@@ -100,9 +112,9 @@ function PrimaryNote() {
 function SimulatedAgent({ agent }: { agent: AgentView }) {
   const { t } = useTranslation();
   // A trade proposal links here to the scan behind it (`EvidenceChecked.tsx`):
-  // the Decisions tab, with that scan open.
+  // the Scans tab, with that scan open.
   const search = useSearch({ strict: false }) as { tab?: unknown; scan?: unknown };
-  const [tab, setTab] = useState<Tab>(search.tab === 'decisions' ? 'decisions' : 'holdings');
+  const [tab, setTab] = useState<Tab>(() => tabFrom(search.tab));
   const openScanId = typeof search.scan === 'string' ? search.scan : undefined;
   const [trading, setTrading] = useState<{ symbol: string; side: TradeSide } | null>(null);
   const canTrade = agent.state !== 'archived';
@@ -123,9 +135,8 @@ function SimulatedAgent({ agent }: { agent: AgentView }) {
       </div>
       <AccountSummary agent={agent} />
       <AgentPerformance agentId={agent.id} />
-      <StateControls agent={agent} />
       <div role="tablist" className="flex gap-2 border-b border-border-subtle">
-        {(['holdings', 'activity', 'decisions'] as const).map((name) => (
+        {TABS.map((name) => (
           <button
             key={name}
             role="tab"
@@ -144,9 +155,19 @@ function SimulatedAgent({ agent }: { agent: AgentView }) {
         <AgentHoldings agent={agent} onSell={(symbol) => setTrading({ symbol, side: 'sell' })} />
       )}
       {tab === 'activity' && <AgentActivity agent={agent} />}
-      {tab === 'decisions' && <AgentDecisions agentId={agent.id} openScanId={openScanId} />}
-      <AgentScans agent={agent} />
-      <SettingsForm agent={agent} />
+      {tab === 'scans' && (
+        <>
+          <RunScanCard agent={agent} />
+          <AgentDecisions agentId={agent.id} openScanId={openScanId} />
+        </>
+      )}
+      {tab === 'settings' && (
+        <>
+          <SettingsForm agent={agent} />
+          <ScanScheduleCard agent={agent} />
+          <StateControls agent={agent} />
+        </>
+      )}
       {trading && (
         <TradePanel
           agentId={agent.id}

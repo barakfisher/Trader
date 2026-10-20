@@ -200,3 +200,4 @@ while this file is out of date.
 | 187 | A waiting user is told so at sign-in; nobody else's state is spelled out |
 | 188 | The Admin page decides requests with the same transitions as Telegram; neither keeps message state |
 | 189 | An answer whose only fault is an unsourced figure goes back to the model once |
+| 190 | An agent's page is four tabs, and the scans and their history are one of them |

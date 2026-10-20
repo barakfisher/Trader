@@ -14,7 +14,7 @@ import { useAgentScanQuery, useAgentScansQuery } from '../queries/agents.ts';
 import { Button, Card, EmptyState, ErrorNote, Spinner } from './ui.tsx';
 
 /**
- * The *Decisions* tab (D50, D64): every scan the agent ran - one that proposed,
+ * The history under the *Scans* tab (D50, D64): every scan the agent ran - one that proposed,
  * one that did nothing, one that ran out of budget - with what it cost. A row
  * opens to the reasoning as readable steps: what the briefing held, each tool
  * the model chose with its arguments, the result folded away as the JSON the
@@ -37,7 +37,7 @@ export function AgentDecisions({ agentId, openScanId }: { agentId: string; openS
   }
   const rows = scans.data.pages.flatMap((page) => page.scans);
   if (rows.length === 0) {
-    return <EmptyState title={t('agents.tabs.decisions')} body={t('agents.decisions.empty')} />;
+    return <EmptyState title={t('agents.decisions.title')} body={t('agents.decisions.empty')} />;
   }
   return (
     <Card>

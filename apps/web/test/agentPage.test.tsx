@@ -262,6 +262,12 @@ function renderAgent(path = `/agents/${AGENT_ID}`) {
   return result;
 }
 
+/** Render the agent and open one of its tabs. */
+async function renderAgentTab(tab: 'Scans' | 'Settings') {
+  renderAgent();
+  fireEvent.click(await screen.findByRole('tab', { name: tab }));
+}
+
 async function openTrade() {
   fireEvent.click(await screen.findByRole('button', { name: 'Trade' }));
   return screen.getByRole('dialog');
@@ -445,9 +451,21 @@ describe('AgentPage with the ledger', () => {
     expect(screen.queryByRole('button', { name: 'Add cash' })).toBeNull();
   });
 
-  it('lists every scan with its outcome and cost, and opens one to its steps and answer (D50, D64)', async () => {
+  it('keeps scans and settings behind their own tabs, not on the page until asked for', async () => {
     renderAgent();
-    fireEvent.click(await screen.findByRole('tab', { name: 'Decisions' }));
+    expect(await screen.findByRole('tab', { name: 'Holdings', selected: true })).toBeTruthy();
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Holdings', 'Activity', 'Scans', 'Settings']);
+    expect(screen.queryByRole('button', { name: 'Run a scan now' })).toBeNull();
+    expect(screen.queryByLabelText('When it scans')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    expect(screen.getByLabelText('When it scans')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Archive' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Run a scan now' })).toBeNull();
+  });
+
+  it('lists every scan with its outcome and cost, and opens one to its steps and answer (D50, D64)', async () => {
+    await renderAgentTab('Scans');
     expect(await screen.findByText('Proposed')).toBeTruthy();
     expect(screen.getByText('No trade')).toBeTruthy();
     expect(screen.getByText('Buy 2 NVDA')).toBeTruthy();
@@ -468,17 +486,18 @@ describe('AgentPage with the ledger', () => {
     expect(screen.getByText('Its answer the rules refused')).toBeTruthy();
   });
 
-  it("opens a trade proposal's scan from its Evidence checked link", async () => {
-    renderAgent(`/agents/${AGENT_ID}?tab=decisions&scan=${SCAN_ID}`);
+  it.each(['scans', 'decisions'])("opens a trade proposal's scan from its Evidence checked link (?tab=%s)", async (tab) => {
+    // `decisions` is the tab's old name, in links written before it was Scans.
+    renderAgent(`/agents/${AGENT_ID}?tab=${tab}&scan=${SCAN_ID}`);
     expect(await screen.findByText('NVDA trades at 237.14.')).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Decisions', selected: true })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Scans', selected: true })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Buy 2 NVDA/, expanded: true })).toBeTruthy();
     expect(screen.getByRole('button', { name: /No trade/, expanded: false })).toBeTruthy();
   });
 
   it('waits for a persona, and offers no scan until it has one (D52)', async () => {
-    renderAgent();
-    expect(await screen.findByText('Waiting for instructions or settings')).toBeTruthy();
+    await renderAgentTab('Scans');
+    expect(screen.getByText('Waiting for instructions or settings')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Run a scan now' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText('Give the agent instructions or settings first: it decides by them.')).toBeTruthy();
   });
@@ -489,7 +508,7 @@ describe('AgentPage with the ledger', () => {
       scan_id: SCAN_ID, outcome: 'trade', steps: 1, cost_micro_usd: 41_000, model: 'm', error: null,
       answer: { decision: 'buy', symbol: 'NVDA', quantity: '2', thesis: 't' }, proposal_id: 'p-1',
     });
-    renderAgent();
+    await renderAgentTab('Scans');
     expect(await screen.findByText(/About \$0\.036 a scan \(measured on 7 Oct 2026/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Run a scan now' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith(`/agents/${AGENT_ID}/scans`, {}));
@@ -500,7 +519,7 @@ describe('AgentPage with the ledger', () => {
   it('says why a scan was refused, in the reader\'s words', async () => {
     serveAgent({ ...AGENT, persona: 'Patient.', waitingForBrief: false });
     post.mockRejectedValueOnce(new ApiRequestError('busy', 409, 'scan_running'));
-    renderAgent();
+    await renderAgentTab('Scans');
     fireEvent.click(await screen.findByRole('button', { name: 'Run a scan now' }));
     expect(await screen.findByText('This agent is already scanning.')).toBeTruthy();
   });
@@ -508,7 +527,7 @@ describe('AgentPage with the ledger', () => {
   it('saves the schedule and the model budget, with the cost per day and the next scheduled scan (D45, D46, D66, D71)', async () => {
     const patch = (await import('../src/api/client.ts')).api.patch as ReturnType<typeof vi.fn>;
     patch.mockResolvedValue(AGENT);
-    renderAgent();
+    await renderAgentTab('Settings');
     const schedule = (await screen.findByLabelText('When it scans')) as HTMLSelectElement;
     expect(screen.getByText(/About \$0\.036 a trading day/)).toBeTruthy();
     expect(screen.getByText(/Next scheduled scan: /)).toBeTruthy();
@@ -524,7 +543,7 @@ describe('AgentPage with the ledger', () => {
 
   it("says when this installation does not schedule scans (D71)", async () => {
     serveAgent({ ...AGENT, scheduling: { enabled: false, nextAt: null } });
-    renderAgent();
+    await renderAgentTab('Settings');
     expect(await screen.findByText(/Scheduled scans don't run on this installation/)).toBeTruthy();
   });
 
@@ -547,7 +566,7 @@ describe('AgentPage with the ledger', () => {
     };
     // AAPL at 1,672.90 of capital 9,998.32 (cash plus holdings at cost) is over a 10% limit.
     serveAgent({ ...AGENT, persona: 'Patient.', mandate });
-    renderAgent();
+    await renderAgentTab('Settings');
     expect(await screen.findByText(/Over its limits now: AAPL above the position limit/)).toBeTruthy();
     // A stored limit counts as typed: the slider proposes nothing over it.
     fireEvent.change(screen.getByLabelText('Risk appetite'), { target: { value: '8' } });
@@ -572,7 +591,7 @@ describe('AgentPage with the ledger', () => {
       waitingForBrief: false,
       instructionsConflicts: [{ setting: 'horizon', quote: 'Day-trade momentum.' }],
     });
-    renderAgent();
+    await renderAgentTab('Settings');
     const warning = await screen.findByText(/Your instructions say/);
     // The quote's own full stop is dropped where it sits inside the sentence, never stored without it (D183).
     expect(warning.textContent).toBe('Your instructions say Day-trade momentum, which conflicts with the trading horizon.');
@@ -589,7 +608,7 @@ describe('AgentPage with the ledger', () => {
     patch.mockResolvedValue(AGENT);
     post.mockResolvedValue({ status: 'checked', reason: null, conflicts: [] });
     serveAgent({ ...AGENT, persona: 'Patient.', waitingForBrief: false });
-    renderAgent();
+    await renderAgentTab('Settings');
     fireEvent.change(await screen.findByLabelText('Additional instructions'), { target: { value: 'Patient and picky.' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith(`/agents/${AGENT_ID}/instructions-check`));
