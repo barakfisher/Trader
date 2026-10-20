@@ -37,13 +37,14 @@ import { SCHEDULE_EXCHANGE } from '../../services/scheduledScans.js';
 
 import {
   agentHasTraded,
-  countLiveAgents,
+  countActiveAgents,
   createAgent,
   getAgent,
   getInstallationSettings,
   listAgents,
   updateAgent,
   type AgentRow,
+  type UserRow,
 } from '../../db/queries.js';
 import {
   EMPTY_MANDATE,
@@ -107,6 +108,8 @@ const createSchema = z
     mandate: mandateSchema.optional(),
     scanSchedule: scanSchedule.optional(),
     maxDecisions: maxDecisions.optional(),
+    // D200: at the limit the page creates it paused, which is never refused.
+    state: z.enum(['active', 'paused']).optional(),
   })
   .strict();
 const patchSchema = z
@@ -248,7 +251,7 @@ export function agentIdFrom(raw: string): string {
 
 const nameTaken = () => conflict('agent_name_taken', 'you already have an agent with that name');
 
-/** D72: the database's own refusal (migration 0047), met when a racing create got there first. */
+/** D72: the database's own refusal (migration 0062), met when a racing activation got there first. */
 function isAgentLimit(error: unknown): boolean {
   const pg = error as { code?: string; message?: string };
   return pg.code === CHECK_VIOLATION && (pg.message ?? '').startsWith('agent_limit_reached');
@@ -257,18 +260,24 @@ function isAgentLimit(error: unknown): boolean {
 function agentLimitReached(max: number) {
   return conflict(
     'agent_limit_reached',
-    `you have ${max} agents, the most this installation allows: archive one to make room`,
+    `you have ${max} active agents, the most this installation allows: pause one to make room`,
     { max },
   );
 }
 
-/** Refuse before writing when a new or restored agent would pass the limit. */
-async function assertRoomForAgent(userId: string): Promise<void> {
-  const [{ max_agents_per_user: max }, used] = await Promise.all([
-    getInstallationSettings(),
-    countLiveAgents(userId),
-  ]);
-  if (used >= max) throw agentLimitReached(max);
+/** D201: the admin has no limit; anyone else has the installation's. */
+async function activeLimitFor(user: UserRow | undefined): Promise<number | null> {
+  if (user?.role === 'admin') return null;
+  return (await getInstallationSettings()).max_agents_per_user;
+}
+
+/**
+ * Refuse before writing when one more active agent would pass the limit (D199):
+ * a create as active, a resume, a restore into active. Paused never counts.
+ */
+async function assertRoomToActivate(userId: string, user: UserRow | undefined): Promise<void> {
+  const [max, used] = await Promise.all([activeLimitFor(user), countActiveAgents(userId)]);
+  if (max !== null && used >= max) throw agentLimitReached(max);
 }
 
 async function limitAfter(error: unknown): Promise<never> {
@@ -279,8 +288,8 @@ async function limitAfter(error: unknown): Promise<never> {
 export function registerAgentsRoutes(app: Hono<AppEnv>): void {
   app.get('/agents', async (context) => {
     const rows = await listAgents(currentUserId(context));
-    const { max_agents_per_user: max } = await getInstallationSettings();
-    const used = rows.filter((row) => !row.is_primary && row.state !== 'archived').length;
+    const max = await activeLimitFor(context.get('user'));
+    const used = rows.filter((row) => !row.is_primary && row.state === 'active').length;
     const body: AgentsResponse = { agents: rows.map(toAgentView), agentLimit: { used, max } };
     return context.json(body);
   });
@@ -301,13 +310,14 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
   app.post('/agents', async (context) => {
     const parsed = createSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
-      throw badRequest('invalid_body', 'expected { name, budget, persona?, mandate?, scanSchedule?, maxDecisions? }', parsed.error.issues);
+      throw badRequest('invalid_body', 'expected { name, budget, persona?, mandate?, scanSchedule?, maxDecisions?, state? }', parsed.error.issues);
     }
     const input = parsed.data;
     const budgetMinor = budgetToMinor(input.budget);
     const mandate = { ...EMPTY_MANDATE, ...toMandateColumns(input.mandate ?? {}) };
     await assertKnownClassifications(mandate);
-    await assertRoomForAgent(currentUserId(context));
+    const state = input.state ?? 'active';
+    if (state === 'active') await assertRoomToActivate(currentUserId(context), context.get('user'));
     try {
       const row = await createAgent({
         userId: currentUserId(context),
@@ -327,6 +337,7 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
           input.maxDecisions ??
           (input.mandate?.horizon ? HORIZON_MAX_DECISIONS[input.mandate.horizon] : MIN_DECISIONS_PER_SCAN),
         mandate,
+        state,
       });
       return context.json(toAgentView(row), 201);
     } catch (error) {
@@ -351,9 +362,9 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
       );
     }
     const patch = parsed.data;
-    // A restore from the archive takes a place back (D72).
-    if (existing.state === 'archived' && patch.state !== undefined && patch.state !== 'archived') {
-      await assertRoomForAgent(userId);
+    // D199: a resume or a restore into active takes a place; paused or archived never does.
+    if (patch.state === 'active' && existing.state !== 'active') {
+      await assertRoomToActivate(userId, context.get('user'));
     }
     const budgetMinor = patch.budget === undefined ? undefined : budgetToMinor(patch.budget);
     const mandate = patch.mandate === undefined ? undefined : toMandateColumns(patch.mandate);

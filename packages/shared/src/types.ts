@@ -337,8 +337,11 @@ export interface AgentScanDetail extends AgentScanSummary {
 
 export interface AgentsResponse {
   agents: AgentView[];
-  /** D72: simulated agents that are not archived, and how many the installation allows. */
-  agentLimit: { used: number; max: number };
+  /**
+   * D72, D199: active simulated agents, and how many may be active at once -
+   * null for the admin, who has no limit (D201).
+   */
+  agentLimit: { used: number; max: number | null };
 }
 
 /** D72's bounds: the Admin page and migration 0047's CHECK agree on them. */
@@ -599,6 +602,8 @@ export interface AgentInput {
   scanSchedule?: ScanSchedule;
   /** When left out, the horizon's (D197), else 1. */
   maxDecisions?: number;
+  /** D200: left out, active; paused at the limit, which is never refused. */
+  state?: 'active' | 'paused';
 }
 
 export interface AgentPatchInput {

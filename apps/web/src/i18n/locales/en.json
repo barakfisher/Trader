@@ -1151,8 +1151,8 @@
     },
     "agentLimit": {
       "title": "Agents per user",
-      "label": "Most simulated agents a user may have",
-      "hint": "Archived agents and the real portfolio don't count. A lower number removes nothing; it stops the next new agent. 1 to {{max}}.",
+      "label": "Most simulated agents a user may have active at once",
+      "hint": "Only active agents count, because only they scan: paused and archived agents and the real portfolio don't, and the admin has no limit. A lower number pauses nothing; it stops the next agent from starting. 1 to {{max}}.",
       "save": "Save",
       "saved": "Saved"
     },
@@ -1287,7 +1287,7 @@
       "budgetRange": "The budget must be more than $0 and at most $1,000,000,000.",
       "invalid": "Check the fields: the name is required, and the budget is dollars with at most two decimals.",
       "budgetDecrease": "This agent has traded, so its budget can be raised but not lowered.",
-      "limitReached": "You already have as many agents as this installation allows. Archive one to make room."
+      "limitReached": "You already have as many active agents as this installation allows. Pause one to make room."
     },
     "account": {
       "title": "Account",
@@ -1517,8 +1517,12 @@
       "sell": "Sell"
     },
     "limit": {
-      "used": "{{used}} of {{max}} agents",
-      "full": "You have {{max}} agents, the most this installation allows. Archive one to make room."
+      "used": "{{used}} of {{max}} active",
+      "usedNoLimit": "{{used}} active",
+      "full": "You have {{max}} active agents, the most that can run at once. A new agent starts paused; pause another to run it.",
+      "startsPaused": "You have {{max}} of {{max}} active, so this agent will start paused. Pause another to resume it.",
+      "resumeBlocked": "{{max}} of {{max}} active: pause another agent to resume this one.",
+      "restoresPaused": "{{max}} of {{max}} active: a restored agent comes back paused."
     },
     "mandate": {
       "title": "Mandate",

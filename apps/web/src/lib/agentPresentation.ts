@@ -7,7 +7,7 @@
  * says so wherever it appears (the P2 amendment's third condition).
  */
 
-import type { AgentState, AgentView } from '@traders/shared';
+import type { AgentState, AgentView, AgentsResponse } from '@traders/shared';
 
 import { ApiRequestError } from '../api/client.ts';
 import { formatMoney, formatNumber, formatPercent } from '../i18n/format.ts';
@@ -29,6 +29,21 @@ export const BUDGET_INPUT = /^\d+(\.\d{1,2})?$/;
  * The sentence for a refused write, in the reader's language for the refusals
  * the page can cause; anything else falls back to the server's own message.
  */
+/**
+ * D199: whether one more agent may become active - false only at a known limit.
+ * The admin's limit is null (D201); an unloaded one is left to the server.
+ */
+export function atActiveLimit(limit: AgentsResponse['agentLimit'] | null): limit is { used: number; max: number } {
+  return limit !== null && limit.max !== null && limit.used >= limit.max;
+}
+
+/** The header's count: "2 of 3 active", or "4 active" with no limit. */
+export function activeCount(limit: AgentsResponse['agentLimit']): string {
+  return limit.max === null
+    ? t('agents.limit.usedNoLimit', { used: limit.used })
+    : t('agents.limit.used', { used: limit.used, max: limit.max });
+}
+
 export function agentErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiRequestError) {
     switch (error.code) {
