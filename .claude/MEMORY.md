@@ -4,7 +4,20 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-20 ~17:45 UTC - **Handoff: improvements items 1-3 are done and deployed, and
+Updated: 2026-10-20 ~20:30 UTC - **Handoff: improvements items 4-5 and the two small fixes from
+the own-key check are merged and deployed.** Merges since handoff #279: #280 (re-check an expired
+proposal, D212-D217, `0066`), #281 (D218-D219), #282 (Telegram ask mode, D220-D224, `0067`), #283
+(Create agent says what is missing, D225), #284 (the product guide names only the assistant's
+own tools, D226) - five, so this PR is the handoff. Decisions reached **226** (next: **227**).
+Migrations: **`0067_telegram_conversation` is head** (next free: **`0068`**). **Deployed:**
+compose runs #284 at `0067` (redeployed 2026-10-20 ~20:25 UTC; no migration since the 19:50 UTC
+backup `traders-compose-20261020T195058Z.dump`; both /readyz ok, `telegram.poller_started`
+logged). kind is untouched at `0059`. **Unverified: Telegram ask mode live** - the binding row
+exists and its `assistant_conversation_id` is still null because nobody has asked the bot
+anything yet; it needs the user to send one question from the phone (item 1 below). **Next:**
+"Next session: after the guide fix".
+
+Previous update, 2026-10-20 ~17:45 UTC - **Handoff: improvements items 1-3 are done and deployed, and
 the own key was checked live.** This PR (D211: own-key spend is limited on OpenRouter's side, one
 sentence on the key card) is the **fifth merge since handoff #274** (#275, #276, #277, #278,
 this) - so it is also the handoff. Decisions reached **211** (next: **212**). Migrations:
@@ -4704,6 +4717,35 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after the guide fix (written 2026-10-20, night)
+
+**State:** the improvements list (items 1-5) is done and deployed; so are the two fixes the
+own-key check found (D225, D226). The standing grant for this batch ended with this handoff:
+ask before each PR, merge only on "merge", redeploy only on "redeploy".
+
+1. **Telegram ask mode, live check (still open).** Nothing on the server side is wrong as far
+   as it can be seen without a message: `telegram.poller_started` is logged, the admin's binding
+   row exists, `assistant_conversation_id` is null. When the user has sent the bot a question,
+   read: the new `assistant_messages` rows (the answer in the question's language, D220);
+   `llm_calls` with `purpose = 'assistant'` and its `paid_by`; `telegram_bindings
+   .assistant_conversation_id` set; the conversation listed by `GET /assistant/conversations`
+   (the Ask page's history). A Hebrew question is the better test: it covers D220 and D224 at once.
+2. **Run the assistant eval with the judge before the next prompt or guide change.** D226 was
+   measured with `--no-judge` (outcomes and mechanical checks only): the three agent questions
+   10 times each and the product group 3 times, about $0.15. One finding in that run that D226
+   does not touch: "why cant I create an agent?" is sometimes *declined* (`action`, 4 of 10) with
+   no tool call - the model reads "create" as a request to act. Harmless (the decline names the
+   Agents page) but worth a look if the judge marks it.
+3. **D225 is unseen in a browser.** The hint beside the disabled Create agent button is covered by
+   jsdom; its wrap at phone width and in Hebrew is not.
+
+**What cost time in this session:**
+- **`prettier --write` is not this repo's formatter.** Run on two web files it reflowed both
+  (118 changed lines for a 20-line change). There is no web formatter; match the surrounding code
+  by hand and check `git diff --stat` before committing.
+- **zsh does not split an unquoted `$2`.** A shell helper passing `--cases a,b` as one argument
+  made the eval exit on "unrecognized arguments" with no report; use `${=2}` or an array.
 
 ### Next session: after the own-key check (written 2026-10-20, evening)
 
