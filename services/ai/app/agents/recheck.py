@@ -15,11 +15,16 @@ monthly cap and the user's own key apply as to any scan. What differs:
 - one decision, at most `RECHECK_STEP_LIMIT` tool calls;
 - a trade on any other symbol or side is refused (`not_this_trade`);
 - the old thesis is told to the model *outside* the briefing, so none of its
-  figures counts as evidence: a figure must be found again today.
+  figures counts as evidence: a figure must be found again today;
+- the briefing carries the symbol's news and the move since it was proposed,
+  and the thesis must say whether the original reason still holds at today's
+  price (D219): a re-check that only restates the old case decides nothing.
 
 **Once** is the database's (`0066`, `agent_scans_one_refresh`, D213); the check
 here only refuses before money is spent. Eligible (D215): a buy or sell that
-expired unanswered, at most `RECHECK_WINDOW` ago. A rejected proposal is not.
+expired unanswered, at most `RECHECK_WINDOW` ago. A rejected proposal is not,
+and neither is one a later approved proposal for the same symbol and side
+already carried out (D218): re-checking it would ask to do the trade twice.
 """
 
 from __future__ import annotations
@@ -34,7 +39,14 @@ from sqlalchemy.engine import Engine
 
 from app.agents.scan import Focus, ScanResult, run_briefed
 from app.agents.scan_log import ScanAgent
-from app.agents.tools import ToolContext, get_findings, get_position, get_quote, money
+from app.agents.tools import (
+    ToolContext,
+    get_findings,
+    get_news,
+    get_position,
+    get_quote,
+    money,
+)
 from app.llm.base import LLMProvider
 
 #: How long after its expiry a proposal may be re-checked (D215).
@@ -81,7 +93,14 @@ def find_expired_trade(
                            SELECT 1 FROM agent_scans s
                             WHERE s.refreshes_proposal_id = p.id
                               AND (s.outcome IS NULL OR s.outcome <> ALL(:unanswered))
-                       ) AS refreshed
+                       ) AS refreshed,
+                       EXISTS (
+                           SELECT 1 FROM proposals later
+                            WHERE later.user_id = p.user_id AND later.agent_id = p.agent_id
+                              AND later.kind = p.kind AND later.state = 'approved'
+                              AND later.payload ->> 'symbol' = p.payload ->> 'symbol'
+                              AND later.created_at > p.created_at
+                       ) AS superseded
                   FROM proposals p
                   JOIN observations o ON o.id = p.observation_id
                  WHERE p.id = CAST(:proposal AS uuid) AND p.user_id = CAST(:user AS uuid)
@@ -108,6 +127,8 @@ def find_expired_trade(
         )
     if row.refreshed:
         raise NotRecheckableError("already_rechecked", "this proposal has had its re-check")
+    if row.superseded:
+        raise NotRecheckableError("superseded", "a later approved proposal already made this trade")
     payload = row.payload
     return ExpiredTrade(
         proposal_id=row.id,
@@ -124,18 +145,30 @@ def find_expired_trade(
 async def recheck_briefing(context: ToolContext, trade: ExpiredTrade) -> dict[str, Any]:
     """What a re-check starts from: the one trade, then today's evidence about it."""
     position = await get_position(context, {})
+    quote = await get_quote(context, {"symbols": [trade.symbol]})
+    then = money(trade.price_minor, "USD")
+    recheck: dict[str, Any] = {
+        "side": trade.side,
+        "symbol": trade.symbol,
+        "quantity_proposed": f"{trade.quantity.normalize():f}",
+        "price_when_proposed": then,
+        "proposed_at": trade.proposed_at.isoformat(),
+        "expired_at": trade.expired_at.isoformat(),
+    }
+    now = quote.get("quotes", {}).get(trade.symbol, {}).get("price")
+    if now is not None:
+        # Computed here, so the thesis can quote the move rather than work it out (D219).
+        change = (Decimal(now) - Decimal(then)) / Decimal(then) * 100
+        recheck["price_now"] = now
+        recheck["change_since_proposed_percent"] = str(change.quantize(Decimal("0.01")))
     return {
         "as_of": context.now.isoformat(),
-        "recheck": {
-            "side": trade.side,
-            "symbol": trade.symbol,
-            "quantity_proposed": f"{trade.quantity.normalize():f}",
-            "price_when_proposed": money(trade.price_minor, "USD"),
-            "proposed_at": trade.proposed_at.isoformat(),
-            "expired_at": trade.expired_at.isoformat(),
-        },
-        "quote": await get_quote(context, {"symbols": [trade.symbol]}),
+        "recheck": recheck,
+        "quote": quote,
         "findings": (await get_findings(context, {"symbol": trade.symbol})).get("findings", []),
+        # Read for the model, not left to it: a move with no reason found is the
+        # weakest case for re-proposing, and the model did not look (D219).
+        "news": await get_news(context, {"symbol": trade.symbol}),
         "cash": position["cash"],
         "holdings": position["holdings"],
     }
@@ -147,10 +180,17 @@ def preface(trade: ExpiredTrade) -> str:
     lines = [
         "This is a re-check, not a scan. You proposed to "
         f"{trade.side} {quantity} {trade.symbol}; the user did not answer before it expired.",
-        "Decide again with today's evidence: answer with this one trade - "
+        "The question is whether your reason then still holds at today's price. Your thesis"
+        " must say, in this order: the price when proposed and the price now with the change"
+        ' between them, exactly as the briefing\'s "recheck" gives them; whether the reason'
+        " still holds, and what in today's evidence (the news, the findings, your holdings)"
+        " says so; then the decision. Your current holdings already include any shares"
+        " bought since: size the trade knowing them.",
+        "Answer with this one trade - "
         f"{trade.side} {trade.symbol}, the quantity set again at the current price - or with"
         ' {"trades": [], "thesis": "why not now"}. Any other symbol or side is refused.',
-        f"You have at most {RECHECK_STEP_LIMIT} tool calls; the briefing has the quote.",
+        f"You have at most {RECHECK_STEP_LIMIT} tool calls; the briefing has the quote and"
+        " the news.",
     ]
     if trade.thesis:
         lines.append(

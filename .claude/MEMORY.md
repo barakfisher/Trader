@@ -3354,6 +3354,24 @@ failure they prevent.
     and the old message gains the outcome line. No nonce is burned: "once" is the index (D213).
     *Rejected:* storing message ids so the expiry sweep swaps the buttons (a column and a sweep
     that edits Telegram, for a button the user only needs when they come back to the message).
+218. **A proposal a later approved proposal already carried out is not re-checked** (the user,
+    2026-10-20, after the first live re-check). The expired "buy 3 IRON" (scheduled scan, 10-19)
+    was proposed again an hour later and approved, so the agent held those 3 shares; the re-check
+    of the expired one proposed 3 more and cited the holding as support - asking for the trade
+    twice. Now refused `superseded` before any model call when the agent has a later *approved*
+    proposal for the same symbol and side (a later sell, rejection or expiry does not count); the
+    page links to the proposal that made the trade. *Rejected:* telling the model and letting it
+    decide (a cheap model re-sized it into a doubling; the fact is the server's to apply).
+219. **A re-check's briefing carries the symbol's news and the move since it was proposed, and its
+    thesis must say whether the original reason still holds** (the user, 2026-10-20). The first
+    live re-check made no tool call and restated yesterday's momentum (a 39%, 18-sigma move with
+    no cause looked up) without comparing 78.24 then with 79.49 now. The briefing now has
+    `recheck.price_now` and `change_since_proposed_percent` (computed by the server, so the thesis
+    quotes rather than computes) and `get_news` for the symbol, read for the model; the preface
+    asks for then/now/change, whether the reason holds and on what evidence, then the decision.
+    The shape is asked, not enforced: the validator checks figures, not argument. *Rejected:*
+    requiring a `get_news` tool call (a step the briefing can do for it, without a refusal path);
+    rejecting a thesis without both prices (a retry kind of its own for a wording rule).
 
 ---
 
@@ -4644,7 +4662,9 @@ by content on `main`), redeploy only on "redeploy".
    PR after handoff #279).** Head is `0066_proposal_refresh` once it merges (next free: `0067`);
    rehearse `0066` on a restored backup before its redeploy. Unseen live: a re-check from the
    phone needs a trade proposal that expired unanswered (compose has one, IRON 2026-10-19, but
-   past the 7-day window from 2026-10-26). **Item 5: Telegram ask mode** - its brief is unchanged
+   past the 7-day window from 2026-10-26). **Seen live 2026-10-20 19:18 UTC** (#280 deployed): it
+   proposed buying 3 more IRON - the trade had already been made by a later approval - which
+   led to D218-D219 in the next PR. **Item 5: Telegram ask mode** - its brief is unchanged
    in "after the UI batch" below; a paid call through the own-key wrapper like every call site.
 4. **The handoff after this one is due at the next merge** (five since #274 counts this PR's
    merge as the fourth; a fifth ends the window).

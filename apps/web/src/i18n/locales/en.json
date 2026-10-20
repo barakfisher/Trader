@@ -935,12 +935,15 @@
         "not_expired": "Only an expired proposal can be re-checked.",
         "recheck_window_passed": "It expired too long ago to re-check.",
         "already_rechecked": "This proposal has already been re-checked.",
+        "superseded": "A later proposal for the same trade was approved, so there is nothing to re-check.",
         "budget_spent": "The agent's AI budget for today is spent.",
         "scan_running": "The agent is scanning right now - try again in a minute.",
         "agent_not_active": "The agent is paused or archived.",
         "no_persona": "The agent has no instructions or settings to decide by."
       },
-      "failed": "The re-check could not run."
+      "failed": "The re-check could not run.",
+      "superseded": "A later proposal for the same trade was approved, so there is nothing to re-check.",
+      "openLater": "Open that proposal"
     }
   },
   "settings": {

@@ -35,7 +35,14 @@ import {
 } from '@traders/shared';
 import { AiServiceError, type AgentScanResponse, type AiClient } from '@traders/shared/ai';
 
-import { findProposal, getAgent, latestRecheck, type ProposalRow, type RecheckRow } from '../db/queries.js';
+import {
+  findProposal,
+  getAgent,
+  laterApprovedProposal,
+  latestRecheck,
+  type ProposalRow,
+  type RecheckRow,
+} from '../db/queries.js';
 import { aiRefusal, conflict, notFound, upstreamFailure } from '../http/errors.js';
 import { logger } from '../logger.js';
 import type { Notifier } from '../notify/notifier.js';
@@ -87,7 +94,13 @@ export function recheckResultOf(row: RecheckRow, now: Date): RecheckResult {
 }
 
 /** Why *Re-check* is not offered, in the AI service's refusal codes; null when it is. */
-export type RecheckBlock = 'not_expired' | 'recheck_window_passed' | 'already_rechecked' | 'agent_not_active' | 'scan_running';
+export type RecheckBlock =
+  | 'not_expired'
+  | 'recheck_window_passed'
+  | 'already_rechecked'
+  | 'superseded'
+  | 'agent_not_active'
+  | 'scan_running';
 
 /**
  * A trade proposal's re-check - whether it is offered now, and the last one - and
@@ -99,9 +112,10 @@ export async function recheckStatus(
   now: Date,
 ): Promise<{ recheck: ProposalRecheck; blocked: RecheckBlock | null } | null> {
   if (!isTradeProposalKind(row.kind)) return null;
-  const [stored, agent] = await Promise.all([
+  const [stored, agent, supersededBy] = await Promise.all([
     latestRecheck(userId, row.agent_id, row.id),
     getAgent(userId, row.agent_id),
+    laterApprovedProposal(userId, row.agent_id, row.id),
   ]);
   const last = stored === null ? null : recheckResultOf(stored, now);
   const blocked: RecheckBlock | null =
@@ -114,10 +128,13 @@ export async function recheckStatus(
           ? 'scan_running'
           : last !== null && last.outcome !== 'unanswered'
             ? 'already_rechecked'
-            : agent === null || agent.state !== 'active' || agent.is_primary
+            : // D218: a later approved proposal already made this trade.
+              supersededBy !== null
+              ? 'superseded'
+              : agent === null || agent.state !== 'active' || agent.is_primary
               ? 'agent_not_active'
               : null;
-  return { recheck: { available: blocked === null, last }, blocked };
+  return { recheck: { available: blocked === null, last, supersededBy }, blocked };
 }
 
 /** The proposal page's view of it (`ProposalDetailResponse.recheck`). */
