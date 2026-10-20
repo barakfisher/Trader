@@ -4,7 +4,23 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-20 ~17:00 UTC - **Handoff at the end of improvements item 3: the monthly cap
+Updated: 2026-10-20 ~17:45 UTC - **Handoff: improvements items 1-3 are done and deployed, and
+the own key was checked live.** This PR (D211: own-key spend is limited on OpenRouter's side, one
+sentence on the key card) is the **fifth merge since handoff #274** (#275, #276, #277, #278,
+this) - so it is also the handoff. Decisions reached **211** (next: **212**). Migrations:
+**`0065_own_llm_keys` is head** (next free: **`0066`**; `git fetch` and check `main` has one head
+before writing one). **Deployed:** compose runs #278 at `0065` (redeployed 2026-10-20 ~14:00 UTC
+after a backup, `~/Backups/traders/compose/traders-compose-20261020T135449Z.dump`; both /readyz
+checks ok). Compose's `.env` holds a generated `LLM_KEY_ENCRYPTION_KEYS` (one Fernet key); the
+value it replaced was not a Fernet key and the AI service refused to start on it, as D208 intends.
+This PR is web copy only and undeployed. kind is untouched at `0059`. **Live check, 2026-10-20
+~17:16-17:27 UTC:** the non-admin user `f36b1a45` saved a real key (ending 13e4) and made 17
+calls - 3 Ask questions, a mandate check, a manual scan of a new agent "George" that ended `trade`
+- every one `paid_by = 'own_key'` ($0.0094), none on the installation, and Settings said the
+monthly limit does not apply. Two things it turned up are under "Next session: after the own-key
+check". **Next:** that section.
+
+Previous update, 2026-10-20 ~17:00 UTC - **Handoff at the end of improvements item 3: the monthly cap
 (#277) is merged and live on compose; the user's own OpenRouter key (PR 3b, D206-D210, `0065`)
 is this handoff's PR.** Merges since handoff #274: #275, #276, #277 - three; this PR is the
 fourth. Decisions reached **210** (next: **211**). Migrations: **`0065_own_llm_keys` is head once
@@ -3276,6 +3292,18 @@ failure they prevent.
     `llm_calls` whoever paid, and stay: they stop a runaway loop on anyone's money. *Rejected:*
     counting own-key calls in the guard; dropping the assistant's allowance for own-key users
     (the user-set limit of D206's direction is the better place to loosen it).
+211. **A limit on own-key spend is OpenRouter's, set on the key; the app has no field for it**
+    (the user, 2026-10-20, choosing between three options). OpenRouter lets each key carry a credit
+    limit and refuses past it with **402** (its limits reference: per-key caps are a credit
+    limit), which D207 already maps to `no_credit`: that call fails, the key is marked failed, and
+    later calls run on the installation's key under the monthly cap until the user saves it again.
+    So the card's intro gains one sentence pointing to the key's limit, and the `no_credit` message
+    names both causes (account out of credit, or the key's limit reached). It is exact (the real
+    bill, not our estimate) and costs no code. Known edge: re-saving a key whose limit is spent
+    passes the free `GET /key` check, so the next call fails and marks it again - the message says
+    to raise the limit first. *Rejected for now:* an in-app "stop my own-key spend at $N a month"
+    (a column, a wrapper summing `paid_by = 'own_key'`, a Settings field; it checks an estimate) -
+    worth building when a user asks for the limit inside the app; both (two limits that disagree).
 
 ---
 
@@ -4523,6 +4551,28 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after the own-key check (written 2026-10-20, evening)
+
+**State:** improvements items 1-3 are done and deployed; the own key works live (header). D211
+settled the user-set limit: none in the app, OpenRouter's per-key limit instead. No standing grant:
+ask before each PR, merge only on "merge" (admin squash, verify by content on `main`), redeploy
+only on "redeploy" (backup first when a migration runs).
+
+1. **Item 4: re-evaluate an expired trade proposal**, then **item 5: Telegram ask mode** - briefs
+   unchanged in "after the UI batch" below. Both are paid calls and go through the own-key wrapper
+   for free (every call site passes `Caller(user_id=...)`).
+2. **Small, found in the live check - bring as questions:**
+   - **Create agent is disabled with no reason given.** Paper budget starts empty; its "1000" is a
+     placeholder that reads as a value, and a template fills name, instructions and mandate but not
+     the budget. The button's condition is `AgentsPage.tsx` (`!budgetValid`). Options: a template
+     fills a default budget, or the form says what is missing.
+   - **`MALFORMED_FUNCTION_CALL` on Ask.** `google/gemini-3.5-flash-lite` answered 4 of 12 calls
+     with that finish reason (llm_calls 448, 449, 455, 456; questions about creating an agent), and
+     two of three answers became "No answer I could check". The only such errors in 14 days, so
+     measure before acting: is it the model, the tool schema, or the question.
+3. **`/private/tmp/claude-501/env.bak`** - a copy of compose's old `.env` (secrets, world-readable,
+   5138 bytes). Ask the user whether to delete it; never print it.
 
 ### Next session: after the own key (written 2026-10-20, evening)
 
