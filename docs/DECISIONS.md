@@ -200,3 +200,7 @@ while this file is out of date.
 | 187 | A waiting user is told so at sign-in; nobody else's state is spelled out |
 | 188 | The Admin page decides requests with the same transitions as Telegram; neither keeps message state |
 | 189 | An answer whose only fault is an unsourced figure goes back to the model once |
+| 190 | Yahoo's taxonomy names are translated on the web, in a map keyed by the English name |
+| 191 | The stored mandate keeps Yahoo's English names; translation is for display only |
+| 192 | Instructions written in Hebrew name each choice as "טכנולוגיה (Technology)" |
+| 193 | A name the map lacks is shown in English, marked `lang="en"`, and CI makes the gap short |
