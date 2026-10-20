@@ -1267,7 +1267,8 @@
     "tabs": {
       "holdings": "Holdings",
       "activity": "Activity",
-      "decisions": "Decisions"
+      "scans": "Scans",
+      "settings": "Settings"
     },
     "holdingsEmpty": {
       "title": "Nothing held yet",
@@ -1400,7 +1401,7 @@
     },
     "waitingForBrief": "Waiting for instructions or settings",
     "scans": {
-      "title": "Scans",
+      "settingsTitle": "Schedule and model budget",
       "run": "Run a scan now",
       "running": "Scanning… this takes up to a minute.",
       "runCost": "About {{cost}} a scan ({{basis}})",
@@ -1443,7 +1444,8 @@
       "save": "Save scan settings"
     },
     "decisions": {
-      "empty": "No scans yet. Run one from Scans below, or wait for its schedule.",
+      "title": "Decisions",
+      "empty": "No scans yet. Run one above, or wait for its schedule.",
       "loadFailed": "Could not load the scans.",
       "older": "Show older scans",
       "trigger": {
@@ -1503,7 +1505,7 @@
       },
       "notSet": "Not set",
       "horizon": "Trading horizon",
-      "horizonHint": "A new agent scans on its horizon's schedule. You can change the schedule under Scans.",
+      "horizonHint": "A new agent scans on its horizon's schedule. You can change it on the Settings tab, under Schedule and model budget.",
       "horizons": {
         "short": "Short-term (days to weeks)",
         "medium": "Medium-term (weeks to months)",

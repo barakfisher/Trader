@@ -3044,6 +3044,15 @@ failure they prevent.
     snapshot lacks. So the gap lasts only until the next snapshot commit. *Rejected:* hiding untranslated
     names (that hides a choice the server accepts, and leaves a stored chip with no row); a
     warning in the UI (it tells the user about a gap only a developer can fix).
+194. **An agent's page is four tabs, and the scans and their history are one of them** (the user,
+    2026-10-20). Holdings / Activity / Scans / Settings: *Scans* is *Run a scan now* above every
+    scan the agent ran (the old *Decisions* tab); *Settings* is the mandate form, the schedule
+    and model budget, and pause/archive. Only the account and performance stay above the tabs.
+    `?tab=decisions` still opens Scans, for links written before. **Why:** the page stacked the
+    scan controls and the whole settings form under every tab, so the page was long whichever
+    tab was open. *Rejected:* five tabs keeping Decisions beside a new Scans (two tabs naming
+    one list - running a scan in one, reading its result in the other). Pause/archive moved with
+    the settings; the header's state badge still says when an agent is paused or archived.
 
 ---
 

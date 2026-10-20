@@ -51,7 +51,7 @@ export function EvidenceCheckedLine({
       <Link
         to="/agents/$agentId"
         params={{ agentId }}
-        search={{ tab: 'decisions', scan: scanId }}
+        search={{ tab: 'scans', scan: scanId }}
         className="text-accent hover:underline"
       >
         {t('proposal.trade.checked.transcript')}

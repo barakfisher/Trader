@@ -251,7 +251,7 @@ describe("an agent's trade proposal", () => {
     // Tool names come from the catalogue, never as the scan called them.
     expect(line.textContent).not.toMatch(/get_|explain_concept/);
     expect(screen.getByRole('link', { name: "Full transcript in the agent's decisions" }).getAttribute('href')).toBe(
-      '/agents/agent-value?tab=decisions&scan=scan-1',
+      '/agents/agent-value?tab=scans&scan=scan-1',
     );
   });
 

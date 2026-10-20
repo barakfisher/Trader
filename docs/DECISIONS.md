@@ -204,3 +204,4 @@ while this file is out of date.
 | 191 | The stored mandate keeps Yahoo's English names; translation is for display only |
 | 192 | Instructions written in Hebrew name each choice as "טכנולוגיה (Technology)" |
 | 193 | A name the map lacks is shown in English, marked `lang="en"`, and CI makes the gap short |
+| 194 | An agent's page is four tabs, and the scans and their history are one of them |
