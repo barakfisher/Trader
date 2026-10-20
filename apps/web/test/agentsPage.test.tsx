@@ -4,7 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 
-import type { AgentView, UniverseTaxonomyResponse } from '@traders/shared';
+import { MAX_AGENTS_PER_USER_CEILING, type AgentView, type UniverseTaxonomyResponse } from '@traders/shared';
 
 const get = vi.fn();
 const post = vi.fn();
@@ -142,7 +142,7 @@ describe('AgentsPage', () => {
         ? { agents: [] }
         : path === '/universe/taxonomy'
           ? TAXONOMY
-          : { agents: [PRIMARY, MOMENTUM], agentLimit: { used: 3, max: 3 } },
+          : { agents: [PRIMARY, MOMENTUM], agentLimit: { used: 3, max: 3, total: 3 } },
     );
     post.mockResolvedValue(MOMENTUM);
     renderPage(<AgentsPage />);
@@ -162,7 +162,7 @@ describe('AgentsPage', () => {
         ? { agents: [] }
         : path === '/universe/taxonomy'
           ? TAXONOMY
-          : { agents: [PRIMARY, MOMENTUM], agentLimit: { used: 7, max: null } },
+          : { agents: [PRIMARY, MOMENTUM], agentLimit: { used: 7, max: null, total: null } },
     );
     post.mockResolvedValue(MOMENTUM);
     renderPage(<AgentsPage />);
@@ -176,13 +176,47 @@ describe('AgentsPage', () => {
     expect(post.mock.calls[0]![1]).not.toHaveProperty('state');
   });
 
+  it('refuses a new agent at the ceiling before the form opens, in the reader\'s words (D202)', async () => {
+    get.mockImplementation(async (path: string) =>
+      path === '/portfolio/consolidated'
+        ? { agents: [] }
+        : { agents: [PRIMARY, MOMENTUM], agentLimit: { used: 3, max: 3, total: MAX_AGENTS_PER_USER_CEILING } },
+    );
+    renderPage(<AgentsPage />);
+    expect(
+      await screen.findByText(`You have ${MAX_AGENTS_PER_USER_CEILING} agents, the most anyone may keep. Archive one to make room.`),
+    ).toBeTruthy();
+    // The ceiling's sentence replaces the active limit's: one reason, not two.
+    expect(screen.queryByText(/the most that can run at once/)).toBeNull();
+    expect((screen.getByRole('button', { name: 'New agent' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('says the ceiling in the reader\'s words when the server refuses a racing create', async () => {
+    get.mockImplementation(async (path: string) =>
+      path === '/portfolio/consolidated'
+        ? { agents: [] }
+        : path === '/universe/taxonomy'
+          ? TAXONOMY
+          : { agents: [PRIMARY, MOMENTUM], agentLimit: { used: 2, max: 3, total: 2 } },
+    );
+    post.mockRejectedValue(new ApiRequestError('total', 409, 'agent_total_reached'));
+    renderPage(<AgentsPage />);
+    await openCreateForm();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Racer' } });
+    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
+    expect(
+      await screen.findByText(`You already have ${MAX_AGENTS_PER_USER_CEILING} agents, the most anyone may keep. Archive one to make room.`),
+    ).toBeTruthy();
+  });
+
   it('says the limit in the reader\'s words when the server refuses a racing create', async () => {
     get.mockImplementation(async (path: string) =>
       path === '/portfolio/consolidated'
         ? { agents: [] }
         : path === '/universe/taxonomy'
           ? TAXONOMY
-          : { agents: [PRIMARY, MOMENTUM], agentLimit: { used: 2, max: 3 } },
+          : { agents: [PRIMARY, MOMENTUM], agentLimit: { used: 2, max: 3, total: 2 } },
     );
     post.mockRejectedValue(new ApiRequestError('limit', 409, 'agent_limit_reached'));
     renderPage(<AgentsPage />);

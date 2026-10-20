@@ -22,10 +22,12 @@ import type {
   AgentScanDetail,
   AgentScansResponse,
   AgentMandate,
+  AgentsResponse,
   AgentView,
   HoldingView,
   TradePreview,
 } from '@traders/shared';
+import { MAX_AGENTS_PER_USER_CEILING } from '@traders/shared';
 
 const get = vi.fn();
 const post = vi.fn();
@@ -272,7 +274,7 @@ function serveAgent(agent: AgentView = AGENT, accountBody: AgentAccountResponse 
     [`/agents/${AGENT_ID}/scans`]: SCANS,
     [`/agents/${AGENT_ID}/scans/${SCAN_ID}`]: SCAN_DETAIL,
     // The list carries the agent limit, which the state controls read (D199).
-    '/agents': { agents: [agent], agentLimit: { used: 1, max: 3 } },
+    '/agents': { agents: [agent], agentLimit: { used: 1, max: 3, total: 1 } },
     // The app bar's inbox count: a scan re-reads it, and waits for it.
     '/proposals': { proposals: [] },
   });
@@ -500,7 +502,7 @@ describe('AgentPage with the ledger', () => {
   });
 
   /** The agents list, which carries the limit; the agent page reads it from there (D199). */
-  function serveAtLimit(agent: AgentView, agentLimit: { used: number; max: number | null }) {
+  function serveAtLimit(agent: AgentView, agentLimit: AgentsResponse['agentLimit']) {
     serve({
       [`/agents/${AGENT_ID}`]: agent,
       [`/agents/${AGENT_ID}/account`]: account(),
@@ -510,7 +512,7 @@ describe('AgentPage with the ledger', () => {
   }
 
   it('refuses a resume at the limit and says why, but still pauses and archives (D199)', async () => {
-    serveAtLimit({ ...AGENT, state: 'paused' }, { used: 3, max: 3 });
+    serveAtLimit({ ...AGENT, state: 'paused' }, { used: 3, max: 3, total: 3 });
     await renderAgentTab('Settings');
     expect(await screen.findByText('3 of 3 active: pause another agent to resume this one.')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Resume' }) as HTMLButtonElement).disabled).toBe(true);
@@ -520,7 +522,7 @@ describe('AgentPage with the ledger', () => {
   it('restores an agent paused at the limit, and active with room (D199)', async () => {
     const patch = (await import('../src/api/client.ts')).api.patch as ReturnType<typeof vi.fn>;
     patch.mockResolvedValue(AGENT);
-    serveAtLimit({ ...AGENT, state: 'archived' }, { used: 3, max: 3 });
+    serveAtLimit({ ...AGENT, state: 'archived' }, { used: 3, max: 3, total: 3 });
     await renderAgentTab('Settings');
     expect(await screen.findByText('3 of 3 active: a restored agent comes back paused.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
@@ -528,15 +530,28 @@ describe('AgentPage with the ledger', () => {
     cleanup();
 
     patch.mockClear();
-    serveAtLimit({ ...AGENT, state: 'archived' }, { used: 2, max: 3 });
+    serveAtLimit({ ...AGENT, state: 'archived' }, { used: 2, max: 3, total: 2 });
     await renderAgentTab('Settings');
     // With room, loaded or not, a restore asks for active; the server holds the limit.
     fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
     await waitFor(() => expect(patch).toHaveBeenCalledWith(`/agents/${AGENT_ID}`, { state: 'active' }));
   });
 
+  it('refuses a restore at the ceiling and says why, whatever the active count (D202)', async () => {
+    serveAtLimit({ ...AGENT, state: 'archived' }, { used: 3, max: 3, total: MAX_AGENTS_PER_USER_CEILING });
+    await renderAgentTab('Settings');
+    expect(
+      await screen.findByText(
+        `You have ${MAX_AGENTS_PER_USER_CEILING} agents, the most anyone may keep: archive another to restore this one.`,
+      ),
+    ).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Restore' }) as HTMLButtonElement).disabled).toBe(true);
+    // The ceiling's reason, not also the active limit's.
+    expect(screen.queryByText(/a restored agent comes back paused/)).toBeNull();
+  });
+
   it('lets the admin resume with any number active (D201)', async () => {
-    serveAtLimit({ ...AGENT, state: 'paused' }, { used: 9, max: null });
+    serveAtLimit({ ...AGENT, state: 'paused' }, { used: 9, max: null, total: null });
     await renderAgentTab('Settings');
     const resume = (await screen.findByRole('button', { name: 'Resume' })) as HTMLButtonElement;
     expect(resume.disabled).toBe(false);

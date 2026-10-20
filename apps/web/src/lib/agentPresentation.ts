@@ -7,7 +7,7 @@
  * says so wherever it appears (the P2 amendment's third condition).
  */
 
-import type { AgentState, AgentView, AgentsResponse } from '@traders/shared';
+import { MAX_AGENTS_PER_USER_CEILING, type AgentState, type AgentView, type AgentsResponse } from '@traders/shared';
 
 import { ApiRequestError } from '../api/client.ts';
 import { formatMoney, formatNumber, formatPercent } from '../i18n/format.ts';
@@ -33,8 +33,18 @@ export const BUDGET_INPUT = /^\d+(\.\d{1,2})?$/;
  * D199: whether one more agent may become active - false only at a known limit.
  * The admin's limit is null (D201); an unloaded one is left to the server.
  */
-export function atActiveLimit(limit: AgentsResponse['agentLimit'] | null): limit is { used: number; max: number } {
+export function atActiveLimit(
+  limit: AgentsResponse['agentLimit'] | null,
+): limit is AgentsResponse['agentLimit'] & { max: number } {
   return limit !== null && limit.max !== null && limit.used >= limit.max;
+}
+
+/**
+ * D202: whether one more agent may be kept (created or restored) - false only
+ * at the fixed ceiling. The admin's total is null (D201).
+ */
+export function atCeiling(limit: AgentsResponse['agentLimit'] | null): boolean {
+  return limit !== null && limit.total !== null && limit.total >= MAX_AGENTS_PER_USER_CEILING;
 }
 
 /** The header's count: "2 of 3 active", or "4 active" with no limit. */
@@ -55,6 +65,8 @@ export function agentErrorMessage(error: unknown, fallback: string): string {
         return t('agents.errors.budgetDecrease');
       case 'agent_limit_reached':
         return t('agents.errors.limitReached');
+      case 'agent_total_reached':
+        return t('agents.errors.totalReached', { max: MAX_AGENTS_PER_USER_CEILING });
       case 'llm_budget_out_of_range':
         return t('agents.scans.budgetInvalid');
       case 'invalid_body':

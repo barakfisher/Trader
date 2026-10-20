@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   HORIZON_MAX_DECISIONS,
   HORIZON_SCHEDULES,
+  MAX_AGENTS_PER_USER_CEILING,
   MAX_DECISIONS_PER_SCAN,
   MAX_SCAN_EVERY_HOURS,
   type ScanSchedule,
@@ -87,6 +88,7 @@ vi.mock('../src/db/queries.js', () => ({
   agentHasTraded: vi.fn(async () => false),
   getInstallationSettings: vi.fn(async () => ({ max_agents_per_user: LIMIT, updated_at: new Date() })),
   countActiveAgents: vi.fn(async () => 1),
+  countLiveAgents: vi.fn(async () => 1),
   listAgents: vi.fn(async () => [
     row({ id: PRIMARY, slug: 'primary-portfolio', name: 'Main portfolio', is_primary: true, budget_minor: null }),
     row(),
@@ -348,7 +350,8 @@ describe('the agents API', () => {
     ] as never);
     const body = await (await send('GET', '/agents')).json();
     // The primary, a paused and an archived agent never count; the active one does.
-    expect(body.agentLimit).toEqual({ used: 1, max: LIMIT });
+    // Against the ceiling (D202) the paused one counts too.
+    expect(body.agentLimit).toEqual({ used: 1, max: LIMIT, total: 2 });
   });
 
   it('refuses a new active agent at the limit before writing anything (D72)', async () => {
@@ -409,15 +412,61 @@ describe('the agents API', () => {
   it('gives the admin no limit (D201)', async () => {
     vi.mocked(queries.getUser).mockResolvedValue({ ...USER, role: 'admin' } as never);
     vi.mocked(queries.countActiveAgents).mockResolvedValue(LIMIT + 10);
+    vi.mocked(queries.countLiveAgents).mockResolvedValue(MAX_AGENTS_PER_USER_CEILING);
     try {
-      expect((await (await send('GET', '/agents')).json()).agentLimit).toEqual({ used: 1, max: null });
+      expect((await (await send('GET', '/agents')).json()).agentLimit).toEqual({ used: 1, max: null, total: null });
       expect((await send('POST', '/agents', { name: 'Many', budget: '1000' })).status).toBe(201);
       vi.mocked(queries.getAgent).mockResolvedValueOnce(row({ state: 'paused' }) as never);
       expect((await send('PATCH', `/agents/${SIMULATED}`, { state: 'active' })).status).toBe(200);
+      // Nor a ceiling (D202).
+      vi.mocked(queries.getAgent).mockResolvedValueOnce(row({ state: 'archived' }) as never);
+      expect((await send('PATCH', `/agents/${SIMULATED}`, { state: 'paused' })).status).toBe(200);
     } finally {
       vi.mocked(queries.getUser).mockResolvedValue(USER as never);
       vi.mocked(queries.countActiveAgents).mockResolvedValue(1);
+      vi.mocked(queries.countLiveAgents).mockResolvedValue(1);
     }
+  });
+
+  it(`refuses a create in any state at ${MAX_AGENTS_PER_USER_CEILING} agents that are not archived (D202)`, async () => {
+    vi.mocked(queries.countLiveAgents).mockResolvedValue(MAX_AGENTS_PER_USER_CEILING);
+    try {
+      for (const state of ['active', 'paused'] as const) {
+        const response = await send('POST', '/agents', { name: 'One more', budget: '1000', state });
+        expect(response.status).toBe(409);
+        expect(await response.json()).toMatchObject({ error: 'agent_total_reached' });
+      }
+      expect(queries.createAgent).not.toHaveBeenCalled();
+    } finally {
+      vi.mocked(queries.countLiveAgents).mockResolvedValue(1);
+    }
+  });
+
+  it('refuses a restore at the ceiling, and never a pause, a resume or an archive (D202)', async () => {
+    vi.mocked(queries.countLiveAgents).mockResolvedValue(MAX_AGENTS_PER_USER_CEILING);
+    try {
+      for (const state of ['active', 'paused'] as const) {
+        vi.mocked(queries.getAgent).mockResolvedValueOnce(row({ state: 'archived' }) as never);
+        const response = await send('PATCH', `/agents/${SIMULATED}`, { state });
+        expect(response.status).toBe(409);
+        expect(await response.json()).toMatchObject({ error: 'agent_total_reached' });
+      }
+      expect((await send('PATCH', `/agents/${SIMULATED}`, { state: 'paused' })).status).toBe(200);
+      expect((await send('PATCH', `/agents/${SIMULATED}`, { state: 'archived' })).status).toBe(200);
+      vi.mocked(queries.getAgent).mockResolvedValueOnce(row({ state: 'paused' }) as never);
+      expect((await send('PATCH', `/agents/${SIMULATED}`, { state: 'active' })).status).toBe(200);
+    } finally {
+      vi.mocked(queries.countLiveAgents).mockResolvedValue(1);
+    }
+  });
+
+  it("answers the database's ceiling refusal of a racing create with the same 409", async () => {
+    vi.mocked(queries.createAgent).mockRejectedValueOnce(
+      Object.assign(new Error('agent_total_reached: 50 of 50 agents'), { code: '23514' }),
+    );
+    const response = await send('POST', '/agents', { name: 'Racer', budget: '1000', state: 'paused' });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: 'agent_total_reached' });
   });
 
   it("says where and when an agent's scheduled scans run (D71)", async () => {

@@ -212,3 +212,4 @@ while this file is out of date.
 | 199 | The agent limit counts active agents only |
 | 200 | At the limit a new agent starts paused, and a restore comes back paused |
 | 201 | The admin has no agent limit |
+| 202 | A user keeps at most 50 agents that are not archived; the admin has no ceiling |

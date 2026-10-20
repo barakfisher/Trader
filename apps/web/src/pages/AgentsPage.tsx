@@ -2,7 +2,7 @@ import { useId, useState, type FormEvent } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Bot, Plus } from 'lucide-react';
 
-import type { AgentView, SimulatedAgentStanding } from '@traders/shared';
+import { MAX_AGENTS_PER_USER_CEILING, type AgentView, type SimulatedAgentStanding } from '@traders/shared';
 
 import { AgentField } from '../components/AgentField.tsx';
 import { InstructionsField } from '../components/InstructionsField.tsx';
@@ -30,6 +30,7 @@ import {
   agentName,
   agentStateWord,
   atActiveLimit,
+  atCeiling,
 } from '../lib/agentPresentation.ts';
 import {
   PERSONA_TEMPLATES,
@@ -59,6 +60,8 @@ export function AgentsPage() {
   const limit = useAgentLimitQuery().data ?? null;
   // D199, D200: at the limit the page says so, and a new agent starts paused.
   const full = atActiveLimit(limit);
+  // D202: at the ceiling no agent can be created at all.
+  const ceiling = atCeiling(limit);
   const [creating, setCreating] = useState(false);
   // The draft outlives the drawer: Escape or a stray click on the shade closes
   // it, and a persona half-written is not lost to that.
@@ -77,7 +80,7 @@ export function AgentsPage() {
           {limit && (
             <span className="text-xs text-text-muted">{activeCount(limit)}</span>
           )}
-          <Button onClick={() => setCreating(true)}>
+          <Button disabled={ceiling} onClick={() => setCreating(true)}>
             <span className="flex items-center gap-1">
               <Plus className="size-4" aria-hidden />
               {t('agents.create.title')}
@@ -87,7 +90,11 @@ export function AgentsPage() {
       </header>
 
       <p className="max-w-3xl text-sm text-text-muted">{t('agents.intro')}</p>
-      {full && <p className="text-sm text-text-muted">{t('agents.limit.full', { max: limit.max })}</p>}
+      {ceiling ? (
+        <p className="text-sm text-text-muted">{t('agents.limit.ceiling', { max: MAX_AGENTS_PER_USER_CEILING })}</p>
+      ) : (
+        full && <p className="text-sm text-text-muted">{t('agents.limit.full', { max: limit.max })}</p>
+      )}
 
       {agents.isPending && <Spinner label={t('agents.loading')} />}
       {agents.error && (
