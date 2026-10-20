@@ -26,6 +26,7 @@ from app.llm.base import LLMProvider
 from app.llm.budget import BudgetedProvider, DailySpendGuard
 from app.llm.call_log import CallLog, RecordingProvider
 from app.llm.model_choice import ChoosingProvider, ModelChoices
+from app.llm.monthly_cap import CapLedger, MonthlyCapProvider
 from app.llm.null_provider import NullProvider
 from app.llm.openai_compatible import OpenAICompatibleProvider
 
@@ -46,6 +47,7 @@ def build_llm(
     transport: object | None = None,
     call_log: CallLog | None = None,
     choices: ModelChoices | None = None,
+    cap_ledger: CapLedger | None = None,
 ) -> LLMProvider:
     """The configured provider, recorded call by call when given a `call_log`.
 
@@ -57,10 +59,23 @@ def build_llm(
     Given `choices`, the Admin page's model for each purpose (D43) is passed to
     every call, outermost of all so the recorder sees the model chosen. Only
     for OpenRouter: the offered models are OpenRouter ids (`catalogue.py`).
+
+    Given a `cap_ledger`, each user's monthly cap (D157, D158) is checked
+    before every call, inside the recorder so a refused call is recorded too.
     """
     provider = _build_provider(settings, redis, transport=transport)
+    model = configured_model(settings)
+    if cap_ledger is not None and model is not None:
+        provider = MonthlyCapProvider(
+            provider,
+            cap_ledger,
+            model=model,
+            prices=settings.llm_model_price_map,
+            unknown_price_usd_per_mtok=settings.llm_unknown_model_price_usd_per_mtok,
+            max_output_tokens=settings.llm_max_output_tokens,
+        )
     if call_log is not None:
-        provider = RecordingProvider(provider, call_log, model=configured_model(settings))
+        provider = RecordingProvider(provider, call_log, model=model)
     if choices is not None and models_are_choosable(settings):
         provider = ChoosingProvider(provider, choices)
     return provider

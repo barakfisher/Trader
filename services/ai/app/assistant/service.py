@@ -39,6 +39,7 @@ from app.llm.base import (
     LLMProvider,
     LLMUnavailableError,
     Message,
+    MonthlyCapReachedError,
     UserMessage,
 )
 from app.llm.tool_loop import LoopState, run_tool_loop
@@ -60,7 +61,9 @@ HISTORY_MESSAGES = 6
 #: with what was wrong, and a model call that failed is made once more.
 REPAIRS = 1
 
-ReplyOutcome = Literal["answer", "decline", "clarify", "failed", "budget_reached", "no_model"]
+ReplyOutcome = Literal[
+    "answer", "decline", "clarify", "failed", "budget_reached", "cap_reached", "no_model"
+]
 
 #: What the user reads when there is no checked reply. Server text, English
 #: like every `/ask` answer until a decision says otherwise (guideline 1).
@@ -71,6 +74,10 @@ NO_REPLY_TEXT: dict[str, str] = {
     ),
     "budget_reached": (
         "The assistant has reached today's spending limit. It will answer again after midnight."
+    ),
+    "cap_reached": (
+        "This month's spending limit for your account is reached. The assistant will answer "
+        "again when the next month begins."
     ),
     "no_model": "The assistant needs a model, and none is configured. An admin can choose one.",
 }
@@ -279,7 +286,10 @@ async def _converse(
             ),
         )
         if stop.end == "budget_reached":
-            turn.outcome = "budget_reached"
+            # The user's monthly cap is told apart from today's allowance: the
+            # screen says a different reset for each.
+            capped = isinstance(stop.cause, MonthlyCapReachedError)
+            turn.outcome = "cap_reached" if capped else "budget_reached"
             return
         if stop.end != "answer" or stop.reply is None:
             turn.outcome = "no_model" if isinstance(stop.cause, LLMUnavailableError) else "failed"

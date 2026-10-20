@@ -38,6 +38,7 @@ export const queryKeys = {
   digest: ['notifications', 'digest'] as const,
   telegramBinding: ['telegram', 'binding'] as const,
   settings: ['settings'] as const,
+  monthlySpend: ['settings', 'llm-spend'] as const,
   targets: ['targets'] as const,
   /** The universe's sectors, industries and ETF categories (D164). */
   taxonomy: ['universe', 'taxonomy'] as const,

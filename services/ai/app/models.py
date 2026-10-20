@@ -975,6 +975,7 @@ class AgentScanResponse(BaseModel):
         "step_limit",
         "failed",
         "rule_rejected",
+        "cap_reached",
     ]
     steps: int = Field(description="Tool calls made (D15's step limit counts these).")
     cost_micro_usd: int
@@ -1014,7 +1015,9 @@ class AssistantReply(BaseModel):
         description="Null only for a blank question, which starts nothing."
     )
     message_id: UUID | None
-    outcome: Literal["answer", "decline", "clarify", "failed", "budget_reached", "no_model"]
+    outcome: Literal[
+        "answer", "decline", "clarify", "failed", "budget_reached", "cap_reached", "no_model"
+    ]
     reason: Literal["off_domain", "advice", "action", "prompt"] | None = Field(
         description="Why it declined; null unless outcome is 'decline'."
     )

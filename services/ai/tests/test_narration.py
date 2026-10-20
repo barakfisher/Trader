@@ -15,6 +15,7 @@ from app.llm.base import (
     LLMCompletion,
     LLMRequestError,
     LLMUnavailableError,
+    MonthlyCapReachedError,
     TokenUsage,
 )
 from app.narration import CandidateArticle, correlate, narrate
@@ -126,6 +127,8 @@ async def test_a_looping_reply_is_malformed_even_as_valid_json():
     [
         (LLMUnavailableError("no model configured"), "no_provider"),
         (LLMBudgetExceededError(500_000, 500_000, "2026-09-16"), "budget_exhausted"),
+        # A capped user's alerts still arrive, explained by the template (D158).
+        (MonthlyCapReachedError(1, 1, 1, datetime(2026, 11, 1, tzinfo=UTC)), "budget_exhausted"),
         (LLMRequestError("stub", "upstream exploded", status_code=500), "provider_error"),
     ],
 )

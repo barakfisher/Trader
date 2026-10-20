@@ -258,7 +258,9 @@ export type AgentScanOutcome =
   | 'budget_reached'
   | 'step_limit'
   | 'failed'
-  | 'rule_rejected';
+  | 'rule_rejected'
+  /** The user's monthly LLM spend cap was reached (D157, D158). */
+  | 'cap_reached';
 
 /** One scan, as a row of the *Decisions* tab (D50). */
 export interface AgentScanSummary {
@@ -1404,6 +1406,22 @@ export interface UserSettingsResponse {
   settings: UserSettings;
 }
 
+/**
+ * A capped user's LLM spend this month (D157, D158): the Settings card. Integer
+ * micro-USD, as `llm_calls` counts it. The month is the user's calendar month in
+ * their zone; `resetsOn` is its successor's first day, `YYYY-MM-DD`, a local date.
+ */
+export interface MonthlySpend {
+  capMicroUsd: number;
+  spentMicroUsd: number;
+  resetsOn: string;
+}
+
+/** `spend` is null for a user with no cap - the admin - who sees no card. */
+export interface MonthlySpendResponse {
+  spend: MonthlySpend | null;
+}
+
 // --- Proposals (migration 0006) ----------------------------------------------
 
 /** The states a proposal can be in. Mirrors the CHECK in migration 0006. */
@@ -1932,7 +1950,14 @@ export interface TopicConfirmRequest {
 /* -- the assistant (`/ask` with tools, migration 0052) ----------------------- */
 
 /** How a reply ended. Every one is a 200 and is shown as itself. */
-export type AssistantOutcome = 'answer' | 'decline' | 'clarify' | 'failed' | 'budget_reached' | 'no_model';
+export type AssistantOutcome =
+  | 'answer'
+  | 'decline'
+  | 'clarify'
+  | 'failed'
+  | 'budget_reached'
+  | 'cap_reached'
+  | 'no_model';
 export type AssistantDeclineReason = 'off_domain' | 'advice' | 'action' | 'prompt';
 
 /** Where a fact in a reply came from, built by the server from the tools that ran. */

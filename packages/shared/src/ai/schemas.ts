@@ -277,7 +277,7 @@ const llmCostEstimateSchema = z.object({
 
 export const agentScanResponseSchema = z.object({
   scan_id: z.string(),
-  outcome: z.enum(['trade', 'no_trade', 'invalid_answer', 'budget_reached', 'step_limit', 'failed', 'rule_rejected']),
+  outcome: z.enum(['trade', 'no_trade', 'invalid_answer', 'budget_reached', 'step_limit', 'failed', 'rule_rejected', 'cap_reached']),
   steps: z.number().int(),
   cost_micro_usd: z.number().int(),
   model: z.string().nullable(),
@@ -333,7 +333,7 @@ export const mandateCheckResponseSchema = z.object({
 export const assistantReplySchema = z.object({
   conversation_id: z.string().nullable(),
   message_id: z.string().nullable(),
-  outcome: z.enum(['answer', 'decline', 'clarify', 'failed', 'budget_reached', 'no_model']),
+  outcome: z.enum(['answer', 'decline', 'clarify', 'failed', 'budget_reached', 'cap_reached', 'no_model']),
   reason: z.enum(['off_domain', 'advice', 'action', 'prompt']).nullable(),
   text: z.string(),
   sources: z.array(

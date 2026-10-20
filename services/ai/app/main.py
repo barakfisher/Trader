@@ -25,6 +25,7 @@ from app.db import get_engine
 from app.llm.call_log import DatabaseCallLog
 from app.llm.factory import build_llm
 from app.llm.model_choice import DatabaseModelChoices
+from app.llm.monthly_cap import DatabaseCapLedger
 from app.providers.registry import MarketDataService, build_providers
 from app.routers import (
     agents,
@@ -63,6 +64,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         redis,
         call_log=DatabaseCallLog(get_engine(), settings.llm_call_retention_days),
         choices=DatabaseModelChoices(get_engine()),
+        cap_ledger=DatabaseCapLedger(get_engine()),
     )
     # Unlike the LLM above, a misconfigured embedder raises here in every
     # environment and stops the service starting. There is no honest null

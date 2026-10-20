@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal, Protocol, runtime_checkable
 
@@ -306,6 +307,36 @@ class LLMBudgetExceededError(LLMError):
         self.spent_micro_usd = spent_micro_usd
         self.cap_micro_usd = cap_micro_usd
         self.day = day
+
+
+class MonthlyCapReachedError(LLMBudgetExceededError):
+    """This call would take its user past their monthly cap (D157, D158); not attempted.
+
+    A kind of `LLMBudgetExceededError`, so every caller that already degrades on
+    a spent budget - narration to its template, a tool loop to `budget_reached` -
+    degrades here too without a change. The two callers that tell the user why
+    (an agent scan and an `/ask` turn) look for this class in particular.
+    `resets_at` is the start of the user's next calendar month, as UTC.
+    """
+
+    def __init__(
+        self,
+        spent_micro_usd: int,
+        cap_micro_usd: int,
+        estimate_micro_usd: int,
+        resets_at: datetime,
+    ) -> None:
+        LLMError.__init__(
+            self,
+            f"monthly LLM cap reached: spent {micro_usd_to_usd(spent_micro_usd)} USD, "
+            f"this call up to {micro_usd_to_usd(estimate_micro_usd)} USD, "
+            f"cap {micro_usd_to_usd(cap_micro_usd)} USD; resets {resets_at.isoformat()}",
+        )
+        self.spent_micro_usd = spent_micro_usd
+        self.cap_micro_usd = cap_micro_usd
+        self.estimate_micro_usd = estimate_micro_usd
+        self.resets_at = resets_at
+        self.day = resets_at.date().isoformat()
 
 
 class LLMRequestError(LLMError):

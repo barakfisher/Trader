@@ -209,6 +209,30 @@ describe('the conversation', () => {
     expect(root.ask.conversationId).toBe(CONVERSATION);
   });
 
+  it("names the cap's reset from the month a stored refusal was written in", async () => {
+    const stored: AssistantConversationResponse = {
+      conversation: CONVERSATIONS.conversations[0]!,
+      messages: [
+        { id: 'u1', role: 'user', text: 'How am I doing?', outcome: null, reason: null, sources: [], suggestions: [], createdAt: '2026-10-12T08:00:00Z' },
+        { id: 'a1', role: 'assistant', text: 'server words', outcome: 'cap_reached', reason: null, sources: [], suggestions: [], createdAt: '2026-10-12T08:01:00Z' },
+      ],
+    };
+    get.mockImplementation((path: string) =>
+      path === '/assistant/conversations'
+        ? Promise.resolve(CONVERSATIONS)
+        : path === `/assistant/conversations/${CONVERSATION}`
+          ? Promise.resolve(stored)
+          : new Promise(() => {}),
+    );
+    renderAsk();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^How am I doing\?/ }));
+
+    expect(await screen.findByText(/monthly spending limit|spending limit for your account/)).toBeTruthy();
+    expect(screen.getByText(/1 November 2026/)).toBeTruthy();
+    expect(screen.queryByText('server words')).toBeNull();
+  });
+
   it('deletes a conversation after confirming, and starts afresh if it was open', async () => {
     window.confirm = vi.fn(() => true);
     del.mockResolvedValueOnce(undefined);

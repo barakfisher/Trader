@@ -14,6 +14,7 @@ import { errorMessage } from '../api/client.ts';
 import { t, useTranslation } from '../i18n/index.ts';
 import { formatMoney, formatNumber } from '../i18n/format.ts';
 import { formatMicroUsd } from '../lib/llmCalls.ts';
+import { capResetLabel } from '../lib/monthlyCap.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
 import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import { useAgentScanQuery, useAgentScansQuery } from '../queries/agents.ts';
@@ -71,7 +72,9 @@ function outcomeClass(scan: AgentScanSummary): string {
   if (scan.outcome === 'failed' || scan.outcome === 'invalid_answer' || scan.outcome === 'rule_rejected') {
     return 'bg-loss/15 text-loss';
   }
-  if (scan.outcome === 'budget_reached' || scan.outcome === 'step_limit') return 'bg-warn/15 text-warn';
+  if (scan.outcome === 'budget_reached' || scan.outcome === 'cap_reached' || scan.outcome === 'step_limit') {
+    return 'bg-warn/15 text-warn';
+  }
   return 'bg-surface-hover text-text-muted';
 }
 
@@ -149,6 +152,10 @@ function ScanDetail({ agentId, scanId }: { agentId: string; scanId: string }) {
   const data = scan.data;
   return (
     <div className="ms-6 mt-2 space-y-3 border-s border-border-subtle ps-3 text-xs">
+      {data.outcome === 'cap_reached' && (
+        // Reset from the scan's own month, so an old one names its own date.
+        <p className="text-warn">{t('agents.decisions.capReached', { date: capResetLabel(data.startedAt) })}</p>
+      )}
       <Briefing briefing={data.briefing} />
       {data.transcript.map((step, index) =>
         isAnswerTurn(step) ? (

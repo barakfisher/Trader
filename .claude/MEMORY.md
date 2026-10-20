@@ -3156,6 +3156,47 @@ failure they prevent.
     'admin'` after taking the row lock; the orchestrator does the same from the session's user,
     and `agentLimit.max` is `null` for the admin, which the page shows as "N active". **Why:**
     the limit protects the installation's bill from its users, and the admin pays that bill.
+202. **The monthly cap is a wrapper inside the recorder, keyed by `caller.user_id`** (D157/D158's
+    enforcement, the user's spec of 2026-10-20; `app/llm/monthly_cap.py`). Before every call,
+    tool-loop turns included, `MonthlyCapProvider` reads the user's cap and zone from `users` and
+    sums `llm_calls.cost_micro_usd` since the user's calendar month began; it refuses when spent
+    plus the call's ceiling would pass the cap. **The ceiling** is the prompt's characters / 4
+    (system, every message and tool call, the tools' schemas) at the input price plus the
+    call's own `max_output_tokens` at the output price, falling back to `LLM_MAX_OUTPUT_TOKENS`
+    when the call sets none - scans ask for 1500 and the assistant 2500, so pricing them at 700
+    would admit calls D158's "maximum cost" refuses. Unknown model = the pessimistic rate,
+    `:free` = 0. The refusal is `MonthlyCapReachedError`, **a subclass of
+    `LLMBudgetExceededError`**, so every caller that already degrades on a spent budget
+    (narration to its template, the instructions check to `budget_spent`, the tool loop to
+    `budget_reached`) degrades unchanged; the recorder writes it as `budget_exhausted` at cost 0.
+    A cap of NULL (the admin), a call with no user, and an unmetered provider are not checked;
+    **an unreadable ledger refuses** (the cap bounds a bill; unknown read as "nothing spent" is
+    the expensive way to be wrong). Two concurrent calls can both pass: the overshoot is bounded
+    by one call's ceiling. *Rejected:* checking at the call sites (four places to forget; the
+    wrapper needs none changed); a separate refusal outcome in `llm_calls` (a migration of the
+    log for a distinction the scan and reply rows already carry).
+203. **The call log keeps at least 32 days** (the user, 2026-10-20). `LLM_CALL_RETENTION_DAYS`
+    defaults to `MIN_RETENTION_DAYS` = 32 and config refuses less: the cap sums `llm_calls`
+    since the month began, and with the old 30 days the month's first calls were pruned from
+    about the 31st, so spent read low and a capped user could pass the cap. 32 = the longest
+    month plus a day for the zone's offset. *Rejected:* pruning only rows older than every
+    user's month start (a prune query that depends on every zone, and a variable oldest row);
+    a per-user monthly counter (a second ledger that can drift from `llm_calls`, what D157 chose
+    against).
+204. **A refusal by the cap is its own outcome, `cap_reached`, and says when it resets** (the
+    user's spec of 2026-10-20; migration **0063**). Agent scans and assistant replies gain
+    `cap_reached` (their CHECKs widened; 0063 also adds `llm_calls_user_month` on `(user_id,
+    started_at)` for the per-call sum). The screens say it in en + he with the reset date - the
+    first day of the month **after the scan or reply was written**, in the user's zone
+    (`apps/web/src/lib/monthlyCap.ts`), so an old refusal names its own month. A scheduled scan
+    ending `cap_reached` finishes its run `degraded`, like `budget_reached`. Settings shows a
+    capped user "This month: $X of $Y, resets on <date>" from `GET /settings/llm-spend` (the
+    orchestrator's SQL, `getMonthlySpend`, the same month as the Python ledger; both are tested
+    against Postgres); `spend: null` for the admin, who sees no card. The narration state's
+    "daily spend ceiling" wording became "a spending limit: the installation's daily one, or your
+    account's monthly one", since a capped user's fallback reads the same reason. *Rejected:*
+    reusing `budget_reached` (it promises "after midnight"); a reset date computed from today
+    (wrong for a refusal read back next month).
 
 ---
 

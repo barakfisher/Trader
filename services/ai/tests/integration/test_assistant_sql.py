@@ -42,6 +42,7 @@ from app.llm.base import (
     LLMCompletion,
     LLMRequestError,
     LLMUnavailableError,
+    MonthlyCapReachedError,
     TokenUsage,
     ToolCall,
     UserMessage,
@@ -786,6 +787,17 @@ async def test_a_spent_budget_answers_without_calling_the_model(
     assert turn.outcome == "budget_reached"
     assert turn.text == NO_REPLY_TEXT["budget_reached"]
     assert llm.sent == []
+
+
+async def test_the_monthly_cap_is_an_outcome_of_its_own(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    refused = MonthlyCapReachedError(1, 1, 1, datetime(2026, 11, 1, tzinfo=UTC))
+    turn = await _ask(loaded, account, ScriptedLLM(refused), "How is my portfolio?")
+
+    assert turn.outcome == "cap_reached"
+    assert turn.text == NO_REPLY_TEXT["cap_reached"]
+    assert [m.outcome for m in _stored(loaded, turn.conversation_id)] == [None, "cap_reached"]
 
 
 async def test_no_model_is_an_outcome_and_the_question_is_kept(

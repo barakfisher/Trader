@@ -55,6 +55,7 @@ vi.mock('../src/db/queries.js', () => ({
   listRecentDedupeKeys: vi.fn(async () => []),
   listTargetWeights: vi.fn(async () => []),
   getOrCreateUserSettings: vi.fn(async () => ({ ...DEFAULT_SETTINGS_ROW })),
+  getMonthlySpend: vi.fn(async () => null),
   // Echoes the input back in row form, which is what the real statement's
   // RETURNING does. The route must be seen to render the stored row.
   replaceUserSettings: vi.fn(async (_userId: string, input: Record<string, unknown>) => ({
@@ -339,5 +340,23 @@ describe('user settings', () => {
       USER.id,
       expect.objectContaining({ mutedUntil: null }),
     );
+  });
+
+  it("reads the user's month against their cap, and nothing for a user without one", async () => {
+    vi.mocked(queries.getMonthlySpend).mockResolvedValueOnce({
+      cap_micro_usd: '5000000',
+      spent_micro_usd: '280462',
+      resets_on: '2026-11-01',
+    });
+    const capped = await app.request('/settings/llm-spend', { headers: { cookie } });
+    expect(capped.status).toBe(200);
+    expect(await capped.json()).toEqual({
+      spend: { capMicroUsd: 5_000_000, spentMicroUsd: 280_462, resetsOn: '2026-11-01' },
+    });
+    expect(queries.getMonthlySpend).toHaveBeenCalledWith(USER.id);
+
+    const admin = await app.request('/settings/llm-spend', { headers: { cookie } });
+    expect(await admin.json()).toEqual({ spend: null });
+    expect((await app.request('/settings/llm-spend')).status).toBe(401);
   });
 });
