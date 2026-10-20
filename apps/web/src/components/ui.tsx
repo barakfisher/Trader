@@ -55,6 +55,7 @@ export function Button({
   disabled = false,
   type = 'button',
   className = '',
+  describedBy,
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -62,9 +63,17 @@ export function Button({
   disabled?: boolean;
   type?: 'button' | 'submit';
   className?: string;
+  /** The id of the text that says why the button is disabled. */
+  describedBy?: string;
 }) {
   return (
-    <button type={type} onClick={onClick} disabled={disabled} className={buttonClass(variant, className)}>
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      aria-describedby={describedBy}
+      className={buttonClass(variant, className)}
+    >
       {children}
     </button>
   );

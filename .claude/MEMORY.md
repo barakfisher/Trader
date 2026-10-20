@@ -3423,6 +3423,15 @@ failure they prevent.
     so they follow `user_settings.language`. *Rejected:* the settings language (a Hebrew question
     from an English-settings user refused in English); the AI service's text as-is (English in a
     Hebrew chat).
+225. **A disabled Create agent says why, beside the button; the paper budget has no default and no
+    placeholder** (2026-10-20, found in the own-key live check: a non-admin user filled a template,
+    saw "1000" in the budget field and a dead button). The form lists what is missing - a name,
+    the budget, or a budget that is not dollars and cents - as text the button points to
+    (`aria-describedby`); the mandate's own message stays as it was. The placeholder "1000" read
+    as a value, so it is gone; the hint under the field already gives the examples. *Rejected:* a
+    template fills a default budget (a template is an investing style, not an amount of money -
+    the budget becomes the agent's first deposit, D22, and a figure the user never chose would be
+    the one every return is measured against); keeping the placeholder (it looked filled in).
 
 ---
 

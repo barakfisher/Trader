@@ -1322,7 +1322,10 @@
     "create": {
       "title": "New agent",
       "submit": "Create agent",
-      "failed": "Could not create the agent."
+      "failed": "Could not create the agent.",
+      "missingName": "Give the agent a name.",
+      "missingBudget": "Enter its paper budget, e.g. 1000.",
+      "invalidBudget": "The paper budget is dollars and cents, e.g. 1000 or 1000.50."
     },
     "templates": {
       "label": "Start from a template",
