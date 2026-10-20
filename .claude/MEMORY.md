@@ -4,7 +4,20 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-20 ~09:30 UTC - **Handoff after seven merges since #266 (late: two sessions
+Updated: 2026-10-20 ~17:00 UTC - **Handoff at the end of improvements item 3: the monthly cap
+(#277) is merged and live on compose; the user's own OpenRouter key (PR 3b, D206-D210, `0065`)
+is this handoff's PR.** Merges since handoff #274: #275, #276, #277 - three; this PR is the
+fourth. Decisions reached **210** (next: **211**). Migrations: **`0065_own_llm_keys` is head once
+this PR merges** (next free: **`0066`**). **Deployed:** compose runs `main` at `0064_monthly_cap`
+(read 2026-10-20 ~16:30 UTC) - so **D186 holds again: signup is live with the cap enforced**;
+kind is untouched at `0059`. **PR 3b is undeployed:** before its redeploy, compose's `.env` needs
+`LLM_KEY_ENCRYPTION_KEYS` (one Fernet key; generator in `.env.example`) or the feature stays off.
+`0065` was rehearsed on the 12:55 UTC compose backup (at `0062`) in a throwaway container: up to
+`0065` clean (403 calls -> `installation`), an own-key call did not move the cap's sum, the
+downgrade refuses while own-key rows exist and steps once cleared. **Next:** "Next session: after
+the own key" under "Where to go next".
+
+Previous update, 2026-10-20 ~09:30 UTC - **Handoff after seven merges since #266 (late: two sessions
 were merging in parallel, and the count was only noticed at the seventh).** Merged: #265 (D189),
 #267 (D190-D193), #268 (D194), #269 (`0060`, D195-D196), #270 (`0061`, D197-D198), #272, and
 **#271: the first PR of the user's 2026-10-20 improvements list.** Decisions reached **210** (next:
@@ -4510,6 +4523,41 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after the own key (written 2026-10-20, evening)
+
+**State:** improvements items 1-3 are done (#271; #275/#276; #277 + this PR). No standing grant:
+ask before each PR, merge only on "merge" (admin squash - the "protect main" ruleset - then verify
+by content on `main`), redeploy only on "redeploy".
+
+1. **Merge and redeploy PR 3b, on the user's word.** Before the redeploy: add
+   `LLM_KEY_ENCRYPTION_KEYS` to compose's `.env` (the user generates it; never paste it into a
+   chat or a commit), back up, redeploy, then read `alembic_version` = `0065_own_llm_keys`. A
+   live check worth doing with the user: save a real key on a non-admin account, run a scan, and
+   read its `llm_calls` row - `paid_by = 'own_key'` - and the Settings card ("the monthly limit
+   doesn't apply"). Never type the user's key yourself.
+2. **The user-set limit for own-key spend** - the user's direction of 2026-10-20 (D206): every
+   user eventually brings their own key and sets their own limits. A Settings field "stop my
+   own-key spend at $N a month" (null = none), enforced by the same wrapper shape as the cap but
+   summing `paid_by = 'own_key'`. Not asked for yet as a PR - bring it as a question.
+3. **Item 4: re-evaluate an expired trade proposal** and **item 5: Telegram ask mode** - their
+   briefs are unchanged in "after the UI batch" below. Both are paid calls: they now go through
+   the own-key wrapper for free, because every call site passes `Caller(user_id=...)`.
+4. **The handoff after this one is due at the next merge** (five since #274 counts this PR's
+   merge as the fourth; a fifth ends the window).
+
+**What cost time in this session:**
+- **Validation constraints on a secret echo it back.** A pydantic `Field(max_length=...)` on a secret
+  returns the value in the 422; zod's `issues` do the same in the orchestrator. Secrets are
+  `SecretStr` with no constraint, checked by hand in the route, and the orchestrator's 400 carries
+  no issues (D206).
+- **The orchestrator's Postgres tests as the owner role** fail two grant tests (admin audit, model
+  choices) for the wrong reason - run them as `traders_app`, as the addendum below says.
+- **The newest backup can be older than the live schema**: the redeploy's backup is taken before
+  it migrates, so 12:55's dump is `0062` while compose is `0064`. Rehearsing from it covers every
+  step since; read `alembic_version` on both before claiming what was rehearsed.
+- **The worktree has no `.venv`**: `uv venv -p 3.12 .venv && uv pip install -p .venv -e '.[dev]'`
+  in `services/ai` (`python3.12` is not on PATH; uv finds it).
 
 ### Next session: after the UI batch (written 2026-10-20)
 
