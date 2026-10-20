@@ -221,3 +221,4 @@ while this file is out of date.
 | 208 | The encryption key is `LLM_KEY_ENCRYPTION_KEYS`: comma-separated Fernet keys, the first encrypts and every one decrypts |
 | 209 | Every recorded call says whose key paid (`llm_calls.paid_by`), and the cap sums only the installation's |
 | 210 | Own-key calls are outside `LLM_DAILY_BUDGET_USD`; the agent and assistant daily allowances still apply |
+| 211 | A limit on own-key spend is OpenRouter's, set on the key; the app has no field for it |
