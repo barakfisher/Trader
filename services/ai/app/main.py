@@ -24,8 +24,10 @@ from app.corpus.vector_store import PgVectorStore
 from app.db import get_engine
 from app.llm.call_log import DatabaseCallLog
 from app.llm.factory import build_llm
+from app.llm.key_vault import build_vault
 from app.llm.model_choice import DatabaseModelChoices
 from app.llm.monthly_cap import DatabaseCapLedger
+from app.llm.own_key import DatabaseOwnKeyStore
 from app.providers.registry import MarketDataService, build_providers
 from app.routers import (
     agents,
@@ -37,6 +39,7 @@ from app.routers import (
     market,
     narration,
     news,
+    own_keys,
     topics,
     universe,
 )
@@ -59,12 +62,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # provider raises here in production and degrades to null elsewhere, so the
     # quotes API is never taken down by a narration setting.
     # Every call through it is recorded in `llm_calls` for the admin page.
+    # Users' own OpenRouter keys (D206), encrypted with LLM_KEY_ENCRYPTION_KEYS;
+    # without it saved keys can be read about and removed, never used.
+    key_store = DatabaseOwnKeyStore(get_engine(), build_vault(settings.llm_key_encryption_keys))
+    app.state.own_keys = key_store
     app.state.llm = build_llm(
         settings,
         redis,
         call_log=DatabaseCallLog(get_engine(), settings.llm_call_retention_days),
         choices=DatabaseModelChoices(get_engine()),
         cap_ledger=DatabaseCapLedger(get_engine()),
+        own_keys=key_store if key_store.can_save else None,
     )
     # Unlike the LLM above, a misconfigured embedder raises here in every
     # environment and stops the service starting. There is no honest null
@@ -121,5 +129,6 @@ app.include_router(topics.router)
 app.include_router(news.router)
 app.include_router(universe.router)
 app.include_router(llm.router)
+app.include_router(own_keys.router)
 app.include_router(agents.router)
 app.include_router(assistant.router)

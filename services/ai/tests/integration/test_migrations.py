@@ -70,6 +70,15 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "DELETE FROM agent_scans WHERE outcome = 'cap_reached'; "
         "DELETE FROM assistant_messages WHERE outcome = 'cap_reached'",
     ),
+    # 0064 cannot tell an own-key call from the installation's and would count
+    # it against the cap, and has nowhere to keep a saved key (D206).
+    "0065_own_llm_keys": (
+        "own-key rows exist",
+        "DELETE FROM llm_calls WHERE paid_by = 'own_key'; "
+        "DELETE FROM agent_scans WHERE outcome = 'own_key_failed'; "
+        "DELETE FROM assistant_messages WHERE outcome = 'own_key_failed'; "
+        "DELETE FROM user_llm_keys",
+    ),
     # A check's calls are spend records; relabelling them as scans would put
     # them in the scan averages, so 0059 refuses.
     "0059_mandate_check": (

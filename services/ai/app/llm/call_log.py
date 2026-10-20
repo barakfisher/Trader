@@ -36,6 +36,8 @@ from app.llm.base import (
     LLMProvider,
     LLMUnavailableError,
     Message,
+    OwnKeyFailedError,
+    PaidBy,
     ToolResultMessage,
     ToolSpec,
     UserMessage,
@@ -62,6 +64,8 @@ class CallEntry:
     cost_micro_usd: int
     prompt: str
     completion: str | None
+    #: Whose key paid (D209); the monthly cap sums only the installation's.
+    paid_by: PaidBy = "installation"
 
 
 class CallLog(Protocol):
@@ -102,12 +106,12 @@ class DatabaseCallLog:
                         INSERT INTO llm_calls (
                             user_id, agent_id, purpose, provider, model, outcome, error,
                             latency_ms, prompt_tokens, completion_tokens, cost_micro_usd, prompt,
-                            completion
+                            completion, paid_by
                         ) VALUES (
                             CAST(:user_id AS uuid), CAST(:agent_id AS uuid), :purpose, :provider,
                             :model, :outcome, :error,
                             :latency_ms, :prompt_tokens, :completion_tokens, :cost_micro_usd,
-                            :prompt, :completion
+                            :prompt, :completion, :paid_by
                         )
                         RETURNING id
                         """
@@ -126,6 +130,7 @@ class DatabaseCallLog:
                         "cost_micro_usd": entry.cost_micro_usd,
                         "prompt": entry.prompt,
                         "completion": entry.completion,
+                        "paid_by": entry.paid_by,
                     },
                 ).scalar_one()
             )
@@ -139,6 +144,9 @@ class DatabaseCallLog:
 
 
 def _outcome(error: BaseException) -> Outcome:
+    if isinstance(error, OwnKeyFailedError):
+        # Reached OpenRouter and refused: not a spent budget, whatever follows.
+        return "provider_error"
     if isinstance(error, LLMUnavailableError):
         return "no_provider"
     if isinstance(error, LLMBudgetExceededError):
@@ -268,6 +276,7 @@ class RecordingProvider:
                 started=started,
                 prompt=prompt,
                 cost=error.metered_micro_usd if isinstance(error, LLMError) else 0,
+                paid_by=error.paid_by if isinstance(error, LLMError) else "installation",
             )
             raise
         call_id = self._record(
@@ -299,6 +308,7 @@ class RecordingProvider:
         completion: LLMCompletion | None = None,
         error: str | None = None,
         cost: int = 0,
+        paid_by: PaidBy = "installation",
     ) -> int | None:
         if caller is None:
             # Every call site names itself; one that does not is a bug worth a
@@ -319,6 +329,7 @@ class RecordingProvider:
             cost_micro_usd=completion.estimated_cost_micro_usd if completion else cost,
             prompt=prompt,
             completion=_completion_text(completion) if completion else None,
+            paid_by=completion.paid_by if completion else paid_by,
         )
         try:
             return self._log.record(entry)

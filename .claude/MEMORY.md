@@ -7,10 +7,10 @@ the reasoning behind it is not, and that is what this file is for. Maintained pe
 Updated: 2026-10-20 ~09:30 UTC - **Handoff after seven merges since #266 (late: two sessions
 were merging in parallel, and the count was only noticed at the seventh).** Merged: #265 (D189),
 #267 (D190-D193), #268 (D194), #269 (`0060`, D195-D196), #270 (`0061`, D197-D198), #272, and
-**#271: the first PR of the user's 2026-10-20 improvements list.** Decisions reached **205** (next:
-**206**; D199-D201 are PR 2, the active-only agent limit, #275; D202 its 50-agent ceiling, #276;
-D203-D205 PR 3a, the monthly cap). Migrations: **`0064_monthly_cap` is head once PR 3a merges**
-(next free: **`0065`**; `git fetch` and check `main` has one head before writing one). **Deployed:** compose runs `main` as of #272 (`0061`,
+**#271: the first PR of the user's 2026-10-20 improvements list.** Decisions reached **210** (next:
+**211**; D199-D201 are PR 2, the active-only agent limit, #275; D202 its 50-agent ceiling, #276;
+D203-D205 PR 3a, the monthly cap, #277; D206-D210 PR 3b, the user's own key). Migrations:
+**`0065_own_llm_keys` is head once PR 3b merges** (next free: **`0066`**; `git fetch` and check `main` has one head before writing one). **Deployed:** compose runs `main` as of #272 (`0061`,
 rebuilt 2026-10-20 08:56 UTC, before #271) - **which means #264's signup is live on compose without
 the cap, against D186**; kind runs #263 at `0059`. Nobody in this session redeployed; ask the user
 whether that was intended (item 1 under "after the UI batch").
@@ -3208,6 +3208,61 @@ failure they prevent.
     account's monthly one", since a capped user's fallback reads the same reason. *Rejected:*
     reusing `budget_reached` (it promises "after midnight"); a reset date computed from today
     (wrong for a refusal read back next month).
+206. **A non-admin user may save their own OpenRouter key; while it works, the installation's
+    limits do not apply to them** (the user, 2026-10-20; improvements item 3b; migration **0065**;
+    `app/llm/own_key.py`). `OwnKeyProvider` sits inside the recorder and outside the cap:
+    `Choosing(Recording(OwnKey(MonthlyCap(Budgeted(adapter)))))`. For each call with a user it
+    reads a `valid` key from `user_llm_keys`, builds an adapter with it (cheap - the adapter builds
+    a client per call anyway) and skips the cap and the daily guard; the completion or error is
+    marked `paid_by="own_key"`. The key is checked on save with OpenRouter's free `GET /key` (401/403
+    rejected, anything else unreachable - neither is saved), stored encrypted (D208), never sent to
+    the browser: the routes answer with its last four only, the request model is a `SecretStr`
+    with no length constraint (a failed constraint echoes the input in the 422), and the
+    orchestrator's 400 carries no zod issues for the same reason. The AI service owns the table
+    and its SQL, because it alone holds the encryption key; the orchestrator relays
+    `GET|PUT|DELETE /settings/llm-key` and refuses the admin (no cap to escape). Only for
+    `LLM_PROVIDER=openrouter`. **The user's direction (2026-10-20):** eventually every user runs
+    on their own key and sets their own limits, and the installation's cap stops mattering - a
+    user-set monthly limit for own-key spend is the follow-up, not this PR. *Rejected:* the key in
+    the orchestrator (it would need the encryption key too: two holders of one secret); per-call
+    keys passed through `Caller` (every call site would carry a secret).
+207. **A saved key OpenRouter refuses is marked failed; that call fails, the next ones run under
+    the cap** (the user, 2026-10-20). 401 -> `rejected`, 402 -> `no_credit`, stored with
+    `failed_at`; the call raises `OwnKeyFailedError`, a kind of `LLMRequestError` (not of the
+    budget error: it reached OpenRouter and was refused), so narration falls back as
+    `provider_error`, the recorder writes `provider_error` on `own_key`, and a scan or `/ask`
+    reply ends as the new outcome `own_key_failed` (0065 widens both CHECKs; a scheduled scan
+    finishes `degraded`; the assistant does not repair it - a retry would run on the installation
+    unannounced). Settings says which and since when, and that calls use the installation under
+    the cap until a working key is saved. Other failures (timeouts, 5xx, 429) are the call's and
+    leave the key alone. Marking matches on the stored ciphertext, so it cannot fail a key saved
+    meanwhile. *Rejected:* refusing every call until the key is replaced (scans and Ask stop for a
+    reason the cap already bounds); retrying silently on the installation's key (guideline 7).
+208. **The encryption key is `LLM_KEY_ENCRYPTION_KEYS`: comma-separated Fernet keys, the first
+    encrypts and every one decrypts** (the user, 2026-10-20; the `cryptography` package, approved
+    under convention 5; `app/llm/key_vault.py`). Rotation: new key first, restart,
+    `scripts/reencrypt_llm_keys.py`, drop the old key (docs/RUNBOOK.md). **Unset = the feature is
+    off** (save answers 503 `own_keys_unavailable`; saved keys can be read about and removed,
+    never used, so their owners are back under the cap); **set but malformed = the AI service
+    refuses to start** - a typo must not read as "off" and silently move own-key users onto the
+    cap. A key no configured key decrypts is logged and treated as none. *Rejected:* one key with
+    no rotation (rotating would lose every saved key); deriving it from `SESSION_SECRET` (another
+    service's secret, and rotating sessions would break saved keys).
+209. **Every recorded call says whose key paid (`llm_calls.paid_by`), and the cap sums only the
+    installation's** (the user, 2026-10-20; 0065). Without it a user who spent $20 on their own
+    key and then removed it would be capped at once for money the installation never paid. The
+    Settings card says, while a key works, that the monthly limit does not apply, and shows "On
+    your own key this month: $X (estimated)" beside the cap whenever own-key spend exists
+    (`getMonthlySpend` sums both with `FILTER`). *Rejected:* no column (the lock-out above); not
+    showing own-key spend (the user's OpenRouter dashboard has it, but the estimate is what the
+    agent allowances count, and saying it costs one line).
+210. **Own-key calls are outside `LLM_DAILY_BUDGET_USD`; the agent and assistant daily
+    allowances still apply** (the user, 2026-10-20). The daily guard bounds the installation's
+    bill and these calls are not on it - counting them would let one own-key user use up the day
+    for everyone. The allowances (each agent's, set by its user; the assistant's $0.50/day) sum
+    `llm_calls` whoever paid, and stay: they stop a runaway loop on anyone's money. *Rejected:*
+    counting own-key calls in the guard; dropping the assistant's allowance for own-key users
+    (the user-set limit of D206's direction is the better place to loosen it).
 
 ---
 
@@ -4475,7 +4530,9 @@ each, merge only on "merge", redeploy only on "redeploy":**
    `state = 'active'` and to fire on create-as-active and on resume (paused -> active), skip the
    admin (`users.role`), and the orchestrator's pre-check and the page's sentence ("3 of 3 active")
    follow. Rehearse the migration on a restored backup, as #253 was.
-3. **The user's own OpenRouter key - decided: a user with a valid key of their own is never
+3. **Built: 3a the cap (#277, D203-D205, `0064`); 3b the user's own key (D206-D210, `0065`) -
+   its PR needs `LLM_KEY_ENCRYPTION_KEYS` in compose's `.env` before redeploy, or the feature is
+   off.** The original brief: **The user's own OpenRouter key - decided: a user with a valid key of their own is never
    capped; without one, the cap (D157) applies as planned.** So the cap PR is still needed, and
    the two are best designed together. Open: storing a per-user key is an exception to guideline
    9 (secrets only in `.env` / Kubernetes Secrets) - the proposal to bring is encrypted at rest

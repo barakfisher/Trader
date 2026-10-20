@@ -20,13 +20,14 @@
  * that can refuse a bad write from every writer at once.
  */
 
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 
 import {
   UI_LANGUAGES,
   type MonthlySpendResponse,
   type ObservationSeverity,
+  type OwnLlmKeyResponse,
   type UiLanguage,
   type UserSettings,
 } from '@traders/shared';
@@ -37,8 +38,10 @@ import {
   replaceUserSettings,
   type UserSettingsRow,
 } from '../../db/queries.js';
+import { AiServiceError, type OwnLlmKeyState } from '@traders/shared/ai';
+
 import { currentUserId, type AppEnv } from '../app.js';
-import { badRequest, unprocessable } from '../errors.js';
+import { ApiProblem, badRequest, forbidden, unprocessable, upstreamFailure } from '../errors.js';
 
 /**
  * The severity ladder, ascending, mirroring the CHECK on both severity columns
@@ -103,6 +106,49 @@ function toWire(row: UserSettingsRow): UserSettings {
   };
 }
 
+const saveKeySchema = z.object({ apiKey: z.string().min(1).max(1000) }).strict();
+
+/** The AI service's refusals of a save, said to the browser under the same codes. */
+const OWN_KEY_REFUSALS: Record<string, { status: 422 | 502 | 503; message: string }> = {
+  key_malformed: { status: 422, message: 'that is not an API key' },
+  key_rejected: { status: 422, message: 'OpenRouter refused this key' },
+  key_check_unreachable: { status: 502, message: 'OpenRouter could not be asked about this key' },
+  own_keys_unavailable: { status: 503, message: "this installation does not use users' own keys" },
+};
+
+function ownKeyUser(context: Context<AppEnv>): string {
+  const userId = currentUserId(context);
+  if (context.get('user')?.role === 'admin') {
+    throw forbidden('the admin runs on the installation key');
+  }
+  return userId;
+}
+
+async function relayOwnKey(call: () => Promise<OwnLlmKeyState>): Promise<OwnLlmKeyState> {
+  try {
+    return await call();
+  } catch (error) {
+    if (!(error instanceof AiServiceError)) throw error;
+    const code = (error.body as { detail?: { code?: string } } | undefined)?.detail?.code;
+    const refusal = code === undefined ? undefined : OWN_KEY_REFUSALS[code];
+    if (refusal) throw new ApiProblem(refusal.status, code!, refusal.message);
+    throw upstreamFailure(error.status, 'Your API key could not be reached.');
+  }
+}
+
+function toOwnKeyResponse(state: OwnLlmKeyState): OwnLlmKeyResponse {
+  return {
+    available: state.available,
+    key: state.key && {
+      lastFour: state.key.last_four,
+      status: state.key.status,
+      savedAt: state.key.saved_at,
+      failedAt: state.key.failed_at,
+      failure: state.key.failure,
+    },
+  };
+}
+
 export function registerSettingsRoutes(app: Hono<AppEnv>): void {
   app.get('/settings', async (context) => {
     // Materialising on read means a user who has never opened this page is not a
@@ -119,10 +165,38 @@ export function registerSettingsRoutes(app: Hono<AppEnv>): void {
       spend: row && {
         capMicroUsd: Number(row.cap_micro_usd),
         spentMicroUsd: Number(row.spent_micro_usd),
+        ownKeySpentMicroUsd: Number(row.own_key_spent_micro_usd),
         resetsOn: row.resets_on,
       },
     };
     return context.json(body);
+  });
+
+  // A user's own OpenRouter key (D206). Relayed to the AI service, which alone
+  // holds the encryption key; the key arrives once, in the PUT's body, and no
+  // answer carries more than its last four characters. The admin runs on the
+  // installation's key and has no cap to escape, so the routes refuse them.
+  app.get('/settings/llm-key', async (context) => {
+    const userId = ownKeyUser(context);
+    return context.json(toOwnKeyResponse(await relayOwnKey(() => context.get('ai').ownLlmKey(userId, context.get('requestId')))));
+  });
+
+  app.put('/settings/llm-key', async (context) => {
+    const userId = ownKeyUser(context);
+    const parsed = saveKeySchema.safeParse(await context.req.json().catch(() => null));
+    // No issues attached: zod's would quote the value, and the value is a key.
+    if (!parsed.success) throw badRequest('invalid_body', 'expected { apiKey: string }');
+    const state = await relayOwnKey(() =>
+      context.get('ai').saveOwnLlmKey(userId, parsed.data.apiKey, context.get('requestId')),
+    );
+    return context.json(toOwnKeyResponse(state));
+  });
+
+  app.delete('/settings/llm-key', async (context) => {
+    const userId = ownKeyUser(context);
+    return context.json(
+      toOwnKeyResponse(await relayOwnKey(() => context.get('ai').removeOwnLlmKey(userId, context.get('requestId')))),
+    );
   });
 
   app.put('/settings', async (context) => {

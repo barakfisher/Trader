@@ -29,6 +29,7 @@ from app.llm.model_choice import ChoosingProvider, ModelChoices
 from app.llm.monthly_cap import CapLedger, MonthlyCapProvider
 from app.llm.null_provider import NullProvider
 from app.llm.openai_compatible import OpenAICompatibleProvider
+from app.llm.own_key import OwnKeyProvider, OwnKeyStore
 
 log = get_logger("llm.factory")
 
@@ -48,6 +49,7 @@ def build_llm(
     call_log: CallLog | None = None,
     choices: ModelChoices | None = None,
     cap_ledger: CapLedger | None = None,
+    own_keys: OwnKeyStore | None = None,
 ) -> LLMProvider:
     """The configured provider, recorded call by call when given a `call_log`.
 
@@ -62,6 +64,10 @@ def build_llm(
 
     Given a `cap_ledger`, each user's monthly cap (D157, D158) is checked
     before every call, inside the recorder so a refused call is recorded too.
+
+    Given `own_keys`, a user with a valid OpenRouter key of their own is served
+    with it, outside the cap and the daily guard and inside the recorder (D206).
+    Only for OpenRouter: the saved keys are OpenRouter keys.
     """
     provider = _build_provider(settings, redis, transport=transport)
     model = configured_model(settings)
@@ -74,11 +80,31 @@ def build_llm(
             unknown_price_usd_per_mtok=settings.llm_unknown_model_price_usd_per_mtok,
             max_output_tokens=settings.llm_max_output_tokens,
         )
+    if own_keys is not None and models_are_choosable(settings):
+        provider = OwnKeyProvider(
+            provider, own_keys, lambda api_key: own_key_adapter(settings, api_key, transport)
+        )
     if call_log is not None:
         provider = RecordingProvider(provider, call_log, model=model)
     if choices is not None and models_are_choosable(settings):
         provider = ChoosingProvider(provider, choices)
     return provider
+
+
+def own_key_adapter(
+    settings: Settings, api_key: str, transport: object | None = None
+) -> OpenAICompatibleProvider:
+    """OpenRouter with a user's own key: the installation's adapter in every
+    other respect, and no daily guard around it (D210)."""
+    return OpenAICompatibleProvider(
+        name="openrouter",
+        base_url=settings.openrouter_base_url,
+        model=settings.llm_model,
+        api_key=api_key,
+        extra_headers={"x-title": "Traders"},
+        **_shared_options(settings),
+        transport=transport,
+    )
 
 
 def models_are_choosable(settings: Settings) -> bool:

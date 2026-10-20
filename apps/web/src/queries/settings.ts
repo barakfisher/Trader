@@ -1,8 +1,14 @@
 /** The account's notification and proposal settings, as the server stores them. */
 
-import { queryOptions, useQuery } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import type { MonthlySpend, MonthlySpendResponse, UserSettingsResponse } from '@traders/shared';
+import type {
+  MonthlySpend,
+  MonthlySpendResponse,
+  OwnLlmKeyResponse,
+  SaveOwnLlmKeyRequest,
+  UserSettingsResponse,
+} from '@traders/shared';
 
 import { api } from '../api/client.ts';
 import { queryKeys } from './queryKeys.ts';
@@ -25,4 +31,42 @@ export const monthlySpendQuery = queryOptions({
 
 export function useMonthlySpendQuery() {
   return useQuery(monthlySpendQuery);
+}
+
+/** The user's own OpenRouter key (D206): never the key, only its last four and state. */
+export const ownLlmKeyQuery = queryOptions({
+  queryKey: queryKeys.ownLlmKey,
+  queryFn: () => api.get<OwnLlmKeyResponse>('/settings/llm-key'),
+});
+
+/** Only for a user with a cap: the admin runs on the installation's key, and is refused. */
+export function useOwnLlmKeyQuery(enabled: boolean) {
+  return useQuery({ ...ownLlmKeyQuery, enabled });
+}
+
+/**
+ * Save or remove the key. Either changes who pays for the user's calls, so the
+ * month's card is read again with the key's new state.
+ */
+export function useSaveOwnLlmKey() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (apiKey: string) =>
+      api.put<OwnLlmKeyResponse>('/settings/llm-key', { apiKey } satisfies SaveOwnLlmKeyRequest),
+    onSuccess: (body) => {
+      client.setQueryData(queryKeys.ownLlmKey, body);
+      void client.invalidateQueries({ queryKey: queryKeys.monthlySpend });
+    },
+  });
+}
+
+export function useRemoveOwnLlmKey() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.delete<OwnLlmKeyResponse>('/settings/llm-key'),
+    onSuccess: (body) => {
+      client.setQueryData(queryKeys.ownLlmKey, body);
+      void client.invalidateQueries({ queryKey: queryKeys.monthlySpend });
+    },
+  });
 }

@@ -39,6 +39,8 @@ export const queryKeys = {
   telegramBinding: ['telegram', 'binding'] as const,
   settings: ['settings'] as const,
   monthlySpend: ['settings', 'llm-spend'] as const,
+  /** The user's own OpenRouter key, as its last four and its state (D206). */
+  ownLlmKey: ['settings', 'llm-key'] as const,
   targets: ['targets'] as const,
   /** The universe's sectors, industries and ETF categories (D164). */
   taxonomy: ['universe', 'taxonomy'] as const,

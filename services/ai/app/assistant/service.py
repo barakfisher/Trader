@@ -40,6 +40,7 @@ from app.llm.base import (
     LLMUnavailableError,
     Message,
     MonthlyCapReachedError,
+    OwnKeyFailedError,
     UserMessage,
 )
 from app.llm.tool_loop import LoopState, run_tool_loop
@@ -62,7 +63,14 @@ HISTORY_MESSAGES = 6
 REPAIRS = 1
 
 ReplyOutcome = Literal[
-    "answer", "decline", "clarify", "failed", "budget_reached", "cap_reached", "no_model"
+    "answer",
+    "decline",
+    "clarify",
+    "failed",
+    "budget_reached",
+    "cap_reached",
+    "no_model",
+    "own_key_failed",
 ]
 
 #: What the user reads when there is no checked reply. Server text, English
@@ -80,6 +88,11 @@ NO_REPLY_TEXT: dict[str, str] = {
         "again when the next month begins."
     ),
     "no_model": "The assistant needs a model, and none is configured. An admin can choose one.",
+    "own_key_failed": (
+        "OpenRouter refused your own API key, so this question was not answered. Until you "
+        "save a working key in Settings, questions use the installation's account under your "
+        "monthly limit."
+    ),
 }
 CLARIFY_BLANK = (
     "What would you like to know? You can ask about your portfolio, agents, a ticker, or "
@@ -290,6 +303,11 @@ async def _converse(
             # screen says a different reset for each.
             capped = isinstance(stop.cause, MonthlyCapReachedError)
             turn.outcome = "cap_reached" if capped else "budget_reached"
+            return
+        if isinstance(stop.cause, OwnKeyFailedError):
+            # Not repaired: the key is marked failed, and a second try would run on
+            # the installation's account without the user having been told (D207).
+            turn.outcome = "own_key_failed"
             return
         if stop.end != "answer" or stop.reply is None:
             turn.outcome = "no_model" if isinstance(stop.cause, LLMUnavailableError) else "failed"

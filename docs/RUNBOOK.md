@@ -33,6 +33,7 @@ is replaced.
 | `TELEGRAM_WEBHOOK_SECRET` | orchestrator | webhook mode only: Telegram must be told the new value (`setWebhook`), or it is refused |
 | `TELEGRAM_BOT_TOKEN` | orchestrator | revoke the old one in @BotFather first if it leaked; the bot then answers only to the new one |
 | provider keys (`OPENROUTER_API_KEY`, ...) | AI service | the next call uses the new key; nothing else changes |
+| `LLM_KEY_ENCRYPTION_KEYS` | AI service | encrypts users' own OpenRouter keys (D208). **Put the new key first and keep the old one after it**, restart, run `cd services/ai && .venv/bin/python scripts/reencrypt_llm_keys.py` (in a container: `python scripts/reencrypt_llm_keys.py`), then drop the old key and restart. Dropping it first leaves saved keys unreadable: their owners go back under the cap until they save their key again |
 | `POSTGRES_PASSWORD` | Postgres, both services | **see below - editing the file alone locks the services out** |
 
 **Compose:** edit `.env`, then `bash scripts/dev-docker.sh`. Compose recreates the containers
