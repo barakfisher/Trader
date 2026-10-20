@@ -7,8 +7,9 @@ the reasoning behind it is not, and that is what this file is for. Maintained pe
 Updated: 2026-10-20 ~09:30 UTC - **Handoff after seven merges since #266 (late: two sessions
 were merging in parallel, and the count was only noticed at the seventh).** Merged: #265 (D189),
 #267 (D190-D193), #268 (D194), #269 (`0060`, D195-D196), #270 (`0061`, D197-D198), #272, and
-**#271: the first PR of the user's 2026-10-20 improvements list.** Decisions reached **198** (next:
-**199**). Migrations: **`0061_max_decisions` is head** (next free: **`0062`**; `git fetch` and check
+**#271: the first PR of the user's 2026-10-20 improvements list.** Decisions reached **201** (next:
+**202**; D199-D201 are PR 2, the active-only agent limit). Migrations: **`0062_active_agent_limit`
+is head once PR 2 merges** (next free: **`0063`**; `git fetch` and check
 `main` has one head before writing one). **Deployed:** compose runs `main` as of #272 (`0061`,
 rebuilt 2026-10-20 08:56 UTC, before #271) - **which means #264's signup is live on compose without
 the cap, against D186**; kind runs #263 at `0059`. Nobody in this session redeployed; ask the user
@@ -3133,6 +3134,28 @@ failure they prevent.
     mandate's limits count them. A waiting sell is not counted - it may be rejected. **Why:**
     "buy 3 IRON" twice an hour apart (compose, 2026-10-19), and scans every two hours would
     make that the norm. *Rejected:* briefing only (the model may still repeat).
+199. **The agent limit counts active agents only** (the user, 2026-10-20; migration **0062**,
+    which rewrites 0047's `agents_within_limit` function - the trigger itself is unchanged).
+    Checked on an insert as active and on any change of state *into* active (resume, restore);
+    a pause, an archive, an edit, or an agent created paused is never refused. The per-user
+    row lock stays, so a create and a resume racing for the last place cannot both win. A
+    lowered limit pauses nothing: the next activation is what is refused. **Why:** cost comes
+    from scans, and only an active agent scans (scheduled, `scheduledScans.ts`, and by hand,
+    `agentScans.ts`), so a paused agent is free to keep. *Rejected:* keeping the count over
+    live agents (charges a user for agents that cannot spend); auto-pausing the excess when the
+    admin lowers the limit (changes a user's agents behind their back).
+200. **At the limit a new agent starts paused, and a restore comes back paused** (the user,
+    2026-10-20). `POST /agents` takes an optional `state` (`active` | `paused`, default
+    active); the page sends `paused` when the limit is reached and says so in the form first.
+    Restore sends `active` with room and `paused` without. Resume at the limit is disabled with
+    the reason beside it; the server's 409 `agent_limit_reached` is the backstop. *Rejected:*
+    refusing the create (contradicts "creating more is harmless"); an always-visible "start
+    paused" switch (a control for a choice only the limit forces); refusing a restore at the
+    limit, and always restoring paused (changes today's restore for users with room).
+201. **The admin has no agent limit** (the user, 2026-10-20). The trigger skips `users.role =
+    'admin'` after taking the row lock; the orchestrator does the same from the session's user,
+    and `agentLimit.max` is `null` for the admin, which the page shows as "N active". **Why:**
+    the limit protects the installation's bill from its users, and the admin pays that bill.
 
 ---
 
@@ -4391,7 +4414,9 @@ each, merge only on "merge", redeploy only on "redeploy":**
    Settings' Email and Password cards became one Sign-in card whose buttons open each form in a
    drawer, and the severity table folds under the proposals card. Settings' Account card stays:
    it is read-only today, but D163 makes the zone editable there.
-2. **Next: the agent limit counts only active agents, and the admin has none.** The user's reason:
+2. **Built in its PR (D199-D201, `0062`): the agent limit counts only active agents, and the admin
+   has none.** Rehearse `0062` on a restored backup before merge; undeployed until "redeploy".
+   The original brief: The user's reason:
    cost comes from scans, and a paused agent does not scan, so creating more is harmless. Today
    the `agents_within_limit` trigger (`0047`) counts every non-archived, non-primary agent - active
    and paused - for every user. The change: migration `0062` rewrites the trigger to count

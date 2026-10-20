@@ -416,7 +416,7 @@ describe('the admin page', () => {
   it('sets how many agents a user may have, within 1 and the ceiling (D72)', async () => {
     put.mockResolvedValue({ ...SETTINGS, maxAgentsPerUser: 5, updatedAt: '2026-10-08T10:00:00Z' });
     renderAt('/admin', ADMIN);
-    const field = (await screen.findByLabelText('Most simulated agents a user may have')) as HTMLInputElement;
+    const field = (await screen.findByLabelText('Most simulated agents a user may have active at once')) as HTMLInputElement;
     expect(field.value).toBe('3');
     const form = within(field.closest('form')!);
     const save = form.getByRole('button', { name: 'Save' }) as HTMLButtonElement;

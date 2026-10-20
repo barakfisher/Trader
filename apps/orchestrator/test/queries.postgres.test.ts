@@ -542,6 +542,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         scanSchedule: { everyHours: 2, preOpen: true, postClose: false },
         maxDecisions: 3,
         mandate: { ...EMPTY_MANDATE, max_position_bps: 1000, sectors: ['Energy'], blocked_symbols: ['XOM'] },
+        state: 'active',
       });
       expect(agent).toMatchObject({ is_primary: false, budget_minor: '100050', state: 'active', holdings_count: 0 });
       // The mandate (0057) round-trips: integers as numbers, text[] as arrays.
@@ -585,6 +586,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           scanSchedule: { everyHours: null, preOpen: true, postClose: false },
           maxDecisions: 1,
           mandate: EMPTY_MANDATE,
+          state: 'active',
         })
         .catch((error: { code?: string; constraint?: string }) => error);
       expect(duplicate).toMatchObject({ code: '23505', constraint: 'agents_user_id_name_key' });
@@ -1456,62 +1458,70 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
-  describe('the agent limit (0047, D72), rolled back', () => {
-    const insertAgent = (client: { query: (sql: string, params: unknown[]) => Promise<unknown> }, user: string, slug: string) =>
+  describe('the agent limit (0047, 0062: D72, D199), rolled back', () => {
+    const insertAgent = (
+      client: { query: (sql: string, params: unknown[]) => Promise<unknown> },
+      user: string,
+      slug: string,
+      state = 'active',
+    ) =>
       client.query(
-        `INSERT INTO agents (user_id, slug, name, budget_minor) VALUES ($1, $2, $2, 1000)`,
-        [user, slug],
+        `INSERT INTO agents (user_id, slug, name, budget_minor, state) VALUES ($1, $2, $2, 1000, $3)`,
+        [user, slug, state],
       );
 
-    it('allows three live simulated agents, refuses a fourth and a restore, and frees a place on archive', async () => {
+    it('counts active agents only: a paused one is created at the limit, a resume is refused', async () => {
       const client = await getPool().connect();
       try {
         await client.query('BEGIN');
         const user = randomUUID();
         await client.query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 10000000)", [user]);
         const { max_agents_per_user: max } = (await client.query('SELECT max_agents_per_user FROM installation_settings')).rows[0];
-        expect(max).toBe(3);
-        for (const slug of ['limit-1', 'limit-2', 'limit-3']) await insertAgent(client, user, slug);
-        // Three, with the primary the trigger on users made: it never counts.
-        await client.query('SAVEPOINT fourth');
-        await expect(insertAgent(client, user, 'limit-4')).rejects.toThrow(/^agent_limit_reached: 3 of 3 agents/);
-        await client.query('ROLLBACK TO SAVEPOINT fourth');
+        for (let index = 0; index < max; index += 1) await insertAgent(client, user, `limit-${index}`);
+        // The primary the trigger on users made never counts.
+        await client.query('SAVEPOINT one_more');
+        await expect(insertAgent(client, user, 'limit-extra')).rejects.toThrow(
+          new RegExp(`^agent_limit_reached: ${max} of ${max} active agents`),
+        );
+        await client.query('ROLLBACK TO SAVEPOINT one_more');
 
-        await client.query(`UPDATE agents SET state = 'archived' WHERE user_id = $1 AND slug = 'limit-1'`, [user]);
-        await insertAgent(client, user, 'limit-4');
-        await client.query('SAVEPOINT restore');
+        await insertAgent(client, user, 'resting', 'paused');
+        await client.query('SAVEPOINT resume');
         await expect(
-          client.query(`UPDATE agents SET state = 'active' WHERE user_id = $1 AND slug = 'limit-1'`, [user]),
+          client.query(`UPDATE agents SET state = 'active' WHERE user_id = $1 AND slug = 'resting'`, [user]),
         ).rejects.toThrow(/agent_limit_reached/);
-        await client.query('ROLLBACK TO SAVEPOINT restore');
-        // Pausing one at the limit is no new agent.
-        await client.query(`UPDATE agents SET state = 'paused' WHERE user_id = $1 AND slug = 'limit-2'`, [user]);
+        await client.query('ROLLBACK TO SAVEPOINT resume');
+
+        // Pausing one makes the room the resume needed.
+        await client.query(`UPDATE agents SET state = 'paused' WHERE user_id = $1 AND slug = 'limit-0'`, [user]);
+        await client.query(`UPDATE agents SET state = 'active' WHERE user_id = $1 AND slug = 'resting'`, [user]);
       } finally {
         await client.query('ROLLBACK');
         client.release();
       }
     });
 
-    it('lets one of two racing creates through, never both', async () => {
+    it('lets one of two racing activations through, never both', async () => {
       const user = randomUUID();
       const first = await getPool().connect();
       const second = await getPool().connect();
       try {
         await getPool().query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 10000000)", [user]);
-        await insertAgent(getPool(), user, 'race-1');
-        await insertAgent(getPool(), user, 'race-2');
-        // Two creates of the third at once. Without the lock both would count two.
+        const { max_agents_per_user: max } = (await getPool().query('SELECT max_agents_per_user FROM installation_settings')).rows[0];
+        for (let index = 0; index < max - 1; index += 1) await insertAgent(getPool(), user, `race-${index}`);
+        await insertAgent(getPool(), user, 'race-waiting', 'paused');
+        // A create and a resume of the last place at once. Without the lock both would see room.
         await first.query('BEGIN');
         await second.query('BEGIN');
-        await insertAgent(first, user, 'race-3');
-        // first holds the user's row: second waits for it, then counts three.
-        const waiting = insertAgent(second, user, 'race-4').then(
-          () => 'inserted',
+        await insertAgent(first, user, 'race-last');
+        // first holds the user's row: second waits for it, then counts the limit.
+        const waiting = second.query(`UPDATE agents SET state = 'active' WHERE user_id = $1 AND slug = 'race-waiting'`, [user]).then(
+          () => 'resumed',
           (error: Error) => error.message,
         );
         await first.query('COMMIT');
-        expect(await waiting).toMatch(/agent_limit_reached: 3 of 3/);
-        expect(await queries.countLiveAgents(user)).toBe(3);
+        expect(await waiting).toMatch(new RegExp(`agent_limit_reached: ${max} of ${max}`));
+        expect(await queries.countActiveAgents(user)).toBe(max);
       } finally {
         await second.query('ROLLBACK').catch(() => undefined);
         first.release();

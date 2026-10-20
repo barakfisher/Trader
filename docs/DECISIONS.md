@@ -209,3 +209,6 @@ while this file is out of date.
 | 196 | Run a scan now shows a scheduled scan; it never blocks on one |
 | 197 | A scan may decide several trades, each its own proposal |
 | 198 | A scan knows the agent's proposals still waiting, and does not repeat them |
+| 199 | The agent limit counts active agents only |
+| 200 | At the limit a new agent starts paused, and a restore comes back paused |
+| 201 | The admin has no agent limit |

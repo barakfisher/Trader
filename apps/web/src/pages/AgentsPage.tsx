@@ -23,7 +23,14 @@ import {
   withMandate,
   type MandateDraft,
 } from '../lib/agentMandate.ts';
-import { BUDGET_INPUT, agentErrorMessage, agentName, agentStateWord } from '../lib/agentPresentation.ts';
+import {
+  BUDGET_INPUT,
+  activeCount,
+  agentErrorMessage,
+  agentName,
+  agentStateWord,
+  atActiveLimit,
+} from '../lib/agentPresentation.ts';
 import {
   PERSONA_TEMPLATES,
   replaceableBy,
@@ -50,8 +57,8 @@ export function AgentsPage() {
     (useConsolidatedQuery(hasSimulated).data?.agents ?? []).map((standing) => [standing.agentId, standing]),
   );
   const limit = useAgentLimitQuery().data ?? null;
-  // D72: at the limit the page says so before anyone opens the form.
-  const full = limit !== null && limit.used >= limit.max;
+  // D199, D200: at the limit the page says so, and a new agent starts paused.
+  const full = atActiveLimit(limit);
   const [creating, setCreating] = useState(false);
   // The draft outlives the drawer: Escape or a stray click on the shade closes
   // it, and a persona half-written is not lost to that.
@@ -68,9 +75,9 @@ export function AgentsPage() {
         </div>
         <div className="flex items-center gap-3">
           {limit && (
-            <span className="text-xs text-text-muted">{t('agents.limit.used', { used: limit.used, max: limit.max })}</span>
+            <span className="text-xs text-text-muted">{activeCount(limit)}</span>
           )}
-          <Button disabled={full} onClick={() => setCreating(true)}>
+          <Button onClick={() => setCreating(true)}>
             <span className="flex items-center gap-1">
               <Plus className="size-4" aria-hidden />
               {t('agents.create.title')}
@@ -104,6 +111,7 @@ export function AgentsPage() {
           <CreateAgentForm
             draft={draft}
             onChange={setDraft}
+            pausedAtLimit={full ? limit.max : null}
             onCreated={(agentId, needsCheck) => {
               setDraft(EMPTY_DRAFT);
               setCreating(false);
@@ -202,10 +210,13 @@ const EMPTY_DRAFT: AgentDraft = { name: '', budget: '', persona: '', generated: 
 function CreateAgentForm({
   draft,
   onChange,
+  pausedAtLimit,
   onCreated,
 }: {
   draft: AgentDraft;
   onChange: (draft: AgentDraft) => void;
+  /** The limit when it is reached, so the agent is created paused (D200); else null. */
+  pausedAtLimit: number | null;
   /** `needsCheck`: the instructions are the user's own words, so they may contradict the settings (D176). */
   onCreated: (agentId: string, needsCheck: boolean) => void;
 }) {
@@ -239,6 +250,7 @@ function CreateAgentForm({
         budget: budget.trim(),
         persona: persona.trim() || null,
         mandate: mandateInput(mandate),
+        ...(pausedAtLimit === null ? {} : { state: 'paused' as const }),
       },
       { onSuccess: (agent) => onCreated(agent.id, persona.trim() !== '' && persona !== generated) },
     );
@@ -277,6 +289,9 @@ function CreateAgentForm({
         onChange={(value) => onChange({ ...draft, persona: value })}
       />
       {!mandateValid && <p className="text-xs text-loss">{t('agents.mandate.invalid')}</p>}
+      {pausedAtLimit !== null && (
+        <p className="text-xs text-text-muted">{t('agents.limit.startsPaused', { max: pausedAtLimit })}</p>
+      )}
       {create.error && <ErrorNote message={agentErrorMessage(create.error, t('agents.create.failed'))} />}
       <Button type="submit" disabled={create.isPending || !name.trim() || !budgetValid || !mandateValid}>
         <span className="flex items-center gap-1">

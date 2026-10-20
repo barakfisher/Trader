@@ -136,15 +136,44 @@ describe('AgentsPage', () => {
     expect(await screen.findByText('You already have an agent with that name.')).toBeTruthy();
   });
 
-  it('shows how many agents count against the limit, and refuses a new one at it (D72)', async () => {
+  it('counts active agents, and at the limit creates a new one paused, saying so first (D199, D200)', async () => {
     get.mockImplementation(async (path: string) =>
-      path === '/portfolio/consolidated' ? { agents: [] } : { agents: [PRIMARY, MOMENTUM], agentLimit: { used: 3, max: 3 } },
+      path === '/portfolio/consolidated'
+        ? { agents: [] }
+        : path === '/universe/taxonomy'
+          ? TAXONOMY
+          : { agents: [PRIMARY, MOMENTUM], agentLimit: { used: 3, max: 3 } },
     );
+    post.mockResolvedValue(MOMENTUM);
     renderPage(<AgentsPage />);
-    expect(await screen.findByText('3 of 3 agents')).toBeTruthy();
-    expect(screen.getByText(/You have 3 agents, the most this installation allows/)).toBeTruthy();
-    // At the limit the form does not open at all.
-    expect((screen.getByRole('button', { name: 'New agent' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(await screen.findByText('3 of 3 active')).toBeTruthy();
+    expect(screen.getByText(/You have 3 active agents, the most that can run at once/)).toBeTruthy();
+    await openCreateForm();
+    expect(screen.getByText('You have 3 of 3 active, so this agent will start paused. Pause another to resume it.')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Resting' } });
+    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/agents', expect.objectContaining({ state: 'paused' })));
+  });
+
+  it('shows the admin a count with no limit, and creates active (D201)', async () => {
+    get.mockImplementation(async (path: string) =>
+      path === '/portfolio/consolidated'
+        ? { agents: [] }
+        : path === '/universe/taxonomy'
+          ? TAXONOMY
+          : { agents: [PRIMARY, MOMENTUM], agentLimit: { used: 7, max: null } },
+    );
+    post.mockResolvedValue(MOMENTUM);
+    renderPage(<AgentsPage />);
+    expect(await screen.findByText('7 active')).toBeTruthy();
+    await openCreateForm();
+    expect(screen.queryByText(/will start paused/)).toBeNull();
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Many' } });
+    fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls[0]![1]).not.toHaveProperty('state');
   });
 
   it('says the limit in the reader\'s words when the server refuses a racing create', async () => {
@@ -157,12 +186,12 @@ describe('AgentsPage', () => {
     );
     post.mockRejectedValue(new ApiRequestError('limit', 409, 'agent_limit_reached'));
     renderPage(<AgentsPage />);
-    expect(await screen.findByText('2 of 3 agents')).toBeTruthy();
+    expect(await screen.findByText('2 of 3 active')).toBeTruthy();
     await openCreateForm();
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Third' } });
     fireEvent.change(screen.getByLabelText('Paper budget (USD)'), { target: { value: '100' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }));
-    expect(await screen.findByText(/You already have as many agents as this installation allows/)).toBeTruthy();
+    expect(await screen.findByText(/You already have as many active agents as this installation allows/)).toBeTruthy();
   });
 
   it('fills an empty name and persona from a template, and switches between templates', async () => {

@@ -168,13 +168,13 @@ export function getAgent(userId: string, agentId: string): Promise<AgentRow | nu
 }
 
 /**
- * Simulated agents that count against the limit (D72): not archived, never the
- * primary. The trigger in migration 0047 counts the same way.
+ * Simulated agents that count against the limit (D72, D199): active ones, never
+ * the primary. The trigger as migration 0062 left it counts the same way.
  */
-export async function countLiveAgents(userId: string): Promise<number> {
+export async function countActiveAgents(userId: string): Promise<number> {
   const row = await queryOne<{ count: number }>(
     `SELECT count(*)::int AS count FROM agents a
-      WHERE a.user_id = $1 AND NOT a.is_primary AND a.state <> 'archived'`,
+      WHERE a.user_id = $1 AND NOT a.is_primary AND a.state = 'active'`,
     [userId],
   );
   return row?.count ?? 0;
@@ -190,6 +190,8 @@ export interface AgentToCreate {
   scanSchedule: ScanSchedule;
   maxDecisions: number;
   mandate: MandateColumns;
+  /** D200: an agent may start paused, which the limit never refuses. */
+  state: 'active' | 'paused';
 }
 
 /** A simulated agent. A primary is made only by the trigger on `users` (migration 0036). */
@@ -206,11 +208,12 @@ export async function createAgent(agent: AgentToCreate): Promise<AgentRow> {
     preOpen,
     postClose,
     agent.maxDecisions,
+    agent.state,
   ];
   const params = [...fixed, ...MANDATE_COLUMNS.map((column) => agent.mandate[column])];
   const row = await queryOne<{ id: string }>(
     `INSERT INTO agents (user_id, slug, name, persona, budget_minor, currency,
-                         scan_every_hours, scan_pre_open, scan_post_close, max_decisions,
+                         scan_every_hours, scan_pre_open, scan_post_close, max_decisions, state,
                          ${MANDATE_COLUMNS.join(', ')})
      VALUES (${params.map((_, index) => `$${index + 1}`).join(', ')})
      RETURNING id`,

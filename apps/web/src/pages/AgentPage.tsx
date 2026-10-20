@@ -28,9 +28,21 @@ import {
   withMandate,
   type MandateDraft,
 } from '../lib/agentMandate.ts';
-import { BUDGET_INPUT, agentErrorMessage, agentName, agentStateWord } from '../lib/agentPresentation.ts';
+import {
+  BUDGET_INPUT,
+  agentErrorMessage,
+  agentName,
+  agentStateWord,
+  atActiveLimit,
+} from '../lib/agentPresentation.ts';
 import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
-import { useAgentAccountQuery, useAgentQuery, useCheckInstructions, useUpdateAgent } from '../queries/agents.ts';
+import {
+  useAgentAccountQuery,
+  useAgentLimitQuery,
+  useAgentQuery,
+  useCheckInstructions,
+  useUpdateAgent,
+} from '../queries/agents.ts';
 import { KindBadge, WaitingForBrief } from './AgentsPage.tsx';
 
 const TABS = ['holdings', 'performance', 'activity', 'scans', 'settings'] as const;
@@ -184,6 +196,9 @@ function StateControls({ agent }: { agent: AgentView }) {
   const { t } = useTranslation();
   const update = useUpdateAgent(agent.id);
   const set = (state: AgentState) => update.mutate({ state });
+  // D199: a resume needs a free place; a restore without one comes back paused.
+  const limit = useAgentLimitQuery().data ?? null;
+  const full = atActiveLimit(limit);
   return (
     <div className="flex flex-wrap items-center gap-2">
       {agent.state === 'active' && (
@@ -195,7 +210,7 @@ function StateControls({ agent }: { agent: AgentView }) {
         </Button>
       )}
       {agent.state === 'paused' && (
-        <Button variant="secondary" onClick={() => set('active')} disabled={update.isPending}>
+        <Button variant="secondary" onClick={() => set('active')} disabled={update.isPending || full}>
           <span className="flex items-center gap-1">
             <Play className="size-4" aria-hidden />
             {t('agents.actions.resume')}
@@ -203,7 +218,7 @@ function StateControls({ agent }: { agent: AgentView }) {
         </Button>
       )}
       {agent.state === 'archived' ? (
-        <Button variant="secondary" onClick={() => set('active')} disabled={update.isPending}>
+        <Button variant="secondary" onClick={() => set(full ? 'paused' : 'active')} disabled={update.isPending}>
           <span className="flex items-center gap-1">
             <RotateCcw className="size-4" aria-hidden />
             {t('agents.actions.restore')}
@@ -216,6 +231,12 @@ function StateControls({ agent }: { agent: AgentView }) {
             {t('agents.actions.archive')}
           </span>
         </Button>
+      )}
+      {full && agent.state === 'paused' && (
+        <span className="text-xs text-warn">{t('agents.limit.resumeBlocked', { max: limit.max })}</span>
+      )}
+      {full && agent.state === 'archived' && (
+        <span className="text-xs text-text-muted">{t('agents.limit.restoresPaused', { max: limit.max })}</span>
       )}
       <span className="text-xs text-text-muted">{t('agents.stateHint')}</span>
       {update.error && <ErrorNote message={agentErrorMessage(update.error, t('agents.saveFailed'))} />}
