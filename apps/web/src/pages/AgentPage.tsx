@@ -18,7 +18,7 @@ import { Button, Card, ErrorNote, Spinner, buttonClass } from '../components/ui.
 import { errorMessage } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { formatMoney } from '../i18n/format.ts';
-import { minorToDecimalString } from '@traders/shared';
+import { MAX_AGENTS_PER_USER_CEILING, minorToDecimalString } from '@traders/shared';
 import {
   describeMandate,
   draftFromMandate,
@@ -34,6 +34,7 @@ import {
   agentName,
   agentStateWord,
   atActiveLimit,
+  atCeiling,
 } from '../lib/agentPresentation.ts';
 import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import {
@@ -199,6 +200,8 @@ function StateControls({ agent }: { agent: AgentView }) {
   // D199: a resume needs a free place; a restore without one comes back paused.
   const limit = useAgentLimitQuery().data ?? null;
   const full = atActiveLimit(limit);
+  // D202: at the ceiling a restore has no place at all.
+  const ceiling = atCeiling(limit);
   return (
     <div className="flex flex-wrap items-center gap-2">
       {agent.state === 'active' && (
@@ -218,7 +221,7 @@ function StateControls({ agent }: { agent: AgentView }) {
         </Button>
       )}
       {agent.state === 'archived' ? (
-        <Button variant="secondary" onClick={() => set(full ? 'paused' : 'active')} disabled={update.isPending}>
+        <Button variant="secondary" onClick={() => set(full ? 'paused' : 'active')} disabled={update.isPending || ceiling}>
           <span className="flex items-center gap-1">
             <RotateCcw className="size-4" aria-hidden />
             {t('agents.actions.restore')}
@@ -235,7 +238,10 @@ function StateControls({ agent }: { agent: AgentView }) {
       {full && agent.state === 'paused' && (
         <span className="text-xs text-warn">{t('agents.limit.resumeBlocked', { max: limit.max })}</span>
       )}
-      {full && agent.state === 'archived' && (
+      {ceiling && agent.state === 'archived' && (
+        <span className="text-xs text-warn">{t('agents.limit.restoreBlocked', { max: MAX_AGENTS_PER_USER_CEILING })}</span>
+      )}
+      {full && !ceiling && agent.state === 'archived' && (
         <span className="text-xs text-text-muted">{t('agents.limit.restoresPaused', { max: limit.max })}</span>
       )}
       <span className="text-xs text-text-muted">{t('agents.stateHint')}</span>

@@ -1158,7 +1158,7 @@
     "agentLimit": {
       "title": "Agents per user",
       "label": "Most simulated agents a user may have active at once",
-      "hint": "Only active agents count, because only they scan: paused and archived agents and the real portfolio don't, and the admin has no limit. A lower number pauses nothing; it stops the next agent from starting. 1 to {{max}}.",
+      "hint": "Only active agents count, because only they scan: paused and archived agents and the real portfolio don't, and the admin has no limit. Apart from this, anyone but the admin keeps at most {{max}} agents that are not archived. A lower number pauses nothing; it stops the next agent from starting. 1 to {{max}}.",
       "save": "Save",
       "saved": "Saved"
     },
@@ -1293,7 +1293,8 @@
       "budgetRange": "The budget must be more than $0 and at most $1,000,000,000.",
       "invalid": "Check the fields: the name is required, and the budget is dollars with at most two decimals.",
       "budgetDecrease": "This agent has traded, so its budget can be raised but not lowered.",
-      "limitReached": "You already have as many active agents as this installation allows. Pause one to make room."
+      "limitReached": "You already have as many active agents as this installation allows. Pause one to make room.",
+      "totalReached": "You already have {{max}} agents, the most anyone may keep. Archive one to make room."
     },
     "account": {
       "title": "Account",
@@ -1531,7 +1532,9 @@
       "full": "You have {{max}} active agents, the most that can run at once. A new agent starts paused; pause another to run it.",
       "startsPaused": "You have {{max}} of {{max}} active, so this agent will start paused. Pause another to resume it.",
       "resumeBlocked": "{{max}} of {{max}} active: pause another agent to resume this one.",
-      "restoresPaused": "{{max}} of {{max}} active: a restored agent comes back paused."
+      "restoresPaused": "{{max}} of {{max}} active: a restored agent comes back paused.",
+      "ceiling": "You have {{max}} agents, the most anyone may keep. Archive one to make room.",
+      "restoreBlocked": "You have {{max}} agents, the most anyone may keep: archive another to restore this one."
     },
     "mandate": {
       "title": "Mandate",

@@ -24,7 +24,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.agents.mandate import Mandate, ready_to_scan
 
-#: Matches `0063_monthly_cap.SCAN_OUTCOMES`; a test holds the two equal.
+#: Matches `0064_monthly_cap.SCAN_OUTCOMES`; a test holds the two equal.
 ScanOutcome = Literal[
     "trade",
     "no_trade",

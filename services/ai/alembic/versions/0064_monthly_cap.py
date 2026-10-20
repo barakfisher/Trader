@@ -1,4 +1,4 @@
-"""The monthly cap's refusal is an outcome of its own, and its sum is indexed (D157, D158, D202).
+"""The monthly cap's refusal is an outcome of its own, and its sum is indexed (D157, D158, D203-D205).
 
 `cap_reached` joins the outcomes of an agent scan (`agent_scans`) and of an
 assistant reply (`assistant_messages`). A scan or a question refused because the
@@ -9,17 +9,17 @@ the screen says which, so the two cannot share `budget_reached`.
 user - `sum(cost_micro_usd)` for one user since their month began. 0052's
 `llm_calls_assistant_spend` covers the same columns for one purpose only.
 
-The downgrade refuses while any row holds `cap_reached`: 0062 has no word for
+The downgrade refuses while any row holds `cap_reached`: 0063 has no word for
 it, and rewriting it to `budget_reached` would say the wrong reset.
 
-Revision ID: 0063_monthly_cap
-Revises: 0062_active_agent_limit
+Revision ID: 0064_monthly_cap
+Revises: 0063_agent_total_ceiling
 """
 
 from alembic import op
 
-revision = "0063_monthly_cap"
-down_revision = "0062_active_agent_limit"
+revision = "0064_monthly_cap"
+down_revision = "0063_agent_total_ceiling"
 branch_labels = None
 depends_on = None
 
@@ -56,7 +56,7 @@ def downgrade() -> None:
         BEGIN
             IF EXISTS (SELECT 1 FROM agent_scans WHERE outcome = 'cap_reached')
                OR EXISTS (SELECT 1 FROM assistant_messages WHERE outcome = 'cap_reached') THEN
-                RAISE EXCEPTION 'cap_reached rows exist; 0062 cannot describe them';
+                RAISE EXCEPTION 'cap_reached rows exist; 0063 cannot describe them';
             END IF;
         END
         $$

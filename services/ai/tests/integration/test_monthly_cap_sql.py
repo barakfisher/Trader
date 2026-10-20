@@ -1,4 +1,4 @@
-"""The monthly cap's ledger against real `users` and `llm_calls` (D157, D202)."""
+"""The monthly cap's ledger against real `users` and `llm_calls` (D157, D203)."""
 
 from __future__ import annotations
 

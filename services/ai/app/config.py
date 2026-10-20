@@ -281,7 +281,7 @@ class Settings(BaseSettings):
     # How long a recorded model call (prompt and completion included, which
     # hold portfolio data) is kept in `llm_calls` before the next insert
     # deletes it (decision 87). Never less than a month: the monthly cap sums
-    # this log since the user's month began (D202).
+    # this log since the user's month began (D204).
     llm_call_retention_days: int = Field(default=MIN_RETENTION_DAYS, ge=MIN_RETENTION_DAYS)
 
     # Per-call limits. A narration is a headline plus a short explanation, so the

@@ -341,12 +341,16 @@ export interface AgentsResponse {
   agents: AgentView[];
   /**
    * D72, D199: active simulated agents, and how many may be active at once -
-   * null for the admin, who has no limit (D201).
+   * null for the admin, who has no limit (D201). `total`: those not archived,
+   * against `MAX_AGENTS_PER_USER_CEILING` (D202); null for the admin too.
    */
-  agentLimit: { used: number; max: number | null };
+  agentLimit: { used: number; max: number | null; total: number | null };
 }
 
-/** D72's bounds: the Admin page and migration 0047's CHECK agree on them. */
+/**
+ * D72's bounds: the Admin page and migration 0047's CHECK agree on them. Also the
+ * most simulated agents a user may keep that are not archived (D202, migration 0063).
+ */
 export const MAX_AGENTS_PER_USER_CEILING = 50;
 
 /** The most the assistant's daily limit may be set to: migration 0052's CHECK, $100. */

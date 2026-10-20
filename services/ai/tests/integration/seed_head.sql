@@ -202,7 +202,7 @@ INSERT INTO llm_calls (user_id, purpose, provider, model, outcome, verdict, late
 INSERT INTO llm_calls (user_id, agent_id, purpose, provider, model, outcome, latency_ms, prompt) VALUES
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'agent_scan',
    'openrouter', 'm', 'ok', 900, 'p');
--- Scans (0043, 0063): one finished with each outcome, both triggers, and one running.
+-- Scans (0043, 0064): one finished with each outcome, both triggers, and one running.
 INSERT INTO agent_scans (user_id, agent_id, trigger, started_at, finished_at, outcome, steps, cost_micro_usd, model, briefing, transcript, answer, error) VALUES
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'manual', now() - interval '6 days', now() - interval '6 days', 'trade', 3, 41000, 'm', '{}', '[]', '{"decision": "buy", "symbol": "EQTY", "quantity": "2", "thesis": "t"}', NULL),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', now() - interval '5 days', now() - interval '5 days', 'no_trade', 1, 9000, 'm', '{}', '[]', '{"decision": "none", "thesis": "t"}', NULL),

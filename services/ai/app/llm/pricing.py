@@ -205,7 +205,7 @@ def estimate_cost_micro_usd(
     return int(micro)
 
 
-#: Characters per token for pricing a prompt before it is sent (D202): the
+#: Characters per token for pricing a prompt before it is sent (D203): the
 #: common rule of thumb for English and JSON. No tokenizer is loaded for the
 #: model a call will reach, and a guess this coarse is enough for a ceiling
 #: whose output half is already the worst case.

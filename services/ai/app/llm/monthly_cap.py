@@ -6,7 +6,7 @@ in `users.timezone`**, and spent is `sum(llm_calls.cost_micro_usd)` for the
 user since it began - `llm_calls` is already the ledger of every call, refused
 ones included, so there is no second counter to drift from it. That holds only
 while the log keeps a whole month, which is why `LLM_CALL_RETENTION_DAYS` may
-not be set below `MIN_RETENTION_DAYS` (D202).
+not be set below `MIN_RETENTION_DAYS` (D204).
 
 **Checked before each call, tool loops included.** A call's cost is known after
 it returns, so the honest form of strict is to refuse when spent plus the most
@@ -55,7 +55,7 @@ from app.llm.pricing import ModelPrice, ceiling_cost_micro_usd
 log = get_logger("llm.monthly_cap")
 
 #: The shortest call log that still holds a whole month in any time zone: 31
-#: days plus a day for the zone's offset from UTC (D202).
+#: days plus a day for the zone's offset from UTC (D204).
 MIN_RETENTION_DAYS = 32
 
 

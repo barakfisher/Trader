@@ -1,4 +1,4 @@
-"""The monthly cap (D157, D158, D202): checked before each call, keyed by the caller's user.
+"""The monthly cap (D157, D158, D203-D205): checked before each call, keyed by the caller's user.
 
 The ledger is a fake here; `tests/integration/test_monthly_cap_sql.py` reads
 the real `users` and `llm_calls`.

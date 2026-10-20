@@ -1,6 +1,6 @@
 """The scan's outcomes and triggers are one list each, in code and in the CHECKs.
 
-Triggers are 0043's; outcomes were last rewritten by 0063 (`cap_reached`)."""
+Triggers are 0043's; outcomes were last rewritten by 0064 (`cap_reached`)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from app.models import AgentScanRequest, AgentScanResponse
 
 VERSIONS = Path(__file__).parents[1] / "alembic" / "versions"
 MIGRATION = VERSIONS / "0043_agent_scans.py"
-OUTCOMES_MIGRATION = VERSIONS / "0063_monthly_cap.py"
+OUTCOMES_MIGRATION = VERSIONS / "0064_monthly_cap.py"
 
 
 def _migration(path: Path = MIGRATION) -> ModuleType:
