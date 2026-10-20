@@ -6,7 +6,7 @@ the reasoning behind it is not, and that is what this file is for. Maintained pe
 
 Updated: 2026-10-19 ~17:00 UTC - **Handoff after five merges since #259: M9 has login (#260) and
 signup with the admin's approval (#264); the next M9 PR is the cap's enforcement.** Decisions
-reached **188** (next: **189**). Migrations: **`0059_mandate_check` is head** (next free: **`0060`**;
+reached **193** (next: **194**; D189 figures retry #265, D190-D193 taxonomy names in Hebrew). Migrations: **`0059_mandate_check` is head** (next free: **`0060`**;
 `git fetch` and check `main` has one head before writing one). **Deployed:** compose and kind both
 run `796cf3d` (#263) at `0059`. **#264 is merged and undeployed, and must stay so until the cap PR
 is merged (D186)** - redeploy only on the user's "redeploy". This stretch:
@@ -3010,6 +3010,40 @@ failure they prevent.
     window - and pass a check it should fail); one retry shared with the mandate's (a fixed
     thesis that then breaks a limit would get no chance). Cost: ~$0.001 per extra answer at
     Flash-Lite rates, inside the agent's daily budget.
+190. **Yahoo's taxonomy names are translated on the web, in a map keyed by the English name** (the
+    user, 2026-10-19/20, after #262 left it open). `apps/web/src/i18n/taxonomy/he.json` holds all
+    262 names (11 sectors, 142 industries, 115 ETF categories; six names are both a sector and a
+    category and share one entry), read through `i18n/taxonomyNames.ts`. **Why:** only the web
+    shows these names - Telegram, the digest and the server's sentences never name a sector - so a
+    server table would be a migration and a join for text no server shows. *Rejected:* a server
+    table or `localized` column (it has to come from a committed map anyway, because
+    `universe_taxonomy` is rebuilt from profiles on every load); the i18next catalogue (names like
+    "Foreign Small/Mid Blend" or "Trading--Inverse Debt" make poor keys, and English would carry 262
+    entries that repeat their own keys). Instead of `parity.ts`, `test/taxonomyNames.test.ts` holds
+    the map to `data/universe/instruments.jsonl` in both directions.
+191. **The stored mandate keeps Yahoo's English names; translation is for display only** (the user,
+    2026-10-20). `agents.sectors/industries/etf_categories`, `assertKnownClassifications`, the
+    enforcement in `mandate.py`, the scan briefing and the contradiction check's "buys only in:"
+    all keep matching English exactly, and changing the language changes no stored data. Picker
+    search matches both spellings ("שבבים" and "semi" both find Semiconductors). *Rejected:* storing
+    `{en, he}` pairs like `observations.localized` - a migration and a wire change for two copies
+    that can drift, of names no server shows.
+192. **Instructions written in Hebrew name each choice as "טכנולוגיה (Technology)"** (the user,
+    2026-10-20). `describeMandate` uses `taxonomyPhrase`: the translation, with the English
+    identifier in brackets. **Why:** the instructions are what the model reads beside the
+    briefing's English names, and once the user edits them they are the text that the
+    contradiction check (D176, D183) compares with "buys only in: Technology". With Hebrew alone, a
+    loose model translation of an obscure industry ("Muni Single State Short") could become a
+    false conflict warning. *Rejected:* Hebrew alone (it reads best, but costs that risk); English
+    alone (what shipped until now - the one untranslated phrase on the page). The cost is longer,
+    mixed-direction text in the textarea.
+193. **A name the map lacks is shown in English, marked `lang="en"`, and CI makes the gap short**
+    (the user, 2026-10-20). A rescreen can bring a name Yahoo added after the snapshot was
+    committed: the picker shows it in English, and instructions use it with no brackets. The test
+    fails when any committed name has no Hebrew name, and when the map names something the
+    snapshot lacks. So the gap lasts only until the next snapshot commit. *Rejected:* hiding untranslated
+    names (that hides a choice the server accepts, and leaves a stored chip with no row); a
+    warning in the UI (it tells the user about a gap only a developer can fix).
 
 ---
 
