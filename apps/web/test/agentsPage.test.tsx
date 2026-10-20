@@ -105,6 +105,27 @@ describe('AgentsPage', () => {
     expect(screen.getByLabelText('Additional instructions').getAttribute('dir')).toBe('auto');
   });
 
+  it('says beside the disabled button what is still missing (D225)', async () => {
+    renderPage(<AgentsPage />);
+    await openCreateForm();
+    const submit = screen.getByRole('button', { name: 'Create agent' }) as HTMLButtonElement;
+    const budget = screen.getByLabelText('Paper budget (USD)') as HTMLInputElement;
+    // The budget starts empty, with no placeholder that reads as a value.
+    expect(budget.value).toBe('');
+    expect(budget.placeholder).toBe('');
+    expect(submit.disabled).toBe(true);
+    expect(submit.getAttribute('aria-describedby')).toBe('create-agent-missing');
+    expect(screen.getByText('Give the agent a name. Enter its paper budget, e.g. 1000.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Warren' }));
+    expect(screen.getByText('Enter its paper budget, e.g. 1000.')).toBeTruthy();
+    fireEvent.change(budget, { target: { value: '10.005' } });
+    expect(screen.getByText('The paper budget is dollars and cents, e.g. 1000 or 1000.50.')).toBeTruthy();
+    fireEvent.change(budget, { target: { value: '1000' } });
+    expect(submit.disabled).toBe(false);
+    expect(submit.getAttribute('aria-describedby')).toBeNull();
+    expect(screen.queryByText(/paper budget is dollars/)).toBeNull();
+  });
+
   it('sends the budget as the decimal string typed, and refuses a third decimal before sending', async () => {
     post.mockResolvedValue(MOMENTUM);
     renderPage(<AgentsPage />);

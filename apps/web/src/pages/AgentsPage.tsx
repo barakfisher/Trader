@@ -233,6 +233,11 @@ function CreateAgentForm({
   const { name, budget, persona, generated, mandate } = draft;
   const budgetValid = BUDGET_INPUT.test(budget.trim());
   const mandateValid = mandateProblems(mandate).length === 0;
+  // A disabled button says why (D225): what is still missing, beside it.
+  const missing = [
+    !name.trim() && t('agents.create.missingName'),
+    budget.trim() === '' ? t('agents.create.missingBudget') : !budgetValid && t('agents.create.invalidBudget'),
+  ].filter((reason): reason is string => Boolean(reason));
   // Instructions the user wrote are never replaced by a click; text a template
   // or the settings wrote may be.
   const templatesAvailable = replaceableBy(persona, templatePersona) || persona === generated;
@@ -282,7 +287,6 @@ function CreateAgentForm({
           onChange={(event) => onChange({ ...draft, budget: event.target.value })}
           inputMode="decimal"
           dir="ltr"
-          placeholder="1000"
           required
           aria-invalid={budget !== '' && !budgetValid}
           className="w-full rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
@@ -300,12 +304,23 @@ function CreateAgentForm({
         <p className="text-xs text-text-muted">{t('agents.limit.startsPaused', { max: pausedAtLimit })}</p>
       )}
       {create.error && <ErrorNote message={agentErrorMessage(create.error, t('agents.create.failed'))} />}
-      <Button type="submit" disabled={create.isPending || !name.trim() || !budgetValid || !mandateValid}>
-        <span className="flex items-center gap-1">
-          <Plus className="size-4" aria-hidden />
-          {t('agents.create.submit')}
-        </span>
-      </Button>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          type="submit"
+          disabled={create.isPending || missing.length > 0 || !mandateValid}
+          describedBy={missing.length > 0 ? 'create-agent-missing' : undefined}
+        >
+          <span className="flex items-center gap-1">
+            <Plus className="size-4" aria-hidden />
+            {t('agents.create.submit')}
+          </span>
+        </Button>
+        {missing.length > 0 && (
+          <p id="create-agent-missing" className="text-xs text-text-muted">
+            {missing.join(' ')}
+          </p>
+        )}
+      </div>
     </form>
   );
 }
