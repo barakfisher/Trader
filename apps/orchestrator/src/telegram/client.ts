@@ -389,6 +389,32 @@ export class TelegramNotifier implements Notifier {
     return this.call('sendMessage', { chat_id: chatId, text: clampMessage(text) });
   }
 
+  /**
+   * An assistant's answer (D223), its suggested questions as reply buttons: a
+   * tap sends the suggestion as the user's next message, which is the next
+   * question. One-time, so the buttons fold away once one is used; none at all
+   * removes any left from the previous answer.
+   */
+  async sendAnswer(chatId: string, text: string, suggestions: readonly string[]): Promise<DeliveryResult> {
+    return this.call('sendMessage', {
+      chat_id: chatId,
+      text: clampMessage(text),
+      reply_markup:
+        suggestions.length === 0
+          ? { remove_keyboard: true }
+          : {
+              keyboard: suggestions.map((suggestion) => [{ text: suggestion }]),
+              one_time_keyboard: true,
+              resize_keyboard: true,
+            },
+    });
+  }
+
+  /** "typing…" under the chat's name for a few seconds: a question is being answered. */
+  async sendTyping(chatId: string): Promise<DeliveryResult> {
+    return this.call('sendChatAction', { chat_id: chatId, action: 'typing' });
+  }
+
   private async call(method: string, payload: unknown): Promise<DeliveryResult> {
     for (const attempt of [1, 2]) {
       let response: Response;

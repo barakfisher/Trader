@@ -24,6 +24,7 @@
 
 import {
   RECHECK_WINDOW_DAYS,
+  type AssistantOutcome,
   type DigestReason,
   type EvidenceChecked,
   type LocalizedTexts,
@@ -228,6 +229,23 @@ export interface Messages {
   };
 
   /**
+   * A question to the assistant from the chat (D221-D224). The answer and a
+   * decline are the model's, in the question's language (D220); these are the
+   * fixed sentences around them, chosen by the question's language too (D224).
+   */
+  ask: {
+    /** Said instead of an answer, by the outcome that left none. */
+    noReply: Record<Exclude<AssistantOutcome, 'answer' | 'decline' | 'clarify'>, string>;
+    tooLong: (limit: number) => string;
+    stillAnswering: string;
+    unavailable: string;
+    textOnly: string;
+    /** The heading over the news an answer drew on. */
+    sources: string;
+    newConversation: string;
+  };
+
+  /**
    * A sign-up request, said to the admin (D156, D184, D187). Figures - the cap,
    * the time - arrive formatted in this language's locale; the email and zone
    * are the requester's own text.
@@ -357,7 +375,7 @@ const en: Messages = {
   severities: { info: 'info', notable: 'notable', high: 'high' },
   alertingFrom: (severity) =>
     `Alerting on ${severity} and above. Open the app for the full portfolio.`,
-  commands: 'Commands: /portfolio /pending /mute /stop',
+  commands: 'Write a question to ask the assistant. Commands: /new /portfolio /pending /mute /stop',
   connected: 'Connected. Alerts will arrive here.',
   chatTaken: 'This chat is already connected to another account.',
   linkUsed: 'That link has already been used. Generate a new one.',
@@ -414,6 +432,22 @@ const en: Messages = {
     confirmInApp: 'This price is too large for a Telegram button: confirm it in the app.',
   },
 
+  ask: {
+    noReply: {
+      failed: "No answer I could check against the data, so none is shown. Try asking again, or more narrowly.",
+      budget_reached: "Today's spending limit for questions is reached. Questions work again after midnight.",
+      cap_reached: "This month's spending limit for your account is reached. Questions work again when the next month begins.",
+      no_model: 'The assistant needs a model, and none is set up. An admin can choose one on the Admin page.',
+      own_key_failed:
+        "OpenRouter refused your own API key, so this question wasn't answered. Settings says why; until you save a working key, questions use this installation's account under your monthly limit.",
+    },
+    tooLong: (limit) => `That question is too long. Ask it in at most ${limit} characters.`,
+    stillAnswering: 'Still answering your last question. Send this one again when that answer arrives.',
+    unavailable: "The assistant couldn't be reached, so this question wasn't answered. Try again in a minute.",
+    textOnly: 'I can read text only. Write your question as a message.',
+    sources: 'Sources:',
+    newConversation: 'New conversation. Your next question starts it.',
+  },
   recheck: {
     button: '🔄 Re-check',
     startedToast: "Re-checking at today's price - the answer follows here.",
@@ -657,7 +691,7 @@ const he: Messages = {
   disconnected: 'החיבור נותק. התיק שלך עדיין במעקב; שום דבר לא יישלח לכאן.',
   severities: { info: 'מידע', notable: 'בולט', high: 'גבוה' },
   alertingFrom: (severity) => `התראות מרמת ${severity} ומעלה. התיק המלא באפליקציה.`,
-  commands: `פקודות: ${ltr('/portfolio /pending /mute /stop')}`,
+  commands: `כתבו שאלה כדי לשאול את העוזר. פקודות: ${ltr('/new /portfolio /pending /mute /stop')}`,
   connected: 'מחובר. ההתראות יגיעו לכאן.',
   chatTaken: 'הצ׳אט הזה כבר מחובר לחשבון אחר.',
   linkUsed: 'בקישור הזה כבר השתמשו. צרו קישור חדש.',
@@ -714,6 +748,21 @@ const he: Messages = {
     confirmInApp: 'המחיר גדול מדי לכפתור בטלגרם: אשרו אותו באפליקציה.',
   },
 
+  ask: {
+    noReply: {
+      failed: 'לא נמצאה תשובה שאפשר לבדוק מול הנתונים, ולכן לא מוצגת תשובה. נסו לשאול שוב, או בצורה ממוקדת יותר.',
+      budget_reached: 'הגעתם למגבלת ההוצאה היומית על שאלות. אפשר לשאול שוב אחרי חצות.',
+      cap_reached: 'הגעתם למגבלת ההוצאה החודשית של החשבון. אפשר לשאול שוב כשיתחיל החודש הבא.',
+      no_model: 'העוזר צריך מודל, ולא הוגדר אחד. מנהל יכול לבחור מודל בדף הניהול.',
+      own_key_failed: `${ltr('OpenRouter')} דחה את מפתח ה־${ltr('API')} שלכם, ולכן השאלה לא נענתה. בהגדרות מוסבר למה; עד שתשמרו מפתח תקין, השאלות עוברות דרך חשבון המערכת במסגרת המגבלה החודשית.`,
+    },
+    tooLong: (limit) => `השאלה ארוכה מדי. נסחו אותה בעד ${ltr(limit)} תווים.`,
+    stillAnswering: 'עדיין עונה על השאלה הקודמת. שלחו את זו שוב כשהתשובה תגיע.',
+    unavailable: 'לא הצלחתי להגיע לעוזר, ולכן השאלה לא נענתה. נסו שוב בעוד דקה.',
+    textOnly: 'אני קורא טקסט בלבד. כתבו את השאלה כהודעה.',
+    sources: 'מקורות:',
+    newConversation: 'שיחה חדשה. השאלה הבאה שלכם תפתח אותה.',
+  },
   recheck: {
     button: '🔄 בדיקה חוזרת',
     startedToast: 'בודק שוב במחיר של היום - התשובה תגיע כאן.',

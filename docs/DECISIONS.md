@@ -230,3 +230,8 @@ while this file is out of date.
 | 217 | In Telegram, Re-check appears when a tap finds the proposal expired; the re-check runs after the tap is answered |
 | 218 | A proposal a later approved proposal already carried out is not re-checked |
 | 219 | A re-check's briefing carries the symbol's news and the move since it was proposed, and its thesis must say whether the original reason still holds |
+| 220 | The assistant answers in the language the question was asked in, on the Ask page and in Telegram |
+| 221 | A Telegram message that is not a command is a question, sent through the Ask page's own call |
+| 222 | One rolling conversation per chat: `telegram_bindings.assistant_conversation_id` (`0067`), a new one after 12 quiet hours or `/new` |
+| 223 | In Telegram an answer is flattened markdown, plus at most three news sources with their URLs; suggestions are one-time reply buttons |
+| 224 | The bot's fixed sentences around a question are in the question's language, read from its letters |

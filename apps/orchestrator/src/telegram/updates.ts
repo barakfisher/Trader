@@ -1,6 +1,6 @@
 /**
- * Inbound Telegram updates - a tap on a button, or a command - and what each
- * one does (FLOWS.md F4).
+ * Inbound Telegram updates - a tap on a button, a command, or a question for
+ * the assistant (D221) - and what each one does (FLOWS.md F4).
  *
  * **Transport-independent on purpose.** An update reaches this module one of
  * two ways: pushed to `POST /telegram/webhook` once a public HTTPS URL exists,
@@ -38,6 +38,7 @@ import {
   listProposals,
   muteUntil,
   redeemTelegramBindToken,
+  setTelegramConversation,
 } from '../db/queries.js';
 import { logger } from '../logger.js';
 import type { Notifier } from '../notify/notifier.js';
@@ -49,6 +50,7 @@ import {
 } from '../services/proposalState.js';
 import { applyDecision, factsOf } from '../services/proposals.js';
 import { MESSAGES, messagesFor, observationTextIn, type Messages } from '../notify/messages.js';
+import { startQuestion } from './assistantQuestion.js';
 import { decodeBindToken } from './bindToken.js';
 import { BUSY_CALLBACK_DATA, decodeCallbackData } from './callbackToken.js';
 import { TelegramNotifier, type Keyboard } from './client.js';
@@ -261,9 +263,10 @@ async function handleMessage(
   deps: UpdateDeps,
   message: z.infer<typeof updateSchema>['message'],
 ): Promise<void> {
-  if (!message?.text) return;
+  if (message === undefined) return;
   const chatId = String(message.chat.id);
-  const [command, argument] = message.text.trim().split(/\s+/, 2);
+  const text = message.text?.trim() ?? '';
+  const [command, argument] = text.split(/\s+/, 2);
   const telegram = telegramOf(deps);
 
   if (command === '/start') {
@@ -279,10 +282,28 @@ async function handleMessage(
     return;
   }
 
+  // Anything that is not a command is a question to the assistant (D221),
+  // answered off the poller and in the question's own language.
+  if (text !== '' && !text.startsWith('/')) {
+    await startQuestion({ telegram, ai: deps.ai, userId: binding.user_id, chatId, question: text });
+    return;
+  }
+
   const settings = await getOrCreateUserSettings(binding.user_id);
   const messages = messagesFor(settings.language);
 
+  if (text === '') {
+    // A photo, a voice note, a sticker: nothing the assistant can read.
+    await telegram?.sendText(chatId, messages.ask.textOnly);
+    return;
+  }
+
   switch (command) {
+    case '/new': {
+      await setTelegramConversation(binding.user_id, null);
+      await telegram?.sendText(chatId, messages.ask.newConversation);
+      return;
+    }
     case '/pending': {
       const open = await listProposals(binding.user_id, { open: true, limit: 10 });
       const now = new Date();

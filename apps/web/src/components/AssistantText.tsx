@@ -3,7 +3,7 @@ import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useRouter } from '@tanstack/react-router';
 
-import { SERVER_ENGLISH } from '../lib/textDirection.ts';
+import { writtenLanguage } from '@traders/shared';
 
 /**
  * An assistant reply, rendered from its markdown by `react-markdown` (the
@@ -15,8 +15,9 @@ import { SERVER_ENGLISH } from '../lib/textDirection.ts';
  * other opens in a new tab. The server has already reduced a link to a page
  * that does not exist to its words (`reply.py`).
  *
- * English, like every reply until a decision says otherwise (guideline 1), so
- * it is marked `lang="en"` and takes the direction of its own text.
+ * In the language the question was asked in (D220) - not necessarily the
+ * interface's - so it is marked with the language its own text is written in,
+ * and takes the direction of that text.
  */
 export function AssistantText({ text }: { text: string }) {
   const router = useRouter();
@@ -60,7 +61,7 @@ export function AssistantText({ text }: { text: string }) {
     td: ({ children }) => <td className="border-b border-border-subtle px-2 py-1">{children}</td>,
   };
   return (
-    <div {...SERVER_ENGLISH} className="space-y-2 text-sm text-text-primary">
+    <div lang={writtenLanguage(text)} dir="auto" className="space-y-2 text-sm text-text-primary">
       <Markdown remarkPlugins={[remarkGfm]} components={components} disallowedElements={['img']} skipHtml>
         {text}
       </Markdown>
