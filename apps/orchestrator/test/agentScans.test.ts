@@ -306,13 +306,46 @@ describe('the Decisions tab (D50)', () => {
     const body = await (await get(`/agents/${AGENT}/scans/${SCAN}`)).json();
     expect(body).toMatchObject({
       briefing: { cash: '10000.00' },
-      thesis: 'NVDA fell 2.1%.',
-      trades: [expect.objectContaining({ proposal: { id: 'p-1', state: 'approved' }, fillId: 'f-1' })],
+      // A one-trade answer from before D197: its thesis is the trade's, shown once, under it.
+      thesis: null,
+      trades: [
+        expect.objectContaining({ thesis: 'NVDA fell 2.1%.', proposal: { id: 'p-1', state: 'approved' }, fillId: 'f-1' }),
+      ],
       transcript: [
         { role: 'assistant', text: 'Checking NVDA.', toolCalls: [{ id: 'c1', name: 'get_quote', arguments: { symbol: 'NVDA' } }] },
         { role: 'tool', callId: 'c1', name: 'get_quote', result: { price: '237.14' } },
       ],
     });
+  });
+
+  it('reads a refused one-trade answer from before D197 as a trade not proposed, with its reasons', async () => {
+    const queries = await import('../src/db/queries.js');
+    const answer = { decision: 'buy', symbol: 'IRON', quantity: '3', thesis: 't', problems: ['figures not in the evidence: 39.69'] };
+    vi.mocked(queries.listAgentScans).mockResolvedValueOnce([
+      scanRow({ outcome: 'invalid_answer', answer, proposals: [] }),
+    ] as never);
+    const { get } = await signedIn(async () => RESULT);
+    const [scan] = (await (await get(`/agents/${AGENT}/scans`)).json()).scans;
+    expect(scan.trades).toEqual([
+      expect.objectContaining({ symbol: 'IRON', refused: true, problems: ['figures not in the evidence: 39.69'], proposal: null }),
+    ]);
+  });
+
+  it("keeps a pass's reason, from either shape of answer", async () => {
+    const queries = await import('../src/db/queries.js');
+    const { get } = await signedIn(async () => RESULT);
+    for (const answer of [
+      { decision: 'none', thesis: 'Nothing fits.' },
+      { trades: [], thesis: 'Nothing fits.', problems: [] },
+    ]) {
+      vi.mocked(queries.getAgentScan).mockResolvedValueOnce({
+        ...scanRow({ outcome: 'no_trade', answer, proposals: [] }),
+        briefing: {},
+        transcript: [],
+      } as never);
+      const body = await (await get(`/agents/${AGENT}/scans/${SCAN}`)).json();
+      expect(body).toMatchObject({ thesis: 'Nothing fits.', trades: [] });
+    }
   });
 
   it('is a 404 for a scan that is not this agent\'s, or an id that is not one', async () => {
