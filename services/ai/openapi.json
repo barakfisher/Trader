@@ -2,77 +2,14 @@
   "components": {
     "schemas": {
       "AgentScanAnswer": {
-        "description": "The agent's answer as it wrote it, with the server's reasons if it failed (D14).",
+        "description": "The agent's answer (D14, D197): its trades, kept first, then any refused, with why;\nand, for no trade, its reason.",
         "properties": {
-          "decision": {
-            "anyOf": [
-              {
-                "enum": [
-                  "buy",
-                  "sell",
-                  "none"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Decision"
-          },
-          "price_as_of": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Price As Of"
-          },
-          "price_minor": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "For a buy or sell: the agent's price (D47), the quote at the scan's end.",
-            "title": "Price Minor"
-          },
           "problems": {
             "items": {
               "type": "string"
             },
             "title": "Problems",
             "type": "array"
-          },
-          "quantity": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Whole shares as a decimal string (guideline 4).",
-            "title": "Quantity"
-          },
-          "symbol": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Symbol"
           },
           "thesis": {
             "anyOf": [
@@ -84,6 +21,13 @@
               }
             ],
             "title": "Thesis"
+          },
+          "trades": {
+            "items": {
+              "$ref": "#/components/schemas/AgentScanTrade"
+            },
+            "title": "Trades",
+            "type": "array"
           }
         },
         "title": "AgentScanAnswer",
@@ -186,6 +130,107 @@
           "error"
         ],
         "title": "AgentScanResponse",
+        "type": "object"
+      },
+      "AgentScanTrade": {
+        "description": "One trade the agent decided (D197): kept and priced, or refused with why.",
+        "properties": {
+          "decision": {
+            "anyOf": [
+              {
+                "enum": [
+                  "buy",
+                  "sell"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          },
+          "funded_by": {
+            "description": "Sells in the same answer whose proceeds this buy needs: approve those first.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Funded By",
+            "type": "array"
+          },
+          "price_as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price As Of"
+          },
+          "price_minor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A kept trade's price: the agent's price (D47), the quote when reviewed.",
+            "title": "Price Minor"
+          },
+          "problems": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whole shares as a decimal string (guideline 4).",
+            "title": "Quantity"
+          },
+          "refused": {
+            "default": false,
+            "description": "Not proposed; `problems` says why.",
+            "title": "Refused",
+            "type": "boolean"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
+          "thesis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thesis"
+          }
+        },
+        "title": "AgentScanTrade",
         "type": "object"
       },
       "AssistantMessageRequest": {

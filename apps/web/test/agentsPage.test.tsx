@@ -39,6 +39,7 @@ const PRIMARY: AgentView = {
   holdingsCount: 10,
   createdAt: '2026-10-05T10:00:00Z',
   scanSchedule: null,
+  maxDecisions: null,
   runningScan: null,
   llmBudgetMicroUsd: null,
   llmSpentTodayMicroUsd: null,

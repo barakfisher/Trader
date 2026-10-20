@@ -3076,6 +3076,29 @@ failure they prevent.
     user's. The agent query re-reads every 30 s only while a scan runs or one is that close.
     *Rejected:* a manual scan covering the next slot (skips a look the user may have wanted);
     blocking manual scans near a slot (blocks the user exactly when they want a scan now).
+197. **A scan may decide several trades, each its own proposal** (the user, 2026-10-20; migration
+    **0061**). `agents.max_decisions` 1-10 (defaults short 1, medium 2, long 3; existing agents
+    1). The answer is `{"trades": [...]}`, each trade with its own thesis; the one-trade shape
+    is still read, so stored scans and a model answering the old way both work. Sells are
+    reviewed before buys (`trade_review.py`), so a buy may be paid for by a sell in the same
+    answer - it carries `funded_by` and its headline says "paid for by selling X: approve that
+    first". Each trade stands alone: what passes is kept, a trade refused for figures (D189) or
+    the mandate (D170) goes back once per kind - just those trades - and what still fails is
+    stored refused with why; a trade the model does not send again is withdrawn, not refused
+    (a pass after a refusal is still `no_trade`). `proposals_one_per_scan` became one per scan
+    and symbol. **Why:** the user wants conservative agents that rebalance several positions in
+    one look. *Rejected:* one bundle approved all-or-nothing (atomic, but Telegram's Confirm
+    could no longer carry the prices - 64 bytes - reversing D62); a bundle with a checkbox per
+    leg (all of that plus partial fills); a limit as a percentage of holdings (moves on its own,
+    gives a new agent 1); all-or-nothing review (one slipped decimal on trade 7 loses the
+    other six). Approving a funded buy before its sell is refused for cash and stays pending.
+198. **A scan knows the agent's proposals still waiting, and does not repeat them** (the user,
+    2026-10-20). The briefing lists them (`waiting_for_approval`); a trade on the same symbol
+    and side as one is refused; the book a trade is reviewed against counts the waiting buys as
+    filled (cash spent, shares held), so approving everything never fails for cash and the
+    mandate's limits count them. A waiting sell is not counted - it may be rejected. **Why:**
+    "buy 3 IRON" twice an hour apart (compose, 2026-10-19), and scans every two hours would
+    make that the norm. *Rejected:* briefing only (the model may still repeat).
 
 ---
 
@@ -3978,6 +4001,16 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
   into `~/Backups/traders/<kind|compose>/`, log `~/Library/Logs/traders-db-backup.log`. It runs
   **the main checkout's** `scripts/db-backup.sh` - a different branch checked out there changes
   what the backup runs. `bash scripts/backup-schedule.sh status|run|uninstall`.
+- **In a worktree, the shared Python venv imports the main checkout's `app`.** The venv at
+  `/Users/a/projects/Traders/services/ai/.venv` is an editable install of the main checkout, so
+  `scripts/export_openapi.py` run from a worktree silently exported `main`'s models (2026-10-20,
+  PR for D197: `openapi.json` came out unchanged). pytest is unaffected (it puts the worktree
+  first); scripts are not. Run them as `PYTHONPATH=. .../.venv/bin/python scripts/...`.
+- **Throwaway Postgres for the integration tests:** `docker run -d --rm --name <x> -e
+  POSTGRES_USER=traders -e POSTGRES_PASSWORD=traders -e POSTGRES_DB=traders_ci -p
+  127.0.0.1:55439:5432 pgvector/pgvector:pg16`, then `TEST_DATABASE_URL=...:55439/traders_ci
+  INTEGRATION_REQUIRED=1 pytest tests/integration`, as CI does. **Not 55432: that is compose's
+  Postgres.**
 - **Both Postgres servers log statements over 200 ms** (DB3); `docker logs traders-postgres-1` and
   `kubectl ... logs postgres-0` are therefore no longer quiet, by design.
 

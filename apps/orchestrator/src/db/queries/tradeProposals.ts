@@ -42,7 +42,8 @@ export async function createTradeProposalIn(
   client: PoolClient,
   proposal: TradeProposalToCreate,
 ): Promise<CreatedTradeProposal> {
-  const dedupeKey = `agent_scan:${proposal.scanId}`;
+  // One proposal per trade (D197): a scan may decide several, one per symbol.
+  const dedupeKey = `agent_scan:${proposal.scanId}:${proposal.payload.symbol}`;
   await client.query(
     `INSERT INTO observations
        (user_id, agent_id, kind, severity, subject_kind, subject_ref, headline, explanation,
@@ -82,8 +83,9 @@ export async function createTradeProposalIn(
     inserted.rows[0] ??
     (
       await client.query<{ id: string; observation_id: string }>(
-        `SELECT id, observation_id FROM proposals WHERE user_id = $1 AND agent_id = $2 AND scan_id = $3`,
-        [proposal.userId, proposal.agentId, proposal.scanId],
+        `SELECT id, observation_id FROM proposals
+          WHERE user_id = $1 AND agent_id = $2 AND scan_id = $3 AND payload ->> 'symbol' = $4`,
+        [proposal.userId, proposal.agentId, proposal.scanId, proposal.payload.symbol],
       )
     ).rows[0];
   if (!row) throw new Error(`scan ${proposal.scanId} wrote no proposal`);

@@ -15,8 +15,11 @@ import type { Hono } from 'hono';
 import { z } from 'zod';
 
 import {
+  HORIZON_MAX_DECISIONS,
   HORIZON_SCHEDULES,
+  MAX_DECISIONS_PER_SCAN,
   MAX_SCAN_EVERY_HOURS,
+  MIN_DECISIONS_PER_SCAN,
   MIN_SCAN_EVERY_HOURS,
   type AgentView,
   type AgentsResponse,
@@ -93,6 +96,8 @@ const scanSchedule = z
     postClose: z.boolean(),
   })
   .strict();
+/** D197: trades one scan may decide, each a proposal the user approves. */
+const maxDecisions = z.number().int().min(MIN_DECISIONS_PER_SCAN).max(MAX_DECISIONS_PER_SCAN);
 
 const createSchema = z
   .object({
@@ -101,6 +106,7 @@ const createSchema = z
     persona: persona.optional(),
     mandate: mandateSchema.optional(),
     scanSchedule: scanSchedule.optional(),
+    maxDecisions: maxDecisions.optional(),
   })
   .strict();
 const patchSchema = z
@@ -111,6 +117,7 @@ const patchSchema = z
     state: z.enum(['active', 'paused', 'archived']).optional(),
     llmBudget: budget.optional(),
     scanSchedule: scanSchedule.optional(),
+    maxDecisions: maxDecisions.optional(),
     mandate: mandateSchema.optional(),
   })
   .strict();
@@ -166,6 +173,7 @@ export function toAgentView(row: AgentRow): AgentView {
     createdAt: row.created_at.toISOString(),
     // The primary never scans (D1): none of this describes it.
     scanSchedule: row.is_primary ? null : scheduleOf(row),
+    maxDecisions: row.is_primary ? null : row.max_decisions,
     runningScan:
       row.is_primary || !row.running_scan
         ? null
@@ -293,7 +301,7 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
   app.post('/agents', async (context) => {
     const parsed = createSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
-      throw badRequest('invalid_body', 'expected { name, budget, persona?, mandate?, scanSchedule? }', parsed.error.issues);
+      throw badRequest('invalid_body', 'expected { name, budget, persona?, mandate?, scanSchedule?, maxDecisions? }', parsed.error.issues);
     }
     const input = parsed.data;
     const budgetMinor = budgetToMinor(input.budget);
@@ -314,6 +322,10 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
         // D166: a horizon brings its schedule unless one was chosen.
         scanSchedule:
           input.scanSchedule ?? (input.mandate?.horizon ? HORIZON_SCHEDULES[input.mandate.horizon] : DEFAULT_SCHEDULE),
+        // D197: and how many trades a scan may decide.
+        maxDecisions:
+          input.maxDecisions ??
+          (input.mandate?.horizon ? HORIZON_MAX_DECISIONS[input.mandate.horizon] : MIN_DECISIONS_PER_SCAN),
         mandate,
       });
       return context.json(toAgentView(row), 201);
@@ -327,7 +339,7 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
     const userId = currentUserId(context);
     const parsed = patchSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
-      throw badRequest('invalid_body', 'expected { name?, budget?, persona?, state?, llmBudget?, scanSchedule?, mandate? }', parsed.error.issues);
+      throw badRequest('invalid_body', 'expected { name?, budget?, persona?, state?, llmBudget?, scanSchedule?, maxDecisions?, mandate? }', parsed.error.issues);
     }
     const agentId = agentIdFrom(context.req.param('id'));
     const existing = await getAgent(userId, agentId);
@@ -363,6 +375,7 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
         state: patch.state,
         llmBudgetMicroUsd: patch.llmBudget === undefined ? undefined : llmBudgetToMicroUsd(patch.llmBudget),
         scanSchedule: patch.scanSchedule,
+        maxDecisions: patch.maxDecisions,
         mandate,
       });
       if (!row) throw notFound('agent not found');

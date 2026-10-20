@@ -53,6 +53,8 @@ class ScanAgent:
     language: str = "en"
     #: The template creator's settings (0057); empty for an agent never edited.
     mandate: Mandate = Mandate()
+    #: Trades one answer may decide (0061, D197).
+    max_decisions: int = 1
 
     @property
     def ready(self) -> bool:
@@ -73,7 +75,8 @@ def find_agent(engine: Engine, user_id: str, agent_id: str) -> ScanAgent | None:
                        a.state, a.is_primary, coalesce(s.language, 'en') AS language,
                        a.risk_level, a.horizon, a.thesis_style, a.max_position_bps,
                        a.cash_buffer_bps, a.max_holdings, a.allow_etfs, a.market_caps,
-                       a.sectors, a.industries, a.etf_categories, a.blocked_symbols
+                       a.sectors, a.industries, a.etf_categories, a.blocked_symbols,
+                       a.max_decisions
                   FROM agents a
                   LEFT JOIN user_settings s ON s.user_id = a.user_id
                  WHERE a.id = CAST(:agent AS uuid) AND a.user_id = CAST(:user AS uuid)
@@ -91,6 +94,7 @@ def find_agent(engine: Engine, user_id: str, agent_id: str) -> ScanAgent | None:
         state=row.state,
         is_primary=row.is_primary,
         language=row.language,
+        max_decisions=row.max_decisions,
         mandate=Mandate(
             risk_level=row.risk_level,
             horizon=row.horizon,

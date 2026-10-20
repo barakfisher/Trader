@@ -88,11 +88,12 @@ vi.mock('../src/db/queries.js', () => ({
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
   getAgent: vi.fn(async () => agentRow()),
   findProposal: vi.fn(async () => proposal),
-  findTradableInstrument: vi.fn(async (symbol: string) =>
-    symbol.trim().toUpperCase() === 'AAPL'
-      ? { id: 'i-aapl', symbol: 'AAPL', name: 'Apple', asset_class: 'equity', exchange: 'NMS', currency: 'USD', membership: 'screened' }
-      : null,
-  ),
+  findTradableInstrument: vi.fn(async (symbol: string) => {
+    const known = symbol.trim().toUpperCase();
+    return known === 'AAPL' || known === 'MSFT'
+      ? { id: `i-${known.toLowerCase()}`, symbol: known, name: known, asset_class: 'equity', exchange: 'NMS', currency: 'USD', membership: 'screened' }
+      : null;
+  }),
   getAgentCash: vi.fn(async () => ({ balance_minor: ledger.cash.toString(), currency: 'USD', updated_at: NOW })),
   lockAgentCash: vi.fn(async () => ledger.cash),
   getAgentHoldingQuantity: vi.fn(async () => null),
@@ -220,6 +221,18 @@ describe('the expiry (D4)', () => {
 });
 
 describe('a scan becomes a proposal', () => {
+  const trade = (overrides: Record<string, unknown> = {}) => ({
+    decision: 'buy',
+    symbol: 'AAPL',
+    quantity: '3',
+    thesis: 'AAPL fell 3.18% to 200.00.',
+    price_minor: AGENT_PRICE,
+    price_as_of: NOW.toISOString(),
+    funded_by: [],
+    refused: false,
+    problems: [],
+    ...overrides,
+  });
   const scan = (overrides: Record<string, unknown> = {}) =>
     ({
       scan_id: SCAN,
@@ -227,15 +240,7 @@ describe('a scan becomes a proposal', () => {
       steps: 2,
       cost_micro_usd: 14_566,
       model: 'm',
-      answer: {
-        decision: 'buy',
-        symbol: 'AAPL',
-        quantity: '3',
-        thesis: 'AAPL fell 3.18% to 200.00.',
-        price_minor: AGENT_PRICE,
-        price_as_of: NOW.toISOString(),
-        problems: [],
-      },
+      answer: { trades: [trade()], thesis: null, problems: [] },
       error: null,
       ...overrides,
     }) as never;
@@ -245,7 +250,7 @@ describe('a scan becomes a proposal', () => {
       ai: stubAi(),
       notifier: stubNotifier(),
     });
-    expect(id).toBeNull();
+    expect(id).toEqual([]);
     expect(queries.createTradeProposal).not.toHaveBeenCalled();
   });
 
@@ -255,7 +260,7 @@ describe('a scan becomes a proposal', () => {
       notifier: stubNotifier(),
       now: () => NOW,
     });
-    expect(id).toBe(PROPOSAL);
+    expect(id).toEqual([PROPOSAL]);
     const written = vi.mocked(queries.createTradeProposal).mock.calls[0]![0];
     expect(written).toMatchObject({
       userId: USER.id,
@@ -299,7 +304,7 @@ describe('a scan becomes a proposal', () => {
     try {
       expect(
         await tradeProposals.proposeFromScan(USER.id, agentRow() as never, scan(), { ai: stubAi(), notifier, now: () => NOW }),
-      ).toBe(PROPOSAL);
+      ).toEqual([PROPOSAL]);
     } finally {
       settingsRow = { ...settingsRow, quiet_hours_start: null, quiet_hours_end: null };
     }
@@ -310,7 +315,7 @@ describe('a scan becomes a proposal', () => {
   it('pushes a sell through quiet hours while the market is open, and holds a buy (D70)', async () => {
     settingsRow = { ...settingsRow, quiet_hours_start: '00:00', quiet_hours_end: '23:59' };
     try {
-      const sell = scan({ answer: { decision: 'sell', symbol: 'AAPL', quantity: '3', thesis: 'AAPL fell 3.18% to 200.00.', price_minor: AGENT_PRICE, price_as_of: NOW.toISOString(), problems: [] } });
+      const sell = scan({ answer: { trades: [trade({ decision: 'sell' })], thesis: null, problems: [] } });
       await tradeProposals.proposeFromScan(USER.id, agentRow() as never, sell, { ai: stubAi({ open: true }), notifier: stubNotifier(), now: () => NOW });
       expect(queries.claimNotification).toHaveBeenLastCalledWith(expect.objectContaining({ route: 'push' }));
       // The same sell with the market shut can be approved only at the open: it waits.
@@ -331,7 +336,37 @@ describe('a scan becomes a proposal', () => {
         notifier: stubNotifier(),
         now: () => NOW,
       }),
-    ).toBe(PROPOSAL);
+    ).toEqual([PROPOSAL]);
+  });
+
+  it('writes a proposal per kept trade, sells first, and names the sell a buy needs (D197)', async () => {
+    vi.mocked(queries.createTradeProposal)
+      .mockResolvedValueOnce({ proposalId: 'p-sell', observationId: 'o-sell' })
+      .mockResolvedValueOnce({ proposalId: 'p-buy', observationId: 'o-buy' });
+    const answer = {
+      trades: [
+        trade({ decision: 'sell', symbol: 'MSFT', quantity: '2' }),
+        trade({ funded_by: ['MSFT'] }),
+        trade({ symbol: 'TSLA', refused: true, problems: ['TSLA is not tradable'] }),
+      ],
+      thesis: null,
+      problems: ['TSLA is not tradable'],
+    };
+    const ids = await tradeProposals.proposeFromScan(USER.id, agentRow() as never, scan({ answer }), {
+      ai: stubAi(),
+      notifier: stubNotifier(),
+      now: () => NOW,
+    });
+    expect(ids).toEqual(['p-sell', 'p-buy']);
+    const [sell, buy] = vi.mocked(queries.createTradeProposal).mock.calls.map(([written]) => written);
+    expect(sell).toMatchObject({ kind: 'sell', payload: { symbol: 'MSFT' } });
+    expect(sell!.payload.fundedBy).toBeUndefined();
+    expect(buy).toMatchObject({
+      kind: 'buy',
+      payload: { symbol: 'AAPL', fundedBy: ['MSFT'] },
+      headline: 'Value proposes to buy 3 AAPL at 200.00 - paid for by selling MSFT: approve that first',
+    });
+    expect(buy!.localized.he?.headline).toContain('במימון מכירת');
   });
 
   it('reports a calendar it could not read rather than guessing the expiry', async () => {

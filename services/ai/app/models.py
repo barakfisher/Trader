@@ -932,10 +932,10 @@ class MandateCheckResponse(BaseModel):
     conflicts: list[MandateConflict] = Field(default_factory=list)
 
 
-class AgentScanAnswer(BaseModel):
-    """The agent's answer as it wrote it, with the server's reasons if it failed (D14)."""
+class AgentScanTrade(BaseModel):
+    """One trade the agent decided (D197): kept and priced, or refused with why."""
 
-    decision: Literal["buy", "sell", "none"] | None = None
+    decision: Literal["buy", "sell"] | None = None
     symbol: str | None = None
     quantity: str | None = Field(
         default=None, description="Whole shares as a decimal string (guideline 4)."
@@ -943,9 +943,23 @@ class AgentScanAnswer(BaseModel):
     thesis: str | None = None
     price_minor: int | None = Field(
         default=None,
-        description="For a buy or sell: the agent's price (D47), the quote at the scan's end.",
+        description="A kept trade's price: the agent's price (D47), the quote when reviewed.",
     )
     price_as_of: datetime | None = None
+    funded_by: list[str] = Field(
+        default_factory=list,
+        description="Sells in the same answer whose proceeds this buy needs: approve those first.",
+    )
+    refused: bool = Field(default=False, description="Not proposed; `problems` says why.")
+    problems: list[str] = Field(default_factory=list)
+
+
+class AgentScanAnswer(BaseModel):
+    """The agent's answer (D14, D197): its trades, kept first, then any refused, with why;
+    and, for no trade, its reason."""
+
+    trades: list[AgentScanTrade] = Field(default_factory=list)
+    thesis: str | None = None
     problems: list[str] = Field(default_factory=list)
 
 

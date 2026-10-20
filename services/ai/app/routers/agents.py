@@ -126,7 +126,7 @@ async def scan_agent(
         steps=result.steps,
         cost_micro_usd=result.cost_micro_usd,
         model=result.model,
-        answer=AgentScanAnswer(**result.answer) if result.answer else None,
+        answer=AgentScanAnswer.model_validate(result.answer) if result.answer else None,
         error=result.error,
     )
 

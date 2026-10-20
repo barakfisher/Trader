@@ -8,7 +8,13 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { HORIZON_SCHEDULES, MAX_SCAN_EVERY_HOURS, type ScanSchedule } from '@traders/shared';
+import {
+  HORIZON_MAX_DECISIONS,
+  HORIZON_SCHEDULES,
+  MAX_DECISIONS_PER_SCAN,
+  MAX_SCAN_EVERY_HOURS,
+  type ScanSchedule,
+} from '@traders/shared';
 
 import { ACTIVE_SESSION, sessionCookie } from './session.js';
 
@@ -38,6 +44,7 @@ function row(overrides: Record<string, unknown> = {}) {
     scan_every_hours: null,
     scan_pre_open: true,
     scan_post_close: false,
+    max_decisions: 1,
     running_scan: null,
     llm_spent_today_micro_usd: '108022',
     agent_scan_cost_micro_usd: null,
@@ -96,6 +103,7 @@ vi.mock('../src/db/queries.js', () => ({
       ...(patch.state === undefined ? {} : { state: patch.state }),
       ...(patch.budgetMinor === undefined ? {} : { budget_minor: String(patch.budgetMinor) }),
       ...(patch.llmBudgetMicroUsd === undefined ? {} : { llm_budget_micro_usd: String(patch.llmBudgetMicroUsd) }),
+      ...(patch.maxDecisions === undefined ? {} : { max_decisions: patch.maxDecisions }),
       ...(patch.scanSchedule === undefined
         ? {}
         : (({ everyHours, preOpen, postClose }) => ({
@@ -288,6 +296,15 @@ describe('the agents API', () => {
     expect(await response.json()).toMatchObject({ llmBudgetMicroUsd: 1_250_000, scanSchedule: schedule });
   });
 
+  it('sets how many trades a scan may decide, 1 to 10 (D197)', async () => {
+    const response = await send('PATCH', `/agents/${SIMULATED}`, { maxDecisions: MAX_DECISIONS_PER_SCAN });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ maxDecisions: MAX_DECISIONS_PER_SCAN });
+    for (const maxDecisions of [0, MAX_DECISIONS_PER_SCAN + 1, 2.5, '3']) {
+      expect((await send('PATCH', `/agents/${SIMULATED}`, { maxDecisions })).status).toBe(400);
+    }
+  });
+
   it('accepts no scheduled scans at all: the agent then scans only when asked (D195)', async () => {
     const none = { everyHours: null, preOpen: false, postClose: false };
     expect((await send('PATCH', `/agents/${SIMULATED}`, { scanSchedule: none })).status).toBe(200);
@@ -396,6 +413,7 @@ describe("an agent's mandate (0057, D165)", () => {
     expect(response.status).toBe(201);
     const created = vi.mocked(queries.createAgent).mock.calls[0]![0];
     expect(created.scanSchedule).toEqual(HORIZON_SCHEDULES.short);
+    expect(created.maxDecisions).toBe(HORIZON_MAX_DECISIONS.short);
     expect(created.mandate).toMatchObject({
       horizon: 'short',
       max_position_bps: 1000,
@@ -412,6 +430,10 @@ describe("an agent's mandate (0057, D165)", () => {
     await send('POST', '/agents', { name: 'B', budget: '1' });
     const calls = vi.mocked(queries.createAgent).mock.calls.map(([agent]) => agent.scanSchedule);
     expect(calls).toEqual([chosen, { everyHours: null, preOpen: true, postClose: false }]);
+    expect(vi.mocked(queries.createAgent).mock.calls.map(([agent]) => agent.maxDecisions)).toEqual([
+      HORIZON_MAX_DECISIONS.long,
+      1,
+    ]);
   });
 
   it('refuses a sector, industry or ETF category the universe does not hold, naming it', async () => {

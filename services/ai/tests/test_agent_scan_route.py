@@ -60,7 +60,7 @@ def scan(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, Any]]:
             steps=2,
             cost_micro_usd=41000,
             model="m",
-            answer={"decision": "none", "symbol": None, "quantity": None, "thesis": "Nothing."},
+            answer={"trades": [], "thesis": "Nothing.", "problems": []},
         )
 
     monkeypatch.setattr("app.routers.agents.find_agent", lambda *_a: state["agent"])
@@ -103,7 +103,7 @@ def test_a_finished_scan_is_returned_as_stored(client: TestClient, scan: dict[st
     assert response.status_code == 200
     body = response.json()
     assert (body["outcome"], body["steps"], body["cost_micro_usd"]) == ("no_trade", 2, 41000)
-    assert body["answer"]["decision"] == "none"
+    assert body["answer"] == {"trades": [], "thesis": "Nothing.", "problems": []}
     assert scan["ran"][0]["trigger"] == "manual"
 
 

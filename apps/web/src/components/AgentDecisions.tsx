@@ -2,10 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
-import { parseToMinor, type AgentScanDetail, type AgentScanStep, type AgentScanSummary } from '@traders/shared';
+import {
+  parseToMinor,
+  type AgentScanDetail,
+  type AgentScanStep,
+  type AgentScanSummary,
+  type AgentScanTrade,
+} from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
-import { useTranslation } from '../i18n/index.ts';
+import { t, useTranslation } from '../i18n/index.ts';
 import { formatMoney, formatNumber } from '../i18n/format.ts';
 import { formatMicroUsd } from '../lib/llmCalls.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
@@ -69,6 +75,24 @@ function outcomeClass(scan: AgentScanSummary): string {
   return 'bg-surface-hover text-text-muted';
 }
 
+/** The trades that became proposals (D197): a scan may decide several. */
+function kept(scan: AgentScanSummary): (AgentScanTrade & { decision: 'buy' | 'sell'; symbol: string })[] {
+  return scan.trades.filter(
+    (trade): trade is AgentScanTrade & { decision: 'buy' | 'sell'; symbol: string } =>
+      !trade.refused && trade.decision !== null && trade.symbol !== null,
+  );
+}
+
+/** "Buy 2 NVDA"; a trade the model wrote half of reads as far as it got. */
+function tradeLabel(trade: AgentScanTrade): string {
+  if (trade.decision === null || trade.symbol === null) return trade.symbol ?? '?';
+  return t('agents.decisions.proposed', {
+    side: t(`agents.sides.${trade.decision}`),
+    quantity: trade.quantity ?? '',
+    symbol: trade.symbol,
+  });
+}
+
 function ScanRow({ agentId, scan, linked }: { agentId: string; scan: AgentScanSummary; linked: boolean }) {
   const { t } = useTranslation();
   // The scan a proposal's "Evidence checked" link names starts open, in view.
@@ -95,13 +119,11 @@ function ScanRow({ agentId, scan, linked }: { agentId: string; scan: AgentScanSu
           <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${outcomeClass(scan)}`}>
             {t(`agents.decisions.outcomes.${scan.outcome ?? 'running'}`)}
           </span>
-          {scan.decision !== null && scan.decision !== 'none' && scan.symbol !== null && (
+          {kept(scan).length > 0 && (
             <span className="text-xs text-text-primary">
-              {t('agents.decisions.proposed', {
-                side: t(`agents.sides.${scan.decision}`),
-                quantity: scan.quantity ?? '',
-                symbol: scan.symbol,
-              })}
+              {kept(scan)
+                .map((trade) => tradeLabel(trade))
+                .join(' · ')}
             </span>
           )}
           <span className="text-xs text-text-muted">{t(`agents.decisions.trigger.${scan.trigger}`)}</span>
@@ -240,33 +262,60 @@ function Folded({ label, value }: { label: string; value: unknown }) {
 function Answer({ scan }: { scan: AgentScanDetail }) {
   const { t } = useTranslation();
   return (
-    <div className="space-y-1 rounded-md border border-border-subtle p-2">
+    <div className="space-y-2 rounded-md border border-border-subtle p-2">
       <p className="font-medium text-text-primary">{t('agents.decisions.answer')}</p>
+      {scan.trades.map((trade, index) => (
+        <TradeAnswer key={`${trade.symbol}-${index}`} trade={trade} />
+      ))}
       {scan.thesis && (
         <p dir="auto" className="text-sm text-text-primary">
           {scan.thesis}
         </p>
       )}
-      {scan.problems.length > 0 && (
+      {/* A trade's reasons are under it; these are the answer's own, when no trade carries them. */}
+      {scan.problems.length > 0 && scan.trades.every((trade) => trade.problems.length === 0) && (
         <p className="text-loss">{t('agents.decisions.problems', { problems: scan.problems.join('; ') })}</p>
       )}
       {scan.error && <p className="text-loss">{t('agents.decisions.error', { error: scan.error })}</p>}
-      {scan.proposal && (
+      {scan.model && <p className="text-text-muted">{t('agents.decisions.model', { model: scan.model })}</p>}
+    </div>
+  );
+}
+
+/** One trade of the answer: what, why, and what became of it. */
+function TradeAnswer({ trade }: { trade: AgentScanTrade }) {
+  const { t } = useTranslation();
+  return (
+    <div className="space-y-1 border-s-2 border-border-subtle ps-2">
+      <p className={`font-medium ${trade.refused ? 'text-text-muted line-through' : 'text-text-primary'}`}>
+        {tradeLabel(trade)}
+      </p>
+      {trade.thesis && (
+        <p dir="auto" className="text-sm text-text-primary">
+          {trade.thesis}
+        </p>
+      )}
+      {trade.fundedBy.length > 0 && (
+        <p className="text-text-muted">{t('agents.decisions.fundedBy', { symbols: trade.fundedBy.join(', ') })}</p>
+      )}
+      {trade.refused && (
+        <p className="text-loss">{t('agents.decisions.notProposed', { problems: trade.problems.join('; ') })}</p>
+      )}
+      {trade.proposal && (
         <p>
           <Link
             to="/proposals/$proposalId"
-            params={{ proposalId: scan.proposal.id }}
+            params={{ proposalId: trade.proposal.id }}
             className="font-medium text-accent hover:underline"
           >
             {t('agents.decisions.proposal')}
           </Link>{' '}
           <span className="text-text-muted">
-            {t('agents.decisions.proposalState', { state: t(`proposal.states.${scan.proposal.state}`) })}
+            {t('agents.decisions.proposalState', { state: t(`proposal.states.${trade.proposal.state}`) })}
           </span>
         </p>
       )}
-      {scan.fillId && <p className="text-text-muted">{t('agents.decisions.fill')}</p>}
-      {scan.model && <p className="text-text-muted">{t('agents.decisions.model', { model: scan.model })}</p>}
+      {trade.fillId && <p className="text-text-muted">{t('agents.decisions.fill')}</p>}
     </div>
   );
 }

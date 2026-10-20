@@ -10,7 +10,7 @@ from decimal import Decimal
 
 import pytest
 
-from app.agents.answer import Answer
+from app.agents.answer import Trade
 from app.agents.mandate import (
     LARGE_CAP_FLOOR_MINOR,
     MEGA_CAP_FLOOR_MINOR,
@@ -33,8 +33,8 @@ GOLD_MINERS_ETF = _Profile("etf", None, None, "Equity Precious Metals", None, No
 BROAD_ETF = _Profile("etf", None, None, "Large Blend", None, None)
 
 
-def _buy(quantity: int, price_minor: int, symbol: str = "CCJ") -> Answer:
-    return Answer("buy", symbol, quantity, "why", price_minor=price_minor)
+def _buy(quantity: int, price_minor: int, symbol: str = "CCJ") -> Trade:
+    return Trade("buy", symbol, quantity, "why", price_minor=price_minor)
 
 
 def _book(cash: int, holdings: dict[str, int] | None = None, symbol: str = "CCJ") -> _Book:

@@ -89,7 +89,7 @@ const RESULT = {
   steps: 2,
   cost_micro_usd: 41000,
   model: 'anthropic/claude-sonnet-5.5',
-  answer: { decision: 'none', symbol: null, quantity: null, thesis: 'Nothing fits.', problems: [] },
+  answer: { trades: [], thesis: 'Nothing fits.', problems: [] },
   error: null,
 };
 
@@ -117,7 +117,7 @@ describe('running a scan', () => {
     const { send, scanAgent } = await signedIn(async () => RESULT);
     const response = await send(`/agents/${AGENT}/scans`);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ...RESULT, proposal_id: null });
+    expect(await response.json()).toEqual({ ...RESULT, proposal_ids: [] });
     expect(scanAgent).toHaveBeenCalledWith(AGENT, { user_id: USER.id, trigger: 'manual' }, expect.anything());
   });
 
@@ -126,14 +126,20 @@ describe('running a scan', () => {
       ...RESULT,
       outcome: 'trade',
       answer: {
-        decision: 'buy', symbol: 'INTC', quantity: '3', thesis: 'INTC fell 3.18% to 112.50.',
-        price_minor: 11_250, price_as_of: '2026-10-07T13:00:00Z', problems: [],
+        trades: [
+          {
+            decision: 'buy', symbol: 'INTC', quantity: '3', thesis: 'INTC fell 3.18% to 112.50.',
+            price_minor: 11_250, price_as_of: '2026-10-07T13:00:00Z', funded_by: [], refused: false, problems: [],
+          },
+        ],
+        thesis: null,
+        problems: [],
       },
     };
     const { send } = await signedIn(async () => trade);
     const response = await send(`/agents/${AGENT}/scans`);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ...trade, proposal_id: 'p-trade' });
+    expect(await response.json()).toEqual({ ...trade, proposal_ids: ['p-trade'] });
     const queries = await import('../src/db/queries.js');
     expect(queries.createTradeProposal).toHaveBeenCalledWith(
       expect.objectContaining({ scanId: RESULT.scan_id, agentId: AGENT, kind: 'buy' }),
@@ -183,6 +189,21 @@ describe('running a scan', () => {
 
 const SCAN = 'b0000000-0000-0000-0000-000000000001';
 
+function proposalRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'p-1',
+    symbol: 'NVDA',
+    state: 'pending',
+    // Past its deadline, not yet swept: it reads expired.
+    expires_at: new Date(Date.now() - 1000).toISOString(),
+    snoozed_until: null,
+    decided_at: null,
+    fill_id: null,
+    ...overrides,
+  };
+}
+
+/** A scan stored before D197: the answer is its one trade. */
 function scanRow(overrides: Record<string, unknown> = {}) {
   return {
     id: SCAN,
@@ -195,13 +216,7 @@ function scanRow(overrides: Record<string, unknown> = {}) {
     model: 'anthropic/claude-sonnet-5.5',
     answer: { decision: 'buy', symbol: 'NVDA', quantity: '2', thesis: 'NVDA fell 2.1%.', price_minor: 23714 },
     error: null,
-    proposal_id: 'p-1',
-    proposal_state: 'pending',
-    // Past its deadline, not yet swept: it reads expired.
-    proposal_expires_at: new Date(Date.now() - 1000),
-    proposal_snoozed_until: null,
-    proposal_decided_at: null,
-    fill_id: null,
+    proposals: [proposalRow()],
     ...overrides,
   };
 }
@@ -217,13 +232,45 @@ describe('the Decisions tab (D50)', () => {
     expect(body).toEqual({
       scans: [
         expect.objectContaining({
-          id: SCAN, outcome: 'trade', costMicroUsd: 41_000, decision: 'buy', symbol: 'NVDA', quantity: '2',
-          proposal: { id: 'p-1', state: 'expired' }, fillId: null, problems: [],
+          id: SCAN, outcome: 'trade', costMicroUsd: 41_000, problems: [],
+          trades: [
+            {
+              decision: 'buy', symbol: 'NVDA', quantity: '2', thesis: 'NVDA fell 2.1%.', fundedBy: [],
+              refused: false, problems: [], proposal: { id: 'p-1', state: 'expired' }, fillId: null,
+            },
+          ],
         }),
       ],
       nextBefore: null,
     });
     expect(body.scans[0]).not.toHaveProperty('transcript');
+  });
+
+  it('lists each trade of a scan with its own proposal, and a refused one with why (D197)', async () => {
+    const queries = await import('../src/db/queries.js');
+    const answer = {
+      trades: [
+        { decision: 'sell', symbol: 'MSFT', quantity: '2', thesis: 'MSFT is rich.', funded_by: [] },
+        { decision: 'buy', symbol: 'NVDA', quantity: '2', thesis: 'NVDA fell.', funded_by: ['MSFT'] },
+        { decision: 'buy', symbol: 'TSLA', quantity: '1', thesis: 't', refused: true, problems: ['TSLA is not tradable'] },
+      ],
+      thesis: null,
+      problems: ['TSLA is not tradable'],
+    };
+    const proposals = [
+      proposalRow({ id: 'p-sell', symbol: 'MSFT', state: 'approved', decided_at: new Date().toISOString(), fill_id: 'f-1' }),
+      proposalRow({ id: 'p-buy', symbol: 'NVDA', expires_at: new Date(Date.now() + 60_000).toISOString() }),
+    ];
+    vi.mocked(queries.listAgentScans).mockResolvedValueOnce([scanRow({ answer, proposals })] as never);
+    const { get } = await signedIn(async () => RESULT);
+    const [scan] = (await (await get(`/agents/${AGENT}/scans`)).json()).scans;
+    expect(scan.trades.map((t: { symbol: string; proposal: unknown; fillId: unknown; refused: boolean }) => [t.symbol, t.proposal, t.fillId, t.refused])).toEqual([
+      ['MSFT', { id: 'p-sell', state: 'approved' }, 'f-1', false],
+      ['NVDA', { id: 'p-buy', state: 'pending' }, null, false],
+      ['TSLA', null, null, true],
+    ]);
+    expect(scan.trades[1].fundedBy).toEqual(['MSFT']);
+    expect(scan.trades[2].problems).toEqual(['TSLA is not tradable']);
   });
 
   it('offers an older page only when one exists', async () => {
@@ -247,7 +294,7 @@ describe('the Decisions tab (D50)', () => {
   it('gives one scan in full: the briefing, every step, the thesis', async () => {
     const queries = await import('../src/db/queries.js');
     vi.mocked(queries.getAgentScan).mockResolvedValueOnce({
-      ...scanRow({ fill_id: 'f-1', proposal_state: 'approved', proposal_decided_at: new Date() }),
+      ...scanRow({ proposals: [proposalRow({ fill_id: 'f-1', state: 'approved', decided_at: new Date().toISOString() })] }),
       briefing: { cash: '10000.00' },
       transcript: [
         { role: 'assistant', text: 'Checking NVDA.', tool_calls: [{ id: 'c1', name: 'get_quote', arguments: { symbol: 'NVDA' } }] },
@@ -260,8 +307,7 @@ describe('the Decisions tab (D50)', () => {
     expect(body).toMatchObject({
       briefing: { cash: '10000.00' },
       thesis: 'NVDA fell 2.1%.',
-      proposal: { id: 'p-1', state: 'approved' },
-      fillId: 'f-1',
+      trades: [expect.objectContaining({ proposal: { id: 'p-1', state: 'approved' }, fillId: 'f-1' })],
       transcript: [
         { role: 'assistant', text: 'Checking NVDA.', toolCalls: [{ id: 'c1', name: 'get_quote', arguments: { symbol: 'NVDA' } }] },
         { role: 'tool', callId: 'c1', name: 'get_quote', result: { price: '237.14' } },

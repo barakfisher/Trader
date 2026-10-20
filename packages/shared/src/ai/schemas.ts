@@ -281,14 +281,25 @@ export const agentScanResponseSchema = z.object({
   steps: z.number().int(),
   cost_micro_usd: z.number().int(),
   model: z.string().nullable(),
+  // D197: up to the agent's limit of trades, kept first, then any refused with why.
   answer: z
     .object({
-      decision: z.enum(['buy', 'sell', 'none']).nullable().optional(),
-      symbol: z.string().nullable().optional(),
-      quantity: z.string().nullable().optional(),
+      trades: z
+        .array(
+          z.object({
+            decision: z.enum(['buy', 'sell']).nullable().optional(),
+            symbol: z.string().nullable().optional(),
+            quantity: z.string().nullable().optional(),
+            thesis: z.string().nullable().optional(),
+            price_minor: z.number().int().nullable().optional(),
+            price_as_of: z.string().nullable().optional(),
+            funded_by: z.array(z.string()).optional(),
+            refused: z.boolean(),
+            problems: z.array(z.string()).optional(),
+          }),
+        )
+        .optional(),
       thesis: z.string().nullable().optional(),
-      price_minor: z.number().int().nullable().optional(),
-      price_as_of: z.string().nullable().optional(),
       problems: z.array(z.string()).optional(),
     })
     .nullable(),

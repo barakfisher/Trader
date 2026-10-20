@@ -4,9 +4,11 @@
  * The AI service ran the scan and checked its answer - tradable symbol, whole
  * shares, a sell within holdings, every thesis figure sourced, and cash for
  * cost plus fee at the agent's price (D54, D55) - so a `trade` outcome reaching
- * here is one that may be proposed. This module writes it: an observation
- * carrying the thesis, and a `buy` or `sell` proposal hanging from it with the
- * agent's price, expiring an hour after the next open (D4).
+ * here is one that may be proposed. This module writes each trade the scan
+ * kept (D197, up to the agent's `max_decisions`): an observation carrying its
+ * thesis, and a `buy` or `sell` proposal hanging from it with the agent's
+ * price, expiring an hour after the next open (D4). A buy paid for by a sell
+ * from the same scan says so in its headline: the user approves the sell first.
  *
  * **The frame is the catalogue's, the thesis the model's (D51).** The headline -
  * agent, side, quantity, symbol, price - is written from `notify/messages.ts` in
@@ -59,26 +61,44 @@ export interface TradeProposalContext {
   now?: () => Date;
 }
 
+type ScanTrade = NonNullable<NonNullable<AgentScanResponse['answer']>['trades']>[number];
+
 /**
- * Write the proposal a `trade` scan made, and answer its id; null for any other
- * outcome. Idempotent per scan (`createTradeProposal`).
+ * Write a proposal for each trade a `trade` scan kept, sells first as the scan
+ * reviewed them, and answer their ids; none for any other outcome. Each is
+ * approved on its own (D197). Idempotent per scan and symbol (`createTradeProposal`).
  */
 export async function proposeFromScan(
   userId: string,
   agent: AgentRow,
   scan: AgentScanResponse,
   context: TradeProposalContext,
-): Promise<string | null> {
-  const answer = scan.answer;
-  if (scan.outcome !== 'trade' || !answer) return null;
-  const { decision, symbol, quantity, thesis, price_minor: priceMinor } = answer;
+): Promise<string[]> {
+  const kept = (scan.answer?.trades ?? []).filter((trade) => !trade.refused);
+  if (scan.outcome !== 'trade' || kept.length === 0) return [];
+  const now = (context.now ?? (() => new Date()))();
+  const ids: string[] = [];
+  for (const trade of kept) {
+    ids.push(await proposeTrade(userId, agent, scan.scan_id, trade, context, now));
+  }
+  return ids;
+}
+
+async function proposeTrade(
+  userId: string,
+  agent: AgentRow,
+  scanId: string,
+  trade: ScanTrade,
+  context: TradeProposalContext,
+  now: Date,
+): Promise<string> {
+  const { decision, symbol, quantity, thesis, price_minor: priceMinor } = trade;
   if ((decision !== 'buy' && decision !== 'sell') || !symbol || !quantity || !thesis || !priceMinor) {
-    // The AI service's contract says a `trade` carries all of these; one that
+    // The AI service's contract says a kept trade carries all of these; one that
     // does not is a bug there, and proposing half a trade would hide it.
-    throw new Error(`scan ${scan.scan_id} is a trade with an incomplete answer`);
+    throw new Error(`scan ${scanId} kept a trade with an incomplete answer`);
   }
   const kind: TradeProposalKind = decision;
-  const now = (context.now ?? (() => new Date()))();
 
   const instrument = await resolveTradable(symbol);
   let calendar;
@@ -91,16 +111,21 @@ export async function proposeFromScan(
     throw error;
   }
 
+  const fundedBy = kind === 'buy' ? (trade.funded_by ?? []) : [];
   const payload: TradeProposalPayload = {
     symbol: instrument.symbol,
     quantity,
     priceMinor,
-    priceAsOf: answer.price_as_of ?? null,
+    priceAsOf: trade.price_as_of ?? null,
     currency: 'USD',
+    ...(fundedBy.length > 0 ? { fundedBy } : {}),
   };
   const price = minorToDecimalString(priceMinor, 'USD');
-  const headlineIn = (language: string) =>
-    messagesFor(language).tradeProposalHeadline(agent.name, kind, quantity, instrument.symbol, price);
+  const headlineIn = (language: string) => {
+    const messages = messagesFor(language);
+    const headline = messages.tradeProposalHeadline(agent.name, kind, quantity, instrument.symbol, price);
+    return fundedBy.length > 0 ? `${headline}${messages.tradeFundedBy(fundedBy)}` : headline;
+  };
   const localized: LocalizedTexts = Object.fromEntries(
     UI_LANGUAGES.filter((language): language is TranslatedLanguage => language !== 'en').map((language) => [
       language,
@@ -111,21 +136,21 @@ export async function proposeFromScan(
   const { proposalId, observationId } = await createTradeProposal({
     userId,
     agentId: agent.id,
-    scanId: scan.scan_id,
+    scanId,
     kind,
     payload,
     expiresAt: tradeProposalExpiry(now, calendar),
     headline: headlineIn('en'),
     thesis,
     localized,
-    evidence: { scanId: scan.scan_id, ...payload, thesis },
+    evidence: { scanId, ...payload, thesis },
   });
-  logger().info({ proposalId, scanId: scan.scan_id, agentId: agent.id, kind }, 'proposal.trade_raised');
+  logger().info({ proposalId, scanId, agentId: agent.id, kind }, 'proposal.trade_raised');
 
   await announce(userId, agent, context.notifier, now, {
     observationId,
     proposalId,
-    scanId: scan.scan_id,
+    scanId,
     // D70: a sell that can be approved right now does not wait for the morning.
     urgent: kind === 'sell' && calendar.is_open,
     headline: headlineIn('en'),
