@@ -85,6 +85,55 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe("a Telegram chat's conversation with the assistant (0067, D222)", () => {
+    const conversation = async (userId: string, quietFor: string) =>
+      (
+        await getPool().query<{ id: string }>(
+          `INSERT INTO assistant_conversations (user_id, title, updated_at)
+           VALUES ($1, 'Q', now() - $2::interval) RETURNING id`,
+          [userId, quietFor],
+        )
+      ).rows[0]!.id;
+
+    it('is the one the binding names while it is recent, and none once it is quiet or gone', async () => {
+      const chat = String(Math.floor(Math.random() * 1e12) + 1e12);
+      await getPool().query('INSERT INTO telegram_bindings (user_id, chat_id) VALUES ($1, $2)', [USER, chat]);
+      expect(await queries.findTelegramConversation(USER, 12)).toBeNull();
+
+      const recent = await conversation(USER, '1 hour');
+      await queries.setTelegramConversation(USER, recent);
+      expect(await queries.findTelegramConversation(USER, 12)).toBe(recent);
+      expect(await queries.findTelegramConversation(USER, 1)).toBeNull();
+
+      // Deleted on the Ask page: the binding forgets it rather than refusing the delete.
+      expect(await queries.deleteAssistantConversation(USER, recent)).toBe(true);
+      const { rows } = await getPool().query('SELECT assistant_conversation_id FROM telegram_bindings WHERE user_id = $1', [USER]);
+      expect(rows[0].assistant_conversation_id).toBeNull();
+
+      await queries.setTelegramConversation(USER, await conversation(USER, '1 hour'));
+      await queries.setTelegramConversation(USER, null);
+      expect(await queries.findTelegramConversation(USER, 12)).toBeNull();
+      await getPool().query('DELETE FROM telegram_bindings WHERE user_id = $1', [USER]);
+      // No cascade from `users` (0052); the listing test below expects USER's own.
+      await getPool().query('DELETE FROM assistant_conversations WHERE user_id = $1', [USER]);
+    });
+
+    it("never finds another user's conversation, whatever the binding names", async () => {
+      const other = randomUUID();
+      await getPool().query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 0)", [other]);
+      try {
+        const chat = String(Math.floor(Math.random() * 1e12) + 1e12);
+        await getPool().query('INSERT INTO telegram_bindings (user_id, chat_id) VALUES ($1, $2)', [USER, chat]);
+        await queries.setTelegramConversation(USER, await conversation(other, '1 hour'));
+        expect(await queries.findTelegramConversation(USER, 12)).toBeNull();
+      } finally {
+        await getPool().query('DELETE FROM telegram_bindings WHERE user_id = $1', [USER]);
+        await getPool().query('DELETE FROM assistant_conversations WHERE user_id = $1', [other]);
+        await getPool().query('DELETE FROM users WHERE id = $1', [other]);
+      }
+    });
+  });
+
   describe('the monthly cap (D157, D203)', () => {
     it("sums the user's calls since their month began, in their zone; none for the admin", async () => {
       const capped = randomUUID();

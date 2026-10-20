@@ -317,3 +317,5 @@ INSERT INTO llm_calls (user_id, agent_id, purpose, provider, model, outcome, ver
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'mandate_check', 'openrouter', 'm', 'ok', 'accepted', 800, 300, 'p');
 UPDATE agents SET instructions_check = '{"fingerprint": "f", "conflicts": [{"setting": "horizon", "quote": "Cautious."}], "checked_at": "2026-10-19T08:00:00Z", "dismissed": false}'
  WHERE id = '90000000-0000-0000-0000-0000000000a1';
+UPDATE telegram_bindings SET assistant_conversation_id = '80000000-0000-0000-0000-000000000001'
+ WHERE user_id = '00000000-0000-0000-0000-00000000000a';

@@ -21,9 +21,11 @@ and [docs/MILESTONES.md](docs/MILESTONES.md) before changing architecture.
    (`apps/orchestrator/src/notify/messages.ts`; a missing sentence is a compile error). **An
    agent's thesis is the one model-written text in the user's language** (D51): the scan asks for
    it in `user_settings.language`, the evidence validator checks its figures the same way, and
-   the frame around it - side, quantity, price, expiry - comes from the catalogues. Other
-   server-generated text (`/ask` answers, news, the concept corpus) stays English
-   until a decision says otherwise, and is marked `lang="en"` where the UI shows it.
+   the frame around it - side, quantity, price, expiry - comes from the catalogues. **The
+   assistant answers in the language the question was asked in** (D220), on the Ask page and in
+   Telegram, its figures checked the same way, and the UI marks an answer with its own language.
+   Other server-generated text (news, the concept corpus) stays English until a decision says
+   otherwise, and is marked `lang="en"` where the UI shows it.
 2. **No order execution, ever.** Approvals write to the virtual ledger only. No broker API, no
    personalized investment advice; output is observation + explanation.
 3. **Money is integer minor units plus an explicit currency code.** `Decimal` in Python, integer

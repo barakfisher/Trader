@@ -97,6 +97,19 @@ describe('a reply', () => {
     expect(post).toHaveBeenCalledWith('/assistant/messages', { message: 'How am I doing?' });
   });
 
+  it('marks a reply with the language it is written in, not the page language (D220)', async () => {
+    post.mockResolvedValueOnce(
+      reply({ text: 'התיק שלך עלה ב־**5.00%** בשבוע האחרון.', sources: [], suggestions: ['איזו החזקה זזה הכי הרבה?'] }),
+    );
+    renderAsk();
+    await ask('איך התיק שלי?');
+
+    const answer = (await screen.findByText('5.00%')).closest('div[lang]')!;
+    expect(answer.getAttribute('lang')).toBe('he');
+    expect(answer.getAttribute('dir')).toBe('auto');
+    expect(screen.getByRole('button', { name: 'איזו החזקה זזה הכי הרבה?' }).getAttribute('lang')).toBe('he');
+  });
+
   it('never renders HTML or an image from the text', async () => {
     post.mockResolvedValueOnce(
       reply({ text: 'Hi <img src="x" onerror="alert(1)"> ![pic](https://x.example/p.png) <b>bold</b>', sources: [] }),

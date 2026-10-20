@@ -3372,6 +3372,57 @@ failure they prevent.
     The shape is asked, not enforced: the validator checks figures, not argument. *Rejected:*
     requiring a `get_news` tool call (a step the briefing can do for it, without a refusal path);
     rejecting a thesis without both prices (a retry kind of its own for a wording rule).
+220. **The assistant answers in the language the question was asked in, on the Ask page and in
+    Telegram** (the user, 2026-10-20; improvements item 5). The second exception to guideline 1's
+    "server text stays English", after D51's thesis: rule 9 of `assistant/instructions.py` was
+    "Write in English" and now names the latest message's language (English when it cannot tell),
+    the suggestions following it. Measured first: 3 of the last 13 Ask questions on compose were
+    Hebrew and got English answers. The figure check reads digits, so it holds unchanged for a
+    Hebrew reply (`test_assistant_reply.py`). The web marks an answer and its suggestions with the
+    language their own text is in (`writtenLanguage`), not `lang="en"`; sources (news headlines)
+    stay `SERVER_ENGLISH`. *Rejected:* Telegram only, behind a flag (two prompts to keep in step,
+    and the Ask page's Hebrew questions kept their English answers); `user_settings.language`
+    (not what the user decided: a question in English from a Hebrew-settings user is answered in
+    English).
+221. **A Telegram message that is not a command is a question, sent through the Ask page's own
+    call** (the user, 2026-10-20). `POST /assistant/messages` with the bound user, so the daily
+    allowance, the monthly cap (D203) and the user's own key (D206) apply with no code of their
+    own. It runs detached from the poller like a re-check (D217): an answer takes 5-11 s (p50-p90,
+    compose) and up to `TIME_LIMIT`, and the poller handles one update at a time. "typing…" is
+    renewed every 4.5 s meanwhile. One question per chat at a time, in-process (one orchestrator
+    polls a bot): a second is refused `stillAnswering`, not queued, because its answer would be
+    written without the first's in the conversation. Over 2000 characters is refused before any
+    call; a photo or voice note gets `textOnly`. *Rejected:* a `/ask <question>` command (every
+    message would need a prefix the phone keyboard makes awkward, and plain text had no other
+    meaning - it only listed the commands).
+222. **One rolling conversation per chat: `telegram_bindings.assistant_conversation_id` (`0067`),
+    a new one after 12 quiet hours or `/new`** (the user, 2026-10-20). The conversation is an
+    ordinary `assistant_conversations` row, so the Ask page lists, reads and deletes it; a delete
+    sets the column null (`ON DELETE SET NULL`), and a 404 between the read and the question
+    starts a fresh one. Quiet is the conversation's own `updated_at`; the lookup also joins on
+    `user_id`, so a pointer can never reach another user's row. The model only ever sees the last
+    six messages (`HISTORY_MESSAGES`), so length does not raise cost; the 12 hours is for the
+    history list (one conversation per sitting) and for retention (90 days untouched), which a
+    conversation that never ended would escape. *Rejected:* one conversation for ever with `/new`
+    only (an ever-growing history entry named after its first question, never retired); a new
+    one at local midnight (splits a conversation at 23:50 mid-thought).
+223. **In Telegram an answer is flattened markdown, plus at most three news sources with their
+    URLs; suggestions are one-time reply buttons** (the user, 2026-10-20; `telegram/plainAnswer.ts`).
+    Plain text, no `parse_mode`: one escaping mistake in Telegram's markup refuses the whole
+    message, and the text is a model's. A link to an app page keeps its words, with the address
+    only when `WEB_BASE_URL` is a public https origin (unset on compose); app-page and data
+    sources are left out. A tapped suggestion is sent as the user's next message - the next
+    question. *Rejected:* Telegram HTML (a fallback path and its tests for bold text); no sources
+    (a news claim the reader cannot follow).
+224. **The bot's fixed sentences around a question are in the question's language, read from
+    its letters** (the user, 2026-10-20; `writtenLanguage` in `packages/shared`). A Hebrew letter
+    means Hebrew, otherwise English - the two languages the app ships. Covers the outcomes with
+    no model reply (failed, today's limit, monthly cap, no model, own key refused - the AI
+    service's English `NO_REPLY_TEXT` is the review record, never shown) and the bot's own
+    refusals (too long, still answering, unreachable). `/new` and `textOnly` have no question,
+    so they follow `user_settings.language`. *Rejected:* the settings language (a Hebrew question
+    from an English-settings user refused in English); the AI service's text as-is (English in a
+    Hebrew chat).
 
 ---
 

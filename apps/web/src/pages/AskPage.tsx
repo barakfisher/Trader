@@ -3,7 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { Link } from '@tanstack/react-router';
 import { ExternalLink, MessageCircleQuestion, Plus, Trash2 } from 'lucide-react';
 
-import type { AssistantReplyView, AssistantSourceView } from '@traders/shared';
+import { writtenLanguage, type AssistantReplyView, type AssistantSourceView } from '@traders/shared';
 
 import { AssistantText } from '../components/AssistantText.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
@@ -221,7 +221,8 @@ function Suggestions({ suggestions, onPick }: { suggestions: string[]; onPick: (
       {suggestions.map((suggestion) => (
         <button
           key={suggestion}
-          {...SERVER_ENGLISH}
+          lang={writtenLanguage(suggestion)}
+          dir="auto"
           type="button"
           onClick={() => onPick(suggestion)}
           className="rounded-full bg-surface-hover px-2.5 py-1 text-xs text-text-muted hover:text-text-primary"

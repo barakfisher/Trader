@@ -267,3 +267,13 @@ def test_a_link_is_checked_as_a_page_never_read_for_figures() -> None:
     assert checked.valid
     assert checked.reply is not None
     assert checked.reply.text == "See the universe and [home](/)."
+
+
+def test_a_hebrew_reply_is_checked_for_figures_as_an_english_one_is() -> None:
+    """D220: a reply is in the question's language, and its figures are still the tools'."""
+    sourced = _raw(outcome="answer", text="‏NVDA נסחרת ב-229.28, ירידה של 3.2981% היום.")
+    invented = _raw(outcome="answer", text="‏NVDA נסחרת ב-231.10 היום.")
+
+    assert check(sourced, tool_results=[PORTFOLIO], user_messages=["מה המחיר של NVDA?"]).valid
+    checked = check(invented, tool_results=[PORTFOLIO], user_messages=["מה המחיר של NVDA?"])
+    assert not checked.valid and "231.10" in " ".join(checked.unsourced)

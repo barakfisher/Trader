@@ -73,8 +73,10 @@ ReplyOutcome = Literal[
     "own_key_failed",
 ]
 
-#: What the user reads when there is no checked reply. Server text, English
-#: like every `/ask` answer until a decision says otherwise (guideline 1).
+#: What the user reads when there is no checked reply. Server text in English, the
+#: record a person reviews: the Ask page and the Telegram bot each show their own
+#: catalogue's sentence for the outcome (the reply itself is in the question's
+#: language, D220; the bot's sentence too, D224).
 NO_REPLY_TEXT: dict[str, str] = {
     "failed": (
         "I couldn't give an answer I could check against the data, so I'm not showing one. "

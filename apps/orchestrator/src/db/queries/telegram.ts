@@ -101,3 +101,30 @@ export async function muteUntil(userId: string, until: Date | null): Promise<voi
     [userId, until],
   );
 }
+
+/**
+ * The chat's conversation with the assistant, while it is still the same sitting
+ * (D222): the one the binding names, if it is this user's and was last touched
+ * within `quietHours`. Null starts a new one. A conversation deleted on the Ask
+ * page has already set the column to null (`0067`).
+ */
+export async function findTelegramConversation(userId: string, quietHours: number): Promise<string | null> {
+  const row = await queryOne<{ id: string }>(
+    `SELECT c.id
+       FROM telegram_bindings b
+       JOIN assistant_conversations c
+         ON c.id = b.assistant_conversation_id AND c.user_id = b.user_id
+      WHERE b.user_id = $1
+        AND c.updated_at > now() - make_interval(hours => $2)`,
+    [userId, quietHours],
+  );
+  return row?.id ?? null;
+}
+
+/** Point the chat at a conversation, or at none: `/new`, and every answered question. */
+export async function setTelegramConversation(userId: string, conversationId: string | null): Promise<void> {
+  await query(`UPDATE telegram_bindings SET assistant_conversation_id = $2 WHERE user_id = $1`, [
+    userId,
+    conversationId,
+  ]);
+}
