@@ -54,6 +54,7 @@ function proposalRow(overrides: Record<string, unknown> = {}) {
 let proposal: Record<string, unknown> | null = proposalRow();
 let agent: Record<string, unknown> | null = { id: AGENT, state: 'active', is_primary: false, name: 'Value' };
 let latest: Record<string, unknown> | null = null;
+let later: string | null = null;
 
 vi.mock('../src/db/pool.js', () => ({
   queryOne: vi.fn(async () => ({ ok: 1 })),
@@ -68,6 +69,7 @@ vi.mock('../src/db/queries.js', () => ({
   findProposal: vi.fn(async () => proposal),
   getAgent: vi.fn(async () => agent),
   latestRecheck: vi.fn(async () => latest),
+  laterApprovedProposal: vi.fn(async () => later),
   getUser: vi.fn(async () => USER),
   listProposalTransitions: vi.fn(async () => []),
   listProposalAttempts: vi.fn(async () => []),
@@ -117,6 +119,7 @@ beforeEach(() => {
   proposal = proposalRow();
   agent = { id: AGENT, state: 'active', is_primary: false, name: 'Value' };
   latest = null;
+  later = null;
 });
 
 describe('what a re-check came to', () => {
@@ -192,6 +195,12 @@ describe('when Re-check is offered (D215)', () => {
     expect(await blocked()).toBeNull();
     latest = scanRow({ outcome: null, finished_at: null });
     expect(await blocked()).toBe('scan_running');
+  });
+
+  it('is not when a later approved proposal already made the trade (D218)', async () => {
+    later = 'p-later';
+    expect(await blocked()).toBe('superseded');
+    expect((await recheckStatus(USER.id, proposal as never, NOW))?.recheck.supersededBy).toBe('p-later');
   });
 
   it('is not for a paused agent', async () => {
@@ -348,6 +357,16 @@ describe('Re-check from Telegram (D217)', () => {
     await tap(telegram, ai);
     expect(telegram.answerCallback).toHaveBeenCalledWith('cb-1', messagesFor('en').recheck.refusals.already_rechecked);
     expect(telegram.setKeyboard).toHaveBeenCalledWith('42', 7, PROPOSAL, 'none', 'en');
+    expect(ai.recheckProposal).not.toHaveBeenCalled();
+  });
+
+  it('answers a tap on a superseded proposal with why, and takes the button away (D218)', async () => {
+    later = 'p-later';
+    const telegram = chat();
+    const ai = fakeAi(async () => SCAN);
+    await tap(telegram, ai, 'he');
+    expect(telegram.answerCallback).toHaveBeenCalledWith('cb-1', messagesFor('he').recheck.refusals.superseded);
+    expect(telegram.setKeyboard).toHaveBeenCalledWith('42', 7, PROPOSAL, 'none', 'he');
     expect(ai.recheckProposal).not.toHaveBeenCalled();
   });
 

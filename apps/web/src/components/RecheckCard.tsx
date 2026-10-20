@@ -14,6 +14,7 @@ const REFUSALS = [
   'not_expired',
   'recheck_window_passed',
   'already_rechecked',
+  'superseded',
   'budget_spent',
   'scan_running',
   'agent_not_active',
@@ -25,7 +26,8 @@ const REFUSALS = [
  * one trade once more, at today's price and under the same rules, and either
  * proposes it again - a new proposal, linked here - or says why not. Offered
  * once a proposal, for a week after it expired; a re-check that reached no
- * answer (a budget, the cap, a failure) does not use it up.
+ * answer (a budget, the cap, a failure) does not use it up. Not offered when a
+ * later approved proposal already made the same trade (D218): the card says so.
  */
 export function RecheckCard({
   proposalId,
@@ -40,7 +42,7 @@ export function RecheckCard({
   const run = useRecheckProposal(proposalId, agentId);
   // The answer just given is the freshest; the page's own read follows it.
   const last = run.data ?? recheck.last;
-  if (!recheck.available && last === null) return null;
+  if (!recheck.available && last === null && recheck.supersededBy === null) return null;
 
   const refusal =
     run.error instanceof ApiRequestError && (REFUSALS as readonly string[]).includes(run.error.code)
@@ -54,6 +56,19 @@ export function RecheckCard({
     <Card title={t('proposalPage.recheck.title')}>
       <div className="space-y-2 text-sm">
         {last !== null && <RecheckOutcome result={last} />}
+        {last === null && recheck.supersededBy !== null && (
+          // D218: the trade was made by a later proposal; re-checking would make it twice.
+          <p className="text-text-muted">
+            {t('proposalPage.recheck.superseded')}{' '}
+            <Link
+              to="/proposals/$proposalId"
+              params={{ proposalId: recheck.supersededBy }}
+              className="text-accent hover:underline"
+            >
+              {t('proposalPage.recheck.openLater')}
+            </Link>
+          </p>
+        )}
         {offered && (
           <>
             <p className="text-text-muted">{t('proposalPage.recheck.body')}</p>

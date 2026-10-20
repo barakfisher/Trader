@@ -52,6 +52,7 @@ vi.mock('../src/db/queries.js', () => ({
   getOrCreateUserSettings: vi.fn(async () => ({ notify_severity: 'high', language })),
   getAgent: vi.fn(async () => ({ id: 'agent-1', state: 'active', is_primary: false })),
   latestRecheck: vi.fn(async () => null),
+  laterApprovedProposal: vi.fn(async () => null),
 }));
 
 vi.mock('../src/services/tradeApproval.js', () => ({

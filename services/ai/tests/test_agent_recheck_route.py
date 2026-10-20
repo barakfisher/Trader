@@ -118,6 +118,7 @@ def test_the_agent_is_held_to_a_manual_scans_rules(
         ("not_expired", 409),
         ("recheck_window_passed", 409),
         ("already_rechecked", 409),
+        ("superseded", 409),
     ],
 )
 def test_a_proposal_that_cannot_be_rechecked_is_refused_with_its_code(

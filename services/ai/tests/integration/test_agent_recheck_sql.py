@@ -131,6 +131,10 @@ async def test_a_recheck_proposes_the_trade_again_at_the_fresh_price(
     assert row.answer["trades"][0]["quantity"] == "3"
     assert row.briefing["recheck"]["price_when_proposed"] == "51.00"
     assert row.briefing["quote"]["quotes"]["CCJ"]["price"] == "54.32"
+    # D219: the move since it was proposed is computed, and the news is read for the model.
+    assert row.briefing["recheck"]["price_now"] == "54.32"
+    assert row.briefing["recheck"]["change_since_proposed_percent"] == "6.51"
+    assert row.briefing["news"]["symbol"] == "CCJ"
     # The old thesis is told, outside the briefing.
     assert OLD_THESIS in str(llm.heard[0]) and OLD_THESIS not in str(row.briefing)
 
@@ -236,3 +240,26 @@ def test_a_swept_expiry_within_the_window_is_rechecked(
     trade = find_expired_trade(loaded, agent.user_id, agent.agent_id, proposal, NOW)
     assert (trade.side, trade.symbol, trade.price_minor) == ("buy", "CCJ", 5_100)
     assert trade.thesis == OLD_THESIS
+
+
+def test_a_trade_a_later_approved_proposal_made_is_not_rechecked(
+    loaded: Engine,  # noqa: F811
+    agent: ScanAgent,  # noqa: F811
+) -> None:
+    # D218: the expired buy was proposed again an hour later and approved; a
+    # re-check of the first would ask to buy the same shares twice.
+    expired = _proposal(loaded, agent, expired_ago=timedelta(hours=2))
+    _proposal(loaded, agent, expired_ago=timedelta(hours=1), state="approved")
+    with pytest.raises(NotRecheckableError) as refused:
+        find_expired_trade(loaded, agent.user_id, agent.agent_id, expired, NOW)
+    assert refused.value.code == "superseded"
+
+
+def test_a_later_sell_or_a_later_rejection_does_not_supersede(
+    loaded: Engine,  # noqa: F811
+    agent: ScanAgent,  # noqa: F811
+) -> None:
+    expired = _proposal(loaded, agent, expired_ago=timedelta(hours=3))
+    _proposal(loaded, agent, expired_ago=timedelta(hours=2), state="approved", kind="sell")
+    _proposal(loaded, agent, expired_ago=timedelta(hours=1), state="rejected")
+    assert find_expired_trade(loaded, agent.user_id, agent.agent_id, expired, NOW)

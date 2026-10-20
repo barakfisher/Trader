@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { createMemoryHistory } from '@tanstack/react-router';
 
-import type { Proposal, ProposalDetailResponse } from '@traders/shared';
+import type { Proposal, ProposalDetailResponse, ProposalRecheck } from '@traders/shared';
 
 const get = vi.fn();
 const post = vi.fn();
@@ -361,9 +361,14 @@ describe('re-checking an expired trade proposal (D212)', () => {
   });
   const AT = '2026-10-20T15:00:00.000Z';
 
-  const serveRecheck = (recheck: ProposalDetailResponse['recheck']) =>
+  const serveRecheck = (recheck: Omit<ProposalRecheck, 'supersededBy'> & { supersededBy?: string }) =>
     serve({
-      '/proposals/p-trade': { proposal: TRADE, transitions: [], attempts: [], recheck },
+      '/proposals/p-trade': {
+        proposal: TRADE,
+        transitions: [],
+        attempts: [],
+        recheck: { supersededBy: null, ...recheck },
+      },
       '/proposals?state=open': { proposals: [] },
       [`/proposals?state=approved&limit=${RECENT_APPROVALS}`]: { proposals: [] },
     });
@@ -418,6 +423,14 @@ describe('re-checking an expired trade proposal (D212)', () => {
     renderAt('/proposals/p-trade');
     fireEvent.click(await screen.findByRole('button', { name: 'Re-check' }));
     expect(await screen.findByText("The agent's AI budget for today is spent.")).toBeTruthy();
+  });
+
+  it('says a later approved proposal already made the trade, and links to it (D218)', async () => {
+    serveRecheck({ available: false, last: null, supersededBy: 'p-later' });
+    renderAt('/proposals/p-trade');
+    expect(await screen.findByText(/A later proposal for the same trade was approved/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open that proposal' }).getAttribute('href')).toBe('/proposals/p-later');
+    expect(screen.queryByRole('button', { name: 'Re-check' })).toBeNull();
   });
 
   it('shows nothing on a proposal that was never offered one', async () => {

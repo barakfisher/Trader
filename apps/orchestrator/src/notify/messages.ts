@@ -57,6 +57,7 @@ export type RecheckRefusal =
   | 'not_expired'
   | 'recheck_window_passed'
   | 'already_rechecked'
+  | 'superseded'
   | 'budget_spent'
   | 'scan_running'
   | 'agent_not_active'
@@ -446,6 +447,7 @@ const en: Messages = {
       not_expired: 'Only an expired proposal can be re-checked.',
       recheck_window_passed: `It expired more than ${RECHECK_WINDOW_DAYS} days ago.`,
       already_rechecked: 'This proposal has already been re-checked.',
+      superseded: 'A later proposal for the same trade was approved, so there is nothing to re-check.',
       budget_spent: "The agent's AI budget for today is spent.",
       scan_running: 'The agent is scanning right now - try again in a minute.',
       agent_not_active: 'The agent is paused or archived.',
@@ -745,6 +747,7 @@ const he: Messages = {
       not_expired: 'אפשר לבדוק שוב רק הצעה שפג תוקפה.',
       recheck_window_passed: `תוקפה פג לפני יותר מ־${ltr(RECHECK_WINDOW_DAYS)} ימים.`,
       already_rechecked: 'ההצעה הזו כבר נבדקה שוב.',
+      superseded: 'הצעה מאוחרת יותר לאותה עסקה אושרה, אז אין מה לבדוק שוב.',
       budget_spent: 'תקציב הבינה המלאכותית של הסוכן להיום נוצל.',
       scan_running: 'הסוכן סורק כרגע - נסו שוב בעוד דקה.',
       agent_not_active: 'הסוכן מושהה או בארכיון.',

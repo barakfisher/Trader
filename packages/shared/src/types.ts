@@ -1677,6 +1677,8 @@ export interface ProposalRecheck {
   available: boolean;
   /** The latest re-check, if there was one. */
   last: RecheckResult | null;
+  /** The later approved proposal that already made this trade (D218); null when none did. */
+  supersededBy: string | null;
 }
 
 /**

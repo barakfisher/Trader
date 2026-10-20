@@ -16,7 +16,8 @@ not configured is a 503: the service cannot do this at all right now.
 `POST /agents/{agent_id}/proposals/{proposal_id}/recheck` re-checks one expired
 trade proposal (D212-D216, `app/agents/recheck.py`): the same agent checks as a
 manual scan, then the proposal's own - not found, not a trade, not expired, past
-the week, or already re-checked - each with its code, before any model is called.
+the week, already re-checked, or superseded by a later approved proposal (D218) -
+each with its code, before any model is called.
 """
 
 from __future__ import annotations

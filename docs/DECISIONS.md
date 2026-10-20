@@ -228,3 +228,5 @@ while this file is out of date.
 | 215 | Re-check is offered on an agent buy or sell that expired unanswered, for 7 days after its deadline, while its agent is active |
 | 216 | A re-check may re-size the trade but not change it: same symbol and side, the quantity set again at the fresh price, or no trade |
 | 217 | In Telegram, Re-check appears when a tap finds the proposal expired; the re-check runs after the tap is answered |
+| 218 | A proposal a later approved proposal already carried out is not re-checked |
+| 219 | A re-check's briefing carries the symbol's news and the move since it was proposed, and its thesis must say whether the original reason still holds |

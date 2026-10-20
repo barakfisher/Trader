@@ -1785,6 +1785,11 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         new_proposal_id: raised,
       });
       await expect(scanOf('refresh', 'no_trade', 1, original)).rejects.toThrow(/agent_scans_one_refresh/);
+      // D218: the agent's next buy of CCJ, approved, made the trade; a later sell does not.
+      expect(await queries.laterApprovedProposal(SEED_ADMIN, simulated, original)).toBeNull();
+      await pool.query(`UPDATE proposals SET state = 'approved', decided_at = now(), decided_via = 'web' WHERE id = $1`, [raised]);
+      expect(await queries.laterApprovedProposal(SEED_ADMIN, simulated, original)).toBe(raised);
+      expect(await queries.laterApprovedProposal(SEED_ADMIN, simulated, raised)).toBeNull();
       // Another user's id reads nothing.
       expect(await queries.latestRecheck(randomUUID(), simulated, original)).toBeNull();
     });
