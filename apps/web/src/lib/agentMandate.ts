@@ -24,6 +24,7 @@ import {
 } from '@traders/shared';
 
 import { currentLanguage, t } from '../i18n/index.ts';
+import { taxonomyPhrase } from '../i18n/taxonomyNames.ts';
 import type { PersonaTemplate } from './personaTemplates.ts';
 
 /** The rules the slider proposes and a hand edit takes over. */
@@ -243,7 +244,8 @@ export function describeMandate(draft: MandateDraft): string {
   if (band) sentences.push(t(`agents.mandate.describe.risk.${band}`));
   if (draft.horizon) sentences.push(t(`agents.mandate.describe.horizon.${draft.horizon}`));
   if (draft.thesisStyle) sentences.push(t(`agents.mandate.describe.style.${draft.thesisStyle}`));
-  const focus = [...draft.sectors, ...draft.industries, ...draft.etfCategories];
+  // Each name translated, with Yahoo's English after it (D192): the identifier the briefing uses.
+  const focus = [...draft.sectors, ...draft.industries, ...draft.etfCategories].map((name) => taxonomyPhrase(name));
   if (focus.length > 0) sentences.push(t('agents.mandate.describe.focus', { focus: list(focus) }));
   if (draft.marketCaps.length > 0) {
     sentences.push(

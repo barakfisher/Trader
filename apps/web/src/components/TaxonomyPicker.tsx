@@ -4,8 +4,9 @@ import { X } from 'lucide-react';
 
 import type { UniverseTaxonomyResponse } from '@traders/shared';
 
-import { useTranslation } from '../i18n/index.ts';
+import { currentLanguage, useTranslation, type Language } from '../i18n/index.ts';
 import { formatNumber } from '../i18n/format.ts';
+import { taxonomyLabel } from '../i18n/taxonomyNames.ts';
 
 /**
  * "Sectors & industries": a multi-select autocomplete over what the universe
@@ -13,8 +14,9 @@ import { formatNumber } from '../i18n/format.ts';
  * focus and announcements (decided 2026-10-18 under convention 5); the grouping
  * by sector and the chips are ours.
  *
- * Names are Yahoo's, in English, in every UI language: they are the same names
- * the server checks and the scan matches, so they are marked `lang="en"`.
+ * Names are Yahoo's English ones underneath - the same names the server checks
+ * and the scan matches - and are shown in the interface's language (D190-D193).
+ * A name with no translation is shown in English and marked `lang="en"`.
  */
 
 export type TaxonomyKind = 'sector' | 'industry' | 'etf_category';
@@ -54,17 +56,23 @@ const KIND_ORDER: Record<TaxonomyKind, number> = { sector: 0, industry: 1, etf_c
  * that starts with it, then one that contains it, then a row matched only by its
  * sector's name. Sectors before industries before categories on a tie, and the
  * menu's own order after that - "tech" lists Technology before Biotechnology.
- * An empty query keeps the menu's grouped order.
+ * An empty query keeps the menu's grouped order. A name matches as it is shown
+ * and in English, so "טכנו" and "tech" both find Technology on a Hebrew page.
  */
-export function matchingChoices(choices: TaxonomyChoice[], query: string): TaxonomyChoice[] {
+export function matchingChoices(
+  choices: TaxonomyChoice[],
+  query: string,
+  language: Language = currentLanguage(),
+): TaxonomyChoice[] {
   const typed = query.trim().toLowerCase();
   if (typed === '') return choices;
+  const spellings = (name: string) => [name.toLowerCase(), taxonomyLabel(name, language).text.toLowerCase()];
   const rank = (choice: TaxonomyChoice): number | null => {
-    const name = choice.name.toLowerCase();
-    if (name === typed) return 0;
-    if (name.startsWith(typed)) return 1;
-    if (name.includes(typed)) return 2;
-    if ((choice.group ?? '').toLowerCase().includes(typed)) return 3;
+    const names = spellings(choice.name);
+    if (names.some((name) => name === typed)) return 0;
+    if (names.some((name) => name.startsWith(typed))) return 1;
+    if (names.some((name) => name.includes(typed))) return 2;
+    if (choice.group !== null && spellings(choice.group).some((name) => name.includes(typed))) return 3;
     return null;
   };
   return choices
@@ -150,10 +158,13 @@ export function TaxonomyPicker({
     });
 
   const kindLabel = (kind: TaxonomyKind) => t(`agents.mandate.kinds.${kind}`);
+  const nameOf = (name: string) => {
+    const label = taxonomyLabel(name);
+    return <bdi lang={label.lang}>{label.text}</bdi>;
+  };
   const hintId = `${useId()}-hint`;
   // The heading a row sits under: a sector heads itself, a sectorless category sits under "No sector".
-  const groupOf = (choice: TaxonomyChoice) =>
-    choice.kind === 'sector' ? choice.name : (choice.group ?? t('agents.mandate.noSector'));
+  const groupOf = (choice: TaxonomyChoice) => (choice.kind === 'sector' ? choice.name : choice.group);
 
   return (
     <div className="text-sm">
@@ -169,12 +180,12 @@ export function TaxonomyPicker({
                 {...getSelectedItemProps({ selectedItem: choice, index })}
                 className="flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-xs text-text-primary"
               >
-                <bdi lang="en">{choice.name}</bdi>
+                {nameOf(choice.name)}
                 <span className="text-text-muted">· {kindLabel(choice.kind)}</span>
                 <button
                   type="button"
                   className="rounded-full hover:text-loss"
-                  aria-label={t('agents.mandate.remove', { name: choice.name })}
+                  aria-label={t('agents.mandate.remove', { name: taxonomyLabel(choice.name).text })}
                   onClick={(event) => {
                     event.stopPropagation();
                     removeSelectedItem(choice);
@@ -226,10 +237,10 @@ export function TaxonomyPicker({
                 <span>
                   {showGroup && (
                     <span className="me-2 text-xs text-text-muted">
-                      <bdi lang={choice.group ? 'en' : undefined}>{groupOf(choice)}</bdi> ›
+                      {choice.group === null ? t('agents.mandate.noSector') : nameOf(choice.group)} ›
                     </span>
                   )}
-                  <bdi lang="en">{choice.name}</bdi>{' '}
+                  {nameOf(choice.name)}{' '}
                   <span className="text-xs text-text-muted">· {kindLabel(choice.kind)}</span>
                 </span>
                 <span className="text-xs text-text-muted">{formatNumber(choice.instruments)}</span>
