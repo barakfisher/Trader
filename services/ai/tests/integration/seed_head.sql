@@ -212,11 +212,12 @@ INSERT INTO agent_scans (user_id, agent_id, trigger, started_at, finished_at, ou
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', now() - interval '2 days', now() - interval '2 days', 'step_limit', 12, 380000, 'm', '{}', '[]', NULL, NULL),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'manual', now() - interval '1 day', now() - interval '1 day', 'failed', 0, 0, NULL, '{}', '[]', NULL, 'LLMRequestError: x'),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a2', 'manual', now(), NULL, NULL, 0, 0, NULL, '{}', '[]', NULL, NULL);
--- Every schedule an agent may choose (0042).
-UPDATE agents SET scan_schedule = 'pre_open_post_close' WHERE id = '90000000-0000-0000-0000-0000000000a1';
-UPDATE agents SET scan_schedule = 'intraday_twice', llm_budget_micro_usd = 250000
+-- Schedules in each shape an agent may choose (0060): both edges, every N hours, and
+-- every N hours with the pre-open scan.
+UPDATE agents SET scan_pre_open = true, scan_post_close = true WHERE id = '90000000-0000-0000-0000-0000000000a1';
+UPDATE agents SET scan_every_hours = 4, scan_pre_open = false, llm_budget_micro_usd = 250000
  WHERE id = '90000000-0000-0000-0000-0000000000a2';
-UPDATE agents SET scan_schedule = 'intraday_once' WHERE id = '90000000-0000-0000-0000-00000000000b';
+UPDATE agents SET scan_every_hours = 2, scan_pre_open = true WHERE id = '90000000-0000-0000-0000-00000000000b';
 -- The models chosen on the Admin page (0041).
 INSERT INTO llm_model_choices (scope, model, updated_by) VALUES
   ('explain', 'anthropic/claude-sonnet-5.5', '00000000-0000-0000-0000-00000000000a'),

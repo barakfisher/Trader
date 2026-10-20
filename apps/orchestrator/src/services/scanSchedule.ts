@@ -16,9 +16,22 @@
  * next scan.
  */
 
-import type { ScanSchedule } from '@traders/shared';
+import { FIRST_MARKET_SCAN_AFTER_OPEN_MINUTES, type ScanSchedule } from '@traders/shared';
 
-export type ScanSlot = 'pre_open' | 'post_close' | 'ny_1000' | 'ny_1400';
+import type { AgentRow } from '../db/queries.js';
+
+/** An agent's schedule from its columns (0060). */
+export function scheduleOf(row: Pick<AgentRow, 'scan_every_hours' | 'scan_pre_open' | 'scan_post_close'>): ScanSchedule {
+  return { everyHours: row.scan_every_hours, preOpen: row.scan_pre_open, postClose: row.scan_post_close };
+}
+
+/**
+ * A slot's name: before the open, after the close, or a market-hours time in
+ * New York - `ny_1000` to `ny_1500`. The name is part of the slot's run key, so
+ * 10:00 and 14:00 keep the names they had before schedules had intervals (D195).
+ */
+export type MarketSlot = `ny_${10 | 11 | 12 | 13 | 14 | 15}00`;
+export type ScanSlot = 'pre_open' | 'post_close' | MarketSlot;
 
 /** A trading day, as `GET /market/sessions` gives it. */
 export interface Session {
@@ -38,46 +51,42 @@ export interface DueSlot {
 }
 
 const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+
+/** A market-hours slot's New York time as it is written: `ny_1000` is "10:00". */
+export function slotClock(slot: MarketSlot): string {
+  return `${slot.slice(3, 5)}:${slot.slice(5)}`;
+}
 
 /** D68: thirty minutes before the open. */
 export const PRE_OPEN_LEAD_MS = 30 * MINUTE;
 /** D68: fifteen minutes after the close, an early one included. */
 export const POST_CLOSE_LAG_MS = 15 * MINUTE;
-/** 10:00 and 14:00 New York, from an open that is always 09:30 there. */
-const NY_1000_AFTER_OPEN_MS = 30 * MINUTE;
-const NY_1400_AFTER_OPEN_MS = 4 * 60 * MINUTE + 30 * MINUTE;
+/** 10:00 New York, from an open that is always 09:30 there. */
+const FIRST_MARKET_SCAN_AFTER_OPEN_MS = FIRST_MARKET_SCAN_AFTER_OPEN_MINUTES * MINUTE;
 /** Midnight New York, from the same 09:30 open. */
 const MIDNIGHT_AFTER_OPEN_MS = 14 * 60 * MINUTE + 30 * MINUTE;
+/** The hour, New York, of the first market-hours scan. */
+const FIRST_MARKET_SCAN_HOUR = 10;
 
-/** Which slots each schedule runs, in the order of the day (D46's four choices). */
-export const SCHEDULE_SLOTS: Record<ScanSchedule, readonly ScanSlot[]> = {
-  pre_open: ['pre_open'],
-  pre_open_post_close: ['pre_open', 'post_close'],
-  intraday_twice: ['ny_1000', 'ny_1400'],
-  intraday_once: ['ny_1000'],
-};
-
-function slotTime(slot: ScanSlot, open: number, close: number): number {
-  switch (slot) {
-    case 'pre_open':
-      return open - PRE_OPEN_LEAD_MS;
-    case 'ny_1000':
-      return open + NY_1000_AFTER_OPEN_MS;
-    case 'ny_1400':
-      return open + NY_1400_AFTER_OPEN_MS;
-    case 'post_close':
-      return close + POST_CLOSE_LAG_MS;
-  }
-}
-
-/** One session's slots for a schedule, each with its window. */
+/**
+ * One session's slots for a schedule, in the order of the day, each with its
+ * window: before the open; from 10:00 every `everyHours` hours while the market
+ * is open - an early close drops what falls after it; after the close.
+ */
 export function slotsOf(schedule: ScanSchedule, session: Session): DueSlot[] {
   const open = Date.parse(session.opens_at);
   const close = Date.parse(session.closes_at);
-  const times = SCHEDULE_SLOTS[schedule]
-    .map((slot) => ({ slot, at: slotTime(slot, open, close) }))
-    // A market-hours slot after the close does not happen: 14:00 on an early close.
-    .filter(({ slot, at }) => slot === 'pre_open' || slot === 'post_close' || at < close);
+  const times: { slot: ScanSlot; at: number }[] = [];
+  if (schedule.preOpen) times.push({ slot: 'pre_open', at: open - PRE_OPEN_LEAD_MS });
+  if (schedule.everyHours !== null) {
+    for (let hours = 0; ; hours += schedule.everyHours) {
+      const at = open + FIRST_MARKET_SCAN_AFTER_OPEN_MS + hours * HOUR;
+      if (at >= close) break;
+      times.push({ slot: `ny_${FIRST_MARKET_SCAN_HOUR + hours}00` as MarketSlot, at });
+    }
+  }
+  if (schedule.postClose) times.push({ slot: 'post_close', at: close + POST_CLOSE_LAG_MS });
   return times.map(({ slot, at }, index) => {
     const next = times[index + 1]?.at;
     const end = slot === 'post_close' ? open + MIDNIGHT_AFTER_OPEN_MS : Math.min(next ?? close, close);

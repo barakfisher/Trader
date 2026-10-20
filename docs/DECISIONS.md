@@ -205,3 +205,5 @@ while this file is out of date.
 | 192 | Instructions written in Hebrew name each choice as "טכנולוגיה (Technology)" |
 | 193 | A name the map lacks is shown in English, marked `lang="en"`, and CI makes the gap short |
 | 194 | An agent's page is four tabs, and the scans and their history are one of them |
+| 195 | An agent's schedule is three parts: market hours every N hours, before the open, after the close |
+| 196 | Run a scan now shows a scheduled scan; it never blocks on one |

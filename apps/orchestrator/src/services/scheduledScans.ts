@@ -25,7 +25,6 @@
  */
 
 import { AiServiceError, type AiClient } from '@traders/shared/ai';
-import type { ScanSchedule } from '@traders/shared';
 
 import {
   claimRun,
@@ -39,7 +38,7 @@ import {
 import { logger } from '../logger.js';
 import { messagesFor } from '../notify/messages.js';
 import type { Notifier } from '../notify/notifier.js';
-import { dueSlots, slotKey, type DueSlot, type ScanSlot, type Session } from './scanSchedule.js';
+import { dueSlots, scheduleOf, slotKey, type DueSlot, type ScanSlot, type Session } from './scanSchedule.js';
 import { readyToScan } from './agentReadiness.js';
 import { proposeFromScan } from './tradeProposals.js';
 
@@ -133,7 +132,7 @@ export async function planScheduledScans(input: {
 
   const result: PlanResult = { agents: agents.length, due: 0, enqueued: 0 };
   for (const agent of agents) {
-    for (const slot of dueSlots(agent.scan_schedule as ScanSchedule, sessions as Session[], input.now)) {
+    for (const slot of dueSlots(scheduleOf(agent), sessions as Session[], input.now)) {
       result.due += 1;
       const key = slotKey(agent.id, slot);
       const attempt = nextAttempt(await listSlotAttempts(agent.id, key), slot, input.now);
@@ -253,7 +252,7 @@ async function reportGaveUp(job: SlotAttemptJob, cause: FailureCause, notifier: 
     const messages = messagesFor(settings.language);
     const text = messages.scheduledScans.gaveUp(
       agent?.name ?? job.agentId,
-      messages.scheduledScans.slots[job.slot],
+      messages.scheduledScans.slot(job.slot),
       job.day,
       messages.scheduledScans.causes[cause],
     );

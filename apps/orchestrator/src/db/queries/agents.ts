@@ -1,3 +1,5 @@
+import type { ScanSchedule } from '@traders/shared';
+
 import { query, queryOne } from '../pool.js';
 
 /**
@@ -41,7 +43,12 @@ export interface AgentRow {
   cash_minor: string | null;
   /** D45: the daily model allowance, integer micro-USD as text. */
   llm_budget_micro_usd: string;
-  scan_schedule: string;
+  /** When scheduled scans run (0060, D195): hours between market-hours scans, or null; and the two edges. */
+  scan_every_hours: number | null;
+  scan_pre_open: boolean;
+  scan_post_close: boolean;
+  /** The scan running now, if any (`agent_scans_one_running` allows one); null when none. */
+  running_scan: { trigger: 'manual' | 'schedule'; started_at: string } | null;
   /** Spent on scans and instruction checks since midnight UTC, as text - the sum `scan_budget.py` checks. */
   llm_spent_today_micro_usd: string;
   /** This agent's average over its last scans (D46); null before its first. */
@@ -119,7 +126,11 @@ const AGENT_COLUMNS = `a.id, a.slug, a.name, a.persona, a.is_primary, a.budget_m
        a.currency, a.state, a.created_at,
        (SELECT count(*)::int FROM holdings h WHERE h.agent_id = a.id) AS holdings_count,
        (SELECT c.balance_minor::text FROM agent_cash c WHERE c.agent_id = a.id) AS cash_minor,
-       a.llm_budget_micro_usd::text AS llm_budget_micro_usd, a.scan_schedule,
+       a.llm_budget_micro_usd::text AS llm_budget_micro_usd,
+       a.scan_every_hours, a.scan_pre_open, a.scan_post_close,
+       (SELECT json_build_object('trigger', s.trigger, 'started_at', s.started_at)
+          FROM agent_scans s WHERE s.agent_id = a.id AND s.finished_at IS NULL
+       ) AS running_scan,
        (SELECT coalesce(sum(l.cost_micro_usd), 0)::text FROM llm_calls l
          WHERE l.agent_id = a.id AND l.purpose IN ${AGENT_SPEND_PURPOSES}
            AND l.started_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
@@ -174,16 +185,18 @@ export interface AgentToCreate {
   persona: string | null;
   budgetMinor: number;
   currency: string;
-  scanSchedule: string;
+  scanSchedule: ScanSchedule;
   mandate: MandateColumns;
 }
 
 /** A simulated agent. A primary is made only by the trigger on `users` (migration 0036). */
 export async function createAgent(agent: AgentToCreate): Promise<AgentRow> {
-  const fixed = [agent.userId, agent.slug, agent.name, agent.persona, agent.budgetMinor, agent.currency, agent.scanSchedule];
+  const { everyHours, preOpen, postClose } = agent.scanSchedule;
+  const fixed = [agent.userId, agent.slug, agent.name, agent.persona, agent.budgetMinor, agent.currency, everyHours, preOpen, postClose];
   const params = [...fixed, ...MANDATE_COLUMNS.map((column) => agent.mandate[column])];
   const row = await queryOne<{ id: string }>(
-    `INSERT INTO agents (user_id, slug, name, persona, budget_minor, currency, scan_schedule,
+    `INSERT INTO agents (user_id, slug, name, persona, budget_minor, currency,
+                         scan_every_hours, scan_pre_open, scan_post_close,
                          ${MANDATE_COLUMNS.join(', ')})
      VALUES (${params.map((_, index) => `$${index + 1}`).join(', ')})
      RETURNING id`,
@@ -198,7 +211,7 @@ export interface AgentPatch {
   budgetMinor?: number;
   state?: AgentState;
   llmBudgetMicroUsd?: number;
-  scanSchedule?: string;
+  scanSchedule?: ScanSchedule;
   mandate?: Partial<MandateColumns>;
 }
 
@@ -224,7 +237,11 @@ export async function updateAgent(
   if (patch.budgetMinor !== undefined) push('budget_minor', patch.budgetMinor);
   if (patch.state !== undefined) push('state', patch.state);
   if (patch.llmBudgetMicroUsd !== undefined) push('llm_budget_micro_usd', patch.llmBudgetMicroUsd);
-  if (patch.scanSchedule !== undefined) push('scan_schedule', patch.scanSchedule);
+  if (patch.scanSchedule !== undefined) {
+    push('scan_every_hours', patch.scanSchedule.everyHours);
+    push('scan_pre_open', patch.scanSchedule.preOpen);
+    push('scan_post_close', patch.scanSchedule.postClose);
+  }
   for (const column of MANDATE_COLUMNS) {
     const value = patch.mandate?.[column];
     if (value !== undefined) push(column, value);

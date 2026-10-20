@@ -99,6 +99,8 @@ export interface AgentView {
   createdAt: string;
   /** When scheduled scans run (D46); null for the primary, which never scans (D1). */
   scanSchedule: ScanSchedule | null;
+  /** The scan running now - one at a time per agent - so *Run a scan now* can say so (D195); null when none. */
+  runningScan: { trigger: 'manual' | 'schedule'; startedAt: string } | null;
   /** The daily model allowance in integer micro-USD (D45); null for the primary. */
   llmBudgetMicroUsd: number | null;
   /** Spent on scans since midnight UTC - the day the AI service's check counts. */
@@ -159,11 +161,11 @@ export type ThesisStyle = (typeof THESIS_STYLES)[number];
 export const MARKET_CAPS = ['mega', 'large', 'mid', 'small'] as const;
 export type MarketCap = (typeof MARKET_CAPS)[number];
 
-/** The schedule a new agent gets from its horizon when none is chosen (D166). */
+/** The schedule a new agent gets from its horizon when none is chosen (D166, D195). */
 export const HORIZON_SCHEDULES: Record<Horizon, ScanSchedule> = {
-  short: 'intraday_twice',
-  medium: 'pre_open_post_close',
-  long: 'pre_open',
+  short: { everyHours: 2, preOpen: false, postClose: false },
+  medium: { everyHours: null, preOpen: true, postClose: true },
+  long: { everyHours: null, preOpen: true, postClose: false },
 };
 
 /**
@@ -198,17 +200,38 @@ export interface AgentScheduling {
   nextAt: string | null;
 }
 
-/** D46's choices, in the order Settings offers them. */
-export const SCAN_SCHEDULES = ['pre_open', 'pre_open_post_close', 'intraday_twice', 'intraday_once'] as const;
-export type ScanSchedule = (typeof SCAN_SCHEDULES)[number];
+/**
+ * When an agent's scheduled scans run (D46, D195): during market hours every
+ * `everyHours` hours from 10:00 New York (null: not during market hours), and
+ * thirty minutes before the open and fifteen after the close, each on its own.
+ * All three off is allowed: the agent scans only when asked.
+ */
+export interface ScanSchedule {
+  everyHours: number | null;
+  preOpen: boolean;
+  postClose: boolean;
+}
 
-/** Scans a schedule runs on an open day. */
-export const SCANS_PER_DAY: Record<ScanSchedule, number> = {
-  pre_open: 1,
-  pre_open_post_close: 2,
-  intraday_twice: 2,
-  intraday_once: 1,
-};
+/** Hours between market-hours scans: 1 runs six (10:00-15:00 New York), 6 runs one. */
+export const MIN_SCAN_EVERY_HOURS = 1;
+export const MAX_SCAN_EVERY_HOURS = 6;
+
+/** The first market-hours scan, as hours and minutes after the 09:30 open: 10:00 New York. */
+export const FIRST_MARKET_SCAN_AFTER_OPEN_MINUTES = 30;
+/** A regular session, open to close: 09:30-16:00 New York. */
+export const REGULAR_SESSION_MINUTES = 390;
+
+/** Market-hours scans on a regular day: 10:00, then every `everyHours`, before the close. */
+export function marketScansPerDay(everyHours: number | null): number {
+  if (everyHours === null) return 0;
+  const span = REGULAR_SESSION_MINUTES - FIRST_MARKET_SCAN_AFTER_OPEN_MINUTES;
+  return Math.floor((span - 1) / (everyHours * 60)) + 1;
+}
+
+/** Scans a schedule runs on a regular trading day. */
+export function scansPerDay(schedule: ScanSchedule): number {
+  return marketScansPerDay(schedule.everyHours) + Number(schedule.preOpen) + Number(schedule.postClose);
+}
 
 /**
  * One scan's expected cost (D46): this agent's recent average, else the

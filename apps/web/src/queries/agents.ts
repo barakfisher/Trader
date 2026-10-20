@@ -27,6 +27,7 @@ import type {
 } from '@traders/shared';
 
 import { api } from '../api/client.ts';
+import { minutesUntilSoonScan } from '../lib/scanTimes.ts';
 import { queryKeys } from './queryKeys.ts';
 
 export const agentsQuery = queryOptions({
@@ -43,10 +44,22 @@ export function useAgentLimitQuery() {
   return useQuery({ ...agentsQuery, select: (body) => body.agentLimit ?? null });
 }
 
+/** How often an agent is re-read while a scan runs or one is due soon (D195). */
+export const AGENT_SCAN_REFRESH_MS = 30_000;
+
 export function useAgentQuery(agentId: string) {
   return useQuery({
     queryKey: queryKeys.agent(agentId),
     queryFn: () => api.get<AgentView>(`/agents/${agentId}`),
+    // A scheduled scan starts and ends without the page asking: re-read while
+    // one is running or about to, so *Run a scan now* follows it - and only then.
+    refetchInterval: (query) => {
+      const agent = query.state.data;
+      if (!agent) return false;
+      return agent.runningScan !== null || minutesUntilSoonScan(agent.scheduling?.nextAt) !== null
+        ? AGENT_SCAN_REFRESH_MS
+        : false;
+    },
   });
 }
 

@@ -16,7 +16,8 @@ import { z } from 'zod';
 
 import {
   HORIZON_SCHEDULES,
-  SCAN_SCHEDULES,
+  MAX_SCAN_EVERY_HOURS,
+  MIN_SCAN_EVERY_HOURS,
   type AgentView,
   type AgentsResponse,
   type AgentScheduling,
@@ -26,7 +27,7 @@ import {
 import type { AiClient } from '@traders/shared/ai';
 
 import { logger } from '../../logger.js';
-import { nextSlot, type Session } from '../../services/scanSchedule.js';
+import { nextSlot, scheduleOf, type Session } from '../../services/scanSchedule.js';
 import { readyToScan } from '../../services/agentReadiness.js';
 import { currentConflicts } from '../../services/instructionsCheck.js';
 import { SCHEDULE_EXCHANGE } from '../../services/scheduledScans.js';
@@ -66,8 +67,8 @@ export const MAX_PERSONA_LENGTH = 4000;
 
 export const MAX_NAME_LENGTH = 60;
 
-/** Migration 0042's default: what an agent with neither a schedule nor a horizon gets. */
-export const DEFAULT_SCHEDULE: ScanSchedule = 'pre_open';
+/** Migration 0060's default: what an agent with neither a schedule nor a horizon gets - before the open. */
+export const DEFAULT_SCHEDULE: ScanSchedule = { everyHours: null, preOpen: true, postClose: false };
 
 /** D45's ceiling, as migration 0042's CHECK has it: $100 a day. */
 export const MAX_LLM_BUDGET_MICRO_USD = 100_000_000;
@@ -84,6 +85,14 @@ const CHECK_VIOLATION = '23514';
 const name = z.string().trim().min(1).max(MAX_NAME_LENGTH);
 const budget = z.string().trim().regex(BUDGET_PATTERN, 'budget must be an amount in dollars, at most two decimal places');
 const persona = z.string().trim().max(MAX_PERSONA_LENGTH).nullable();
+/** D195: all three parts, always - a schedule is replaced whole, never merged. All off is manual only. */
+const scanSchedule = z
+  .object({
+    everyHours: z.number().int().min(MIN_SCAN_EVERY_HOURS).max(MAX_SCAN_EVERY_HOURS).nullable(),
+    preOpen: z.boolean(),
+    postClose: z.boolean(),
+  })
+  .strict();
 
 const createSchema = z
   .object({
@@ -91,7 +100,7 @@ const createSchema = z
     budget,
     persona: persona.optional(),
     mandate: mandateSchema.optional(),
-    scanSchedule: z.enum(SCAN_SCHEDULES).optional(),
+    scanSchedule: scanSchedule.optional(),
   })
   .strict();
 const patchSchema = z
@@ -101,7 +110,7 @@ const patchSchema = z
     persona: persona.optional(),
     state: z.enum(['active', 'paused', 'archived']).optional(),
     llmBudget: budget.optional(),
-    scanSchedule: z.enum(SCAN_SCHEDULES).optional(),
+    scanSchedule: scanSchedule.optional(),
     mandate: mandateSchema.optional(),
   })
   .strict();
@@ -156,7 +165,11 @@ export function toAgentView(row: AgentRow): AgentView {
     holdingsCount: row.holdings_count,
     createdAt: row.created_at.toISOString(),
     // The primary never scans (D1): none of this describes it.
-    scanSchedule: row.is_primary ? null : (row.scan_schedule as ScanSchedule),
+    scanSchedule: row.is_primary ? null : scheduleOf(row),
+    runningScan:
+      row.is_primary || !row.running_scan
+        ? null
+        : { trigger: row.running_scan.trigger, startedAt: new Date(row.running_scan.started_at).toISOString() },
     llmBudgetMicroUsd: row.is_primary ? null : Number(row.llm_budget_micro_usd),
     llmSpentTodayMicroUsd: row.is_primary ? null : Number(row.llm_spent_today_micro_usd),
     scanCost: row.is_primary ? null : scanCostOf(row),
@@ -184,7 +197,7 @@ async function schedulingOf(row: AgentRow, enabled: boolean, ai: AiClient, reque
       new Date(now.getTime() + NEXT_SLOT_HORIZON_MS).toISOString().slice(0, 10),
       requestId,
     );
-    const next = nextSlot(row.scan_schedule as ScanSchedule, sessions as Session[], now);
+    const next = nextSlot(scheduleOf(row), sessions as Session[], now);
     return { enabled, nextAt: next?.at.toISOString() ?? null };
   } catch (error) {
     logger().warn({ err: error, agentId: row.id }, 'agents.next_scan_unknown');

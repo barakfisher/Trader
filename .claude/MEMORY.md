@@ -3053,6 +3053,29 @@ failure they prevent.
     tab was open. *Rejected:* five tabs keeping Decisions beside a new Scans (two tabs naming
     one list - running a scan in one, reading its result in the other). Pause/archive moved with
     the settings; the header's state badge still says when an agent is paused or archived.
+195. **An agent's schedule is three parts: market hours every N hours, before the open, after the
+    close** (the user, 2026-10-20; replaces D46's four named schedules, migration **0060**).
+    `scan_every_hours` (1-6 from 10:00 New York, null for none), `scan_pre_open`,
+    `scan_post_close`; any combination, and all off means the agent scans only when asked
+    (Pause still refuses manual scans too). Settings shows the times on a regular day in the
+    user's own zone, the count and the cost a day, and a suggestion from the horizon applied in
+    one press. Defaults by horizon: short every 2 h, medium both edges, long pre-open. The four
+    old schedules map exactly (`intraday_twice` is every 4 h, `intraday_once` every 6) and
+    market-hours slots keep their names (`ny_1000`...`ny_1500`, part of each attempt's run key),
+    so no agent's scans move. **Why:** the user asked for "once every ___ hours" rather than a
+    fixed hourly choice, and for the edges to combine with it. *Rejected:* a free "scans a day"
+    count (no obvious times for 5 a day); one text column holding a spec string (a parse at every
+    read); only every-N-hours (long-horizon agents lose the pre-open scan that is their default);
+    hourly as the short default (up to 6 proposals a day while the last one may still be
+    pending - 2 h matches a proposal's one-hour life). The downgrade refuses a schedule 0042
+    cannot name rather than silently moving an agent's scans.
+196. **Run a scan now shows a scheduled scan; it never blocks on one** (the user, 2026-10-20). The
+    agent view carries `runningScan` (trigger, start); while any scan runs the button waits, with
+    "a scheduled scan is running now", and within 30 minutes of a scheduled scan it says when -
+    two scans close together usually propose the same idea twice - but the choice stays the
+    user's. The agent query re-reads every 30 s only while a scan runs or one is that close.
+    *Rejected:* a manual scan covering the next slot (skips a look the user may have wanted);
+    blocking manual scans near a slot (blocks the user exactly when they want a scan now).
 
 ---
 
