@@ -4,7 +4,18 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-19 ~17:00 UTC - **Handoff after five merges since #259: M9 has login (#260) and
+Updated: 2026-10-20 ~09:30 UTC - **Handoff after seven merges since #266 (late: two sessions
+were merging in parallel, and the count was only noticed at the seventh).** Merged: #265 (D189),
+#267 (D190-D193), #268 (D194), #269 (`0060`, D195-D196), #270 (`0061`, D197-D198), #272, and
+**#271: the first PR of the user's 2026-10-20 improvements list.** Decisions reached **198** (next:
+**199**). Migrations: **`0061_max_decisions` is head** (next free: **`0062`**; `git fetch` and check
+`main` has one head before writing one). **Deployed:** compose runs `main` as of #272 (`0061`,
+rebuilt 2026-10-20 08:56 UTC, before #271) - **which means #264's signup is live on compose without
+the cap, against D186**; kind runs #263 at `0059`. Nobody in this session redeployed; ask the user
+whether that was intended (item 1 under "after the UI batch").
+**Next:** "Next session: after the UI batch" under "Where to go next".
+
+Earlier update, 2026-10-19 ~17:00 UTC - **Handoff after five merges since #259: M9 has login (#260) and
 signup with the admin's approval (#264); the next M9 PR is the cap's enforcement.** Decisions
 reached **193** (next: **194**; D189 figures retry #265, D190-D193 taxonomy names in Hebrew). Migrations: **`0059_mandate_check` is head** (next free: **`0060`**;
 `git fetch` and check `main` has one head before writing one). **Deployed:** compose and kind both
@@ -4346,6 +4357,68 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after the UI batch (written 2026-10-20)
+
+**The user's improvements list (2026-10-20), split and agreed - one PR at a time, ask before
+each, merge only on "merge", redeploy only on "redeploy":**
+
+1. **Done: #271** - one `PasswordInput` with a show/hide toggle for all four password fields;
+   the agent's Performance card in its own tab (five tabs; the row scrolls at phone width);
+   Settings' Email and Password cards became one Sign-in card whose buttons open each form in a
+   drawer, and the severity table folds under the proposals card. Settings' Account card stays:
+   it is read-only today, but D163 makes the zone editable there.
+2. **Next: the agent limit counts only active agents, and the admin has none.** The user's reason:
+   cost comes from scans, and a paused agent does not scan, so creating more is harmless. Today
+   the `agents_within_limit` trigger (`0047`) counts every non-archived, non-primary agent - active
+   and paused - for every user. The change: migration `0062` rewrites the trigger to count
+   `state = 'active'` and to fire on create-as-active and on resume (paused -> active), skip the
+   admin (`users.role`), and the orchestrator's pre-check and the page's sentence ("3 of 3 active")
+   follow. Rehearse the migration on a restored backup, as #253 was.
+3. **The user's own OpenRouter key - decided: a user with a valid key of their own is never
+   capped; without one, the cap (D157) applies as planned.** So the cap PR is still needed, and
+   the two are best designed together. Open: storing a per-user key is an exception to guideline
+   9 (secrets only in `.env` / Kubernetes Secrets) - the proposal to bring is encrypted at rest
+   with a key from `.env`, never sent to the browser, shown as its last four characters,
+   validated against OpenRouter on save; background scans and narration run on the owner's key.
+   Measure first how a call reaches `BudgetedProvider` with its user (the cap PR's list under
+   "after M9's signup" item 2 still stands).
+4. **Re-evaluate an expired trade proposal** (after 3 - it is a paid call). A button in Telegram
+   and the UI runs a focused one-ticker re-check for that agent - fresh price, the same mandate
+   rules, the evidence validator - and either issues a new proposal or says why not. One refresh
+   per proposal. For reference, how long proposals live: trade proposals 60 minutes from the next
+   market open (D4, `TRADE_PROPOSAL_TTL_MS`); portfolio-scan proposals `proposal_ttl_hours`
+   (default 24, 1-168); topic proposals 14 days.
+5. **Telegram ask mode** (after 3) - decided: the same paid call and daily budget as the Ask page,
+   **one rolling conversation per chat**, and **answered in the language the question was asked
+   in**. That last is an exception to guideline 1's "`/ask` answers stay English" and needs a
+   decision number when it is built (and a word on whether the Ask page follows).
+
+**Also open, in order of urgency:**
+- **Compose has #264's signup without the cap (D186).** Ask the user: leave it (household users
+  only, over Tailscale) or roll compose back until the cap merges.
+- The 2026-10-20 Test agent scan review: #270 (several trades a scan, D197) suggests another
+  session acted on it, but this session did not see it. Draft **#247** is still open and waits on
+  it, as do the research sub-agent and the per-agent tool picker.
+- Everything under "after M9's signup" items 3-6 is unchanged.
+
+**What cost time in this session:**
+- **The dev server's port must be in `ALLOWED_ORIGINS`.** The orchestrator refuses a sign-in from
+  any other origin with `403 bad_origin`, which in the browser looks exactly like a wrong
+  password. Compose allows `localhost:5173`, `localhost:5174` and `127.0.0.1:5174`; 5174 is the
+  compose web container (the code on `main`), so a branch's dev server belongs on **5173**. An
+  orphaned Vite from a `frontend` folder in the Trash was holding 5173 on `::1` and was stopped
+  with the user's OK. Check the response body before suspecting the password.
+- **The browser pane does not share the user's browser cookies.** "Signed in at 5174" in Chrome
+  means nothing to the pane; the user signs in on the pane itself.
+- **Checking Hebrew without changing the user's saved language:** in the Vite dev server,
+  `(await import('/src/i18n/index.ts')).applyLanguage('he')` from the page switches language and
+  `dir` client-side only; move between pages with `history.pushState` plus a `popstate` event, since
+  a reload re-reads the saved language. In RTL the menu button is on the left.
+- **The pane is 304 px wide**, which is where the five agent tabs overflowed: measure
+  `document.documentElement.scrollWidth` against `innerWidth` on any page with a row of tabs.
+- **Count merges with `git log`, not by memory**, when other sessions are merging too: this
+  handoff came at seven.
 
 ### Next session: after M9's signup (written 2026-10-19, evening)
 
