@@ -13,6 +13,7 @@ import {
 
 import { ApiRequestError, api } from '../api/client.ts';
 import { currentLanguage, useTranslation } from '../i18n/index.ts';
+import { PasswordInput } from './PasswordInput.tsx';
 import { Button, ErrorNote } from './ui.tsx';
 
 /** The browser's zone (D163): what "today" and quiet hours will mean for this account. */
@@ -82,13 +83,7 @@ export function SignupForm({ onBack }: { onBack: () => void }) {
       <span className="text-xs uppercase tracking-wide text-text-muted">{label}</span>
       <div className="flex items-center gap-2">
         <LockKeyhole className="size-4 text-text-muted" aria-hidden />
-        <input
-          type="password"
-          value={value}
-          onChange={(event) => set(event.target.value)}
-          autoComplete="new-password"
-          className="input"
-        />
+        <PasswordInput value={value} onChange={set} autoComplete="new-password" />
       </div>
     </label>
   );

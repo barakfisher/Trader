@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import { AtSign, LineChart, LockKeyhole } from 'lucide-react';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
+import { PasswordInput } from '../components/PasswordInput.tsx';
 import { SignupForm } from '../components/SignupForm.tsx';
 import { Button, ErrorNote } from '../components/ui.tsx';
 import { useTranslation } from '../i18n/index.ts';
@@ -60,13 +61,7 @@ export const LoginPage = observer(function LoginPage() {
                 </span>
                 <div className="flex items-center gap-2">
                   <LockKeyhole className="size-4 text-text-muted" aria-hidden />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    autoComplete="current-password"
-                    className="input"
-                  />
+                  <PasswordInput value={password} onChange={setPassword} autoComplete="current-password" />
                 </div>
               </label>
 

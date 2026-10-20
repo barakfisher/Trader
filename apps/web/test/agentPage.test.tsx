@@ -289,7 +289,7 @@ function renderAgent(path = `/agents/${AGENT_ID}`) {
 }
 
 /** Render the agent and open one of its tabs. */
-async function renderAgentTab(tab: 'Scans' | 'Settings') {
+async function renderAgentTab(tab: 'Performance' | 'Scans' | 'Settings') {
   renderAgent();
   fireEvent.click(await screen.findByRole('tab', { name: tab }));
 }
@@ -323,7 +323,7 @@ describe('AgentPage with the ledger', () => {
   });
 
   it('compares the agent with SPY on the same deposits, and has no score before the agent decides (D24, D42)', async () => {
-    renderAgent();
+    await renderAgentTab('Performance');
     expect(await screen.findByText('SPY with the same deposits')).toBeTruthy();
     expect(screen.getByText('-1.50 pts')).toBeTruthy();
     expect(screen.getByText(/Each deposit buys SPY at the first market close after it, without fees/)).toBeTruthy();
@@ -477,10 +477,17 @@ describe('AgentPage with the ledger', () => {
     expect(screen.queryByRole('button', { name: 'Add cash' })).toBeNull();
   });
 
-  it('keeps scans and settings behind their own tabs, not on the page until asked for', async () => {
+  it('keeps performance, scans and settings behind their own tabs, not on the page until asked for', async () => {
     renderAgent();
     expect(await screen.findByRole('tab', { name: 'Holdings', selected: true })).toBeTruthy();
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Holdings', 'Activity', 'Scans', 'Settings']);
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Holdings',
+      'Performance',
+      'Activity',
+      'Scans',
+      'Settings',
+    ]);
+    expect(screen.queryByText('SPY with the same deposits')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Run a scan now' })).toBeNull();
     expect(screen.queryByRole('group', { name: 'When it scans' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();

@@ -6,6 +6,7 @@ import { EMAIL_MAX_LENGTH, emailProblem, normaliseEmail } from '@traders/shared'
 import { ApiRequestError } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { useStore } from '../stores/context.tsx';
+import { PasswordInput } from './PasswordInput.tsx';
 import { Button, ErrorNote } from './ui.tsx';
 
 /**
@@ -97,13 +98,7 @@ export const EmailChange = observer(function EmailChange() {
       </label>
       <label className="block space-y-1">
         <span className="text-xs uppercase tracking-wide text-text-muted">{t('email.password')}</span>
-        <input
-          type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          autoComplete="current-password"
-          className="input"
-        />
+        <PasswordInput value={password} onChange={setPassword} autoComplete="current-password" />
       </label>
       <p className="text-xs text-text-muted">{t('email.note')}</p>
 

@@ -72,7 +72,9 @@
       "unchanged": "The new password is the same as the current one.",
       "mismatch": "The two new passwords are different.",
       "failed": "Could not change the password."
-    }
+    },
+    "show": "Show password",
+    "hide": "Hide password"
   },
   "email": {
     "title": "Email",
@@ -932,7 +934,8 @@
     "timezoneNote": "Every time on screen is shown in it, and “today” - quiet hours, the daily summary, the daily snapshot - begins at midnight here.",
     "language": "Language",
     "languageHint": "The language of this interface. Observations, explanations, answers and Telegram messages are written by the server and stay in English.",
-    "interfaceLanguage": "Interface language"
+    "interfaceLanguage": "Interface language",
+    "signIn": "Sign-in"
   },
   "topicsPage": {
     "title": "Topics",
@@ -1266,6 +1269,7 @@
     },
     "tabs": {
       "holdings": "Holdings",
+      "performance": "Performance",
       "activity": "Activity",
       "scans": "Scans",
       "settings": "Settings"

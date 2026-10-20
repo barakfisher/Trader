@@ -1,8 +1,9 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { observer } from 'mobx-react-lite';
-import { BellOff, Settings as SettingsIcon } from 'lucide-react';
+import { AtSign, BellOff, KeyRound, Settings as SettingsIcon } from 'lucide-react';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
+import { Drawer } from '../components/Drawer.tsx';
 import { EmailChange } from '../components/EmailChange.tsx';
 import { PasswordChange } from '../components/PasswordChange.tsx';
 import { TelegramConnect } from '../components/TelegramConnect.tsx';
@@ -30,8 +31,8 @@ import { useStore } from '../stores/context.tsx';
  * Every control is a statement about this user's attention, so each one says
  * what it will cost them - a severity floor is meaningless without the bands
  * that produce it, and a TTL is meaningless without the reason proposals expire
- * at all. The severity table at the bottom is the reference those sentences
- * point at.
+ * at all. The severity bands, folded under the proposals card, are the
+ * reference those sentences point at.
  *
  * The form edits a draft and saves the whole object at once, because the API
  * replaces the whole object. Nothing here writes on change: a settings page
@@ -142,6 +143,35 @@ export const SettingsPage = observer(function SettingsPage() {
                   </span>
                 </div>
               </Field>
+              <details className="text-sm">
+                <summary className="cursor-pointer text-text-muted">{t('settings.severityTitle')}</summary>
+                <p className="mb-3 mt-2 text-xs text-text-muted">{t('settings.severityIntro')}</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="text-start text-xs uppercase tracking-wide text-text-muted">
+                      <tr>
+                        <th className="py-2 pe-3 font-medium">{t('settings.finding')}</th>
+                        <th className="py-2 pe-3 font-medium">{t('severity.labels.info')}</th>
+                        <th className="py-2 pe-3 font-medium">{t('severity.labels.notable')}</th>
+                        <th className="py-2 font-medium">{t('severity.labels.high')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {SEVERITY_BANDS.map((band) => (
+                        <tr key={band.rule} className="border-t border-border-subtle">
+                          <td className="py-2 pe-3">
+                            <span className="text-text-primary">{band.rule}</span>
+                            <span className="block text-xs text-text-muted">{band.measure}</span>
+                          </td>
+                          <td className="py-2 pe-3 text-text-muted">{band.info}</td>
+                          <td className="py-2 pe-3 text-warn">{band.notable}</td>
+                          <td className="py-2 text-loss">{band.high}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
             </div>
           </Card>
 
@@ -251,44 +281,7 @@ export const SettingsPage = observer(function SettingsPage() {
 
           <AccountCard />
 
-          <Card title={t('email.title')}>
-            <EmailChange />
-          </Card>
-
-          <Card title={t('password.title')}>
-            <PasswordChange />
-          </Card>
-
-          <Card title={t('settings.severityTitle')}>
-            <p className="mb-3 text-sm text-text-muted">
-              {t('settings.severityIntro')}
-            </p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-start text-xs uppercase tracking-wide text-text-muted">
-                  <tr>
-                    <th className="py-2 pe-3 font-medium">{t('settings.finding')}</th>
-                    <th className="py-2 pe-3 font-medium">{t('severity.labels.info')}</th>
-                    <th className="py-2 pe-3 font-medium">{t('severity.labels.notable')}</th>
-                    <th className="py-2 font-medium">{t('severity.labels.high')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {SEVERITY_BANDS.map((band) => (
-                    <tr key={band.rule} className="border-t border-border-subtle">
-                      <td className="py-2 pe-3">
-                        <span className="text-text-primary">{band.rule}</span>
-                        <span className="block text-xs text-text-muted">{band.measure}</span>
-                      </td>
-                      <td className="py-2 pe-3 text-text-muted">{band.info}</td>
-                      <td className="py-2 pe-3 text-warn">{band.notable}</td>
-                      <td className="py-2 text-loss">{band.high}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+          <SignInCard />
 
           <div className="flex flex-wrap items-center justify-end gap-3">
             {settings.blockingIssue && (
@@ -331,6 +324,57 @@ function Field({
     </div>
   );
 }
+
+/**
+ * The address this account signs in with, and the two changes it allows. Each
+ * form opens on demand: both are rare, both ask for the current password, and
+ * as standing cards they took more of the page than any setting a person
+ * actually tunes.
+ */
+const SignInCard = observer(function SignInCard() {
+  const { auth } = useStore();
+  const { t } = useTranslation();
+  const [open, setOpen] = useState<'email' | 'password' | null>(null);
+  const close = () => setOpen(null);
+  return (
+    <Card title={t('settings.signIn')}>
+      <p className="mb-3 text-sm">
+        <span className="text-text-muted">{t('email.current')} </span>
+        {auth.user?.email ? (
+          <bdi dir="ltr" className="font-medium">
+            {auth.user.email}
+          </bdi>
+        ) : (
+          <span className="text-text-muted">{t('email.none')}</span>
+        )}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="secondary" onClick={() => setOpen('email')}>
+          <span className="flex items-center gap-1">
+            <AtSign className="size-4" aria-hidden />
+            {t('email.save')}
+          </span>
+        </Button>
+        <Button variant="secondary" onClick={() => setOpen('password')}>
+          <span className="flex items-center gap-1">
+            <KeyRound className="size-4" aria-hidden />
+            {t('password.save')}
+          </span>
+        </Button>
+      </div>
+      {open === 'email' && (
+        <Drawer title={t('email.save')} closeLabel={t('common.close')} onClose={close}>
+          <EmailChange />
+        </Drawer>
+      )}
+      {open === 'password' && (
+        <Drawer title={t('password.save')} closeLabel={t('common.close')} onClose={close}>
+          <PasswordChange />
+        </Drawer>
+      )}
+    </Card>
+  );
+});
 
 /**
  * What this installation fixes rather than asks: shown, so a reader knows what

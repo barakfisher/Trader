@@ -72,6 +72,21 @@ describe('the sign-in page', () => {
     });
   });
 
+  it('shows the typed password on request and hides it again, without touching the value', () => {
+    renderWithServerState(<LoginPage />);
+    type('Password', 'secret');
+    const field = screen.getByLabelText('Password') as HTMLInputElement;
+    const toggle = screen.getByRole('button', { name: 'Show password' });
+    expect(field.type).toBe('password');
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(toggle);
+    expect(field.type).toBe('text');
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(field.value).toBe('secret');
+    fireEvent.click(toggle);
+    expect(field.type).toBe('password');
+  });
+
   it('says the email and password do not match, without the server\'s English', async () => {
     post.mockRejectedValue(new ApiRequestError('incorrect email or password', 401, 'unauthorized'));
     renderWithServerState(<LoginPage />);
