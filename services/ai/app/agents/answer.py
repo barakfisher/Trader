@@ -36,6 +36,23 @@ from sqlalchemy.engine import Engine
 from app.narration.evidence_validator import unsourced_figures
 
 Side = Literal["buy", "sell"]
+#: Why a trade was refused, for a screen that says it in the user's language (D214);
+#: `problems` keeps the reason in full, in English, for the scan's history.
+RefusalCode = Literal[
+    "malformed",
+    "decision_limit",
+    "duplicate",
+    "already_waiting",
+    "not_tradable",
+    "holding",
+    "thesis",
+    "figures",
+    "no_price",
+    "too_small",
+    "cash",
+    "mandate",
+    "not_this_trade",
+]
 SIDES: tuple[Side, ...] = ("buy", "sell")
 
 #: A thesis long enough to say why, short enough to read before approving.
@@ -77,12 +94,14 @@ class Refused:
     """A trade the server will not propose, as the model wrote it, and why.
 
     `kind` says whether it may go back to the model: `figures` (D189) and
-    `mandate` (D170) each get one chance; `final` never goes back.
+    `mandate` (D170) each get one chance; `final` never goes back. `code` is the
+    first fault, by name (D214).
     """
 
     written: dict[str, Any]
     problems: tuple[str, ...]
     kind: Literal["figures", "mandate", "final"] = "final"
+    code: RefusalCode = "malformed"
 
     @property
     def symbol(self) -> str | None:
@@ -90,7 +109,7 @@ class Refused:
         return symbol.strip().upper() if isinstance(symbol, str) and symbol.strip() else None
 
     def as_json(self) -> dict[str, Any]:
-        return {**self.written, "problems": list(self.problems), "refused": True}
+        return {**self.written, "problems": list(self.problems), "refused": True, "code": self.code}
 
 
 @dataclass(frozen=True)

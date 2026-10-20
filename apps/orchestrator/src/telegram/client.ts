@@ -51,8 +51,9 @@ const ACTIONS = ['approve', 'reject', 'snooze'] as const;
  * for everything else - a rejection and an expiry have nothing left to press.
  * A trade proposal has its own two (D48): `trade` is Approve and Reject, and
  * `{ confirmAt }` is Confirm at the price its preview showed, and Reject.
+ * `recheck` is the one button an expired trade proposal may carry (D217).
  */
-export type Keyboard = 'decide' | 'trade' | 'undo' | 'none' | { confirmAt: bigint };
+export type Keyboard = 'decide' | 'trade' | 'undo' | 'recheck' | 'none' | { confirmAt: bigint };
 
 /** Whether a Confirm button can carry this price (`MAX_CALLBACK_PRICE_MINOR`). */
 export function confirmable(priceMinor: bigint): boolean {
@@ -219,6 +220,8 @@ export class TelegramNotifier implements Notifier {
         };
       case 'undo':
         return { inline_keyboard: [[button('undo', messages.undoButton)], ...link] };
+      case 'recheck':
+        return { inline_keyboard: [[button('recheck', messages.recheck.button)], ...link] };
       case 'none':
         // An empty keyboard removes it. Omitting `reply_markup` would leave the
         // old one in place, which is the opposite of what a terminal state needs.

@@ -3304,6 +3304,56 @@ failure they prevent.
     to raise the limit first. *Rejected for now:* an in-app "stop my own-key spend at $N a month"
     (a column, a wrapper summing `paid_by = 'own_key'`, a Settings field; it checks an estimate) -
     worth building when a user asks for the limit inside the app; both (two limits that disagree).
+212. **Re-checking an expired trade proposal is a focused scan of that one trade, through the
+    scan machinery** (the user, 2026-10-20, improvements item 4; `app/agents/recheck.py`,
+    `scan.run_briefed`). Same instructions, mandate, `TradeReview`, evidence validator, budgets and
+    `Caller("agent_scan", user_id, agent_id)` - so the cap and the own key apply untouched - but a
+    briefing about the trade (fresh quote, its findings, cash and holdings, what was proposed and
+    when it expired), one decision, `RECHECK_STEP_LIMIT` (4) tool calls. The old thesis is told in
+    a preface *outside* the briefing, so none of its figures counts as evidence: a re-check must
+    find each figure again today. Stored as an `agent_scans` row with trigger `refresh` (0066).
+    *Rejected:* a full scan (it decides the whole portfolio, up to `max_decisions` trades, and
+    costs a full scan's tokens to answer one question); no model - re-run the checks and reuse the
+    old thesis (its prices are yesterday's, and the validator would be checking old text against
+    new evidence).
+213. **"Once per proposal" is a partial unique index on the re-check's scan row, and a re-check
+    that reached no answer does not use it up** (the user, 2026-10-20; 0066
+    `agent_scans_one_refresh` on `refreshes_proposal_id` WHERE outcome is NULL or not in
+    failed / budget_reached / cap_reached / own_key_failed). A second press loses at the database,
+    whatever surface raced it; the AI service checks first only to refuse before money is spent. A
+    new proposal hangs from the re-check's scan (`proposals.scan_id`), so the lineage needs no
+    column of its own. `step_limit` and `invalid_answer` count: the model answered badly, and a
+    retry would bill again for the same. *Rejected:* a column on the original proposal set by a
+    conditional UPDATE (a second writer, and a refused re-check would have nowhere to keep its
+    outcome); counting every re-check (a cap reached mid-month would burn the only chance).
+214. **A re-check that proposes nothing says why in the user's language: the catalogue's frame,
+    then the agent's own reason or the check that refused it** (the user, 2026-10-20). The agent's
+    reason is a pass's thesis - written in `user_settings.language` and held to the evidence
+    validator like any thesis (D51). A server refusal is said from the refused trade's new `code`
+    (`answer.RefusalCode`, stored beside the English `problems`, which stay for the Scans tab):
+    cash, mandate, no price, already waiting, not tradable, figures, not this trade, ... each a
+    sentence in `messages.ts` and the web catalogue. *Rejected:* the catalogue sentence alone
+    (says less); the English `problems` strings (guideline 1).
+215. **Re-check is offered on an agent buy or sell that expired unanswered, for 7 days after its
+    deadline, while its agent is active** (the user, 2026-10-20; `RECHECK_WINDOW` /
+    `RECHECK_WINDOW_DAYS`). A rejected proposal is not offered - the user already said no. It is
+    refused up front with the agent's day's budget spent, as a manual scan is (D52). The orchestrator
+    computes the same rule (`recheckStatus`) for the page and the Telegram keyboard; the AI service
+    is the authority and refuses with the same codes. *Rejected:* any age (a month-old idea
+    re-checked against today's price); rejected proposals too.
+216. **A re-check may re-size the trade but not change it: same symbol and side, the quantity set
+    again at the fresh price, or no trade** (the user, 2026-10-20; `TradeReview.focus`). Anything
+    else is refused `not_this_trade`. *Rejected:* the exact same trade (a price that moved would
+    leave only "yes at the old size" or "no").
+217. **In Telegram, Re-check appears when a tap finds the proposal expired; the re-check runs after
+    the tap is answered** (the user, 2026-10-20). We keep no Telegram message ids, so nothing can
+    swap the buttons at the deadline; the stale Approve or Reject answers "expired" and is replaced
+    by Re-check (callback action `k`). The poller handles updates one at a time and a re-check is
+    a model call, so the tap is answered "re-checking" at once and the work runs detached; a new
+    proposal arrives as its own message with Approve and Reject (`proposeFromScan` announces it),
+    and the old message gains the outcome line. No nonce is burned: "once" is the index (D213).
+    *Rejected:* storing message ids so the expiry sweep swaps the buttons (a column and a sweep
+    that edits Telegram, for a button the user only needs when they come back to the message).
 
 ---
 
@@ -4590,9 +4640,12 @@ by content on `main`), redeploy only on "redeploy".
    user eventually brings their own key and sets their own limits. A Settings field "stop my
    own-key spend at $N a month" (null = none), enforced by the same wrapper shape as the cap but
    summing `paid_by = 'own_key'`. Not asked for yet as a PR - bring it as a question.
-3. **Item 4: re-evaluate an expired trade proposal** and **item 5: Telegram ask mode** - their
-   briefs are unchanged in "after the UI batch" below. Both are paid calls: they now go through
-   the own-key wrapper for free, because every call site passes `Caller(user_id=...)`.
+3. **Item 4 is built: re-check an expired trade proposal (D212-D217, migration `0066`; the first
+   PR after handoff #279).** Head is `0066_proposal_refresh` once it merges (next free: `0067`);
+   rehearse `0066` on a restored backup before its redeploy. Unseen live: a re-check from the
+   phone needs a trade proposal that expired unanswered (compose has one, IRON 2026-10-19, but
+   past the 7-day window from 2026-10-26). **Item 5: Telegram ask mode** - its brief is unchanged
+   in "after the UI batch" below; a paid call through the own-key wrapper like every call site.
 4. **The handoff after this one is due at the next merge** (five since #274 counts this PR's
    merge as the fourth; a fifth ends the window).
 

@@ -272,6 +272,9 @@ INSERT INTO agent_scans (id, user_id, agent_id, trigger, started_at, finished_at
 INSERT INTO proposals (id, user_id, agent_id, observation_id, kind, payload, state, expires_at, scan_id) VALUES
   ('50000000-0000-0000-0000-000000000022', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '30000000-0000-0000-0000-000000000022', 'buy',
    '{"symbol": "EQTY", "quantity": "2", "priceMinor": 1100, "currency": "USD"}', 'pending', now() + interval '1 hour', '70000000-0000-0000-0000-000000000001');
+-- A re-check of that buy (0066): a scan with trigger `refresh` naming the proposal.
+INSERT INTO agent_scans (user_id, agent_id, trigger, refreshes_proposal_id, started_at, finished_at, outcome, steps, cost_micro_usd, model, briefing, transcript, answer) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'refresh', '50000000-0000-0000-0000-000000000022', now() - interval '1 day', now() - interval '1 day', 'no_trade', 1, 2000, 'm', '{}', '[]', '{"trades": [], "thesis": "t"}');
 INSERT INTO proposal_attempts (user_id, proposal_id, surface, reason, agent_price_minor, live_price_minor, quote_as_of) VALUES
   ('00000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-000000000022', 'web', 'price_far_from_agent', 1100, 1200, now()),
   ('00000000-0000-0000-0000-00000000000a', '50000000-0000-0000-0000-000000000022', 'telegram', 'market_closed', 1100, NULL, NULL);

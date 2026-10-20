@@ -114,7 +114,7 @@ def _mandate_lines(mandate: Mandate) -> str:
     return "\n".join(lines)
 
 
-def instructions(agent: ScanAgent) -> str:
+def instructions(agent: ScanAgent, step_limit: int = SCAN_STEP_LIMIT) -> str:
     """The system prompt: the user's mandate, then their own words, then the rules the code
     enforces. The mandate ranks above the words (D170): a contradiction resolves to it."""
     language = THESIS_LANGUAGES.get(agent.language, "English")
@@ -133,7 +133,7 @@ How to work:
 1. Start from the briefing: your cash, your holdings and what the rules found in
    them, today's movers you may trade, and the user's followed topics.
 2. Use the tools to look into what matters to your mandate. Check the news and
-   the price history before acting on a move. You have at most {SCAN_STEP_LIMIT} tool
+   the price history before acting on a move. You have at most {step_limit} tool
    calls; most scans need far fewer.
 3. Decide: {_decide_line(agent.max_decisions)} Doing nothing is a good answer and
    the most common one.
@@ -209,11 +209,47 @@ async def run_scan(
     """Run one scan of `agent` and store it. The agent is the caller's to have checked:
     simulated, active, with a persona (`routers/agents.py`)."""
     briefing = await build_briefing(context, movers)
+    return await run_briefed(
+        engine=engine, llm=llm, context=context, agent=agent, trigger=trigger, briefing=briefing
+    )
+
+
+@dataclass(frozen=True)
+class Focus:
+    """What narrows a re-check to one trade (D212, D216): the proposal it re-checks,
+    its side and symbol, and what the model is told before the briefing."""
+
+    proposal_id: str
+    side: str
+    symbol: str
+    preface: str
+    step_limit: int
+
+
+async def run_briefed(
+    *,
+    engine: Engine,
+    llm: LLMProvider,
+    context: ToolContext,
+    agent: ScanAgent,
+    trigger: ScanTrigger,
+    briefing: dict[str, Any],
+    focus: Focus | None = None,
+) -> ScanResult:
+    """A scan from its briefing on: the mandate and the waiting proposals are added,
+    the row is started, and the model is asked. A scan and a re-check share it."""
     if (brief := mandate_brief(agent.mandate)) is not None:
         briefing["mandate"] = brief
     pending = pending_trades(engine, agent.user_id, agent.agent_id, context.now)
     briefing["waiting_for_approval"] = [trade.as_briefing() for trade in pending]
-    scan_id = start_scan(engine, agent, trigger, briefing, context.now)
+    scan_id = start_scan(
+        engine,
+        agent,
+        trigger,
+        briefing,
+        context.now,
+        refreshes_proposal_id=focus.proposal_id if focus else None,
+    )
     result = ScanResult(scan_id=scan_id, outcome="failed")
     try:
         await asyncio.wait_for(
@@ -225,6 +261,7 @@ async def run_scan(
                 agent=agent,
                 briefing=briefing,
                 pending=pending,
+                focus=focus,
             ),
             timeout=SCAN_TIME_LIMIT,
         )
@@ -238,6 +275,7 @@ async def run_scan(
     log.info(
         "agents.scan_finished",
         scan_id=scan_id,
+        trigger=trigger,
         agent_id=agent.agent_id,
         outcome=result.outcome,
         steps=result.steps,
@@ -270,6 +308,7 @@ async def _converse(
     agent: ScanAgent,
     briefing: dict[str, Any],
     pending: list[Any],
+    focus: Focus | None = None,
 ) -> None:
     """The scan's use of the shared loop. Fills `result` as it goes, so a timeout
     keeps what was done.
@@ -279,10 +318,11 @@ async def _converse(
     once per kind - just those trades, named with their reasons - and what still
     fails is dropped and stored with why. At most three answers a scan.
     """
+    opening = "Today's briefing:\n" + json.dumps(briefing, ensure_ascii=False, indent=1)
     state = LoopState(
-        messages=[
-            UserMessage("Today's briefing:\n" + json.dumps(briefing, ensure_ascii=False, indent=1))
-        ],
+        # A re-check's preface is not evidence: it may quote the old thesis, whose
+        # figures must be found again in the briefing or a tool (D212).
+        messages=[UserMessage(f"{focus.preface}\n\n{opening}" if focus else opening)],
         transcript=result.transcript,
     )
     evidence: dict[str, Any] = {"briefing": briefing, "tool_results": state.tool_results}
@@ -292,6 +332,7 @@ async def _converse(
         max_decisions=agent.max_decisions,
         evidence=evidence,
         pending=pending,
+        focus=(focus.side, focus.symbol) if focus else None,
     )
 
     async def run(name: str, arguments: str) -> str:
@@ -305,10 +346,10 @@ async def _converse(
             stop = await run_tool_loop(
                 state,
                 llm=llm,
-                system=instructions(agent),
+                system=instructions(agent, focus.step_limit if focus else SCAN_STEP_LIMIT),
                 tools=[tool.spec for tool in TOOLS],
                 run_tool=run,
-                step_limit=SCAN_STEP_LIMIT,
+                step_limit=focus.step_limit if focus else SCAN_STEP_LIMIT,
                 max_output_tokens=MAX_OUTPUT_TOKENS,
                 caller=Caller("agent_scan", user_id=agent.user_id, agent_id=agent.agent_id),
                 within_budget=lambda: (
@@ -375,7 +416,7 @@ async def _converse(
         allowed = {r.symbol for r in back}
         resent = [t for t in again[0].trades if t.symbol in allowed]
         refused += [
-            Refused(t.as_json(), ("not one of the trades sent back",))
+            Refused(t.as_json(), ("not one of the trades sent back",), code="not_this_trade")
             for t in again[0].trades
             if t.symbol not in allowed
         ]

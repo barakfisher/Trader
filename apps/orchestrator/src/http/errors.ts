@@ -47,6 +47,16 @@ export const upstreamFailure = (status: number, message: string) =>
     message,
   );
 
+/** The AI service's refusal body: FastAPI puts our `{ code, message }` under `detail`. */
+export function aiRefusal(body: unknown): { code: string; message: string } | null {
+  const detail = (body as { detail?: unknown } | undefined)?.detail as
+    | { code?: unknown; message?: unknown }
+    | undefined;
+  return typeof detail?.code === 'string' && typeof detail.message === 'string'
+    ? { code: detail.code, message: detail.message }
+    : null;
+}
+
 export function toErrorResponse(error: unknown, context: Context): { body: ApiError; status: number } {
   const requestId = context.get('requestId') as string | undefined;
   if (error instanceof ApiProblem) {

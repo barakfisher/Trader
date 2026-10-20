@@ -30,7 +30,7 @@ import { AiServiceError } from '@traders/shared/ai';
 import { getAgent, getAgentScan, listAgentScans, type AgentScanRow } from '../../db/queries.js';
 import { effectiveState } from '../../services/proposalState.js';
 import { currentUserId, type AppEnv } from '../app.js';
-import { badRequest, conflict, notFound, upstreamFailure } from '../errors.js';
+import { aiRefusal, badRequest, conflict, notFound, upstreamFailure } from '../errors.js';
 import { proposeFromScan } from '../../services/tradeProposals.js';
 import { readyToScan } from '../../services/agentReadiness.js';
 import { agentIdFrom } from './agents.js';
@@ -107,7 +107,7 @@ export function toScanSummary(row: AgentScanRow, now: Date): AgentScanSummary {
   });
   return {
     id: row.id,
-    trigger: row.trigger === 'schedule' ? 'schedule' : 'manual',
+    trigger: row.trigger === 'schedule' || row.trigger === 'refresh' ? row.trigger : 'manual',
     startedAt: row.started_at.toISOString(),
     finishedAt: row.finished_at?.toISOString() ?? null,
     outcome: row.outcome as AgentScanOutcome | null,
@@ -144,16 +144,6 @@ export function toScanStep(raw: unknown): AgentScanStep | null {
   return null;
 }
 
-/** The AI service's refusal body: FastAPI puts our `{ code, message }` under `detail`. */
-function refusal(body: unknown): { code: string; message: string } | null {
-  const detail = (body as { detail?: unknown } | undefined)?.detail as
-    | { code?: unknown; message?: unknown }
-    | undefined;
-  return typeof detail?.code === 'string' && typeof detail.message === 'string'
-    ? { code: detail.code, message: detail.message }
-    : null;
-}
-
 export function registerAgentScanRoutes(app: Hono<AppEnv>): void {
   app.post('/agents/:id/scans', async (context) => {
     const userId = currentUserId(context);
@@ -176,7 +166,7 @@ export function registerAgentScanRoutes(app: Hono<AppEnv>): void {
         .scanAgent(agent.id, { user_id: userId, trigger: 'manual' }, context.get('requestId'));
     } catch (error) {
       if (error instanceof AiServiceError) {
-        const reason = refusal(error.body);
+        const reason = aiRefusal(error.body);
         if (error.status === 404) throw notFound('agent not found');
         if (error.status === 409 && reason) throw conflict(reason.code, reason.message);
         if (error.status === 503 && reason?.code === 'no_model') {

@@ -17,6 +17,7 @@ import { z } from 'zod';
 import {
   isTradeProposalKind,
   type ProposalAttempt,
+  type RecheckResult,
   type TradeApprovalPreview,
   type TradeApprovalResult,
 } from '@traders/shared';
@@ -32,6 +33,7 @@ import {
 } from '../../db/queries.js';
 import { evidenceCheckedFrom } from '../../services/evidenceChecked.js';
 import { applyDecision, factsOf } from '../../services/proposals.js';
+import { recheckOf, recheckProposal } from '../../services/proposalRecheck.js';
 import { confirmTradeApproval, previewTradeApproval } from '../../services/tradeApproval.js';
 import type { TradeContext } from '../../services/fills.js';
 import {
@@ -166,11 +168,13 @@ export function registerProposalsRoutes(app: Hono<AppEnv>): void {
     const row = await findProposal(userId, context.req.param('id'));
     if (row === null) throw notFound('proposal not found');
 
+    const now = new Date();
     const transitions = await listProposalTransitions(userId, row.id);
     const attempts = await listProposalAttempts(userId, row.id);
     return context.json({
-      proposal: toWire(row, new Date()),
+      proposal: toWire(row, now),
       attempts: attempts.map(attemptToWire),
+      recheck: await recheckOf(userId, row, now),
       // The audit trail, which is the answer to "why does this say expired when
       // I never touched it?" and to "who approved this, and from where?".
       transitions: transitions.map((transition) => ({
@@ -194,6 +198,19 @@ export function registerProposalsRoutes(app: Hono<AppEnv>): void {
       'web',
       await tradeContextOf(context),
     );
+    return context.json(body);
+  });
+
+  /**
+   * *Re-check* on an expired trade proposal (D212): the agent looks at that one
+   * trade again, once, and either proposes it anew or says why not.
+   */
+  app.post('/proposals/:id/recheck', async (context) => {
+    const body: RecheckResult = await recheckProposal(currentUserId(context), context.req.param('id'), {
+      ai: context.get('ai'),
+      notifier: context.get('notifier'),
+      requestId: context.get('requestId'),
+    });
     return context.json(body);
   });
 

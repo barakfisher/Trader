@@ -36,7 +36,8 @@ ScanOutcome = Literal[
     "cap_reached",
     "own_key_failed",
 ]
-ScanTrigger = Literal["manual", "schedule"]
+#: Matches `0066_proposal_refresh.TRIGGERS`; a re-check is `refresh` (D212).
+ScanTrigger = Literal["manual", "schedule", "refresh"]
 
 #: Longer than a scan may run (`scan.SCAN_TIME_LIMIT`), so a live scan is never
 #: closed under itself.
@@ -66,6 +67,10 @@ class ScanAgent:
 
 class ScanAlreadyRunningError(RuntimeError):
     """The agent has a scan in flight; a second would be a second bill."""
+
+
+class AlreadyRefreshedError(RuntimeError):
+    """The proposal has had its one re-check (D213): running, or ended with an answer."""
 
 
 def find_agent(engine: Engine, user_id: str, agent_id: str) -> ScanAgent | None:
@@ -120,8 +125,10 @@ def start_scan(
     trigger: ScanTrigger,
     briefing: dict[str, Any],
     now: datetime,
+    refreshes_proposal_id: str | None = None,
 ) -> str:
-    """Write the running row and answer its id; refuse if one is already running."""
+    """Write the running row and answer its id; refuse if one is already running, or
+    if a re-check's proposal has had its one (`agent_scans_one_refresh`, D213)."""
     with engine.begin() as connection:
         connection.execute(
             text(
@@ -141,9 +148,10 @@ def start_scan(
             return connection.execute(
                 text(
                     """
-                    INSERT INTO agent_scans (user_id, agent_id, trigger, started_at, briefing)
-                    VALUES (CAST(:user AS uuid), CAST(:agent AS uuid), :trigger, :now,
-                            CAST(:briefing AS jsonb))
+                    INSERT INTO agent_scans
+                        (user_id, agent_id, trigger, refreshes_proposal_id, started_at, briefing)
+                    VALUES (CAST(:user AS uuid), CAST(:agent AS uuid), :trigger,
+                            CAST(:proposal AS uuid), :now, CAST(:briefing AS jsonb))
                     RETURNING id::text
                     """
                 ),
@@ -151,6 +159,7 @@ def start_scan(
                     "user": agent.user_id,
                     "agent": agent.agent_id,
                     "trigger": trigger,
+                    "proposal": refreshes_proposal_id,
                     "now": now,
                     "briefing": json.dumps(briefing, ensure_ascii=False, default=str),
                 },
@@ -158,6 +167,8 @@ def start_scan(
     except IntegrityError as error:
         if "agent_scans_one_running" in str(error):
             raise ScanAlreadyRunningError(agent.agent_id) from error
+        if "agent_scans_one_refresh" in str(error):
+            raise AlreadyRefreshedError(refreshes_proposal_id) from error
         raise
 
 

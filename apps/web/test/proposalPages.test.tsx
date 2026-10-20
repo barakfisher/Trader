@@ -138,7 +138,7 @@ describe('the inbox', () => {
 
 describe("a proposal's page", () => {
   it('decides an open proposal through the same request as the inbox', async () => {
-    const detail: ProposalDetailResponse = { proposal: proposal(), transitions: [], attempts: [] };
+    const detail: ProposalDetailResponse = { proposal: proposal(), transitions: [], attempts: [], recheck: null };
     serve({ '/proposals/p-open': detail });
     post.mockResolvedValue({ outcome: 'applied', state: 'rejected', intentId: null });
 
@@ -158,6 +158,7 @@ describe("a proposal's page", () => {
         { from: 'snoozed', to: 'expired', surface: 'system', byUser: false, at: '2026-09-29T05:20:00.000Z' },
       ],
       attempts: [],
+      recheck: null,
     };
     serve({ '/proposals/p-expired': detail });
 
@@ -340,5 +341,89 @@ describe("an agent's trade proposal", () => {
     // Still open: it can be tried again, or rejected.
     expect(screen.getByRole('button', { name: 'Approve' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Reject' })).toBeTruthy();
+  });
+});
+
+describe('re-checking an expired trade proposal (D212)', () => {
+  const TRADE = proposal({
+    id: 'p-trade',
+    kind: 'buy',
+    state: 'expired',
+    storedState: 'expired',
+    payload: { symbol: 'INTC', quantity: '3', priceMinor: 11_250, priceAsOf: null, currency: 'USD' },
+    headline: 'Value proposes to buy 3 INTC at 112.50',
+    explanation: 'INTC fell.',
+    evidence: {},
+    agentId: 'agent-value',
+    agentName: 'Value',
+    agentIsPrimary: false,
+    scanId: 'scan-1',
+  });
+  const AT = '2026-10-20T15:00:00.000Z';
+
+  const serveRecheck = (recheck: ProposalDetailResponse['recheck']) =>
+    serve({
+      '/proposals/p-trade': { proposal: TRADE, transitions: [], attempts: [], recheck },
+      '/proposals?state=open': { proposals: [] },
+      [`/proposals?state=approved&limit=${RECENT_APPROVALS}`]: { proposals: [] },
+    });
+
+  it('offers it once, and says why the agent proposed nothing', async () => {
+    serveRecheck({ available: true, last: null });
+    post.mockResolvedValue({
+      outcome: 'declined',
+      scanId: 's-2',
+      at: AT,
+      reason: { kind: 'agent', thesis: 'INTC is above where it was worth buying.' },
+    });
+    renderAt('/proposals/p-trade');
+    expect(await screen.findByText(/can be re-checked once, up to 7 days after it expired/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Re-check' }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/proposals/p-trade/recheck', {}));
+    expect(await screen.findByText('INTC is above where it was worth buying.')).toBeTruthy();
+    expect(screen.getByText(/no new proposal/)).toBeTruthy();
+    // Once: the answer takes the button away.
+    expect(screen.queryByRole('button', { name: 'Re-check' })).toBeNull();
+  });
+
+  it('links to the new proposal a re-check raised, with no button', async () => {
+    serveRecheck({ available: false, last: { outcome: 'proposed', scanId: 's-2', at: AT, proposalId: 'p-new' } });
+    renderAt('/proposals/p-trade');
+    const link = await screen.findByRole('link', { name: 'Open the new proposal' });
+    expect(link.getAttribute('href')).toBe('/proposals/p-new');
+    expect(screen.queryByRole('button', { name: 'Re-check' })).toBeNull();
+  });
+
+  it("says a server check's refusal in the catalogue's words", async () => {
+    serveRecheck({
+      available: false,
+      last: { outcome: 'declined', scanId: 's-2', at: AT, reason: { kind: 'check', check: 'mandate' } },
+    });
+    renderAt('/proposals/p-trade');
+    expect(await screen.findByText("The trade no longer fits the agent's settings.")).toBeTruthy();
+  });
+
+  it('keeps the button after a re-check that reached no answer, and says why', async () => {
+    serveRecheck({ available: true, last: { outcome: 'unanswered', scanId: 's-2', at: AT, cause: 'cap_reached' } });
+    renderAt('/proposals/p-trade');
+    expect(await screen.findByText(/your monthly AI limit is reached\. You can try again\./)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Re-check' })).toBeTruthy();
+  });
+
+  it('says a refusal before any model call in the user\'s language', async () => {
+    serveRecheck({ available: true, last: null });
+    post.mockRejectedValue(new ApiRequestError('spent', 409, 'budget_spent'));
+    renderAt('/proposals/p-trade');
+    fireEvent.click(await screen.findByRole('button', { name: 'Re-check' }));
+    expect(await screen.findByText("The agent's AI budget for today is spent.")).toBeTruthy();
+  });
+
+  it('shows nothing on a proposal that was never offered one', async () => {
+    serveRecheck({ available: false, last: null });
+    renderAt('/proposals/p-trade');
+    expect(await screen.findByText('INTC fell.')).toBeTruthy();
+    expect(screen.queryByText('Re-check')).toBeNull();
   });
 });

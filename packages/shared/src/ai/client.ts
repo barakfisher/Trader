@@ -66,6 +66,7 @@ export type LlmModelsResponse = components['schemas']['LlmModelsResponse'];
 export type OwnLlmKeyState = components['schemas']['OwnLlmKeyState'];
 export type AgentScanRequest = components['schemas']['AgentScanRequest'];
 export type AgentScanResponse = components['schemas']['AgentScanResponse'];
+export type AgentRecheckRequest = components['schemas']['AgentRecheckRequest'];
 export type MandateCheckResponse = components['schemas']['MandateCheckResponse'];
 export type MandateConflict = components['schemas']['MandateConflict'];
 export type AssistantMessageRequest = components['schemas']['AssistantMessageRequest'];
@@ -367,6 +368,23 @@ export class AiClient {
   scanAgent(agentId: string, payload: AgentScanRequest, requestId?: string): Promise<AgentScanResponse> {
     return this.request<AgentScanResponse>(
       `/agents/${encodeURIComponent(agentId)}/scans`,
+      agentScanResponseSchema,
+      { method: 'POST', body: JSON.stringify(payload), requestId, timeoutMs: AGENT_SCAN_TIMEOUT_MS },
+    );
+  }
+
+  /**
+   * Re-check one of an agent's expired trade proposals (D212): a `refresh` scan of
+   * that one trade, answered as a scan. Its refusals carry `{ detail: { code, message } }`.
+   */
+  recheckProposal(
+    agentId: string,
+    proposalId: string,
+    payload: AgentRecheckRequest,
+    requestId?: string,
+  ): Promise<AgentScanResponse> {
+    return this.request<AgentScanResponse>(
+      `/agents/${encodeURIComponent(agentId)}/proposals/${encodeURIComponent(proposalId)}/recheck`,
       agentScanResponseSchema,
       { method: 'POST', body: JSON.stringify(payload), requestId, timeoutMs: AGENT_SCAN_TIMEOUT_MS },
     );

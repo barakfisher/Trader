@@ -102,7 +102,7 @@ export interface AgentView {
   /** Trades one scan may decide (D197); null for the primary. */
   maxDecisions: number | null;
   /** The scan running now - one at a time per agent - so *Run a scan now* can say so (D195); null when none. */
-  runningScan: { trigger: 'manual' | 'schedule'; startedAt: string } | null;
+  runningScan: { trigger: AgentScanTrigger; startedAt: string } | null;
   /** The daily model allowance in integer micro-USD (D45); null for the primary. */
   llmBudgetMicroUsd: number | null;
   /** Spent on scans since midnight UTC - the day the AI service's check counts. */
@@ -265,9 +265,12 @@ export type AgentScanOutcome =
   | 'own_key_failed';
 
 /** One scan, as a row of the *Decisions* tab (D50). */
+/** What started a scan: a person, the schedule, or a re-check of an expired proposal (D212). */
+export type AgentScanTrigger = 'manual' | 'schedule' | 'refresh';
+
 export interface AgentScanSummary {
   id: string;
-  trigger: 'manual' | 'schedule';
+  trigger: AgentScanTrigger;
   startedAt: string;
   finishedAt: string | null;
   /** Null while the scan is still running. */
@@ -1623,6 +1626,57 @@ export interface ProposalDetailResponse {
   transitions: ProposalTransition[];
   /** Refused approvals of a trade proposal, newest first (D49). */
   attempts: ProposalAttempt[];
+  /** A trade proposal's re-check (D212); null for every other kind. */
+  recheck: ProposalRecheck | null;
+}
+
+// --- Re-checking an expired trade proposal (D212-D217) -------------------------
+
+/** How long after its expiry a trade proposal may be re-checked (D215). The AI service's `RECHECK_WINDOW`. */
+export const RECHECK_WINDOW_DAYS = 7;
+
+/**
+ * Why a re-check's trade was refused, by the server's check (D214): the AI
+ * service's `RefusalCode`, plus `no_answer` for a re-check whose model gave
+ * none the server could read. Each is a sentence in the catalogues.
+ */
+export const RECHECK_CHECKS = [
+  'malformed',
+  'decision_limit',
+  'duplicate',
+  'already_waiting',
+  'not_tradable',
+  'holding',
+  'thesis',
+  'figures',
+  'no_price',
+  'too_small',
+  'cash',
+  'mandate',
+  'not_this_trade',
+  'no_answer',
+] as const;
+export type RecheckCheck = (typeof RECHECK_CHECKS)[number];
+
+/** A re-check that reached no answer, and so did not use the refresh up (D213). */
+export const RECHECK_UNANSWERED = ['failed', 'budget_reached', 'cap_reached', 'own_key_failed'] as const;
+export type RecheckUnanswered = (typeof RECHECK_UNANSWERED)[number];
+
+/** Why a re-check proposed nothing: the agent's own reason, or the check that refused it (D214). */
+export type RecheckDeclined = { kind: 'agent'; thesis: string } | { kind: 'check'; check: RecheckCheck };
+
+/** What one re-check came to. `at` is when it started. */
+export type RecheckResult =
+  | { outcome: 'proposed'; scanId: string; at: string; proposalId: string }
+  | { outcome: 'declined'; scanId: string; at: string; reason: RecheckDeclined }
+  | { outcome: 'unanswered'; scanId: string; at: string; cause: RecheckUnanswered }
+  | { outcome: 'running'; scanId: string; at: string };
+
+export interface ProposalRecheck {
+  /** Whether *Re-check* is offered now (D215): expired unanswered, within the window, not used up. */
+  available: boolean;
+  /** The latest re-check, if there was one. */
+  last: RecheckResult | null;
 }
 
 /**

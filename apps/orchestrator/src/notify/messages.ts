@@ -22,14 +22,17 @@
  * do this job there; the isolates are invisible.
  */
 
-import type {
-  DigestReason,
-  EvidenceChecked,
-  LocalizedTexts,
-  ScanToolName,
-  TopicSentimentGap,
-  TranslatedLanguage,
-  UiLanguage,
+import {
+  RECHECK_WINDOW_DAYS,
+  type DigestReason,
+  type EvidenceChecked,
+  type LocalizedTexts,
+  type RecheckCheck,
+  type RecheckUnanswered,
+  type ScanToolName,
+  type TopicSentimentGap,
+  type TranslatedLanguage,
+  type UiLanguage,
 } from '@traders/shared';
 
 import type { CallbackAction } from '../telegram/callbackToken.js';
@@ -48,6 +51,17 @@ export function ltr(text: string | number): string {
 export function isolated(text: string): string {
   return `\u2068${text}\u2069`;
 }
+
+/** Why a re-check could not start, by the AI service's code (D212); `other` for the rest. */
+export type RecheckRefusal =
+  | 'not_expired'
+  | 'recheck_window_passed'
+  | 'already_rechecked'
+  | 'budget_spent'
+  | 'scan_running'
+  | 'agent_not_active'
+  | 'no_persona'
+  | 'other';
 
 /** A refused trade approval's code, as `fills.ts` and `tradeApproval.ts` throw it. */
 export type TradeRefusalCode =
@@ -196,6 +210,23 @@ export interface Messages {
   };
 
   /**
+   * Re-checking an expired trade proposal (D212-D217): the button, the toast,
+   * and the line its outcome adds under the message. The agent's own reason
+   * arrives written in this language (D51); everything around it is here.
+   */
+  recheck: {
+    button: string;
+    startedToast: string;
+    proposed: (at: string) => string;
+    declined: (at: string, reason: string) => string;
+    unanswered: (at: string, cause: string) => string;
+    agentSaid: (thesis: string) => string;
+    checks: Record<RecheckCheck, string>;
+    causes: Record<RecheckUnanswered, string>;
+    refusals: Record<RecheckRefusal, string>;
+  };
+
+  /**
    * A sign-up request, said to the admin (D156, D184, D187). Figures - the cap,
    * the time - arrive formatted in this language's locale; the email and zone
    * are the requester's own text.
@@ -287,6 +318,7 @@ const en: Messages = {
     snooze: '⏳ Snoozing…',
     undo: '⏳ Undoing…',
     confirm: '⏳ Filling…',
+    recheck: '⏳ Re-checking…',
   },
   openInApp: 'Open in app',
 
@@ -379,6 +411,47 @@ const en: Messages = {
     farFromAgent: (agentPrice, livePrice, distance) =>
       `The price is ${livePrice}, ${distance} from the agent's ${agentPrice} - more than 3%.`,
     confirmInApp: 'This price is too large for a Telegram button: confirm it in the app.',
+  },
+
+  recheck: {
+    button: '🔄 Re-check',
+    startedToast: "Re-checking at today's price - the answer follows here.",
+    proposed: (at) => `🔄 Re-checked (${at}): a new proposal follows.`,
+    declined: (at, reason) => `🔄 Re-checked (${at}): no new proposal. ${reason}`,
+    unanswered: (at, cause) => `🔄 The re-check did not finish (${at}): ${cause} You can try again.`,
+    agentSaid: (thesis) => `The agent: ${thesis}`,
+    checks: {
+      malformed: "The agent's answer could not be read.",
+      decision_limit: 'The agent answered with more than one trade.',
+      duplicate: 'The agent named the same trade twice.',
+      already_waiting: 'The same trade is already waiting for your approval.',
+      not_tradable: 'This instrument can no longer be traded here.',
+      holding: 'The agent no longer holds enough shares to sell.',
+      thesis: "The agent's reasoning was too long to show.",
+      figures: "The agent's reasoning cited figures the evidence does not contain.",
+      no_price: 'No price is available right now.',
+      too_small: 'The sale would bring in less than its fee.',
+      cash: 'The agent does not have the cash for it and its fee.',
+      mandate: "The trade no longer fits the agent's settings.",
+      not_this_trade: 'The agent proposed a different trade, which a re-check cannot do.',
+      no_answer: 'The agent gave no answer the server could check.',
+    },
+    causes: {
+      failed: 'it failed.',
+      budget_reached: "the agent's daily AI budget ran out.",
+      cap_reached: 'your monthly AI limit is reached.',
+      own_key_failed: 'your own OpenRouter key stopped working.',
+    },
+    refusals: {
+      not_expired: 'Only an expired proposal can be re-checked.',
+      recheck_window_passed: `It expired more than ${RECHECK_WINDOW_DAYS} days ago.`,
+      already_rechecked: 'This proposal has already been re-checked.',
+      budget_spent: "The agent's AI budget for today is spent.",
+      scan_running: 'The agent is scanning right now - try again in a minute.',
+      agent_not_active: 'The agent is paused or archived.',
+      no_persona: 'The agent has no instructions or settings to decide by.',
+      other: 'The re-check could not run.',
+    },
   },
 
   signup: {
@@ -545,6 +618,7 @@ const he: Messages = {
     snooze: '⏳ משהה…',
     undo: '⏳ מבטל…',
     confirm: '⏳ מבצע…',
+    recheck: '⏳ בודק שוב…',
   },
   openInApp: 'פתיחה באפליקציה',
 
@@ -636,6 +710,47 @@ const he: Messages = {
     farFromAgent: (agentPrice, livePrice, distance) =>
       `המחיר ${ltr(livePrice)}, ${ltr(distance)} מהמחיר של הסוכן ${ltr(agentPrice)} - יותר מ־${ltr('3%')}.`,
     confirmInApp: 'המחיר גדול מדי לכפתור בטלגרם: אשרו אותו באפליקציה.',
+  },
+
+  recheck: {
+    button: '🔄 בדיקה חוזרת',
+    startedToast: 'בודק שוב במחיר של היום - התשובה תגיע כאן.',
+    proposed: (at) => `🔄 נבדק שוב (${ltr(at)}): הצעה חדשה בהודעה הבאה.`,
+    declined: (at, reason) => `🔄 נבדק שוב (${ltr(at)}): אין הצעה חדשה. ${reason}`,
+    unanswered: (at, cause) => `🔄 הבדיקה החוזרת לא הסתיימה (${ltr(at)}): ${cause} אפשר לנסות שוב.`,
+    agentSaid: (thesis) => `הסוכן: ${thesis}`,
+    checks: {
+      malformed: 'לא ניתן היה לקרוא את תשובת הסוכן.',
+      decision_limit: 'הסוכן ענה ביותר מעסקה אחת.',
+      duplicate: 'הסוכן ציין את אותה עסקה פעמיים.',
+      already_waiting: 'אותה עסקה כבר ממתינה לאישורך.',
+      not_tradable: 'כבר אי אפשר לסחור כאן בנכס הזה.',
+      holding: 'הסוכן כבר לא מחזיק מספיק מניות למכירה.',
+      thesis: 'הנימוק של הסוכן ארוך מכדי להציג אותו.',
+      figures: 'הנימוק של הסוכן ציטט נתונים שאינם בראיות.',
+      no_price: 'אין כרגע מחיר זמין.',
+      too_small: 'המכירה תכניס פחות מהעמלה שלה.',
+      cash: 'לסוכן אין מספיק מזומן לעסקה ולעמלה.',
+      mandate: 'העסקה כבר לא מתאימה להגדרות הסוכן.',
+      not_this_trade: 'הסוכן הציע עסקה אחרת, ובדיקה חוזרת לא יכולה להציע אותה.',
+      no_answer: 'הסוכן לא נתן תשובה שהשרת יכול לבדוק.',
+    },
+    causes: {
+      failed: 'היא נכשלה.',
+      budget_reached: 'תקציב הבינה המלאכותית היומי של הסוכן נגמר.',
+      cap_reached: 'הגעת למגבלת הבינה המלאכותית החודשית שלך.',
+      own_key_failed: `מפתח ה־${ltr('OpenRouter')} שלך הפסיק לעבוד.`,
+    },
+    refusals: {
+      not_expired: 'אפשר לבדוק שוב רק הצעה שפג תוקפה.',
+      recheck_window_passed: `תוקפה פג לפני יותר מ־${ltr(RECHECK_WINDOW_DAYS)} ימים.`,
+      already_rechecked: 'ההצעה הזו כבר נבדקה שוב.',
+      budget_spent: 'תקציב הבינה המלאכותית של הסוכן להיום נוצל.',
+      scan_running: 'הסוכן סורק כרגע - נסו שוב בעוד דקה.',
+      agent_not_active: 'הסוכן מושהה או בארכיון.',
+      no_persona: 'לסוכן אין הוראות או הגדרות להחליט לפיהן.',
+      other: 'הבדיקה החוזרת לא הצליחה לרוץ.',
+    },
   },
 
   signup: {

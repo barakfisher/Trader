@@ -28,6 +28,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agents/{agent_id}/proposals/{proposal_id}/recheck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recheck Proposal
+         * @description Re-check one expired trade proposal (D212): a `refresh` scan of that one trade.
+         */
+        post: operations["recheck_proposal_agents__agent_id__proposals__proposal_id__recheck_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agents/{agent_id}/scans": {
         parameters: {
             query?: never;
@@ -508,6 +528,17 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * AgentRecheckRequest
+         * @description Re-check one of the agent's expired trade proposals (D212).
+         */
+        AgentRecheckRequest: {
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /**
          * AgentScanAnswer
          * @description The agent's answer (D14, D197): its trades, kept first, then any refused, with why;
          *     and, for no trade, its reason.
@@ -570,6 +601,11 @@ export interface components {
          * @description One trade the agent decided (D197): kept and priced, or refused with why.
          */
         AgentScanTrade: {
+            /**
+             * Code
+             * @description A refused trade's first fault, by name (D214); null when kept or older.
+             */
+            code?: ("malformed" | "decision_limit" | "duplicate" | "already_waiting" | "not_tradable" | "holding" | "thesis" | "figures" | "no_price" | "too_small" | "cash" | "mandate" | "not_this_trade") | null;
             /** Decision */
             decision?: ("buy" | "sell") | null;
             /**
@@ -2140,6 +2176,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MandateCheckResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recheck_proposal_agents__agent_id__proposals__proposal_id__recheck_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path: {
+                agent_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRecheckRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentScanResponse"];
                 };
             };
             /** @description Validation Error */

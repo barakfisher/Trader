@@ -306,6 +306,25 @@ export const agentScanResponseSchema = z.object({
             funded_by: z.array(z.string()).optional(),
             refused: z.boolean(),
             problems: z.array(z.string()).optional(),
+            // D214: a refused trade's first fault, by name; absent on older answers.
+            code: z
+              .enum([
+                'malformed',
+                'decision_limit',
+                'duplicate',
+                'already_waiting',
+                'not_tradable',
+                'holding',
+                'thesis',
+                'figures',
+                'no_price',
+                'too_small',
+                'cash',
+                'mandate',
+                'not_this_trade',
+              ])
+              .nullable()
+              .optional(),
           }),
         )
         .optional(),

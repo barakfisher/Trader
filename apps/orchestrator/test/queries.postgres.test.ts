@@ -1731,6 +1731,65 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe("a trade proposal's re-check (0066, D212, D213)", () => {
+    // Committed and written as the seeded admin, as the scans above are: traders_app
+    // may not delete a scan. A fresh agent per run keeps a re-run independent.
+    const SEED_ADMIN = '00000000-0000-0000-0000-000000000001';
+    it('reads the latest re-check and the proposal it raised; once is the index', async () => {
+      const pool = getPool();
+      const simulated = (
+        await pool.query(
+          `INSERT INTO agents (user_id, slug, name, persona, budget_minor)
+           VALUES ($1, $2, $2, 'Patient.', 100000) RETURNING id`,
+          [SEED_ADMIN, `recheck-${randomUUID().slice(0, 8)}`],
+        )
+      ).rows[0].id as string;
+      const scanOf = async (trigger: string, outcome: string, minutesAgo: number, refreshes: string | null = null) =>
+        (
+          await pool.query(
+            `INSERT INTO agent_scans (user_id, agent_id, trigger, refreshes_proposal_id, started_at,
+                                      finished_at, outcome, briefing)
+             VALUES ($1, $2, $3, $4, now() - make_interval(mins => $5), now(), $6, '{}') RETURNING id`,
+            [SEED_ADMIN, simulated, trigger, refreshes, minutesAgo, outcome],
+          )
+        ).rows[0].id as string;
+      const proposeFrom = async (scanId: string) =>
+        (
+          await queries.createTradeProposal({
+            userId: SEED_ADMIN,
+            agentId: simulated,
+            scanId,
+            kind: 'buy',
+            payload: { symbol: 'CCJ', quantity: '2', priceMinor: 5_100, priceAsOf: null, currency: 'USD' },
+            expiresAt: new Date(Date.now() - 3_600_000),
+            headline: 'Recheck test proposes to buy 2 CCJ at 51.00',
+            thesis: 't',
+            localized: {},
+            evidence: {},
+          })
+        ).proposalId;
+      const original = await proposeFrom(await scanOf('manual', 'trade', 120));
+      expect(await queries.latestRecheck(SEED_ADMIN, simulated, original)).toBeNull();
+
+      // One that reached no answer does not count: a second may follow it (D213).
+      const unanswered = await scanOf('refresh', 'budget_reached', 10, original);
+      expect(await queries.latestRecheck(SEED_ADMIN, simulated, original)).toMatchObject({
+        scan_id: unanswered,
+        outcome: 'budget_reached',
+        new_proposal_id: null,
+      });
+      const counted = await scanOf('refresh', 'trade', 5, original);
+      const raised = await proposeFrom(counted);
+      expect(await queries.latestRecheck(SEED_ADMIN, simulated, original)).toMatchObject({
+        scan_id: counted,
+        new_proposal_id: raised,
+      });
+      await expect(scanOf('refresh', 'no_trade', 1, original)).rejects.toThrow(/agent_scans_one_refresh/);
+      // Another user's id reads nothing.
+      expect(await queries.latestRecheck(randomUUID(), simulated, original)).toBeNull();
+    });
+  });
+
   describe('the account reset (task 18)', () => {
     // An account of its own: a reset of USER would erase what the tests above wrote.
     const OWNER = randomUUID();
