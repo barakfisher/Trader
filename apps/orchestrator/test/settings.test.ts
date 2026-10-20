@@ -346,17 +346,118 @@ describe('user settings', () => {
     vi.mocked(queries.getMonthlySpend).mockResolvedValueOnce({
       cap_micro_usd: '5000000',
       spent_micro_usd: '280462',
+      own_key_spent_micro_usd: '1200000',
       resets_on: '2026-11-01',
     });
     const capped = await app.request('/settings/llm-spend', { headers: { cookie } });
     expect(capped.status).toBe(200);
     expect(await capped.json()).toEqual({
-      spend: { capMicroUsd: 5_000_000, spentMicroUsd: 280_462, resetsOn: '2026-11-01' },
+      spend: {
+        capMicroUsd: 5_000_000,
+        spentMicroUsd: 280_462,
+        ownKeySpentMicroUsd: 1_200_000,
+        resetsOn: '2026-11-01',
+      },
     });
     expect(queries.getMonthlySpend).toHaveBeenCalledWith(USER.id);
 
     const admin = await app.request('/settings/llm-spend', { headers: { cookie } });
     expect(await admin.json()).toEqual({ spend: null });
     expect((await app.request('/settings/llm-spend')).status).toBe(401);
+  });
+});
+
+describe("a user's own OpenRouter key (D206)", () => {
+  const KEY = 'sk-or-v1-test-not-a-real-key-c0de';
+  const SAVED = {
+    available: true,
+    key: {
+      last_four: 'c0de',
+      status: 'valid' as const,
+      saved_at: '2026-10-20T12:00:00Z',
+      failed_at: null,
+      failure: null,
+    },
+  };
+  let cookie: string;
+
+  function appWith(ai: Partial<ReturnType<typeof createFakeAi>>) {
+    resetConfigForTests();
+    return createApp(loadConfig(ENV), Object.assign(createFakeAi(), ai));
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cookie = sessionCookie();
+  });
+
+  it('relays a save to the AI service and answers with the last four only', async () => {
+    const saveOwnLlmKey = vi.fn(async () => SAVED);
+    const app = appWith({ saveOwnLlmKey });
+    const response = await app.request('/settings/llm-key', {
+      method: 'PUT',
+      headers: { ...ORIGIN, cookie },
+      body: JSON.stringify({ apiKey: KEY }),
+    });
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    expect(text).not.toContain(KEY);
+    expect(JSON.parse(text)).toEqual({
+      available: true,
+      key: { lastFour: 'c0de', status: 'valid', savedAt: '2026-10-20T12:00:00Z', failedAt: null, failure: null },
+    });
+    expect(saveOwnLlmKey).toHaveBeenCalledWith(USER.id, KEY, expect.any(String));
+  });
+
+  it("names the AI service's refusal, and never quotes the key back", async () => {
+    const { AiServiceError } = await import('@traders/shared/ai');
+    const refusals = [
+      [422, 'key_rejected'],
+      [422, 'key_malformed'],
+      [502, 'key_check_unreachable'],
+      [503, 'own_keys_unavailable'],
+    ] as const;
+    for (const [status, code] of refusals) {
+      const app = appWith({
+        saveOwnLlmKey: vi.fn(async () => {
+          throw new AiServiceError('refused', status, { detail: { code, message: 'm' } });
+        }),
+      });
+      const response = await app.request('/settings/llm-key', {
+        method: 'PUT',
+        headers: { ...ORIGIN, cookie },
+        body: JSON.stringify({ apiKey: KEY }),
+      });
+      expect(response.status).toBe(status);
+      const text = await response.text();
+      expect(JSON.parse(text).error).toBe(code);
+      expect(text).not.toContain(KEY);
+    }
+  });
+
+  it('refuses a malformed body without quoting it', async () => {
+    const app = appWith({});
+    const response = await app.request('/settings/llm-key', {
+      method: 'PUT',
+      headers: { ...ORIGIN, cookie },
+      body: JSON.stringify({ apiKey: KEY, extra: true }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.text()).not.toContain(KEY);
+  });
+
+  it('reads and removes the key, and refuses the admin', async () => {
+    const ownLlmKey = vi.fn(async () => SAVED);
+    const removeOwnLlmKey = vi.fn(async () => ({ available: true, key: null }));
+    const app = appWith({ ownLlmKey, removeOwnLlmKey });
+    expect((await (await app.request('/settings/llm-key', { headers: { cookie } })).json()).key.lastFour).toBe(
+      'c0de',
+    );
+    const removed = await app.request('/settings/llm-key', { method: 'DELETE', headers: { ...ORIGIN, cookie } });
+    expect(await removed.json()).toEqual({ available: true, key: null });
+
+    vi.mocked(queries.getUser).mockResolvedValueOnce({ ...USER, role: 'admin' } as never);
+    expect((await app.request('/settings/llm-key', { headers: { cookie } })).status).toBe(403);
+    expect((await app.request('/settings/llm-key')).status).toBe(401);
   });
 });

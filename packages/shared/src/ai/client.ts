@@ -31,6 +31,7 @@ import {
   llmModelsResponseSchema,
   marketSessionsSchema,
   narrationConfigSchema,
+  ownLlmKeyStateSchema,
   portfolioScanResponseSchema,
   profileRequestResponseSchema,
   rescreenResponseSchema,
@@ -62,6 +63,7 @@ export type PriceHistoryResponse = components['schemas']['PriceHistoryResponse']
 export type MarketCalendarStatus = components['schemas']['MarketCalendarStatus'];
 export type MarketSessions = components['schemas']['MarketSessions'];
 export type LlmModelsResponse = components['schemas']['LlmModelsResponse'];
+export type OwnLlmKeyState = components['schemas']['OwnLlmKeyState'];
 export type AgentScanRequest = components['schemas']['AgentScanRequest'];
 export type AgentScanResponse = components['schemas']['AgentScanResponse'];
 export type MandateCheckResponse = components['schemas']['MandateCheckResponse'];
@@ -399,6 +401,38 @@ export class AiClient {
   llmModels(requestId?: string): Promise<LlmModelsResponse> {
     return this.request<LlmModelsResponse>('/llm/models', llmModelsResponseSchema, {
       method: 'GET',
+      requestId,
+    });
+  }
+
+  /**
+   * A user's own OpenRouter key (D206), as the AI service describes it - never
+   * the key. The AI service owns the table because it alone holds the
+   * encryption key; the orchestrator only relays.
+   */
+  ownLlmKey(userId: string, requestId?: string): Promise<OwnLlmKeyState> {
+    return this.request<OwnLlmKeyState>(`/llm/own-keys/${encodeURIComponent(userId)}`, ownLlmKeyStateSchema, {
+      method: 'GET',
+      requestId,
+    });
+  }
+
+  /**
+   * Check a key with OpenRouter and save it encrypted. A 422 `key_rejected` or
+   * `key_malformed`, a 502 `key_check_unreachable` or a 503
+   * `own_keys_unavailable` saves nothing. The key travels once, in this body.
+   */
+  saveOwnLlmKey(userId: string, apiKey: string, requestId?: string): Promise<OwnLlmKeyState> {
+    return this.request<OwnLlmKeyState>(`/llm/own-keys/${encodeURIComponent(userId)}`, ownLlmKeyStateSchema, {
+      method: 'PUT',
+      body: JSON.stringify({ api_key: apiKey }),
+      requestId,
+    });
+  }
+
+  removeOwnLlmKey(userId: string, requestId?: string): Promise<OwnLlmKeyState> {
+    return this.request<OwnLlmKeyState>(`/llm/own-keys/${encodeURIComponent(userId)}`, ownLlmKeyStateSchema, {
+      method: 'DELETE',
       requestId,
     });
   }

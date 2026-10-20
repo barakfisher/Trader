@@ -69,7 +69,12 @@ export function AgentDecisions({ agentId, openScanId }: { agentId: string; openS
 
 function outcomeClass(scan: AgentScanSummary): string {
   if (scan.outcome === 'trade') return 'bg-accent/15 text-accent';
-  if (scan.outcome === 'failed' || scan.outcome === 'invalid_answer' || scan.outcome === 'rule_rejected') {
+  if (
+    scan.outcome === 'failed' ||
+    scan.outcome === 'invalid_answer' ||
+    scan.outcome === 'rule_rejected' ||
+    scan.outcome === 'own_key_failed'
+  ) {
     return 'bg-loss/15 text-loss';
   }
   if (scan.outcome === 'budget_reached' || scan.outcome === 'cap_reached' || scan.outcome === 'step_limit') {
@@ -156,6 +161,7 @@ function ScanDetail({ agentId, scanId }: { agentId: string; scanId: string }) {
         // Reset from the scan's own month, so an old one names its own date.
         <p className="text-warn">{t('agents.decisions.capReached', { date: capResetLabel(data.startedAt) })}</p>
       )}
+      {data.outcome === 'own_key_failed' && <p className="text-loss">{t('agents.decisions.ownKeyFailed')}</p>}
       <Briefing briefing={data.briefing} />
       {data.transcript.map((step, index) =>
         isAnswerTurn(step) ? (

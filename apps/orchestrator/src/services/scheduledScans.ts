@@ -208,8 +208,10 @@ export async function runSlotAttempt(job: SlotAttemptJob, deps: AttemptDeps): Pr
       await finish(runId, job, { ...stats, cause, retryable: true, error: scan.error }, deps.notifier, now);
       return;
     }
-    // Everything else is the slot's answer - a refused answer and a spent budget or cap too (D69).
-    const spent = scan.outcome === 'budget_reached' || scan.outcome === 'cap_reached';
+    // Everything else is the slot's answer - a refused answer, a spent budget or cap, and a
+    // refused own key too (D69, D207): retrying the slot would not change any of them.
+    const spent =
+      scan.outcome === 'budget_reached' || scan.outcome === 'cap_reached' || scan.outcome === 'own_key_failed';
     await finishRun(runId, spent ? 'degraded' : 'ok', stats);
   } catch (error) {
     const code = (error instanceof AiServiceError

@@ -105,7 +105,8 @@
               "step_limit",
               "failed",
               "rule_rejected",
-              "cap_reached"
+              "cap_reached",
+              "own_key_failed"
             ],
             "title": "Outcome",
             "type": "string"
@@ -319,7 +320,8 @@
               "failed",
               "budget_reached",
               "cap_reached",
-              "no_model"
+              "no_model",
+              "own_key_failed"
             ],
             "title": "Outcome",
             "type": "string"
@@ -1970,6 +1972,105 @@
           "severity"
         ],
         "title": "OpenEpisodeIn",
+        "type": "object"
+      },
+      "OwnLlmKey": {
+        "description": "What may be said about a user's saved OpenRouter key (D206): never the key.",
+        "properties": {
+          "failed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed At"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "enum": [
+                  "rejected",
+                  "no_credit"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why OpenRouter refused it: 401 rejected, 402 no_credit. Null while valid.",
+            "title": "Failure"
+          },
+          "last_four": {
+            "title": "Last Four",
+            "type": "string"
+          },
+          "saved_at": {
+            "format": "date-time",
+            "title": "Saved At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "valid",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "last_four",
+          "status",
+          "saved_at",
+          "failed_at",
+          "failure"
+        ],
+        "title": "OwnLlmKey",
+        "type": "object"
+      },
+      "OwnLlmKeySave": {
+        "properties": {
+          "api_key": {
+            "format": "password",
+            "title": "Api Key",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "title": "OwnLlmKeySave",
+        "type": "object"
+      },
+      "OwnLlmKeyState": {
+        "properties": {
+          "available": {
+            "description": "Whether this installation can use users' own keys: LLM_KEY_ENCRYPTION_KEYS is set and the provider is OpenRouter.",
+            "title": "Available",
+            "type": "boolean"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OwnLlmKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "available",
+          "key"
+        ],
+        "title": "OwnLlmKeyState",
         "type": "object"
       },
       "PortfolioScanRequest": {
@@ -3644,6 +3745,189 @@
           }
         },
         "summary": "Llm Models",
+        "tags": [
+          "llm"
+        ]
+      }
+    },
+    "/llm/own-keys/{user_id}": {
+      "delete": {
+        "operationId": "remove_own_key_llm_own_keys__user_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnLlmKeyState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Own Key",
+        "tags": [
+          "llm"
+        ]
+      },
+      "get": {
+        "operationId": "own_key_llm_own_keys__user_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnLlmKeyState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Own Key",
+        "tags": [
+          "llm"
+        ]
+      },
+      "put": {
+        "operationId": "save_own_key_llm_own_keys__user_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnLlmKeySave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnLlmKeyState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Own Key",
         "tags": [
           "llm"
         ]

@@ -277,7 +277,17 @@ const llmCostEstimateSchema = z.object({
 
 export const agentScanResponseSchema = z.object({
   scan_id: z.string(),
-  outcome: z.enum(['trade', 'no_trade', 'invalid_answer', 'budget_reached', 'step_limit', 'failed', 'rule_rejected', 'cap_reached']),
+  outcome: z.enum([
+    'trade',
+    'no_trade',
+    'invalid_answer',
+    'budget_reached',
+    'step_limit',
+    'failed',
+    'rule_rejected',
+    'cap_reached',
+    'own_key_failed',
+  ]),
   steps: z.number().int(),
   cost_micro_usd: z.number().int(),
   model: z.string().nullable(),
@@ -333,7 +343,7 @@ export const mandateCheckResponseSchema = z.object({
 export const assistantReplySchema = z.object({
   conversation_id: z.string().nullable(),
   message_id: z.string().nullable(),
-  outcome: z.enum(['answer', 'decline', 'clarify', 'failed', 'budget_reached', 'cap_reached', 'no_model']),
+  outcome: z.enum(['answer', 'decline', 'clarify', 'failed', 'budget_reached', 'cap_reached', 'no_model', 'own_key_failed']),
   reason: z.enum(['off_domain', 'advice', 'action', 'prompt']).nullable(),
   text: z.string(),
   sources: z.array(
@@ -476,6 +486,24 @@ export const narrationConfigSchema = z.object({
 
 export type _AssertNarrationConfig = Expect<
   Equal<z.infer<typeof narrationConfigSchema>, Schemas['NarrationConfigResponse']>
+>;
+
+/** A user's own OpenRouter key, as the AI service may describe it: never the key (D206). */
+export const ownLlmKeyStateSchema = z.object({
+  available: z.boolean(),
+  key: z
+    .object({
+      last_four: z.string(),
+      status: z.enum(['valid', 'failed']),
+      saved_at: z.string(),
+      failed_at: z.string().nullable(),
+      failure: z.enum(['rejected', 'no_credit']).nullable(),
+    })
+    .nullable(),
+});
+
+export type _AssertOwnLlmKeyState = Expect<
+  Equal<z.infer<typeof ownLlmKeyStateSchema>, Schemas['OwnLlmKeyState']>
 >;
 
 export const conceptSectionSchema = z.object({

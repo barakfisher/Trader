@@ -5,6 +5,7 @@ import { AtSign, BellOff, KeyRound, Settings as SettingsIcon } from 'lucide-reac
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Drawer } from '../components/Drawer.tsx';
 import { EmailChange } from '../components/EmailChange.tsx';
+import { OwnLlmKeyForm } from '../components/OwnLlmKeyForm.tsx';
 import { PasswordChange } from '../components/PasswordChange.tsx';
 import { TelegramConnect } from '../components/TelegramConnect.tsx';
 import { Button, Card, ErrorNote, Spinner } from '../components/ui.tsx';
@@ -24,7 +25,7 @@ import {
 } from '../stores/SettingsStore.ts';
 import { errorMessage } from '../api/client.ts';
 import { LANGUAGES, useTranslation, type Language } from '../i18n/index.ts';
-import { useMonthlySpendQuery, useSettingsQuery } from '../queries/settings.ts';
+import { useMonthlySpendQuery, useOwnLlmKeyQuery, useSettingsQuery } from '../queries/settings.ts';
 import { useStore } from '../stores/context.tsx';
 
 /**
@@ -386,26 +387,48 @@ const SignInCard = observer(function SignInCard() {
  * 2026-09-29 - no schema or backend change in M6).
  */
 /**
- * A capped user's month against their LLM spend cap (D157, D158). The admin has
- * no cap and sees no card; a failed read shows nothing rather than a guess.
+ * A capped user's month against their LLM spend cap (D157, D158), and their own
+ * OpenRouter key (D206), which - while it works - takes them out from under the
+ * cap. The admin has no cap and no key to save, and sees neither card; a failed
+ * read shows nothing rather than a guess.
  */
 function SpendCard() {
   const { t } = useTranslation();
   const spend = useMonthlySpendQuery().data;
+  const ownKey = useOwnLlmKeyQuery(Boolean(spend)).data;
   if (!spend) return null;
+  const ownKeyWorks = ownKey?.key?.status === 'valid';
   return (
-    <Card title={t('settings.spend.title')}>
-      <p className="text-sm font-medium">
-        <bdi>
-          {t('settings.spend.line', {
-            spent: formatMicroUsd(spend.spentMicroUsd),
-            cap: formatMicroUsd(spend.capMicroUsd),
-            date: formatResetDate(spend.resetsOn),
-          })}
-        </bdi>
-      </p>
-      <p className="mt-1 text-xs text-text-muted">{t('settings.spend.hint')}</p>
-    </Card>
+    <>
+      <Card title={t('settings.spend.title')}>
+        {ownKeyWorks ? (
+          <p className="text-sm font-medium">{t('settings.spend.ownKeyActive')}</p>
+        ) : (
+          <>
+            <p className="text-sm font-medium">
+              <bdi>
+                {t('settings.spend.line', {
+                  spent: formatMicroUsd(spend.spentMicroUsd),
+                  cap: formatMicroUsd(spend.capMicroUsd),
+                  date: formatResetDate(spend.resetsOn),
+                })}
+              </bdi>
+            </p>
+            <p className="mt-1 text-xs text-text-muted">{t('settings.spend.hint')}</p>
+          </>
+        )}
+        {(ownKeyWorks || spend.ownKeySpentMicroUsd > 0) && (
+          <p className="mt-2 text-sm">
+            <bdi>{t('settings.spend.ownKeyLine', { spent: formatMicroUsd(spend.ownKeySpentMicroUsd) })}</bdi>
+          </p>
+        )}
+      </Card>
+      {ownKey && (
+        <Card title={t('settings.ownKey.title')}>
+          <OwnLlmKeyForm available={ownKey.available} saved={ownKey.key} />
+        </Card>
+      )}
+    </>
   );
 }
 

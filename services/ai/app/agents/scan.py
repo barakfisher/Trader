@@ -55,7 +55,13 @@ from app.agents.tools import TOOLS, ToolContext, money, run_tool
 from app.agents.trade_review import TradeReview
 from app.core.fees import FEE_PER_SHARE_MINOR, MIN_FEE_MINOR
 from app.core.logging import get_logger
-from app.llm.base import Caller, LLMProvider, MonthlyCapReachedError, UserMessage
+from app.llm.base import (
+    Caller,
+    LLMProvider,
+    MonthlyCapReachedError,
+    OwnKeyFailedError,
+    UserMessage,
+)
 from app.llm.tool_loop import LoopState, LoopStop, run_tool_loop
 from app.models import Mover
 
@@ -386,6 +392,8 @@ def _outcome_for(stop: LoopStop) -> ScanOutcome:
     cap is told apart from the other budgets, because the screen says when it resets."""
     if isinstance(stop.cause, MonthlyCapReachedError):
         return "cap_reached"
+    if isinstance(stop.cause, OwnKeyFailedError):
+        return "own_key_failed"
     return stop.end if stop.end != "answer" else "failed"
 
 

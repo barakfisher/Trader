@@ -11,7 +11,7 @@ from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 AssetClass = Literal["equity", "etf", "crypto", "fx", "index", "unknown"]
 
@@ -976,6 +976,7 @@ class AgentScanResponse(BaseModel):
         "failed",
         "rule_rejected",
         "cap_reached",
+        "own_key_failed",
     ]
     steps: int = Field(description="Tool calls made (D15's step limit counts these).")
     cost_micro_usd: int
@@ -1016,7 +1017,14 @@ class AssistantReply(BaseModel):
     )
     message_id: UUID | None
     outcome: Literal[
-        "answer", "decline", "clarify", "failed", "budget_reached", "cap_reached", "no_model"
+        "answer",
+        "decline",
+        "clarify",
+        "failed",
+        "budget_reached",
+        "cap_reached",
+        "no_model",
+        "own_key_failed",
     ]
     reason: Literal["off_domain", "advice", "action", "prompt"] | None = Field(
         description="Why it declined; null unless outcome is 'decline'."
@@ -1027,3 +1035,30 @@ class AssistantReply(BaseModel):
     model: str | None
     cost_micro_usd: int
     steps: int = Field(description="Tool calls made.")
+
+
+class OwnLlmKey(BaseModel):
+    """What may be said about a user's saved OpenRouter key (D206): never the key."""
+
+    last_four: str
+    status: Literal["valid", "failed"]
+    saved_at: datetime
+    failed_at: datetime | None
+    failure: Literal["rejected", "no_credit"] | None = Field(
+        description="Why OpenRouter refused it: 401 rejected, 402 no_credit. Null while valid."
+    )
+
+
+class OwnLlmKeyState(BaseModel):
+    available: bool = Field(
+        description="Whether this installation can use users' own keys: "
+        "LLM_KEY_ENCRYPTION_KEYS is set and the provider is OpenRouter."
+    )
+    key: OwnLlmKey | None
+
+
+class OwnLlmKeySave(BaseModel):
+    # A SecretStr is masked in every repr and log line, and the model has no
+    # length or pattern constraint because a failed constraint echoes the input
+    # back in the 422 (guideline 9). The route checks the shape itself.
+    api_key: SecretStr

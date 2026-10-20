@@ -3,10 +3,11 @@
 `users.llm_cap_micro_usd` is written when the admin approves a signup; the
 admin's is NULL and is never capped. **The month is the user's calendar month,
 in `users.timezone`**, and spent is `sum(llm_calls.cost_micro_usd)` for the
-user since it began - `llm_calls` is already the ledger of every call, refused
-ones included, so there is no second counter to drift from it. That holds only
-while the log keeps a whole month, which is why `LLM_CALL_RETENTION_DAYS` may
-not be set below `MIN_RETENTION_DAYS` (D204).
+user since it began, over the calls the installation paid for (`paid_by`: a
+call on the user's own key is theirs, D209) - `llm_calls` is already the
+ledger of every call, refused ones included, so there is no second counter to
+drift from it. That holds only while the log keeps a whole month, which is why
+`LLM_CALL_RETENTION_DAYS` may not be set below `MIN_RETENTION_DAYS` (D204).
 
 **Checked before each call, tool loops included.** A call's cost is known after
 it returns, so the honest form of strict is to refuse when spent plus the most
@@ -107,6 +108,7 @@ class DatabaseCapLedger:
                     """
                     SELECT coalesce(sum(cost_micro_usd), 0) FROM llm_calls
                      WHERE user_id = CAST(:user AS uuid) AND started_at >= :since
+                       AND paid_by = 'installation'
                     """
                 ),
                 {"user": user_id, "since": start},

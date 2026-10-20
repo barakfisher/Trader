@@ -216,3 +216,8 @@ while this file is out of date.
 | 203 | The monthly cap is a wrapper inside the recorder, keyed by `caller.user_id` |
 | 204 | The call log keeps at least 32 days |
 | 205 | A refusal by the cap is its own outcome, `cap_reached`, and says when it resets |
+| 206 | A non-admin user may save their own OpenRouter key; while it works, the installation's limits do not apply to them |
+| 207 | A saved key OpenRouter refuses is marked failed; that call fails, the next ones run under the cap |
+| 208 | The encryption key is `LLM_KEY_ENCRYPTION_KEYS`: comma-separated Fernet keys, the first encrypts and every one decrypts |
+| 209 | Every recorded call says whose key paid (`llm_calls.paid_by`), and the cap sums only the installation's |
+| 210 | Own-key calls are outside `LLM_DAILY_BUDGET_USD`; the agent and assistant daily allowances still apply |

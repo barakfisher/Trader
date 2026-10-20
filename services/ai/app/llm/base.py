@@ -43,6 +43,11 @@ from typing import Any, Literal, Protocol, runtime_checkable
 #: amount exactly once, at the boundary. Still integers, still no floats.
 MICRO_USD_PER_USD = 1_000_000
 
+#: Whose OpenRouter account a call was billed to: the installation's key, or a
+#: user's own saved key (`own_key.py`). Recorded on every `llm_calls` row, so the
+#: monthly cap sums only what the installation paid for.
+PaidBy = Literal["installation", "own_key"]
+
 
 def micro_usd_to_usd(micro_usd: int) -> Decimal:
     """Convert the internal accounting unit to a Decimal USD amount."""
@@ -93,6 +98,8 @@ class LLMCompletion:
     #: The tools the model asked for, in order (`converse` only). A turn may
     #: carry tool calls and no text; `complete` never returns one without text.
     tool_calls: tuple[ToolCall, ...] = ()
+    #: Whose key paid for it; set by `own_key.OwnKeyProvider`.
+    paid_by: PaidBy = "installation"
 
     @property
     def estimated_cost_usd(self) -> Decimal:
@@ -285,6 +292,8 @@ class LLMError(RuntimeError):
     """
 
     metered_micro_usd: int = 0
+    #: Whose key the failed call was made with; set by `own_key.OwnKeyProvider`.
+    paid_by: PaidBy = "installation"
 
 
 class LLMUnavailableError(LLMError):
@@ -354,6 +363,18 @@ class LLMRequestError(LLMError):
         self.provider = provider
         self.status_code = status_code
         self.metered_micro_usd = metered_micro_usd
+
+
+class OwnKeyFailedError(LLMRequestError):
+    """OpenRouter refused the user's own saved key - revoked, or out of credit (D206).
+
+    The key is marked failed before this is raised, so the user's next call runs
+    on the installation's key under their monthly cap. This call is not retried
+    on the installation's key: the user is told their key stopped working, and
+    a scan or an `/ask` reply ends as `own_key_failed`.
+    """
+
+    paid_by: PaidBy = "own_key"
 
 
 class LLMTimeoutError(LLMError):

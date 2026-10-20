@@ -260,7 +260,9 @@ export type AgentScanOutcome =
   | 'failed'
   | 'rule_rejected'
   /** The user's monthly LLM spend cap was reached (D157, D158). */
-  | 'cap_reached';
+  | 'cap_reached'
+  /** OpenRouter refused the user's own API key mid-scan (D207). */
+  | 'own_key_failed';
 
 /** One scan, as a row of the *Decisions* tab (D50). */
 export interface AgentScanSummary {
@@ -1417,13 +1419,44 @@ export interface UserSettingsResponse {
  */
 export interface MonthlySpend {
   capMicroUsd: number;
+  /** What the installation paid for this month: the cap counts only this (D209). */
   spentMicroUsd: number;
+  /** What the user's own OpenRouter key paid for this month, as estimated here. */
+  ownKeySpentMicroUsd: number;
   resetsOn: string;
 }
 
 /** `spend` is null for a user with no cap - the admin - who sees no card. */
 export interface MonthlySpendResponse {
   spend: MonthlySpend | null;
+}
+
+/** Why OpenRouter refused a saved key: 401 `rejected`, 402 `no_credit` (D207). */
+export type OwnLlmKeyFailure = 'rejected' | 'no_credit';
+
+/**
+ * A user's own OpenRouter key as the browser may know it (D206): its last four
+ * characters and whether it works. The key itself never leaves the AI service.
+ */
+export interface OwnLlmKey {
+  lastFour: string;
+  status: 'valid' | 'failed';
+  savedAt: string;
+  failedAt: string | null;
+  failure: OwnLlmKeyFailure | null;
+}
+
+/**
+ * `GET|PUT|DELETE /settings/llm-key`. `available` is false when the installation
+ * cannot use users' keys (no encryption key configured, or not OpenRouter).
+ */
+export interface OwnLlmKeyResponse {
+  available: boolean;
+  key: OwnLlmKey | null;
+}
+
+export interface SaveOwnLlmKeyRequest {
+  apiKey: string;
 }
 
 // --- Proposals (migration 0006) ----------------------------------------------
@@ -1961,7 +1994,8 @@ export type AssistantOutcome =
   | 'failed'
   | 'budget_reached'
   | 'cap_reached'
-  | 'no_model';
+  | 'no_model'
+  | 'own_key_failed';
 export type AssistantDeclineReason = 'off_domain' | 'advice' | 'action' | 'prompt';
 
 /** Where a fact in a reply came from, built by the server from the tools that ran. */

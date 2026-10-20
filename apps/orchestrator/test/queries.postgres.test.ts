@@ -102,12 +102,19 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
                   ($1, 'ask', 'openrouter', 'budget_exhausted', 1, 'p', 0, now())`,
           [capped],
         );
+        // D209: a call on the user's own key is summed beside the cap, not in it.
+        await getPool().query(
+          `INSERT INTO llm_calls (user_id, purpose, provider, outcome, latency_ms, prompt, cost_micro_usd, paid_by)
+           VALUES ($1, 'ask', 'openrouter', 'ok', 1, 'p', 4000, 'own_key')`,
+          [capped],
+        );
         const { rows } = await getPool().query<{ resets: string }>(
           `SELECT to_char(date_trunc('month', now() AT TIME ZONE '${zone}') + interval '1 month', 'YYYY-MM-DD') AS resets`,
         );
         expect(await queries.getMonthlySpend(capped)).toEqual({
           cap_micro_usd: '5000000',
           spent_micro_usd: '11',
+          own_key_spent_micro_usd: '4000',
           resets_on: rows[0]!.resets,
         });
         const { rows: admins } = await getPool().query<{ id: string }>(

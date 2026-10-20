@@ -15,6 +15,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.llm.key_vault import build_vault
 from app.llm.monthly_cap import MIN_RETENTION_DAYS
 from app.llm.pricing import ModelPrice, parse_model_prices
 
@@ -305,6 +306,11 @@ class Settings(BaseSettings):
 
     openrouter_api_key: str | None = None
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    # Fernet keys that encrypt the OpenRouter keys users save (`app/llm/key_vault.py`,
+    # D208): comma-separated, the first encrypts and every one decrypts. Empty
+    # turns users' own keys off. Generate one with
+    # `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+    llm_key_encryption_keys: str = ""
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
     openai_base_url: str = "https://api.openai.com/v1"
@@ -336,6 +342,18 @@ class Settings(BaseSettings):
     def _validate_llm_prices(self) -> Settings:
         """Surface a malformed LLM_MODEL_PRICES at boot, not on the first call."""
         _ = self.llm_model_price_map
+        return self
+
+    @model_validator(mode="after")
+    def _validate_key_encryption_keys(self) -> Settings:
+        """A malformed LLM_KEY_ENCRYPTION_KEYS refuses to start, rather than reading
+        as "own keys off" and quietly moving every own-key user onto the cap."""
+        try:
+            build_vault(self.llm_key_encryption_keys)
+        except ValueError as error:
+            raise ValueError(
+                "LLM_KEY_ENCRYPTION_KEYS holds a value that is not a Fernet key"
+            ) from error
         return self
 
     @property

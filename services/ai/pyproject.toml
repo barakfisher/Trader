@@ -23,6 +23,9 @@ dependencies = [
     # app/corpus/openrouter_embedder.py), pointed at OpenRouter's base URL.
     # The floor is the version tested.
     "openai>=3.31",
+    # Encrypts the OpenRouter keys users save (app/llm/key_vault.py, D208):
+    # Fernet tokens, and MultiFernet for rotation. The floor is the version tested.
+    "cryptography>=50",
 ]
 
 [project.optional-dependencies]

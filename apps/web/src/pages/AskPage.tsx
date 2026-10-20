@@ -186,9 +186,14 @@ function ReplyView({
       </p>
     );
   }
-  if (reply.outcome === 'failed' || reply.outcome === 'budget_reached' || reply.outcome === 'no_model') {
+  if (
+    reply.outcome === 'failed' ||
+    reply.outcome === 'budget_reached' ||
+    reply.outcome === 'no_model' ||
+    reply.outcome === 'own_key_failed'
+  ) {
     // Said in the page's language: the server's wording is a fallback for
-    // other callers, and these three mean exactly one thing each.
+    // other callers, and these four mean exactly one thing each.
     return (
       <p role="status" className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">
         {t(`ask.outcome.${reply.outcome}`)}

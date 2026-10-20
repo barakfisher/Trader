@@ -209,6 +209,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/llm/own-keys/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Own Key */
+        get: operations["own_key_llm_own_keys__user_id__get"];
+        /** Save Own Key */
+        put: operations["save_own_key_llm_own_keys__user_id__put"];
+        post?: never;
+        /** Remove Own Key */
+        delete: operations["remove_own_key_llm_own_keys__user_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/market/calendar": {
         parameters: {
             query?: never;
@@ -534,7 +553,7 @@ export interface components {
              * Outcome
              * @enum {string}
              */
-            outcome: "trade" | "no_trade" | "invalid_answer" | "budget_reached" | "step_limit" | "failed" | "rule_rejected" | "cap_reached";
+            outcome: "trade" | "no_trade" | "invalid_answer" | "budget_reached" | "step_limit" | "failed" | "rule_rejected" | "cap_reached" | "own_key_failed";
             /**
              * Scan Id
              * Format: uuid
@@ -622,7 +641,7 @@ export interface components {
              * Outcome
              * @enum {string}
              */
-            outcome: "answer" | "decline" | "clarify" | "failed" | "budget_reached" | "cap_reached" | "no_model";
+            outcome: "answer" | "decline" | "clarify" | "failed" | "budget_reached" | "cap_reached" | "no_model" | "own_key_failed";
             /**
              * Reason
              * @description Why it declined; null unless outcome is 'decline'.
@@ -1475,6 +1494,48 @@ export interface components {
             severity: "info" | "notable" | "high";
             /** Subject Ref */
             subject_ref: string;
+        };
+        /**
+         * OwnLlmKey
+         * @description What may be said about a user's saved OpenRouter key (D206): never the key.
+         */
+        OwnLlmKey: {
+            /** Failed At */
+            failed_at: string | null;
+            /**
+             * Failure
+             * @description Why OpenRouter refused it: 401 rejected, 402 no_credit. Null while valid.
+             */
+            failure: ("rejected" | "no_credit") | null;
+            /** Last Four */
+            last_four: string;
+            /**
+             * Saved At
+             * Format: date-time
+             */
+            saved_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "valid" | "failed";
+        };
+        /** OwnLlmKeySave */
+        OwnLlmKeySave: {
+            /**
+             * Api Key
+             * Format: password
+             */
+            api_key: string;
+        };
+        /** OwnLlmKeyState */
+        OwnLlmKeyState: {
+            /**
+             * Available
+             * @description Whether this installation can use users' own keys: LLM_KEY_ENCRYPTION_KEYS is set and the provider is OpenRouter.
+             */
+            available: boolean;
+            key: components["schemas"]["OwnLlmKey"] | null;
         };
         /** PortfolioScanRequest */
         PortfolioScanRequest: {
@@ -2371,6 +2432,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LlmModelsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    own_key_llm_own_keys__user_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnLlmKeyState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_own_key_llm_own_keys__user_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnLlmKeySave"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnLlmKeyState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_own_key_llm_own_keys__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnLlmKeyState"];
                 };
             };
             /** @description Validation Error */
