@@ -145,7 +145,7 @@ export const SettingsPage = observer(function SettingsPage() {
               </Field>
               <details className="text-sm">
                 <summary className="cursor-pointer text-text-muted">{t('settings.severityTitle')}</summary>
-                <p className="mb-3 mt-2 text-text-muted">{t('settings.severityIntro')}</p>
+                <p className="mb-3 mt-2 text-xs text-text-muted">{t('settings.severityIntro')}</p>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="text-start text-xs uppercase tracking-wide text-text-muted">

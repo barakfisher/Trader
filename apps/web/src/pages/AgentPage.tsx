@@ -134,7 +134,7 @@ function SimulatedAgent({ agent }: { agent: AgentView }) {
         )}
       </div>
       <AccountSummary agent={agent} />
-      <div role="tablist" className="flex gap-2 border-b border-border-subtle">
+      <div role="tablist" className="flex gap-2 overflow-x-auto border-b border-border-subtle">
         {TABS.map((name) => (
           <button
             key={name}
@@ -142,7 +142,7 @@ function SimulatedAgent({ agent }: { agent: AgentView }) {
             type="button"
             aria-selected={tab === name}
             onClick={() => setTab(name)}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm ${
+            className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm ${
               tab === name ? 'border-accent text-text-primary' : 'border-transparent text-text-muted'
             }`}
           >
