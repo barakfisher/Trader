@@ -236,3 +236,4 @@ while this file is out of date.
 | 223 | In Telegram an answer is flattened markdown, plus at most three news sources with their URLs; suggestions are one-time reply buttons |
 | 224 | The bot's fixed sentences around a question are in the question's language, read from its letters |
 | 225 | A disabled Create agent says why, beside the button; the paper budget has no default and no placeholder |
+| 226 | The product guide names only tools the assistant has, and says how an agent is created |

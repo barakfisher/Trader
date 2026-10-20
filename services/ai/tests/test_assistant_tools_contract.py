@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from app.assistant.product_guide import PAGES
+from app.assistant.product_guide import PAGES, SECTIONS
 from app.assistant.tools import RESCREEN_DUE_DAYS, TOOLS_BY_NAME
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -38,3 +38,17 @@ def test_the_pages_a_reply_may_link_are_the_routers() -> None:
     }
 
     assert set(PAGES) == routed
+
+
+def test_the_guide_names_only_tools_the_assistant_has() -> None:
+    """Gemini Flash-Lite read `get_position` in the agents section - an agent's
+    tool, not the assistant's - and then tried to call it: Google ends that turn
+    `MALFORMED_FUNCTION_CALL`, and "why can't I create an agent?" failed 9 times in
+    10 (D226). Describe what another tool does; name only tools the model has."""
+    named = {
+        (section, name)
+        for section, text in SECTIONS.items()
+        for name in re.findall(r"\b[a-z]+(?:_[a-z]+)+\b", text)
+    }
+
+    assert {(section, name) for section, name in named if name not in TOOLS_BY_NAME} == set()

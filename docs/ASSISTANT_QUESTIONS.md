@@ -19,6 +19,8 @@ expected behaviour in checkable form. Add a question here and there together.
 | U9 | What's in the news today? | Declined unless it is market news |
 | U10 | What's the weather tomorrow? | Declined |
 | U11 | Help me plan a vacation | Declined |
+| U12 | why cant I create an agent? | Says where agents are created and what the form needs (asked on compose 2026-10-20; failed `MALFORMED_FUNCTION_CALL`, D226) |
+| U13 | How do I set up a simulated agent? | Walks through the Agents page's New agent form |
 
 Taken from the conversation of 2026-10-11, in the user's words. Where a draft question below asks
 the same thing, the user's wording is the one in the test set and the draft row says so.
