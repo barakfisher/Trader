@@ -1,4 +1,4 @@
-"""The monthly cap's refusal is an outcome of its own, and its sum is indexed (D157, D158, D203-D205).
+"""The monthly cap's refusal is an outcome of its own, and its sum is indexed (D157, D158, D205).
 
 `cap_reached` joins the outcomes of an agent scan (`agent_scans`) and of an
 assistant reply (`assistant_messages`). A scan or a question refused because the
