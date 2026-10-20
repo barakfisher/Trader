@@ -63,6 +63,13 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "agent_scans holds rule_rejected scans",
         "DELETE FROM agent_scans WHERE outcome = 'rule_rejected'",
     ),
+    # A cap_reached scan or reply resets on a different day than budget_reached;
+    # 0063 cannot name it, so 0064 refuses rather than relabel it.
+    "0064_monthly_cap": (
+        "cap_reached rows exist",
+        "DELETE FROM agent_scans WHERE outcome = 'cap_reached'; "
+        "DELETE FROM assistant_messages WHERE outcome = 'cap_reached'",
+    ),
     # A check's calls are spend records; relabelling them as scans would put
     # them in the scan averages, so 0059 refuses.
     "0059_mandate_check": (

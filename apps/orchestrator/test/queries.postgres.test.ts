@@ -85,6 +85,42 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe('the monthly cap (D157, D203)', () => {
+    it("sums the user's calls since their month began, in their zone; none for the admin", async () => {
+      const capped = randomUUID();
+      const zone = 'Pacific/Kiritimati'; // UTC+14: its month starts a day before UTC's
+      await getPool().query(
+        "INSERT INTO users (id, status, llm_cap_micro_usd, timezone) VALUES ($1, 'active', 5000000, $2)",
+        [capped, zone],
+      );
+      try {
+        const start = `date_trunc('month', now() AT TIME ZONE '${zone}') AT TIME ZONE '${zone}'`;
+        await getPool().query(
+          `INSERT INTO llm_calls (user_id, purpose, provider, outcome, latency_ms, prompt, cost_micro_usd, started_at)
+           VALUES ($1, 'ask', 'openrouter', 'ok', 1, 'p', 700, ${start} - interval '1 second'),
+                  ($1, 'ask', 'openrouter', 'ok', 1, 'p', 11, ${start}),
+                  ($1, 'ask', 'openrouter', 'budget_exhausted', 1, 'p', 0, now())`,
+          [capped],
+        );
+        const { rows } = await getPool().query<{ resets: string }>(
+          `SELECT to_char(date_trunc('month', now() AT TIME ZONE '${zone}') + interval '1 month', 'YYYY-MM-DD') AS resets`,
+        );
+        expect(await queries.getMonthlySpend(capped)).toEqual({
+          cap_micro_usd: '5000000',
+          spent_micro_usd: '11',
+          resets_on: rows[0]!.resets,
+        });
+        const { rows: admins } = await getPool().query<{ id: string }>(
+          "SELECT id FROM users WHERE role = 'admin' LIMIT 1",
+        );
+        if (admins[0]) expect(await queries.getMonthlySpend(admins[0].id)).toBeNull();
+      } finally {
+        await getPool().query('DELETE FROM llm_calls WHERE user_id = $1', [capped]);
+        await getPool().query('DELETE FROM users WHERE id = $1', [capped]);
+      }
+    });
+  });
+
   describe('sign-up requests (0058, D156, D185, D188)', () => {
     const tag = USER.slice(0, 8);
     const email = (name: string) => `${name}-${tag}@example.com`;

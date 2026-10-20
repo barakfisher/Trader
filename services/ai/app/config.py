@@ -15,6 +15,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.llm.monthly_cap import MIN_RETENTION_DAYS
 from app.llm.pricing import ModelPrice, parse_model_prices
 
 #: Where the container copies the fixtures to (see infra/docker/Dockerfile.ai).
@@ -279,8 +280,9 @@ class Settings(BaseSettings):
 
     # How long a recorded model call (prompt and completion included, which
     # hold portfolio data) is kept in `llm_calls` before the next insert
-    # deletes it (decision 87).
-    llm_call_retention_days: int = Field(default=30, ge=1)
+    # deletes it (decision 87). Never less than a month: the monthly cap sums
+    # this log since the user's month began (D204).
+    llm_call_retention_days: int = Field(default=MIN_RETENTION_DAYS, ge=MIN_RETENTION_DAYS)
 
     # Per-call limits. A narration is a headline plus a short explanation, so the
     # output cap is small on purpose: it bounds both the latency of a scheduled

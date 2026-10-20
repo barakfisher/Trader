@@ -37,6 +37,8 @@ from app.llm.base import (
     TokenUsage,
     ToolCall,
 )
+from app.llm.monthly_cap import DatabaseCapLedger, MonthlyCapProvider
+from app.llm.pricing import DEFAULT_UNKNOWN_MODEL_PRICE_USD_PER_MTOK
 from tests.integration.conftest import run_script
 from tests.integration.test_agent_tools_sql import NOW as QUOTED_AT
 from tests.integration.test_agent_tools_sql import ScriptedMarket, _instrument
@@ -422,6 +424,35 @@ async def test_the_installations_spend_guard_also_reads_as_budget_reached(
 ) -> None:
     llm = ScriptedLLM(LLMBudgetExceededError(5_000_000, 5_000_000, "2026-10-07"))
     assert (await _scan(loaded, agent, llm)).outcome == "budget_reached"
+
+
+async def test_the_users_monthly_cap_ends_the_scan_as_cap_reached(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    with loaded.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO llm_calls (user_id, purpose, provider, outcome, latency_ms, prompt, "
+                "cost_micro_usd) VALUES (CAST(:u AS uuid), 'ask', 'openrouter', 'ok', 1, 'p', "
+                "(SELECT llm_cap_micro_usd FROM users WHERE id = CAST(:u AS uuid)))"
+            ),
+            {"u": agent.user_id},
+        )
+    inner = ScriptedLLM()
+    capped = MonthlyCapProvider(
+        inner,  # type: ignore[arg-type]
+        DatabaseCapLedger(loaded),
+        model="vendor/unpriced",
+        prices={},
+        unknown_price_usd_per_mtok=DEFAULT_UNKNOWN_MODEL_PRICE_USD_PER_MTOK,
+        max_output_tokens=1,
+    )
+
+    result = await _scan(loaded, agent, capped)  # type: ignore[arg-type]
+
+    assert result.outcome == "cap_reached"
+    assert _stored(loaded, result.scan_id).outcome == "cap_reached"
+    assert inner.offered == []
 
 
 async def test_one_scan_at_a_time_and_an_abandoned_one_is_closed(

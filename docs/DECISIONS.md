@@ -213,3 +213,6 @@ while this file is out of date.
 | 200 | At the limit a new agent starts paused, and a restore comes back paused |
 | 201 | The admin has no agent limit |
 | 202 | A user keeps at most 50 agents that are not archived; the admin has no ceiling |
+| 203 | The monthly cap is a wrapper inside the recorder, keyed by `caller.user_id` |
+| 204 | The call log keeps at least 32 days |
+| 205 | A refusal by the cap is its own outcome, `cap_reached`, and says when it resets |

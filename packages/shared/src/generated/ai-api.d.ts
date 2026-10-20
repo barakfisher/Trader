@@ -534,7 +534,7 @@ export interface components {
              * Outcome
              * @enum {string}
              */
-            outcome: "trade" | "no_trade" | "invalid_answer" | "budget_reached" | "step_limit" | "failed" | "rule_rejected";
+            outcome: "trade" | "no_trade" | "invalid_answer" | "budget_reached" | "step_limit" | "failed" | "rule_rejected" | "cap_reached";
             /**
              * Scan Id
              * Format: uuid
@@ -622,7 +622,7 @@ export interface components {
              * Outcome
              * @enum {string}
              */
-            outcome: "answer" | "decline" | "clarify" | "failed" | "budget_reached" | "no_model";
+            outcome: "answer" | "decline" | "clarify" | "failed" | "budget_reached" | "cap_reached" | "no_model";
             /**
              * Reason
              * @description Why it declined; null unless outcome is 'decline'.

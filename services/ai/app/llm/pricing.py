@@ -203,3 +203,32 @@ def estimate_cost_micro_usd(
     ) / _TOKENS_PER_MILLION
     micro = (usd * Decimal(MICRO_USD_PER_USD)).to_integral_value(rounding=ROUND_CEILING)
     return int(micro)
+
+
+#: Characters per token for pricing a prompt before it is sent (D203): the
+#: common rule of thumb for English and JSON. No tokenizer is loaded for the
+#: model a call will reach, and a guess this coarse is enough for a ceiling
+#: whose output half is already the worst case.
+CHARS_PER_TOKEN = 4
+
+
+def ceiling_cost_micro_usd(
+    model: str,
+    prompt_chars: int,
+    max_output_tokens: int,
+    prices: dict[str, ModelPrice],
+    *,
+    unknown_price_usd_per_mtok: Decimal = DEFAULT_UNKNOWN_MODEL_PRICE_USD_PER_MTOK,
+) -> int:
+    """What a call may cost at most, before it is made: the prompt's characters
+    over `CHARS_PER_TOKEN` at the input price, plus every output token it may
+    write at the output price. Priced exactly as `estimate_cost_micro_usd`
+    prices a finished call, so an unpriced model is charged the pessimistic
+    rate and a `:free` one nothing."""
+    prompt_tokens = -(-prompt_chars // CHARS_PER_TOKEN)
+    return estimate_cost_micro_usd(
+        model,
+        TokenUsage(prompt_tokens=prompt_tokens, completion_tokens=max_output_tokens),
+        prices,
+        unknown_price_usd_per_mtok=unknown_price_usd_per_mtok,
+    )

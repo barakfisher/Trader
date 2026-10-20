@@ -16,6 +16,8 @@ export interface AskTurn {
   /** When it was sent, for the waiting line's seconds; null for a turn read back. */
   askedAt: number | null;
   reply: AssistantReplyView | null;
+  /** When a stored reply was written; null for one that arrived on this screen (now). */
+  repliedAt: string | null;
   /** A failure to get any reply - the network, a 5xx. A decline is a reply, never this. */
   error: string | null;
 }
@@ -54,7 +56,14 @@ export class AskStore {
   async send(): Promise<void> {
     const question = this.draft.trim();
     if (question === '' || question.length > MAX_QUESTION_LENGTH || this.pending || this.opening) return;
-    const turn: AskTurn = { id: this.nextId++, question, askedAt: Date.now(), reply: null, error: null };
+    const turn: AskTurn = {
+      id: this.nextId++,
+      question,
+      askedAt: Date.now(),
+      reply: null,
+      repliedAt: null,
+      error: null,
+    };
     const conversationId = this.conversationId;
     this.turns.push(turn);
     this.draft = '';
@@ -144,11 +153,12 @@ function pairTurns(body: AssistantConversationResponse, nextId: () => number): A
   const turns: AskTurn[] = [];
   for (const message of body.messages) {
     if (message.role === 'user') {
-      turns.push({ id: nextId(), question: message.text, askedAt: null, reply: null, error: null });
+      turns.push({ id: nextId(), question: message.text, askedAt: null, reply: null, repliedAt: null, error: null });
       continue;
     }
     const last = turns[turns.length - 1];
     if (!last || last.reply !== null || message.outcome === null) continue;
+    last.repliedAt = message.createdAt;
     last.reply = {
       conversationId: body.conversation.id,
       messageId: message.id,

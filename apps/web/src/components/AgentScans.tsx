@@ -20,6 +20,7 @@ import { ApiRequestError } from '../api/client.ts';
 import { t, useTranslation } from '../i18n/index.ts';
 import { BUDGET_INPUT, agentErrorMessage } from '../lib/agentPresentation.ts';
 import { formatMicroUsd } from '../lib/llmCalls.ts';
+import { capResetLabel } from '../lib/monthlyCap.ts';
 import { formatClockTime, formatExactTime } from '../lib/relativeTime.ts';
 import { minutesUntilSoonScan, sameSchedule, scheduleTimes, schedulesAnything } from '../lib/scanTimes.ts';
 import { useRunScan, useUpdateAgent } from '../queries/agents.ts';
@@ -135,7 +136,12 @@ function RunResult({ result }: { result: RunScanResult }) {
     });
   return (
     <div role="status" className="space-y-1 text-sm text-text-primary">
-      <p>{t(`agents.scans.result.${result.outcome}`, { trades: kept.map(label).join(' · ') })}</p>
+      <p>
+        {t(`agents.scans.result.${result.outcome}`, {
+          trades: kept.map(label).join(' · '),
+          date: capResetLabel(),
+        })}
+      </p>
       {/* D197: one proposal per kept trade, in the same order. */}
       {result.proposal_ids.length > 0 && (
         <p className="flex flex-wrap gap-x-3 gap-y-1">

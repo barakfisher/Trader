@@ -24,7 +24,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.agents.mandate import Mandate, ready_to_scan
 
-#: Matches `0057_agent_mandate.OUTCOMES`; a test holds the two equal.
+#: Matches `0064_monthly_cap.SCAN_OUTCOMES`; a test holds the two equal.
 ScanOutcome = Literal[
     "trade",
     "no_trade",
@@ -33,6 +33,7 @@ ScanOutcome = Literal[
     "step_limit",
     "failed",
     "rule_rejected",
+    "cap_reached",
 ]
 ScanTrigger = Literal["manual", "schedule"]
 

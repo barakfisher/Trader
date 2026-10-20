@@ -15,6 +15,8 @@ import {
   isMuted,
 } from '../lib/notificationSchedule.ts';
 import { SEVERITY_BANDS, SEVERITY_CHOICES, describeSeverityFloor } from '../lib/severityScale.ts';
+import { formatMicroUsd } from '../lib/llmCalls.ts';
+import { formatResetDate } from '../lib/monthlyCap.ts';
 import { formatClockTime, formatExactTime, getDisplayTimeZone } from '../lib/relativeTime.ts';
 import {
   MAX_PROPOSAL_TTL_HOURS,
@@ -22,7 +24,7 @@ import {
 } from '../stores/SettingsStore.ts';
 import { errorMessage } from '../api/client.ts';
 import { LANGUAGES, useTranslation, type Language } from '../i18n/index.ts';
-import { useSettingsQuery } from '../queries/settings.ts';
+import { useMonthlySpendQuery, useSettingsQuery } from '../queries/settings.ts';
 import { useStore } from '../stores/context.tsx';
 
 /**
@@ -281,6 +283,8 @@ export const SettingsPage = observer(function SettingsPage() {
 
           <AccountCard />
 
+          <SpendCard />
+
           <SignInCard />
 
           <div className="flex flex-wrap items-center justify-end gap-3">
@@ -381,6 +385,30 @@ const SignInCard = observer(function SignInCard() {
  * every figure and time is in, and not offered as a choice (the user's decision,
  * 2026-09-29 - no schema or backend change in M6).
  */
+/**
+ * A capped user's month against their LLM spend cap (D157, D158). The admin has
+ * no cap and sees no card; a failed read shows nothing rather than a guess.
+ */
+function SpendCard() {
+  const { t } = useTranslation();
+  const spend = useMonthlySpendQuery().data;
+  if (!spend) return null;
+  return (
+    <Card title={t('settings.spend.title')}>
+      <p className="text-sm font-medium">
+        <bdi>
+          {t('settings.spend.line', {
+            spent: formatMicroUsd(spend.spentMicroUsd),
+            cap: formatMicroUsd(spend.capMicroUsd),
+            date: formatResetDate(spend.resetsOn),
+          })}
+        </bdi>
+      </p>
+      <p className="mt-1 text-xs text-text-muted">{t('settings.spend.hint')}</p>
+    </Card>
+  );
+}
+
 const AccountCard = observer(function AccountCard() {
   const { auth } = useStore();
   const { t } = useTranslation();

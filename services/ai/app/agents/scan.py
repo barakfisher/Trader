@@ -55,8 +55,8 @@ from app.agents.tools import TOOLS, ToolContext, money, run_tool
 from app.agents.trade_review import TradeReview
 from app.core.fees import FEE_PER_SHARE_MINOR, MIN_FEE_MINOR
 from app.core.logging import get_logger
-from app.llm.base import Caller, LLMProvider, UserMessage
-from app.llm.tool_loop import LoopState, run_tool_loop
+from app.llm.base import Caller, LLMProvider, MonthlyCapReachedError, UserMessage
+from app.llm.tool_loop import LoopState, LoopStop, run_tool_loop
 from app.models import Mover
 
 log = get_logger("agents.scan")
@@ -316,7 +316,7 @@ async def _converse(
 
         if stop.end != "answer" or stop.reply is None:
             if not review.kept:
-                result.outcome = stop.end if stop.end != "answer" else "failed"
+                result.outcome = _outcome_for(stop)
                 result.error = stop.error
             return None
         parsed, problems = parse_answer(stop.reply.text)
@@ -379,6 +379,14 @@ async def _converse(
         refused += list(again[0].refused) + await review.review(resent)
 
     _conclude(result, review, refused, thesis, evidence)
+
+
+def _outcome_for(stop: LoopStop) -> ScanOutcome:
+    """How a loop that ended without an answer ends the scan: the user's monthly
+    cap is told apart from the other budgets, because the screen says when it resets."""
+    if isinstance(stop.cause, MonthlyCapReachedError):
+        return "cap_reached"
+    return stop.end if stop.end != "answer" else "failed"
 
 
 def _returned_reason(problems: list[str]) -> str:

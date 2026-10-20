@@ -208,8 +208,9 @@ export async function runSlotAttempt(job: SlotAttemptJob, deps: AttemptDeps): Pr
       await finish(runId, job, { ...stats, cause, retryable: true, error: scan.error }, deps.notifier, now);
       return;
     }
-    // Everything else is the slot's answer - a refused answer and a spent budget too (D69).
-    await finishRun(runId, scan.outcome === 'budget_reached' ? 'degraded' : 'ok', stats);
+    // Everything else is the slot's answer - a refused answer and a spent budget or cap too (D69).
+    const spent = scan.outcome === 'budget_reached' || scan.outcome === 'cap_reached';
+    await finishRun(runId, spent ? 'degraded' : 'ok', stats);
   } catch (error) {
     const code = (error instanceof AiServiceError
       ? (error.body as { detail?: { code?: string } } | undefined)?.detail?.code

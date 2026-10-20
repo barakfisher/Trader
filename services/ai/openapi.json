@@ -104,7 +104,8 @@
               "budget_reached",
               "step_limit",
               "failed",
-              "rule_rejected"
+              "rule_rejected",
+              "cap_reached"
             ],
             "title": "Outcome",
             "type": "string"
@@ -317,6 +318,7 @@
               "clarify",
               "failed",
               "budget_reached",
+              "cap_reached",
               "no_model"
             ],
             "title": "Outcome",

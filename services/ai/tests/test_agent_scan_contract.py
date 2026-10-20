@@ -1,6 +1,6 @@
 """The scan's outcomes and triggers are one list each, in code and in the CHECKs.
 
-Triggers are 0043's; outcomes were last rewritten by 0057 (`rule_rejected`)."""
+Triggers are 0043's; outcomes were last rewritten by 0064 (`cap_reached`)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from app.models import AgentScanRequest, AgentScanResponse
 
 VERSIONS = Path(__file__).parents[1] / "alembic" / "versions"
 MIGRATION = VERSIONS / "0043_agent_scans.py"
-OUTCOMES_MIGRATION = VERSIONS / "0057_agent_mandate.py"
+OUTCOMES_MIGRATION = VERSIONS / "0064_monthly_cap.py"
 
 
 def _migration(path: Path = MIGRATION) -> ModuleType:
@@ -27,7 +27,7 @@ def _migration(path: Path = MIGRATION) -> ModuleType:
 
 def test_the_database_accepts_exactly_the_outcomes_and_triggers_the_code_writes() -> None:
     migration = _migration()
-    assert set(_migration(OUTCOMES_MIGRATION).OUTCOMES) == set(typing.get_args(ScanOutcome))
+    assert set(_migration(OUTCOMES_MIGRATION).SCAN_OUTCOMES) == set(typing.get_args(ScanOutcome))
     assert set(migration.TRIGGERS) == set(typing.get_args(ScanTrigger))
 
 

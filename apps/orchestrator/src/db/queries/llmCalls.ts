@@ -106,3 +106,35 @@ export function countNarrationFallbacks(
     [since],
   );
 }
+
+/** A capped user's month (D157): the cap, what is spent, and the local date it resets. */
+export interface MonthlySpendRow {
+  cap_micro_usd: string;
+  spent_micro_usd: string;
+  /** `YYYY-MM-DD`: the first day of the user's next calendar month, in their zone. */
+  resets_on: string;
+}
+
+/**
+ * The user's spend against their monthly cap, or null when they have none (the
+ * admin). The same month the AI service enforces (`app/llm/monthly_cap.py`):
+ * the calendar month in `users.timezone`, summed over every recorded call.
+ */
+export function getMonthlySpend(userId: string): Promise<MonthlySpendRow | null> {
+  return queryOne<MonthlySpendRow>(
+    `WITH month AS (
+       SELECT id, llm_cap_micro_usd AS cap, timezone,
+              date_trunc('month', now() AT TIME ZONE timezone) AS local_start
+         FROM users
+        WHERE id = $1 AND llm_cap_micro_usd IS NOT NULL
+     )
+     SELECT m.cap::text AS cap_micro_usd,
+            coalesce((
+              SELECT sum(c.cost_micro_usd) FROM llm_calls c
+               WHERE c.user_id = m.id AND c.started_at >= (m.local_start AT TIME ZONE m.timezone)
+            ), 0)::text AS spent_micro_usd,
+            to_char(m.local_start + interval '1 month', 'YYYY-MM-DD') AS resets_on
+       FROM month m`,
+    [userId],
+  );
+}

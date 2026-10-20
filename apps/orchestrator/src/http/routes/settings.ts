@@ -23,9 +23,16 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
 
-import { UI_LANGUAGES, type ObservationSeverity, type UiLanguage, type UserSettings } from '@traders/shared';
+import {
+  UI_LANGUAGES,
+  type MonthlySpendResponse,
+  type ObservationSeverity,
+  type UiLanguage,
+  type UserSettings,
+} from '@traders/shared';
 
 import {
+  getMonthlySpend,
   getOrCreateUserSettings,
   replaceUserSettings,
   type UserSettingsRow,
@@ -103,6 +110,19 @@ export function registerSettingsRoutes(app: Hono<AppEnv>): void {
     // holds are the schema's, stated once for both services.
     const row = await getOrCreateUserSettings(currentUserId(context));
     return context.json({ settings: toWire(row) });
+  });
+
+  // The monthly cap's card (D157): read-only, and null for a user without a cap.
+  app.get('/settings/llm-spend', async (context) => {
+    const row = await getMonthlySpend(currentUserId(context));
+    const body: MonthlySpendResponse = {
+      spend: row && {
+        capMicroUsd: Number(row.cap_micro_usd),
+        spentMicroUsd: Number(row.spent_micro_usd),
+        resetsOn: row.resets_on,
+      },
+    };
+    return context.json(body);
   });
 
   app.put('/settings', async (context) => {

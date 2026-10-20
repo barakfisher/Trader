@@ -9,6 +9,7 @@ import { AssistantText } from '../components/AssistantText.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Button, Card, ErrorNote, Spinner } from '../components/ui.tsx';
 import { useTranslation } from '../i18n/index.ts';
+import { capResetLabel } from '../lib/monthlyCap.ts';
 import { formatAge } from '../lib/relativeTime.ts';
 import { SERVER_ENGLISH } from '../lib/textDirection.ts';
 import { useAssistantConversationsQuery } from '../queries/assistant.ts';
@@ -147,7 +148,9 @@ const TurnView = observer(function TurnView({
       {turn.error !== null && (
         <ErrorNote message={turn.error} onRetry={ask.pending || turn.askedAt === null ? undefined : () => ask.retry(turn.id)} />
       )}
-      {turn.reply !== null && <ReplyView reply={turn.reply} showSuggestions={last} onPick={onPick} />}
+      {turn.reply !== null && (
+        <ReplyView reply={turn.reply} repliedAt={turn.repliedAt} showSuggestions={last} onPick={onPick} />
+      )}
     </div>
   );
 });
@@ -165,14 +168,24 @@ function Waiting({ since }: { since: number }) {
 
 function ReplyView({
   reply,
+  repliedAt,
   showSuggestions,
   onPick,
 }: {
   reply: AssistantReplyView;
+  repliedAt: string | null;
   showSuggestions: boolean;
   onPick: (text: string) => void;
 }) {
   const { t } = useTranslation();
+  if (reply.outcome === 'cap_reached') {
+    // The month it was refused in, so a reply read back later names its own reset.
+    return (
+      <p role="status" className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">
+        {t('ask.outcome.cap_reached', { date: capResetLabel(repliedAt) })}
+      </p>
+    );
+  }
   if (reply.outcome === 'failed' || reply.outcome === 'budget_reached' || reply.outcome === 'no_model') {
     // Said in the page's language: the server's wording is a fallback for
     // other callers, and these three mean exactly one thing each.

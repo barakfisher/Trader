@@ -9,6 +9,7 @@ every reason not to check is `skipped`, never an error.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -28,7 +29,13 @@ from app.agents.scan_budget import AgentBudget
 from app.agents.scan_log import ScanAgent
 from app.config import Settings, get_settings
 from app.db import get_engine
-from app.llm.base import LLMBudgetExceededError, LLMCompletion, LLMRequestError, TokenUsage
+from app.llm.base import (
+    LLMBudgetExceededError,
+    LLMCompletion,
+    LLMRequestError,
+    MonthlyCapReachedError,
+    TokenUsage,
+)
 from app.main import app
 from app.models import MandateConflict
 
@@ -194,6 +201,12 @@ async def test_a_check_is_an_agent_call_on_the_agents_budget() -> None:
         (_agent(persona="  "), "{}", "no_instructions"),
         (_agent(mandate=Mandate()), "{}", "no_settings"),
         (_agent(), LLMBudgetExceededError(500_000, 500_000, "2026-10-19"), "budget_spent"),
+        # The user's monthly cap degrades it the same quiet way (D158).
+        (
+            _agent(),
+            MonthlyCapReachedError(1, 1, 1, datetime(2026, 11, 1, tzinfo=UTC)),
+            "budget_spent",
+        ),
         (_agent(), LLMRequestError("stub", "down"), "failed"),
         (_agent(), "not json", "failed"),
     ],
