@@ -6,6 +6,7 @@ import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordProblem } from '@trad
 import { ApiRequestError } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { useStore } from '../stores/context.tsx';
+import { PasswordInput } from './PasswordInput.tsx';
 import { Button, ErrorNote } from './ui.tsx';
 
 /**
@@ -69,16 +70,10 @@ export const PasswordChange = observer(function PasswordChange({
     }
   }
 
-  const field = (label: string, value: string, set: (value: string) => void, autoComplete: string) => (
+  const field = (label: string, value: string, set: (value: string) => void, autoComplete: 'current-password' | 'new-password') => (
     <label className="block space-y-1">
       <span className="text-xs uppercase tracking-wide text-text-muted">{label}</span>
-      <input
-        type="password"
-        value={value}
-        onChange={(event) => set(event.target.value)}
-        autoComplete={autoComplete}
-        className="input"
-      />
+      <PasswordInput value={value} onChange={set} autoComplete={autoComplete} />
     </label>
   );
 

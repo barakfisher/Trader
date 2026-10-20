@@ -33,7 +33,7 @@ import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
 import { useAgentAccountQuery, useAgentQuery, useCheckInstructions, useUpdateAgent } from '../queries/agents.ts';
 import { KindBadge, WaitingForBrief } from './AgentsPage.tsx';
 
-const TABS = ['holdings', 'activity', 'scans', 'settings'] as const;
+const TABS = ['holdings', 'performance', 'activity', 'scans', 'settings'] as const;
 type Tab = (typeof TABS)[number];
 
 /**
@@ -134,7 +134,6 @@ function SimulatedAgent({ agent }: { agent: AgentView }) {
         )}
       </div>
       <AccountSummary agent={agent} />
-      <AgentPerformance agentId={agent.id} />
       <div role="tablist" className="flex gap-2 border-b border-border-subtle">
         {TABS.map((name) => (
           <button
@@ -154,6 +153,7 @@ function SimulatedAgent({ agent }: { agent: AgentView }) {
       {tab === 'holdings' && (
         <AgentHoldings agent={agent} onSell={(symbol) => setTrading({ symbol, side: 'sell' })} />
       )}
+      {tab === 'performance' && <AgentPerformance agentId={agent.id} />}
       {tab === 'activity' && <AgentActivity agent={agent} />}
       {tab === 'scans' && (
         <>
