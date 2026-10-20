@@ -106,6 +106,8 @@ describe("the user's own OpenRouter key (D206)", () => {
     expect(screen.queryByText(/This month: /)).toBeNull();
     expect(screen.getByText(/On your own key this month: \$1\.50/)).toBeTruthy();
     expect(screen.getByText(/Key ending c0de/)).toBeTruthy();
+    // D211: a limit on own-key spend is OpenRouter's, set on the key.
+    expect(screen.getByText(/set a credit limit on the key in your OpenRouter account/)).toBeTruthy();
   });
 
   it('saves a key, sends it once, and empties the field', async () => {
@@ -143,7 +145,7 @@ describe("the user's own OpenRouter key (D206)", () => {
     );
     renderSettings();
 
-    expect(await screen.findByText(/Your OpenRouter account ran out of credit/)).toBeTruthy();
+    expect(await screen.findByText(/has no credit left: your account ran out, or the key reached the credit limit/)).toBeTruthy();
     expect(screen.getByText('This month: $0.2805 of $5.00, resets on 1 November 2026.')).toBeTruthy();
   });
 

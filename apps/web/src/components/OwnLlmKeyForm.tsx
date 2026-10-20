@@ -64,6 +64,7 @@ export function OwnLlmKeyForm({ available, saved }: { available: boolean; saved:
   return (
     <div className="space-y-3">
       <p className="max-w-2xl text-xs text-text-muted">{t('settings.ownKey.intro')}</p>
+      <p className="max-w-2xl text-xs text-text-muted">{t('settings.ownKey.limitHint')}</p>
       {saved?.status === 'failed' && saved.failure && (
         <p role="status" className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">
           {t(`settings.ownKey.failed.${saved.failure}`, {

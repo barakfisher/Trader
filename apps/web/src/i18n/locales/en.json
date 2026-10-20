@@ -948,6 +948,7 @@
     "ownKey": {
       "title": "Your OpenRouter key",
       "intro": "Save an OpenRouter API key of your own and your agent scans, questions and explanations are paid from your OpenRouter account instead of this installation's, with no monthly limit. The key is checked with OpenRouter, stored encrypted, and never shown again: only its last four characters.",
+      "limitHint": "To cap what your key spends, set a credit limit on the key in your OpenRouter account. When it is reached, the call that hits it fails and your calls move to this installation's account under your monthly limit, until you save the key again.",
       "label": "API key",
       "saved": "Key ending {{lastFour}}, saved {{date}}.",
       "save": "Save key",
@@ -957,7 +958,7 @@
       "removed": "Key removed. Your calls use this installation's account under your monthly limit.",
       "failed": {
         "rejected": "OpenRouter stopped accepting your key ending {{lastFour}} on {{date}}. Until you save a working key, your calls use this installation's account under your monthly limit.",
-        "no_credit": "Your OpenRouter account ran out of credit on {{date}} (key ending {{lastFour}}). Until you add credit and save the key again, your calls use this installation's account under your monthly limit."
+        "no_credit": "On {{date}} OpenRouter said your key ending {{lastFour}} has no credit left: your account ran out, or the key reached the credit limit set on it. Until you add credit or raise the limit and save the key again, your calls use this installation's account under your monthly limit."
       },
       "unavailable": "This installation isn't set up to use your own key.",
       "errors": {
