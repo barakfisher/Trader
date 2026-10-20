@@ -7,9 +7,9 @@ the reasoning behind it is not, and that is what this file is for. Maintained pe
 Updated: 2026-10-20 ~09:30 UTC - **Handoff after seven merges since #266 (late: two sessions
 were merging in parallel, and the count was only noticed at the seventh).** Merged: #265 (D189),
 #267 (D190-D193), #268 (D194), #269 (`0060`, D195-D196), #270 (`0061`, D197-D198), #272, and
-**#271: the first PR of the user's 2026-10-20 improvements list.** Decisions reached **201** (next:
-**202**; D199-D201 are PR 2, the active-only agent limit). Migrations: **`0062_active_agent_limit`
-is head once PR 2 merges** (next free: **`0063`**; `git fetch` and check
+**#271: the first PR of the user's 2026-10-20 improvements list.** Decisions reached **202** (next:
+**203**; D199-D201 are PR 2, the active-only agent limit, #275; D202 its 50-agent ceiling). Migrations:
+**`0063_agent_total_ceiling` is head once its PR merges** (next free: **`0064`**; `git fetch` and check
 `main` has one head before writing one). **Deployed:** compose runs `main` as of #272 (`0061`,
 rebuilt 2026-10-20 08:56 UTC, before #271) - **which means #264's signup is live on compose without
 the cap, against D186**; kind runs #263 at `0059`. Nobody in this session redeployed; ask the user
@@ -3156,6 +3156,17 @@ failure they prevent.
     'admin'` after taking the row lock; the orchestrator does the same from the session's user,
     and `agentLimit.max` is `null` for the admin, which the page shows as "N active". **Why:**
     the limit protects the installation's bill from its users, and the admin pays that bill.
+202. **A user keeps at most 50 agents that are not archived; the admin has no ceiling** (the user,
+    2026-10-20; migration `0063`). `MAX_AGENTS_PER_USER_CEILING`, a fixed backstop rather than a
+    setting, checked when an agent joins the non-archived set - a create in any state, a restore
+    - and refused with `agent_total_reached` (409); a pause, a resume or an archive never is. A
+    trigger of its own (`agents_within_total`) beside D199's, under the same lock on the user's
+    row; `agentLimit.total` is `null` for the admin. At the ceiling the Agents page disables New
+    agent and the agent page disables Restore, each saying why. **Why:** D199 stopped counting
+    paused agents, and with signup live (D156) a user could create them without end - rows, a
+    card each on the Agents page, a line each in the consolidated view. *Rejected:* no bound
+    until M10 (signup is live now); a second Admin setting (a column, a field and copy for a
+    backstop); folding it into `agents_within_limit` (two rules, two sets, two refusals).
 
 ---
 

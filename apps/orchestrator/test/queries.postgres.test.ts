@@ -15,6 +15,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { MAX_AGENTS_PER_USER_CEILING } from '@traders/shared';
 
 const DATABASE_URL = process.env.TEST_DATABASE_URL ?? '';
 
@@ -1528,6 +1529,38 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         second.release();
         // Each agent's cash account is a ledger row the app role may not delete, so
         // the throwaway user stays; its agents are archived and hold nothing.
+        await getPool().query(`UPDATE agents SET state = 'archived' WHERE user_id = $1 AND NOT is_primary`, [user]);
+      }
+    });
+
+    it(`lets one of two racing creates take the ${MAX_AGENTS_PER_USER_CEILING}th place, never both (0063, D202)`, async () => {
+      const user = randomUUID();
+      const first = await getPool().connect();
+      const second = await getPool().connect();
+      try {
+        await getPool().query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 10000000)", [user]);
+        // Paused, so the active limit (0062) never speaks first.
+        for (let index = 0; index < MAX_AGENTS_PER_USER_CEILING - 1; index += 1) {
+          await insertAgent(getPool(), user, `kept-${index}`, 'paused');
+        }
+        await first.query('BEGIN');
+        await second.query('BEGIN');
+        await insertAgent(first, user, 'kept-last', 'paused');
+        // first holds the user's row: second waits for it, then counts the ceiling.
+        const waiting = insertAgent(second, user, 'kept-racer', 'paused').then(
+          () => 'created',
+          (error: Error) => error.message,
+        );
+        await first.query('COMMIT');
+        expect(await waiting).toMatch(
+          new RegExp(`^agent_total_reached: ${MAX_AGENTS_PER_USER_CEILING} of ${MAX_AGENTS_PER_USER_CEILING} agents`),
+        );
+        expect(await queries.countLiveAgents(user)).toBe(MAX_AGENTS_PER_USER_CEILING);
+      } finally {
+        await second.query('ROLLBACK').catch(() => undefined);
+        first.release();
+        second.release();
+        // As above: the throwaway user stays, its agents archived.
         await getPool().query(`UPDATE agents SET state = 'archived' WHERE user_id = $1 AND NOT is_primary`, [user]);
       }
     });

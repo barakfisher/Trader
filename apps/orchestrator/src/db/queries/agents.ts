@@ -180,6 +180,19 @@ export async function countActiveAgents(userId: string): Promise<number> {
   return row?.count ?? 0;
 }
 
+/**
+ * Simulated agents that count against the fixed ceiling (D202): any not
+ * archived, never the primary. Migration 0063's trigger counts the same way.
+ */
+export async function countLiveAgents(userId: string): Promise<number> {
+  const row = await queryOne<{ count: number }>(
+    `SELECT count(*)::int AS count FROM agents a
+      WHERE a.user_id = $1 AND NOT a.is_primary AND a.state <> 'archived'`,
+    [userId],
+  );
+  return row?.count ?? 0;
+}
+
 export interface AgentToCreate {
   userId: string;
   slug: string;

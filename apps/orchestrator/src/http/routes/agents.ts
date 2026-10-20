@@ -17,6 +17,7 @@ import { z } from 'zod';
 import {
   HORIZON_MAX_DECISIONS,
   HORIZON_SCHEDULES,
+  MAX_AGENTS_PER_USER_CEILING,
   MAX_DECISIONS_PER_SCAN,
   MAX_SCAN_EVERY_HOURS,
   MIN_DECISIONS_PER_SCAN,
@@ -38,6 +39,7 @@ import { SCHEDULE_EXCHANGE } from '../../services/scheduledScans.js';
 import {
   agentHasTraded,
   countActiveAgents,
+  countLiveAgents,
   createAgent,
   getAgent,
   getInstallationSettings,
@@ -251,10 +253,10 @@ export function agentIdFrom(raw: string): string {
 
 const nameTaken = () => conflict('agent_name_taken', 'you already have an agent with that name');
 
-/** D72: the database's own refusal (migration 0062), met when a racing activation got there first. */
-function isAgentLimit(error: unknown): boolean {
+/** The database's own refusals (migrations 0062, 0063), met when a racing write got there first. */
+function isRefusal(error: unknown, code: 'agent_limit_reached' | 'agent_total_reached'): boolean {
   const pg = error as { code?: string; message?: string };
-  return pg.code === CHECK_VIOLATION && (pg.message ?? '').startsWith('agent_limit_reached');
+  return pg.code === CHECK_VIOLATION && (pg.message ?? '').startsWith(code);
 }
 
 function agentLimitReached(max: number) {
@@ -262,6 +264,14 @@ function agentLimitReached(max: number) {
     'agent_limit_reached',
     `you have ${max} active agents, the most this installation allows: pause one to make room`,
     { max },
+  );
+}
+
+function agentTotalReached() {
+  return conflict(
+    'agent_total_reached',
+    `you have ${MAX_AGENTS_PER_USER_CEILING} agents, the most anyone may keep: archive one to make room`,
+    { max: MAX_AGENTS_PER_USER_CEILING },
   );
 }
 
@@ -280,8 +290,20 @@ async function assertRoomToActivate(userId: string, user: UserRow | undefined): 
   if (max !== null && used >= max) throw agentLimitReached(max);
 }
 
+/**
+ * Refuse before writing when one more agent that is not archived would pass the
+ * fixed ceiling (D202): a create in any state, a restore. The admin has none (D201).
+ */
+async function assertRoomToKeep(userId: string, user: UserRow | undefined): Promise<void> {
+  if (user?.role === 'admin') return;
+  if ((await countLiveAgents(userId)) >= MAX_AGENTS_PER_USER_CEILING) throw agentTotalReached();
+}
+
 async function limitAfter(error: unknown): Promise<never> {
-  if (isAgentLimit(error)) throw agentLimitReached((await getInstallationSettings()).max_agents_per_user);
+  if (isRefusal(error, 'agent_total_reached')) throw agentTotalReached();
+  if (isRefusal(error, 'agent_limit_reached')) {
+    throw agentLimitReached((await getInstallationSettings()).max_agents_per_user);
+  }
   throw error;
 }
 
@@ -289,8 +311,11 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
   app.get('/agents', async (context) => {
     const rows = await listAgents(currentUserId(context));
     const max = await activeLimitFor(context.get('user'));
-    const used = rows.filter((row) => !row.is_primary && row.state === 'active').length;
-    const body: AgentsResponse = { agents: rows.map(toAgentView), agentLimit: { used, max } };
+    const live = rows.filter((row) => !row.is_primary && row.state !== 'archived');
+    const used = live.filter((row) => row.state === 'active').length;
+    // D202: the ceiling is the admin's to ignore, like the limit (D201).
+    const total = max === null ? null : live.length;
+    const body: AgentsResponse = { agents: rows.map(toAgentView), agentLimit: { used, max, total } };
     return context.json(body);
   });
 
@@ -317,6 +342,7 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
     const mandate = { ...EMPTY_MANDATE, ...toMandateColumns(input.mandate ?? {}) };
     await assertKnownClassifications(mandate);
     const state = input.state ?? 'active';
+    await assertRoomToKeep(currentUserId(context), context.get('user'));
     if (state === 'active') await assertRoomToActivate(currentUserId(context), context.get('user'));
     try {
       const row = await createAgent({
@@ -363,6 +389,10 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
     }
     const patch = parsed.data;
     // D199: a resume or a restore into active takes a place; paused or archived never does.
+    // D202: a restore takes a place under the ceiling, whichever state it restores to.
+    if (existing.state === 'archived' && patch.state !== undefined && patch.state !== 'archived') {
+      await assertRoomToKeep(userId, context.get('user'));
+    }
     if (patch.state === 'active' && existing.state !== 'active') {
       await assertRoomToActivate(userId, context.get('user'));
     }
