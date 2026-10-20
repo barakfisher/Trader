@@ -58,13 +58,24 @@ function writtenTrades(answer: Record<string, unknown>): Record<string, unknown>
   return answer.decision === 'buy' || answer.decision === 'sell' ? [answer] : [];
 }
 
+/**
+ * The answer's own reason: a pass's why, or an overview beside its trades. In a
+ * one-trade answer from before D197 the thesis is that trade's, already shown
+ * under it (`writtenTrades`), so it is not the answer's too.
+ */
+function answerThesis(answer: Record<string, unknown>): string | null {
+  return writtenTrades(answer).includes(answer) ? null : textOf(answer.thesis);
+}
+
 export function toScanSummary(row: AgentScanRow, now: Date): AgentScanSummary {
   const answer = row.answer ?? {};
   // Each trade's proposal is the scan's proposal for its symbol (one per symbol, 0061).
   const bySymbol = new Map(row.proposals.map((proposal) => [proposal.symbol, proposal]));
   const trades = writtenTrades(answer).map((written): AgentScanTrade => {
     const symbol = textOf(written.symbol);
-    const refused = written.refused === true;
+    const current = Array.isArray(answer.trades);
+    // Before D197 an answer's one trade was proposed exactly when the scan was a `trade`.
+    const refused = current ? written.refused === true : row.outcome !== 'trade';
     const proposal = refused || symbol === null ? undefined : bySymbol.get(symbol.toUpperCase());
     return {
       decision: sideOf(written.decision),
@@ -73,8 +84,8 @@ export function toScanSummary(row: AgentScanRow, now: Date): AgentScanSummary {
       thesis: textOf(written.thesis),
       fundedBy: textsOf(written.funded_by),
       refused,
-      // Before D197 a refused answer's reasons were the answer's own.
-      problems: Array.isArray(answer.trades) ? textsOf(written.problems) : [],
+      // Before D197 a refused answer's reasons were the answer's own, and so its one trade's.
+      problems: textsOf(written.problems),
       // The state now, not as stored: a proposal past its deadline reads expired
       // before the sweep catches up, as everywhere else.
       proposal: proposal
@@ -216,7 +227,7 @@ export function registerAgentScanRoutes(app: Hono<AppEnv>): void {
       transcript: (Array.isArray(row.transcript) ? row.transcript : [])
         .map(toScanStep)
         .filter((step): step is AgentScanStep => step !== null),
-      thesis: textOf(row.answer?.thesis),
+      thesis: answerThesis(row.answer ?? {}),
     };
     return context.json(body);
   });
