@@ -99,6 +99,8 @@ export interface AgentView {
   createdAt: string;
   /** When scheduled scans run (D46); null for the primary, which never scans (D1). */
   scanSchedule: ScanSchedule | null;
+  /** Trades one scan may decide (D197); null for the primary. */
+  maxDecisions: number | null;
   /** The scan running now - one at a time per agent - so *Run a scan now* can say so (D195); null when none. */
   runningScan: { trigger: 'manual' | 'schedule'; startedAt: string } | null;
   /** The daily model allowance in integer micro-USD (D45); null for the primary. */
@@ -212,6 +214,13 @@ export interface ScanSchedule {
   postClose: boolean;
 }
 
+/** Trades one scan may decide (D197, migration 0061's CHECK). Each is a proposal the user approves. */
+export const MIN_DECISIONS_PER_SCAN = 1;
+export const MAX_DECISIONS_PER_SCAN = 10;
+
+/** What a new agent may decide per scan from its horizon (D197); with neither, the minimum. */
+export const HORIZON_MAX_DECISIONS: Record<Horizon, number> = { short: 1, medium: 2, long: 3 };
+
 /** Hours between market-hours scans: 1 runs six (10:00-15:00 New York), 6 runs one. */
 export const MIN_SCAN_EVERY_HOURS = 1;
 export const MAX_SCAN_EVERY_HOURS = 6;
@@ -262,13 +271,26 @@ export interface AgentScanSummary {
   steps: number;
   costMicroUsd: number;
   model: string | null;
-  decision: 'buy' | 'sell' | 'none' | null;
-  symbol: string | null;
-  quantity: string | null;
+  /** What it decided (D197): kept trades first, then any it was refused, with why. */
+  trades: AgentScanTrade[];
   /** Why the answer was refused, as the validator named it. */
   problems: string[];
   error: string | null;
-  /** The proposal the scan made, in its state now; a fill when it was approved. */
+}
+
+/** One trade of a scan's answer, with the proposal it became and the fill its approval wrote. */
+export interface AgentScanTrade {
+  decision: 'buy' | 'sell' | null;
+  symbol: string | null;
+  quantity: string | null;
+  /** Its own reason, as the agent wrote it (D51: in the user's language). */
+  thesis: string | null;
+  /** Sells from the same answer whose proceeds this buy needs. */
+  fundedBy: string[];
+  /** Not proposed: `problems` says why. */
+  refused: boolean;
+  problems: string[];
+  /** In its state now. */
   proposal: { id: string; state: ProposalState } | null;
   fillId: string | null;
 }
@@ -296,9 +318,14 @@ export interface RunScanResult {
   steps: number;
   cost_micro_usd: number;
   model: string | null;
-  answer: { decision?: string | null; symbol?: string | null; quantity?: string | null; thesis?: string | null } | null;
+  /** D197: the trades it decided, kept first, then any refused with why; or none and its reason. */
+  answer: {
+    trades?: { decision?: string | null; symbol?: string | null; quantity?: string | null; refused?: boolean }[];
+    thesis?: string | null;
+  } | null;
   error: string | null;
-  proposal_id: string | null;
+  /** One per kept trade, in the same order. */
+  proposal_ids: string[];
 }
 
 /** A scan in full, when its row is expanded. */
@@ -570,6 +597,8 @@ export interface AgentInput {
   mandate?: Partial<AgentMandate>;
   /** When left out, the horizon's schedule (D166), else pre-open. */
   scanSchedule?: ScanSchedule;
+  /** When left out, the horizon's (D197), else 1. */
+  maxDecisions?: number;
 }
 
 export interface AgentPatchInput {
@@ -580,6 +609,7 @@ export interface AgentPatchInput {
   /** Dollars and cents a day (D45). */
   llmBudget?: string;
   scanSchedule?: ScanSchedule;
+  maxDecisions?: number;
   /** Fields given replace the stored ones; fields left out stay as they are. */
   mandate?: Partial<AgentMandate>;
 }
@@ -1479,6 +1509,8 @@ export interface TradeProposalPayload {
   priceMinor: number;
   priceAsOf: string | null;
   currency: 'USD';
+  /** Sells from the same scan whose proceeds this buy needs: approve those first (D197). */
+  fundedBy?: string[];
 }
 
 /** *Approve* on a trade proposal: the trade at the live price, beside the agent's (D47). */

@@ -200,8 +200,8 @@ export async function runSlotAttempt(job: SlotAttemptJob, deps: AttemptDeps): Pr
 
   try {
     const scan = await deps.ai.scanAgent(agent.id, { user_id: job.userId, trigger: 'schedule' });
-    const proposalId = await proposeFromScan(job.userId, agent, scan, { ai: deps.ai, notifier: deps.notifier });
-    const stats = { outcome: scan.outcome, scanId: scan.scan_id, proposalId, costMicroUsd: scan.cost_micro_usd };
+    const proposalIds = await proposeFromScan(job.userId, agent, scan, { ai: deps.ai, notifier: deps.notifier });
+    const stats = { outcome: scan.outcome, scanId: scan.scan_id, proposalIds, costMicroUsd: scan.cost_micro_usd };
     if (scan.outcome === 'failed') {
       // The scan ran and the model call failed: the provider's trouble, worth another try.
       const cause: FailureCause = /429|rate.?limit/i.test(scan.error ?? '') ? 'rate_limited' : 'scan_failed';

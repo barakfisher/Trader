@@ -47,6 +47,8 @@ export interface AgentRow {
   scan_every_hours: number | null;
   scan_pre_open: boolean;
   scan_post_close: boolean;
+  /** Trades one scan may decide (0061, D197). */
+  max_decisions: number;
   /** The scan running now, if any (`agent_scans_one_running` allows one); null when none. */
   running_scan: { trigger: 'manual' | 'schedule'; started_at: string } | null;
   /** Spent on scans and instruction checks since midnight UTC, as text - the sum `scan_budget.py` checks. */
@@ -127,7 +129,7 @@ const AGENT_COLUMNS = `a.id, a.slug, a.name, a.persona, a.is_primary, a.budget_m
        (SELECT count(*)::int FROM holdings h WHERE h.agent_id = a.id) AS holdings_count,
        (SELECT c.balance_minor::text FROM agent_cash c WHERE c.agent_id = a.id) AS cash_minor,
        a.llm_budget_micro_usd::text AS llm_budget_micro_usd,
-       a.scan_every_hours, a.scan_pre_open, a.scan_post_close,
+       a.scan_every_hours, a.scan_pre_open, a.scan_post_close, a.max_decisions,
        (SELECT json_build_object('trigger', s.trigger, 'started_at', s.started_at)
           FROM agent_scans s WHERE s.agent_id = a.id AND s.finished_at IS NULL
        ) AS running_scan,
@@ -186,17 +188,29 @@ export interface AgentToCreate {
   budgetMinor: number;
   currency: string;
   scanSchedule: ScanSchedule;
+  maxDecisions: number;
   mandate: MandateColumns;
 }
 
 /** A simulated agent. A primary is made only by the trigger on `users` (migration 0036). */
 export async function createAgent(agent: AgentToCreate): Promise<AgentRow> {
   const { everyHours, preOpen, postClose } = agent.scanSchedule;
-  const fixed = [agent.userId, agent.slug, agent.name, agent.persona, agent.budgetMinor, agent.currency, everyHours, preOpen, postClose];
+  const fixed = [
+    agent.userId,
+    agent.slug,
+    agent.name,
+    agent.persona,
+    agent.budgetMinor,
+    agent.currency,
+    everyHours,
+    preOpen,
+    postClose,
+    agent.maxDecisions,
+  ];
   const params = [...fixed, ...MANDATE_COLUMNS.map((column) => agent.mandate[column])];
   const row = await queryOne<{ id: string }>(
     `INSERT INTO agents (user_id, slug, name, persona, budget_minor, currency,
-                         scan_every_hours, scan_pre_open, scan_post_close,
+                         scan_every_hours, scan_pre_open, scan_post_close, max_decisions,
                          ${MANDATE_COLUMNS.join(', ')})
      VALUES (${params.map((_, index) => `$${index + 1}`).join(', ')})
      RETURNING id`,
@@ -212,6 +226,7 @@ export interface AgentPatch {
   state?: AgentState;
   llmBudgetMicroUsd?: number;
   scanSchedule?: ScanSchedule;
+  maxDecisions?: number;
   mandate?: Partial<MandateColumns>;
 }
 
@@ -242,6 +257,7 @@ export async function updateAgent(
     push('scan_pre_open', patch.scanSchedule.preOpen);
     push('scan_post_close', patch.scanSchedule.postClose);
   }
+  if (patch.maxDecisions !== undefined) push('max_decisions', patch.maxDecisions);
   for (const column of MANDATE_COLUMNS) {
     const value = patch.mandate?.[column];
     if (value !== undefined) push(column, value);

@@ -39,7 +39,7 @@ from app.llm.base import (
 )
 from tests.integration.conftest import run_script
 from tests.integration.test_agent_tools_sql import NOW as QUOTED_AT
-from tests.integration.test_agent_tools_sql import ScriptedMarket
+from tests.integration.test_agent_tools_sql import ScriptedMarket, _instrument
 
 FIXTURE_EMBEDDER = {"EMBEDDINGS_PROVIDER": "fixture"}
 NOW = datetime.now(UTC)
@@ -60,6 +60,17 @@ def _turn(text_: str = "", calls: tuple[ToolCall, ...] = ()) -> LLMCompletion:
 
 def _answer(**fields: Any) -> LLMCompletion:
     return _turn(json.dumps(fields))
+
+
+def _trades(*trades: dict[str, Any], thesis: str | None = None) -> LLMCompletion:
+    body: dict[str, Any] = {"trades": list(trades)}
+    if thesis is not None:
+        body["thesis"] = thesis
+    return _turn(json.dumps(body))
+
+
+def _trade(decision: str, symbol: str, quantity: str, thesis: str = "t") -> dict[str, str]:
+    return {"decision": decision, "symbol": symbol, "quantity": quantity, "thesis": thesis}
 
 
 class ScriptedLLM:
@@ -168,7 +179,11 @@ async def test_a_scan_that_decides_nothing_is_stored_whole(
     )
     assert row.finished_at is not None and row.trigger == "manual"
     assert row.briefing["cash"] == "1000.00"
-    assert row.answer["decision"] == "none"
+    assert row.answer == {
+        "trades": [],
+        "thesis": "Nothing in the briefing fits a value investor.",
+        "problems": [],
+    }
     assert [entry["role"] for entry in row.transcript] == ["assistant"]
     assert llm.verdicts == ["accepted"]
 
@@ -191,14 +206,22 @@ async def test_tools_run_and_a_sourced_trade_is_accepted(loaded: Engine, agent: 
     assert result.outcome == "trade", result.problems
     row = _stored(loaded, result.scan_id)
     assert row.steps == 1
+    # The one-trade shape from before D197 is still read, and stored as a list of one.
     assert row.answer == {
-        "decision": "buy",
-        "symbol": "CCJ",
-        "quantity": "3",
-        "thesis": "CCJ trades at 54.32, inside what a patient buyer pays for uranium.",
-        # The agent's price, read at the scan's end, which the proposal carries (D47).
-        "price_minor": 5_432,
-        "price_as_of": QUOTED_AT.isoformat(),
+        "trades": [
+            {
+                "decision": "buy",
+                "symbol": "CCJ",
+                "quantity": "3",
+                "thesis": "CCJ trades at 54.32, inside what a patient buyer pays for uranium.",
+                # The agent's price, read at the scan's end, which the proposal carries (D47).
+                "price_minor": 5_432,
+                "price_as_of": QUOTED_AT.isoformat(),
+                "funded_by": [],
+            }
+        ],
+        "thesis": None,
+        "problems": [],
     }
     assert [entry["role"] for entry in row.transcript] == ["assistant", "tool", "assistant"]
     assert row.transcript[1]["result"]["quotes"]["CCJ"]["price"] == "54.32"
@@ -218,7 +241,8 @@ async def test_an_invented_figure_twice_makes_the_answer_invalid(
     row = _stored(loaded, result.scan_id)
     assert [entry["role"] for entry in row.transcript] == ["assistant", "returned", "assistant"]
     assert row.transcript[1]["problems"] == ["figures not in the evidence: 80.00"]
-    assert "90.00" in row.answer["thesis"]
+    assert "90.00" in row.answer["trades"][0]["thesis"]
+    assert row.answer["trades"][0]["refused"] is True
 
 
 async def test_an_invented_figure_goes_back_once_and_a_sourced_answer_is_a_trade(
@@ -270,7 +294,7 @@ async def test_an_answer_with_another_fault_is_not_sent_back(
         ({"decision": "buy", "symbol": "TSLA", "quantity": "1", "thesis": "t"}, "not tradable"),
         ({"decision": "buy", "symbol": "CCJ", "quantity": "1.5", "thesis": "t"}, "whole number"),
         ({"decision": "sell", "symbol": "CCJ", "quantity": "1", "thesis": "t"}, "holds 0"),
-        ({"decision": "hold", "thesis": "t"}, "decision must be"),
+        ({"decision": "hold", "thesis": "t"}, "decision is one of"),
     ],
 )
 async def test_the_server_checks_the_answer_whatever_the_model_said(
@@ -301,8 +325,11 @@ async def test_a_buy_cash_cannot_cover_with_its_fee_is_invalid_with_the_amounts(
 
     assert short.outcome == "invalid_answer"
     cost = money(19 * 5_432 + fee_minor(Decimal("19")), "USD")
-    assert short.problems == (f"buying 19 CCJ at 54.32 costs {cost} with the fee; cash is 1000.00",)
-    assert _stored(loaded, short.scan_id).answer["price_minor"] == 5_432
+    assert short.problems == (
+        f"buying 19 CCJ at 54.32 costs {cost} with the fee; cash after the other proposals"
+        " is 1000.00",
+    )
+    assert _stored(loaded, short.scan_id).answer["trades"][0]["price_minor"] == 5_432
     # The model's answer was well formed; the refusal is the server's, not a bad answer.
     assert llm.verdicts == ["accepted"]
 
@@ -458,3 +485,215 @@ def test_the_agent_carries_its_users_language(loaded: Engine, agent: ScanAgent) 
         )
     found = find_agent(loaded, agent.user_id, agent.agent_id)
     assert found is not None and found.language == "he"
+
+
+# -- several trades a scan (D197) ----------------------------------------------------
+
+
+def _limit(engine: Engine, agent: ScanAgent, max_decisions: int) -> ScanAgent:
+    with engine.begin() as connection:
+        connection.execute(
+            text("UPDATE agents SET max_decisions = :n WHERE id = CAST(:a AS uuid)"),
+            {"n": max_decisions, "a": agent.agent_id},
+        )
+    found = find_agent(engine, agent.user_id, agent.agent_id)
+    assert found is not None and found.max_decisions == max_decisions
+    return found
+
+
+def _hold(engine: Engine, agent: ScanAgent, symbol: str, quantity: str, cost_minor: int) -> None:
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO holdings (user_id, agent_id, instrument_id, quantity,
+                                      cost_basis_minor, opened_at)
+                VALUES (CAST(:u AS uuid), CAST(:a AS uuid), CAST(:i AS uuid),
+                        CAST(:q AS numeric), :c, '2026-10-01')
+                """
+            ),
+            {
+                "u": agent.user_id,
+                "a": agent.agent_id,
+                "i": _instrument(engine, symbol),
+                "q": quantity,
+                "c": cost_minor,
+            },
+        )
+
+
+def _waiting(
+    engine: Engine, agent: ScanAgent, side: str, symbol: str, quantity: str, price: int
+) -> None:
+    """A trade proposal from an earlier scan, still waiting for the user."""
+    with engine.begin() as connection:
+        scan = connection.execute(
+            text(
+                "INSERT INTO agent_scans (user_id, agent_id, trigger, briefing, finished_at, "
+                "outcome) VALUES (CAST(:u AS uuid), CAST(:a AS uuid), 'schedule', '{}', now(), "
+                "'trade') RETURNING id"
+            ),
+            {"u": agent.user_id, "a": agent.agent_id},
+        ).scalar_one()
+        observation = connection.execute(
+            text(
+                "INSERT INTO observations (user_id, agent_id, kind, severity, subject_kind, "
+                "subject_ref, headline, explanation, evidence, dedupe_key) VALUES "
+                "(CAST(:u AS uuid), CAST(:a AS uuid), 'agent_trade', 'notable', 'instrument', "
+                ":ref, 'h', 'e', '{}', :key) RETURNING id"
+            ),
+            {
+                "u": agent.user_id,
+                "a": agent.agent_id,
+                "ref": f"instrument:{symbol}",
+                "key": f"k:{scan}",
+            },
+        ).scalar_one()
+        connection.execute(
+            text(
+                "INSERT INTO proposals (user_id, agent_id, observation_id, kind, payload, "
+                "expires_at, scan_id) VALUES (CAST(:u AS uuid), CAST(:a AS uuid), :o, :kind, "
+                "CAST(:payload AS jsonb), now() + interval '1 hour', :s)"
+            ),
+            {
+                "u": agent.user_id,
+                "a": agent.agent_id,
+                "o": observation,
+                "kind": side,
+                "s": scan,
+                "payload": json.dumps(
+                    {"symbol": symbol, "quantity": quantity, "priceMinor": price, "currency": "USD"}
+                ),
+            },
+        )
+
+
+async def test_a_sell_funds_a_buy_in_the_same_answer_and_the_buy_names_it(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    agent = _limit(loaded, agent, 3)
+    _hold(loaded, agent, "NXE", "20", 500)
+    market = ScriptedMarket()
+    market.prices = {"NXE": 600, "CCJ": 5_432}
+    # 1000.00 of cash buys 18 CCJ at 54.32 with the fee; 20 more need the sale of NXE.
+    llm = ScriptedLLM(_trades(_trade("buy", "CCJ", "20"), _trade("sell", "NXE", "20")))
+
+    result = await _scan(loaded, agent, llm, market)
+
+    assert result.outcome == "trade", result.problems
+    trades = _stored(loaded, result.scan_id).answer["trades"]
+    # Sells are reviewed first, and stored in the order they were kept.
+    assert [(t["decision"], t["symbol"], t["funded_by"]) for t in trades] == [
+        ("sell", "NXE", []),
+        ("buy", "CCJ", ["NXE"]),
+    ]
+
+
+async def test_the_good_trades_are_kept_and_only_the_bad_one_goes_back(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    agent = _limit(loaded, agent, 3)
+    market = ScriptedMarket()
+    market.prices = {"NXE": 600, "CCJ": 5_432}
+    llm = ScriptedLLM(
+        _trades(
+            _trade("buy", "NXE", "10", "NXE is a uranium developer."),
+            _trade("buy", "CCJ", "2", "CCJ will reach 80.00."),
+        ),
+        _trades(_trade("buy", "CCJ", "2", "CCJ trades at 54.32.")),
+    )
+
+    result = await _scan(loaded, agent, llm, market)
+
+    assert result.outcome == "trade", result.problems
+    assert [t["symbol"] for t in _stored(loaded, result.scan_id).answer["trades"]] == ["NXE", "CCJ"]
+    # Only CCJ was sent back, named with its figure.
+    heard = str(llm.heard[-1])
+    assert "CCJ: figures not in the evidence: 80.00" in heard and "NXE:" not in heard
+
+
+async def test_a_trade_still_failing_after_its_chance_is_dropped_and_the_rest_proposed(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    agent = _limit(loaded, agent, 3)
+    market = ScriptedMarket()
+    market.prices = {"NXE": 600, "CCJ": 5_432}
+    llm = ScriptedLLM(
+        _trades(_trade("buy", "NXE", "10"), _trade("buy", "CCJ", "2", "CCJ will reach 80.00.")),
+        _trades(_trade("buy", "CCJ", "2", "CCJ will reach 90.00.")),
+    )
+
+    result = await _scan(loaded, agent, llm, market)
+
+    assert result.outcome == "trade"
+    trades = _stored(loaded, result.scan_id).answer["trades"]
+    assert [(t["symbol"], t.get("refused", False)) for t in trades] == [
+        ("NXE", False),
+        ("CCJ", True),
+    ]
+    assert result.problems == ("figures not in the evidence: 90.00",)
+
+
+async def test_trades_past_the_agents_limit_are_refused(loaded: Engine, agent: ScanAgent) -> None:
+    agent = _limit(loaded, agent, 1)
+    market = ScriptedMarket()
+    market.prices = {"NXE": 600, "CCJ": 5_432}
+    llm = ScriptedLLM(_trades(_trade("buy", "NXE", "1"), _trade("buy", "CCJ", "1")))
+
+    result = await _scan(loaded, agent, llm, market)
+
+    assert result.outcome == "trade"
+    assert result.problems == ("over this agent's limit of 1 decisions a scan",)
+    assert "at most one trade" in instructions(agent)
+
+
+async def test_a_waiting_proposal_is_briefed_not_repeated_and_its_cash_set_aside(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    agent = _limit(loaded, agent, 3)
+    _waiting(loaded, agent, "buy", "CCJ", "10", 5_000)  # 500.00 and its fee are spoken for
+    market = ScriptedMarket()
+    market.prices = {"NXE": 600, "CCJ": 5_432}
+    llm = ScriptedLLM(_trades(_trade("buy", "CCJ", "1"), _trade("buy", "NXE", "90")))
+
+    result = await _scan(loaded, agent, llm, market)
+
+    row = _stored(loaded, result.scan_id)
+    assert row.briefing["waiting_for_approval"][0] | {"expires_at": None} == {
+        "side": "buy",
+        "symbol": "CCJ",
+        "quantity": "10",
+        "price": "50.00",
+        "expires_at": None,
+    }
+    assert result.outcome == "invalid_answer"
+    assert result.problems[0] == "buy CCJ is already waiting for the user's approval"
+    # 90 NXE at 6.00 is 540.00 plus the fee: more than what the waiting buy leaves.
+    assert "cash after the other proposals is" in result.problems[1]
+
+
+async def test_a_buy_over_the_mandate_goes_back_alone_and_the_sell_stays(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    agent = _limit(loaded, agent, 3)
+    with loaded.begin() as connection:
+        connection.execute(
+            text("UPDATE agents SET blocked_symbols = '{CCJ}' WHERE id = CAST(:a AS uuid)"),
+            {"a": agent.agent_id},
+        )
+    agent = find_agent(loaded, agent.user_id, agent.agent_id)
+    assert agent is not None
+    _hold(loaded, agent, "NXE", "20", 500)
+    market = ScriptedMarket()
+    market.prices = {"NXE": 600, "CCJ": 5_432}
+    llm = ScriptedLLM(
+        _trades(_trade("sell", "NXE", "5"), _trade("buy", "CCJ", "1")),
+        _trades(thesis="CCJ is blocked; the sale stands alone."),  # withdraws it
+    )
+
+    result = await _scan(loaded, agent, llm, market)
+
+    assert result.outcome == "trade"
+    assert "CCJ: CCJ is on this agent's blocked list" in llm.heard[-1].text
+    # Withdrawn by the agent, not refused: only the sale is stored as a trade.
+    assert [t["symbol"] for t in _stored(loaded, result.scan_id).answer["trades"]] == ["NXE"]

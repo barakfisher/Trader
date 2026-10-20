@@ -33,7 +33,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from app.agents.answer import Answer, agent_cash_minor
+from app.agents.answer import Trade
 from app.agents.tools import money
 from app.core.fees import fee_minor, notional_minor
 from app.universe.taxonomy import category_sector
@@ -189,28 +189,6 @@ def _profile(engine: Engine, symbol: str) -> _Profile | None:
     )
 
 
-def _book(engine: Engine, user_id: str, agent_id: str, symbol: str) -> _Book:
-    with engine.connect() as connection:
-        rows = connection.execute(
-            text(
-                """
-                SELECT i.symbol, h.quantity, h.cost_basis_minor
-                  FROM holdings h JOIN instruments i ON i.id = h.instrument_id
-                 WHERE h.user_id = CAST(:user AS uuid) AND h.agent_id = CAST(:agent AS uuid)
-                   AND h.quantity > 0
-                """
-            ),
-            {"user": user_id, "agent": agent_id},
-        ).all()
-    costs = [(row.symbol, Decimal(row.quantity) * int(row.cost_basis_minor or 0)) for row in rows]
-    return _Book(
-        cash_minor=agent_cash_minor(engine, user_id, agent_id),
-        holdings_cost=sum((cost for _, cost in costs), Decimal(0)),
-        symbol_cost=sum((cost for held, cost in costs if held == symbol), Decimal(0)),
-        held_symbols=frozenset(held for held, _ in costs),
-    )
-
-
 def universe_problems(mandate: Mandate, symbol: str, profile: _Profile | None) -> list[str]:
     """Why `symbol` is outside the agent's universe; empty when it is inside."""
     if symbol in mandate.blocked_symbols:
@@ -248,7 +226,7 @@ def _in_selection(mandate: Mandate, profile: _Profile) -> bool:
     return profile.sector in mandate.sectors or profile.industry in mandate.industries
 
 
-def size_problems(mandate: Mandate, answer: Answer, book: _Book) -> list[str]:
+def size_problems(mandate: Mandate, answer: Trade, book: _Book) -> list[str]:
     """Why a priced buy breaks the position, cash or holdings rules; empty when it does not."""
     assert answer.symbol is not None and answer.quantity is not None
     assert answer.price_minor is not None
@@ -282,17 +260,3 @@ def size_problems(mandate: Mandate, answer: Answer, book: _Book) -> list[str]:
             f"{answer.symbol} would be one more"
         )
     return problems
-
-
-def mandate_problems(
-    engine: Engine, user_id: str, agent_id: str, mandate: Mandate, answer: Answer
-) -> list[str]:
-    """Every rule a priced answer breaks. A sell or a no-trade breaks none."""
-    if answer.decision != "buy" or answer.symbol is None:
-        return []
-    problems = universe_problems(mandate, answer.symbol, _profile(engine, answer.symbol))
-    sized = (mandate.max_position_bps, mandate.cash_buffer_bps, mandate.max_holdings)
-    if all(limit is None for limit in sized):
-        return problems
-    book = _book(engine, user_id, agent_id, answer.symbol)
-    return problems + size_problems(mandate, answer, book)

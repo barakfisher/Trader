@@ -23,6 +23,7 @@ import type {
   AgentScanStep,
   AgentScanSummary,
   AgentScansResponse,
+  AgentScanTrade,
 } from '@traders/shared';
 import { AiServiceError } from '@traders/shared/ai';
 
@@ -39,13 +40,60 @@ export const SCANS_PAGE_SIZE = 20;
 
 const listQuery = z.object({ before: z.string().datetime({ offset: true }).optional() });
 
-const decisionOf = (value: unknown): AgentScanSummary['decision'] =>
-  value === 'buy' || value === 'sell' || value === 'none' ? value : null;
+const sideOf = (value: unknown): AgentScanTrade['decision'] => (value === 'buy' || value === 'sell' ? value : null);
 
 const textOf = (value: unknown): string | null => (typeof value === 'string' ? value : null);
 
+const textsOf = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+
+/**
+ * The trades an answer wrote, as stored: the list since D197, or the one trade
+ * every answer was before it (`{decision, symbol, quantity}`; `none` is no trade).
+ */
+function writtenTrades(answer: Record<string, unknown>): Record<string, unknown>[] {
+  if (Array.isArray(answer.trades)) {
+    return answer.trades.filter((t): t is Record<string, unknown> => typeof t === 'object' && t !== null);
+  }
+  return answer.decision === 'buy' || answer.decision === 'sell' ? [answer] : [];
+}
+
 export function toScanSummary(row: AgentScanRow, now: Date): AgentScanSummary {
   const answer = row.answer ?? {};
+  // Each trade's proposal is the scan's proposal for its symbol (one per symbol, 0061).
+  const bySymbol = new Map(row.proposals.map((proposal) => [proposal.symbol, proposal]));
+  const trades = writtenTrades(answer).map((written): AgentScanTrade => {
+    const symbol = textOf(written.symbol);
+    const refused = written.refused === true;
+    const proposal = refused || symbol === null ? undefined : bySymbol.get(symbol.toUpperCase());
+    return {
+      decision: sideOf(written.decision),
+      symbol,
+      quantity: textOf(written.quantity),
+      thesis: textOf(written.thesis),
+      fundedBy: textsOf(written.funded_by),
+      refused,
+      // Before D197 a refused answer's reasons were the answer's own.
+      problems: Array.isArray(answer.trades) ? textsOf(written.problems) : [],
+      // The state now, not as stored: a proposal past its deadline reads expired
+      // before the sweep catches up, as everywhere else.
+      proposal: proposal
+        ? {
+            id: proposal.id,
+            state: effectiveState(
+              {
+                state: proposal.state as never,
+                expiresAt: new Date(proposal.expires_at),
+                snoozedUntil: proposal.snoozed_until === null ? null : new Date(proposal.snoozed_until),
+                decidedAt: proposal.decided_at === null ? null : new Date(proposal.decided_at),
+              },
+              now,
+            ),
+          }
+        : null,
+      fillId: proposal?.fill_id ?? null,
+    };
+  });
   return {
     id: row.id,
     trigger: row.trigger === 'schedule' ? 'schedule' : 'manual',
@@ -55,29 +103,9 @@ export function toScanSummary(row: AgentScanRow, now: Date): AgentScanSummary {
     steps: row.steps,
     costMicroUsd: Number(row.cost_micro_usd),
     model: row.model,
-    decision: decisionOf(answer.decision),
-    symbol: textOf(answer.symbol),
-    quantity: textOf(answer.quantity),
-    problems: Array.isArray(answer.problems) ? answer.problems.filter((p): p is string => typeof p === 'string') : [],
+    trades,
+    problems: textsOf(answer.problems),
     error: row.error,
-    // The state now, not as stored: a proposal past its deadline reads expired
-    // before the sweep catches up, as everywhere else.
-    proposal:
-      row.proposal_id === null
-        ? null
-        : {
-            id: row.proposal_id,
-            state: effectiveState(
-              {
-                state: row.proposal_state as never,
-                expiresAt: row.proposal_expires_at!,
-                snoozedUntil: row.proposal_snoozed_until,
-                decidedAt: row.proposal_decided_at,
-              },
-              now,
-            ),
-          },
-    fillId: row.fill_id,
   };
 }
 
@@ -147,12 +175,12 @@ export function registerAgentScanRoutes(app: Hono<AppEnv>): void {
       }
       throw error;
     }
-    const proposalId = await proposeFromScan(userId, agent, scan, {
+    const proposalIds = await proposeFromScan(userId, agent, scan, {
       ai: context.get('ai'),
       notifier: context.get('notifier'),
       requestId: context.get('requestId'),
     });
-    return context.json({ ...scan, proposal_id: proposalId });
+    return context.json({ ...scan, proposal_ids: proposalIds });
   });
 
   /** The *Decisions* tab (D50): every scan, newest first, a page at a time. */

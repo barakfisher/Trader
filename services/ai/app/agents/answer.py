@@ -1,33 +1,31 @@
-"""The agent's answer, and the server's checks on it (D14).
+"""The agent's answer: the trades it decided, each with its own thesis (D14, D197).
 
-A scan ends with one JSON object: buy, sell or none, and why. The decision is
-the model's; the limits are the code's, applied here *after* it has answered and
-whatever it said:
+A scan ends with one JSON object - up to the agent's `max_decisions` trades, or
+none and why:
 
-- the symbol is tradable: in the universe, not dropped, priced in USD (D7, D8);
-- the quantity is a whole number of shares, more than zero (D9);
-- a sell does not exceed what the agent holds;
-- every figure in the thesis appears in what the briefing and the tools returned
-  (§6.2, guideline 7) - the same validator narration uses, over the scan's own
-  evidence.
+    {"trades": [{"decision": "sell", "symbol": "XOM", "quantity": "3", "thesis": "..."},
+                {"decision": "buy",  "symbol": "CCJ", "quantity": "2", "thesis": "..."}]}
+    {"trades": [], "thesis": "why nothing is worth doing"}
 
-Then, for a buy or sell that passed, `price_answer` reads the price the
-proposal will carry - the agent's price (D47) - and checks that cash covers
-cost plus fee at that price (D54, D55). It runs at the end of the scan, not when
-the orchestrator writes the proposal seconds later, so the scan's stored outcome
-is always the true one: a buy the agent cannot pay for is `invalid_answer`
-with the amounts, never a `trade` that silently proposed nothing.
+The one-trade shape every scan wrote before D197 - `{"decision", "symbol",
+"quantity", "thesis"}` - is still read, so a model that answers in it is
+understood and a stored scan still reads back.
 
-A problem is a reason string, never an exception: an answer that fails is
-stored with its reasons as `invalid_answer`, which is a scan outcome the
-*Decisions* tab shows, not an error.
+This module parses an answer and checks each trade *on its own*: a symbol and
+whole shares (D9), a thesis short enough to read, and every figure in it
+sourced from the scan's evidence (§6.2, guideline 7). What depends on the other
+trades and on the agent's book - holdings, cash, the mandate, the proposals
+already waiting - is `trade_review.py`'s.
+
+A problem is a reason string, never an exception: a trade that fails is stored
+with its reasons, which the scan's history shows, not an error.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
@@ -35,63 +33,78 @@ from typing import Any, Literal
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from app.agents.tools import ToolContext, find_listing, money
-from app.core.fees import fee_minor, notional_minor
 from app.narration.evidence_validator import unsourced_figures
 
-Decision = Literal["buy", "sell", "none"]
-DECISIONS: tuple[Decision, ...] = ("buy", "sell", "none")
+Side = Literal["buy", "sell"]
+SIDES: tuple[Side, ...] = ("buy", "sell")
 
 #: A thesis long enough to say why, short enough to read before approving.
 MAX_THESIS_CHARS = 1500
-#: How a problem naming unsourced figures begins; the scan sends such an answer back once.
+#: How a problem naming unsourced figures begins; the scan sends such a trade back once.
 UNSOURCED_PREFIX = "figures not in the evidence"
 
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
 
 
 @dataclass(frozen=True)
-class Answer:
-    decision: Decision
-    symbol: str | None
-    quantity: int | None
+class Trade:
+    """One buy or sell the agent decided. The price and what funds it are the server's."""
+
+    decision: Side
+    symbol: str
+    quantity: int
     thesis: str
-    #: The agent's price for a trade, set by `price_answer` (D47).
+    #: The agent's price, the quote when the trade was reviewed (D47).
     price_minor: int | None = None
     price_as_of: datetime | None = None
+    #: Sells in the same answer whose proceeds this buy needs (D197): approve those first.
+    funded_by: tuple[str, ...] = ()
 
     def as_json(self) -> dict[str, Any]:
         return {
             "decision": self.decision,
             "symbol": self.symbol,
-            "quantity": None if self.quantity is None else str(self.quantity),
+            "quantity": str(self.quantity),
             "thesis": self.thesis,
             "price_minor": self.price_minor,
             "price_as_of": None if self.price_as_of is None else self.price_as_of.isoformat(),
+            "funded_by": list(self.funded_by),
         }
 
 
 @dataclass(frozen=True)
-class CheckedAnswer:
-    answer: Answer | None
+class Refused:
+    """A trade the server will not propose, as the model wrote it, and why.
+
+    `kind` says whether it may go back to the model: `figures` (D189) and
+    `mandate` (D170) each get one chance; `final` never goes back.
+    """
+
+    written: dict[str, Any]
     problems: tuple[str, ...]
+    kind: Literal["figures", "mandate", "final"] = "final"
 
     @property
-    def valid(self) -> bool:
-        return self.answer is not None and not self.problems
+    def symbol(self) -> str | None:
+        symbol = self.written.get("symbol")
+        return symbol.strip().upper() if isinstance(symbol, str) and symbol.strip() else None
 
-    @property
-    def only_unsourced(self) -> bool:
-        """A well-formed answer whose one fault is figures the evidence does not hold."""
-        return (
-            self.answer is not None
-            and bool(self.problems)
-            and all(problem.startswith(UNSOURCED_PREFIX) for problem in self.problems)
-        )
+    def as_json(self) -> dict[str, Any]:
+        return {**self.written, "problems": list(self.problems), "refused": True}
 
 
-def parse_answer(raw: str) -> tuple[Answer | None, list[str]]:
-    """The answer the model wrote, or why it is not one."""
+@dataclass(frozen=True)
+class ParsedAnswer:
+    """The trades in an answer that are well formed, those that are not, and the overall thesis."""
+
+    trades: tuple[Trade, ...]
+    refused: tuple[Refused, ...]
+    #: Why nothing is worth doing, when there are no trades; optional beside trades.
+    thesis: str | None
+
+
+def parse_answer(raw: str) -> tuple[ParsedAnswer | None, list[str]]:
+    """The answer the model wrote, or why it is not one at all."""
     body = _FENCE.sub("", raw.strip())
     try:
         data = json.loads(body)
@@ -100,27 +113,52 @@ def parse_answer(raw: str) -> tuple[Answer | None, list[str]]:
     if not isinstance(data, dict):
         return None, ["the answer is not a JSON object"]
 
-    decision = data.get("decision")
-    if decision not in DECISIONS:
-        return None, [f"decision must be one of {', '.join(DECISIONS)}"]
     thesis = data.get("thesis")
-    if not isinstance(thesis, str) or not thesis.strip():
-        return None, ["a thesis is required, even for no trade"]
-    thesis = thesis.strip()
-    if decision == "none":
-        return Answer("none", None, None, thesis), []
+    thesis = thesis.strip() if isinstance(thesis, str) and thesis.strip() else None
+    if "trades" in data:
+        written = data["trades"]
+        if not isinstance(written, list):
+            return None, ["trades must be a list"]
+    elif data.get("decision") == "none":
+        written = []
+    elif "decision" in data:
+        # The one-trade shape (before D197): the whole object is the trade.
+        written, thesis = [data], None
+    else:
+        return None, ["the answer names its trades, or none"]
+    if not written and thesis is None:
+        return None, ["an answer with no trades says why"]
 
+    trades: list[Trade] = []
+    refused: list[Refused] = []
+    for item in written:
+        trade, problems = _parse_trade(item)
+        if trade is None:
+            refused.append(Refused(item if isinstance(item, dict) else {"written": item}, problems))
+        else:
+            trades.append(trade)
+    return ParsedAnswer(tuple(trades), tuple(refused), thesis), []
+
+
+def _parse_trade(item: object) -> tuple[Trade | None, tuple[str, ...]]:
+    if not isinstance(item, dict):
+        return None, ("a trade is a JSON object",)
     problems: list[str] = []
-    symbol = data.get("symbol")
+    decision = item.get("decision")
+    if decision not in SIDES:
+        problems.append(f"a trade's decision is one of {', '.join(SIDES)}")
+    symbol = item.get("symbol")
     if not isinstance(symbol, str) or not symbol.strip():
-        problems.append("a buy or sell names a symbol")
-        symbol = None
-    quantity = _whole_shares(data.get("quantity"))
+        problems.append("a trade names a symbol")
+    quantity = _whole_shares(item.get("quantity"))
     if quantity is None:
         problems.append("quantity is a whole number of shares, more than zero")
+    thesis = item.get("thesis")
+    if not isinstance(thesis, str) or not thesis.strip():
+        problems.append("every trade has a thesis")
     if problems:
-        return None, problems
-    return Answer(decision, symbol.strip().upper(), quantity, thesis), []  # type: ignore[union-attr]
+        return None, tuple(problems)
+    return Trade(decision, symbol.strip().upper(), quantity, thesis.strip()), ()  # type: ignore[arg-type, union-attr]
 
 
 def _whole_shares(value: object) -> int | None:
@@ -133,6 +171,30 @@ def _whole_shares(value: object) -> int | None:
     if not number.is_finite() or number <= 0 or number != number.to_integral_value():
         return None
     return int(number)
+
+
+def thesis_problems(trade: Trade, evidence: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """What is wrong with a trade's thesis: (final problems, unsourced-figure problems)."""
+    final: list[str] = []
+    if len(trade.thesis) > MAX_THESIS_CHARS:
+        final.append(f"the thesis is longer than {MAX_THESIS_CHARS} characters")
+    # The thesis may state the agent's own decision - "buy 2 shares" - which is
+    # the answer, not a claim about the world, and so is in no tool's output.
+    unsourced = unsourced_figures(trade.thesis, {**evidence, "proposed_quantity": trade.quantity})
+    figures = [f"{UNSOURCED_PREFIX}: {', '.join(unsourced)}"] if unsourced else []
+    return final, figures
+
+
+def overall_thesis_problems(thesis: str | None, evidence: dict[str, Any]) -> list[str]:
+    """A no-trade answer's reason is held to the same rules as a trade's thesis."""
+    if thesis is None:
+        return []
+    problems: list[str] = []
+    if len(thesis) > MAX_THESIS_CHARS:
+        problems.append(f"the thesis is longer than {MAX_THESIS_CHARS} characters")
+    if unsourced := unsourced_figures(thesis, evidence):
+        problems.append(f"{UNSOURCED_PREFIX}: {', '.join(unsourced)}")
+    return problems
 
 
 def held_quantity(engine: Engine, user_id: str, agent_id: str, symbol: str) -> Decimal:
@@ -151,39 +213,6 @@ def held_quantity(engine: Engine, user_id: str, agent_id: str, symbol: str) -> D
     return Decimal(held)
 
 
-def check_answer(
-    raw: str,
-    *,
-    engine: Engine,
-    user_id: str,
-    agent_id: str,
-    evidence: dict[str, Any],
-) -> CheckedAnswer:
-    answer, problems = parse_answer(raw)
-    if answer is None:
-        return CheckedAnswer(None, tuple(problems))
-
-    if len(answer.thesis) > MAX_THESIS_CHARS:
-        problems.append(f"the thesis is longer than {MAX_THESIS_CHARS} characters")
-    # The thesis may state the agent's own decision - "buy 2 shares" - which is
-    # the answer, not a claim about the world, and so is in no tool's output.
-    if answer.quantity is not None:
-        evidence = {**evidence, "proposed_quantity": answer.quantity}
-    unsourced = unsourced_figures(answer.thesis, evidence)
-    if unsourced:
-        problems.append(f"{UNSOURCED_PREFIX}: {', '.join(unsourced)}")
-
-    if answer.decision != "none" and answer.symbol and answer.quantity:
-        listing = find_listing(engine, answer.symbol)
-        if listing is None or not listing.tradable:
-            problems.append(f"{answer.symbol} is not tradable: USD-listed, in the universe")
-        if answer.decision == "sell":
-            held = held_quantity(engine, user_id, agent_id, answer.symbol)
-            if held < answer.quantity:
-                problems.append(f"sells {answer.quantity} {answer.symbol} but holds {held:f}")
-    return CheckedAnswer(answer, tuple(problems))
-
-
 def agent_cash_minor(engine: Engine, user_id: str, agent_id: str) -> int:
     with engine.connect() as connection:
         cash = connection.execute(
@@ -194,35 +223,3 @@ def agent_cash_minor(engine: Engine, user_id: str, agent_id: str) -> int:
             {"agent": agent_id, "user": user_id},
         ).scalar_one_or_none()
     return int(cash or 0)
-
-
-async def price_answer(context: ToolContext, checked: CheckedAnswer) -> CheckedAnswer:
-    """A valid buy or sell, with the agent's price on it, or why it cannot be proposed.
-
-    The price is the quote now, the one the orchestrator writes on the proposal.
-    Only a buy spends cash: `notional + fee` must fit (D6, D54). A sell's fee
-    comes out of its proceeds, and `executeFill` refuses one that would not.
-    """
-    answer = checked.answer
-    if not checked.valid or answer is None or answer.decision == "none":
-        return checked
-    assert answer.symbol is not None and answer.quantity is not None
-    quotes, _missing = await context.market.quotes([answer.symbol])
-    quote = next((q for q in quotes if q.symbol.upper() == answer.symbol), None)
-    if quote is None or quote.currency.upper() != "USD" or quote.price_minor <= 0:
-        return CheckedAnswer(answer, (f"no USD price is available for {answer.symbol}",))
-    priced = replace(answer, price_minor=quote.price_minor, price_as_of=quote.as_of)
-    if answer.decision == "buy":
-        notional = notional_minor(Decimal(answer.quantity), quote.price_minor)
-        cost = notional + fee_minor(Decimal(answer.quantity))
-        cash = agent_cash_minor(context.engine, context.user_id, context.agent_id)
-        if cost > cash:
-            price = money(quote.price_minor, "USD")
-            return CheckedAnswer(
-                priced,
-                (
-                    f"buying {answer.quantity} {answer.symbol} at {price} "
-                    f"costs {money(cost, 'USD')} with the fee; cash is {money(cash, 'USD')}",
-                ),
-            )
-    return CheckedAnswer(priced, ())

@@ -490,29 +490,16 @@ export interface components {
     schemas: {
         /**
          * AgentScanAnswer
-         * @description The agent's answer as it wrote it, with the server's reasons if it failed (D14).
+         * @description The agent's answer (D14, D197): its trades, kept first, then any refused, with why;
+         *     and, for no trade, its reason.
          */
         AgentScanAnswer: {
-            /** Decision */
-            decision?: ("buy" | "sell" | "none") | null;
-            /** Price As Of */
-            price_as_of?: string | null;
-            /**
-             * Price Minor
-             * @description For a buy or sell: the agent's price (D47), the quote at the scan's end.
-             */
-            price_minor?: number | null;
             /** Problems */
             problems?: string[];
-            /**
-             * Quantity
-             * @description Whole shares as a decimal string (guideline 4).
-             */
-            quantity?: string | null;
-            /** Symbol */
-            symbol?: string | null;
             /** Thesis */
             thesis?: string | null;
+            /** Trades */
+            trades?: components["schemas"]["AgentScanTrade"][];
         };
         /**
          * AgentScanRequest
@@ -558,6 +545,43 @@ export interface components {
              * @description Tool calls made (D15's step limit counts these).
              */
             steps: number;
+        };
+        /**
+         * AgentScanTrade
+         * @description One trade the agent decided (D197): kept and priced, or refused with why.
+         */
+        AgentScanTrade: {
+            /** Decision */
+            decision?: ("buy" | "sell") | null;
+            /**
+             * Funded By
+             * @description Sells in the same answer whose proceeds this buy needs: approve those first.
+             */
+            funded_by?: string[];
+            /** Price As Of */
+            price_as_of?: string | null;
+            /**
+             * Price Minor
+             * @description A kept trade's price: the agent's price (D47), the quote when reviewed.
+             */
+            price_minor?: number | null;
+            /** Problems */
+            problems?: string[];
+            /**
+             * Quantity
+             * @description Whole shares as a decimal string (guideline 4).
+             */
+            quantity?: string | null;
+            /**
+             * Refused
+             * @description Not proposed; `problems` says why.
+             * @default false
+             */
+            refused: boolean;
+            /** Symbol */
+            symbol?: string | null;
+            /** Thesis */
+            thesis?: string | null;
         };
         /**
          * AssistantMessageRequest

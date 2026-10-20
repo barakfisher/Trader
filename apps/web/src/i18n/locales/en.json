@@ -1411,7 +1411,7 @@
         "measured": "measured on 7 Oct 2026, before this agent's first scan"
       },
       "result": {
-        "trade": "Proposed: {{side}} {{quantity}} {{symbol}}.",
+        "trade": "Proposed: {{trades}}.",
         "no_trade": "No trade: nothing fit the persona today.",
         "invalid_answer": "The answer was refused; the scan below says why.",
         "rule_rejected": "The trade broke this agent's rules twice; the scan below says why.",
@@ -1448,11 +1448,17 @@
       "perDay_other": "{{count}} scans a trading day · about {{cost}} a day.",
       "guidance": {
         "short": "Short horizon: frequent scans, one decision each, catch moves while they last - every 2 hours suits it.",
-        "medium": "Medium horizon: a scan before the open and one after the close is usually enough.",
-        "long": "Long horizon: one scan before the open is enough; more scans mostly repeat the same idea.",
-        "none": "More scans react faster but cost more, and often repeat an idea already proposed. Day trading suits every 1-2 hours; long-term investing, one scan before the open."
+        "medium": "Medium horizon: a scan before the open and one after the close, up to 2 decisions each, is usually enough.",
+        "long": "Long horizon: one scan before the open that looks at the whole portfolio and may rebalance up to 3 positions at once; more scans mostly repeat the same idea.",
+        "none": "More scans react faster but cost more, and often repeat an idea already proposed. Day trading suits every 1-2 hours with one decision each; long-term investing, one scan before the open with several decisions."
       },
       "useSuggestion": "Use the suggestion",
+      "decisions": "Decisions per scan, at most",
+      "decisionsHint_one": "Each decision is a proposal you approve within an hour - {{count}} means one message at a time.",
+      "decisionsHint_other": "Each decision is a proposal you approve within an hour - {{count}} means up to {{count}} messages at once.",
+      "decisionsOverHoldings": "It holds at most {{max}} instruments: buys past that are refused.",
+      "decisionsInvalid": "A whole number, {{min}} to {{max}}.",
+      "review": "Review:",
       "scheduleElsewhere": "Scheduled scans don't run on this installation; here this agent scans only when you press Run a scan now.",
       "scheduleNext": "Next scheduled scan: {{when}}.",
       "scheduleNone": "No scheduled scan is coming: the agent is paused, has no persona, or the market calendar could not be read.",
@@ -1498,7 +1504,9 @@
       "proposal": "The proposal",
       "proposalState": "now {{state}}",
       "fill": "Filled - see Activity",
-      "model": "Model: {{model}}"
+      "model": "Model: {{model}}",
+      "fundedBy": "Paid for by selling {{symbols}}: approve that first.",
+      "notProposed": "Not proposed: {{problems}}"
     },
     "sides": {
       "buy": "Buy",

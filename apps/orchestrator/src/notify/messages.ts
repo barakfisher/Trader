@@ -157,6 +157,8 @@ export interface Messages {
 
   /** A trade proposal's headline (D51: the frame is the catalogue's; the thesis the model's). */
   tradeProposalHeadline: (agent: string, side: 'buy' | 'sell', quantity: string, symbol: string, price: string) => string;
+  /** D197: appended to a buy's headline when it needs the proceeds of sells from the same scan. */
+  tradeFundedBy: (symbols: string[]) => string;
 
   /** Decision 148: a holding's move and drawdown from one scan, said in one message. */
   moveWithDrawdown: (figures: MoveWithDrawdownFigures) => NoticeText;
@@ -330,6 +332,7 @@ const en: Messages = {
 
   tradeProposalHeadline: (agent, side, quantity, symbol, price) =>
     `${agent} proposes to ${side} ${quantity} ${symbol} at ${price}`,
+  tradeFundedBy: (symbols) => ` - paid for by selling ${symbols.join(', ')}: approve that first`,
 
   moveWithDrawdown: (f) => ({
     headline: `${f.symbol} ${f.direction} ${f.change} to ${f.price}`,
@@ -586,6 +589,7 @@ const he: Messages = {
 
   tradeProposalHeadline: (agent, side, quantity, symbol, price) =>
     `${isolated(agent)} מציע ${side === 'buy' ? 'לקנות' : 'למכור'} ${ltr(quantity)} ${ltr(symbol)} ב־${ltr(price)}`,
+  tradeFundedBy: (symbols) => ` - במימון מכירת ${symbols.map(ltr).join(', ')}: אשרו אותה קודם`,
 
   moveWithDrawdown: (f) => ({
     headline: `מחיר ${ltr(f.symbol)} ${f.direction === 'fell' ? 'ירד' : 'עלה'} ב־${ltr(f.change)} ל־${ltr(f.price)}`,

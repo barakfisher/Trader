@@ -3,8 +3,11 @@ import { Link } from '@tanstack/react-router';
 import { Play, Save } from 'lucide-react';
 
 import {
+  HORIZON_MAX_DECISIONS,
   HORIZON_SCHEDULES,
+  MAX_DECISIONS_PER_SCAN,
   MAX_SCAN_EVERY_HOURS,
+  MIN_DECISIONS_PER_SCAN,
   MIN_SCAN_EVERY_HOURS,
   minorToDecimalString,
   scansPerDay,
@@ -123,24 +126,33 @@ function RunScan({ agent }: { agent: AgentView }) {
 
 function RunResult({ result }: { result: RunScanResult }) {
   const { t } = useTranslation();
-  const side = result.answer?.decision === 'sell' ? 'sell' : 'buy';
+  const kept = (result.answer?.trades ?? []).filter((trade) => !trade.refused);
+  const label = (trade: (typeof kept)[number]) =>
+    t('agents.decisions.proposed', {
+      side: t(`agents.sides.${trade.decision === 'sell' ? 'sell' : 'buy'}`),
+      quantity: trade.quantity ?? '',
+      symbol: trade.symbol ?? '',
+    });
   return (
-    <p role="status" className="text-sm text-text-primary">
-      {t(`agents.scans.result.${result.outcome}`, {
-        side: t(`agents.sides.${side}`),
-        quantity: result.answer?.quantity ?? '',
-        symbol: result.answer?.symbol ?? '',
-      })}{' '}
-      {result.proposal_id && (
-        <Link
-          to="/proposals/$proposalId"
-          params={{ proposalId: result.proposal_id }}
-          className="font-medium text-accent hover:underline"
-        >
-          {t('agents.scans.openProposal')}
-        </Link>
+    <div role="status" className="space-y-1 text-sm text-text-primary">
+      <p>{t(`agents.scans.result.${result.outcome}`, { trades: kept.map(label).join(' · ') })}</p>
+      {/* D197: one proposal per kept trade, in the same order. */}
+      {result.proposal_ids.length > 0 && (
+        <p className="flex flex-wrap gap-x-3 gap-y-1">
+          <span className="text-text-muted">{t('agents.scans.review')}</span>
+          {result.proposal_ids.map((proposalId, index) => (
+            <Link
+              key={proposalId}
+              to="/proposals/$proposalId"
+              params={{ proposalId }}
+              className="font-medium text-accent hover:underline"
+            >
+              {kept[index] ? label(kept[index]) : t('agents.scans.openProposal')}
+            </Link>
+          ))}
+        </p>
       )}
-    </p>
+    </div>
   );
 }
 
@@ -177,21 +189,30 @@ function ScanSettings({ agent }: { agent: AgentView }) {
   // The hours typed are kept while market-hours scans are off, so switching back restores them.
   const [hoursText, setHoursText] = useState(String(stored.everyHours ?? DEFAULT_EVERY_HOURS));
   const [budget, setBudget] = useState(storedBudget);
+  const storedDecisions = agent.maxDecisions ?? MIN_DECISIONS_PER_SCAN;
+  const [decisionsText, setDecisionsText] = useState(String(storedDecisions));
   useEffect(() => {
     setSchedule(stored);
     setHoursText(String(stored.everyHours ?? DEFAULT_EVERY_HOURS));
     setBudget(storedBudget);
+    setDecisionsText(String(storedDecisions));
     // The three parts stand for `agent.scanSchedule`, whose identity changes on every read.
-  }, [stored.everyHours, stored.preOpen, stored.postClose, storedBudget]);
+  }, [stored.everyHours, stored.preOpen, stored.postClose, storedBudget, storedDecisions]);
 
   const hours = Number(hoursText);
   const hoursValid = Number.isInteger(hours) && hours >= MIN_SCAN_EVERY_HOURS && hours <= MAX_SCAN_EVERY_HOURS;
   const marketOn = schedule.everyHours !== null;
   const budgetValid = BUDGET_INPUT.test(budget.trim());
-  const dirty = !sameSchedule(schedule, stored) || budget.trim() !== storedBudget;
+  const decisions = Number(decisionsText);
+  const decisionsValid =
+    Number.isInteger(decisions) && decisions >= MIN_DECISIONS_PER_SCAN && decisions <= MAX_DECISIONS_PER_SCAN;
+  const dirty =
+    !sameSchedule(schedule, stored) || budget.trim() !== storedBudget || decisions !== storedDecisions;
   const perScan = agent.scanCost?.microUsd ?? 0;
   const horizon = agent.mandate?.horizon ?? null;
   const suggested = horizon ? HORIZON_SCHEDULES[horizon] : null;
+  const suggestedDecisions = horizon ? HORIZON_MAX_DECISIONS[horizon] : null;
+  const maxHoldings = agent.mandate?.maxHoldings ?? null;
 
   const setHours = (text: string) => {
     setHoursText(text);
@@ -205,13 +226,17 @@ function ScanSettings({ agent }: { agent: AgentView }) {
     if (on && !hoursValid) setHoursText(String(DEFAULT_EVERY_HOURS));
     setSchedule({ ...schedule, everyHours: on ? (hoursValid ? hours : DEFAULT_EVERY_HOURS) : null });
   };
-  const apply = (next: ScanSchedule) => {
+  // The horizon's suggestion is a schedule and a number of decisions, applied together (D195, D197).
+  const apply = (next: ScanSchedule, nextDecisions: number) => {
     setSchedule(next);
     if (next.everyHours !== null) setHoursText(String(next.everyHours));
+    setDecisionsText(String(nextDecisions));
   };
+  const differsFromSuggestion =
+    suggested !== null && (!sameSchedule(suggested, schedule) || decisions !== suggestedDecisions);
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    update.mutate({ scanSchedule: schedule, llmBudget: budget.trim() });
+    update.mutate({ scanSchedule: schedule, maxDecisions: decisions, llmBudget: budget.trim() });
   };
 
   return (
@@ -269,13 +294,45 @@ function ScanSettings({ agent }: { agent: AgentView }) {
         <SchedulePreview schedule={schedule} perScan={perScan} agent={agent} />
         <p className="text-xs text-text-muted">
           {t(`agents.scans.guidance.${horizon ?? 'none'}`)}{' '}
-          {suggested && !sameSchedule(suggested, schedule) && (
-            <button type="button" onClick={() => apply(suggested)} className="font-medium text-accent hover:underline">
+          {suggested && suggestedDecisions !== null && differsFromSuggestion && (
+            <button
+              type="button"
+              onClick={() => apply(suggested, suggestedDecisions)}
+              className="font-medium text-accent hover:underline"
+            >
               {t('agents.scans.useSuggestion')}
             </button>
           )}
         </p>
       </fieldset>
+      <AgentField
+        label={t('agents.scans.decisions')}
+        hint={[
+          t('agents.scans.decisionsHint', { count: decisionsValid ? decisions : storedDecisions }),
+          maxHoldings !== null && decisionsValid && decisions > maxHoldings
+            ? t('agents.scans.decisionsOverHoldings', { max: maxHoldings })
+            : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <input
+          type="number"
+          min={MIN_DECISIONS_PER_SCAN}
+          max={MAX_DECISIONS_PER_SCAN}
+          step={1}
+          value={decisionsText}
+          onChange={(event) => setDecisionsText(event.target.value)}
+          aria-invalid={!decisionsValid}
+          dir="ltr"
+          className="w-20 rounded-md border border-border-subtle bg-surface px-2 py-1 text-center"
+        />
+      </AgentField>
+      {!decisionsValid && (
+        <p className="text-xs text-loss">
+          {t('agents.scans.decisionsInvalid', { min: MIN_DECISIONS_PER_SCAN, max: MAX_DECISIONS_PER_SCAN })}
+        </p>
+      )}
       <AgentField
         label={t('agents.scans.budget')}
         hint={t('agents.scans.budgetHint', {
@@ -297,7 +354,7 @@ function ScanSettings({ agent }: { agent: AgentView }) {
       <Button
         type="submit"
         variant="secondary"
-        disabled={!dirty || !budgetValid || (marketOn && !hoursValid) || update.isPending}
+        disabled={!dirty || !budgetValid || !decisionsValid || (marketOn && !hoursValid) || update.isPending}
       >
         <span className="flex items-center gap-1">
           <Save className="size-4" aria-hidden />

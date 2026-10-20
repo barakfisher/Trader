@@ -540,6 +540,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         budgetMinor: 100050,
         currency: 'USD',
         scanSchedule: { everyHours: 2, preOpen: true, postClose: false },
+        maxDecisions: 3,
         mandate: { ...EMPTY_MANDATE, max_position_bps: 1000, sectors: ['Energy'], blocked_symbols: ['XOM'] },
       });
       expect(agent).toMatchObject({ is_primary: false, budget_minor: '100050', state: 'active', holdings_count: 0 });
@@ -548,6 +549,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         scan_every_hours: 2,
         scan_pre_open: true,
         scan_post_close: false,
+        max_decisions: 3,
         running_scan: null,
         max_position_bps: 1000,
         cash_buffer_bps: null,
@@ -581,6 +583,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           budgetMinor: 1,
           currency: 'USD',
           scanSchedule: { everyHours: null, preOpen: true, postClose: false },
+          maxDecisions: 1,
           mandate: EMPTY_MANDATE,
         })
         .catch((error: { code?: string; constraint?: string }) => error);
@@ -1378,18 +1381,24 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         const newer = await scan('2026-10-07T13:00:00Z', 40_000, 'trade', {
           decision: 'buy', symbol: 'INTC', quantity: '3', thesis: 'INTC fell.', price_minor: 11_250,
         });
-        const { proposalId } = await queries.createTradeProposal({
-          userId: SEED_ADMIN,
-          agentId: agent,
-          scanId: newer,
-          kind: 'buy',
-          payload: { symbol: 'INTC', quantity: '3', priceMinor: 11_250, priceAsOf: null, currency: 'USD' },
-          expiresAt: new Date(Date.now() + 3_600_000),
-          headline: 'Scan read proposes to buy 3 INTC at 112.50',
-          thesis: 'INTC fell.',
-          localized: {},
-          evidence: {},
-        });
+        const propose = (symbol: string) =>
+          queries.createTradeProposal({
+            userId: SEED_ADMIN,
+            agentId: agent,
+            scanId: newer,
+            kind: 'buy',
+            payload: { symbol, quantity: '3', priceMinor: 11_250, priceAsOf: null, currency: 'USD' },
+            expiresAt: new Date(Date.now() + 3_600_000),
+            headline: `Scan read proposes to buy 3 ${symbol} at 112.50`,
+            thesis: `${symbol} fell.`,
+            localized: {},
+            evidence: {},
+          });
+        const { proposalId } = await propose('INTC');
+        // D197: a second trade of the same scan is its own proposal; the same one again is not (0061).
+        const { proposalId: second } = await propose('AMD');
+        expect(second).not.toBe(proposalId);
+        expect((await propose('INTC')).proposalId).toBe(proposalId);
         // Today's calls count; yesterday's do not.
         for (const [startedAt, cost] of [[new Date(), 7_000], [new Date(Date.now() - 2 * 86_400_000), 99_000]] as const) {
           await pool.query(
@@ -1401,14 +1410,18 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
         const page = await queries.listAgentScans(SEED_ADMIN, agent, { limit: 1 });
         expect(page.map((row) => row.id)).toEqual([newer]);
-        expect(page[0]).toMatchObject({ proposal_id: proposalId, proposal_state: 'pending', fill_id: null, cost_micro_usd: '40000' });
+        expect(page[0]).toMatchObject({ cost_micro_usd: '40000' });
+        expect(page[0]!.proposals.map((p) => [p.id, p.symbol, p.state, p.fill_id])).toEqual([
+          [proposalId, 'INTC', 'pending', null],
+          [second, 'AMD', 'pending', null],
+        ]);
         expect(page[0]).not.toHaveProperty('transcript');
         const back = await queries.listAgentScans(SEED_ADMIN, agent, { limit: 5, before: page[0]!.started_at });
         expect(back.map((row) => row.id)).toEqual([older]);
         expect(await queries.listAgentScans(randomUUID(), agent, { limit: 5 })).toEqual([]);
 
         const detail = await queries.getAgentScan(SEED_ADMIN, agent, older);
-        expect(detail).toMatchObject({ briefing: { cash: '1000.00' }, transcript: [{ role: 'assistant' }], proposal_id: null });
+        expect(detail).toMatchObject({ briefing: { cash: '1000.00' }, transcript: [{ role: 'assistant' }], proposals: [] });
         expect(await queries.getAgentScan(USER, AGENT, older)).toBeNull();
 
         const row = await queries.getAgent(SEED_ADMIN, agent);

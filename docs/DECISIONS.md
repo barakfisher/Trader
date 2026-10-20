@@ -207,3 +207,5 @@ while this file is out of date.
 | 194 | An agent's page is four tabs, and the scans and their history are one of them |
 | 195 | An agent's schedule is three parts: market hours every N hours, before the open, after the close |
 | 196 | Run a scan now shows a scheduled scan; it never blocks on one |
+| 197 | A scan may decide several trades, each its own proposal |
+| 198 | A scan knows the agent's proposals still waiting, and does not repeat them |

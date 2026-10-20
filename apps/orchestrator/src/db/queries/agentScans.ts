@@ -2,10 +2,10 @@ import { query, queryOne } from '../pool.js';
 import { SCAN_TOOL_CALLS } from './proposals.js';
 
 /**
- * An agent's scans, read for the *Decisions* tab (D50). The AI service writes
- * `agent_scans` (migration 0043); this side only reads it, with the proposal a
- * `trade` scan made (`proposals.scan_id`) and the fill its approval wrote
- * (`fills.proposal_id`), so a row can link to both.
+ * An agent's scans, read for the Scans tab (D50). The AI service writes
+ * `agent_scans` (migration 0043); this side only reads it, with the proposals a
+ * `trade` scan made (`proposals.scan_id`, one per trade since D197) and the fill
+ * each approval wrote (`fills.proposal_id`), so a row can link to them.
  */
 export interface AgentScanRow {
   id: string;
@@ -19,11 +19,17 @@ export interface AgentScanRow {
   model: string | null;
   answer: Record<string, unknown> | null;
   error: string | null;
-  proposal_id: string | null;
-  proposal_state: string | null;
-  proposal_expires_at: Date | null;
-  proposal_snoozed_until: Date | null;
-  proposal_decided_at: Date | null;
+  /** The scan's proposals, oldest first; timestamps as ISO text (they come through JSON). */
+  proposals: ScanProposalRow[];
+}
+
+export interface ScanProposalRow {
+  id: string;
+  symbol: string | null;
+  state: string;
+  expires_at: string;
+  snoozed_until: string | null;
+  decided_at: string | null;
   fill_id: string | null;
 }
 
@@ -34,11 +40,16 @@ export interface AgentScanDetailRow extends AgentScanRow {
 
 const SUMMARY_COLUMNS = `s.id, s.trigger, s.started_at, s.finished_at, s.outcome, s.steps,
        s.cost_micro_usd::text AS cost_micro_usd, s.model, s.answer, s.error,
-       p.id AS proposal_id, p.state AS proposal_state, p.expires_at AS proposal_expires_at,
-       p.snoozed_until AS proposal_snoozed_until, p.decided_at AS proposal_decided_at,
-       (SELECT f.id FROM fills f WHERE f.agent_id = s.agent_id AND f.proposal_id = p.id LIMIT 1) AS fill_id`;
+       (SELECT coalesce(json_agg(json_build_object(
+                 'id', p.id, 'symbol', p.payload ->> 'symbol', 'state', p.state,
+                 'expires_at', p.expires_at, 'snoozed_until', p.snoozed_until,
+                 'decided_at', p.decided_at,
+                 'fill_id', (SELECT f.id FROM fills f
+                              WHERE f.agent_id = s.agent_id AND f.proposal_id = p.id LIMIT 1))
+               ORDER BY p.created_at), '[]'::json)
+          FROM proposals p WHERE p.agent_id = s.agent_id AND p.scan_id = s.id) AS proposals`;
 
-const FROM = `agent_scans s LEFT JOIN proposals p ON p.agent_id = s.agent_id AND p.scan_id = s.id`;
+const FROM = `agent_scans s`;
 
 /** Newest first; `before` pages back by start time. */
 export function listAgentScans(

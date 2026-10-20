@@ -54,6 +54,7 @@ const AGENT: AgentView = {
   holdingsCount: 1,
   createdAt: '2026-10-05T10:00:00Z',
   scanSchedule: { everyHours: null, preOpen: true, postClose: false },
+  maxDecisions: 1,
   runningScan: null,
   llmBudgetMicroUsd: 500_000,
   llmSpentTodayMicroUsd: 108_022,
@@ -227,17 +228,25 @@ const SCAN_SUMMARY = {
   steps: 1,
   costMicroUsd: 41_000,
   model: 'anthropic/claude-sonnet-5.5',
-  decision: 'buy' as const,
-  symbol: 'NVDA',
-  quantity: '2',
+  trades: [
+    {
+      decision: 'buy' as const,
+      symbol: 'NVDA',
+      quantity: '2',
+      thesis: 'NVDA trades at 237.14.',
+      fundedBy: [],
+      refused: false,
+      problems: [],
+      proposal: { id: 'p-1', state: 'pending' as const },
+      fillId: null,
+    },
+  ],
   problems: [],
   error: null,
-  proposal: { id: 'p-1', state: 'pending' as const },
-  fillId: null,
 };
 
 const SCANS: AgentScansResponse = {
-  scans: [SCAN_SUMMARY, { ...SCAN_SUMMARY, id: 's-2', outcome: 'no_trade', decision: 'none', symbol: null, quantity: null, proposal: null, costMicroUsd: 14_600 }],
+  scans: [SCAN_SUMMARY, { ...SCAN_SUMMARY, id: 's-2', outcome: 'no_trade', trades: [], costMicroUsd: 14_600 }],
   nextBefore: null,
 };
 
@@ -251,7 +260,7 @@ const SCAN_DETAIL: AgentScanDetail = {
     { role: 'returned', problems: ['NVDA would be 2134.26 at cost, over the 10% position limit'] },
     { role: 'assistant', text: '{"decision": "buy", "thesis": "NVDA trades at 237.14."}', toolCalls: [] },
   ],
-  thesis: 'NVDA trades at 237.14.',
+  thesis: null,
 };
 
 function serveAgent(agent: AgentView = AGENT, accountBody: AgentAccountResponse = account()) {
@@ -503,6 +512,36 @@ describe('AgentPage with the ledger', () => {
     expect(screen.getByText('Its answer the rules refused')).toBeTruthy();
   });
 
+  it('shows each trade of a scan, the sell a buy needs, and why one was not proposed (D197)', async () => {
+    const trade = SCAN_SUMMARY.trades[0]!;
+    const several = {
+      ...SCAN_SUMMARY,
+      trades: [
+        { ...trade, decision: 'sell' as const, symbol: 'MSFT', quantity: '1', thesis: 'MSFT is rich.', proposal: { id: 'p-2', state: 'approved' as const }, fillId: 'f-2' },
+        { ...trade, fundedBy: ['MSFT'] },
+        { ...trade, symbol: 'TSLA', quantity: '1', thesis: 'TSLA.', refused: true, problems: ['TSLA is not tradable'], proposal: null },
+      ],
+    };
+    serve({
+      [`/agents/${AGENT_ID}`]: AGENT,
+      [`/agents/${AGENT_ID}/account`]: account(),
+      [`/agents/${AGENT_ID}/activity`]: ACTIVITY,
+      [`/agents/${AGENT_ID}/performance`]: PERFORMANCE,
+      [`/agents/${AGENT_ID}/scans`]: { scans: [several], nextBefore: null },
+      [`/agents/${AGENT_ID}/scans/${SCAN_ID}`]: { ...SCAN_DETAIL, ...several },
+      '/proposals': { proposals: [] },
+    });
+    await renderAgentTab('Scans');
+    // The row names the trades that became proposals, not the refused one.
+    fireEvent.click(await screen.findByRole('button', { name: /Sell 1 MSFT · Buy 2 NVDA/, expanded: false }));
+    expect(await screen.findByText('Paid for by selling MSFT: approve that first.')).toBeTruthy();
+    expect(screen.getByText('Not proposed: TSLA is not tradable')).toBeTruthy();
+    expect(screen.getAllByText('The proposal').map((link) => link.closest('a')?.getAttribute('href'))).toEqual([
+      '/proposals/p-2',
+      '/proposals/p-1',
+    ]);
+  });
+
   it.each(['scans', 'decisions'])("opens a trade proposal's scan from its Evidence checked link (?tab=%s)", async (tab) => {
     // `decisions` is the tab's old name, in links written before it was Scans.
     renderAgent(`/agents/${AGENT_ID}?tab=${tab}&scan=${SCAN_ID}`);
@@ -523,14 +562,14 @@ describe('AgentPage with the ledger', () => {
     serveAgent({ ...AGENT, persona: 'Patient.', waitingForBrief: false });
     post.mockResolvedValueOnce({
       scan_id: SCAN_ID, outcome: 'trade', steps: 1, cost_micro_usd: 41_000, model: 'm', error: null,
-      answer: { decision: 'buy', symbol: 'NVDA', quantity: '2', thesis: 't' }, proposal_id: 'p-1',
+      answer: { trades: [{ decision: 'buy', symbol: 'NVDA', quantity: '2', refused: false }] }, proposal_ids: ['p-1'],
     });
     await renderAgentTab('Scans');
     expect(await screen.findByText(/About \$0\.036 a scan \(measured on 7 Oct 2026/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Run a scan now' }));
     await waitFor(() => expect(post).toHaveBeenCalledWith(`/agents/${AGENT_ID}/scans`, {}));
     expect(await screen.findByText(/Proposed: Buy 2 NVDA\./)).toBeTruthy();
-    expect(screen.getByText('Review the proposal').closest('a')?.getAttribute('href')).toBe('/proposals/p-1');
+    expect(screen.getByRole('link', { name: 'Buy 2 NVDA' }).getAttribute('href')).toBe('/proposals/p-1');
   });
 
   it('waits for a scheduled scan that is running, and names one about to start (D195)', async () => {
@@ -586,6 +625,7 @@ describe('AgentPage with the ledger', () => {
     await waitFor(() =>
       expect(patch).toHaveBeenCalledWith(`/agents/${AGENT_ID}`, {
         scanSchedule: { everyHours: 2, preOpen: true, postClose: false },
+        maxDecisions: 1,
         llmBudget: '1.25',
       }),
     );
@@ -602,6 +642,35 @@ describe('AgentPage with the ledger', () => {
     fireEvent.click(screen.getByLabelText('Before the open'));
     expect(screen.getByText('No scheduled scans: it scans only when you press Run a scan now.')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Save scan settings' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('saves how many trades a scan may decide, and says what that asks of you (D197)', async () => {
+    const patch = (await import('../src/api/client.ts')).api.patch as ReturnType<typeof vi.fn>;
+    patch.mockResolvedValue(AGENT);
+    serveAgent({ ...AGENT, mandate: { ...MANDATE, maxHoldings: 3 } });
+    await renderAgentTab('Settings');
+    const decisions = (await screen.findByLabelText('Decisions per scan, at most')) as HTMLInputElement;
+    expect(decisions.value).toBe('1');
+    fireEvent.change(decisions, { target: { value: '5' } });
+    expect(screen.getByText(/5 means up to 5 messages at once\. It holds at most 3 instruments/)).toBeTruthy();
+    fireEvent.change(decisions, { target: { value: '11' } });
+    expect(screen.getByText('A whole number, 1 to 10.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Save scan settings' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(decisions, { target: { value: '4' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save scan settings' }));
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith(`/agents/${AGENT_ID}`, expect.objectContaining({ maxDecisions: 4 })),
+    );
+  });
+
+  it("suggests a long horizon's schedule and decisions together (D195, D197)", async () => {
+    serveAgent({ ...AGENT, mandate: { ...MANDATE, horizon: 'long' }, scanSchedule: { everyHours: 2, preOpen: false, postClose: false } });
+    await renderAgentTab('Settings');
+    expect(await screen.findByText(/Long horizon: one scan before the open that looks at the whole portfolio/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Use the suggestion' }));
+    expect((screen.getByLabelText('Decisions per scan, at most') as HTMLInputElement).value).toBe('3');
+    expect((screen.getByLabelText('Before the open') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('During market hours,') as HTMLInputElement).checked).toBe(false);
   });
 
   it("suggests a schedule from the agent's horizon, and applies it in one press (D195)", async () => {
