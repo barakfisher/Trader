@@ -12,19 +12,31 @@ a mandate has nothing to decide by (D174; the code keeps its old name,
 `no_persona`), one asked to scan now with its day's budget spent is refused (D52),
 and one already scanning would be billed twice. A model that is
 not configured is a 503: the service cannot do this at all right now.
+
+`POST /agents/{agent_id}/proposals/{proposal_id}/recheck` re-checks one expired
+trade proposal (D212-D216, `app/agents/recheck.py`): the same agent checks as a
+manual scan, then the proposal's own - not found, not a trade, not expired, past
+the week, or already re-checked - each with its code, before any model is called.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.engine import Engine
 
 from app.agents.mandate_check import check_instructions
-from app.agents.scan import run_scan
+from app.agents.recheck import NotRecheckableError, find_expired_trade, run_recheck
+from app.agents.scan import ScanResult, run_scan
 from app.agents.scan_budget import agent_budget
-from app.agents.scan_log import ScanAlreadyRunningError, find_agent
+from app.agents.scan_log import (
+    AlreadyRefreshedError,
+    ScanAgent,
+    ScanAlreadyRunningError,
+    find_agent,
+)
 from app.agents.tools import scan_context
 from app.analysis.thresholds import AnalysisThresholds
 from app.corpus.embeddings import BaseEmbedder
@@ -39,6 +51,7 @@ from app.deps import (
 )
 from app.llm.factory import configured_model
 from app.models import (
+    AgentRecheckRequest,
     AgentScanAnswer,
     AgentScanRequest,
     AgentScanResponse,
@@ -73,30 +86,11 @@ async def scan_agent(
     store: VectorStore = Depends(get_vector_store),
 ) -> AgentScanResponse:
     user_id = str(payload.user_id)
-    agent = find_agent(engine, user_id, agent_id)
-    if agent is None:
-        raise _refuse("agent_not_found", "no such agent", status.HTTP_404_NOT_FOUND)
-    if agent.is_primary:
-        raise _refuse("primary_agent", "the main portfolio does not scan (D1)")
-    if agent.state != "active":
-        raise _refuse("agent_not_active", f"the agent is {agent.state}")
-    if not agent.ready:
-        raise _refuse("no_persona", "the agent needs instructions or settings to decide by")
-
     # D52: a scan asked for now is refused with the day's budget spent. A
     # scheduled one is run and recorded as `budget_reached`, so the Decisions tab
     # shows the slot that did not happen and why.
-    if payload.trigger == "manual" and agent_budget(engine, agent.agent_id, _now()).exhausted:
-        raise _refuse("budget_spent", "the agent's model budget for today is spent")
-
-    llm = getattr(request.app.state, "llm", None)
-    # Off on purpose (LLM_PROVIDER=null) is refused up front. A provider that is
-    # configured but broken fails its first call, and the scan records why.
-    if llm is None or configured_model(settings) is None:
-        raise _refuse(
-            "no_model", "no model is configured for scans", status.HTTP_503_SERVICE_UNAVAILABLE
-        )
-
+    agent = _scannable(engine, user_id, agent_id, asked_now=payload.trigger == "manual")
+    llm = _model(request, settings)
     context = scan_context(
         engine=engine,
         market=market,
@@ -119,7 +113,80 @@ async def scan_agent(
         )
     except ScanAlreadyRunningError as error:
         raise _refuse("scan_running", "this agent is already scanning") from error
+    return _response(result)
 
+
+@router.post("/{agent_id}/proposals/{proposal_id}/recheck", response_model=AgentScanResponse)
+async def recheck_proposal(
+    agent_id: str,
+    proposal_id: str,
+    payload: AgentRecheckRequest,
+    request: Request,
+    settings: SettingsDep,
+    engine: Engine = Depends(get_engine),
+    market: MarketDataService = Depends(get_market_data),
+    embedder: BaseEmbedder = Depends(get_embedder),
+    store: VectorStore = Depends(get_vector_store),
+) -> AgentScanResponse:
+    """Re-check one expired trade proposal (D212): a `refresh` scan of that one trade."""
+    user_id = str(payload.user_id)
+    agent = _scannable(engine, user_id, agent_id, asked_now=True)
+    try:
+        trade = find_expired_trade(engine, user_id, agent.agent_id, proposal_id, _now())
+    except NotRecheckableError as error:
+        code = status.HTTP_404_NOT_FOUND if error.code == "proposal_not_found" else None
+        raise _refuse(error.code, error.message, code or status.HTTP_409_CONFLICT) from error
+    llm = _model(request, settings)
+    context = scan_context(
+        engine=engine,
+        market=market,
+        embedder=embedder,
+        vector_store=store,
+        thresholds=AnalysisThresholds.from_settings(settings),
+        excluded_price_sources=excluded_price_sources(settings.market_data_chain),
+        user_id=user_id,
+        agent_id=agent.agent_id,
+        news=news_on_demand(settings, engine, getattr(request.app.state, "redis", None)),
+    )
+    try:
+        result = await run_recheck(
+            engine=engine, llm=llm, context=context, agent=agent, trade=trade
+        )
+    except ScanAlreadyRunningError as error:
+        raise _refuse("scan_running", "this agent is already scanning") from error
+    except AlreadyRefreshedError as error:
+        raise _refuse("already_rechecked", "this proposal has had its re-check") from error
+    return _response(result)
+
+
+def _scannable(engine: Engine, user_id: str, agent_id: str, *, asked_now: bool) -> ScanAgent:
+    """The agent, if it may scan; otherwise the refusal that says why."""
+    agent = find_agent(engine, user_id, agent_id)
+    if agent is None:
+        raise _refuse("agent_not_found", "no such agent", status.HTTP_404_NOT_FOUND)
+    if agent.is_primary:
+        raise _refuse("primary_agent", "the main portfolio does not scan (D1)")
+    if agent.state != "active":
+        raise _refuse("agent_not_active", f"the agent is {agent.state}")
+    if not agent.ready:
+        raise _refuse("no_persona", "the agent needs instructions or settings to decide by")
+    if asked_now and agent_budget(engine, agent.agent_id, _now()).exhausted:
+        raise _refuse("budget_spent", "the agent's model budget for today is spent")
+    return agent
+
+
+def _model(request: Request, settings: SettingsDep) -> Any:
+    """The model provider. Off on purpose (LLM_PROVIDER=null) is refused up front; a
+    provider configured but broken fails its first call, and the scan records why."""
+    llm = getattr(request.app.state, "llm", None)
+    if llm is None or configured_model(settings) is None:
+        raise _refuse(
+            "no_model", "no model is configured for scans", status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+    return llm
+
+
+def _response(result: ScanResult) -> AgentScanResponse:
     return AgentScanResponse(
         scan_id=result.scan_id,
         outcome=result.outcome,

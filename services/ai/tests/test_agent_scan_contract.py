@@ -1,6 +1,7 @@
 """The scan's outcomes and triggers are one list each, in code and in the CHECKs.
 
-Triggers are 0043's; outcomes were last rewritten by 0065 (`own_key_failed`)."""
+Triggers were last rewritten by 0066 (`refresh`), outcomes by 0065 (`own_key_failed`).
+A re-check has its own route (D212), so a scan request names every trigger but `refresh`."""
 
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from app.agents.scan_log import ScanOutcome, ScanTrigger
 from app.models import AgentScanRequest, AgentScanResponse
 
 VERSIONS = Path(__file__).parents[1] / "alembic" / "versions"
-MIGRATION = VERSIONS / "0043_agent_scans.py"
+MIGRATION = VERSIONS / "0066_proposal_refresh.py"
 OUTCOMES_MIGRATION = VERSIONS / "0065_own_llm_keys.py"
 
 
@@ -35,4 +36,10 @@ def test_the_wire_names_the_same_outcomes_and_triggers() -> None:
     outcome = AgentScanResponse.model_fields["outcome"].annotation
     trigger = AgentScanRequest.model_fields["trigger"].annotation
     assert set(typing.get_args(outcome)) == set(typing.get_args(ScanOutcome))
-    assert set(typing.get_args(trigger)) == set(typing.get_args(ScanTrigger))
+    assert set(typing.get_args(trigger)) | {"refresh"} == set(typing.get_args(ScanTrigger))
+
+
+def test_a_recheck_that_reached_no_answer_is_left_out_of_the_index_in_both() -> None:
+    from app.agents.recheck import UNANSWERED_OUTCOMES
+
+    assert set(_migration().UNANSWERED_OUTCOMES) == set(UNANSWERED_OUTCOMES)

@@ -896,6 +896,12 @@ class AgentScanRequest(BaseModel):
     trigger: Literal["manual", "schedule"] = "manual"
 
 
+class AgentRecheckRequest(BaseModel):
+    """Re-check one of the agent's expired trade proposals (D212)."""
+
+    user_id: UUID
+
+
 class MandateCheckRequest(BaseModel):
     """Check one agent's instructions against its settings (D176)."""
 
@@ -952,6 +958,27 @@ class AgentScanTrade(BaseModel):
     )
     refused: bool = Field(default=False, description="Not proposed; `problems` says why.")
     problems: list[str] = Field(default_factory=list)
+    code: (
+        Literal[
+            "malformed",
+            "decision_limit",
+            "duplicate",
+            "already_waiting",
+            "not_tradable",
+            "holding",
+            "thesis",
+            "figures",
+            "no_price",
+            "too_small",
+            "cash",
+            "mandate",
+            "not_this_trade",
+        ]
+        | None
+    ) = Field(
+        default=None,
+        description="A refused trade's first fault, by name (D214); null when kept or older.",
+    )
 
 
 class AgentScanAnswer(BaseModel):

@@ -222,3 +222,9 @@ while this file is out of date.
 | 209 | Every recorded call says whose key paid (`llm_calls.paid_by`), and the cap sums only the installation's |
 | 210 | Own-key calls are outside `LLM_DAILY_BUDGET_USD`; the agent and assistant daily allowances still apply |
 | 211 | A limit on own-key spend is OpenRouter's, set on the key; the app has no field for it |
+| 212 | Re-checking an expired trade proposal is a focused scan of that one trade, through the scan machinery |
+| 213 | "Once per proposal" is a partial unique index on the re-check's scan row, and a re-check that reached no answer does not use it up |
+| 214 | A re-check that proposes nothing says why in the user's language: the catalogue's frame, then the agent's own reason or the check that refused it |
+| 215 | Re-check is offered on an agent buy or sell that expired unanswered, for 7 days after its deadline, while its agent is active |
+| 216 | A re-check may re-size the trade but not change it: same symbol and side, the quantity set again at the fresh price, or no trade |
+| 217 | In Telegram, Re-check appears when a tap finds the proposal expired; the re-check runs after the tap is answered |

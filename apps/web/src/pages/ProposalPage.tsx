@@ -10,6 +10,7 @@ import { useTranslation } from '../i18n/index.ts';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { EvidenceDrawer } from '../components/EvidenceDrawer.tsx';
 import { ProposalCard, UndoButton } from '../components/ProposalCards.tsx';
+import { RecheckCard } from '../components/RecheckCard.tsx';
 import { Card, EmptyState, ErrorNote, Spinner, buttonClass } from '../components/ui.tsx';
 import { subjectLabel } from '../lib/observationPresentation.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
@@ -87,6 +88,9 @@ export const ProposalPage = observer(function ProposalPage() {
           )}
           {(proposal.state !== 'pending' && proposal.state !== 'snoozed') && (
             <DecidedCard proposal={proposal} baseCurrency={baseCurrency} />
+          )}
+          {detail.data?.recheck && (
+            <RecheckCard proposalId={proposal.id} agentId={proposal.agentId} recheck={detail.data.recheck} />
           )}
           <SubjectLink proposal={proposal} />
           <TrailCard transitions={detail.data?.transitions ?? []} createdAt={proposal.createdAt} />

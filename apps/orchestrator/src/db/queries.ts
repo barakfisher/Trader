@@ -15,6 +15,7 @@ export * from './queries/users.js';
 export * from './queries/signups.js';
 export * from './queries/agents.js';
 export * from './queries/agentScans.js';
+export * from './queries/proposalRechecks.js';
 export * from './queries/assistant.js';
 export * from './queries/ledger.js';
 export * from './queries/instruments.js';

@@ -1,6 +1,21 @@
 {
   "components": {
     "schemas": {
+      "AgentRecheckRequest": {
+        "description": "Re-check one of the agent's expired trade proposals (D212).",
+        "properties": {
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "AgentRecheckRequest",
+        "type": "object"
+      },
       "AgentScanAnswer": {
         "description": "The agent's answer (D14, D197): its trades, kept first, then any refused, with why;\nand, for no trade, its reason.",
         "properties": {
@@ -137,6 +152,33 @@
       "AgentScanTrade": {
         "description": "One trade the agent decided (D197): kept and priced, or refused with why.",
         "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "malformed",
+                  "decision_limit",
+                  "duplicate",
+                  "already_waiting",
+                  "not_tradable",
+                  "holding",
+                  "thesis",
+                  "figures",
+                  "no_price",
+                  "too_small",
+                  "cash",
+                  "mandate",
+                  "not_this_trade"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A refused trade's first fault, by name (D214); null when kept or older.",
+            "title": "Code"
+          },
           "decision": {
             "anyOf": [
               {
@@ -3244,6 +3286,84 @@
           }
         },
         "summary": "Mandate Check",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
+    "/agents/{agent_id}/proposals/{proposal_id}/recheck": {
+      "post": {
+        "description": "Re-check one expired trade proposal (D212): a `refresh` scan of that one trade.",
+        "operationId": "recheck_proposal_agents__agent_id__proposals__proposal_id__recheck_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRecheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentScanResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recheck Proposal",
         "tags": [
           "agents"
         ]

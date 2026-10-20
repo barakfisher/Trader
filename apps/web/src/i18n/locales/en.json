@@ -895,6 +895,52 @@
       "not_tradable": "The instrument could not be traded",
       "agent_archived": "The agent was archived",
       "other": "Refused"
+    },
+    "recheck": {
+      "title": "Re-check",
+      "body": "This trade expired before you answered. The agent can look at it once more - today's price, the same settings, the same checks - and propose it again or say why not.",
+      "once_one": "Each proposal can be re-checked once, up to {{count}} day after it expired.",
+      "once_other": "Each proposal can be re-checked once, up to {{count}} days after it expired.",
+      "button": "Re-check",
+      "running": "Re-checking…",
+      "runningSince": "A re-check is running (since {{when}}).",
+      "proposed": "Re-checked {{when}}: the agent proposed it again.",
+      "openNew": "Open the new proposal",
+      "declined": "Re-checked {{when}}: no new proposal.",
+      "agentSaid": "The agent's reason:",
+      "unanswered": "The re-check {{when}} did not finish: {{cause}} You can try again.",
+      "checks": {
+        "malformed": "The agent's answer could not be read.",
+        "decision_limit": "The agent answered with more than one trade.",
+        "duplicate": "The agent named the same trade twice.",
+        "already_waiting": "The same trade is already waiting for your approval.",
+        "not_tradable": "This instrument can no longer be traded here.",
+        "holding": "The agent no longer holds enough shares to sell.",
+        "thesis": "The agent's reasoning was too long to show.",
+        "figures": "The agent's reasoning cited figures the evidence does not contain.",
+        "no_price": "No price is available right now.",
+        "too_small": "The sale would bring in less than its fee.",
+        "cash": "The agent does not have the cash for it and its fee.",
+        "mandate": "The trade no longer fits the agent's settings.",
+        "not_this_trade": "The agent proposed a different trade, which a re-check cannot do.",
+        "no_answer": "The agent gave no answer the server could check."
+      },
+      "causes": {
+        "failed": "it failed.",
+        "budget_reached": "the agent's daily AI budget ran out.",
+        "cap_reached": "your monthly AI limit is reached.",
+        "own_key_failed": "your own OpenRouter key stopped working."
+      },
+      "refusals": {
+        "not_expired": "Only an expired proposal can be re-checked.",
+        "recheck_window_passed": "It expired too long ago to re-check.",
+        "already_rechecked": "This proposal has already been re-checked.",
+        "budget_spent": "The agent's AI budget for today is spent.",
+        "scan_running": "The agent is scanning right now - try again in a minute.",
+        "agent_not_active": "The agent is paused or archived.",
+        "no_persona": "The agent has no instructions or settings to decide by."
+      },
+      "failed": "The re-check could not run."
     }
   },
   "settings": {
@@ -1471,7 +1517,8 @@
       "schedule": "When it scans",
       "runningNow": {
         "manual": "A scan is running now (since {{since}}).",
-        "schedule": "A scheduled scan is running now (since {{since}})."
+        "schedule": "A scheduled scan is running now (since {{since}}).",
+        "refresh": "A re-check of an expired proposal is running now (since {{since}})."
       },
       "nextSoon_one": "Next scheduled scan in {{count}} minute ({{at}}). Running one now makes two scans close together, often on the same idea.",
       "nextSoon_other": "Next scheduled scan in {{count}} minutes ({{at}}). Running one now makes two scans close together, often on the same idea.",
@@ -1515,7 +1562,8 @@
       "older": "Show older scans",
       "trigger": {
         "manual": "Run by you",
-        "schedule": "Scheduled"
+        "schedule": "Scheduled",
+        "refresh": "Re-check"
       },
       "outcomes": {
         "trade": "Proposed",

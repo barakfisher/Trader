@@ -37,6 +37,7 @@ import { DEFAULT_RANGE_BPS } from '../services/fills.js';
 import { confirmTradeApproval, previewTradeApproval } from '../services/tradeApproval.js';
 import type { CallbackPayload } from './callbackToken.js';
 import { confirmable, type Keyboard, type TelegramNotifier } from './client.js';
+import { recheckOffered } from './proposalRecheck.js';
 
 export interface TradeCallback {
   telegram: TelegramNotifier | null;
@@ -180,7 +181,8 @@ export async function handleTradeCallback(input: TradeCallback): Promise<void> {
     } else if (error.code === 'expired') {
       toast = messages.decisionReplies.expired ?? messages.cannotChange;
       block = `${messages.outcomeLines.expired ?? messages.nowState('expired')} (${stamp(now, timezone, messages)})`;
-      keyboard = 'none';
+      // D217: the tap that finds it expired is where Re-check appears.
+      keyboard = (await recheckOffered(userId, payload.proposalId)) ? 'recheck' : 'none';
     } else if (error.code === 'already_decided') {
       toast = messages.refusalReplies.already_decided ?? messages.cannotChange;
       block = null;

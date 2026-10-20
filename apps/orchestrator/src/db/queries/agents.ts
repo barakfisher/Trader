@@ -50,7 +50,7 @@ export interface AgentRow {
   /** Trades one scan may decide (0061, D197). */
   max_decisions: number;
   /** The scan running now, if any (`agent_scans_one_running` allows one); null when none. */
-  running_scan: { trigger: 'manual' | 'schedule'; started_at: string } | null;
+  running_scan: { trigger: 'manual' | 'schedule' | 'refresh'; started_at: string } | null;
   /** Spent on scans and instruction checks since midnight UTC, as text - the sum `scan_budget.py` checks. */
   llm_spent_today_micro_usd: string;
   /** This agent's average over its last scans (D46); null before its first. */

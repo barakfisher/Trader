@@ -26,7 +26,7 @@ from typing import Any
 
 from sqlalchemy import text
 
-from app.agents.answer import Refused, Trade, agent_cash_minor, thesis_problems
+from app.agents.answer import RefusalCode, Refused, Trade, agent_cash_minor, thesis_problems
 from app.agents.mandate import Mandate, _Book, _profile, size_problems, universe_problems
 from app.agents.pending_trades import PendingTrade
 from app.agents.tools import ToolContext, find_listing, money
@@ -50,6 +50,8 @@ class TradeReview:
     max_decisions: int
     evidence: dict[str, Any]
     pending: Sequence[PendingTrade]
+    #: A re-check's one trade, (side, symbol) (D216): any other is refused.
+    focus: tuple[str, str] | None = None
     kept: list[Trade] = field(default_factory=list)
     _cash: int = 0
     _positions: dict[str, _Position] = field(default_factory=dict)
@@ -120,35 +122,47 @@ class TradeReview:
         """Faults no second answer could mend come first, so a trade that has one is
         never sent back for its figures (D189: only an answer whose one fault is
         its figures goes back)."""
+        if self.focus is not None and (trade.decision, trade.symbol) != self.focus:
+            side, symbol = self.focus
+            return _refuse(
+                trade, f"not the trade being re-checked: {side} {symbol}", code="not_this_trade"
+            )
         if len(self.kept) >= self.max_decisions:
             return _refuse(
-                trade, f"over this agent's limit of {self.max_decisions} decisions a scan"
+                trade,
+                f"over this agent's limit of {self.max_decisions} decisions a scan",
+                code="decision_limit",
             )
         if trade.symbol in seen:
-            return _refuse(trade, f"{trade.symbol} is already in this answer")
+            return _refuse(trade, f"{trade.symbol} is already in this answer", code="duplicate")
         for waiting in self.pending:
             if waiting.side == trade.decision and waiting.symbol == trade.symbol:
                 return _refuse(
                     trade,
                     f"{trade.decision} {trade.symbol} is already waiting for the user's approval",
+                    code="already_waiting",
                 )
         final: list[str] = []
+        codes: list[RefusalCode] = []
         listing = find_listing(self.context.engine, trade.symbol)
         if listing is None or not listing.tradable:
             final.append(f"{trade.symbol} is not tradable: USD-listed, in the universe")
+            codes.append("not_tradable")
         position = self._positions.get(trade.symbol)
         held = position.quantity if position else Decimal(0)
         if trade.decision == "sell" and held < trade.quantity:
             final.append(f"sells {trade.quantity} {trade.symbol} but holds {held.normalize():f}")
+            codes.append("holding")
         too_long, figures = thesis_problems(trade, self.evidence)
         final += too_long
+        codes += ["thesis"] * len(too_long)
         if final:
-            return _refuse(trade, *final, *figures)
+            return _refuse(trade, *final, *figures, code=codes[0])
         if figures:
-            return _refuse(trade, *figures, kind="figures")
+            return _refuse(trade, *figures, kind="figures", code="figures")
         quote = prices.get(trade.symbol)
         if quote is None:
-            return _refuse(trade, f"no USD price is available for {trade.symbol}")
+            return _refuse(trade, f"no USD price is available for {trade.symbol}", code="no_price")
         priced = replace(trade, price_minor=quote.price_minor, price_as_of=quote.as_of)
         quantity = Decimal(trade.quantity)
         notional = notional_minor(quantity, quote.price_minor)
@@ -163,6 +177,7 @@ class TradeReview:
                 trade,
                 f"selling {trade.quantity} {trade.symbol} brings {money(notional, 'USD')}, "
                 f"not more than the {money(fee, 'USD')} fee",
+                code="too_small",
             )
         position = self._positions[trade.symbol]
         position.cost -= position.cost * quantity / position.quantity
@@ -179,12 +194,13 @@ class TradeReview:
                 trade,
                 f"buying {trade.quantity} {trade.symbol} at {price} costs {money(cost, 'USD')} "
                 f"with the fee; cash after the other proposals is {money(self._cash, 'USD')}",
+                code="cash",
             )
         broken = universe_problems(
             self.mandate, trade.symbol, _profile(self.context.engine, trade.symbol)
         ) + size_problems(self.mandate, trade, self._book(trade.symbol))
         if broken:
-            return _refuse(trade, *broken, kind="mandate")
+            return _refuse(trade, *broken, kind="mandate", code="mandate")
         # Paid for by this answer's sells when the cash before them would not cover it.
         if cost > self._cash - sum(self._proceeds.values()):
             trade = replace(trade, funded_by=tuple(self._proceeds))
@@ -193,6 +209,6 @@ class TradeReview:
         return trade
 
 
-def _refuse(trade: Trade, *problems: str, kind: str = "final") -> Refused:
+def _refuse(trade: Trade, *problems: str, code: RefusalCode, kind: str = "final") -> Refused:
     """A refused trade as written, with the price when one was read."""
-    return Refused(trade.as_json(), problems, kind)  # type: ignore[arg-type]
+    return Refused(trade.as_json(), problems, kind, code)  # type: ignore[arg-type]

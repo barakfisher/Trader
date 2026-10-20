@@ -20,6 +20,8 @@ const SIGNING_SECRET = 'a-signing-secret-long-enough';
 
 let language = 'en';
 let kind = 'buy';
+/** The proposal's deadline, from now; negative once expired. */
+let expiresInMs = 3_600_000;
 
 vi.mock('../src/db/pool.js', () => ({
   queryOne: vi.fn(async () => null),
@@ -40,13 +42,16 @@ vi.mock('../src/db/queries.js', () => ({
   findProposal: vi.fn(async () => ({
     id: PROPOSAL,
     kind,
+    agent_id: 'agent-1',
     state: 'pending',
-    expires_at: new Date(Date.now() + 3_600_000),
+    expires_at: new Date(Date.now() + expiresInMs),
     snoozed_until: null,
     decided_at: null,
   })),
   getUser: vi.fn(async () => ({ id: USER, email: null, base_currency: 'USD', timezone: 'Asia/Jerusalem' })),
   getOrCreateUserSettings: vi.fn(async () => ({ notify_severity: 'high', language })),
+  getAgent: vi.fn(async () => ({ id: 'agent-1', state: 'active', is_primary: false })),
+  latestRecheck: vi.fn(async () => null),
 }));
 
 vi.mock('../src/services/tradeApproval.js', () => ({
@@ -240,6 +245,19 @@ describe('Approve: the preview at the live price (D47)', () => {
     await tap('approve');
     expect(keyboardOf(lastEdit())).toEqual([]);
     expect(String(lastEdit().body.text)).toContain('Expired');
+  });
+
+  it('offers Re-check in their place when the expired trade may be re-checked (D217)', async () => {
+    expiresInMs = -60_000;
+    try {
+      vi.mocked(approval.previewTradeApproval).mockRejectedValueOnce(new ApiProblem(422, 'expired', 'expired'));
+      await tap('approve');
+      const buttons = keyboardOf(lastEdit());
+      expect(buttons.map((button) => button.text)).toEqual(['🔄 Re-check']);
+      expect(decodeCallbackData(String(buttons[0]!.callback_data), SIGNING_SECRET)?.action).toBe('recheck');
+    } finally {
+      expiresInMs = 3_600_000;
+    }
   });
 });
 

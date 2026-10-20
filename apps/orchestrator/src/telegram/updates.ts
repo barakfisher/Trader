@@ -54,6 +54,7 @@ import { BUSY_CALLBACK_DATA, decodeCallbackData } from './callbackToken.js';
 import { TelegramNotifier, type Keyboard } from './client.js';
 import { handleSignupCallback } from './signupApproval.js';
 import { decodeSignupData } from './signupToken.js';
+import { recheckOffered, startRecheckCallback } from './proposalRecheck.js';
 import { handleTradeCallback } from './tradeApproval.js';
 
 /** What handling an update needs, whichever transport delivered it. */
@@ -445,6 +446,27 @@ async function handleCallback(
       return;
     }
   }
+  if (payload.action === 'recheck') {
+    if (!trade) {
+      // Only an expired trade is ever rendered with Re-check.
+      await telegram?.answerCallback(callback.id, messages.buttonUnusable);
+      return;
+    }
+    // Answered now, finished later: a re-check is a model call, and the poller
+    // handles one update at a time (`proposalRecheck.ts`).
+    await startRecheckCallback({
+      telegram,
+      ai: deps.ai,
+      notifier: deps.notifier,
+      userId: binding.user_id,
+      language,
+      callbackId: callback.id,
+      chatId,
+      ...(message === undefined ? {} : { message }),
+      payload: { ...payload, action: 'recheck' },
+    });
+    return;
+  }
   const decisionAction = payload.action;
 
   // The tap registered: swap every button for one inert "Approving…" before
@@ -501,12 +523,14 @@ async function handleCallback(
       chatId,
       message.message_id,
       payload.proposalId,
-      keyboardFor(
-        result.state,
-        result.state === 'approved' &&
-          (await undoIsOpen(binding.user_id, payload.proposalId, new Date())),
-        trade,
-      ),
+      trade && result.state === 'expired' && (await recheckOffered(binding.user_id, payload.proposalId))
+        ? 'recheck'
+        : keyboardFor(
+            result.state,
+            result.state === 'approved' &&
+              (await undoIsOpen(binding.user_id, payload.proposalId, new Date())),
+            trade,
+          ),
       language,
     );
     return;

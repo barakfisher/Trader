@@ -79,6 +79,11 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "DELETE FROM assistant_messages WHERE outcome = 'own_key_failed'; "
         "DELETE FROM user_llm_keys",
     ),
+    # A re-check names the proposal it was for; 0065's triggers cannot (D212).
+    "0066_proposal_refresh": (
+        "agent_scans holds re-checks",
+        "DELETE FROM agent_scans WHERE trigger = 'refresh'",
+    ),
     # A check's calls are spend records; relabelling them as scans would put
     # them in the scan averages, so 0059 refuses.
     "0059_mandate_check": (

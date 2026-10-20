@@ -15,6 +15,7 @@ import type {
   Proposal,
   ProposalDetailResponse,
   ProposalsResponse,
+  RecheckResult,
   TradeApprovalPreview,
   TradeApprovalResult,
 } from '@traders/shared';
@@ -195,6 +196,25 @@ export function useConfirmTradeApproval(proposalId: string) {
         client.invalidateQueries({ queryKey: queryKeys.proposals }),
         client.invalidateQueries({ queryKey: queryKeys.agents }),
         client.invalidateQueries({ queryKey: queryKeys.consolidated }),
+      ]),
+  });
+}
+
+/**
+ * *Re-check* on an expired trade proposal (D212): the agent looks at that one
+ * trade again - a model call of up to a minute - and either proposes it anew or
+ * says why not. A new proposal joins the inbox, and the scan joins the agent's
+ * Scans tab, so both are re-read with the page.
+ */
+export function useRecheckProposal(proposalId: string, agentId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<RecheckResult>(`/proposals/${encodeURIComponent(proposalId)}/recheck`, {}),
+    onSettled: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: queryKeys.proposal(proposalId) }),
+        client.invalidateQueries({ queryKey: queryKeys.proposals }),
+        client.invalidateQueries({ queryKey: queryKeys.agentScans(agentId) }),
       ]),
   });
 }
