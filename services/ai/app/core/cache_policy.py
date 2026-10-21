@@ -11,9 +11,12 @@ TTL follows the data instead of the clock:
   * crypto: 60s - it really does trade continuously;
   * equities during market hours: the provider's own delay, floored by the
     configured minimum, because nothing new exists before then;
-  * equities outside market hours: one hour, short enough that the first
-    request after the opening bell is at most an hour stale and the normal
-    in-hours path then takes over.
+  * equities outside market hours: one hour, and never past the next opening
+    bell. A price read at 09:00 New York is the previous close; cached for a
+    full hour it was still served at 09:59, by then seventeen hours old, and
+    every trade approval in that window was refused as `quote_too_old`. So the
+    closed-market TTL ends at the open, and the first request after the bell
+    fetches a live price.
 
 "Market hours" are the instrument's own exchange's (`market_sessions.py`), and
 "crypto" is its asset class, whenever the caller sends them - the orchestrator
@@ -26,6 +29,7 @@ tested against a fake clock rather than against whatever time CI happens to run 
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -48,9 +52,10 @@ CRYPTO_TTL_SECONDS = 300
 #: default so importing this module standalone behaves like the wired service.
 DEFAULT_MINIMUM_TTL_SECONDS = 60
 
-#: Used when the market is closed. An open price cannot change before the bell,
-#: so the only cost of a longer TTL is staleness across the open; an hour caps
-#: that without turning the overnight window into a per-minute poll.
+#: Used when the market is closed. A closed price cannot change before the
+#: bell, so an hour keeps the overnight window from becoming a per-minute poll.
+#: It is capped at the next open (`seconds_until_open`): the staleness across
+#: the open was the cost, and a fill refuses any quote older than 30 minutes.
 CLOSED_TTL_SECONDS = 3600
 
 #: Fallback window for the US session, in UTC, used only if the system has no
@@ -165,6 +170,49 @@ def last_session_close(now: datetime, session: Session) -> datetime | None:
     return None
 
 
+def next_session_open(now: datetime, session: Session) -> datetime | None:
+    """The next instant after `now` at which `session` opens, in UTC.
+
+    Weekdays in the exchange's own zone, holidays ignored as in
+    `is_session_open`: on a holiday this names an open that does not happen, and
+    the whole cost is one extra fetch of an unchanged price. Without a timezone
+    database the US session uses its UTC fallback window and any other session
+    gives None - `is_session_open` already calls those open, so a closed-market
+    TTL is never asked of them.
+    """
+    try:
+        zone: ZoneInfo | type[UTC] = ZoneInfo(session.timezone)
+        open_minute = session.open_minute
+    except ZoneInfoNotFoundError:
+        if session != US:
+            return None
+        zone, open_minute = UTC, FALLBACK_OPEN_MINUTE_UTC
+    local = now.astimezone(zone)
+    day = local.date()
+    for _ in range(8):
+        if day.weekday() < 5:
+            opens = datetime(
+                day.year, day.month, day.day, open_minute // 60, open_minute % 60, tzinfo=zone
+            )
+            if opens > local:
+                return opens.astimezone(UTC)
+        day += timedelta(days=1)
+    return None
+
+
+def seconds_until_open(now: datetime, session: Session) -> int | None:
+    """Whole seconds from `now` to the next open, rounded up and at least 1.
+
+    Rounded up so an entry never expires a fraction of a second before the bell
+    and is refetched as the old close; at least 1 because a cache TTL of 0 means
+    "keep forever" to some backends.
+    """
+    opens = next_session_open(now, session)
+    if opens is None:
+        return None
+    return max(math.ceil((opens - now).total_seconds()), 1)
+
+
 def quote_ttl(
     symbol: str,
     provider_delay_seconds: int,
@@ -193,6 +241,12 @@ def quote_ttl(
         # because the delayed value itself keeps moving.
         return max(CRYPTO_TTL_SECONDS, floor)
 
-    if is_session_open(moment, session_for(exchange)):
+    session = session_for(exchange)
+    if is_session_open(moment, session):
         return max(provider_delay_seconds, floor)
-    return max(CLOSED_TTL_SECONDS, floor)
+    closed_ttl = max(CLOSED_TTL_SECONDS, floor)
+    # A price read before the bell must not outlive it, floor included: the
+    # floor saves quota, and a pre-open close served after the open is a wrong
+    # answer rather than an expensive one.
+    until_open = seconds_until_open(moment, session)
+    return closed_ttl if until_open is None else min(closed_ttl, until_open)

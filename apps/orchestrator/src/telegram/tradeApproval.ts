@@ -10,9 +10,12 @@
  *   signs it with the proposal and the action, so the ±50 bps band a fill is
  *   checked against is centred on the price the user read - never one an
  *   edited button names. The server computes every bound, as on the web.
- * - **The message keeps the record.** The preview, the fill and each refusal
+ * - **The message keeps the record.** The preview, the fill and the refusal
  *   are appended under the proposal, as the other decisions' outcome lines
- *   are, so the chat read tomorrow says what happened and at what price.
+ *   are, so the chat read tomorrow says what happened and at what price. A
+ *   refusal that follows a refusal replaces it rather than stacking a second
+ *   ⚠️ line: five taps before a fresh quote arrived read as five lines of the
+ *   same sentence, and only the latest time and reason say anything.
  * - **A refusal keeps Approve and Reject (D49, D62).** The proposal is still
  *   pending; the reason is shown in the user's language, a closed market with
  *   its next open in the user's own time, and the attempt is recorded by the
@@ -112,6 +115,24 @@ function appendBlock(text: string, block: string): string {
   return text === '' ? block : `${text}\n\n${block}`;
 }
 
+/** BIDI isolates: Telegram may hand a message back with or without them. */
+const ISOLATES = /[\u2066-\u2069]/g;
+
+/**
+ * The text with `refusal` as its last block: the previous block is replaced when
+ * it is itself a refusal in this language, appended otherwise. A refusal is
+ * recognised by the catalogue's own wording up to its first placeholder, so the
+ * sentence and the test for it cannot drift apart.
+ */
+export function withRefusal(text: string, refusal: string, messages: Messages): string {
+  const probe = messages.trade.refused('\u0000', '\u0000');
+  const opening = probe.slice(0, probe.indexOf('\u0000')).replace(ISOLATES, '');
+  const split = text.lastIndexOf('\n\n');
+  const last = split === -1 ? text : text.slice(split + 2);
+  if (split === -1 || !last.replace(ISOLATES, '').startsWith(opening)) return appendBlock(text, refusal);
+  return appendBlock(text.slice(0, split), refusal);
+}
+
 export async function handleTradeCallback(input: TradeCallback): Promise<void> {
   const { telegram, userId, payload, message, chatId } = input;
   const messages = messagesFor(input.language);
@@ -125,6 +146,7 @@ export async function handleTradeCallback(input: TradeCallback): Promise<void> {
 
   let toast: string;
   let block: string | null;
+  let refused = false;
   let keyboard: Keyboard;
   try {
     if (payload.action === 'approve') {
@@ -192,6 +214,7 @@ export async function handleTradeCallback(input: TradeCallback): Promise<void> {
       const reason = refusalReason(error, messages, timezone);
       toast = reason;
       block = messages.trade.refused(reason, stamp(now, timezone, messages));
+      refused = true;
       keyboard = 'trade';
     }
   }
@@ -200,14 +223,16 @@ export async function handleTradeCallback(input: TradeCallback): Promise<void> {
   await telegram?.answerCallback(input.callbackId, toast);
   if (telegram === null || message === undefined) return;
 
+  const text = message.text ?? '';
   const edited =
     block === null
       ? await telegram.setKeyboard(chatId, message.message_id, payload.proposalId, keyboard, input.language)
-      : await telegram.editMessage(chatId, message.message_id, appendBlock(message.text ?? '', block), {
-          proposalId: payload.proposalId,
-          keyboard,
-          language: input.language,
-        });
+      : await telegram.editMessage(
+          chatId,
+          message.message_id,
+          refused ? withRefusal(text, block, messages) : appendBlock(text, block),
+          { proposalId: payload.proposalId, keyboard, language: input.language },
+        );
   if (!edited.delivered) {
     logger().warn({ chatId, messageId: message.message_id, err: edited.error }, 'telegram.edit_failed');
   }

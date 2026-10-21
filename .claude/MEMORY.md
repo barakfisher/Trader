@@ -3623,6 +3623,27 @@ failure they prevent.
     failed naming `/agents` and the leaked ids. Also: the fan-out runs for both and not for a
     disabled user; a run naming no user is refused; a disabled user's cookie is refused.
     *Rejected:* a hand-written list of routes (the next route would be untested, silently).
+241. **A closed-market quote is cached until the next open at most, the TTL floor included**
+    (2026-10-21; `services/ai/app/core/cache_policy.py`). A price read before the bell is the
+    previous close; cached for the full hour it was served after the open dated ~17.7 hours old,
+    and every approval in that window was refused `quote_too_old` (fills accept 30 minutes). The
+    closed TTL is now `min(max(CLOSED_TTL_SECONDS, floor), seconds to the next open)`, rounded up,
+    at least 1. The cap beats `CACHE_TTL_QUOTE`'s floor on purpose: the floor saves quota, and a
+    close served after the open is a wrong answer, not an expensive one. The open is the regular
+    session's (`market_sessions.py`, holidays ignored): on a holiday the cap names an open that
+    does not happen and costs one extra fetch of the same price. *Rejected:* the holiday
+    calendar (`exchange_calendar.py` covers XNYS only and raises outside its years - the pricing
+    path must not); shortening `CLOSED_TTL_SECONDS` (more overnight requests, and still a window
+    after the bell); bypassing the cache on approval (the fill path would spend quota per tap).
+242. **In Telegram a refusal after a refusal replaces its line** (2026-10-21;
+    `telegram/tradeApproval.ts` `withRefusal`). Each refused tap used to append another ⚠️ line, so
+    a user retrying through the stale-quote window read five copies of one sentence. The last
+    block is replaced when it is a refusal in the same language, recognised by the catalogue's
+    own wording up to its first placeholder with BIDI isolates ignored (Telegram may strip them);
+    a refusal after a preview is still appended beneath it, so the price the user read stays.
+    Every attempt is still recorded by the service and listed on the web proposal page (D49).
+    *Rejected:* a count ("3 attempts") - a new plural sentence in both catalogues for a number
+    nobody acts on.
 
 ---
 
