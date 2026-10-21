@@ -3462,6 +3462,32 @@ failure they prevent.
     leaving the tool names in with "an agent's tool only" (a name in the text is still a name to
     call - describe the tool, do not name it).
 
+227. **A scan's figure check counts the agent's own instructions as a source; #247 is closed
+    unmerged** (the user, 2026-10-21, at the scan review; `_converse` in `agents/scan.py`). The
+    review (all compose scans, 2026-10-12 to 10-20: 16 model scans, 5 trade, 7 no_trade, 4
+    `invalid_answer`, 0 `step_limit`; 0.31 trades a scan; 3 refused for unsourced figures; **0
+    buys refused for cash**; 2.3 tool calls a scan, max 4 of 12; `search_universe` never called;
+    $0.036 in all) found the invalid answers came from the agent quoting its own rule - Test
+    agent's "a drop of 3% or more", refused twice, the second time after the repair turn - plus
+    one Hebrew "ב-39.69" already fixed by D184 and one answer that was not JSON. Now
+    `evidence["instructions"]` is the persona, as the Ask page counts the user's own question.
+    The cost: an invented figure that happens to equal one in the instructions passes; the
+    instructions are the user's, short, and their figures are rules, not market data. #247
+    (`affordable_shares` per mover and four prompt lines) guarded against cash refusals and
+    unlooked-up symbols, neither seen once, and conflicted with `main` after D197. *Rejected:*
+    rebasing and merging #247 (a whole-prompt change for an unseen problem, leaving the measured
+    one); both (two prompt changes measured as one); waiting for more scans (the "3%" refusal is
+    certain to repeat on every Test agent pass that explains itself). **Revisit
+    `affordable_shares`** the first time a buy is refused for cash.
+228. **The research sub-agent and the per-agent tool picker are deferred again** (the user,
+    2026-10-21). Nothing measured asks for either: scans use 2.3 of 12 tool calls, none reached
+    the step limit, and every agent used the same four tools (`get_news` 14, `get_quote` 13,
+    `get_price_history` 5, `get_position` 4, `get_findings` 1). **Re-measure at about 50 model
+    scans**, or sooner when a scan hits `step_limit` or a thesis says it lacked information.
+    *Rejected:* dropping both (a later need starts from nothing); building the tool picker
+    (cheap, unasked); building the research agent (more cost a scan while scans use under a fifth
+    of their tool budget).
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -4741,6 +4767,9 @@ ask before each PR, merge only on "merge", redeploy only on "redeploy".
    does not touch: "why cant I create an agent?" is sometimes *declined* (`action`, 4 of 10) with
    no tool call - the model reads "create" as a request to act. Harmless (the decline names the
    Agents page) but worth a look if the judge marks it.
+2b. **The scan review is done (D227, D228; 2026-10-21).** #247 closed; the agent's instructions
+   now count as a source for its thesis. Next look: about 50 model scans (compose had 16), the
+   numbers in D227 as the baseline.
 3. **D225 is unseen in a browser.** The hint beside the disabled Create agent button is covered by
    jsdom; its wrap at phone width and in Hebrew is not.
 

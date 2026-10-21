@@ -237,3 +237,5 @@ while this file is out of date.
 | 224 | The bot's fixed sentences around a question are in the question's language, read from its letters |
 | 225 | A disabled Create agent says why, beside the button; the paper budget has no default and no placeholder |
 | 226 | The product guide names only tools the assistant has, and says how an agent is created |
+| 227 | A scan's figure check counts the agent's own instructions as a source; #247 is closed unmerged |
+| 228 | The research sub-agent and the per-agent tool picker are deferred again |
