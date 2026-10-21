@@ -100,15 +100,19 @@ say "snapshot run"
 # A unique run key makes this deterministic: the daily key may already have been
 # consumed by the local scheduler or a previous smoke run.
 run_key="smoke:$(date +%s):$$"
+# A user's run names its user (D161, D238): the signed-in account's, from its session.
+user_id=$(curl -fsS -b "$COOKIE_JAR" "$BASE_URL/auth/session" \
+  | python3 -c 'import json, sys; print(json.load(sys.stdin)["user"]["id"])') \
+  || fail "could not read the signed-in user"
 curl -fsS -X POST "$BASE_URL/internal/runs" \
   -H 'content-type: application/json' -H "x-internal-key: ${INTERNAL_API_KEY}" \
-  -d "{\"kind\":\"snapshot\",\"runKey\":\"$run_key\"}" \
+  -d "{\"kind\":\"snapshot\",\"userId\":\"$user_id\",\"runKey\":\"$run_key\"}" \
   | grep -q '"status":"ok"' || fail "snapshot run did not succeed"
 
 say "snapshot run is idempotent"
 curl -fsS -X POST "$BASE_URL/internal/runs" \
   -H 'content-type: application/json' -H "x-internal-key: ${INTERNAL_API_KEY}" \
-  -d "{\"kind\":\"snapshot\",\"runKey\":\"$run_key\"}" \
+  -d "{\"kind\":\"snapshot\",\"userId\":\"$user_id\",\"runKey\":\"$run_key\"}" \
   | grep -q '"status":"skipped"' || fail "second run with the same key was not deduplicated"
 
 say "snapshot is persisted"
