@@ -25,6 +25,7 @@ import {
 import {
   changeEmail,
   changePassword,
+  changeTimeZone,
   createSignupRequest,
   getOrCreateUserSettings,
   getPasswordHash,
@@ -62,6 +63,8 @@ const passwordChangeSchema = z.object({
   currentPassword: submittedPassword,
   newPassword: submittedPassword,
 });
+
+const timeZoneChangeSchema = z.object({ timezone: z.string().max(200) });
 
 const emailChangeSchema = z.object({
   email: z.string().max(1000),
@@ -242,6 +245,27 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     if (updated === 'taken') throw conflict('email_taken', 'another account uses this address');
     if (!updated) throw unauthorized();
     issueSession(context, updated);
+    return context.json(await sessionUser(updated));
+  });
+
+  /**
+   * The user's own zone (D163), edited in Settings: a valid IANA name only. It
+   * moves "today" - quiet hours, the digest, the snapshot's day - from the next
+   * run on; a run already done today is not repeated or undone, so a mid-day
+   * change may run or skip one daily run once (accepted in D163).
+   */
+  app.post('/auth/timezone', async (context) => {
+    const user = context.get('user');
+    if (!user) throw unauthorized();
+    // `/auth/*` is outside the session gate's refusal so the one-time password can be changed (D162); nothing else can.
+    if (user.password_must_change) throw new ApiProblem(403, 'password_change_required', 'set a new password first');
+    const parsed = timeZoneChangeSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) throw badRequest('invalid_body', 'expected { timezone: string }');
+    if (timeZoneProblem(parsed.data.timezone) !== null) {
+      throw badRequest('timezone_invalid', 'the zone is not an IANA time zone such as Europe/London');
+    }
+    const updated = await changeTimeZone(user.id, parsed.data.timezone);
+    if (!updated) throw unauthorized();
     return context.json(await sessionUser(updated));
   });
 }

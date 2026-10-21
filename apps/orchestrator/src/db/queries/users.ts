@@ -20,6 +20,18 @@ export interface UserRow {
 const USER_COLUMNS =
   'id, email, base_currency, timezone, role, status, session_version, password_must_change';
 
+/**
+ * The users scheduled work runs for (D161): active ones, oldest first, so the
+ * round-robin's order is stable from one ask to the next. Pending, rejected and
+ * disabled users have no scheduled runs.
+ */
+export async function listActiveUserIds(): Promise<string[]> {
+  const rows = await query<{ id: string }>(
+    `SELECT id FROM users WHERE status = 'active' ORDER BY created_at, id`,
+  );
+  return rows.map((row) => row.id);
+}
+
 export function getUser(userId: string): Promise<UserRow | null> {
   return queryOne<UserRow>(`SELECT ${USER_COLUMNS} FROM users WHERE id = $1`, [userId]);
 }
@@ -64,6 +76,17 @@ export async function changePassword(userId: string, passwordHash: string): Prom
       WHERE id = $1
   RETURNING ${USER_COLUMNS}`,
     [userId, passwordHash],
+  );
+}
+
+/**
+ * The user's own zone (D163): their "today", quiet hours, digest and snapshot
+ * day. Not a credential, so no session ends; the caller validates the name.
+ */
+export function changeTimeZone(userId: string, timezone: string): Promise<UserRow | null> {
+  return queryOne<UserRow>(
+    `UPDATE users SET timezone = $2 WHERE id = $1 RETURNING ${USER_COLUMNS}`,
+    [userId, timezone],
   );
 }
 

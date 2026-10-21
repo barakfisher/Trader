@@ -47,7 +47,7 @@ import { AiServiceError } from '@traders/shared/ai';
 
 import {
   deleteTopic,
-  getLatestFinishedRun,
+  getLatestInstallationRun,
   getTopic,
   getUser,
   listTopicArticles,
@@ -308,7 +308,7 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
     if (!topic) throw notFound('no such topic');
     const [rows, lastRun] = await Promise.all([
       listTopicArticles(userId, id, TOPIC_NEWS_DAYS),
-      getLatestFinishedRun(userId, 'news_collect'),
+      getLatestInstallationRun('news_collect'),
     ]);
     const body: TopicNewsResponse = {
       topicId: id,

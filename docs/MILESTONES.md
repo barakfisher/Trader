@@ -175,7 +175,7 @@ decision 85).
 
 ---
 
-## M9 — Multiple users *(planned 2026-10-14; PR 1 measured 2026-10-15; decisions 155-163 on 2026-10-18)*
+## M9 — Multiple users *(planned 2026-10-14; PR 1 measured 2026-10-15; decisions 155-163 on 2026-10-18; complete 2026-10-21 - the exit test, D240)*
 
 Added at the user's request. The data model has been multi-tenant since M1 (`user_id` on every
 user-owned row, guideline 5) and DESIGN §2 deferred real multi-user auth "but not designed out";

@@ -5,6 +5,10 @@
 # cron syntax, "minute hour day-of-month month day-of-week" - it creates a Job,
 # which runs one pod to completion. Here that pod is a tiny curl container that
 # POSTs {kind, trigger: "cronjob"} to the orchestrator's /internal/runs with the
+# internal key - and, for a user's kind (RUN_FOR), for: "every_active_user", so
+# the orchestrator runs it once for each active user in turn (D161). The
+# installation's kinds (backfill, news, names, the sweep, the scan plan, the
+# rescreen) name no user and run once (D238). Continuing:
 # internal key: the same single trigger path the local timer uses (DESIGN.md
 # section 2). It calls the orchestrator Service inside the cluster; the front
 # door does not expose /internal/*.
@@ -60,7 +64,7 @@ spec:
           containers:
             - name: trigger
               image: curlimages/curl:8.22.0
-              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"${RUN_FOR:+,\"for\":\"$RUN_FOR\"}}"']
               env:
                 - name: RUN_KIND
                   value: backfill
@@ -96,7 +100,7 @@ spec:
           containers:
             - name: trigger
               image: curlimages/curl:8.22.0
-              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"${RUN_FOR:+,\"for\":\"$RUN_FOR\"}}"']
               env:
                 - name: RUN_KIND
                   value: instrument_metadata
@@ -132,10 +136,13 @@ spec:
           containers:
             - name: trigger
               image: curlimages/curl:8.22.0
-              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"${RUN_FOR:+,\"for\":\"$RUN_FOR\"}}"']
               env:
                 - name: RUN_KIND
                   value: snapshot
+                # A user's kind runs once for each active user (D161).
+                - name: RUN_FOR
+                  value: every_active_user
                 - name: INTERNAL_API_KEY
                   valueFrom:
                     secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }
@@ -171,7 +178,7 @@ spec:
           containers:
             - name: trigger
               image: curlimages/curl:8.22.0
-              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"${RUN_FOR:+,\"for\":\"$RUN_FOR\"}}"']
               env:
                 - name: RUN_KIND
                   value: agent_scans
@@ -207,7 +214,7 @@ spec:
           containers:
             - name: trigger
               image: curlimages/curl:8.22.0
-              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"${RUN_FOR:+,\"for\":\"$RUN_FOR\"}}"']
               env:
                 - name: RUN_KIND
                   value: news_collect
@@ -242,10 +249,13 @@ spec:
           containers:
             - name: trigger
               image: curlimages/curl:8.22.0
-              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"${RUN_FOR:+,\"for\":\"$RUN_FOR\"}}"']
               env:
                 - name: RUN_KIND
                   value: portfolio_scan
+                # A user's kind runs once for each active user (D161).
+                - name: RUN_FOR
+                  value: every_active_user
                 - name: INTERNAL_API_KEY
                   valueFrom:
                     secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }
@@ -278,10 +288,13 @@ spec:
           containers:
             - name: trigger
               image: curlimages/curl:8.22.0
-              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"${RUN_FOR:+,\"for\":\"$RUN_FOR\"}}"']
               env:
                 - name: RUN_KIND
                   value: topic_scan
+                # A user's kind runs once for each active user (D161).
+                - name: RUN_FOR
+                  value: every_active_user
                 - name: INTERNAL_API_KEY
                   valueFrom:
                     secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }
@@ -313,7 +326,7 @@ spec:
           containers:
             - name: trigger
               image: curlimages/curl:8.22.0
-              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"${RUN_FOR:+,\"for\":\"$RUN_FOR\"}}"']
               env:
                 - name: RUN_KIND
                   value: proposal_sweep
@@ -349,10 +362,13 @@ spec:
           containers:
             - name: trigger
               image: curlimages/curl:8.22.0
-              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"${RUN_FOR:+,\"for\":\"$RUN_FOR\"}}"']
               env:
                 - name: RUN_KIND
                   value: topic_discovery
+                # A user's kind runs once for each active user (D161).
+                - name: RUN_FOR
+                  value: every_active_user
                 - name: INTERNAL_API_KEY
                   valueFrom:
                     secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }
@@ -393,7 +409,7 @@ spec:
           containers:
             - name: trigger
               image: curlimages/curl:8.22.0
-              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"${RUN_FOR:+,\"for\":\"$RUN_FOR\"}}"']
               env:
                 - name: RUN_KIND
                   value: universe_rescreen
@@ -429,10 +445,13 @@ spec:
           containers:
             - name: trigger
               image: curlimages/curl:8.22.0
-              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"}"']
+              command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"${RUN_FOR:+,\"for\":\"$RUN_FOR\"}}"']
               env:
                 - name: RUN_KIND
                   value: daily_digest
+                # A user's kind runs once for each active user (D161).
+                - name: RUN_FOR
+                  value: every_active_user
                 - name: INTERNAL_API_KEY
                   valueFrom:
                     secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }

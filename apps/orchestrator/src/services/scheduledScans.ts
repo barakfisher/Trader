@@ -102,6 +102,8 @@ export function nextAttempt(history: SlotAttemptRow[], slot: Pick<DueSlot, 'unti
 }
 
 export interface PlanResult {
+  /** Active users whose agents were planned (D161). */
+  users: number;
   agents: number;
   due: number;
   enqueued: number;
@@ -109,18 +111,42 @@ export interface PlanResult {
 
 const isoDay = (time: number) => new Date(time).toISOString().slice(0, 10);
 
-/** One 15-minute ask: put every due attempt on the queue. */
+/**
+ * Take one from each list in turn until all are empty: [[a1, a2], [b1]] is
+ * [a1, b1, a2]. Pure.
+ */
+export function roundRobin<T>(lists: T[][]): T[] {
+  const out: T[] = [];
+  for (let index = 0; lists.some((list) => index < list.length); index += 1) {
+    for (const list of lists) if (index < list.length) out.push(list[index] as T);
+  }
+  return out;
+}
+
+/**
+ * One 15-minute ask: put every due attempt of every active user on the queue
+ * (D161, D238). The queue works through jobs in the order they are added, so
+ * the users' attempts are added in turn - one user's ten agents cannot push
+ * another's one slot to the back of the line.
+ */
 export async function planScheduledScans(input: {
-  userId: string;
+  userIds: string[];
   ai: AiClient;
   queue: ScanQueue;
   now: Date;
   requestId?: string;
 }): Promise<PlanResult> {
-  const agents = (await listAgents(input.userId)).filter(
-    (agent) => !agent.is_primary && agent.state === 'active' && readyToScan(agent),
+  const perUser = await Promise.all(
+    input.userIds.map(async (userId) => ({
+      userId,
+      agents: (await listAgents(userId)).filter(
+        (agent) => !agent.is_primary && agent.state === 'active' && readyToScan(agent),
+      ),
+    })),
   );
-  if (agents.length === 0) return { agents: 0, due: 0, enqueued: 0 };
+  const agents = perUser.reduce((sum, user) => sum + user.agents.length, 0);
+  const result: PlanResult = { users: input.userIds.length, agents, due: 0, enqueued: 0 };
+  if (agents === 0) return result;
 
   const t = input.now.getTime();
   const { sessions } = await input.ai.marketSessions(
@@ -130,24 +156,30 @@ export async function planScheduledScans(input: {
     input.requestId,
   );
 
-  const result: PlanResult = { agents: agents.length, due: 0, enqueued: 0 };
-  for (const agent of agents) {
-    for (const slot of dueSlots(scheduleOf(agent), sessions as Session[], input.now)) {
-      result.due += 1;
-      const key = slotKey(agent.id, slot);
-      const attempt = nextAttempt(await listSlotAttempts(agent.id, key), slot, input.now);
-      if (attempt === null) continue;
-      const job: SlotAttemptJob = {
-        userId: input.userId,
-        agentId: agent.id,
-        day: slot.day,
-        slot: slot.slot,
-        attempt,
-        until: slot.until.toISOString(),
-      };
-      await input.queue.add(attemptRunKey(job), job);
-      result.enqueued += 1;
+  const jobsPerUser: SlotAttemptJob[][] = [];
+  for (const user of perUser) {
+    const jobs: SlotAttemptJob[] = [];
+    for (const agent of user.agents) {
+      for (const slot of dueSlots(scheduleOf(agent), sessions as Session[], input.now)) {
+        result.due += 1;
+        const key = slotKey(agent.id, slot);
+        const attempt = nextAttempt(await listSlotAttempts(agent.id, key), slot, input.now);
+        if (attempt === null) continue;
+        jobs.push({
+          userId: user.userId,
+          agentId: agent.id,
+          day: slot.day,
+          slot: slot.slot,
+          attempt,
+          until: slot.until.toISOString(),
+        });
+      }
     }
+    jobsPerUser.push(jobs);
+  }
+  for (const job of roundRobin(jobsPerUser)) {
+    await input.queue.add(attemptRunKey(job), job);
+    result.enqueued += 1;
   }
   return result;
 }

@@ -413,6 +413,45 @@ export interface AdminSignupsResponse {
   defaultLlmCapMicroUsd: number;
 }
 
+/**
+ * One account on the Admin page's user list (D162): operations only - status,
+ * cap, this month's spend, last sign-in - never holdings, proposals, agents or
+ * conversations.
+ */
+export interface AdminUserView {
+  userId: string;
+  email: string | null;
+  role: 'user' | 'admin';
+  status: 'active' | 'disabled';
+  timezone: string;
+  /** Null for the admin: uncapped (D157). Integer micro-USD. */
+  llmCapMicroUsd: number | null;
+  /** What the installation paid for this user's calls this month, in their zone. */
+  spentThisMonthMicroUsd: number;
+  /** Their own OpenRouter key (D206): none, working, or refused by OpenRouter. */
+  ownKey: 'none' | 'valid' | 'failed';
+  lastSignInAt: string | null;
+  approvedAt: string | null;
+}
+
+export interface AdminUsersResponse {
+  users: AdminUserView[];
+}
+
+/** A user's new monthly cap (D239): the same bounds as at approval. */
+export interface UserCapInput {
+  llmCapMicroUsd: number;
+}
+
+/**
+ * A one-time password the app made (D162, D239). Shown to the admin once, in
+ * this answer only: stored hashed, never audited, never logged.
+ */
+export interface OneTimePasswordResponse {
+  userId: string;
+  password: string;
+}
+
 /** Approving a request sets the user's monthly cap (D157). */
 export interface SignupApprovalInput {
   llmCapMicroUsd: number;

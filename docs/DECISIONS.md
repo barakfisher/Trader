@@ -248,3 +248,6 @@ while this file is out of date.
 | 235 | The briefing states idle cash as `cash_above_buffer`: the amount and the percent of capital, left out at or under the buffer |
 | 236 | A pass that does not quote its idle cash goes back once |
 | 237 | A pass that still does not quote it is kept and flagged `cash_unjustified` |
+| 238 | The installation's runs refuse a user; the agent-scan plan is one installation run over every active user |
+| 239 | The admin's user list: disable/enable, a cap edit, an app-made one-time password; reset is each user's own |
+| 240 | M9's exit test reads the routes from the app and asks each with the other user's ids |

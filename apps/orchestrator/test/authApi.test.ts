@@ -35,6 +35,7 @@ vi.mock('../src/db/queries.js', () => ({
   recordSignIn: vi.fn(async () => undefined),
   changePassword: vi.fn(),
   changeEmail: vi.fn(),
+  changeTimeZone: vi.fn(),
   getOrCreateUserSettings: vi.fn(async () => ({ language: 'en' })),
   insertAdminAudit: vi.fn(),
 }));
@@ -354,5 +355,50 @@ describe('changing one\'s own email', () => {
     expect(verifySessionToken(token, 'test-session-secret-value')?.sessionVersion).toBe(
       USER.session_version + 1,
     );
+  });
+});
+
+describe("changing one's own time zone (D163)", () => {
+  let app: App;
+
+  function changeZone(cookie: string | null, timezone: unknown) {
+    return app.request('/auth/timezone', {
+      method: 'POST',
+      headers: cookie ? { ...HEADERS, cookie } : HEADERS,
+      body: JSON.stringify({ timezone }),
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(queries.getUser).mockResolvedValue(USER);
+    vi.mocked(queries.changeTimeZone).mockResolvedValue({ ...USER, timezone: 'Europe/London' });
+    app = buildApp();
+  });
+
+  it('needs a session', async () => {
+    expect((await changeZone(null, 'Europe/London')).status).toBe(401);
+  });
+
+  it('accepts only an IANA zone', async () => {
+    for (const zone of ['Mars/Olympus', 'not a zone', '', 7]) {
+      const response = await changeZone(sessionCookie(), zone);
+      expect(response.status, String(zone)).toBe(400);
+    }
+    expect(queries.changeTimeZone).not.toHaveBeenCalled();
+  });
+
+  it('stores the zone and answers the session user, without ending the session', async () => {
+    const response = await changeZone(sessionCookie(), 'Europe/London');
+    expect(response.status).toBe(200);
+    expect(queries.changeTimeZone).toHaveBeenCalledWith(USER.id, 'Europe/London');
+    expect(await response.json()).toMatchObject({ timezone: 'Europe/London' });
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('waits for the one-time password to be changed (D162)', async () => {
+    vi.mocked(queries.getUser).mockResolvedValue({ ...USER, password_must_change: true });
+    const response = await changeZone(sessionCookie(), 'Europe/London');
+    expect(await response.json()).toMatchObject({ error: 'password_change_required' });
   });
 });

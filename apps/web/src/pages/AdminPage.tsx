@@ -3,13 +3,11 @@ import { observer } from 'mobx-react-lite';
 import { ShieldCheck } from 'lucide-react';
 
 import {
-  ACCOUNT_RESET_CONFIRMATION,
-  ACCOUNT_RESET_GROUPS,
   ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD,
   LLM_CAP_CEILING_MICRO_USD,
   MAX_AGENTS_PER_USER_CEILING,
   MAX_PENDING_SIGNUPS_CEILING,
-  type AccountResetGroup,
+  type AdminUserView,
   type SignupRequestView,
 } from '@traders/shared';
 import type {
@@ -52,10 +50,13 @@ import {
   useAdminSettingsQuery,
   useAdminSignupsQuery,
   useAdminUniverseQuery,
+  useAdminUsersQuery,
   useChooseLlmModel,
   useDecideSignup,
+  useOneTimePassword,
   useRescreen,
-  useResetAccount,
+  useSetUserCap,
+  useSetUserStatus,
   useUpdateAdminSettings,
 } from '../queries/admin.ts';
 import { useStore } from '../stores/context.tsx';
@@ -94,6 +95,7 @@ export const AdminPage = observer(function AdminPage() {
       {isAdmin ? (
         <>
           <SignupRequestsCard />
+          <UsersCard />
           <UniverseCard />
           <GapsCard />
           <ModelsCard />
@@ -103,7 +105,6 @@ export const AdminPage = observer(function AdminPage() {
           <LlmCard />
           <RunsCard />
           <AuditCard />
-          <ResetCard />
         </>
       ) : (
         <EmptyState
@@ -114,81 +115,6 @@ export const AdminPage = observer(function AdminPage() {
     </div>
   );
 });
-
-/**
- * Reset the account, by group (task 18). Every group is ticked, a full reset,
- * and the user unticks what to keep; what each erases and what is always kept
- * are written beside the boxes, because the alternative is finding out. The
- * typed word is the same in every language, and the server checks it too.
- */
-function ResetCard() {
-  const { t } = useTranslation();
-  const reset = useResetAccount();
-  const [groups, setGroups] = useState<AccountResetGroup[]>([...ACCOUNT_RESET_GROUPS]);
-  const [typed, setTyped] = useState('');
-  const result = reset.data;
-  const ready = groups.length > 0 && typed === ACCOUNT_RESET_CONFIRMATION && !reset.isPending;
-  const erased = result ? Object.values(result.erased).reduce((sum, n) => sum + n, 0) : 0;
-
-  const toggle = (group: AccountResetGroup, on: boolean) =>
-    setGroups((current) =>
-      ACCOUNT_RESET_GROUPS.filter((g) => (g === group ? on : current.includes(g))),
-    );
-
-  return (
-    <Card title={t('admin.reset.title')} className="border-loss/40">
-      <div className="space-y-3 text-sm">
-        <p>{t('admin.reset.intro')}</p>
-        <fieldset className="space-y-2">
-          <legend className="sr-only">{t('admin.reset.groupsLegend')}</legend>
-          {ACCOUNT_RESET_GROUPS.map((group) => (
-            <label key={group} className="flex items-start gap-2">
-              <input
-                type="checkbox"
-                className="mt-1"
-                checked={groups.includes(group)}
-                onChange={(event) => toggle(group, event.target.checked)}
-              />
-              <span>
-                <span className="font-medium">{t(`admin.reset.group.${group}.label`)}</span>
-                <span className="block text-text-muted">{t(`admin.reset.group.${group}.erases`)}</span>
-              </span>
-            </label>
-          ))}
-        </fieldset>
-        <p className="text-text-muted">{t('admin.reset.kept')}</p>
-        <label className="block space-y-1">
-          <span>{t('admin.reset.confirmLabel', { word: ACCOUNT_RESET_CONFIRMATION })}</span>
-          <input
-            className="input max-w-48"
-            dir="ltr"
-            autoComplete="off"
-            spellCheck={false}
-            value={typed}
-            onChange={(event) => setTyped(event.target.value)}
-          />
-        </label>
-        {groups.length === 0 && <p className="text-warn">{t('admin.reset.nothingTicked')}</p>}
-        <Button
-          variant="danger"
-          disabled={!ready}
-          onClick={() => {
-            reset.mutate({ groups, confirm: typed }, { onSuccess: () => setTyped('') });
-          }}
-        >
-          {t('admin.reset.submit')}
-        </Button>
-        {reset.isPending && <Spinner label={t('admin.reset.running')} />}
-        {reset.error && <ErrorNote message={errorMessage(reset.error, t('admin.reset.failed'))} />}
-        {result && (
-          <p className="text-gain">
-            {t('admin.reset.done', { count: erased, id: result.resetId })}
-          </p>
-        )}
-      </div>
-    </Card>
-  );
-}
 
 function RunsCard() {
   const runs = useAdminRunsQuery();
@@ -501,6 +427,124 @@ function SignupRequestsCard() {
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * The accounts (D162, D239): status, cap, this month's spend, own key and last
+ * sign-in - operations only, never a user's finances. Each user can be
+ * disabled (signed out at once, data kept) and enabled again, have their cap
+ * changed, or be given a one-time password, shown here once to pass on. The
+ * admin's own row has none of these: the admin is never disabled or capped,
+ * and a forgotten admin password is `scripts/admin-password.sh`'s.
+ */
+function UsersCard() {
+  const { t } = useTranslation();
+  const users = useAdminUsersQuery();
+  return (
+    <Card title={t('admin.users.title')}>
+      {users.isPending && <Spinner label={t('admin.users.title')} />}
+      {users.error && <ErrorNote message={errorMessage(users.error, t('admin.users.failed'))} />}
+      {users.data && (
+        <ul className="divide-y divide-border-subtle text-sm">
+          {users.data.users.map((user) => (
+            <UserRow key={user.userId} user={user} />
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function UserRow({ user }: { user: AdminUserView }) {
+  const { t } = useTranslation();
+  const status = useSetUserStatus();
+  const setCap = useSetUserCap();
+  const oneTime = useOneTimePassword();
+  const stored = user.llmCapMicroUsd === null ? '' : microToDollarsText(user.llmCapMicroUsd);
+  const [cap, setCapText] = useState(stored);
+  useEffect(() => setCapText(stored), [stored]);
+  const micro = dollarsTextToMicro(cap);
+  const capValid = micro !== null && micro <= LLM_CAP_CEILING_MICRO_USD;
+  const isAdmin = user.role === 'admin';
+  const error = status.error ?? setCap.error ?? oneTime.error;
+
+  return (
+    <li className="space-y-2 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="min-w-0">
+          <bdi dir="ltr" className="block truncate font-medium">
+            {user.email ?? t('admin.users.noEmail')}
+          </bdi>
+          <span className="text-xs text-text-muted">
+            {t(`admin.users.role.${user.role}`)} · {t(`admin.users.status.${user.status}`)} ·{' '}
+            <bdi dir="ltr">{user.timezone}</bdi> ·{' '}
+            {user.lastSignInAt
+              ? t('admin.users.lastSignIn', { age: formatAge(user.lastSignInAt) })
+              : t('admin.users.neverSignedIn')}
+          </span>
+        </div>
+        <span className="text-xs text-text-muted">
+          <bdi>
+            {user.llmCapMicroUsd === null
+              ? t('admin.users.spentUncapped', { spent: formatMicroUsd(user.spentThisMonthMicroUsd) })
+              : t('admin.users.spent', {
+                  spent: formatMicroUsd(user.spentThisMonthMicroUsd),
+                  cap: formatMicroUsd(user.llmCapMicroUsd),
+                })}
+          </bdi>
+          {' · '}
+          {t(`admin.users.ownKey.${user.ownKey}`)}
+        </span>
+      </div>
+      {!isAdmin && (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-text-muted">{t('admin.users.cap')}</span>
+            <input
+              value={cap}
+              onChange={(event) => setCapText(event.target.value)}
+              inputMode="decimal"
+              dir="ltr"
+              aria-invalid={!capValid}
+              className="w-24 rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
+            />
+          </label>
+          <Button
+            variant="secondary"
+            disabled={!capValid || cap === stored || setCap.isPending}
+            onClick={() => micro !== null && setCap.mutate({ userId: user.userId, llmCapMicroUsd: micro })}
+          >
+            {t('admin.users.saveCap')}
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={oneTime.isPending}
+            onClick={() => oneTime.mutate({ userId: user.userId })}
+          >
+            {t('admin.users.oneTimePassword')}
+          </Button>
+          <Button
+            variant={user.status === 'active' ? 'danger' : 'secondary'}
+            disabled={status.isPending}
+            onClick={() =>
+              status.mutate({ userId: user.userId, action: user.status === 'active' ? 'disable' : 'enable' })
+            }
+          >
+            {user.status === 'active' ? t('admin.users.disable') : t('admin.users.enable')}
+          </Button>
+        </div>
+      )}
+      {oneTime.data && (
+        <p className="rounded-md border border-border-subtle bg-surface p-2">
+          <span className="block text-xs text-text-muted">{t('admin.users.oneTimeShown')}</span>
+          <code dir="ltr" className="select-all font-mono text-base">
+            {oneTime.data.password}
+          </code>
+        </p>
+      )}
+      {error && <ErrorNote message={errorMessage(error, t('admin.users.failed'))} />}
+    </li>
   );
 }
 

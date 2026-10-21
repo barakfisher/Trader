@@ -4,7 +4,16 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-20 ~20:30 UTC - **Handoff: improvements items 4-5 and the two small fixes from
+Updated: 2026-10-21 - **Handoff at a milestone boundary: M9 (multiple users) is complete in one
+PR** - scheduling per user (D238), the user's own zone (D163's reads, guideline 10 amended), the
+admin's user list and each user's own reset (D239), and the exit test (D240), all asked up front
+and built without stopping, as the user asked. Merges since handoff #285: #286 (memory), #287
+(D227-D228), #288 (the dashboard's one holdings table, D229-D233) and #289 (idle cash must be explained, D234-D237) - both another session's - and this PR. Decisions reached **240** (next: **241**). Migrations: none in this PR;
+**`0067_telegram_conversation` is head** (next free: **`0068`**). **Deployed:** compose runs #289
+at `0067` (read 2026-10-21); **this PR is undeployed**; kind's state is the other session's to report (its CronJobs change here).
+**Next:** "Next session: after M9".
+
+Previous update, 2026-10-20 ~20:30 UTC - **Handoff: improvements items 4-5 and the two small fixes from
 the own-key check are merged and deployed.** Merges since handoff #279: #280 (re-check an expired
 proposal, D212-D217, `0066`), #281 (D218-D219), #282 (Telegram ask mode, D220-D224, `0067`), #283
 (Create agent says what is missing, D225), #284 (the product guide names only the assistant's
@@ -893,7 +902,7 @@ strings and left-to-right assumptions before designing it.
 | Multi-agent sandbox, Stage 1 — isolation (no M-number; `docs/PROPOSAL-MULTI-AGENT.md`) | ✅ Complete | #151 spec amendment D1-D16; #152 `agents` + `agent_id` (0036); #153 agent-scoped reads + contract; #154 per-agent uniques (0037); #155 passive primary (0038). Nothing user-visible, by design. Stages 2-4 to come - see "Next session: multi-agent Stage 2" |
 | M8 — Admin operations & observability | ✅ Complete | #120-#124, #126-#130: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel, on-demand profiles, the rescreen run and its CronJob. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event and profiled within one background fetch ✅ (#127, decision 89); rescreen button ✅ (#128, decision 90; shown in kind); button and CronJob are one run ✅ (#129, decision 91; shown in kind). Checked live 2026-10-01 - see "M8 is complete, and how it was verified" |
 | Agent template creator (no M-number; the user's request, 2026-10-18) | ✅ Complete | #252 taxonomy (0056), #254 mandate + code check + retry (0057), #257 the form, Downshift picker, settings-alone readiness, #258 save-time contradiction check (0059). Decisions 164-178. Not yet checked in a browser or against a real model; undeployed |
-| M9 — Multiple users | 🔄 In progress | PR 1 (measurement, `docs/M9-MEASUREMENT.md`) merged as #240, 2026-10-15; decisions next. Added to the plan at the user's request, 2026-10-14; not ordered against the database sprint or the assistant's owed checks. PR 1 is a read-only measurement of every single-user assumption; the decisions (who the users are, login, sessions, scheduling, shared costs) come after it. See `docs/MILESTONES.md` |
+| M9 — Multiple users | ✅ Complete (exit test passes; PR after #287, 2026-10-21) | Schema 0058 (#249-#255), login #260, signup #264, cap #277, own key #278, then one PR for scheduling per user (D238), the user's own zone (D163), the admin's user list and own reset (D239) and the exit test (D240). Earlier: PR 1 (measurement, `docs/M9-MEASUREMENT.md`) merged as #240, 2026-10-15. Added to the plan at the user's request, 2026-10-14; not ordered against the database sprint or the assistant's owed checks. PR 1 is a read-only measurement of every single-user assumption; the decisions (who the users are, login, sessions, scheduling, shared costs) come after it. See `docs/MILESTONES.md` |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
 not anticipate, found by running the thing rather than by reading it. M1.5 came from auditing the
@@ -3566,6 +3575,55 @@ failure they prevent.
     *Rejected:* a column (`0068`) for a flag on a row the answer already describes; storing it
     without showing it (nobody would notice between measurements).
 
+238. **The installation's runs refuse a user; the agent-scan plan is one installation run over
+    every active user** (2026-10-21, M9's completion PR; refines D161; `runKinds.ts`,
+    `routes/internal.ts`). `INSTALLATION_KINDS` - `backfill`, `news_collect`,
+    `instrument_metadata`, `proposal_sweep`, `agent_scans`, `universe_rescreen` - run once a bucket
+    under no user and no agent (`<kind>:installation:<day in APP_TIMEZONE>`), and a body naming a
+    user or `for` is refused 400 `installation_kind`. Backfill and news read the union of the
+    active users' instruments (`listActiveUsers*Instruments`). None of them calls a model, so none
+    can spend a user's key or cap (the user's rule of 2026-10-21: shared tasks use the system's
+    key, once). `USER_KINDS` - `snapshot`, `portfolio_scan`, `topic_scan`, `topic_discovery`,
+    `daily_digest` - take a `userId` (must be `active`, else 409) or `for: "every_active_user"`;
+    neither is 400 `no_user`. The fan-out runs users one at a time, oldest first; a user's failure
+    is recorded on their run and the next user still runs; any failure answers 500 with every
+    user's result (a CronJob's Job then shows it). The scan plan reads every active user's due
+    slots and enqueues them round-robin (`roundRobin`), so it is one run, not one per user.
+    "Last news collection" on a holding or topic page now reads the installation's run
+    (`getLatestInstallationRun`). `SINGLE_USER_ID` is gone from the config. *Rejected:* D161's
+    literal "every trigger sends `for`" (accepted-and-ignored on a shared kind would hide a
+    misconfigured trigger); one plan run per user (round-robin needs every user's slots in one
+    place); a fan-out that stops at the first failure (one user's broken data would starve the
+    rest).
+239. **The admin's user list: disable/enable, a cap edit, an app-made one-time password; reset is
+    each user's own** (the user, 2026-10-21, asked up front; `routes/admin.ts`,
+    `db/queries/adminUsers.ts`, `routes/account.ts`). The list shows status, role, zone, cap,
+    this month's installation-paid spend (the cap's own sum), own-key state and last sign-in -
+    operations only (D162). **Disable** bumps `session_version` (sessions end at once, D160);
+    scheduled work skips the user; data stays; **enable** restores them. **Cap** edits use the
+    approval's bounds; the user asked whether a cap still matters once users bring their own key -
+    it does for anyone without one (the installation pays), and an approved $5 could not be
+    changed at all. **One-time password:** 120 random bits as 20 base64url characters, hashed with
+    argon2id, `password_must_change` set, sessions ended, answered once with `no-store`; the audit
+    records the request, which carries no password (asserted). The admin's own row has none of
+    these actions (every query has `role <> 'admin'`): a locked-out admin uses
+    `scripts/admin-password.sh`. **Account reset** moved from `/admin/account/reset` to
+    `/account/reset` and from the Admin page to the bottom of Settings; it is no longer in
+    `admin_audit` - the reset's own backup row is its record. *Rejected:* the admin typing the
+    password (weaker, and it passes through the admin's hands); listing pending and rejected
+    users here too (the sign-up list's); disabling by deleting (irreversible, and a household
+    member coming back would lose everything).
+240. **M9's exit test reads the routes from the app and asks each with the other user's ids**
+    (2026-10-21; `apps/orchestrator/test/m9Exit.postgres.test.ts`, in CI's Postgres job as
+    `traders_app`). Two users seeded over real SQL with marked data (agent, holding, topic,
+    conversation); signed in as one, every GET route outside `/admin`, `/internal`, `/auth` and
+    the probes (37 today) is asked - a route with a parameter once with each of the other user's
+    ids - and no answer may contain the other's marks or ids. A user added to a route later is
+    covered without editing the test. Proved to bite: with `listAgents`' `WHERE` loosened, it
+    failed naming `/agents` and the leaked ids. Also: the fan-out runs for both and not for a
+    disabled user; a run naming no user is refused; a disabled user's cookie is refused.
+    *Rejected:* a hand-written list of routes (the next route would be untested, silently).
+
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -4385,7 +4443,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | ~~The Admin page shows a model as chosen when none is~~ | — | **Resolved** (2026-10-08): when the model in use is not offered for a scope (agents on the free route, or a chosen model since withdrawn) the picker selects a disabled "Not chosen – using <model>" entry, Save stays off, and the total counts nothing for that scope. When the model in use *is* offered (narration on the free route) it is selected, as before |
 | ~~Approving a trade from Telegram is refused~~ | — | **Resolved by #186 (D62)**: Approve previews, Confirm fills at the signed price |
 | **The give-up alert ignores quiet hours, mute and dedupe** | `scheduledScans.ts` (`reportGaveUp`) | Sent through `notifier.send`, not `fanOut`, so a slot that gives up at 03:00 messages at 03:00 and a muted user still hears it; it is once per slot only because it runs on the last attempt. Route it through the fan-out with a `refKind` for runs (a CHECK change) if it ever annoys |
-| **Scheduled scans run for `SINGLE_USER_ID` only** | `routes/internal.ts` (`agent_scans`) | The ask plans one user's agents, as every run kind does. Multi-user means iterating users here, and per-user fairness on the queue needs BullMQ Pro's groups (D73) |
+| ~~Scheduled scans run for `SINGLE_USER_ID` only~~ | — | **Resolved by M9's completion (D238)**: every active user's due slots, enqueued round-robin. Was: | The ask plans one user's agents, as every run kind does. Multi-user means iterating users here, and per-user fairness on the queue needs BullMQ Pro's groups (D73) |
 | **The plan needs the AI service's calendar** | `planScheduledScans` | With the AI service down the ask fails (recorded "AI service unreachable", HTTP 500 - a failed CronJob in kind) and the next ask, 15 minutes later, catches up; a slot's window is hours, so nothing is lost unless the outage outlasts it |
 | **Agents' answers are refused for formatted figures** | evidence validator (`app/agents/answer.py`, `narration` checker) | The first scheduled scan (2026-10-08) wrote "1,923" - refused as unsourced. Measure how often real scans are refused and for what before changing anything; a computed figure (shares x price) is rightly refused, a re-formatted one may not be |
 | **#197's commit title on `main` reads "wip: PR 7a before merging main"** | git history | Cosmetic and permanent (the ruleset forbids the force push a fix would need); the PR and this file name it correctly |
@@ -4824,6 +4882,33 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after M9 (written 2026-10-21)
+
+**State:** M9 is complete in code: the exit test (D240) passes on a throwaway Postgres as
+`traders_app`. No standing grant - ask before each PR, merge only on "merge", redeploy only on
+"redeploy".
+
+1. **Merge, then redeploy compose** (no migration, so no backup is required; take one anyway if
+   unsure). After it: `runs` gains rows with `user_id IS NULL` and keys `<kind>:installation:...`
+   for backfill, news, names, the sweep and the scan plan - **each daily shared kind runs once
+   more on the deploy day** because its key changed; harmless (idempotent). Check: the approved
+   user `f36b1a45` gets `snapshot` / `portfolio_scan` / `daily_digest` runs of their own, and
+   George (their agent) is planned by `agent_scans` at its next slot.
+2. **kind (k8s): its CronJobs and its code change together** when it is next
+   redeployed (the manifests send `RUN_FOR: every_active_user` for user kinds, which this code
+   requires), so apply the manifests with the images - a new image under the old CronJobs would
+   answer every user kind 400 `no_user`.
+3. **Unseen in a browser:** the Admin page's Users card, the zone picker in Settings and the
+   reset card's new home at the bottom of Settings (jsdom covers each).
+4. **M10 (public access)** is the roadmap's next milestone - only on the user's word; it brings
+   OAuth, self-service reset and abuse limits (docs/MILESTONES.md).
+
+**What cost time in this session:**
+- **A `vi.mocked(fn).mockResolvedValue` survives `vi.clearAllMocks()`.** A test that set a user's
+  role for one case changed the next case's user; use `...Once` or set it back.
+- **A Postgres test's cleanup must delete what has no cascade first** - `agent_cash` names the user
+  without one, so non-primary agents go before `users` (as `queries.postgres.test.ts` does).
 
 ### Next session: after the guide fix (written 2026-10-20, night)
 

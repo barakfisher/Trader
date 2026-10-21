@@ -13,7 +13,7 @@
  * deduplicated after the fact.
  */
 
-import type { Hono } from 'hono';
+import type { Context as HonoContext, Hono } from 'hono';
 import { z } from 'zod';
 
 import {
@@ -21,10 +21,12 @@ import {
   findInstrumentsBySymbols,
   finishRun,
   getUser,
-  listAnalysedInstruments,
-  listTradedInstruments,
+  listActiveUserIds,
+  listActiveUsersAnalysedInstruments,
+  listActiveUsersTradedInstruments,
   listRuns,
   primaryAgentId,
+  type UserRow,
 } from '../../db/queries.js';
 import { backfillInstrumentNames } from '../../services/instrumentMetadata.js';
 import { runPortfolioScan } from '../../services/portfolioScan.js';
@@ -32,6 +34,7 @@ import { marketRetentionDays, runTopicDiscovery } from '../../services/topicDisc
 import { HISTORY_BACKFILL_DAYS, runTopicScan } from '../../services/topicScan.js';
 import { sendDigest } from '../../services/notifications.js';
 import { RESCREEN_KIND, startRescreen } from '../../services/universeRescreen.js';
+import { EVERY_ACTIVE_USER, INSTALLATION_KINDS } from '../../runKinds.js';
 import { MARKET_BENCHMARK_SYMBOLS } from '../../services/marketBenchmarks.js';
 import { BENCHMARK_SYMBOL } from '../../services/performance.js';
 import { sweepExpiredProposals } from '../../services/proposals.js';
@@ -39,7 +42,7 @@ import { planScheduledScans } from '../../services/scheduledScans.js';
 import { logger } from '../../logger.js';
 import { localDate, takeSnapshot } from '../../services/snapshot.js';
 import { currentUserId, type AppEnv } from '../app.js';
-import { ApiProblem, badRequest, notFound } from '../errors.js';
+import { ApiProblem, badRequest, conflict, notFound } from '../errors.js';
 
 /**
  * How often a kind of run is allowed to do work, expressed as the bucket its
@@ -131,9 +134,224 @@ const runSchema = z.object({
     'agent_scans',
   ]),
   userId: z.string().uuid().optional(),
+  for: z.literal(EVERY_ACTIVE_USER).optional(),
   runKey: z.string().max(200).optional(),
   trigger: z.string().max(40).optional(),
 });
+
+type RunRequest = z.infer<typeof runSchema>;
+type Context = HonoContext<AppEnv>;
+type FinishedStatus = 'ok' | 'degraded' | 'failed' | 'skipped';
+
+/** What one run answered: the body, and whether it failed. */
+interface RunOutcome {
+  kind: string;
+  runKey: string;
+  runId?: string;
+  status: string;
+  reason?: string;
+  result?: unknown;
+}
+
+/**
+ * Claim a run and, when it is this caller's, do it. A claim already held is the
+ * common answer of a timer that asks more often than the work is due.
+ */
+async function claimAnd(
+  claim: { userId: string | null; agentId: string | null; kind: string; runKey: string; trigger: string },
+  work: (runId: string) => Promise<RunOutcome>,
+): Promise<RunOutcome> {
+  const claimed = await claimRun({ ...claim, retryFailed: RETRY_FAILED_KINDS.has(claim.kind) });
+  if (!claimed.claimed) {
+    logger().info({ runKey: claim.runKey, existingStatus: claimed.existingStatus }, 'run skipped: already claimed');
+    return {
+      kind: claim.kind,
+      runKey: claim.runKey,
+      status: 'skipped',
+      reason: `this run key was already claimed (${claimed.existingStatus ?? 'unknown'})`,
+    };
+  }
+  const runId = claimed.runId as string;
+  try {
+    return await work(runId);
+  } catch (error) {
+    // A failed run must be recorded as failed, not left claimed: otherwise the
+    // key blocks every later attempt until the stale-claim window elapses.
+    await finishRun(runId, 'failed', { error: (error as Error).message });
+    throw error;
+  }
+}
+
+/** The installation's work (D238): no user, no agent, the installation's day. */
+async function runForInstallation(context: Context, request: RunRequest): Promise<RunOutcome> {
+  const config = context.get('config');
+  const kind = request.kind;
+  const runKey =
+    request.runKey ?? `${kind}:installation:${runBucket(kind, localDate(config.APP_TIMEZONE))}`;
+  const done = async (runId: string, status: FinishedStatus, result: unknown): Promise<RunOutcome> => {
+    await finishRun(runId, status, result);
+    return { kind, runKey, runId, status, result };
+  };
+
+  return claimAnd({ userId: null, agentId: null, kind, runKey, trigger: request.trigger ?? 'unknown' }, async (runId) => {
+    if (kind === 'backfill') {
+      // Beside what is held and followed: every instrument an agent has ever
+      // traded, so a past day stays valued after a sale, and the benchmarks,
+      // always: SPY's closes are there before the first agent is (PR 7, D24),
+      // and every index a move is set beside has its closes too (decision 149).
+      // Every active user's, once: two users holding AAPL fetch it once.
+      const [analysed, traded, benchmark] = await Promise.all([
+        listActiveUsersAnalysedInstruments(),
+        listActiveUsersTradedInstruments(),
+        findInstrumentsBySymbols([...new Set([BENCHMARK_SYMBOL, ...MARKET_BENCHMARK_SYMBOLS])]),
+      ]);
+      const instruments = [
+        ...new Map([...analysed, ...traded, ...benchmark].map((row) => [row.id, row])).values(),
+      ];
+      if (instruments.length === 0) return done(runId, 'skipped', { reason: 'no holdings and no topics' });
+      const result = await context.get('ai').backfillHistory(
+        {
+          instruments: instruments.map((row) => ({ instrument_id: row.id, symbol: row.symbol })),
+          days: HISTORY_BACKFILL_DAYS,
+        },
+        context.get('requestId'),
+      );
+      // A symbol with no series is a holding the engine cannot analyse, which
+      // the user should be able to discover - so it degrades rather than
+      // reporting a clean run.
+      return done(runId, (result.without_history ?? []).length > 0 ? 'degraded' : 'ok', result);
+    }
+
+    if (kind === 'agent_scans') {
+      // Only puts due attempts on the queue: the scans run on its worker (D73).
+      const result = await planScheduledScans({
+        userIds: await listActiveUserIds(),
+        ai: context.get('ai'),
+        queue: context.get('scanQueue')!,
+        now: new Date(),
+        requestId: context.get('requestId'),
+      });
+      return done(runId, 'ok', result);
+    }
+
+    if (kind === 'instrument_metadata') {
+      const result = await backfillInstrumentNames(context.get('ai'), context.get('requestId'));
+      // Nothing to examine is a clean run, not a skipped one: the run asked
+      // the only question it exists to ask and the answer was "no gaps".
+      // A symbol the provider still cannot name is not a failure either - a
+      // null name is a legitimate answer that the UI already renders - so only
+      // a resolution that errored degrades the run.
+      return done(runId, result.failed.length > 0 ? 'degraded' : 'ok', result);
+    }
+
+    if (kind === 'proposal_sweep') {
+      // A deadline is a deadline for everybody: one sweep expires every
+      // account's proposals.
+      return done(runId, 'ok', { expired: (await sweepExpiredProposals()).length });
+    }
+
+    // news_collect. Held and topic instruments only - never the universe. The
+    // reason is in app/news/collection.py: a matcher that knows "Target" and
+    // "Block" links half of every article to something.
+    const instruments = await listActiveUsersAnalysedInstruments();
+    if (instruments.length === 0) return done(runId, 'skipped', { reason: 'no holdings and no topics' });
+    const result = await context.get('ai').collectNews(
+      {
+        instruments: instruments.map((row) => ({
+          instrument_id: row.id,
+          symbol: row.symbol,
+          name: row.name,
+          asset_class: row.asset_class,
+        })),
+        lookback_hours: NEWS_LOOKBACK_HOURS,
+        market_retention_days: marketRetentionDays(config.TOPIC_PROPOSAL_TTL_DAYS),
+      },
+      context.get('requestId'),
+    );
+    // A provider that failed is news the user did not get, and a run that
+    // says 'ok' over it would read as a quiet day.
+    return done(runId, (result.provider_failures ?? []).length > 0 ? 'degraded' : 'ok', result);
+  });
+}
+
+/** One user's run of a per-user kind, in that user's day (D161, D163). */
+async function runForUser(
+  context: Context,
+  request: RunRequest,
+  user: UserRow,
+  runKeyOverride: string | undefined,
+): Promise<RunOutcome> {
+  const config = context.get('config');
+  const kind = request.kind;
+  // Resolved once, here at the edge, and passed down. Every user kind is the
+  // primary's - the agent-blind ones (topics, digest) by convention, since they
+  // are no agent's work (§3.3c).
+  const agentId = await primaryAgentId(user.id);
+  const runKey = runKeyOverride ?? `${kind}:${user.id}:${runBucket(kind, localDate(user.timezone))}`;
+  const done = async (runId: string, status: FinishedStatus, result: unknown): Promise<RunOutcome> => {
+    await finishRun(runId, status, result);
+    return { kind, runKey, runId, status, result };
+  };
+
+  return claimAnd({ userId: user.id, agentId, kind, runKey, trigger: request.trigger ?? 'unknown' }, async (runId) => {
+    if (kind === 'daily_digest') {
+      const digest = await sendDigest(user, context.get('notifier'));
+      // A digest with nothing in it is not a failure and not a success worth
+      // claiming: 'skipped' says the run happened and found nothing to say,
+      // which is exactly what GET /runs is read to distinguish.
+      const status =
+        digest.entries === 0 && digest.topics === 0 ? 'skipped' : digest.delivered ? 'ok' : 'degraded';
+      return done(runId, status, digest);
+    }
+
+    if (kind === 'topic_discovery') {
+      const result = await runTopicDiscovery(
+        user,
+        context.get('ai'),
+        {
+          cooldownDays: config.TOPIC_REJECTION_COOLDOWN_DAYS,
+          proposalTtlDays: config.TOPIC_PROPOSAL_TTL_DAYS,
+        },
+        context.get('requestId'),
+      );
+      // No headlines is 'skipped', not 'ok': the run asked nothing, and the
+      // reason says where to look. A run that examined phrases and proposed
+      // none is 'ok' - every phrase carries its reason in `notProposed`.
+      return done(runId, result.degraded ? 'degraded' : result.headlines === 0 ? 'skipped' : 'ok', result);
+    }
+
+    if (kind === 'topic_scan') {
+      const scan = await runTopicScan(
+        user,
+        agentId,
+        context.get('ai'),
+        context.get('notifier'),
+        runId,
+        context.get('requestId'),
+      );
+      if (scan === null) return done(runId, 'skipped', { reason: 'no active topics' });
+      return done(runId, scan.degraded ? 'degraded' : 'ok', scan);
+    }
+
+    if (kind === 'portfolio_scan') {
+      const scan = await runPortfolioScan(
+        user,
+        agentId,
+        context.get('ai'),
+        context.get('notifier'),
+        runId,
+        context.get('requestId'),
+      );
+      // A scan that found nothing is a legitimate outcome, but one that could
+      // not look properly is not the same thing - hence 'degraded' rather than
+      // 'ok' whenever a rule declined to run or a holding could not be priced.
+      return done(runId, scan.degraded ? 'degraded' : 'ok', scan);
+    }
+
+    const result = await takeSnapshot(user, agentId, context.get('ai'), context.get('requestId'));
+    return done(runId, result.skipped ? 'skipped' : result.degraded ? 'degraded' : 'ok', result);
+  });
+}
 
 export function registerInternalRoutes(app: Hono<AppEnv>): void {
   app.post('/internal/runs', async (context) => {
@@ -144,269 +362,80 @@ export function registerInternalRoutes(app: Hono<AppEnv>): void {
 
     const parsed = runSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
-      throw badRequest('invalid_body', 'expected { kind, userId?, runKey?, trigger? }', parsed.error.issues);
+      throw badRequest('invalid_body', `expected { kind, userId? | for?: "${EVERY_ACTIVE_USER}", runKey?, trigger? }`, parsed.error.issues);
     }
+    const request = parsed.data;
 
-    if (parsed.data.kind === RESCREEN_KIND) {
-      // The installation's work, not an account's: no user, and the AI service
-      // finishes the run in the background, so the answer is 202 once handed
-      // over. A trigger is a request to run; the run key decides whether it is
-      // a repeat (the button and the CronJob share it).
-      const started = await startRescreen(context.get('ai'), {
-        timezone: config.APP_TIMEZONE,
-        trigger: parsed.data.trigger ?? 'unknown',
-        // Every caller of this endpoint is a timer or a CronJob: it asks hourly,
-        // and the rescreen is done only when the universe is a quarter old.
-        scheduled: true,
-        requestId: context.get('requestId'),
-        runKey: parsed.data.runKey,
-      });
-      return context.json({ kind: RESCREEN_KIND, ...started }, started.status === 'running' ? 202 : 200);
-    }
-
-    if (parsed.data.kind === 'agent_scans' && context.get('scanQueue') === null) {
-      // D71: this installation does not schedule scans. Answered without a run
-      // row - ninety-six "skipped" rows a day would say nothing new.
-      return context.json({
-        kind: parsed.data.kind,
-        status: 'skipped',
-        reason: 'scheduled scans are off on this installation (ENABLE_SCHEDULED_SCANS)',
-      });
-    }
-
-    const userId = parsed.data.userId ?? config.SINGLE_USER_ID;
-    const user = await getUser(userId);
-    if (!user) throw notFound('user not found');
-    // Resolved once, here at the edge, and passed down. Every run kind is the
-    // primary's in Stage 1 - the agent-blind ones (backfill, news, topics,
-    // digest) by convention, since they are no agent's work (§3.3c).
-    const agentId = await primaryAgentId(userId);
-
-    const runKey =
-      parsed.data.runKey ??
-      `${parsed.data.kind}:${userId}:${runBucket(parsed.data.kind, localDate(user.timezone))}`;
-    const claim = await claimRun({
-      userId,
-      agentId,
-      kind: parsed.data.kind,
-      runKey,
-      trigger: parsed.data.trigger ?? 'unknown',
-      retryFailed: RETRY_FAILED_KINDS.has(parsed.data.kind),
-    });
-
-    if (!claim.claimed) {
-      logger().info({ runKey, existingStatus: claim.existingStatus }, 'run skipped: already claimed');
-      return context.json({
-        kind: parsed.data.kind,
-        runKey,
-        status: 'skipped',
-        reason: `this run key was already claimed (${claim.existingStatus ?? 'unknown'})`,
-      });
-    }
-
-    const runId = claim.runId as string;
-    try {
-      if (parsed.data.kind === 'backfill') {
-        // Beside what is held and followed: every instrument an agent has ever
-        // traded, so a past day stays valued after a sale, and the benchmarks,
-        // always: SPY's closes are there before the first agent is (PR 7, D24),
-        // and every index a move is set beside has its closes too (decision 149).
-        const [analysed, traded, benchmark] = await Promise.all([
-          listAnalysedInstruments(userId),
-          listTradedInstruments(userId),
-          findInstrumentsBySymbols([...new Set([BENCHMARK_SYMBOL, ...MARKET_BENCHMARK_SYMBOLS])]),
-        ]);
-        const instruments = [
-          ...new Map([...analysed, ...traded, ...benchmark].map((row) => [row.id, row])).values(),
-        ];
-        if (instruments.length === 0) {
-          await finishRun(runId, 'skipped', { reason: 'no holdings and no topics' });
-          return context.json({ kind: parsed.data.kind, runKey, runId, status: 'skipped' });
-        }
-        const result = await context.get('ai').backfillHistory(
-          {
-            instruments: instruments.map((row) => ({ instrument_id: row.id, symbol: row.symbol })),
-            days: HISTORY_BACKFILL_DAYS,
-          },
-          context.get('requestId'),
-        );
-        // A symbol with no series is a holding the engine cannot analyse, which
-        // the user should be able to discover - so it degrades rather than
-        // reporting a clean run.
-        const degraded = (result.without_history ?? []).length > 0;
-        await finishRun(runId, degraded ? 'degraded' : 'ok', result);
-        return context.json({
-          kind: parsed.data.kind,
-          runKey,
-          runId,
-          status: degraded ? 'degraded' : 'ok',
-          result,
-        });
+    if (INSTALLATION_KINDS.has(request.kind)) {
+      if (request.userId !== undefined || request.for !== undefined) {
+        throw badRequest('installation_kind', `${request.kind} is the installation's work and names no user`);
       }
-
-      if (parsed.data.kind === 'agent_scans') {
-        // Only puts due attempts on the queue: the scans run on its worker (D73).
-        const result = await planScheduledScans({
-          userId,
-          ai: context.get('ai'),
-          queue: context.get('scanQueue')!,
-          now: new Date(),
+      if (request.kind === RESCREEN_KIND) {
+        // The AI service finishes the run in the background, so the answer is
+        // 202 once handed over. A trigger is a request to run; the run key
+        // decides whether it is a repeat (the button and the CronJob share it).
+        const started = await startRescreen(context.get('ai'), {
+          timezone: config.APP_TIMEZONE,
+          trigger: request.trigger ?? 'unknown',
+          // Every caller of this endpoint is a timer or a CronJob: it asks hourly,
+          // and the rescreen is done only when the universe is a quarter old.
+          scheduled: true,
           requestId: context.get('requestId'),
+          runKey: request.runKey,
         });
-        await finishRun(runId, 'ok', result);
-        return context.json({ kind: parsed.data.kind, runKey, runId, status: 'ok', result });
+        return context.json({ kind: RESCREEN_KIND, ...started }, started.status === 'running' ? 202 : 200);
       }
-
-      if (parsed.data.kind === 'instrument_metadata') {
-        const result = await backfillInstrumentNames(context.get('ai'), context.get('requestId'));
-        // Nothing to examine is a clean run, not a skipped one: the run asked
-        // the only question it exists to ask and the answer was "no gaps".
-        // A symbol the provider still cannot name is not a failure either - a
-        // null name is a legitimate answer that the UI already renders - so only
-        // a resolution that errored degrades the run.
-        const status = result.failed.length > 0 ? 'degraded' : 'ok';
-        await finishRun(runId, status, result);
-        return context.json({ kind: parsed.data.kind, runKey, runId, status, result });
-      }
-
-      if (parsed.data.kind === 'daily_digest') {
-        const digest = await sendDigest(user, context.get('notifier'));
-        // A digest with nothing in it is not a failure and not a success worth
-        // claiming: 'skipped' says the run happened and found nothing to say,
-        // which is exactly what GET /runs is read to distinguish.
-        const status =
-          digest.entries === 0 && digest.topics === 0
-            ? 'skipped'
-            : digest.delivered
-              ? 'ok'
-              : 'degraded';
-        await finishRun(runId, status, digest);
+      if (request.kind === 'agent_scans' && context.get('scanQueue') === null) {
+        // D71: this installation does not schedule scans. Answered without a run
+        // row - ninety-six "skipped" rows a day would say nothing new.
         return context.json({
-          kind: parsed.data.kind,
-          runKey,
-          runId,
-          status,
-          result: digest,
+          kind: request.kind,
+          status: 'skipped',
+          reason: 'scheduled scans are off on this installation (ENABLE_SCHEDULED_SCANS)',
         });
       }
-
-      if (parsed.data.kind === 'proposal_sweep') {
-        // Deliberately not scoped to `userId`: a deadline is a deadline for
-        // everybody, and a sweep that only expired the triggering user's
-        // proposals would leave every other account's inbox stale for as long
-        // as that account stayed quiet.
-        const expired = (await sweepExpiredProposals()).length;
-        await finishRun(runId, 'ok', { expired });
-        return context.json({
-          kind: parsed.data.kind,
-          runKey,
-          runId,
-          status: 'ok',
-          result: { expired },
-        });
-      }
-
-      if (parsed.data.kind === 'news_collect') {
-        // Held and topic instruments only - never the universe. The reason is
-        // in app/news/collection.py: a matcher that knows "Target" and "Block"
-        // links half of every article to something.
-        const instruments = await listAnalysedInstruments(userId);
-        if (instruments.length === 0) {
-          await finishRun(runId, 'skipped', { reason: 'no holdings and no topics' });
-          return context.json({ kind: parsed.data.kind, runKey, runId, status: 'skipped' });
-        }
-        const result = await context.get('ai').collectNews(
-          {
-            instruments: instruments.map((row) => ({
-              instrument_id: row.id,
-              symbol: row.symbol,
-              name: row.name,
-              asset_class: row.asset_class,
-            })),
-            lookback_hours: NEWS_LOOKBACK_HOURS,
-            market_retention_days: marketRetentionDays(config.TOPIC_PROPOSAL_TTL_DAYS),
-          },
-          context.get('requestId'),
-        );
-        // A provider that failed is news the user did not get, and a run that
-        // says 'ok' over it would read as a quiet day.
-        const status = (result.provider_failures ?? []).length > 0 ? 'degraded' : 'ok';
-        await finishRun(runId, status, result);
-        return context.json({ kind: parsed.data.kind, runKey, runId, status, result });
-      }
-
-      if (parsed.data.kind === 'topic_discovery') {
-        const result = await runTopicDiscovery(
-          user,
-          context.get('ai'),
-          {
-            cooldownDays: config.TOPIC_REJECTION_COOLDOWN_DAYS,
-            proposalTtlDays: config.TOPIC_PROPOSAL_TTL_DAYS,
-          },
-          context.get('requestId'),
-        );
-        // No headlines is 'skipped', not 'ok': the run asked nothing, and the
-        // reason says where to look. A run that examined phrases and proposed
-        // none is 'ok' - every phrase carries its reason in `notProposed`.
-        const status = result.degraded
-          ? 'degraded'
-          : result.headlines === 0
-            ? 'skipped'
-            : 'ok';
-        await finishRun(runId, status, result);
-        return context.json({ kind: parsed.data.kind, runKey, runId, status, result });
-      }
-
-      if (parsed.data.kind === 'topic_scan') {
-        const scan = await runTopicScan(
-          user,
-          agentId,
-          context.get('ai'),
-          context.get('notifier'),
-          runId,
-          context.get('requestId'),
-        );
-        if (scan === null) {
-          await finishRun(runId, 'skipped', { reason: 'no active topics' });
-          return context.json({ kind: parsed.data.kind, runKey, runId, status: 'skipped' });
-        }
-        const status = scan.degraded ? 'degraded' : 'ok';
-        await finishRun(runId, status, scan);
-        return context.json({ kind: parsed.data.kind, runKey, runId, status, result: scan });
-      }
-
-      if (parsed.data.kind === 'portfolio_scan') {
-        const scan = await runPortfolioScan(
-          user,
-          agentId,
-          context.get('ai'),
-          context.get('notifier'),
-          runId,
-          context.get('requestId'),
-        );
-        // A scan that found nothing is a legitimate outcome, but one that could
-        // not look properly is not the same thing - hence 'degraded' rather than
-        // 'ok' whenever a rule declined to run or a holding could not be priced.
-        await finishRun(runId, scan.degraded ? 'degraded' : 'ok', scan);
-        return context.json({
-          kind: parsed.data.kind,
-          runKey,
-          runId,
-          status: scan.degraded ? 'degraded' : 'ok',
-          result: scan,
-        });
-      }
-
-      const result = await takeSnapshot(user, agentId, context.get('ai'), context.get('requestId'));
-      const status = result.skipped ? 'skipped' : result.degraded ? 'degraded' : 'ok';
-      await finishRun(runId, status, result);
-      return context.json({ kind: parsed.data.kind, runKey, runId, status, result });
-    } catch (error) {
-      // A failed run must be recorded as failed, not left claimed: otherwise the
-      // key blocks every later attempt until the stale-claim window elapses.
-      await finishRun(runId, 'failed', { error: (error as Error).message });
-      throw error;
+      return context.json(await runForInstallation(context, request));
     }
+
+    // A user's kind: one named user, or every active one. Never a default - a
+    // run that names nobody used to run as the first account (D161).
+    if (request.userId !== undefined && request.for !== undefined) {
+      throw badRequest('ambiguous_target', 'name either userId or for, not both');
+    }
+    if (request.userId === undefined && request.for === undefined) {
+      throw badRequest('no_user', `${request.kind} is a user's work: name a userId or for: "${EVERY_ACTIVE_USER}"`);
+    }
+    if (request.userId !== undefined) {
+      const user = await getUser(request.userId);
+      if (!user) throw notFound('user not found');
+      if (user.status !== 'active') throw conflict('user_not_active', `the user is ${user.status}`);
+      return context.json(await runForUser(context, request, user, request.runKey));
+    }
+    if (request.runKey !== undefined) {
+      throw badRequest('run_key_with_fan_out', 'a fan-out keys each user\'s run itself');
+    }
+
+    // In turn, one user at a time (D161): a failure is that user's, recorded on
+    // their run, and the next user still runs.
+    const userIds = await listActiveUserIds();
+    const results: (RunOutcome & { userId: string; error?: string })[] = [];
+    for (const userId of userIds) {
+      const user = await getUser(userId);
+      if (!user) continue;
+      try {
+        results.push({ userId, ...(await runForUser(context, request, user, undefined)) });
+      } catch (error) {
+        logger().warn({ kind: request.kind, userId, err: error }, 'run failed for one user');
+        results.push({ userId, kind: request.kind, runKey: '', status: 'failed', error: (error as Error).message });
+      }
+    }
+    const failed = results.filter((result) => result.status === 'failed').length;
+    // A failure answers 500 so a CronJob's Job shows it (--fail-with-body); the
+    // body still says who ran and who did not.
+    return context.json(
+      { kind: request.kind, for: EVERY_ACTIVE_USER, users: userIds.length, failed, results },
+      failed > 0 ? 500 : 200,
+    );
   });
 
   /**

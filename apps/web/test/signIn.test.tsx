@@ -38,6 +38,7 @@ const { App } = await import('../src/App.tsx');
 const { LoginPage } = await import('../src/pages/LoginPage.tsx');
 const { EmailChange } = await import('../src/components/EmailChange.tsx');
 const { PasswordChange } = await import('../src/components/PasswordChange.tsx');
+const { TimeZoneChange } = await import('../src/components/TimeZoneChange.tsx');
 const { renderWithServerState, testQueryClient } = await import('./serverStateHarness.tsx');
 const { RootStore } = await import('../src/stores/RootStore.ts');
 
@@ -249,6 +250,35 @@ describe('the one-time password', () => {
       currentPassword: 'one-time-password',
       newPassword: 'a long new password',
     });
+  });
+});
+
+describe('changing the time zone (D163)', () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(cleanup);
+
+  function renderSignedIn() {
+    const root = new RootStore(testQueryClient());
+    runInAction(() => {
+      root.auth.user = { ...USER, timezone: 'Asia/Jerusalem' };
+    });
+    return renderWithServerState(<TimeZoneChange />, root);
+  }
+
+  it('starts on the saved zone, with nothing to save', () => {
+    renderSignedIn();
+    expect((screen.getByLabelText('Timezone') as HTMLSelectElement).value).toBe('Asia/Jerusalem');
+    expect((screen.getByRole('button', { name: 'Save time zone' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('sends the chosen zone and follows the answer', async () => {
+    post.mockResolvedValue({ ...USER, timezone: 'Europe/London' });
+    const { root } = renderSignedIn();
+    fireEvent.change(screen.getByLabelText('Timezone'), { target: { value: 'Europe/London' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save time zone' }));
+    expect(await screen.findByText(/Saved/)).toBeTruthy();
+    expect(post).toHaveBeenCalledWith('/auth/timezone', { timezone: 'Europe/London' });
+    expect(root.auth.user?.timezone).toBe('Europe/London');
   });
 });
 

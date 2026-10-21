@@ -51,6 +51,7 @@ const queries = vi.hoisted(() => ({
   listObservations: vi.fn(async (): Promise<unknown[]> => []),
   countObservations: vi.fn(async () => 0),
   getLatestFinishedRun: vi.fn(async (): Promise<unknown> => null),
+  getLatestInstallationRun: vi.fn(async (): Promise<unknown> => null),
 }));
 
 vi.mock('../src/db/queries.js', () => ({
@@ -191,7 +192,7 @@ describe('GET /holdings/:id/news', () => {
 
   it('says which empty an empty week is', async () => {
     queries.getHolding.mockResolvedValueOnce(HOLDING_ROW);
-    queries.getLatestFinishedRun.mockResolvedValueOnce({
+    queries.getLatestInstallationRun.mockResolvedValueOnce({
       started_at: new Date('2026-09-30T06:00:00Z'),
       status: 'degraded',
       stats: { provider_failures: ['gdelt'] },

@@ -62,6 +62,7 @@ const queries = vi.hoisted(() => ({
   deleteTopic: vi.fn(),
   rejectProposal: vi.fn(),
   getLatestFinishedRun: vi.fn(async (): Promise<unknown> => null),
+  getLatestInstallationRun: vi.fn(async (): Promise<unknown> => null),
 }));
 
 vi.mock('../src/db/queries.js', () => ({
@@ -489,7 +490,7 @@ describe('GET /topics/:id/news', () => {
   it('says which empty an empty list is: the last collection and who failed in it', async () => {
     queries.getTopic.mockResolvedValueOnce(TOPIC_ROW);
     queries.listTopicArticles.mockResolvedValueOnce([]);
-    queries.getLatestFinishedRun.mockResolvedValueOnce({
+    queries.getLatestInstallationRun.mockResolvedValueOnce({
       started_at: new Date('2026-09-27T14:01:12Z'),
       status: 'degraded',
       stats: { fetched: 0, provider_failures: ['gdelt'] },
@@ -497,7 +498,7 @@ describe('GET /topics/:id/news', () => {
 
     const body = await (await get()).json();
 
-    expect(queries.getLatestFinishedRun).toHaveBeenCalledWith(USER.id, 'news_collect');
+    expect(queries.getLatestInstallationRun).toHaveBeenCalledWith('news_collect');
     expect(body.articles).toEqual([]);
     expect(body.collection).toEqual({
       lastRunAt: '2026-09-27T14:01:12.000Z',

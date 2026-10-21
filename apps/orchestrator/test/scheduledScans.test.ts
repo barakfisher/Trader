@@ -44,6 +44,7 @@ vi.mock('../src/db/pool.js', () => ({
 vi.mock('../src/db/queries.js', () => ({
   listAgents: vi.fn(async () => [agentRow({ id: 'primary', is_primary: true, persona: null }), agentRow()]),
   getAgent: vi.fn(async () => agentRow()),
+  listActiveUserIds: vi.fn(async () => [USER]),
   listSlotAttempts: vi.fn(async () => attempts),
   claimRun: vi.fn(async () => ({ claimed: true, runId: 'run-1' })),
   finishRun: vi.fn(async () => undefined),
@@ -58,7 +59,7 @@ vi.mock('../src/services/tradeProposals.js', () => ({
 
 const queries = await import('../src/db/queries.js');
 const scheduled = await import('../src/services/scheduledScans.js');
-const { MAX_SLOT_ATTEMPTS, RETRY_AFTER_MS, nextAttempt, planScheduledScans, runSlotAttempt } = scheduled;
+const { MAX_SLOT_ATTEMPTS, RETRY_AFTER_MS, nextAttempt, planScheduledScans, roundRobin, runSlotAttempt } = scheduled;
 
 const SCAN = { scan_id: 's-1', outcome: 'no_trade', steps: 2, cost_micro_usd: 30_000, model: 'm', answer: null, error: null };
 
@@ -114,8 +115,8 @@ describe('the 15-minute plan', () => {
   it("queues the due slot of each active agent with a persona, keyed by its attempt's run key", async () => {
     const queue = { add: vi.fn(async () => undefined) };
     const ai = fakeAi();
-    const result = await planScheduledScans({ userId: USER, ai, queue, now: NOW });
-    expect(result).toEqual({ agents: 1, due: 1, enqueued: 1 });
+    const result = await planScheduledScans({ userIds: [USER], ai, queue, now: NOW });
+    expect(result).toEqual({ users: 1, agents: 1, due: 1, enqueued: 1 });
     expect(queue.add).toHaveBeenCalledWith(`agent_scan:${AGENT}:2026-10-08:pre_open:1`, {
       userId: USER,
       agentId: AGENT,
@@ -129,21 +130,39 @@ describe('the 15-minute plan', () => {
   it('queues nothing for a slot that already has its answer', async () => {
     attempts = [{ run_key: 'k', status: 'ok', finished_at: NOW, stats: {} }];
     const queue = { add: vi.fn(async () => undefined) };
-    expect(await planScheduledScans({ userId: USER, ai: fakeAi(), queue, now: NOW })).toEqual({ agents: 1, due: 1, enqueued: 0 });
+    expect(await planScheduledScans({ userIds: [USER], ai: fakeAi(), queue, now: NOW })).toEqual({ users: 1, agents: 1, due: 1, enqueued: 0 });
     expect(queue.add).not.toHaveBeenCalled();
   });
 
   it('plans an agent with settings and no instructions (D174)', async () => {
     vi.mocked(queries.listAgents).mockResolvedValueOnce([agentRow({ persona: null, horizon: 'long' })] as never);
     const ai = fakeAi();
-    const plan = await planScheduledScans({ userId: USER, ai, queue: { add: vi.fn() }, now: NOW });
+    const plan = await planScheduledScans({ userIds: [USER], ai, queue: { add: vi.fn() }, now: NOW });
     expect(plan.agents).toBe(1);
+  });
+
+  it("takes the users' attempts in turn, so one user's many agents do not go first (D161)", async () => {
+    const OTHER = '00000000-0000-0000-0000-0000000000b2';
+    vi.mocked(queries.listAgents)
+      .mockResolvedValueOnce([agentRow({ id: 'a-1' }), agentRow({ id: 'a-2' }), agentRow({ id: 'a-3' })] as never)
+      .mockResolvedValueOnce([agentRow({ id: 'b-1' })] as never);
+    const added: { agentId: string; userId: string }[] = [];
+    const queue = { add: vi.fn(async (_id: string, job: { agentId: string; userId: string }) => void added.push(job)) };
+    const plan = await planScheduledScans({ userIds: [USER, OTHER], ai: fakeAi(), queue, now: NOW });
+    expect(plan).toEqual({ users: 2, agents: 4, due: 4, enqueued: 4 });
+    expect(added.map((job) => job.agentId)).toEqual(['a-1', 'b-1', 'a-2', 'a-3']);
+    expect(added[1]?.userId).toBe(OTHER);
+  });
+
+  it('round-robin takes one from each list in turn', () => {
+    expect(roundRobin([['a1', 'a2', 'a3'], [], ['c1', 'c2']])).toEqual(['a1', 'c1', 'a2', 'c2', 'a3']);
+    expect(roundRobin([])).toEqual([]);
   });
 
   it('asks nothing of the calendar when no agent can scan', async () => {
     vi.mocked(queries.listAgents).mockResolvedValueOnce([agentRow({ persona: null }), agentRow({ state: 'paused' })] as never);
     const ai = fakeAi();
-    expect(await planScheduledScans({ userId: USER, ai, queue: { add: vi.fn() }, now: NOW })).toEqual({ agents: 0, due: 0, enqueued: 0 });
+    expect(await planScheduledScans({ userIds: [USER], ai, queue: { add: vi.fn() }, now: NOW })).toEqual({ users: 1, agents: 0, due: 0, enqueued: 0 });
     expect(ai.marketSessions).not.toHaveBeenCalled();
   });
 });
@@ -248,11 +267,13 @@ describe('the ask, through POST /internal/runs (D71)', () => {
     expect(queries.claimRun).not.toHaveBeenCalled();
   });
 
-  it('claims its 15-minute run and plans where they are on', async () => {
+  it("claims the installation's 15-minute run and plans every active user's agents (D238)", async () => {
     const queue = { add: vi.fn(async () => undefined) };
     const response = await ask(queue);
-    expect(await response.json()).toMatchObject({ status: 'ok', result: { agents: 1 } });
-    expect(queries.claimRun).toHaveBeenCalledWith(expect.objectContaining({ kind: 'agent_scans', agentId: 'primary' }));
+    expect(await response.json()).toMatchObject({ status: 'ok', result: { users: 1, agents: 1 } });
+    expect(queries.claimRun).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'agent_scans', userId: null, agentId: null, runKey: expect.stringMatching(/^agent_scans:installation:/) }),
+    );
   });
 });
 

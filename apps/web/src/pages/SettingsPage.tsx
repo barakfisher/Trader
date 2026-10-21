@@ -2,12 +2,14 @@ import { useState, type ReactNode } from 'react';
 import { observer } from 'mobx-react-lite';
 import { AtSign, BellOff, KeyRound, Settings as SettingsIcon } from 'lucide-react';
 
+import { AccountResetCard } from '../components/AccountResetCard.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Drawer } from '../components/Drawer.tsx';
 import { EmailChange } from '../components/EmailChange.tsx';
 import { OwnLlmKeyForm } from '../components/OwnLlmKeyForm.tsx';
 import { PasswordChange } from '../components/PasswordChange.tsx';
 import { TelegramConnect } from '../components/TelegramConnect.tsx';
+import { TimeZoneChange } from '../components/TimeZoneChange.tsx';
 import { Button, Card, ErrorNote, Spinner } from '../components/ui.tsx';
 import {
   MUTE_PRESET_HOURS,
@@ -304,6 +306,9 @@ export const SettingsPage = observer(function SettingsPage() {
               {settings.saving ? t('settings.saving') : t('settings.saveChanges')}
             </Button>
           </div>
+
+          {/* Last, below the save bar: it acts at once and erases, so it is never part of "Save changes". */}
+          <AccountResetCard />
         </>
       )}
 
@@ -435,7 +440,6 @@ function SpendCard() {
 const AccountCard = observer(function AccountCard() {
   const { auth } = useStore();
   const { t } = useTranslation();
-  const zone = getDisplayTimeZone();
   return (
     <Card title={t('settings.account')}>
       <dl className="grid gap-3 text-sm sm:grid-cols-2">
@@ -446,14 +450,10 @@ const AccountCard = observer(function AccountCard() {
             {t('settings.baseCurrencyNote')}
           </dd>
         </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-text-muted">{t('settings.timezone')}</dt>
-          <dd className="font-medium">{zone}</dd>
-          <dd className="text-xs text-text-muted">
-            {t('settings.timezoneNote')}
-          </dd>
-        </div>
       </dl>
+      <div className="mt-4">
+        <TimeZoneChange />
+      </div>
     </Card>
   );
 });

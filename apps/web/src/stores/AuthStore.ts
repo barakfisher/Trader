@@ -104,6 +104,14 @@ export class AuthStore {
     });
   }
 
+  /** The account's own zone (D163); the display zone follows the returned user. */
+  async changeTimeZone(timezone: string): Promise<void> {
+    const user = await api.post<SessionUser>('/auth/timezone', { timezone });
+    runInAction(() => {
+      this.user = user;
+    });
+  }
+
   async logout(): Promise<void> {
     try {
       await api.post('/auth/logout');

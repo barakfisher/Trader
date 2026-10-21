@@ -66,8 +66,8 @@ vi.mock('../src/db/queries.js', () => ({
   ]),
   claimRun: vi.fn(async () => ({ claimed: true, runId: 'run-1' })),
   finishRun: vi.fn(async () => undefined),
-  listAnalysedInstruments: vi.fn(async () => [{ id: 'i-AAPL', symbol: 'AAPL', name: 'Apple', asset_class: 'equity' }]),
-  listTradedInstruments: vi.fn(async () => [
+  listActiveUsersAnalysedInstruments: vi.fn(async () => [{ id: 'i-AAPL', symbol: 'AAPL', name: 'Apple', asset_class: 'equity' }]),
+  listActiveUsersTradedInstruments: vi.fn(async () => [
     { id: 'i-AAPL', symbol: 'AAPL' },
     { id: 'i-NVDA', symbol: 'NVDA' },
   ]),
@@ -85,7 +85,6 @@ const ENV = {
   AI_SERVICE_URL: 'http://ai-service:8000',
   INTERNAL_API_KEY: 'internal-test-key',
   ALLOWED_ORIGINS: 'http://localhost:5173',
-  SINGLE_USER_ID: USER.id,
 } as unknown as NodeJS.ProcessEnv;
 const ORIGIN = { origin: 'http://localhost:5173', 'content-type': 'application/json' };
 
@@ -149,7 +148,7 @@ describe('the backfill', () => {
     expect(response.status).toBe(200);
     const sent = (ai.backfillHistory.mock.calls as unknown[][])[0]![0] as { instruments: { symbol: string }[] };
     expect(sent.instruments.map((row) => row.symbol).sort()).toEqual(['AAPL', 'NVDA', 'SPY']);
-    expect(queries.listTradedInstruments).toHaveBeenCalledWith(USER.id);
+    expect(queries.listActiveUsersTradedInstruments).toHaveBeenCalledWith();
     // The market benchmarks' closes too, so a move can be set beside them (decision 149).
     expect(queries.findInstrumentsBySymbols).toHaveBeenCalledWith(['SPY', 'QQQ', 'IWM', 'BTC-USD']);
   });

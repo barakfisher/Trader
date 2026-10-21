@@ -23,6 +23,7 @@ import { SESSION_COOKIE, verifySessionToken } from './auth.js';
 import { getUser, insertAdminAudit, type UserRow } from '../db/queries.js';
 import { auditEntry } from './adminAudit.js';
 import { forbidden, toErrorResponse, unauthorized, ApiProblem } from './errors.js';
+import { registerAccountRoutes } from './routes/account.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerAgentAccountRoutes } from './routes/agentAccount.js';
 import { registerAgentScanRoutes } from './routes/agentScans.js';
@@ -85,6 +86,8 @@ const PROTECTED_PREFIXES = [
   '/assistant',
   '/notifications',
   '/settings',
+  // The user's own account: its reset (D162).
+  '/account',
   // Named individually, not as '/telegram': POST /telegram/webhook is called by
   // Telegram and must stay unauthenticated - it proves itself with the secret
   // header instead. A blanket prefix here would 401 every inbound update, and
@@ -261,6 +264,7 @@ export function createApp(
 
   registerHealthRoutes(app);
   registerAuthRoutes(app);
+  registerAccountRoutes(app);
   registerPortfolioRoutes(app);
   registerHoldingsRoutes(app);
   registerAgentsRoutes(app);

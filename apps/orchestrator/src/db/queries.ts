@@ -44,3 +44,4 @@ export * from './queries/telegram.js';
 export * from './queries/topics.js';
 export * from './queries/articles.js';
 export * from './queries/topicProposals.js';
+export * from './queries/adminUsers.js';
