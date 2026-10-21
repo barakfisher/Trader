@@ -93,7 +93,7 @@ describe('AgentsPage', () => {
     expect(screen.getByText('Simulated')).toBeTruthy();
     expect(screen.getByText('Paused')).toBeTruthy();
     // A simulated agent's net worth, valued as its own page values it (D19).
-    expect(await screen.findByText('Net worth $1,234.56 · paper budget $1,000.50')).toBeTruthy();
+    expect(await screen.findByText('Net worth $1,234.56 · total deposited $1,000.50')).toBeTruthy();
   });
 
   it('lets a name and a persona take the direction of what is typed in them', async () => {
