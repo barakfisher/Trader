@@ -103,7 +103,12 @@ def test_a_finished_scan_is_returned_as_stored(client: TestClient, scan: dict[st
     assert response.status_code == 200
     body = response.json()
     assert (body["outcome"], body["steps"], body["cost_micro_usd"]) == ("no_trade", 2, 41000)
-    assert body["answer"] == {"trades": [], "thesis": "Nothing.", "problems": []}
+    assert body["answer"] == {
+        "trades": [],
+        "thesis": "Nothing.",
+        "problems": [],
+        "cash_unjustified": False,
+    }
     assert scan["ran"][0]["trigger"] == "manual"
 
 

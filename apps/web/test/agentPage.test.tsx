@@ -245,11 +245,15 @@ const SCAN_SUMMARY = {
     },
   ],
   problems: [],
+  cashUnjustified: false,
   error: null,
 };
 
 const SCANS: AgentScansResponse = {
-  scans: [SCAN_SUMMARY, { ...SCAN_SUMMARY, id: 's-2', outcome: 'no_trade', trades: [], costMicroUsd: 14_600 }],
+  scans: [
+    SCAN_SUMMARY,
+    { ...SCAN_SUMMARY, id: 's-2', outcome: 'no_trade', trades: [], costMicroUsd: 14_600, cashUnjustified: true },
+  ],
   nextBefore: null,
 };
 
@@ -563,6 +567,8 @@ describe('AgentPage with the ledger', () => {
     await renderAgentTab('Scans');
     expect(await screen.findByText('Proposed')).toBeTruthy();
     expect(screen.getByText('No trade')).toBeTruthy();
+    // D237: only the pass that never explained its idle cash says so.
+    expect(screen.getAllByText("Didn't explain idle cash")).toHaveLength(1);
     expect(screen.getByText('Buy 2 NVDA')).toBeTruthy();
     expect(screen.getByText('$0.041 · 1 step')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Buy 2 NVDA/, expanded: false }));

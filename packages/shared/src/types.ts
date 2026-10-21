@@ -290,6 +290,8 @@ export interface AgentScanSummary {
   trades: AgentScanTrade[];
   /** Why the answer was refused, as the validator named it. */
   problems: string[];
+  /** A pass that never quoted its cash above the buffer, even when sent back (D237). */
+  cashUnjustified: boolean;
   error: string | null;
 }
 

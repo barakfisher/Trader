@@ -277,12 +277,13 @@ def _as_written(token: str, text: str, start: int) -> str:
     return token
 
 
-def unsourced_figures(text: str, evidence: Mapping[str, object]) -> list[str]:
-    """Figures in `text` that the evidence does not support, in order of appearance."""
+def _figures(text: str, evidence: Mapping[str, object]) -> list[tuple[str, bool]]:
+    """Each figure in `text`, as written, with whether the evidence supports it.
+    A window's length a key names is not a figure, so it is left out."""
     sourced = sourced_values(evidence)
     as_percent = sourced_values(evidence, percent=True)
     windows = named_windows(evidence)
-    offenders: list[str] = []
+    figures: list[tuple[str, bool]] = []
 
     for match in _NUMBER_PATTERN.finditer(text):
         token = match.group()
@@ -293,10 +294,20 @@ def unsourced_figures(text: str, evidence: Mapping[str, object]) -> list[str]:
         if _is_named_window(token, text, match.end(), windows):
             continue
         is_percent = _PERCENT_AFTER.match(text, match.end()) is not None
-        if not _supported(written, places, as_percent if is_percent else sourced):
-            offenders.append(_as_written(token, text, match.start()))
+        supported = _supported(written, places, as_percent if is_percent else sourced)
+        figures.append((_as_written(token, text, match.start()), supported))
 
-    return offenders
+    return figures
+
+
+def unsourced_figures(text: str, evidence: Mapping[str, object]) -> list[str]:
+    """Figures in `text` that the evidence does not support, in order of appearance."""
+    return [figure for figure, supported in _figures(text, evidence) if not supported]
+
+
+def quotes_any(text: str, evidence: Mapping[str, object]) -> bool:
+    """Whether `text` quotes at least one figure of `evidence`, as the check reads figures."""
+    return any(supported for _figure, supported in _figures(text, evidence))
 
 
 def is_supported(text: str, evidence: Mapping[str, object]) -> bool:

@@ -40,6 +40,41 @@ class _Position:
     cost: Decimal
 
 
+def load_book(
+    context: ToolContext, pending: Sequence[PendingTrade]
+) -> tuple[int, dict[str, _Position]]:
+    """The agent's cash and positions after every waiting buy, as if filled: the book a
+    trade is reviewed against, and what the briefing's idle cash is read from (D235)."""
+    engine, user, agent = context.engine, context.user_id, context.agent_id
+    cash = agent_cash_minor(engine, user, agent)
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                """
+                SELECT i.symbol, sum(h.quantity) AS quantity,
+                       sum(h.quantity * coalesce(h.cost_basis_minor, 0)) AS cost
+                  FROM holdings h JOIN instruments i ON i.id = h.instrument_id
+                 WHERE h.user_id = CAST(:user AS uuid) AND h.agent_id = CAST(:agent AS uuid)
+                   AND h.quantity > 0
+                 GROUP BY i.symbol
+                """
+            ),
+            {"user": user, "agent": agent},
+        ).all()
+    positions = {row.symbol: _Position(Decimal(row.quantity), Decimal(row.cost)) for row in rows}
+    for waiting in pending:
+        if waiting.side == "buy":
+            cash -= waiting.cost_minor
+            position = positions.setdefault(waiting.symbol, _Position(Decimal(0), Decimal(0)))
+            position.quantity += waiting.quantity
+            position.cost += notional_minor(waiting.quantity, waiting.price_minor)
+    return cash, positions
+
+
+def holdings_cost(positions: dict[str, _Position]) -> Decimal:
+    return sum((p.cost for p in positions.values() if p.quantity > 0), Decimal(0))
+
+
 @dataclass
 class TradeReview:
     """The running review of one scan's trades. `review` may be called again with
@@ -59,29 +94,7 @@ class TradeReview:
     _proceeds: dict[str, int] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        engine, user, agent = self.context.engine, self.context.user_id, self.context.agent_id
-        self._cash = agent_cash_minor(engine, user, agent)
-        with engine.connect() as connection:
-            rows = connection.execute(
-                text(
-                    """
-                    SELECT i.symbol, sum(h.quantity) AS quantity,
-                           sum(h.quantity * coalesce(h.cost_basis_minor, 0)) AS cost
-                      FROM holdings h JOIN instruments i ON i.id = h.instrument_id
-                     WHERE h.user_id = CAST(:user AS uuid) AND h.agent_id = CAST(:agent AS uuid)
-                       AND h.quantity > 0
-                     GROUP BY i.symbol
-                    """
-                ),
-                {"user": user, "agent": agent},
-            ).all()
-        self._positions = {
-            row.symbol: _Position(Decimal(row.quantity), Decimal(row.cost)) for row in rows
-        }
-        for waiting in self.pending:
-            if waiting.side == "buy":
-                self._cash -= waiting.cost_minor
-                self._add(waiting.symbol, waiting.quantity, waiting.price_minor)
+        self._cash, self._positions = load_book(self.context, self.pending)
 
     def _add(self, symbol: str, quantity: Decimal, price_minor: int) -> None:
         position = self._positions.setdefault(symbol, _Position(Decimal(0), Decimal(0)))
@@ -92,7 +105,7 @@ class TradeReview:
         held = {s: p for s, p in self._positions.items() if p.quantity > 0}
         return _Book(
             cash_minor=self._cash,
-            holdings_cost=sum((p.cost for p in held.values()), Decimal(0)),
+            holdings_cost=holdings_cost(held),
             symbol_cost=held[symbol].cost if symbol in held else Decimal(0),
             held_symbols=frozenset(held),
         )
