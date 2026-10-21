@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 /**
- * The dashboard's layout (UX5): the summary, the two charts, then the holdings
- * card - which carries its own actions. Add holding opens a drawer, Targets is
+ * The dashboard's layout (UX5, D231): the summary, the holdings card - which
+ * carries its own actions - then the two charts. Add holding opens a drawer, Targets is
  * the page, Import and Export sit behind "⋯"; none of them is in the app bar.
  */
 
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { createMemoryHistory } from '@tanstack/react-router';
 
-import type { HoldingView, PortfolioResponse } from '@traders/shared';
+import type { ConsolidatedHoldingsResponse, HoldingView, PortfolioResponse } from '@traders/shared';
 
 const get = vi.fn();
 const post = vi.fn();
@@ -62,6 +62,7 @@ const PORTFOLIO: PortfolioResponse = {
     holdingsCount: 1,
     pricedCount: 1,
     unpricedSymbols: [],
+    uncostedSymbols: [],
     degraded: false,
     asOf: '2026-09-30T07:00:00Z',
   },
@@ -84,6 +85,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   get.mockImplementation((path: string) => {
     if (path === '/portfolio') return Promise.resolve(PORTFOLIO);
+    // No simulated agent: every view is the real portfolio's.
+    if (path === '/agents') return Promise.resolve({ agents: [] });
     // Adding a holding waits for every portfolio read to refresh, the curve's included.
     if (path.startsWith('/portfolio/snapshots')) return Promise.resolve({ snapshots: [] });
     return new Promise(() => {});
@@ -101,14 +104,14 @@ afterEach(cleanup);
 const holdingsCard = async () =>
   (await screen.findByRole('heading', { name: 'Holdings (1)' })).closest('section') as HTMLElement;
 
-it('reads summary, the two charts, then the holdings - with no add form beside them', async () => {
+it('reads summary, the holdings, then the two charts - with no add form beside them (D231)', async () => {
   renderAt('/');
   await holdingsCard();
   const order = screen
     .getAllByRole('heading', { level: 2 })
     .map((heading) => heading.textContent)
     .filter((text) => ['Value over time', 'Allocation', 'Holdings (1)'].includes(text ?? ''));
-  expect(order).toEqual(['Value over time', 'Allocation', 'Holdings (1)']);
+  expect(order).toEqual(['Holdings (1)', 'Value over time', 'Allocation']);
   expect(screen.queryByRole('heading', { name: 'Add a holding' })).toBeNull();
 });
 
@@ -188,4 +191,69 @@ it('exports the stored holdings from "⋯" as a JSON file the import reads', asy
   const file = JSON.parse(text);
   expect(file.holdings).toEqual([{ symbol: 'AAPL', quantity: '25', cost_basis: '185.40', currency: 'USD' }]);
   click.mockRestore();
+});
+
+describe('with a simulated agent (D227)', () => {
+  const AGENT_ID = '90000000-0000-0000-0000-0000000000a1';
+  const agentSummary = { ...PORTFOLIO.summary, totalValueMinor: 100000, totalCostMinor: 90000, pnlMinor: 10000 };
+  const CONSOLIDATED: ConsolidatedHoldingsResponse = {
+    currency: 'USD',
+    real: PORTFOLIO.summary,
+    simulated: { agentCount: 1, cashMinor: 0, holdingsValueMinor: 100000, netWorthMinor: 100000, unpricedSymbols: [], summary: agentSummary },
+    agents: [
+      {
+        agentId: AGENT_ID, name: 'Momentum', state: 'active', currency: 'USD', cashMinor: 0, depositsMinor: 100000,
+        holdingsValueMinor: 100000, netWorthMinor: 100000, pnlMinor: 0, pnlPct: 0, unpricedSymbols: [], summary: agentSummary,
+      },
+    ],
+    rows: [
+      {
+        instrument: AAPL.instrument,
+        quote: AAPL.quote,
+        real: { quantity: '25', valueMinor: 823500 },
+        simulated: { quantity: '3', valueMinor: 100000 },
+        positions: [
+          {
+            agentId: 'primary', agentName: 'Main portfolio', isPrimary: true, state: 'active', holdingId: 'h-aapl',
+            quantity: '25', costBasisMinor: 18540, costCurrency: 'USD', valueMinor: 823500, costMinor: 463500,
+            pnlMinor: 360000, pnlPct: 77.67,
+          },
+          {
+            agentId: AGENT_ID, agentName: 'Momentum', isPrimary: false, state: 'active', holdingId: 'h-m',
+            quantity: '3', costBasisMinor: 30000, costCurrency: 'USD', valueMinor: 100000, costMinor: 90000,
+            pnlMinor: 10000, pnlPct: 11.11,
+          },
+        ],
+      },
+    ],
+    pendingTrades: [],
+  };
+
+  beforeEach(() => {
+    get.mockImplementation((path: string) => {
+      if (path === '/portfolio') return Promise.resolve(PORTFOLIO);
+      if (path === '/portfolio/consolidated') return Promise.resolve(CONSOLIDATED);
+      if (path.startsWith('/portfolio/snapshots')) return Promise.resolve({ snapshots: [] });
+      if (path === '/agents')
+        return Promise.resolve({
+          agents: [{ id: AGENT_ID, name: 'Momentum', isPrimary: false, state: 'active' }],
+        });
+      return new Promise(() => {});
+    });
+  });
+
+  it('opens on All: the added-up cards, the holders, and the toggle above the table', async () => {
+    const { router } = renderAt('/');
+    const holders = await screen.findByRole('list', { name: 'Holders' });
+    expect(within(holders).getByText('Momentum')).toBeTruthy();
+    expect(screen.getByRole('radio', { name: 'All' }).getAttribute('aria-checked')).toBe('true');
+    // $8,235.00 real + $1,000.00 paper, and the split is one click away.
+    expect(screen.getByRole('button', { name: /Total value \$9,235\.00/ })).toBeTruthy();
+    expect(screen.getByText('The charts below are your real portfolio\'s.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Real only' }));
+    await waitFor(() => expect(router.state.location.search).toEqual({ holdings: 'real' }));
+    expect(await holdingsCard()).toBeTruthy();
+    expect(screen.queryByRole('list', { name: 'Holders' })).toBeNull();
+  });
 });

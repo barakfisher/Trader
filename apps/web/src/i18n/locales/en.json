@@ -255,7 +255,10 @@
       "import": "Import",
       "export": "Export JSON",
       "close": "Close"
-    }
+    },
+    "setCost": "Set cost basis",
+    "setCostFor": "Set the cost basis for {{symbol}}",
+    "noCostTitle": "No cost basis: its P&L cannot be measured, and it is left out of total cost and P&L."
   },
   "import": {
     "title": "Import holdings",
@@ -576,7 +579,10 @@
     "today": "Today",
     "incomplete": "This view is incomplete.",
     "unpriced": " No provider could price <strong>{{symbols}}</strong>, so those positions are excluded from the totals rather than valued at zero.",
-    "lastKnown": " Some quotes may be served from the last known price."
+    "lastKnown": " Some quotes may be served from the last known price.",
+    "uncosted_one": "{{count}} holding without cost basis",
+    "uncosted_other": "{{count}} holdings without cost basis",
+    "uncostedNote": "No cost basis for <strong>{{symbols}}</strong>: left out of total cost and P&L rather than counted at zero cost, which would read their whole value as profit. Set one from the holding's row."
   },
   "telegram": {
     "checkFailed": "Could not check your Telegram link.",
@@ -1748,43 +1754,20 @@
     }
   },
   "consolidated": {
-    "showing": "Showing",
-    "scopes": {
-      "real": "Real portfolio only",
-      "all": "All: real and simulated",
-      "agent": "Simulated: {{name}}",
-      "agentPaused": "Simulated: {{name}} (paused)"
-    },
     "loading": "Loading every holding…",
     "loadFailed": "Could not load the consolidated holdings.",
-    "realValue": "Real portfolio",
-    "realHint_one": "{{count}} holding, at market",
-    "realHint_other": "{{count}} holdings, at market",
-    "realPartial": "Partial: {{symbols}} could not be priced and are left out.",
-    "simulatedNetWorth": "Simulated agents, net worth",
-    "simulatedHint_one": "{{count}} agent · of which cash {{cash}}",
-    "simulatedHint_other": "{{count}} agents · of which cash {{cash}}",
-    "simulatedUnpriced": "Not shown: {{symbols}} could not be priced, and a total without them would read as complete.",
-    "neverSummed": "Real and simulated money are never added together: one is yours, the other is paper.",
-    "belowIsReal": "The chart, allocation and findings below are your real portfolio's.",
-    "title": "All holdings ({{count}})",
     "empty": "Nothing is held, real or simulated.",
-    "shares": "{{quantity}} sh",
-    "positionLine": "{{quantity}} sh · {{value}}",
-    "agentTitle": "{{name}} ({{count}})",
-    "openAgent": "Open the agent's page to trade",
     "pending": {
       "title_one": "{{count}} trade waiting for you",
       "title_other": "{{count}} trades waiting for you",
-      "hint": "Proposed by your agents for stocks not in the list below. Open one to approve it at the live price, or reject it.",
+      "hint": "Proposed by your agents for stocks no holding above covers. Approve one at the live price from here, or reject it.",
       "badge_one": "{{count}} pending",
       "badge_other": "{{count}} pending",
       "line": "{{agent}} proposes to {{side}} {{quantity}} {{symbol}} at {{price}}",
       "sides": {
         "buy": "buy",
         "sell": "sell"
-      },
-      "open": "Review"
+      }
     }
   },
   "insights": {
@@ -1815,5 +1798,41 @@
     "notDelivered": "Not delivered",
     "sent": "Sent {{when}}",
     "agent": "Agent: {{name}}"
+  },
+  "combined": {
+    "holders": "Holders",
+    "editReal": "Edit your real {{symbol}} holding",
+    "removeReal": "Remove your real {{symbol}} holding",
+    "editingReal": "Your real {{symbol}} holding",
+    "chartsAreReal": "The charts below are your real portfolio's.",
+    "scopes": {
+      "label": "Holdings to show",
+      "all": "All",
+      "real": "Real only",
+      "simulated": "Simulated only",
+      "agents": "Agent",
+      "everyAgent": "Every agent"
+    },
+    "breakdown": {
+      "title": "Breakdown by source",
+      "hint": "The cards add your real portfolio and your agents' paper holdings together. Here is each part.",
+      "open": "Breakdown by source",
+      "openWithTrades_one": "Breakdown by source, and {{count}} trade waiting",
+      "openWithTrades_other": "Breakdown by source, and {{count}} trades waiting",
+      "cash": "Uninvested paper cash: {{cash}}",
+      "total": "Combined",
+      "real": "Real portfolio",
+      "agent": "{{name}} (simulated)",
+      "combined": "Combined",
+      "line": "{{value}} ({{quantity}} units)",
+      "for": "Breakdown of {{symbol}} by holder"
+    },
+    "approve": {
+      "button": "Approve",
+      "label": "Review and approve: {{agent}} proposes to {{side}} {{symbol}}",
+      "title": "Approve a trade",
+      "loading": "Loading the proposal…",
+      "loadFailed": "Could not load the proposal."
+    }
   }
 }

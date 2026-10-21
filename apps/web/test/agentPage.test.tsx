@@ -120,6 +120,7 @@ function account(overrides: Partial<AgentAccountResponse> = {}): AgentAccountRes
         holdingsCount: 1,
         pricedCount: 1,
         unpricedSymbols: [],
+        uncostedSymbols: [],
         degraded: false,
         asOf: '2026-10-05T16:45:00Z',
       },

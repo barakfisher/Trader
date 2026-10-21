@@ -160,17 +160,24 @@ describe('the consolidated view', () => {
     expect(queries.listHoldings).not.toHaveBeenCalledWith(USER.id, OLD);
   });
 
-  it('reports the real summary as /portfolio does, and the simulated totals as cash plus market value (D34)', async () => {
+  it('reports the real summary as /portfolio does, and the simulated totals as cash plus market value (D34, D229)', async () => {
     const body = await consolidated();
     expect(body.currency).toBe('USD');
     expect(body.real.totalValueMinor).toBe(40 * AAPL + Math.round(2.5 * VOO));
-    expect(body.simulated).toEqual({
+    expect(body.simulated).toMatchObject({
       agentCount: 2,
       cashMinor: 50000 + 20000,
       holdingsValueMinor: 8 * AAPL,
       netWorthMinor: 70000 + 8 * AAPL,
       unpricedSymbols: [],
     });
+    // The agents' holdings together, for the dashboard's cards (D229): each
+    // agent's own summary, added.
+    expect(body.simulated.summary.totalValueMinor).toBe(8 * AAPL);
+    expect(body.simulated.summary.totalCostMinor).toBe(
+      body.agents[0].summary.totalCostMinor + body.agents[1].summary.totalCostMinor,
+    );
+    expect(body.simulated.summary.holdingsCount).toBe(2);
     expect(body.agents[1]).toMatchObject({ name: 'Value', state: 'paused', cashMinor: 20000, netWorthMinor: 20000 + 3 * AAPL });
   });
 
@@ -189,7 +196,8 @@ describe('the consolidated view', () => {
     agents = [agents[0]!];
     const body = await consolidated();
     expect(body.agents).toEqual([]);
-    expect(body.simulated).toEqual({ agentCount: 0, cashMinor: 0, holdingsValueMinor: 0, netWorthMinor: 0, unpricedSymbols: [] });
+    expect(body.simulated).toMatchObject({ agentCount: 0, cashMinor: 0, holdingsValueMinor: 0, netWorthMinor: 0, unpricedSymbols: [] });
+    expect(body.simulated.summary).toMatchObject({ totalValueMinor: 0, pnlMinor: null, holdingsCount: 0 });
     expect(body.rows.every((row: { simulated: unknown }) => row.simulated === null)).toBe(true);
   });
 });

@@ -33,7 +33,13 @@ vi.mock('../src/api/client.ts', () => {
 const { ApiRequestError } = await import('../src/api/client.ts');
 const { AddHoldingForm } = await import('../src/components/AddHoldingForm.tsx');
 const { SummaryCards } = await import('../src/components/SummaryCards.tsx');
+const { usePortfolioQuery } = await import('../src/queries/portfolio.ts');
 const { renderWithServerState } = await import('./serverStateHarness.tsx');
+
+/** The cards as the dashboard's real view feeds them: the portfolio's own summary. */
+function PortfolioCards() {
+  return <SummaryCards summary={usePortfolioQuery().data?.summary} />;
+}
 
 function portfolioWorth(totalValueMinor: number): PortfolioResponse {
   return {
@@ -48,6 +54,7 @@ function portfolioWorth(totalValueMinor: number): PortfolioResponse {
       holdingsCount: 1,
       pricedCount: 1,
       unpricedSymbols: [],
+      uncostedSymbols: [],
       degraded: false,
       asOf: '2026-09-29T10:00:00Z',
     },
@@ -72,7 +79,7 @@ describe('adding a holding', () => {
     post.mockResolvedValue({ id: 'h-1' });
     renderWithServerState(
       <>
-        <SummaryCards />
+        <PortfolioCards />
         <AddHoldingForm />
       </>,
     );
@@ -98,7 +105,7 @@ describe('adding a holding', () => {
     );
     renderWithServerState(
       <>
-        <SummaryCards />
+        <PortfolioCards />
         <AddHoldingForm />
       </>,
     );

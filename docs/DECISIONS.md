@@ -237,3 +237,8 @@ while this file is out of date.
 | 224 | The bot's fixed sentences around a question are in the question's language, read from its letters |
 | 225 | A disabled Create agent says why, beside the button; the paper budget has no default and no placeholder |
 | 226 | The product guide names only tools the assistant has, and says how an agent is created |
+| 227 | The dashboard opens on *All*, and one table shows every holding with who holds it |
+| 228 | A holding without a cost basis is left out of cost and P&L, never counted at zero cost |
+| 229 | The cards add the real portfolio and the agents together under *All*, and the split is one click away |
+| 230 | An agent's trade is approved from its row, through the proposal's own card |
+| 231 | Order: the four cards, the scope toggle, the holdings table, then the charts |

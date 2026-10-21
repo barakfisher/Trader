@@ -104,7 +104,7 @@ export const ProposalPage = observer(function ProposalPage() {
 });
 
 /** A decided proposal: its outcome, what it asked, and the figures - no buttons. */
-function DecidedCard({ proposal, baseCurrency }: { proposal: Proposal; baseCurrency: string }) {
+export function DecidedCard({ proposal, baseCurrency }: { proposal: Proposal; baseCurrency: string }) {
   const { t, i18n } = useTranslation();
   const text = observationText(proposal, i18n.language);
   return (

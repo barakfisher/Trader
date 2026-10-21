@@ -100,6 +100,7 @@ function portfolio(
       holdingsCount: holdings.length,
       pricedCount: holdings.length - unpricedSymbols.length,
       unpricedSymbols,
+      uncostedSymbols: [],
       degraded: unpricedSymbols.length > 0,
       asOf: '2026-09-17T10:00:00.000Z',
     },

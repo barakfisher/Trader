@@ -3463,6 +3463,49 @@ failure they prevent.
     leaving the tool names in with "an agent's tool only" (a name in the text is still a name to
     call - describe the tool, do not name it).
 
+227. **The dashboard opens on *All*, and one table shows every holding with who holds it**
+    (2026-10-21, the user's dashboard redesign; supersedes D33's default). The address is
+    `?holdings=real|simulated|<agent id>`; the plain address and the old `?holdings=all` are *All*.
+    A segmented `[All] [Real only] [Simulated only]` sits directly above the table, with one chip
+    per agent under *Simulated* when there is more than one. Under *All*, *Simulated* and one
+    agent the table has the real table's columns plus *Holders* - a *Real* badge and each agent by
+    name - and the quantity and value open the split by holder (hover, click or tap: a phone has
+    no hover). *Real only* is the old table, unchanged. D33 rejected *All* as the default because
+    "a glance at NVDA 40 must mean the real 40"; the *Holders* column answers that on the row
+    itself. Without a non-archived simulated agent there is no toggle and every view is the real
+    one. *Rejected:* dropping the per-agent view (the chips keep it, and old links still open it).
+228. **A holding without a cost basis is left out of cost and P&L, never counted at zero cost**
+    (2026-10-21; `valuation.ts`). Before: `totalCostMinor` summed `costMinor ?? 0` while
+    `totalValueMinor` summed every priced holding, so an imported holding with no purchase price
+    added its whole value to Unrealised P&L - and an unpriced holding with a cost subtracted its
+    cost from it. Now cost and P&L cover the holdings with both a price and a cost basis;
+    `pnlMinor` is null when there are none; `uncostedSymbols` names the rest, and the cards and
+    rows show "—" with a *Set cost basis* warning that opens the edit. The snapshot's `costMinor`
+    follows (it was already described to the assistant as covering the priced holdings).
+    *Rejected:* "—" for the whole P&L while any holding lacks a cost (one forgotten import hides
+    every figure); a cost of zero, which is the bug.
+229. **The cards add the real portfolio and the agents together under *All*, and the split is one
+    click away** (2026-10-21; supersedes D34's "never summed" for the cards - rows still keep real
+    and simulated apart). Every view has the same four cards. A simulated summary is each agent's
+    holdings valued exactly as the real portfolio is (`standing.summary`, `simulated.summary`),
+    added by `combineSummaries` in `@traders/shared` - money summed in minor units, percentages
+    computed again from the sums. When the figures add more than one source, or an agent's trade is
+    waiting, each card is a button opening a drawer: every source's four figures, an agent's
+    uninvested paper cash, the combined total, and the waiting trades. The user chose a click over
+    a hover tooltip because a phone has no hover. *Total value* is holdings, not net worth: cash
+    is shown in the drawer, so the four figures stay the same kind of number in every view.
+    *Rejected:* keeping two figures (the user asked for one); the split on hover only.
+230. **An agent's trade is approved from its row, through the proposal's own card** (2026-10-21).
+    *Approve* in the row opens a drawer with the proposal as the inbox shows it - thesis, what the
+    scan checked, the deadline - and that card's *Approve* (the live price beside the agent's,
+    D47) then *Confirm*. So every refusal still applies, D218's included, and the dashboard has
+    no second approval path to keep in step. A trade on a ticker nobody holds is listed under the
+    table with the same button. *Rejected:* one-click approve (skips the thesis and the live
+    price); a link to the proposal page only (the user asked for the action in the row).
+231. **Order: the four cards, the scope toggle, the holdings table, then the charts** (2026-10-21;
+    supersedes UX5's charts-before-table). The table is what the page is for. The charts stay the
+    real portfolio's (D32), and under any other view a line above them says so.
+
 ---
 
 ## Bugs that cost real time, and the lesson from each

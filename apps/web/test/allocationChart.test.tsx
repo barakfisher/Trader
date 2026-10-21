@@ -36,6 +36,7 @@ const portfolio: PortfolioResponse = {
     holdingsCount: 2,
     pricedCount: 2,
     unpricedSymbols: [],
+    uncostedSymbols: [],
     degraded: false,
     asOf: '2026-10-08T10:00:00Z',
   },

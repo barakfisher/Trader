@@ -60,8 +60,14 @@ export interface AllocationSlice {
 export interface PortfolioSummary {
   baseCurrency: string;
   totalValueMinor: number;
+  /**
+   * What was paid for the holdings P&L can be measured on: priced, with a cost
+   * basis. A holding without one is not counted at zero cost - that read its
+   * whole value as profit (D228) - it is named in `uncostedSymbols` instead.
+   */
   totalCostMinor: number;
-  pnlMinor: number;
+  /** Value minus cost over the same holdings as `totalCostMinor`; null when there are none. */
+  pnlMinor: number | null;
   pnlPct: number | null;
   dayChangeMinor: number | null;
   dayChangePct: number | null;
@@ -69,6 +75,8 @@ export interface PortfolioSummary {
   pricedCount: number;
   /** Symbols no provider could price; surfaced in the UI, never silently dropped. */
   unpricedSymbols: string[];
+  /** Symbols held with no cost basis: left out of cost and P&L, and the UI asks for one (D228). */
+  uncostedSymbols: string[];
   /** True when any quote was served stale or any symbol is unpriced. */
   degraded: boolean;
   asOf: string;
@@ -696,12 +704,15 @@ export interface SimulatedAgentStanding {
   pnlMinor: number | null;
   pnlPct: number | null;
   unpricedSymbols: string[];
+  /** Its holdings, valued exactly as the real portfolio's are: the dashboard's four cards (D229). */
+  summary: PortfolioSummary;
 }
 
 /**
- * Every simulated agent together: one figure for paper money, shown beside the
- * real one and never added to it (§4.3, D34). Null when any agent's net worth
- * is - a total that left a position out would read as complete.
+ * Every simulated agent together. `netWorthMinor` is null when any agent's net
+ * worth is - a total that left a position out would read as complete
+ * (decision 111). `summary` is their holdings, which the dashboard's cards add
+ * to the real portfolio's under *All* (D229).
  */
 export interface SimulatedTotals {
   agentCount: number;
@@ -709,6 +720,8 @@ export interface SimulatedTotals {
   holdingsValueMinor: number | null;
   netWorthMinor: number | null;
   unpricedSymbols: string[];
+  /** Every agent's holdings summed, by `combineSummaries` (D229). */
+  summary: PortfolioSummary;
 }
 
 /**
