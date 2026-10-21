@@ -326,6 +326,11 @@ async def _converse(
         transcript=result.transcript,
     )
     evidence: dict[str, Any] = {"briefing": briefing, "tool_results": state.tool_results}
+    # The user's own instructions are a source, as a question is on the Ask page: a
+    # thesis quoting its rule - "a drop of 3% or more" - is not inventing a figure.
+    # Measured 2026-10-21: 2 of 16 scans were refused for exactly that (D227).
+    if agent.persona:
+        evidence["instructions"] = agent.persona
     review = TradeReview(
         context=context,
         mandate=agent.mandate,

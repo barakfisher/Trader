@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -275,6 +276,32 @@ async def test_a_pass_with_an_invented_figure_also_goes_back_once(
     assert len(llm.verdicts) == 2
 
 
+async def test_a_figure_from_the_agents_own_instructions_is_sourced(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    # Test agent's rule quoted in its pass was refused twice on compose (D227).
+    ruled = replace(agent, persona="Buy only after a drop of 3% or more in a day.")
+    llm = ScriptedLLM(
+        _answer(decision="none", thesis="No large company dropped 3% or more today."),
+    )
+    result = await _scan(loaded, ruled, llm)
+    assert result.outcome == "no_trade", result.problems
+    assert llm.verdicts == ["accepted"]
+
+
+async def test_a_figure_the_instructions_do_not_hold_is_still_refused(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    ruled = replace(agent, persona="Buy only after a drop of 3% or more in a day.")
+    llm = ScriptedLLM(
+        _answer(decision="none", thesis="No large company dropped 4% or more today."),
+        _answer(decision="none", thesis="No large company dropped 4% or more today."),
+    )
+    result = await _scan(loaded, ruled, llm)
+    assert result.outcome == "invalid_answer"
+    assert result.problems == ("figures not in the evidence: 4",)
+
+
 async def test_an_answer_with_another_fault_is_not_sent_back(
     loaded: Engine, agent: ScanAgent
 ) -> None:
@@ -500,7 +527,6 @@ def test_the_instructions_carry_the_persona_and_the_limits(agent: ScanAgent) -> 
 
 
 def test_the_thesis_is_asked_for_in_the_users_language(agent: ScanAgent) -> None:
-    from dataclasses import replace
 
     assert "Write the thesis in Hebrew" in instructions(replace(agent, language="he"))
 
