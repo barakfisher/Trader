@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from app.narration.evidence_validator import is_supported, sourced_values, unsourced_figures
+from app.narration.evidence_validator import (
+    is_supported,
+    quotes_any,
+    sourced_values,
+    unsourced_figures,
+)
 
 EVIDENCE = {
     "symbol": "NVDA",
@@ -231,3 +236,11 @@ def test_a_window_no_key_names_is_still_a_figure():
     # The figure a window qualifies is checked as ever.
     assert unsourced_figures("Up 7.10% over 5 days.", evidence) == ["7.10"]
     assert unsourced_figures("A 60-dayish range.", evidence) == ["60"]
+
+
+def test_quotes_any_finds_one_figure_of_the_evidence_in_the_text() -> None:
+    idle = {"amount": "750.00", "percent_of_capital": "75"}
+    assert quotes_any("Holding 750.00 for now.", idle)
+    assert quotes_any("75% of capital waits.", idle)
+    assert not quotes_any("Nothing fits; 12.00 is the price.", idle)
+    assert not quotes_any("Nothing fits.", idle)

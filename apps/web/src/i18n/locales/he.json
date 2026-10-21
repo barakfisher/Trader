@@ -1616,6 +1616,7 @@
         "schedule": "מתוזמנת",
         "refresh": "בדיקה חוזרת"
       },
+      "cashUnjustified": "לא הסביר מזומן לא מושקע",
       "outcomes": {
         "trade": "הוצעה עסקה",
         "no_trade": "אין עסקה",

@@ -1577,6 +1577,7 @@
         "schedule": "Scheduled",
         "refresh": "Re-check"
       },
+      "cashUnjustified": "Didn't explain idle cash",
       "outcomes": {
         "trade": "Proposed",
         "no_trade": "No trade",

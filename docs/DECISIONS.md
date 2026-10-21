@@ -244,3 +244,7 @@ while this file is out of date.
 | 231 | The cards add the real portfolio and the agents together under *All*, and the split is one click away |
 | 232 | An agent's trade is approved from its row, through the proposal's own card |
 | 233 | Order: the four cards, the scope toggle, the holdings table, then the charts |
+| 234 | "Doing nothing" is right only when nothing fits, and idle cash carries the user's rule |
+| 235 | The briefing states idle cash as `cash_above_buffer`: the amount and the percent of capital, left out at or under the buffer |
+| 236 | A pass that does not quote its idle cash goes back once |
+| 237 | A pass that still does not quote it is kept and flagged `cash_unjustified` |

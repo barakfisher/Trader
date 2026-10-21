@@ -3529,6 +3529,42 @@ failure they prevent.
 233. **Order: the four cards, the scope toggle, the holdings table, then the charts** (2026-10-21;
     supersedes UX5's charts-before-table). The table is what the page is for. The charts stay the
     real portfolio's (D32), and under any other view a line above them says so.
+234. **"Doing nothing" is right only when nothing fits, and idle cash carries the user's rule**
+    (the user, 2026-10-21, after measuring the 16 model scans on compose). The prompt's "Doing
+    nothing is a good answer and the most common one" - prompt wording, never a decision - became
+    "Doing nothing is right when nothing fits your mandate; with cash above your buffer, say why
+    in your thesis", followed, only when the briefing has `cash_above_buffer`, by the user's own
+    two sentences (`scan.IDLE_CASH_RULE`, verbatim). The measurement: every one of the 13 scans
+    that had cash held 75-100% of capital above its buffer, all 8 passes said "no fitting
+    opportunity" and none mentioned the cash, and the 4 trades bought 15-24% of capital each.
+    *Rejected:* deleting the sentence and always showing the rule (it would ask an agent at its
+    buffer to justify cash it is required to hold); forcing every agent to invest everything
+    (it would make a cautious mandate a fully invested one, and agents could no longer be
+    compared by philosophy). A re-check (D216) is about one trade and carries neither.
+235. **The briefing states idle cash as `cash_above_buffer`: the amount and the percent of
+    capital, left out at or under the buffer** (the user, 2026-10-21). A justification must quote
+    a figure, and the evidence validator refuses any figure the briefing lacks - without this
+    entry every honest justification would be sent back. Cash is what remains after the waiting
+    buys and capital is cash plus holdings at cost, the book `trade_review.load_book` gives the
+    mandate checks (D171), so the prompt, the briefing and the limits agree. The amount is
+    rounded down to the cent; the percent is to one place. **The key is `percent_of_capital`,
+    not `..._pct_...`:** the validator reads any key with "pct" as a ratio, so "75%" would not
+    match "75" - which is why a thesis quoting the mandate's `min_cash_pct_of_capital` is refused
+    today (open, below). No buffer set is a buffer of zero. *Rejected:* the amount only (a person
+    reads idle cash as a share, and the agent may not compute one).
+236. **A pass that does not quote its idle cash goes back once** (the user, 2026-10-21). When a
+    scan trades nothing, the briefing has `cash_above_buffer`, and the thesis quotes neither its
+    amount nor its percent (`evidence_validator.quotes_any`), the answer goes back once with the
+    reason. It shares the pass's one return with D189's figures - both in one message - so three
+    answers a scan stay the most. What the code checks is that the cash was addressed; whether the
+    reason is strategy-based is the user's to judge, reading it. *Rejected:* prompt only (the
+    user's "in every scan" would be a request, not a rule); refusing the scan (it would add to the
+    4 of 16 scans already lost as `invalid_answer`).
+237. **A pass that still does not quote it is kept and flagged `cash_unjustified`**
+    (the user, 2026-10-21). The flag is `"cash_unjustified": true` in `agent_scans.answer` - no
+    migration, one query to count - and the Scans tab marks that row "Didn't explain idle cash".
+    *Rejected:* a column (`0068`) for a flag on a row the answer already describes; storing it
+    without showing it (nobody would notice between measurements).
 
 ---
 
@@ -4334,6 +4370,9 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | **Mandate limits are not re-checked at approval** | `services/tradeApproval.ts`, `fills.ts` | The scan checks a buy against capital at cost; a proposal approved later, after another approval moved cash, can land past a limit. The fill still refuses what cash cannot cover. Approving is the user's explicit act |
 | **The instructions are still `persona` underneath** | `agents.persona`, `AgentView.persona`, wire code `no_persona` | Relabelled in the UI only ("Additional instructions", D170/D174); renaming the column and the code is churn with no behaviour, left on purpose |
 | **Narration's and the agents' figure checks still read a timestamp's digits as sources, and refuse U+2011 hyphens** | `app/narration/evidence_validator.py`; the assistant fixed it in `app/assistant/reply.py` only | A small whole number (a day, hour or minute) written by a model passes whenever its evidence carries a timestamp that contains it; "7‑day" with a non-breaking hyphen is refused. Moving `_without_dates` and the dash normalisation into the validator fixes both for everyone - and changes narration's behaviour, so measure its rejection rate before and after |
+| **A key with "pct" in it is read as a ratio, so the mandate's own percentages cannot be quoted** | `mandate.mandate_brief` (`min_cash_pct_of_capital`, `max_position_pct_of_capital` hold "25"), `evidence_validator.is_ratio_key` | Found 2026-10-21 (D235): a thesis writing "my 25% cash buffer" is refused as unsourced, because the validator offers 2500% for a `pct` key, never 25%. D236 makes a pass talk about cash, so this will bite more. Renaming the two keys (`..._percent_of_capital`) fixes it; stored briefings keep the old names, read only by the UI's folded JSON |
+| **Scheduled runs serve only `SINGLE_USER_ID`** | `scheduler.ts` (`triggerRun` names no user), `routes/internal.ts` falls back to it | Found 2026-10-21: the second user's agent George has never had a scheduled scan; `agent_scans` runs report `"agents": 3`, the admin's. Every scheduled kind - scans, news, digest - is the admin's only. The three-part fix is M9-MEASUREMENT.md's "Scheduling" item; proposed as its own session |
+| **A few cents above the buffer still asks for a justification** | `mandate.cash_above_buffer` (D235), `scan._quotes_idle` (D236) | As decided: any amount above the buffer is idle, so an agent left with $3 is sent back unless it quotes "3.00". Cheap and harmless, but reads oddly; a floor (cash that buys one share plus the fee) would need a decision |
 | **`purpose = 'ask'` outlives `/ask`** | `Purpose` in `app/llm/base.py`, `SCOPE_FOR_PURPOSE`, `llm_calls`' CHECK, `services/llmPanel.ts`, `spend_estimate.py` | Nothing emits it since PR 4; kept so stored rows still read. Retention (30 days) empties them; then drop it with a migration |
 | **A month written as a word is never checked** | `app/assistant/reply.py`, `app/narration/evidence_validator.py` (both read digits) | Live 2026-10-21 (llm_calls 476): a Hebrew answer gave a 2026-10-20 snapshot as "20 בנובמבר 2026" - November. The checks compare digits, so "20" and "2026" are the only figures they see; this time the year was missing from the evidence and the reply was refused, but "20 בנובמבר" alone, or "November 20" in English, passes with the wrong month. Not Hebrew-specific - D220 makes it likelier, because a Hebrew answer translates the ISO date instead of quoting it. A fix would be one rule in the assistant's instructions (quote dates as they appear in tool results) or month names in the validator, in both languages; measure first how often answers spell out a date |
 | **The assistant eval runs only by hand** | `scripts/run_assistant_eval.py` | Keyed and paid, so never in CI: a prompt or tool change can regress it unseen. Run it (Flash-Lite, `--repeat 3`, ~$1.30 with the judge) before merging any change to the assistant's prompt, tools or checks |

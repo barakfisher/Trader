@@ -544,6 +544,12 @@ export interface components {
          *     and, for no trade, its reason.
          */
         AgentScanAnswer: {
+            /**
+             * Cash Unjustified
+             * @description A pass that did not quote its cash above the buffer, sent back once (D237).
+             * @default false
+             */
+            cash_unjustified: boolean;
             /** Problems */
             problems?: string[];
             /** Thesis */

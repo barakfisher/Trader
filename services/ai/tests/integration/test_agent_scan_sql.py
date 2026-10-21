@@ -19,7 +19,13 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from app.agents.scan import SCAN_STEP_LIMIT, instructions, run_scan
+from app.agents.scan import (
+    IDLE_CASH_PROBLEM,
+    IDLE_CASH_RULE,
+    SCAN_STEP_LIMIT,
+    instructions,
+    run_scan,
+)
 from app.agents.scan_log import (
     ABANDONED_AFTER,
     ScanAgent,
@@ -166,9 +172,9 @@ def _stored(engine: Engine, scan_id: str) -> Any:
 async def test_a_scan_that_decides_nothing_is_stored_whole(
     loaded: Engine, agent: ScanAgent
 ) -> None:
-    llm = ScriptedLLM(
-        _answer(decision="none", thesis="Nothing in the briefing fits a value investor.")
-    )
+    # Its 1000.00 is all above a buffer of zero (D235), so the pass quotes it (D236).
+    pass_ = "Nothing in the briefing fits a value investor; 1000.00 waits for one."
+    llm = ScriptedLLM(_answer(decision="none", thesis=pass_))
 
     result = await _scan(loaded, agent, llm)
 
@@ -182,11 +188,8 @@ async def test_a_scan_that_decides_nothing_is_stored_whole(
     )
     assert row.finished_at is not None and row.trigger == "manual"
     assert row.briefing["cash"] == "1000.00"
-    assert row.answer == {
-        "trades": [],
-        "thesis": "Nothing in the briefing fits a value investor.",
-        "problems": [],
-    }
+    assert row.briefing["cash_above_buffer"] == {"amount": "1000.00", "percent_of_capital": "100"}
+    assert row.answer == {"trades": [], "thesis": pass_, "problems": []}
     assert [entry["role"] for entry in row.transcript] == ["assistant"]
     assert llm.verdicts == ["accepted"]
 
@@ -282,7 +285,10 @@ async def test_a_figure_from_the_agents_own_instructions_is_sourced(
     # Test agent's rule quoted in its pass was refused twice on compose (D227).
     ruled = replace(agent, persona="Buy only after a drop of 3% or more in a day.")
     llm = ScriptedLLM(
-        _answer(decision="none", thesis="No large company dropped 3% or more today."),
+        _answer(
+            decision="none",
+            thesis="No large company dropped 3% or more today, so 100% of capital waits.",
+        ),
     )
     result = await _scan(loaded, ruled, llm)
     assert result.outcome == "no_trade", result.problems
@@ -416,7 +422,9 @@ async def test_calls_past_the_limit_in_one_turn_are_answered_but_not_run(
     loaded: Engine, agent: ScanAgent
 ) -> None:
     many = tuple(ToolCall(f"c{n}", "get_position", "{}") for n in range(SCAN_STEP_LIMIT + 2))
-    llm = ScriptedLLM(_turn(calls=many), _answer(decision="none", thesis="Enough looked at."))
+    llm = ScriptedLLM(
+        _turn(calls=many), _answer(decision="none", thesis="Enough looked at; 1000.00 waits.")
+    )
 
     result = await _scan(loaded, agent, llm)
 
@@ -754,3 +762,122 @@ async def test_a_buy_over_the_mandate_goes_back_alone_and_the_sell_stays(
     assert "CCJ: CCJ is on this agent's blocked list" in llm.heard[-1].text
     # Withdrawn by the agent, not refused: only the sale is stored as a trade.
     assert [t["symbol"] for t in _stored(loaded, result.scan_id).answer["trades"]] == ["NXE"]
+
+
+# -- idle cash (D234-D237) -------------------------------------------------------------
+
+
+def _buffer(engine: Engine, agent: ScanAgent, bps: int) -> ScanAgent:
+    with engine.begin() as connection:
+        connection.execute(
+            text("UPDATE agents SET cash_buffer_bps = :b WHERE id = CAST(:a AS uuid)"),
+            {"b": bps, "a": agent.agent_id},
+        )
+    found = find_agent(engine, agent.user_id, agent.agent_id)
+    assert found is not None
+    return found
+
+
+async def test_idle_cash_is_briefed_after_the_buffer_and_the_waiting_buys(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    agent = _buffer(loaded, agent, 2_500)
+    _hold(loaded, agent, "NXE", "20", 500)  # 100.00 at cost: capital 1100.00
+    _waiting(loaded, agent, "buy", "CCJ", "2", 5_000)  # 100.00 and its fee spoken for
+    cash = 100_000 - 10_000 - fee_minor(Decimal(2))
+    capital = cash + 10_000 + 10_000
+    amount = int((cash - Decimal(capital) * 2_500 / 10_000) // 1)  # down to the cent
+    pass_ = f"Nothing fits; {money(amount, 'USD')} stays in cash."
+    llm = ScriptedLLM(_answer(decision="none", thesis=pass_))
+
+    result = await _scan(loaded, agent, llm)
+
+    assert result.outcome == "no_trade", result.problems
+    idle = _stored(loaded, result.scan_id).briefing["cash_above_buffer"]
+    assert idle["amount"] == money(amount, "USD")
+    share = (Decimal(amount) * 100 / capital).quantize(Decimal("0.1"))
+    assert idle["percent_of_capital"] == f"{share.normalize():f}"
+
+
+async def test_cash_at_the_buffer_is_not_briefed_and_a_plain_pass_stands(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    agent = _buffer(loaded, agent, 5_000)
+    _hold(loaded, agent, "NXE", "20", 10_000)  # capital 3000.00: its 1000.00 is under 1500.00
+    llm = ScriptedLLM(_answer(decision="none", thesis="Nothing fits a value investor."))
+
+    result = await _scan(loaded, agent, llm)
+
+    row = _stored(loaded, result.scan_id)
+    assert "cash_above_buffer" not in row.briefing
+    assert result.outcome == "no_trade" and "cash_unjustified" not in row.answer
+    assert IDLE_CASH_RULE not in instructions(agent)
+
+
+async def test_with_idle_cash_the_prompt_carries_the_users_rule(agent: ScanAgent) -> None:
+    assert IDLE_CASH_RULE in instructions(agent, idle_cash=True)
+    assert IDLE_CASH_RULE not in instructions(agent)
+    assert "the most common one" not in instructions(agent)
+
+
+async def test_a_pass_that_ignores_idle_cash_goes_back_once_and_a_justified_one_stands(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    llm = ScriptedLLM(
+        _answer(decision="none", thesis="Nothing fits a value investor."),
+        _answer(decision="none", thesis="Holding 100% of capital: no value on offer yet."),
+    )
+
+    result = await _scan(loaded, agent, llm)
+
+    assert result.outcome == "no_trade", result.problems
+    assert IDLE_CASH_PROBLEM in llm.heard[-1].text
+    row = _stored(loaded, result.scan_id)
+    assert "cash_unjustified" not in row.answer
+    assert [e["role"] for e in row.transcript][-2] == "returned"
+
+
+async def test_a_pass_still_ignoring_idle_cash_is_kept_and_flagged(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    llm = ScriptedLLM(
+        _answer(decision="none", thesis="Nothing fits a value investor."),
+        _answer(decision="none", thesis="Still nothing fits."),
+    )
+
+    result = await _scan(loaded, agent, llm)
+
+    assert result.outcome == "no_trade"
+    assert _stored(loaded, result.scan_id).answer["cash_unjustified"] is True
+    assert len(llm.verdicts) == 2  # sent back once, not twice
+
+
+async def test_a_pass_sent_back_for_idle_cash_may_answer_with_a_trade(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    market = ScriptedMarket()
+    market.prices = {"CCJ": 5_432}
+    llm = ScriptedLLM(
+        _answer(decision="none", thesis="Nothing fits a value investor."),
+        _trades(_trade("buy", "CCJ", "2", "CCJ is a uranium miner.")),
+    )
+
+    result = await _scan(loaded, agent, llm, market)
+
+    assert result.outcome == "trade", result.problems
+    assert "cash_unjustified" not in _stored(loaded, result.scan_id).answer
+
+
+async def test_unsourced_figures_and_idle_cash_go_back_in_one_message(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    llm = ScriptedLLM(
+        _answer(decision="none", thesis="Nothing moved more than 777% today."),
+        _answer(decision="none", thesis="Nothing moved enough; 1000.00 waits."),
+    )
+
+    result = await _scan(loaded, agent, llm)
+
+    assert result.outcome == "no_trade", result.problems
+    heard = llm.heard[-1].text
+    assert "777" in heard and IDLE_CASH_PROBLEM in heard
