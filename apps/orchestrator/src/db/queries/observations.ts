@@ -165,6 +165,32 @@ export function listAnalysedInstruments(userId: string): Promise<AnalysedInstrum
   );
 }
 
+/**
+ * What the installation's shared ingestion fetches (D161, D234): every active
+ * user's analysed instruments, once. Backfill and news collection run once a
+ * bucket for the installation, not once per user - two users holding AAPL
+ * fetch its closes once.
+ */
+export function listActiveUsersAnalysedInstruments(): Promise<AnalysedInstrumentRow[]> {
+  return query<AnalysedInstrumentRow>(
+    `-- agent-blind: shared ingestion fetches every agent's instruments once (§4.1).
+     SELECT i.id, i.symbol, i.name, i.asset_class
+       FROM instruments i
+      WHERE i.id IN (
+              SELECT h.instrument_id
+                FROM holdings h JOIN users u ON u.id = h.user_id
+               WHERE u.status = 'active'
+              UNION
+              SELECT ti.instrument_id
+                FROM topic_instruments ti
+                JOIN topics t ON t.id = ti.topic_id
+                JOIN users u ON u.id = ti.user_id
+               WHERE u.status = 'active' AND t.status = 'active'
+            )
+      ORDER BY i.symbol`,
+  );
+}
+
 export async function listRecentDedupeKeys(
   userId: string,
   agentId: string,

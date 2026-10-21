@@ -70,9 +70,6 @@ const schema = z.object({
     z.string().url().default('redis://127.0.0.1:6379/0'),
   ),
 
-  /** Fixed single-user id, seeded by migration 0001. Replaced by real auth later. */
-  SINGLE_USER_ID: z.string().uuid().default('00000000-0000-0000-0000-000000000001'),
-
   /**
    * Telegram bot credential. Optional, and its absence is a supported state
    * rather than a misconfiguration: the notification fan-out, the dedupe
@@ -104,7 +101,7 @@ const schema = z.object({
    * It never leaves this process, which is the whole point of it being separate
    * from the webhook secret. The first version signed bind tokens with the
    * webhook secret instead, and that was a real hole rather than an untidiness:
-   * `SINGLE_USER_ID` defaults to a value published in this repository, so
+   * the single account's id (`SINGLE_USER_ID`, removed in M9) was published in this repository, so
    * anyone who read the shared secret out of a proxy log could mint a connect
    * link for that account, bind their own chat, and approve its proposals.
    *

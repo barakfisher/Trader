@@ -17,7 +17,7 @@ import { AiServiceError } from '@traders/shared/ai';
 import {
   deleteHolding,
   getHolding,
-  getLatestFinishedRun,
+  getLatestInstallationRun,
   getUser,
   listHoldingArticles,
   listHoldings,
@@ -141,7 +141,7 @@ export function registerHoldingsRoutes(app: Hono<AppEnv>): void {
     if (!holding) throw notFound('holding not found');
     const [rows, lastRun] = await Promise.all([
       listHoldingArticles(userId, agentId, holding.id, HOLDING_NEWS_DAYS, HOLDING_NEWS_PAGE),
-      getLatestFinishedRun(userId, 'news_collect'),
+      getLatestInstallationRun('news_collect'),
     ]);
     const body: HoldingNewsResponse = {
       holdingId: holding.id,

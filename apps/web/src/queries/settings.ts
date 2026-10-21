@@ -3,6 +3,9 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type {
+  AccountResetGroup,
+  AccountResetInput,
+  AccountResetResponse,
   MonthlySpend,
   MonthlySpendResponse,
   OwnLlmKeyResponse,
@@ -67,6 +70,23 @@ export function useRemoveOwnLlmKey() {
     onSuccess: (body) => {
       client.setQueryData(queryKeys.ownLlmKey, body);
       void client.invalidateQueries({ queryKey: queryKeys.monthlySpend });
+    },
+  });
+}
+
+/**
+ * Reset the signed-in account, by group (task 18; each user's own, D162). Afterwards almost every cached read
+ * describes rows that are gone - the portfolio, findings, proposals, agents,
+ * topics - so the whole cache is refetched rather than a list of keys that the
+ * next feature would have to remember to extend.
+ */
+export function useResetAccount() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groups, confirm }: { groups: AccountResetGroup[]; confirm: string }) =>
+      api.post<AccountResetResponse>('/account/reset', { groups, confirm } satisfies AccountResetInput),
+    onSuccess: () => {
+      void client.invalidateQueries();
     },
   });
 }

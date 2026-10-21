@@ -244,3 +244,6 @@ while this file is out of date.
 | 231 | The cards add the real portfolio and the agents together under *All*, and the split is one click away |
 | 232 | An agent's trade is approved from its row, through the proposal's own card |
 | 233 | Order: the four cards, the scope toggle, the holdings table, then the charts |
+| 234 | The installation's runs refuse a user; the agent-scan plan is one installation run over every active user |
+| 235 | The admin's user list: disable/enable, a cap edit, an app-made one-time password; reset is each user's own |
+| 236 | M9's exit test reads the routes from the app and asks each with the other user's ids |

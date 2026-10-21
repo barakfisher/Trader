@@ -28,6 +28,7 @@ const { App } = await import('../src/App.tsx');
 const { createAppRouter } = await import('../src/router.tsx');
 const { renderWithServerState } = await import('./serverStateHarness.tsx');
 const { duration } = await import('../src/pages/AdminPage.tsx');
+const { AccountResetCard } = await import('../src/components/AccountResetCard.tsx');
 
 const estimate = (daily: number) => ({ dailyMicroUsd: daily, monthlyMicroUsd: daily * 30 });
 /** Nothing chosen yet, the free route configured, ten dollars bought. */
@@ -172,6 +173,19 @@ const SIGNUPS = {
   defaultLlmCapMicroUsd: 10_000_000,
 };
 
+const USERS = {
+  users: [
+    {
+      userId: 'u-admin', email: 'admin@example.com', role: 'admin', status: 'active', timezone: 'Asia/Jerusalem',
+      llmCapMicroUsd: null, spentThisMonthMicroUsd: 0, ownKey: 'none', lastSignInAt: '2026-10-21T05:00:00Z', approvedAt: null,
+    },
+    {
+      userId: 'u-dana', email: 'dana@example.com', role: 'user', status: 'active', timezone: 'Europe/London',
+      llmCapMicroUsd: 5_000_000, spentThisMonthMicroUsd: 1_250_000, ownKey: 'valid', lastSignInAt: null, approvedAt: '2026-10-20T12:00:00Z',
+    },
+  ],
+};
+
 function renderAt(path: string, user: typeof ADMIN) {
   const router = createAppRouter(createMemoryHistory({ initialEntries: [path] }));
   const result = renderWithServerState(<App router={router} />);
@@ -265,6 +279,8 @@ describe('the admin page', () => {
             ? Promise.resolve(SIGNUPS)
           : path === '/admin/signups/count'
             ? Promise.resolve({ pending: SIGNUPS.pending.length })
+          : path === '/admin/users'
+            ? Promise.resolve(USERS)
           : path.startsWith('/admin/llm')
             ? Promise.resolve(LLM_PANEL)
             : new Promise(() => {}),
@@ -511,13 +527,13 @@ describe('the admin page', () => {
     expect(await screen.findByText('Not started: this run key was already claimed (ok).')).toBeTruthy();
   });
 
-  it('resets only the ticked groups, and only once the word is typed', async () => {
+  it("resets only the ticked groups, and only once the word is typed - each user's own, on Settings (D162)", async () => {
     post.mockResolvedValue({
       resetId: 'b-42',
       groups: ['main_portfolio', 'agents_trading'],
       erased: { holdings: 2, observations: 104, topics: 0 },
     });
-    renderAt('/admin', ADMIN);
+    renderWithServerState(<AccountResetCard />);
     const submit = (await screen.findByRole('button', { name: 'Erase the ticked groups' })) as HTMLButtonElement;
     // Every group starts ticked: the default is a full reset.
     for (const label of ['Main portfolio', "Agents' trading", 'Followed topics']) {
@@ -532,7 +548,7 @@ describe('the admin page', () => {
     await act(async () => {
       fireEvent.click(submit);
     });
-    expect(post).toHaveBeenCalledWith('/admin/account/reset', {
+    expect(post).toHaveBeenCalledWith('/account/reset', {
       groups: ['main_portfolio', 'agents_trading'],
       confirm: 'RESET',
     });
@@ -540,13 +556,44 @@ describe('the admin page', () => {
   });
 
   it('cannot reset with nothing ticked', async () => {
-    renderAt('/admin', ADMIN);
+    renderWithServerState(<AccountResetCard />);
     for (const label of ['Main portfolio', "Agents' trading", 'Followed topics']) {
       fireEvent.click(await screen.findByRole('checkbox', { name: new RegExp(label) }));
     }
     fireEvent.change(screen.getByLabelText('Type RESET to confirm'), { target: { value: 'RESET' } });
     expect(screen.getByText('Nothing is ticked, so there is nothing to erase.')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Erase the ticked groups' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("lists the users' operations, never their finances, and acts only on a user who is not the admin (D162, D235)", async () => {
+    post.mockResolvedValue({ userId: 'u-dana', password: 'Abc123-xyz_PQRstuvW' });
+    renderAt('/admin', ADMIN);
+    expect(await screen.findByText('dana@example.com')).toBeTruthy();
+    expect(screen.getByText(/\$1\.25 of \$5\.00 this month/)).toBeTruthy();
+    expect(screen.getByText(/own key working/)).toBeTruthy();
+    // One row of actions: Dana's. The admin's row has none.
+    expect(screen.getAllByRole('button', { name: 'Disable' })).toHaveLength(1);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'One-time password' }));
+    });
+    expect(post).toHaveBeenCalledWith('/admin/users/u-dana/one-time-password');
+    expect(await screen.findByText('Abc123-xyz_PQRstuvW')).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
+    });
+    expect(post).toHaveBeenCalledWith('/admin/users/u-dana/disable');
+  });
+
+  it("changes a user's cap", async () => {
+    put.mockResolvedValue({ userId: 'u-dana' });
+    renderAt('/admin', ADMIN);
+    const field = (await screen.findByLabelText('Monthly cap (USD)')) as HTMLInputElement;
+    expect(field.value).toBe('5.00');
+    fireEvent.change(field, { target: { value: '20' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save cap' }));
+    });
+    expect(put).toHaveBeenCalledWith('/admin/users/u-dana/cap', { llmCapMicroUsd: 20_000_000 });
   });
 
   it('asks the server for nothing when the account is not an admin', async () => {

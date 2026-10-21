@@ -104,6 +104,14 @@ def primary_agent_id(connection: Connection, user_id: str) -> str | None:
     ).scalar_one_or_none()
 
 
+def user_timezone(connection: Connection, user_id: str) -> str | None:
+    """The user's own zone (D163): their day, their budget's day, their next scan's time."""
+    return connection.execute(
+        text("SELECT timezone FROM users WHERE id = CAST(:user AS uuid)"),
+        {"user": user_id},
+    ).scalar_one_or_none()
+
+
 #: What a model writes for "no agent, the real portfolio" (measured: "None").
 _PRIMARY_WORDS = {"", "none", "null", "main", "primary", "real"}
 

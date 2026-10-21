@@ -13,7 +13,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-import { INTERVALS_MS } from '../src/scheduler.js';
+import { INTERVALS_MS, triggerBody } from '../src/scheduler.js';
+import { EVERY_ACTIVE_USER, USER_KINDS } from '../src/runKinds.js';
 
 const MANIFEST = readFileSync(
   new URL('../../../infra/k8s/base/cronjobs.yaml', import.meta.url),
@@ -23,6 +24,7 @@ const MANIFEST = readFileSync(
 interface CronJob {
   name: string;
   kind: string;
+  runFor: string | null;
   minutes: number[];
   hourField: string;
 }
@@ -34,9 +36,10 @@ function parseCronJobs(text: string): CronJob[] {
     .map((doc) => {
       const name = /^ {2}name: (\S+)$/m.exec(doc)?.[1] ?? '';
       const kind = /name: RUN_KIND\n\s+value: (\S+)/.exec(doc)?.[1] ?? '';
+      const runFor = /name: RUN_FOR\n\s+value: (\S+)/.exec(doc)?.[1] ?? null;
       const schedule = /^ {2}schedule: '([^']+)'$/m.exec(doc)?.[1] ?? '';
       const [minuteField = '', hourField = ''] = schedule.split(' ');
-      return { name, kind, minutes: minuteField.split(',').map(Number), hourField };
+      return { name, kind, runFor, minutes: minuteField.split(',').map(Number), hourField };
     });
 }
 
@@ -45,6 +48,14 @@ const cronJobs = parseCronJobs(MANIFEST);
 describe('CronJobs match the local scheduler', () => {
   it('has exactly one CronJob per run kind the scheduler offers', () => {
     expect(cronJobs.map((job) => job.kind).sort()).toEqual(Object.keys(INTERVALS_MS).sort());
+  });
+
+  it("asks for every active user exactly where the local timer does (D161)", () => {
+    for (const job of cronJobs) {
+      expect(job.runFor, job.name).toBe(USER_KINDS.has(job.kind) ? EVERY_ACTIVE_USER : null);
+      expect(triggerBody(job.kind).for ?? null, job.name).toBe(job.runFor);
+    }
+    expect(MANIFEST).not.toMatch(/"userId"/);
   });
 
   it('asks at the same rhythm as the local timer', () => {

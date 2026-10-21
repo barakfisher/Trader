@@ -42,8 +42,11 @@ and [docs/MILESTONES.md](docs/MILESTONES.md) before changing architecture.
    observations and notifications carry a `dedupe_key`.
 9. **Secrets live in `.env` / Kubernetes Secrets only.** Never committed, never logged, never
    shipped to the browser.
-10. **Timestamps are ISO 8601 UTC**; "today" resolves in the user's timezone (`APP_TIMEZONE`,
-    default `Asia/Jerusalem`). Base currency USD.
+10. **Timestamps are ISO 8601 UTC**; "today" resolves in **the user's own zone**
+    (`users.timezone`: from the browser at signup, editable in Settings, a valid IANA name only;
+    D163). `APP_TIMEZONE` (default `Asia/Jerusalem`) is the installation's clock - its shared
+    runs' day and the fallback - scan slots keep the market's clock and the LLM ceiling UTC.
+    Base currency USD.
 
 ## Conventions learned the hard way
 

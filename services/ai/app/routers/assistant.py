@@ -26,7 +26,7 @@ from app.agents.scan_schedule import Scheduling
 from app.agents.tools import scan_context
 from app.analysis.thresholds import AnalysisThresholds
 from app.assistant.service import ask
-from app.assistant.tools import primary_agent_id
+from app.assistant.tools import primary_agent_id, user_timezone
 from app.config import Settings
 from app.core.exchange_calendar import load_calendar
 from app.corpus.embeddings import BaseEmbedder
@@ -50,16 +50,15 @@ router = APIRouter(
 )
 
 
-def _scheduling(settings: Settings) -> Scheduling:
-    """D71's switch and the calendar; a calendar that cannot be read leaves the
-    next scan unknown rather than failing the question."""
+def _scheduling(settings: Settings, timezone: str) -> Scheduling:
+    """D71's switch and the calendar, the next scan told in the user's zone (D163);
+    a calendar that cannot be read leaves the next scan unknown rather than
+    failing the question."""
     try:
         calendar = load_calendar(settings.calendar_dir)
     except (OSError, ValueError):
         calendar = None
-    return Scheduling(
-        enabled=settings.enable_scheduled_scans, calendar=calendar, timezone=settings.app_timezone
-    )
+    return Scheduling(enabled=settings.enable_scheduled_scans, calendar=calendar, timezone=timezone)
 
 
 @router.post("/messages", response_model=AssistantReply)
@@ -75,6 +74,9 @@ async def assistant_message(
     user_id = str(payload.user_id)
     with engine.connect() as connection:
         primary = primary_agent_id(connection, user_id)
+        # The user's day, not the installation's (D163): the allowance resets,
+        # "today" and the next scan's time all follow it.
+        timezone = user_timezone(connection, user_id) or settings.app_timezone
     if primary is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, {"code": "no_account", "message": "no such user"}
@@ -91,7 +93,7 @@ async def assistant_message(
         user_id=user_id,
         agent_id=primary,
         news=news_on_demand(settings, engine, getattr(request.app.state, "redis", None)),
-        scheduling=_scheduling(settings),
+        scheduling=_scheduling(settings, timezone),
     )
     turn = await ask(
         engine=engine,
@@ -100,7 +102,7 @@ async def assistant_message(
         question=payload.message,
         conversation_id=str(payload.conversation_id) if payload.conversation_id else None,
         now=datetime.now(UTC),
-        timezone=settings.app_timezone,
+        timezone=timezone,
     )
     if turn is None:
         raise HTTPException(

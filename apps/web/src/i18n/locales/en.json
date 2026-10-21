@@ -1211,33 +1211,6 @@
     "underASecond": "<1 s",
     "seconds": "{{count}} s",
     "minutes": "{{count}} min",
-    "reset": {
-      "title": "Reset account",
-      "intro": "Erase parts of this account and start them again. Everything erased is kept as a backup in the database first, in the same step, so a reset either completes with its backup or does nothing.",
-      "groupsLegend": "What to erase",
-      "group": {
-        "main_portfolio": {
-          "label": "Main portfolio",
-          "erases": "Holdings, target weights, daily values, findings, proposals and their history, and the notifications about them."
-        },
-        "agents_trading": {
-          "label": "Agents' trading",
-          "erases": "Every simulated agent's trades, holdings, daily values, scans and proposals. Each agent's cash and budget go to $0; it keeps its name, persona and schedule, and waits for Add cash."
-        },
-        "followed_topics": {
-          "label": "Followed topics",
-          "erases": "Topics, their instruments, and what was found about them."
-        }
-      },
-      "kept": "Always kept: your settings and Telegram, the agents' configuration, market data and the universe, and the logs of runs, model calls and admin actions.",
-      "confirmLabel": "Type {{word}} to confirm",
-      "nothingTicked": "Nothing is ticked, so there is nothing to erase.",
-      "submit": "Erase the ticked groups",
-      "running": "Resetting…",
-      "failed": "The reset did not run; nothing was erased.",
-      "done_one": "Done: {{count}} row erased. Backup {{id}}.",
-      "done_other": "Done: {{count}} rows erased. Backup {{id}}."
-    },
     "agentLimit": {
       "title": "Agents per user",
       "label": "Most simulated agents a user may have active at once",
@@ -1270,6 +1243,34 @@
       "save": "Save",
       "saved": "Saved",
       "hint": "An approval offers the default cap; approvals already made keep theirs. The cap is $0 to {{cap}}. Up to {{max}} requests may wait; 0 closes sign-up."
+    },
+    "users": {
+      "title": "Users",
+      "failed": "Could not read or change the users.",
+      "noEmail": "(no email)",
+      "role": {
+        "admin": "Admin",
+        "user": "User"
+      },
+      "status": {
+        "active": "Active",
+        "disabled": "Disabled"
+      },
+      "lastSignIn": "signed in {{age}}",
+      "neverSignedIn": "never signed in",
+      "spent": "{{spent}} of {{cap}} this month",
+      "spentUncapped": "{{spent}} this month, no cap",
+      "ownKey": {
+        "none": "no own key",
+        "valid": "own key working",
+        "failed": "own key refused"
+      },
+      "cap": "Monthly cap (USD)",
+      "saveCap": "Save cap",
+      "oneTimePassword": "One-time password",
+      "oneTimeShown": "Shown once - pass it on. They must change it when they sign in, and every session they had has ended.",
+      "disable": "Disable",
+      "enable": "Enable"
     }
   },
   "languages": {
@@ -1834,5 +1835,39 @@
       "loading": "Loading the proposal…",
       "loadFailed": "Could not load the proposal."
     }
+  },
+  "timeZone": {
+    "save": "Save time zone",
+    "saved": "Saved. “Today” follows this zone from the next run on.",
+    "invalid": "Choose a time zone such as Europe/London.",
+    "failed": "Could not save the time zone.",
+    "useDevice": "Use this device’s zone ({{zone}})"
+  },
+  "accountReset": {
+    "title": "Reset account",
+    "intro": "Erase parts of this account and start them again. Everything erased is kept as a backup in the database first, in the same step, so a reset either completes with its backup or does nothing.",
+    "groupsLegend": "What to erase",
+    "group": {
+      "main_portfolio": {
+        "label": "Main portfolio",
+        "erases": "Holdings, target weights, daily values, findings, proposals and their history, and the notifications about them."
+      },
+      "agents_trading": {
+        "label": "Agents' trading",
+        "erases": "Every simulated agent's trades, holdings, daily values, scans and proposals. Each agent's cash and budget go to $0; it keeps its name, persona and schedule, and waits for Add cash."
+      },
+      "followed_topics": {
+        "label": "Followed topics",
+        "erases": "Topics, their instruments, and what was found about them."
+      }
+    },
+    "kept": "Always kept: your settings and Telegram, the agents' configuration, market data and the universe, and the logs of runs, model calls and admin actions.",
+    "confirmLabel": "Type {{word}} to confirm",
+    "nothingTicked": "Nothing is ticked, so there is nothing to erase.",
+    "submit": "Erase the ticked groups",
+    "running": "Resetting…",
+    "failed": "The reset did not run; nothing was erased.",
+    "done_one": "Done: {{count}} row erased. Backup {{id}}.",
+    "done_other": "Done: {{count}} rows erased. Backup {{id}}."
   }
 }

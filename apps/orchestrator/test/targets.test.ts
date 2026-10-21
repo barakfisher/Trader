@@ -301,7 +301,7 @@ describe('target weights', () => {
     const response = await app.request('/internal/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
-      body: JSON.stringify({ kind: 'portfolio_scan' }),
+      body: JSON.stringify({ kind: 'portfolio_scan', userId: USER.id }),
     });
     expect(response.status).toBe(200);
     // Decimal strings, as stored: the weight is never a number on this side.

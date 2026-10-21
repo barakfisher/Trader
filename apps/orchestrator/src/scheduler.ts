@@ -11,6 +11,7 @@
 
 import type { Config } from './config.js';
 import { logger } from './logger.js';
+import { EVERY_ACTIVE_USER, USER_KINDS } from './runKinds.js';
 
 /**
  * How often each kind is offered the chance to run.
@@ -99,12 +100,20 @@ export function startScheduler(config: Config): void {
   }
 }
 
+/**
+ * What the timer asks for: a user's kind for every active user (D161), the
+ * installation's kind for nobody. Exported for the CronJob contract test.
+ */
+export function triggerBody(kind: string): { kind: string; trigger: string; for?: string } {
+  return USER_KINDS.has(kind) ? { kind, trigger: 'scheduler', for: EVERY_ACTIVE_USER } : { kind, trigger: 'scheduler' };
+}
+
 async function triggerRun(config: Config, kind: string): Promise<void> {
   try {
     const response = await fetch(`http://127.0.0.1:${config.ORCHESTRATOR_PORT}/internal/runs`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-internal-key': config.INTERNAL_API_KEY },
-      body: JSON.stringify({ kind, trigger: 'scheduler' }),
+      body: JSON.stringify(triggerBody(kind)),
     });
     const body = (await response.json()) as { status?: string; reason?: string };
     // 'skipped' is the common case and is not a problem: it means the bucket has

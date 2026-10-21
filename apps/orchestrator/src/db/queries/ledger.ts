@@ -291,18 +291,16 @@ export function listFillsOldestFirst(userId: string, agentId: string): Promise<F
   );
 }
 
-/**
- * Every instrument any of the user's agents has ever traded. The daily backfill
- * keeps their closes, so a past day stays valued after a position is sold.
- */
-export function listTradedInstruments(userId: string): Promise<{ id: string; symbol: string }[]> {
+/** Every instrument an active user's agents have traded: the installation's backfill (D234). */
+export function listActiveUsersTradedInstruments(): Promise<{ id: string; symbol: string }[]> {
   return query<{ id: string; symbol: string }>(
     `-- agent-blind: shared ingestion fetches every agent's instruments once (§4.1).
      SELECT DISTINCT i.id, i.symbol
-       FROM fills f JOIN instruments i ON i.id = f.instrument_id
-      WHERE f.user_id = $1
+       FROM fills f
+       JOIN instruments i ON i.id = f.instrument_id
+       JOIN users u ON u.id = f.user_id
+      WHERE u.status = 'active'
       ORDER BY i.symbol`,
-    [userId],
   );
 }
 

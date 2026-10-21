@@ -72,7 +72,7 @@ describe('the account reset', () => {
   });
 
   const reset = (body: unknown) =>
-    app.request('/admin/account/reset', {
+    app.request('/account/reset', {
       method: 'POST',
       headers: { ...HEADERS, cookie },
       body: JSON.stringify(body),
@@ -92,15 +92,23 @@ describe('the account reset', () => {
     });
   });
 
-  it('is audited before anything is erased', async () => {
-    await reset({ groups: [...ACCOUNT_RESET_GROUPS], confirm: ACCOUNT_RESET_CONFIRMATION });
-    const audited = vi.mocked(queries.insertAdminAudit).mock.invocationCallOrder[0]!;
-    const erased = vi.mocked(queries.resetAccount).mock.invocationCallOrder[0]!;
-    expect(audited).toBeLessThan(erased);
-    expect(vi.mocked(queries.insertAdminAudit).mock.calls[0]![0]).toMatchObject({
-      action: 'POST /admin/account/reset',
-      detail: { body: { groups: [...ACCOUNT_RESET_GROUPS] } },
+  it("is each user's own: an account that is not the admin resets itself (D162)", async () => {
+    vi.mocked(queries.getUser).mockResolvedValue({ ...ADMIN, role: 'user' } as never);
+    const response = await reset({ groups: ['main_portfolio'], confirm: ACCOUNT_RESET_CONFIRMATION });
+    expect(response.status).toBe(200);
+    expect(queries.resetAccount).toHaveBeenCalledWith(ADMIN.id, ['main_portfolio']);
+    expect(queries.insertAdminAudit).not.toHaveBeenCalled();
+  });
+
+  it('is no longer an admin route', async () => {
+    vi.mocked(queries.getUser).mockResolvedValue(ADMIN as never);
+    const response = await app.request('/admin/account/reset', {
+      method: 'POST',
+      headers: { ...HEADERS, cookie },
+      body: JSON.stringify({ groups: ['main_portfolio'], confirm: ACCOUNT_RESET_CONFIRMATION }),
     });
+    expect(response.status).toBe(404);
+    expect(queries.resetAccount).not.toHaveBeenCalled();
   });
 
   it('refuses without the typed word, in any other spelling', async () => {

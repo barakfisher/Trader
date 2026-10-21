@@ -87,6 +87,11 @@ vi.mock('../src/db/queries.js', () => ({
   listAnalysedInstruments: vi.fn(async () => [
     { id: 'instrument-1', symbol: 'AAPL', name: 'Apple Inc.', asset_class: 'equity' },
   ]),
+  listActiveUsersAnalysedInstruments: vi.fn(async () => [
+    { id: 'instrument-1', symbol: 'AAPL', name: 'Apple Inc.', asset_class: 'equity' },
+  ]),
+  listActiveUsersTradedInstruments: vi.fn(async () => []),
+  listActiveUserIds: vi.fn(async () => [USER.id]),
   setInstrumentName: vi.fn(async () => true),
   replaceTargetWeights: vi.fn(async () => 0),
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
@@ -415,7 +420,7 @@ describe('API', () => {
     const response = await app.request('/internal/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ kind: 'snapshot' }),
+      body: JSON.stringify({ kind: 'snapshot', userId: USER.id }),
     });
     expect(response.status).toBe(401);
   });
@@ -424,7 +429,7 @@ describe('API', () => {
     const response = await app.request('/internal/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
-      body: JSON.stringify({ kind: 'snapshot', trigger: 'test' }),
+      body: JSON.stringify({ kind: 'snapshot', userId: USER.id, trigger: 'test' }),
     });
     expect(response.status).toBe(200);
     expect(queries.claimRun).toHaveBeenCalledWith(
@@ -440,7 +445,7 @@ describe('API', () => {
     const response = await app.request('/internal/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
-      body: JSON.stringify({ kind: 'snapshot' }),
+      body: JSON.stringify({ kind: 'snapshot', userId: USER.id }),
     });
     expect(response.status).toBe(500);
     expect(queries.finishRun).toHaveBeenCalledWith('run-1', 'failed', expect.anything());
@@ -453,7 +458,7 @@ describe('API', () => {
       app.request('/internal/runs', {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
-        body: JSON.stringify({ kind }),
+        body: JSON.stringify(kind === 'backfill' ? { kind } : { kind, userId: USER.id }),
       });
     await post('backfill');
     expect(queries.claimRun).toHaveBeenLastCalledWith(
@@ -462,6 +467,75 @@ describe('API', () => {
     await post('daily_digest');
     expect(queries.claimRun).toHaveBeenLastCalledWith(
       expect.objectContaining({ kind: 'daily_digest', retryFailed: false }),
+    );
+  });
+
+  it("refuses a user's kind that names no user, instead of running it as the first account (D161)", async () => {
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'snapshot' }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'no_user' });
+    expect(queries.claimRun).not.toHaveBeenCalled();
+  });
+
+  it("refuses a user for the installation's work (D234)", async () => {
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'news_collect', userId: USER.id }),
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: 'installation_kind' });
+  });
+
+  it('runs news collection once, as the installation, over every active user\'s instruments (D234)', async () => {
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'news_collect' }),
+    });
+    expect(response.status).toBe(200);
+    expect(queries.claimRun).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: null, agentId: null, runKey: expect.stringMatching(/^news_collect:installation:/) }),
+    );
+    expect(queries.listActiveUsersAnalysedInstruments).toHaveBeenCalled();
+    expect(queries.listAnalysedInstruments).not.toHaveBeenCalled();
+  });
+
+  it('refuses a named user who is not active', async () => {
+    vi.mocked(queries.getUser).mockResolvedValueOnce({ ...USER, status: 'disabled' } as never);
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'snapshot', userId: USER.id }),
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: 'user_not_active' });
+  });
+
+  it('fans a user\'s kind out to every active user in turn, and one failure does not stop the next (D161)', async () => {
+    const OTHER = { ...USER, id: '00000000-0000-0000-0000-0000000000b2' };
+    vi.mocked(queries.listActiveUserIds).mockResolvedValueOnce([USER.id, OTHER.id]);
+    vi.mocked(queries.getUser).mockImplementation((async (id: string) => (id === OTHER.id ? OTHER : USER)) as never);
+    vi.mocked(queries.listHoldings).mockRejectedValueOnce(new Error('database is down'));
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'snapshot', for: 'every_active_user', trigger: 'scheduler' }),
+    });
+    vi.mocked(queries.getUser).mockImplementation((async () => USER) as never);
+    expect(response.status).toBe(500);
+    const body = (await response.json()) as { users: number; failed: number; results: { userId: string; status: string }[] };
+    expect(body.users).toBe(2);
+    expect(body.failed).toBe(1);
+    expect(body.results.map((result) => result.userId)).toEqual([USER.id, OTHER.id]);
+    expect(body.results[0]?.status).toBe('failed');
+    expect(body.results[1]?.status).not.toBe('failed');
+    expect(queries.claimRun).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: OTHER.id, runKey: expect.stringContaining(`snapshot:${OTHER.id}:`) }),
     );
   });
 
@@ -484,7 +558,7 @@ describe('API', () => {
     const init = {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
-      body: JSON.stringify({ kind: 'snapshot' }),
+      body: JSON.stringify({ kind: 'snapshot', userId: USER.id }),
     };
     const first = (await (await app.request('/internal/runs', init)).json()) as { status: string };
     const second = (await (await app.request('/internal/runs', init)).json()) as { status: string };
@@ -531,7 +605,7 @@ describe('API', () => {
     const response = await app.request('/internal/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
-      body: JSON.stringify({ kind: 'portfolio_scan' }),
+      body: JSON.stringify({ kind: 'portfolio_scan', userId: USER.id }),
     });
     expect(response.status).toBe(200);
     const body = (await response.json()) as { status: string; result: { created: number } };
@@ -549,7 +623,7 @@ describe('API', () => {
     const response = await app.request('/internal/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
-      body: JSON.stringify({ kind: 'portfolio_scan' }),
+      body: JSON.stringify({ kind: 'portfolio_scan', userId: USER.id }),
     });
     expect(response.status).toBe(200);
     expect(queries.findInstrumentsBySymbols).toHaveBeenCalledWith(['SPY', 'QQQ', 'IWM', 'BTC-USD']);
@@ -571,7 +645,7 @@ describe('API', () => {
     const response = await app.request('/internal/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
-      body: JSON.stringify({ kind: 'portfolio_scan' }),
+      body: JSON.stringify({ kind: 'portfolio_scan', userId: USER.id }),
     });
     expect(response.status).toBe(200);
     expect((fakeAi.lastScanRequest as { benchmarks?: unknown } | null)?.benchmarks).toEqual([
@@ -589,7 +663,7 @@ describe('API', () => {
     const response = await app.request('/internal/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
-      body: JSON.stringify({ kind: 'portfolio_scan' }),
+      body: JSON.stringify({ kind: 'portfolio_scan', userId: USER.id }),
     });
     expect(response.status).toBe(200);
     expect(queries.insertObservations).toHaveBeenCalledWith(
@@ -607,7 +681,7 @@ describe('API', () => {
     const response = await app.request('/internal/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
-      body: JSON.stringify({ kind: 'portfolio_scan' }),
+      body: JSON.stringify({ kind: 'portfolio_scan', userId: USER.id }),
     });
     const body = (await response.json()) as { status: string; result: { skipped: string[] } };
     expect(body.status).toBe('degraded');

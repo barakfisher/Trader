@@ -7,21 +7,22 @@
  * registered routes to prove it. A route added here is guarded by being here.
  */
 
+import { randomBytes } from 'node:crypto';
+
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 
 import { AiServiceError, type LlmModelsResponse } from '@traders/shared/ai';
 import {
-  ACCOUNT_RESET_CONFIRMATION,
-  ACCOUNT_RESET_GROUPS,
-  type AccountResetInput,
-  type AccountResetResponse,
   type AdminAuditResponse,
   type AdminLlmModelsResponse,
   type LlmModelChoiceInput,
   type AdminRunsResponse,
   type AdminSettingsResponse,
   type AdminSignupsResponse,
+  type AdminUsersResponse,
+  type AdminUserView,
+  type OneTimePasswordResponse,
   type SignupApprovalInput,
   type SignupDecisionResponse,
   type SignupRequestView,
@@ -42,6 +43,11 @@ import {
   restoreSignup,
   type SignupDecision,
   type SignupRequestRow,
+  type AdminUserRow,
+  listUsersForAdmin,
+  setOneTimePassword,
+  setUserCap,
+  setUserStatus,
   countUniverse,
   firstLlmCallAt,
   chooseLlmModel,
@@ -57,7 +63,6 @@ import {
   listLlmCalls,
   listOpsEvents,
   llmLatencies,
-  resetAccount,
   type OpsEventKind,
 } from '../../db/queries.js';
 import {
@@ -72,6 +77,7 @@ import { startRescreen } from '../../services/universeRescreen.js';
 import { universeStatus } from '../../services/universeStatus.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, conflict, unprocessable, upstreamFailure } from '../errors.js';
+import { hashPassword } from '../password.js';
 
 /** Enough to see a day of the half-hourly scans next to everything else. */
 const ADMIN_RUNS_LIMIT = 100;
@@ -114,6 +120,26 @@ const approvalSchema = z
 
 const uuidParam = z.string().uuid();
 
+/** 120 random bits as 20 URL-safe characters: past the length rule, easy to read aloud in groups. */
+export function oneTimePassword(): string {
+  return randomBytes(15).toString('base64url');
+}
+
+function adminUserView(row: AdminUserRow): AdminUserView {
+  return {
+    userId: row.id,
+    email: row.email,
+    role: row.role,
+    status: row.status,
+    timezone: row.timezone,
+    llmCapMicroUsd: row.llm_cap_micro_usd === null ? null : Number(row.llm_cap_micro_usd),
+    spentThisMonthMicroUsd: Number(row.spent_this_month_micro_usd),
+    ownKey: row.own_key_status ?? 'none',
+    lastSignInAt: row.last_sign_in_at ? row.last_sign_in_at.toISOString() : null,
+    approvedAt: row.approved_at ? row.approved_at.toISOString() : null,
+  };
+}
+
 function signupView(row: SignupRequestRow): SignupRequestView {
   return {
     userId: row.user_id,
@@ -134,13 +160,6 @@ function signupId(context: Context<AppEnv>): string {
   if (!parsed.success) throw badRequest('invalid_user_id', 'expected a user id');
   return parsed.data;
 }
-
-const resetSchema = z
-  .object({
-    groups: z.array(z.enum(ACCOUNT_RESET_GROUPS)).min(1),
-    confirm: z.string(),
-  })
-  .strict() satisfies z.ZodType<AccountResetInput>;
 
 const modelChoiceSchema = z
   .object({ model: z.string().trim().min(1).max(200) })
@@ -291,6 +310,60 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
   });
 
   /**
+   * The user list (D162): status, cap, this month's spend, own key, last sign-in.
+   * Operations only - never an account's holdings, proposals, agents or
+   * conversations.
+   */
+  app.get('/admin/users', async (context) => {
+    const body: AdminUsersResponse = { users: (await listUsersForAdmin()).map(adminUserView) };
+    return context.json(body);
+  });
+
+  /**
+   * Disable a user (D235): their sessions end at once (D160), scheduled work
+   * skips them (D161), their data stays. Re-enable lets them back in as they
+   * were. Never the admin's own row. Audited by the gate before this runs.
+   */
+  app.post('/admin/users/:userId/disable', async (context) => {
+    const changed = await setUserStatus(signupId(context), 'active', 'disabled');
+    if (!changed) throw conflict('not_disableable', 'only an active user who is not the admin can be disabled');
+    return context.json({ userId: changed.id, status: 'disabled' });
+  });
+
+  app.post('/admin/users/:userId/enable', async (context) => {
+    const changed = await setUserStatus(signupId(context), 'disabled', 'active');
+    if (!changed) throw conflict('not_enableable', 'only a disabled user can be enabled');
+    return context.json({ userId: changed.id, status: 'active' });
+  });
+
+  /** A user's monthly cap after approval (D235); the same bounds as at approval. */
+  app.put('/admin/users/:userId/cap', async (context) => {
+    const userId = signupId(context);
+    const parsed = approvalSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) {
+      throw badRequest('invalid_body', `expected { llmCapMicroUsd: 0-${LLM_CAP_CEILING_MICRO_USD} }`, parsed.error.issues);
+    }
+    const changed = await setUserCap(userId, parsed.data.llmCapMicroUsd);
+    if (!changed) throw conflict('not_cappable', 'only an approved user who is not the admin has a cap');
+    return context.json({ userId: changed.id, llmCapMicroUsd: parsed.data.llmCapMicroUsd });
+  });
+
+  /**
+   * A forgotten password (D162, D235): the app makes a one-time password,
+   * stores its hash, ends the user's sessions, and answers it here once for the
+   * admin to pass on. The audit records the request, which carries no password.
+   */
+  app.post('/admin/users/:userId/one-time-password', async (context) => {
+    const userId = signupId(context);
+    const password = oneTimePassword();
+    const changed = await setOneTimePassword(userId, await hashPassword(password));
+    if (!changed) throw conflict('no_one_time_password', 'only an approved user who is not the admin');
+    context.header('cache-control', 'no-store');
+    const body: OneTimePasswordResponse = { userId: changed.id, password };
+    return context.json(body);
+  });
+
+  /**
    * Sign-up requests (D156, D188): waiting ones oldest first, then recent
    * rejections, which can be undone. Email and zone only - never anything of
    * the account itself (D162).
@@ -358,27 +431,6 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
     if (parsed.data.defaultLlmCapMicroUsd !== undefined) await setDefaultLlmCap(parsed.data.defaultLlmCapMicroUsd, admin);
     if (parsed.data.maxPendingSignups !== undefined) await setMaxPendingSignups(parsed.data.maxPendingSignups, admin);
     return context.json(await adminSettings());
-  });
-
-  /**
-   * Reset the account, by group (task 18). Erases the chosen groups of the
-   * signed-in account and keeps a backup of every erased row, in one
-   * transaction inside the database (`reset_account`, migration 0045). Audited
-   * by the gate before this runs (decision 84). The typed word is checked here
-   * as well as on the page: a request that skipped the page has not confirmed.
-   */
-  app.post('/admin/account/reset', async (context) => {
-    const parsed = resetSchema.safeParse(await context.req.json().catch(() => null));
-    if (!parsed.success) {
-      throw badRequest('invalid_body', `expected { groups: (${ACCOUNT_RESET_GROUPS.join(' | ')})[], confirm }`, parsed.error.issues);
-    }
-    if (parsed.data.confirm !== ACCOUNT_RESET_CONFIRMATION) {
-      throw unprocessable('reset_not_confirmed', `type ${ACCOUNT_RESET_CONFIRMATION} to confirm a reset`);
-    }
-    const groups = ACCOUNT_RESET_GROUPS.filter((group) => parsed.data.groups.includes(group));
-    const reset = await resetAccount(currentUserId(context), groups);
-    const body: AccountResetResponse = { resetId: reset.reset_id, groups, erased: reset.counts };
-    return context.json(body);
   });
 
   /**
