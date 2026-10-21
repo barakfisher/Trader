@@ -12,9 +12,8 @@ own tools, D226) - five, so this PR is the handoff. Decisions reached **226** (n
 Migrations: **`0067_telegram_conversation` is head** (next free: **`0068`**). **Deployed:**
 compose runs #284 at `0067` (redeployed 2026-10-20 ~20:25 UTC; no migration since the 19:50 UTC
 backup `traders-compose-20261020T195058Z.dump`; both /readyz ok, `telegram.poller_started`
-logged). kind is untouched at `0059`. **Unverified: Telegram ask mode live** - the binding row
-exists and its `assistant_conversation_id` is still null because nobody has asked the bot
-anything yet; it needs the user to send one question from the phone (item 1 below). **Next:**
+logged). kind is untouched at `0059`. **Telegram ask mode checked live 2026-10-21 05:11-05:12 UTC**
+(item 1 below): two Hebrew questions from the phone, two Hebrew answers. **Next:**
 "Next session: after the guide fix".
 
 Previous update, 2026-10-20 ~17:45 UTC - **Handoff: improvements items 1-3 are done and deployed, and
@@ -4268,6 +4267,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | **The instructions are still `persona` underneath** | `agents.persona`, `AgentView.persona`, wire code `no_persona` | Relabelled in the UI only ("Additional instructions", D170/D174); renaming the column and the code is churn with no behaviour, left on purpose |
 | **Narration's and the agents' figure checks still read a timestamp's digits as sources, and refuse U+2011 hyphens** | `app/narration/evidence_validator.py`; the assistant fixed it in `app/assistant/reply.py` only | A small whole number (a day, hour or minute) written by a model passes whenever its evidence carries a timestamp that contains it; "7‑day" with a non-breaking hyphen is refused. Moving `_without_dates` and the dash normalisation into the validator fixes both for everyone - and changes narration's behaviour, so measure its rejection rate before and after |
 | **`purpose = 'ask'` outlives `/ask`** | `Purpose` in `app/llm/base.py`, `SCOPE_FOR_PURPOSE`, `llm_calls`' CHECK, `services/llmPanel.ts`, `spend_estimate.py` | Nothing emits it since PR 4; kept so stored rows still read. Retention (30 days) empties them; then drop it with a migration |
+| **A month written as a word is never checked** | `app/assistant/reply.py`, `app/narration/evidence_validator.py` (both read digits) | Live 2026-10-21 (llm_calls 476): a Hebrew answer gave a 2026-10-20 snapshot as "20 בנובמבר 2026" - November. The checks compare digits, so "20" and "2026" are the only figures they see; this time the year was missing from the evidence and the reply was refused, but "20 בנובמבר" alone, or "November 20" in English, passes with the wrong month. Not Hebrew-specific - D220 makes it likelier, because a Hebrew answer translates the ISO date instead of quoting it. A fix would be one rule in the assistant's instructions (quote dates as they appear in tool results) or month names in the validator, in both languages; measure first how often answers spell out a date |
 | **The assistant eval runs only by hand** | `scripts/run_assistant_eval.py` | Keyed and paid, so never in CI: a prompt or tool change can regress it unseen. Run it (Flash-Lite, `--repeat 3`, ~$1.30 with the judge) before merging any change to the assistant's prompt, tools or checks |
 | **No backup leaves the laptop** | `~/Backups/traders` (DB1, decision 137) | The daily dumps survive `k8s-down.sh`, a lost Docker volume and a bad migration, but not the Mac's disk failing or the laptop being lost: Time Machine has no destination and no synced folder exists (checked 2026-10-11). The fix is the user's - a Time Machine disk (`~/Backups` is already included) or a synced folder (`TRADERS_BACKUP_DIR`, then `backup-schedule.sh install` again) |
 | **The shadow SPY pays no fees** | `services/performance.ts` (`benchmarkOn`), D38 | The user's choice for now (2026-10-05), to be revisited: they will add fees. The agent pays 10 bps / $1.50 on every trade and the shadow pays nothing, so the comparison leans slightly against the agent - about $1.50-$10 per deposit at today's budgets. When fees are added, decide whether each deposit pays one fee on the way in (the shadow buys once per deposit) and record it as a decision; the hint under the figures ("without fees", `agents.performance.hint`) must change with it |
@@ -4724,13 +4724,17 @@ grant tests fail for the wrong reason.
 own-key check found (D225, D226). The standing grant for this batch ended with this handoff:
 ask before each PR, merge only on "merge", redeploy only on "redeploy".
 
-1. **Telegram ask mode, live check (still open).** Nothing on the server side is wrong as far
-   as it can be seen without a message: `telegram.poller_started` is logged, the admin's binding
-   row exists, `assistant_conversation_id` is null. When the user has sent the bot a question,
-   read: the new `assistant_messages` rows (the answer in the question's language, D220);
-   `llm_calls` with `purpose = 'assistant'` and its `paid_by`; `telegram_bindings
-   .assistant_conversation_id` set; the conversation listed by `GET /assistant/conversations`
-   (the Ask page's history). A Hebrew question is the better test: it covers D220 and D224 at once.
+1. **Telegram ask mode is checked live (2026-10-21 05:11-05:12 UTC, done).** The user asked the
+   bot two questions in Hebrew from the phone ("מה מצב התיק שלי?", then one about the simulated
+   agents); both answers came back in Hebrew (D220). `telegram_bindings.assistant_conversation_id`
+   now points to conversation `dcdfb127`, titled with the first question; the route's own query
+   (`listAssistantConversations`) lists it first, so the Ask page's history shows it (read in
+   SQL; the HTTP route needs a session). `llm_calls` 473-480: 8 calls, all `purpose = 'assistant'`
+   on the admin, `paid_by = 'installation'` (correct: the admin has no row in `user_llm_keys`),
+   about $0.014. No orchestrator warnings. One finding, now under debt: the first draft (476)
+   gave the snapshot date as "20 בנובמבר 2026" - November, for a 2026-10-20 snapshot. The figure
+   check refused it only because "2026" was not in the evidence; the repair turn (478) quoted
+   `2026-10-20` and was accepted.
 2. **Run the assistant eval with the judge before the next prompt or guide change.** D226 was
    measured with `--no-judge` (outcomes and mechanical checks only): the three agent questions
    10 times each and the product group 3 times, about $0.15. One finding in that run that D226
