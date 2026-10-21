@@ -239,3 +239,8 @@ while this file is out of date.
 | 226 | The product guide names only tools the assistant has, and says how an agent is created |
 | 227 | A scan's figure check counts the agent's own instructions as a source; #247 is closed unmerged |
 | 228 | The research sub-agent and the per-agent tool picker are deferred again |
+| 229 | The dashboard opens on *All*, and one table shows every holding with who holds it |
+| 230 | A holding without a cost basis is left out of cost and P&L, never counted at zero cost |
+| 231 | The cards add the real portfolio and the agents together under *All*, and the split is one click away |
+| 232 | An agent's trade is approved from its row, through the proposal's own card |
+| 233 | Order: the four cards, the scope toggle, the holdings table, then the charts |

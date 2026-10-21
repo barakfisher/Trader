@@ -4,17 +4,12 @@ import { RefreshCw } from 'lucide-react';
 
 import { AddHoldingForm } from '../components/AddHoldingForm.tsx';
 import { AllocationChart } from '../components/AllocationChart.tsx';
-import {
-  AgentHeadline,
-  AgentScopeHoldings,
-  ConsolidatedHeadline,
-  ConsolidatedHoldings,
-  HoldingsScopePicker,
-} from '../components/ConsolidatedHoldings.tsx';
+import { CombinedHoldingsTable } from '../components/CombinedHoldingsTable.tsx';
 import { EquityCurve } from '../components/EquityCurve.tsx';
 import { DigestBanner } from '../components/DigestBanner.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { HoldingsActions } from '../components/HoldingsActions.tsx';
+import { HoldingsScopeToggle } from '../components/HoldingsScopeToggle.tsx';
 import { HoldingsTable } from '../components/HoldingsTable.tsx';
 import { ImportWizard } from '../components/ImportWizard.tsx';
 import { NarrationBadge } from '../components/NarrationBadge.tsx';
@@ -24,7 +19,8 @@ import { errorMessage } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { hasStaleQuotes, pricesAsOf } from '../lib/portfolioView.ts';
 import { formatAge, formatClockTime, formatExactTime } from '../lib/relativeTime.ts';
-import { REAL_SCOPE, holdingsScopeFrom, holdingsSearchValue, type HoldingsScope } from '../lib/holdingsScope.ts';
+import { scopeSummary, summarySources } from '../lib/combinedHoldings.ts';
+import { ALL_SCOPE, holdingsScopeFrom, holdingsSearchValue, inScope, type HoldingsScope } from '../lib/holdingsScope.ts';
 import { useAgentsQuery } from '../queries/agents.ts';
 import { useConsolidatedQuery, usePortfolioQuery } from '../queries/portfolio.ts';
 import { queryKeys } from '../queries/queryKeys.ts';
@@ -38,23 +34,26 @@ export const DashboardPage = observer(function DashboardPage() {
   // Read loosely: this page also renders for unknown addresses, where the '/'
   // route is not matched.
   const search = useSearch({ strict: false });
-  // Which holdings the holdings card and the headline show (D32, D33): the
-  // real portfolio unless the address asks for more. An agent the user does
+  // Which holdings the cards and the table show (D32, D229): everything, real
+  // and simulated, unless the address asks for less. An agent the user does
   // not have - or has archived - is the default view, once the list is known.
   const agents = useAgentsQuery();
   const simulatedAgents = (agents.data ?? []).filter((agent) => !agent.isPrimary && agent.state !== 'archived');
+  // Until the agents are known, it is not known whether there is anything but
+  // the real portfolio to show; a failed list leaves the real view.
+  const agentsKnown = agents.data !== undefined || agents.isError;
+  const hasSimulated = simulatedAgents.length > 0;
   const requestedScope = holdingsScopeFrom(search);
   const scope: HoldingsScope =
     requestedScope.kind === 'agent' &&
     agents.data !== undefined &&
     !simulatedAgents.some((agent) => agent.id === requestedScope.agentId)
-      ? REAL_SCOPE
+      ? ALL_SCOPE
       : requestedScope;
-  const consolidated = useConsolidatedQuery(scope.kind !== 'real');
-  const standing =
-    scope.kind === 'agent'
-      ? (consolidated.data?.agents.find((agent) => agent.agentId === scope.agentId) ?? null)
-      : null;
+  // With no simulated agent, every view is the real portfolio's.
+  const combinedView = hasSimulated && scope.kind !== 'real';
+  const consolidated = useConsolidatedQuery(combinedView);
+  const sources = consolidated.data ? summarySources(consolidated.data, scope) : [];
   const setScope = (next: HoldingsScope) =>
     void navigate({
       to: '/',
@@ -116,46 +115,70 @@ export const DashboardPage = observer(function DashboardPage() {
         />
       )}
 
-      {simulatedAgents.length > 0 && (
-        <HoldingsScopePicker scope={scope} agents={simulatedAgents} onChange={setScope} />
-      )}
-      {scope.kind !== 'real' && consolidated.isPending && <Spinner label={t('consolidated.loading')} />}
-      {scope.kind !== 'real' && consolidated.error && (
+      {!agentsKnown && portfolio.data && <Spinner label={t('consolidated.loading')} />}
+      {combinedView && consolidated.isPending && <Spinner label={t('consolidated.loading')} />}
+      {combinedView && consolidated.error && (
         <ErrorNote
           message={errorMessage(consolidated.error, t('consolidated.loadFailed'))}
           onRetry={() => void consolidated.refetch()}
         />
       )}
 
-      {scope.kind === 'real' && portfolio.data?.holdings.length === 0 ? (
-        <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-          <div className="rounded-xl border border-border-subtle bg-surface-raised">
-            <EmptyState
-              title={t('dashboard.emptyTitle')}
-              body={t('dashboard.emptyBody')}
-              action={<Button onClick={importStore.openDialog}>{t('dashboard.importFile')}</Button>}
-            />
-          </div>
-          <AddHoldingForm />
-        </div>
-      ) : (
+      {agentsKnown && !combinedView && portfolio.data?.holdings.length === 0 ? (
         <>
-          {scope.kind === 'real' && <SummaryCards />}
-          {scope.kind === 'all' && consolidated.data && <ConsolidatedHeadline data={consolidated.data} />}
-          {standing && <AgentHeadline standing={standing} />}
-          {/* Summary, then the two charts side by side - Value over time where
-              the table used to be, Allocation at its own size - then the
-              holdings with a row to themselves, because a table needs width
-              (UX5). On a phone everything stacks. No cards are added here:
-              findings and the digest are on Insights. */}
+          {hasSimulated && <HoldingsScopeToggle scope={scope} agents={simulatedAgents} onChange={setScope} />}
           <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-            <EquityCurve />
-            <AllocationChart />
+            <div className="rounded-xl border border-border-subtle bg-surface-raised">
+              <EmptyState
+                title={t('dashboard.emptyTitle')}
+                body={t('dashboard.emptyBody')}
+                action={<Button onClick={importStore.openDialog}>{t('dashboard.importFile')}</Button>}
+              />
+            </div>
+            <AddHoldingForm />
           </div>
-          {scope.kind === 'real' && <HoldingsTable actions={<HoldingsActions />} />}
-          {scope.kind === 'all' && consolidated.data && <ConsolidatedHoldings data={consolidated.data} />}
-          {standing && consolidated.data && <AgentScopeHoldings data={consolidated.data} standing={standing} />}
         </>
+      ) : (
+        agentsKnown && (
+          <>
+            {/* The four cards, then the holdings - the page's main content -
+                with the scope toggle directly above them, then the two charts
+                (D233). On a phone everything stacks. Findings and the digest
+                are on Insights. */}
+            {combinedView ? (
+              consolidated.data && (
+                <SummaryCards
+                  summary={scopeSummary(consolidated.data, sources)}
+                  sources={sources}
+                  pendingTrades={consolidated.data.pendingTrades.filter((trade) =>
+                    inScope(scope, { agentId: trade.agentId, isPrimary: false }),
+                  )}
+                />
+              )
+            ) : (
+              <SummaryCards summary={portfolio.data?.summary} />
+            )}
+            {hasSimulated && <HoldingsScopeToggle scope={scope} agents={simulatedAgents} onChange={setScope} />}
+            {combinedView ? (
+              consolidated.data && (
+                <CombinedHoldingsTable
+                  data={consolidated.data}
+                  scope={scope}
+                  actions={scope.kind === 'all' ? <HoldingsActions /> : undefined}
+                />
+              )
+            ) : (
+              <HoldingsTable actions={<HoldingsActions />} />
+            )}
+            {/* The charts stay the real portfolio's (D32): an allocation over
+                real and paper shares together is a figure nobody holds. */}
+            {combinedView && <p className="text-xs text-text-muted">{t('combined.chartsAreReal')}</p>}
+            <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+              <EquityCurve />
+              <AllocationChart />
+            </div>
+          </>
+        )
       )}
 
       <Disclaimer />

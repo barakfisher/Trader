@@ -78,6 +78,7 @@ const PORTFOLIO: PortfolioResponse = {
     holdingsCount: 1,
     pricedCount: 1,
     unpricedSymbols: [],
+    uncostedSymbols: [],
     degraded: false,
     asOf: '2026-09-30T07:00:00Z',
   },
@@ -217,7 +218,8 @@ describe('the holding page', () => {
   });
 
   it("is reached from the dashboard by the holding's symbol", async () => {
-    serve({ '/portfolio': PORTFOLIO });
+    // With no simulated agent, the dashboard's holdings are the real table.
+    serve({ '/portfolio': PORTFOLIO, '/agents': { agents: [] } });
     renderAt('/');
     const link = await screen.findByRole('link', { name: 'NVDA' });
     expect(link.getAttribute('href')).toBe(`/holdings/${HOLDING_ID}`);

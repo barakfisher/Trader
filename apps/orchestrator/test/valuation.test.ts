@@ -85,6 +85,45 @@ describe('valuePortfolio', () => {
     expect(result.summary.totalValueMinor).toBe(232140);
   });
 
+  it('leaves a holding without a cost basis out of cost and P&L, and names it (D230)', async () => {
+    const result = await valuePortfolio(
+      [
+        holding({ symbol: 'AAPL', quantity: '10', cost_basis_minor: '18540' }),
+        // Imported with no purchase price: its whole value is not profit.
+        holding({ symbol: 'VOO', quantity: '5', asset_class: 'etf' }),
+      ],
+      context,
+    );
+    expect(result.summary.totalValueMinor).toBeGreaterThan(232140);
+    expect(result.summary.totalCostMinor).toBe(185400);
+    expect(result.summary.pnlMinor).toBe(232140 - 185400);
+    expect(result.summary.pnlPct).toBeCloseTo(25.2104, 3);
+    expect(result.summary.uncostedSymbols).toEqual(['VOO']);
+    expect(result.holdings.find((h) => h.instrument.symbol === 'VOO')!.pnlMinor).toBeNull();
+  });
+
+  it('has no P&L at all when nothing has a cost basis, rather than its value as profit (D230)', async () => {
+    const result = await valuePortfolio([holding({ symbol: 'AAPL', quantity: '10' })], context);
+    expect(result.summary.totalCostMinor).toBe(0);
+    expect(result.summary.pnlMinor).toBeNull();
+    expect(result.summary.pnlPct).toBeNull();
+    expect(result.summary.uncostedSymbols).toEqual(['AAPL']);
+  });
+
+  it("counts an unpriced holding's cost nowhere: it has no value to set against it (D230)", async () => {
+    const ai = createFakeAi({ unpriceable: ['VOO'] });
+    const result = await valuePortfolio(
+      [
+        holding({ symbol: 'AAPL', quantity: '10', cost_basis_minor: '18540' }),
+        holding({ symbol: 'VOO', quantity: '5', asset_class: 'etf', cost_basis_minor: '40000' }),
+      ],
+      { baseCurrency: 'USD', ai },
+    );
+    expect(result.summary.totalCostMinor).toBe(185400);
+    expect(result.summary.pnlMinor).toBe(46740);
+    expect(result.summary.uncostedSymbols).toEqual([]);
+  });
+
   it('marks a holding unpriced when its FX rate is unavailable', async () => {
     const ai = createFakeAi({ missingFx: ['EURUSD'] });
     const result = await valuePortfolio(

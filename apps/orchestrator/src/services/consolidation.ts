@@ -3,11 +3,11 @@
  * D18, D32-D35): one row per instrument across the real portfolio and every
  * non-archived simulated agent, each row carrying the per-agent split.
  *
- * The one rule that shapes everything here: **real and simulated are never
- * summed into one figure.** A row says "40 real" and "5 simulated" side by
- * side; the headline says "real $48,000" and "simulated $15,000" side by side.
- * A blended number that mixed twelve real shares with two imaginary ones would
- * tell the user something false, and nothing on the screen could show it.
+ * Each row keeps the real and the simulated sides apart, and every position
+ * says whose it is. The headline cards add the real portfolio and the agents'
+ * holdings together under *All* (D231, superseding D34's "never summed"); a
+ * combined figure never stands alone - the dashboard opens its split by source
+ * from the card, and a row's split from its quantity and value.
  *
  * Each agent is valued exactly as its own page values it (`valueAgentAccount`),
  * and the real portfolio exactly as `/portfolio` does, so the dashboard and the
@@ -19,6 +19,8 @@
  */
 
 import {
+  addQuantities,
+  combineSummaries,
   isTradeProposalKind,
   type TradeProposalPayload,
 } from '@traders/shared';
@@ -39,25 +41,7 @@ import type { AgentRow, ProposalRow } from '../db/queries.js';
 import { factsOf } from './proposals.js';
 import { effectiveState } from './proposalState.js';
 
-/** `numeric(38, 18)`: the scale every stored quantity has. */
-const QUANTITY_SCALE = 18;
-const QUANTITY_UNIT = 10n ** BigInt(QUANTITY_SCALE);
-
-function scaledQuantity(text: string): bigint {
-  const [whole = '0', fraction = ''] = text.trim().split('.');
-  return BigInt(whole) * QUANTITY_UNIT + BigInt(fraction.padEnd(QUANTITY_SCALE, '0').slice(0, QUANTITY_SCALE));
-}
-
-/**
- * Exact sum of decimal-string quantities (guideline 4), in the shape Postgres
- * returns them. Never through a float: 0.1 + 0.2 shares is 0.3 shares.
- */
-export function addQuantities(quantities: string[]): string {
-  const total = quantities.reduce((sum, quantity) => sum + scaledQuantity(quantity), 0n);
-  const whole = total / QUANTITY_UNIT;
-  const fraction = (total % QUANTITY_UNIT).toString().padStart(QUANTITY_SCALE, '0');
-  return `${whole}.${fraction}`;
-}
+export { addQuantities };
 
 /** Sum of values that are all known, or null: a total that skipped one would read as complete. */
 function sumKnown(values: (number | null)[]): number | null {
@@ -102,16 +86,26 @@ export function standingOf(agent: AgentRow, account: AgentAccountResponse): Simu
     pnlMinor: account.pnlMinor,
     pnlPct: account.pnlPct,
     unpricedSymbols: account.portfolio.summary.unpricedSymbols,
+    summary: account.portfolio.summary,
   };
 }
 
-export function simulatedTotals(standings: SimulatedAgentStanding[]): SimulatedTotals {
+export function simulatedTotals(
+  standings: SimulatedAgentStanding[],
+  currency: string,
+  asOf: string,
+): SimulatedTotals {
   return {
     agentCount: standings.length,
     cashMinor: standings.reduce((sum, standing) => sum + standing.cashMinor, 0),
     holdingsValueMinor: sumKnown(standings.map((standing) => standing.holdingsValueMinor)),
     netWorthMinor: sumKnown(standings.map((standing) => standing.netWorthMinor)),
     unpricedSymbols: [...new Set(standings.flatMap((standing) => standing.unpricedSymbols))].sort(),
+    summary: combineSummaries(
+      currency,
+      standings.map((standing) => standing.summary),
+      asOf,
+    ),
   };
 }
 
@@ -191,7 +185,7 @@ export function consolidate(
   return {
     currency,
     real: real.summary,
-    simulated: simulatedTotals(standings),
+    simulated: simulatedTotals(standings, currency, real.summary.asOf),
     agents: standings,
     rows,
     pendingTrades,

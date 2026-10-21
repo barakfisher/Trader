@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
-import { Check, Clock, Pencil, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Check, Clock, Pencil, Trash2, X } from 'lucide-react';
 
 import { minorToDecimalString, minorToNumber, type HoldingView } from '@traders/shared';
 
@@ -14,8 +14,8 @@ import { useNarrowViewport } from '../lib/viewport.ts';
 import { usePortfolioQuery, useRemoveHolding, useUpdateHolding } from '../queries/portfolio.ts';
 import { Card, Delta } from './ui.tsx';
 
-type UpdateHolding = ReturnType<typeof useUpdateHolding>;
-type RemoveHolding = ReturnType<typeof useRemoveHolding>;
+export type UpdateHolding = ReturnType<typeof useUpdateHolding>;
+export type RemoveHolding = ReturnType<typeof useRemoveHolding>;
 
 /** `actions`: the card's own controls - Add holding, Targets, the "⋯" menu (UX5). */
 export function HoldingsTable({ actions }: { actions?: ReactNode } = {}) {
@@ -108,7 +108,7 @@ function costDraftOf(holding: HoldingView): string {
  * its currency, so an untouched cost is never rewritten and a typed one is
  * never read at another currency's exponent.
  */
-function useHoldingEditor(holding: HoldingView, updateHolding: UpdateHolding) {
+export function useHoldingEditor(holding: HoldingView, updateHolding: UpdateHolding, onSaved?: () => void) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(holding.quantity);
   const [costDraft, setCostDraft] = useState(() => costDraftOf(holding));
@@ -140,7 +140,12 @@ function useHoldingEditor(holding: HoldingView, updateHolding: UpdateHolding) {
           quantity: draft,
           ...(costChanged ? { costBasis: cost === '' ? null : cost, currency: holding.costCurrency } : {}),
         },
-        { onSuccess: () => setEditing(false) },
+        {
+          onSuccess: () => {
+            setEditing(false);
+            onSaved?.();
+          },
+        },
       );
     },
   };
@@ -260,6 +265,8 @@ function HoldingRow({
             />
             <span>{t('holdings.perUnit', { currency: holding.costCurrency })}</span>
           </label>
+        ) : holding.costBasisMinor === null ? (
+          <CostWarning symbol={holding.instrument.symbol} onSet={startEditing} />
         ) : (
           formatMoney(holding.costMinor, baseCurrency)
         )}
@@ -418,6 +425,10 @@ function HoldingCard({
         {holding.quote && t('holdings.priceAge', { age: formatAge(holding.quote.asOf) })}
       </p>
 
+      {!editing && holding.costBasisMinor === null && (
+        <CostWarning symbol={holding.instrument.symbol} onSet={startEditing} />
+      )}
+
       {editing ? (
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-xs text-text-muted">
@@ -490,8 +501,38 @@ function HoldingCard({
   );
 }
 
+/**
+ * A holding with no cost basis (D230): its P&L is "—" rather than its whole
+ * value, and it is left out of the totals. This says so where the cost would
+ * be, and is the way to set one.
+ */
+export function CostWarning({ symbol, onSet }: { symbol: string; onSet?: () => void }) {
+  const { t } = useTranslation();
+  const body = (
+    <>
+      <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
+      {t('holdings.setCost')}
+    </>
+  );
+  return onSet ? (
+    <button
+      type="button"
+      onClick={onSet}
+      title={t('holdings.noCostTitle')}
+      aria-label={t('holdings.setCostFor', { symbol })}
+      className="inline-flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-[11px] text-warn hover:bg-warn/25"
+    >
+      {body}
+    </button>
+  ) : (
+    <span title={t('holdings.noCostTitle')} className="inline-flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-[11px] text-warn">
+      {body}
+    </span>
+  );
+}
+
 /** Numeric quantities arrive as exact decimal strings; trim trailing zeros only. */
-function trimQuantity(quantity: string): string {
+export function trimQuantity(quantity: string): string {
   if (!quantity.includes('.')) return quantity;
   return quantity.replace(/0+$/, '').replace(/\.$/, '');
 }

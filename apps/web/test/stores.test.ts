@@ -98,6 +98,7 @@ const portfolio: PortfolioResponse = {
     holdingsCount: 1,
     pricedCount: 1,
     unpricedSymbols: [],
+    uncostedSymbols: [],
     degraded: false,
     asOf: new Date().toISOString(),
   },

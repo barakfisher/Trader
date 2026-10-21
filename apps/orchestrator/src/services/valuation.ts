@@ -7,6 +7,9 @@
  *    `summary.unpricedSymbols`. It is never valued at zero and never hidden -
  *    a silently missing position is worse than a visibly missing price.
  *  - Cost basis is stored per unit; total cost is quantity x per-unit cost.
+ *  - Cost and P&L cover only holdings with both a price and a cost basis
+ *    (D230). A holding with no cost basis is not counted at zero cost - that
+ *    read its whole value as profit - it is named in `uncostedSymbols`.
  */
 
 import { AiClient, type Quote } from '@traders/shared/ai';
@@ -161,7 +164,11 @@ export async function valuePortfolio(
   });
 
   const totalValueMinor = priced.reduce((sum, item) => sum + (item.valueMinor ?? 0), 0);
-  const totalCostMinor = priced.reduce((sum, item) => sum + (item.costMinor ?? 0), 0);
+  // The holdings P&L can be measured on: an unpriced one has no value to set
+  // against its cost, and an uncosted one no cost to set against its value.
+  const measured = priced.filter((item) => item.valueMinor !== null && item.costMinor !== null);
+  const totalCostMinor = measured.reduce((sum, item) => sum + item.costMinor!, 0);
+  const measuredValueMinor = measured.reduce((sum, item) => sum + item.valueMinor!, 0);
   const totalPreviousMinor = priced.reduce(
     (sum, item) => sum + (item.previousValueMinor ?? item.valueMinor ?? 0),
     0,
@@ -217,7 +224,10 @@ export async function valuePortfolio(
     .map((item) => item.row.symbol);
   const anyStale = priced.some((item) => item.quote?.stale);
 
-  const pnlMinor = totalValueMinor - totalCostMinor;
+  const uncostedSymbols = [
+    ...new Set(priced.filter((item) => item.row.cost_basis_minor === null).map((item) => item.row.symbol)),
+  ].sort();
+  const pnlMinor = measured.length === 0 ? null : measuredValueMinor - totalCostMinor;
   const dayChangeMinor = totalPreviousMinor > 0 ? totalValueMinor - totalPreviousMinor : null;
 
   const summary: PortfolioSummary = {
@@ -225,7 +235,7 @@ export async function valuePortfolio(
     totalValueMinor,
     totalCostMinor,
     pnlMinor,
-    pnlPct: totalCostMinor > 0 ? round((pnlMinor / totalCostMinor) * 100, 4) : null,
+    pnlPct: pnlMinor !== null && totalCostMinor > 0 ? round((pnlMinor / totalCostMinor) * 100, 4) : null,
     dayChangeMinor,
     dayChangePct:
       dayChangeMinor !== null && totalPreviousMinor > 0
@@ -234,6 +244,7 @@ export async function valuePortfolio(
     holdingsCount: rows.length,
     pricedCount: rows.length - unpricedSymbols.length,
     unpricedSymbols: [...new Set([...unpricedSymbols, ...missing])].sort(),
+    uncostedSymbols,
     degraded: unpricedSymbols.length > 0 || anyStale,
     asOf,
   };
@@ -286,13 +297,14 @@ function emptySummary(baseCurrency: string, asOf: string): PortfolioSummary {
     baseCurrency,
     totalValueMinor: 0,
     totalCostMinor: 0,
-    pnlMinor: 0,
+    pnlMinor: null,
     pnlPct: null,
     dayChangeMinor: null,
     dayChangePct: null,
     holdingsCount: 0,
     pricedCount: 0,
     unpricedSymbols: [],
+    uncostedSymbols: [],
     degraded: false,
     asOf,
   };
