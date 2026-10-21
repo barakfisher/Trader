@@ -251,3 +251,5 @@ while this file is out of date.
 | 238 | The installation's runs refuse a user; the agent-scan plan is one installation run over every active user |
 | 239 | The admin's user list: disable/enable, a cap edit, an app-made one-time password; reset is each user's own |
 | 240 | M9's exit test reads the routes from the app and asks each with the other user's ids |
+| 241 | A closed-market quote is cached until the next open at most, the TTL floor included |
+| 242 | In Telegram a refusal after a refusal replaces its line |

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -7,8 +7,10 @@ from app.core.cache_policy import (
     CRYPTO_TTL_SECONDS,
     is_crypto_symbol,
     is_us_market_open,
+    next_session_open,
     quote_ttl,
 )
+from app.core.market_sessions import FRANKFURT, US
 
 
 #: 2026-09-15 is a Tuesday; 2026-09-19 a Saturday, 2026-09-20 a Sunday.
@@ -166,7 +168,58 @@ def test_the_floor_never_shortens_a_longer_provider_delay():
 def test_now_defaults_to_the_current_time():
     # Only that it is one of the three legal answers; asserting which one would
     # make the suite depend on when CI runs.
-    assert quote_ttl("AAPL", YFINANCE_DELAY) in {YFINANCE_DELAY, CLOSED_TTL_SECONDS}
+    ttl = quote_ttl("AAPL", YFINANCE_DELAY)
+    assert ttl == YFINANCE_DELAY or 1 <= ttl <= CLOSED_TTL_SECONDS
+
+
+# -- the opening bell -----------------------------------------------------------
+
+
+class TestAPriceReadBeforeTheBellDoesNotOutliveIt:
+    """A quote fetched at 13:00 UTC was cached for an hour and served at 13:42,
+    dated the previous close - 17.7 hours old - so every approval in the first
+    half-hour of the session was refused as `quote_too_old`."""
+
+    def test_just_before_the_open_the_ttl_ends_at_the_bell(self):
+        # 13:29:30 UTC on a September Tuesday is 09:29:30 in New York.
+        moment = datetime(2026, 9, 15, 13, 29, 30, tzinfo=UTC)
+        assert quote_ttl("AAPL", YFINANCE_DELAY, moment) == 30
+
+    def test_the_cap_binds_inside_the_last_closed_hour_only(self):
+        bell = weekday(13, 30)
+        for minutes_before in (1, 30, 59):
+            moment = bell - timedelta(minutes=minutes_before)
+            assert quote_ttl("AAPL", YFINANCE_DELAY, moment) == minutes_before * 60
+        # Further out, the hour is shorter than the wait for the bell.
+        assert quote_ttl("AAPL", YFINANCE_DELAY, bell - timedelta(minutes=61)) == (
+            CLOSED_TTL_SECONDS
+        )
+
+    def test_the_floor_does_not_carry_a_closed_price_past_the_open(self):
+        moment = weekday(13, 29)
+        assert quote_ttl("AAPL", 0, moment, minimum_ttl_seconds=7200) == 60
+
+    def test_a_fraction_of_a_second_rounds_up_and_never_reaches_zero(self):
+        moment = datetime(2026, 9, 15, 13, 29, 59, 500_000, tzinfo=UTC)
+        assert quote_ttl("AAPL", YFINANCE_DELAY, moment) == 1
+
+    def test_friday_evening_waits_for_monday(self):
+        # 2026-09-18 is a Friday: 21:00 UTC is after the close, the next bell Monday.
+        friday = datetime(2026, 9, 18, 21, 0, tzinfo=UTC)
+        assert next_session_open(friday, US) == datetime(2026, 9, 21, 13, 30, tzinfo=UTC)
+        assert quote_ttl("AAPL", YFINANCE_DELAY, friday) == CLOSED_TTL_SECONDS
+
+    def test_each_exchange_is_capped_at_its_own_bell(self):
+        # 06:59 UTC is 08:59 in Frankfurt: one minute to the XETRA open.
+        moment = weekday(6, 59)
+        assert quote_ttl("SAP.DE", YFINANCE_DELAY, moment, exchange="XETRA") == 60
+        assert next_session_open(moment, FRANKFURT) == weekday(7, 0)
+
+    def test_the_bell_follows_daylight_saving(self):
+        # 2026-11-02 (Mon) is after New York leaves summer time: the bell is 14:30 UTC.
+        assert next_session_open(datetime(2026, 11, 2, 13, 45, tzinfo=UTC), US) == datetime(
+            2026, 11, 2, 14, 30, tzinfo=UTC
+        )
 
 
 # -- wiring -------------------------------------------------------------------

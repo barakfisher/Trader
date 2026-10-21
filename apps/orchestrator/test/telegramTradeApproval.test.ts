@@ -77,7 +77,8 @@ const { decodeCallbackData, encodeCallbackData, mintNonce, MAX_CALLBACK_PRICE_MI
 const approval = await import('../src/services/tradeApproval.js');
 const proposals = await import('../src/services/proposals.js');
 const { ApiProblem } = await import('../src/http/errors.js');
-const { bpsAsPercent } = await import('../src/telegram/tradeApproval.js');
+const { bpsAsPercent, withRefusal } = await import('../src/telegram/tradeApproval.js');
+const { messagesFor } = await import('../src/notify/messages.js');
 
 const ENV = {
   APP_ENV: 'test',
@@ -115,7 +116,7 @@ let app: ReturnType<typeof buildApp>;
 
 const HEADLINE = 'Value proposes to buy 2 NVDA at 238.68';
 
-const tap = (action: 'approve' | 'confirm' | 'reject', priceMinor?: bigint) =>
+const tap = (action: 'approve' | 'confirm' | 'reject', priceMinor?: bigint, text = HEADLINE) =>
   app.request('/telegram/webhook', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': WEBHOOK_SECRET },
@@ -126,7 +127,7 @@ const tap = (action: 'approve' | 'confirm' | 'reject', priceMinor?: bigint) =>
           { proposalId: PROPOSAL, action, nonce: mintNonce(), ...(priceMinor === undefined ? {} : { priceMinor }) },
           SIGNING_SECRET,
         ),
-        message: { message_id: 99, text: HEADLINE, chat: { id: CHAT } },
+        message: { message_id: 99, text, chat: { id: CHAT } },
       },
     }),
   });
@@ -301,6 +302,31 @@ describe('Confirm: the fill at the previewed price', () => {
     expect(keyboardOf(lastEdit()).map((button) => button.text)).toEqual(['Approve', 'Reject']);
   });
 
+  it('a refusal after a refusal replaces its line instead of stacking another', async () => {
+    const tooOld = () => new ApiProblem(422, 'quote_too_old', 'old', { quoteAsOf: '2026-10-06T20:00:00Z' });
+    vi.mocked(approval.previewTradeApproval).mockRejectedValueOnce(tooOld()).mockRejectedValueOnce(tooOld());
+    await tap('approve');
+    const first = String(lastEdit().body.text);
+    expect(first.match(/⚠️/g)).toHaveLength(1);
+    await tap('approve', undefined, first);
+    const second = String(lastEdit().body.text);
+    expect(second.startsWith(HEADLINE)).toBe(true);
+    expect(second.match(/⚠️/g)).toHaveLength(1);
+    expect(second).toContain('too old to trade at');
+  });
+
+  it('a refusal after a preview is added beneath it, the preview kept', async () => {
+    await tap('approve');
+    const previewed = String(lastEdit().body.text);
+    vi.mocked(approval.confirmTradeApproval).mockRejectedValueOnce(
+      new ApiProblem(409, 'price_moved', 'moved', { shownPriceMinor: 23_928, livePriceMinor: 24_100 }),
+    );
+    await tap('confirm', 23_928n, previewed);
+    const text = String(lastEdit().body.text);
+    expect(text.startsWith(previewed)).toBe(true);
+    expect(text.match(/⚠️/g)).toHaveLength(1);
+  });
+
   it('a Confirm on a proposal that is not a trade decides nothing', async () => {
     kind = 'rebalance';
     await tap('confirm', 100n);
@@ -326,5 +352,23 @@ describe('bpsAsPercent', () => {
     [1234, '+12.34%'],
   ])('%s bps reads %s', (bps, text) => {
     expect(bpsAsPercent(bps)).toBe(text);
+  });
+});
+
+describe('withRefusal', () => {
+  const he = messagesFor('he');
+
+  it('recognises a Hebrew refusal whether or not Telegram kept its isolates', () => {
+    const earlier = he.trade.refused(he.trade.reasons.quote_too_old, '09:31');
+    const latest = he.trade.refused(he.trade.reasons.quote_too_old, '09:33');
+    const stripped = earlier.replace(/[\u2066-\u2069]/g, '');
+    for (const previous of [earlier, stripped]) {
+      expect(withRefusal(`${HEADLINE}\n\n${previous}`, latest, he)).toBe(`${HEADLINE}\n\n${latest}`);
+    }
+  });
+
+  it('never replaces the announcement itself', () => {
+    const refusal = he.trade.refused(he.trade.reasons.quote_too_old, '09:31');
+    expect(withRefusal(refusal, refusal, he)).toBe(`${refusal}\n\n${refusal}`);
   });
 });
