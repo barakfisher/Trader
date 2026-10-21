@@ -5,7 +5,7 @@ import { agentStateWord } from '../lib/agentPresentation.ts';
 import type { HoldingsScope } from '../lib/holdingsScope.ts';
 
 /**
- * `[ All ] [ Real ] [ Simulated ]` above the holdings table (D227), and under
+ * `[ All ] [ Real ] [ Simulated ]` above the holdings table (D229), and under
  * *Simulated*, one chip per agent when there is more than one to choose
  * between. Shown only when a non-archived simulated agent exists: without one,
  * every view is the real portfolio.

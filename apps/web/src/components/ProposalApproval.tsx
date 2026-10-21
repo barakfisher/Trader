@@ -16,7 +16,7 @@ import { Drawer } from './Drawer.tsx';
 import { ErrorNote, Spinner } from './ui.tsx';
 
 /**
- * *Approve* on the dashboard (D230): a pending agent trade, approved where its
+ * *Approve* on the dashboard (D232): a pending agent trade, approved where its
  * ticker is shown rather than only from the inbox.
  *
  * Never one click. The button opens the proposal's own card in a drawer - the

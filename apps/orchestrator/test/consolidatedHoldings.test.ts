@@ -160,7 +160,7 @@ describe('the consolidated view', () => {
     expect(queries.listHoldings).not.toHaveBeenCalledWith(USER.id, OLD);
   });
 
-  it('reports the real summary as /portfolio does, and the simulated totals as cash plus market value (D34, D229)', async () => {
+  it('reports the real summary as /portfolio does, and the simulated totals as cash plus market value (D34, D231)', async () => {
     const body = await consolidated();
     expect(body.currency).toBe('USD');
     expect(body.real.totalValueMinor).toBe(40 * AAPL + Math.round(2.5 * VOO));
@@ -171,7 +171,7 @@ describe('the consolidated view', () => {
       netWorthMinor: 70000 + 8 * AAPL,
       unpricedSymbols: [],
     });
-    // The agents' holdings together, for the dashboard's cards (D229): each
+    // The agents' holdings together, for the dashboard's cards (D231): each
     // agent's own summary, added.
     expect(body.simulated.summary.totalValueMinor).toBe(8 * AAPL);
     expect(body.simulated.summary.totalCostMinor).toBe(

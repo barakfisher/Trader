@@ -85,7 +85,7 @@ describe('valuePortfolio', () => {
     expect(result.summary.totalValueMinor).toBe(232140);
   });
 
-  it('leaves a holding without a cost basis out of cost and P&L, and names it (D228)', async () => {
+  it('leaves a holding without a cost basis out of cost and P&L, and names it (D230)', async () => {
     const result = await valuePortfolio(
       [
         holding({ symbol: 'AAPL', quantity: '10', cost_basis_minor: '18540' }),
@@ -102,7 +102,7 @@ describe('valuePortfolio', () => {
     expect(result.holdings.find((h) => h.instrument.symbol === 'VOO')!.pnlMinor).toBeNull();
   });
 
-  it('has no P&L at all when nothing has a cost basis, rather than its value as profit (D228)', async () => {
+  it('has no P&L at all when nothing has a cost basis, rather than its value as profit (D230)', async () => {
     const result = await valuePortfolio([holding({ symbol: 'AAPL', quantity: '10' })], context);
     expect(result.summary.totalCostMinor).toBe(0);
     expect(result.summary.pnlMinor).toBeNull();
@@ -110,7 +110,7 @@ describe('valuePortfolio', () => {
     expect(result.summary.uncostedSymbols).toEqual(['AAPL']);
   });
 
-  it("counts an unpriced holding's cost nowhere: it has no value to set against it (D228)", async () => {
+  it("counts an unpriced holding's cost nowhere: it has no value to set against it (D230)", async () => {
     const ai = createFakeAi({ unpriceable: ['VOO'] });
     const result = await valuePortfolio(
       [

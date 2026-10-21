@@ -8,7 +8,7 @@
  *    a silently missing position is worse than a visibly missing price.
  *  - Cost basis is stored per unit; total cost is quantity x per-unit cost.
  *  - Cost and P&L cover only holdings with both a price and a cost basis
- *    (D228). A holding with no cost basis is not counted at zero cost - that
+ *    (D230). A holding with no cost basis is not counted at zero cost - that
  *    read its whole value as profit - it is named in `uncostedSymbols`.
  */
 

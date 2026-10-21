@@ -5,7 +5,7 @@
  *
  * Each row keeps the real and the simulated sides apart, and every position
  * says whose it is. The headline cards add the real portfolio and the agents'
- * holdings together under *All* (D229, superseding D34's "never summed"); a
+ * holdings together under *All* (D231, superseding D34's "never summed"); a
  * combined figure never stands alone - the dashboard opens its split by source
  * from the card, and a row's split from its quantity and value.
  *

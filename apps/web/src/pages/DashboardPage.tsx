@@ -34,7 +34,7 @@ export const DashboardPage = observer(function DashboardPage() {
   // Read loosely: this page also renders for unknown addresses, where the '/'
   // route is not matched.
   const search = useSearch({ strict: false });
-  // Which holdings the cards and the table show (D32, D227): everything, real
+  // Which holdings the cards and the table show (D32, D229): everything, real
   // and simulated, unless the address asks for less. An agent the user does
   // not have - or has archived - is the default view, once the list is known.
   const agents = useAgentsQuery();
@@ -143,7 +143,7 @@ export const DashboardPage = observer(function DashboardPage() {
           <>
             {/* The four cards, then the holdings - the page's main content -
                 with the scope toggle directly above them, then the two charts
-                (D231). On a phone everything stacks. Findings and the digest
+                (D233). On a phone everything stacks. Findings and the digest
                 are on Insights. */}
             {combinedView ? (
               consolidated.data && (

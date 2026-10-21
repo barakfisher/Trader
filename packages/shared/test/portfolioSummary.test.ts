@@ -18,7 +18,7 @@ const base: PortfolioSummary = {
   asOf: '2026-10-21T00:00:00Z',
 };
 
-describe('combineSummaries (D229)', () => {
+describe('combineSummaries (D231)', () => {
   it('adds money exactly and computes each percentage again from the sums', () => {
     const real = { ...base, totalValueMinor: 110_00, totalCostMinor: 100_00, pnlMinor: 10_00, dayChangeMinor: 10_00, holdingsCount: 1, pricedCount: 1 };
     const paper = { ...base, totalValueMinor: 90_00, totalCostMinor: 100_00, pnlMinor: -10_00, dayChangeMinor: -10_00, holdingsCount: 2, pricedCount: 2 };

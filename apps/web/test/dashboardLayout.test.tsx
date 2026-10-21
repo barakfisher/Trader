@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * The dashboard's layout (UX5, D231): the summary, the holdings card - which
+ * The dashboard's layout (UX5, D233): the summary, the holdings card - which
  * carries its own actions - then the two charts. Add holding opens a drawer, Targets is
  * the page, Import and Export sit behind "⋯"; none of them is in the app bar.
  */
@@ -104,7 +104,7 @@ afterEach(cleanup);
 const holdingsCard = async () =>
   (await screen.findByRole('heading', { name: 'Holdings (1)' })).closest('section') as HTMLElement;
 
-it('reads summary, the holdings, then the two charts - with no add form beside them (D231)', async () => {
+it('reads summary, the holdings, then the two charts - with no add form beside them (D233)', async () => {
   renderAt('/');
   await holdingsCard();
   const order = screen
@@ -193,7 +193,7 @@ it('exports the stored holdings from "⋯" as a JSON file the import reads', asy
   click.mockRestore();
 });
 
-describe('with a simulated agent (D227)', () => {
+describe('with a simulated agent (D229)', () => {
   const AGENT_ID = '90000000-0000-0000-0000-0000000000a1';
   const agentSummary = { ...PORTFOLIO.summary, totalValueMinor: 100000, totalCostMinor: 90000, pnlMinor: 10000 };
   const CONSOLIDATED: ConsolidatedHoldingsResponse = {

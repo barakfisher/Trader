@@ -1,12 +1,12 @@
 /**
- * The dashboard's one holdings table and its four cards, for any scope (D227,
- * D229): the consolidated response cut down to the positions the scope shows,
+ * The dashboard's one holdings table and its four cards, for any scope (D229,
+ * D231): the consolidated response cut down to the positions the scope shows,
  * one row per instrument, each row carrying who holds it and the agents'
  * pending trades on it.
  *
  * A row adds its positions together - real and simulated under *All* - and
  * keeps every position, so the table can always say whose each part is. The
- * rules are the summary's (D228): cost and P&L cover only positions with both a
+ * rules are the summary's (D230): cost and P&L cover only positions with both a
  * price and a cost basis, and a position without a cost basis is flagged, never
  * read at zero cost.
  */

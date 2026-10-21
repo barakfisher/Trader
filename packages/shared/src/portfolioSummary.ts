@@ -2,11 +2,11 @@ import type { PortfolioSummary } from './types.js';
 
 /**
  * Several portfolio summaries as one: the simulated agents together, or the
- * real portfolio and the agents together under *All* (D229).
+ * real portfolio and the agents together under *All* (D231).
  *
  * Every figure is a sum of integer minor units, and each keeps the rule its
  * parts were computed by: cost and P&L cover only holdings with a price and a
- * cost basis (D228), a day change only parts that have one, and a symbol that
+ * cost basis (D230), a day change only parts that have one, and a symbol that
  * is unpriced or uncosted anywhere is named. A percentage is computed again
  * from the sums - never averaged - so it is exactly what a single summary of
  * all the holdings would say.

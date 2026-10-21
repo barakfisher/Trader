@@ -12,9 +12,8 @@ own tools, D226) - five, so this PR is the handoff. Decisions reached **226** (n
 Migrations: **`0067_telegram_conversation` is head** (next free: **`0068`**). **Deployed:**
 compose runs #284 at `0067` (redeployed 2026-10-20 ~20:25 UTC; no migration since the 19:50 UTC
 backup `traders-compose-20261020T195058Z.dump`; both /readyz ok, `telegram.poller_started`
-logged). kind is untouched at `0059`. **Unverified: Telegram ask mode live** - the binding row
-exists and its `assistant_conversation_id` is still null because nobody has asked the bot
-anything yet; it needs the user to send one question from the phone (item 1 below). **Next:**
+logged). kind is untouched at `0059`. **Telegram ask mode checked live 2026-10-21 05:11-05:12 UTC**
+(item 1 below): two Hebrew questions from the phone, two Hebrew answers. **Next:**
 "Next session: after the guide fix".
 
 Previous update, 2026-10-20 ~17:45 UTC - **Handoff: improvements items 1-3 are done and deployed, and
@@ -3463,7 +3462,32 @@ failure they prevent.
     leaving the tool names in with "an agent's tool only" (a name in the text is still a name to
     call - describe the tool, do not name it).
 
-227. **The dashboard opens on *All*, and one table shows every holding with who holds it**
+227. **A scan's figure check counts the agent's own instructions as a source; #247 is closed
+    unmerged** (the user, 2026-10-21, at the scan review; `_converse` in `agents/scan.py`). The
+    review (all compose scans, 2026-10-12 to 10-20: 16 model scans, 5 trade, 7 no_trade, 4
+    `invalid_answer`, 0 `step_limit`; 0.31 trades a scan; 3 refused for unsourced figures; **0
+    buys refused for cash**; 2.3 tool calls a scan, max 4 of 12; `search_universe` never called;
+    $0.036 in all) found the invalid answers came from the agent quoting its own rule - Test
+    agent's "a drop of 3% or more", refused twice, the second time after the repair turn - plus
+    one Hebrew "ב-39.69" already fixed by D184 and one answer that was not JSON. Now
+    `evidence["instructions"]` is the persona, as the Ask page counts the user's own question.
+    The cost: an invented figure that happens to equal one in the instructions passes; the
+    instructions are the user's, short, and their figures are rules, not market data. #247
+    (`affordable_shares` per mover and four prompt lines) guarded against cash refusals and
+    unlooked-up symbols, neither seen once, and conflicted with `main` after D197. *Rejected:*
+    rebasing and merging #247 (a whole-prompt change for an unseen problem, leaving the measured
+    one); both (two prompt changes measured as one); waiting for more scans (the "3%" refusal is
+    certain to repeat on every Test agent pass that explains itself). **Revisit
+    `affordable_shares`** the first time a buy is refused for cash.
+228. **The research sub-agent and the per-agent tool picker are deferred again** (the user,
+    2026-10-21). Nothing measured asks for either: scans use 2.3 of 12 tool calls, none reached
+    the step limit, and every agent used the same four tools (`get_news` 14, `get_quote` 13,
+    `get_price_history` 5, `get_position` 4, `get_findings` 1). **Re-measure at about 50 model
+    scans**, or sooner when a scan hits `step_limit` or a thesis says it lacked information.
+    *Rejected:* dropping both (a later need starts from nothing); building the tool picker
+    (cheap, unasked); building the research agent (more cost a scan while scans use under a fifth
+    of their tool budget).
+229. **The dashboard opens on *All*, and one table shows every holding with who holds it**
     (2026-10-21, the user's dashboard redesign; supersedes D33's default). The address is
     `?holdings=real|simulated|<agent id>`; the plain address and the old `?holdings=all` are *All*.
     A segmented `[All] [Real only] [Simulated only]` sits directly above the table, with one chip
@@ -3474,7 +3498,7 @@ failure they prevent.
     "a glance at NVDA 40 must mean the real 40"; the *Holders* column answers that on the row
     itself. Without a non-archived simulated agent there is no toggle and every view is the real
     one. *Rejected:* dropping the per-agent view (the chips keep it, and old links still open it).
-228. **A holding without a cost basis is left out of cost and P&L, never counted at zero cost**
+230. **A holding without a cost basis is left out of cost and P&L, never counted at zero cost**
     (2026-10-21; `valuation.ts`). Before: `totalCostMinor` summed `costMinor ?? 0` while
     `totalValueMinor` summed every priced holding, so an imported holding with no purchase price
     added its whole value to Unrealised P&L - and an unpriced holding with a cost subtracted its
@@ -3484,7 +3508,7 @@ failure they prevent.
     follows (it was already described to the assistant as covering the priced holdings).
     *Rejected:* "—" for the whole P&L while any holding lacks a cost (one forgotten import hides
     every figure); a cost of zero, which is the bug.
-229. **The cards add the real portfolio and the agents together under *All*, and the split is one
+231. **The cards add the real portfolio and the agents together under *All*, and the split is one
     click away** (2026-10-21; supersedes D34's "never summed" for the cards - rows still keep real
     and simulated apart). Every view has the same four cards. A simulated summary is each agent's
     holdings valued exactly as the real portfolio is (`standing.summary`, `simulated.summary`),
@@ -3495,14 +3519,14 @@ failure they prevent.
     a hover tooltip because a phone has no hover. *Total value* is holdings, not net worth: cash
     is shown in the drawer, so the four figures stay the same kind of number in every view.
     *Rejected:* keeping two figures (the user asked for one); the split on hover only.
-230. **An agent's trade is approved from its row, through the proposal's own card** (2026-10-21).
+232. **An agent's trade is approved from its row, through the proposal's own card** (2026-10-21).
     *Approve* in the row opens a drawer with the proposal as the inbox shows it - thesis, what the
     scan checked, the deadline - and that card's *Approve* (the live price beside the agent's,
     D47) then *Confirm*. So every refusal still applies, D218's included, and the dashboard has
     no second approval path to keep in step. A trade on a ticker nobody holds is listed under the
     table with the same button. *Rejected:* one-click approve (skips the thesis and the live
     price); a link to the proposal page only (the user asked for the action in the row).
-231. **Order: the four cards, the scope toggle, the holdings table, then the charts** (2026-10-21;
+233. **Order: the four cards, the scope toggle, the holdings table, then the charts** (2026-10-21;
     supersedes UX5's charts-before-table). The table is what the page is for. The charts stay the
     real portfolio's (D32), and under any other view a line above them says so.
 
@@ -4311,6 +4335,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | **The instructions are still `persona` underneath** | `agents.persona`, `AgentView.persona`, wire code `no_persona` | Relabelled in the UI only ("Additional instructions", D170/D174); renaming the column and the code is churn with no behaviour, left on purpose |
 | **Narration's and the agents' figure checks still read a timestamp's digits as sources, and refuse U+2011 hyphens** | `app/narration/evidence_validator.py`; the assistant fixed it in `app/assistant/reply.py` only | A small whole number (a day, hour or minute) written by a model passes whenever its evidence carries a timestamp that contains it; "7‑day" with a non-breaking hyphen is refused. Moving `_without_dates` and the dash normalisation into the validator fixes both for everyone - and changes narration's behaviour, so measure its rejection rate before and after |
 | **`purpose = 'ask'` outlives `/ask`** | `Purpose` in `app/llm/base.py`, `SCOPE_FOR_PURPOSE`, `llm_calls`' CHECK, `services/llmPanel.ts`, `spend_estimate.py` | Nothing emits it since PR 4; kept so stored rows still read. Retention (30 days) empties them; then drop it with a migration |
+| **A month written as a word is never checked** | `app/assistant/reply.py`, `app/narration/evidence_validator.py` (both read digits) | Live 2026-10-21 (llm_calls 476): a Hebrew answer gave a 2026-10-20 snapshot as "20 בנובמבר 2026" - November. The checks compare digits, so "20" and "2026" are the only figures they see; this time the year was missing from the evidence and the reply was refused, but "20 בנובמבר" alone, or "November 20" in English, passes with the wrong month. Not Hebrew-specific - D220 makes it likelier, because a Hebrew answer translates the ISO date instead of quoting it. A fix would be one rule in the assistant's instructions (quote dates as they appear in tool results) or month names in the validator, in both languages; measure first how often answers spell out a date |
 | **The assistant eval runs only by hand** | `scripts/run_assistant_eval.py` | Keyed and paid, so never in CI: a prompt or tool change can regress it unseen. Run it (Flash-Lite, `--repeat 3`, ~$1.30 with the judge) before merging any change to the assistant's prompt, tools or checks |
 | **No backup leaves the laptop** | `~/Backups/traders` (DB1, decision 137) | The daily dumps survive `k8s-down.sh`, a lost Docker volume and a bad migration, but not the Mac's disk failing or the laptop being lost: Time Machine has no destination and no synced folder exists (checked 2026-10-11). The fix is the user's - a Time Machine disk (`~/Backups` is already included) or a synced folder (`TRADERS_BACKUP_DIR`, then `backup-schedule.sh install` again) |
 | **The shadow SPY pays no fees** | `services/performance.ts` (`benchmarkOn`), D38 | The user's choice for now (2026-10-05), to be revisited: they will add fees. The agent pays 10 bps / $1.50 on every trade and the shadow pays nothing, so the comparison leans slightly against the agent - about $1.50-$10 per deposit at today's budgets. When fees are added, decide whether each deposit pays one fee on the way in (the shadow buys once per deposit) and record it as a decision; the hint under the figures ("without fees", `agents.performance.hint`) must change with it |
@@ -4767,19 +4792,26 @@ grant tests fail for the wrong reason.
 own-key check found (D225, D226). The standing grant for this batch ended with this handoff:
 ask before each PR, merge only on "merge", redeploy only on "redeploy".
 
-1. **Telegram ask mode, live check (still open).** Nothing on the server side is wrong as far
-   as it can be seen without a message: `telegram.poller_started` is logged, the admin's binding
-   row exists, `assistant_conversation_id` is null. When the user has sent the bot a question,
-   read: the new `assistant_messages` rows (the answer in the question's language, D220);
-   `llm_calls` with `purpose = 'assistant'` and its `paid_by`; `telegram_bindings
-   .assistant_conversation_id` set; the conversation listed by `GET /assistant/conversations`
-   (the Ask page's history). A Hebrew question is the better test: it covers D220 and D224 at once.
+1. **Telegram ask mode is checked live (2026-10-21 05:11-05:12 UTC, done).** The user asked the
+   bot two questions in Hebrew from the phone ("מה מצב התיק שלי?", then one about the simulated
+   agents); both answers came back in Hebrew (D220). `telegram_bindings.assistant_conversation_id`
+   now points to conversation `dcdfb127`, titled with the first question; the route's own query
+   (`listAssistantConversations`) lists it first, so the Ask page's history shows it (read in
+   SQL; the HTTP route needs a session). `llm_calls` 473-480: 8 calls, all `purpose = 'assistant'`
+   on the admin, `paid_by = 'installation'` (correct: the admin has no row in `user_llm_keys`),
+   about $0.014. No orchestrator warnings. One finding, now under debt: the first draft (476)
+   gave the snapshot date as "20 בנובמבר 2026" - November, for a 2026-10-20 snapshot. The figure
+   check refused it only because "2026" was not in the evidence; the repair turn (478) quoted
+   `2026-10-20` and was accepted.
 2. **Run the assistant eval with the judge before the next prompt or guide change.** D226 was
    measured with `--no-judge` (outcomes and mechanical checks only): the three agent questions
    10 times each and the product group 3 times, about $0.15. One finding in that run that D226
    does not touch: "why cant I create an agent?" is sometimes *declined* (`action`, 4 of 10) with
    no tool call - the model reads "create" as a request to act. Harmless (the decline names the
    Agents page) but worth a look if the judge marks it.
+2b. **The scan review is done (D227, D228; 2026-10-21).** #247 closed; the agent's instructions
+   now count as a source for its thesis. Next look: about 50 model scans (compose had 16), the
+   numbers in D227 as the baseline.
 3. **D225 is unseen in a browser.** The hint beside the disabled Create agent button is covered by
    jsdom; its wrap at phone width and in Hebrew is not.
 

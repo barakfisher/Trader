@@ -1,10 +1,10 @@
 /**
- * Which holdings the dashboard's cards and table show (D32, D227): everything,
+ * Which holdings the dashboard's cards and table show (D32, D229): everything,
  * real and simulated together (the default), the real portfolio, every
  * simulated agent, or one of them. Carried in the address as
  * `?holdings=real`, `?holdings=simulated` or `?holdings=<agent id>`, so a
  * chosen view survives a reload and can be sent; the plain address is *All*,
- * and so is `?holdings=all`, which links made before D227 carry.
+ * and so is `?holdings=all`, which links made before D229 carry.
  *
  * The address is typed by whoever sends a link, so anything unrecognised is the
  * default view - never an error page. An agent id that is not one of the user's

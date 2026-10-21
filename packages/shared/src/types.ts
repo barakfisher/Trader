@@ -63,7 +63,7 @@ export interface PortfolioSummary {
   /**
    * What was paid for the holdings P&L can be measured on: priced, with a cost
    * basis. A holding without one is not counted at zero cost - that read its
-   * whole value as profit (D228) - it is named in `uncostedSymbols` instead.
+   * whole value as profit (D230) - it is named in `uncostedSymbols` instead.
    */
   totalCostMinor: number;
   /** Value minus cost over the same holdings as `totalCostMinor`; null when there are none. */
@@ -75,7 +75,7 @@ export interface PortfolioSummary {
   pricedCount: number;
   /** Symbols no provider could price; surfaced in the UI, never silently dropped. */
   unpricedSymbols: string[];
-  /** Symbols held with no cost basis: left out of cost and P&L, and the UI asks for one (D228). */
+  /** Symbols held with no cost basis: left out of cost and P&L, and the UI asks for one (D230). */
   uncostedSymbols: string[];
   /** True when any quote was served stale or any symbol is unpriced. */
   degraded: boolean;
@@ -704,7 +704,7 @@ export interface SimulatedAgentStanding {
   pnlMinor: number | null;
   pnlPct: number | null;
   unpricedSymbols: string[];
-  /** Its holdings, valued exactly as the real portfolio's are: the dashboard's four cards (D229). */
+  /** Its holdings, valued exactly as the real portfolio's are: the dashboard's four cards (D231). */
   summary: PortfolioSummary;
 }
 
@@ -712,7 +712,7 @@ export interface SimulatedAgentStanding {
  * Every simulated agent together. `netWorthMinor` is null when any agent's net
  * worth is - a total that left a position out would read as complete
  * (decision 111). `summary` is their holdings, which the dashboard's cards add
- * to the real portfolio's under *All* (D229).
+ * to the real portfolio's under *All* (D231).
  */
 export interface SimulatedTotals {
   agentCount: number;
@@ -720,7 +720,7 @@ export interface SimulatedTotals {
   holdingsValueMinor: number | null;
   netWorthMinor: number | null;
   unpricedSymbols: string[];
-  /** Every agent's holdings summed, by `combineSummaries` (D229). */
+  /** Every agent's holdings summed, by `combineSummaries` (D231). */
   summary: PortfolioSummary;
 }
 

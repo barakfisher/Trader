@@ -27,7 +27,7 @@ import { Card, Delta } from './ui.tsx';
 
 /**
  * The dashboard's one holdings table under *All*, *Simulated* and a single
- * agent (D227): the real table's columns - price, quantity, value, weight,
+ * agent (D229): the real table's columns - price, quantity, value, weight,
  * cost, P&L, actions - plus who holds each row.
  *
  * A row adds its holders' positions together, and never hides whose they are:
@@ -35,7 +35,7 @@ import { Card, Delta } from './ui.tsx';
  * the split by holder - on hover, on focus, or on a tap. The real holding keeps
  * its edit and remove; a simulated position changes only by a trade, on its
  * agent's page (D35). An agent's pending trade on the ticker is approved from
- * the row, through the proposal's own card (D230).
+ * the row, through the proposal's own card (D232).
  */
 export function CombinedHoldingsTable({
   data,

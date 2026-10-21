@@ -16,7 +16,7 @@ import { Delta } from './ui.tsx';
 
 /**
  * The dashboard's four cards - total value, total cost, unrealised P&L, today
- * - for whatever the holdings scope shows (D229): the real portfolio, an agent,
+ * - for whatever the holdings scope shows (D231): the real portfolio, an agent,
  * or several of them added together.
  *
  * A figure that adds sources never stands alone: when there is more than one

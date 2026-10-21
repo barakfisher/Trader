@@ -502,7 +502,7 @@ function HoldingCard({
 }
 
 /**
- * A holding with no cost basis (D228): its P&L is "—" rather than its whole
+ * A holding with no cost basis (D230): its P&L is "—" rather than its whole
  * value, and it is left out of the totals. This says so where the cost would
  * be, and is the way to set one.
  */

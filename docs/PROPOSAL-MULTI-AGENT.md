@@ -688,14 +688,14 @@ figure §4.3 forbids, and every card would need its own split; a separate page -
 where the holdings already are.
 
 **D33 - `Real only` is the default, and the choice lives in the address** *(default superseded
-2026-10-21 by D227: the dashboard opens on `All`, with a Holders column)* (`?holdings=all`,
+2026-10-21 by D229: the dashboard opens on `All`, with a Holders column)* (`?holdings=all`,
 `?holdings=<agent id>`). Nothing changes for a user who does not ask, and the view matches the
 real-only cards around it; a chosen view survives a reload and can be sent. The picker appears
 only when a non-archived simulated agent exists. An unknown or archived agent in the address is
 the default view. *Rejected:* `All` as the default (§4.3 as first written) - a glance at "NVDA 40"
 must mean the real 40.
 
-**D34 - Under `All` the headline is two figures** *(superseded 2026-10-21 by D229: the four cards
+**D34 - Under `All` the headline is two figures** *(superseded 2026-10-21 by D231: the four cards
 add them, with the split one click away)*: **the real portfolio's value and the simulated
 agents' net worth** (cash + holdings, "of which cash" beneath it), never their sum. Each keeps its
 own rule for a missing price: the real one is partial and marked, as the dashboard always was; the

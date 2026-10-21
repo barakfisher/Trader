@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * The dashboard's combined holdings (D227-D230): the scope the address
+ * The dashboard's combined holdings (D229-D232): the scope the address
  * carries, the rows a scope adds up, who holds each one, the four cards and
  * their breakdown by source, cost basis that is missing rather than zero, and
  * an agent's trade approved from its row - never in one click.
@@ -129,10 +129,10 @@ afterEach(cleanup);
 
 const ALL = { kind: 'all' } as const;
 
-describe('the scope in the address (D227)', () => {
+describe('the scope in the address (D229)', () => {
   it('is everything unless it names real, simulated or an agent, and drops anything else', () => {
     expect(holdingsScopeFrom({})).toEqual({ kind: 'all' });
-    // A link made before D227 still opens the same view.
+    // A link made before D229 still opens the same view.
     expect(holdingsScopeFrom({ holdings: 'all' })).toEqual({ kind: 'all' });
     expect(holdingsScopeFrom({ holdings: 'real' })).toEqual({ kind: 'real' });
     expect(holdingsScopeFrom({ holdings: 'simulated' })).toEqual({ kind: 'simulated' });
@@ -163,7 +163,7 @@ describe('the rows a scope adds up', () => {
     expect(combinedHoldings(response(), { kind: 'agent', agentId: PRIMARY }).rows).toEqual([]);
   });
 
-  it('measures P&L only where there is a cost basis, and flags the row (D228)', () => {
+  it('measures P&L only where there is a cost basis, and flags the row (D230)', () => {
     const data = response();
     const real = data.rows[0]!.positions[0]!;
     data.rows[0]!.positions[0] = { ...real, costBasisMinor: null, costMinor: null, pnlMinor: null, pnlPct: null };
@@ -176,7 +176,7 @@ describe('the rows a scope adds up', () => {
   });
 });
 
-describe('the cards\' figures (D229)', () => {
+describe('the cards\' figures (D231)', () => {
   it('add the real portfolio and every agent under All, and only the agents under Simulated', () => {
     const data = response();
     const all = scopeSummary(data, summarySources(data, ALL));
@@ -207,7 +207,7 @@ describe('the holdings table', () => {
     expect(within(tooltip).getByText('$9,000.00 (45 units)')).toBeTruthy();
   });
 
-  it('asks for a cost basis instead of showing a profit (D228)', async () => {
+  it('asks for a cost basis instead of showing a profit (D230)', async () => {
     const data = response();
     const real = data.rows[0]!.positions[0]!;
     data.rows[0]!.positions = [{ ...real, costBasisMinor: null, costMinor: null, pnlMinor: null, pnlPct: null }];
@@ -217,7 +217,7 @@ describe('the holdings table', () => {
   });
 });
 
-describe('an agent\'s pending trade (D230)', () => {
+describe('an agent\'s pending trade (D232)', () => {
   it('is approved from its row through the proposal\'s own card, not in one click', async () => {
     renderPage(<CombinedHoldingsTable data={response({ pendingTrades: [pendingTrade('p-1', 'NVDA')] })} scope={ALL} />);
     expect(await screen.findByText('1 pending')).toBeTruthy();
@@ -261,7 +261,7 @@ describe('the four cards', () => {
     expect(screen.queryByRole('button', { name: /Total value/ })).toBeNull();
   });
 
-  it('show P&L as missing, and say why, when nothing has a cost basis (D228)', async () => {
+  it('show P&L as missing, and say why, when nothing has a cost basis (D230)', async () => {
     renderPage(
       <SummaryCards summary={{ ...REAL, totalCostMinor: 0, pnlMinor: null, pnlPct: null, uncostedSymbols: ['AAPL'] }} />,
     );
