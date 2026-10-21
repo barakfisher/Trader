@@ -320,7 +320,7 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
   });
 
   /**
-   * Disable a user (D235): their sessions end at once (D160), scheduled work
+   * Disable a user (D239): their sessions end at once (D160), scheduled work
    * skips them (D161), their data stays. Re-enable lets them back in as they
    * were. Never the admin's own row. Audited by the gate before this runs.
    */
@@ -336,7 +336,7 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
     return context.json({ userId: changed.id, status: 'active' });
   });
 
-  /** A user's monthly cap after approval (D235); the same bounds as at approval. */
+  /** A user's monthly cap after approval (D239); the same bounds as at approval. */
   app.put('/admin/users/:userId/cap', async (context) => {
     const userId = signupId(context);
     const parsed = approvalSchema.safeParse(await context.req.json().catch(() => null));
@@ -349,7 +349,7 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
   });
 
   /**
-   * A forgotten password (D162, D235): the app makes a one-time password,
+   * A forgotten password (D162, D239): the app makes a one-time password,
    * stores its hash, ends the user's sessions, and answers it here once for the
    * admin to pass on. The audit records the request, which carries no password.
    */

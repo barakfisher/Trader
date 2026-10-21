@@ -988,6 +988,10 @@ class AgentScanAnswer(BaseModel):
     trades: list[AgentScanTrade] = Field(default_factory=list)
     thesis: str | None = None
     problems: list[str] = Field(default_factory=list)
+    cash_unjustified: bool = Field(
+        default=False,
+        description="A pass that did not quote its cash above the buffer, sent back once (D237).",
+    )
 
 
 class AgentScanResponse(BaseModel):

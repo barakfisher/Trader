@@ -1,5 +1,5 @@
 /**
- * The admin's user list and its actions (D162, D235): operations only, the
+ * The admin's user list and its actions (D162, D239): operations only, the
  * admin's own row never touched, each action audited before it runs, and a
  * one-time password answered once and never written to the audit.
  */
@@ -85,7 +85,7 @@ function buildApp() {
   return createApp(loadConfig(ENV), createFakeAi());
 }
 
-describe("the admin's user list (D162, D235)", () => {
+describe("the admin's user list (D162, D239)", () => {
   let app: ReturnType<typeof buildApp>;
   const request = (method: string, path: string, body?: unknown) =>
     app.request(path, {

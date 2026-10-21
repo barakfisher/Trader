@@ -166,7 +166,7 @@ export function listAnalysedInstruments(userId: string): Promise<AnalysedInstrum
 }
 
 /**
- * What the installation's shared ingestion fetches (D161, D234): every active
+ * What the installation's shared ingestion fetches (D161, D238): every active
  * user's analysed instruments, once. Backfill and news collection run once a
  * bucket for the installation, not once per user - two users holding AAPL
  * fetch its closes once.

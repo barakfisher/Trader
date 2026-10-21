@@ -565,7 +565,7 @@ describe('the admin page', () => {
     expect((screen.getByRole('button', { name: 'Erase the ticked groups' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("lists the users' operations, never their finances, and acts only on a user who is not the admin (D162, D235)", async () => {
+  it("lists the users' operations, never their finances, and acts only on a user who is not the admin (D162, D239)", async () => {
     post.mockResolvedValue({ userId: 'u-dana', password: 'Abc123-xyz_PQRstuvW' });
     renderAt('/admin', ADMIN);
     expect(await screen.findByText('dana@example.com')).toBeTruthy();

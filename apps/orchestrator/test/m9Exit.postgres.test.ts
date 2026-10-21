@@ -201,7 +201,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     expect(response.status).toBe(400);
   });
 
-  it("refuses a disabled user's session at once (D160, D235)", async () => {
+  it("refuses a disabled user's session at once (D160, D239)", async () => {
     const response = await app.request('/portfolio', { headers: { cookie: sessionCookie(disabled) } });
     expect(response.status).toBe(401);
   });

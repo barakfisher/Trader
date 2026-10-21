@@ -291,7 +291,7 @@ export function listFillsOldestFirst(userId: string, agentId: string): Promise<F
   );
 }
 
-/** Every instrument an active user's agents have traded: the installation's backfill (D234). */
+/** Every instrument an active user's agents have traded: the installation's backfill (D238). */
 export function listActiveUsersTradedInstruments(): Promise<{ id: string; symbol: string }[]> {
   return query<{ id: string; symbol: string }>(
     `-- agent-blind: shared ingestion fetches every agent's instruments once (§4.1).

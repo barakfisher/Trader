@@ -5,12 +5,12 @@ the reasoning behind it is not, and that is what this file is for. Maintained pe
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
 Updated: 2026-10-21 - **Handoff at a milestone boundary: M9 (multiple users) is complete in one
-PR** - scheduling per user (D234), the user's own zone (D163's reads, guideline 10 amended), the
-admin's user list and each user's own reset (D235), and the exit test (D236), all asked up front
+PR** - scheduling per user (D238), the user's own zone (D163's reads, guideline 10 amended), the
+admin's user list and each user's own reset (D239), and the exit test (D240), all asked up front
 and built without stopping, as the user asked. Merges since handoff #285: #286 (memory), #287
-(D227-D228), #288 (the dashboard's one holdings table, D229-D233, another session's), and this PR. Decisions reached **236** (next: **237**). Migrations: none in this PR;
-**`0067_telegram_conversation` is head** (next free: **`0068`**). **Deployed:** compose runs #287
-at `0067`; **#288 and this PR are undeployed**, and kind is still at `0059` (its CronJobs change here).
+(D227-D228), #288 (the dashboard's one holdings table, D229-D233) and #289 (idle cash must be explained, D234-D237) - both another session's - and this PR. Decisions reached **240** (next: **241**). Migrations: none in this PR;
+**`0067_telegram_conversation` is head** (next free: **`0068`**). **Deployed:** compose runs #289
+at `0067` (read 2026-10-21); **this PR is undeployed**; kind's state is the other session's to report (its CronJobs change here).
 **Next:** "Next session: after M9".
 
 Previous update, 2026-10-20 ~20:30 UTC - **Handoff: improvements items 4-5 and the two small fixes from
@@ -902,7 +902,7 @@ strings and left-to-right assumptions before designing it.
 | Multi-agent sandbox, Stage 1 — isolation (no M-number; `docs/PROPOSAL-MULTI-AGENT.md`) | ✅ Complete | #151 spec amendment D1-D16; #152 `agents` + `agent_id` (0036); #153 agent-scoped reads + contract; #154 per-agent uniques (0037); #155 passive primary (0038). Nothing user-visible, by design. Stages 2-4 to come - see "Next session: multi-agent Stage 2" |
 | M8 — Admin operations & observability | ✅ Complete | #120-#124, #126-#130: the admin role and guard, `admin_audit`, universe gaps (`ops_events`), the universe status, `llm_calls`, the LLM panel, on-demand profiles, the rescreen run and its CronJob. **Exit so far:** 403 on every `/admin/*` route, enumerated ✅ (test + kind CI); real calls recorded and shown per agent ✅ (#126, the LLM panel); missing ticker as a gap event and profiled within one background fetch ✅ (#127, decision 89); rescreen button ✅ (#128, decision 90; shown in kind); button and CronJob are one run ✅ (#129, decision 91; shown in kind). Checked live 2026-10-01 - see "M8 is complete, and how it was verified" |
 | Agent template creator (no M-number; the user's request, 2026-10-18) | ✅ Complete | #252 taxonomy (0056), #254 mandate + code check + retry (0057), #257 the form, Downshift picker, settings-alone readiness, #258 save-time contradiction check (0059). Decisions 164-178. Not yet checked in a browser or against a real model; undeployed |
-| M9 — Multiple users | ✅ Complete (exit test passes; PR after #287, 2026-10-21) | Schema 0058 (#249-#255), login #260, signup #264, cap #277, own key #278, then one PR for scheduling per user (D234), the user's own zone (D163), the admin's user list and own reset (D235) and the exit test (D236). Earlier: PR 1 (measurement, `docs/M9-MEASUREMENT.md`) merged as #240, 2026-10-15. Added to the plan at the user's request, 2026-10-14; not ordered against the database sprint or the assistant's owed checks. PR 1 is a read-only measurement of every single-user assumption; the decisions (who the users are, login, sessions, scheduling, shared costs) come after it. See `docs/MILESTONES.md` |
+| M9 — Multiple users | ✅ Complete (exit test passes; PR after #287, 2026-10-21) | Schema 0058 (#249-#255), login #260, signup #264, cap #277, own key #278, then one PR for scheduling per user (D238), the user's own zone (D163), the admin's user list and own reset (D239) and the exit test (D240). Earlier: PR 1 (measurement, `docs/M9-MEASUREMENT.md`) merged as #240, 2026-10-15. Added to the plan at the user's request, 2026-10-14; not ordered against the database sprint or the assistant's owed checks. PR 1 is a read-only measurement of every single-user assumption; the decisions (who the users are, login, sessions, scheduling, shared costs) come after it. See `docs/MILESTONES.md` |
 
 **Why the two unplanned milestones exist, and the pattern behind them.** Both were gaps the plan did
 not anticipate, found by running the thing rather than by reading it. M1.5 came from auditing the
@@ -3538,8 +3538,44 @@ failure they prevent.
 233. **Order: the four cards, the scope toggle, the holdings table, then the charts** (2026-10-21;
     supersedes UX5's charts-before-table). The table is what the page is for. The charts stay the
     real portfolio's (D32), and under any other view a line above them says so.
+234. **"Doing nothing" is right only when nothing fits, and idle cash carries the user's rule**
+    (the user, 2026-10-21, after measuring the 16 model scans on compose). The prompt's "Doing
+    nothing is a good answer and the most common one" - prompt wording, never a decision - became
+    "Doing nothing is right when nothing fits your mandate; with cash above your buffer, say why
+    in your thesis", followed, only when the briefing has `cash_above_buffer`, by the user's own
+    two sentences (`scan.IDLE_CASH_RULE`, verbatim). The measurement: every one of the 13 scans
+    that had cash held 75-100% of capital above its buffer, all 8 passes said "no fitting
+    opportunity" and none mentioned the cash, and the 4 trades bought 15-24% of capital each.
+    *Rejected:* deleting the sentence and always showing the rule (it would ask an agent at its
+    buffer to justify cash it is required to hold); forcing every agent to invest everything
+    (it would make a cautious mandate a fully invested one, and agents could no longer be
+    compared by philosophy). A re-check (D216) is about one trade and carries neither.
+235. **The briefing states idle cash as `cash_above_buffer`: the amount and the percent of
+    capital, left out at or under the buffer** (the user, 2026-10-21). A justification must quote
+    a figure, and the evidence validator refuses any figure the briefing lacks - without this
+    entry every honest justification would be sent back. Cash is what remains after the waiting
+    buys and capital is cash plus holdings at cost, the book `trade_review.load_book` gives the
+    mandate checks (D171), so the prompt, the briefing and the limits agree. The amount is
+    rounded down to the cent; the percent is to one place. **The key is `percent_of_capital`,
+    not `..._pct_...`:** the validator reads any key with "pct" as a ratio, so "75%" would not
+    match "75" - which is why a thesis quoting the mandate's `min_cash_pct_of_capital` is refused
+    today (open, below). No buffer set is a buffer of zero. *Rejected:* the amount only (a person
+    reads idle cash as a share, and the agent may not compute one).
+236. **A pass that does not quote its idle cash goes back once** (the user, 2026-10-21). When a
+    scan trades nothing, the briefing has `cash_above_buffer`, and the thesis quotes neither its
+    amount nor its percent (`evidence_validator.quotes_any`), the answer goes back once with the
+    reason. It shares the pass's one return with D189's figures - both in one message - so three
+    answers a scan stay the most. What the code checks is that the cash was addressed; whether the
+    reason is strategy-based is the user's to judge, reading it. *Rejected:* prompt only (the
+    user's "in every scan" would be a request, not a rule); refusing the scan (it would add to the
+    4 of 16 scans already lost as `invalid_answer`).
+237. **A pass that still does not quote it is kept and flagged `cash_unjustified`**
+    (the user, 2026-10-21). The flag is `"cash_unjustified": true` in `agent_scans.answer` - no
+    migration, one query to count - and the Scans tab marks that row "Didn't explain idle cash".
+    *Rejected:* a column (`0068`) for a flag on a row the answer already describes; storing it
+    without showing it (nobody would notice between measurements).
 
-234. **The installation's runs refuse a user; the agent-scan plan is one installation run over
+238. **The installation's runs refuse a user; the agent-scan plan is one installation run over
     every active user** (2026-10-21, M9's completion PR; refines D161; `runKinds.ts`,
     `routes/internal.ts`). `INSTALLATION_KINDS` - `backfill`, `news_collect`,
     `instrument_metadata`, `proposal_sweep`, `agent_scans`, `universe_rescreen` - run once a bucket
@@ -3559,7 +3595,7 @@ failure they prevent.
     misconfigured trigger); one plan run per user (round-robin needs every user's slots in one
     place); a fan-out that stops at the first failure (one user's broken data would starve the
     rest).
-235. **The admin's user list: disable/enable, a cap edit, an app-made one-time password; reset is
+239. **The admin's user list: disable/enable, a cap edit, an app-made one-time password; reset is
     each user's own** (the user, 2026-10-21, asked up front; `routes/admin.ts`,
     `db/queries/adminUsers.ts`, `routes/account.ts`). The list shows status, role, zone, cap,
     this month's installation-paid spend (the cap's own sum), own-key state and last sign-in -
@@ -3577,7 +3613,7 @@ failure they prevent.
     password (weaker, and it passes through the admin's hands); listing pending and rejected
     users here too (the sign-up list's); disabling by deleting (irreversible, and a household
     member coming back would lose everything).
-236. **M9's exit test reads the routes from the app and asks each with the other user's ids**
+240. **M9's exit test reads the routes from the app and asks each with the other user's ids**
     (2026-10-21; `apps/orchestrator/test/m9Exit.postgres.test.ts`, in CI's Postgres job as
     `traders_app`). Two users seeded over real SQL with marked data (agent, holding, topic,
     conversation); signed in as one, every GET route outside `/admin`, `/internal`, `/auth` and
@@ -4392,6 +4428,9 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | **Mandate limits are not re-checked at approval** | `services/tradeApproval.ts`, `fills.ts` | The scan checks a buy against capital at cost; a proposal approved later, after another approval moved cash, can land past a limit. The fill still refuses what cash cannot cover. Approving is the user's explicit act |
 | **The instructions are still `persona` underneath** | `agents.persona`, `AgentView.persona`, wire code `no_persona` | Relabelled in the UI only ("Additional instructions", D170/D174); renaming the column and the code is churn with no behaviour, left on purpose |
 | **Narration's and the agents' figure checks still read a timestamp's digits as sources, and refuse U+2011 hyphens** | `app/narration/evidence_validator.py`; the assistant fixed it in `app/assistant/reply.py` only | A small whole number (a day, hour or minute) written by a model passes whenever its evidence carries a timestamp that contains it; "7‑day" with a non-breaking hyphen is refused. Moving `_without_dates` and the dash normalisation into the validator fixes both for everyone - and changes narration's behaviour, so measure its rejection rate before and after |
+| **A key with "pct" in it is read as a ratio, so the mandate's own percentages cannot be quoted** | `mandate.mandate_brief` (`min_cash_pct_of_capital`, `max_position_pct_of_capital` hold "25"), `evidence_validator.is_ratio_key` | Found 2026-10-21 (D235): a thesis writing "my 25% cash buffer" is refused as unsourced, because the validator offers 2500% for a `pct` key, never 25%. D236 makes a pass talk about cash, so this will bite more. Renaming the two keys (`..._percent_of_capital`) fixes it; stored briefings keep the old names, read only by the UI's folded JSON |
+| **Scheduled runs serve only `SINGLE_USER_ID`** | `scheduler.ts` (`triggerRun` names no user), `routes/internal.ts` falls back to it | Found 2026-10-21: the second user's agent George has never had a scheduled scan; `agent_scans` runs report `"agents": 3`, the admin's. Every scheduled kind - scans, news, digest - is the admin's only. The three-part fix is M9-MEASUREMENT.md's "Scheduling" item; proposed as its own session |
+| **A few cents above the buffer still asks for a justification** | `mandate.cash_above_buffer` (D235), `scan._quotes_idle` (D236) | As decided: any amount above the buffer is idle, so an agent left with $3 is sent back unless it quotes "3.00". Cheap and harmless, but reads oddly; a floor (cash that buys one share plus the fee) would need a decision |
 | **`purpose = 'ask'` outlives `/ask`** | `Purpose` in `app/llm/base.py`, `SCOPE_FOR_PURPOSE`, `llm_calls`' CHECK, `services/llmPanel.ts`, `spend_estimate.py` | Nothing emits it since PR 4; kept so stored rows still read. Retention (30 days) empties them; then drop it with a migration |
 | **A month written as a word is never checked** | `app/assistant/reply.py`, `app/narration/evidence_validator.py` (both read digits) | Live 2026-10-21 (llm_calls 476): a Hebrew answer gave a 2026-10-20 snapshot as "20 בנובמבר 2026" - November. The checks compare digits, so "20" and "2026" are the only figures they see; this time the year was missing from the evidence and the reply was refused, but "20 בנובמבר" alone, or "November 20" in English, passes with the wrong month. Not Hebrew-specific - D220 makes it likelier, because a Hebrew answer translates the ISO date instead of quoting it. A fix would be one rule in the assistant's instructions (quote dates as they appear in tool results) or month names in the validator, in both languages; measure first how often answers spell out a date |
 | **The assistant eval runs only by hand** | `scripts/run_assistant_eval.py` | Keyed and paid, so never in CI: a prompt or tool change can regress it unseen. Run it (Flash-Lite, `--repeat 3`, ~$1.30 with the judge) before merging any change to the assistant's prompt, tools or checks |
@@ -4404,7 +4443,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | ~~The Admin page shows a model as chosen when none is~~ | — | **Resolved** (2026-10-08): when the model in use is not offered for a scope (agents on the free route, or a chosen model since withdrawn) the picker selects a disabled "Not chosen – using <model>" entry, Save stays off, and the total counts nothing for that scope. When the model in use *is* offered (narration on the free route) it is selected, as before |
 | ~~Approving a trade from Telegram is refused~~ | — | **Resolved by #186 (D62)**: Approve previews, Confirm fills at the signed price |
 | **The give-up alert ignores quiet hours, mute and dedupe** | `scheduledScans.ts` (`reportGaveUp`) | Sent through `notifier.send`, not `fanOut`, so a slot that gives up at 03:00 messages at 03:00 and a muted user still hears it; it is once per slot only because it runs on the last attempt. Route it through the fan-out with a `refKind` for runs (a CHECK change) if it ever annoys |
-| ~~Scheduled scans run for `SINGLE_USER_ID` only~~ | — | **Resolved by M9's completion (D234)**: every active user's due slots, enqueued round-robin. Was: | The ask plans one user's agents, as every run kind does. Multi-user means iterating users here, and per-user fairness on the queue needs BullMQ Pro's groups (D73) |
+| ~~Scheduled scans run for `SINGLE_USER_ID` only~~ | — | **Resolved by M9's completion (D238)**: every active user's due slots, enqueued round-robin. Was: | The ask plans one user's agents, as every run kind does. Multi-user means iterating users here, and per-user fairness on the queue needs BullMQ Pro's groups (D73) |
 | **The plan needs the AI service's calendar** | `planScheduledScans` | With the AI service down the ask fails (recorded "AI service unreachable", HTTP 500 - a failed CronJob in kind) and the next ask, 15 minutes later, catches up; a slot's window is hours, so nothing is lost unless the outage outlasts it |
 | **Agents' answers are refused for formatted figures** | evidence validator (`app/agents/answer.py`, `narration` checker) | The first scheduled scan (2026-10-08) wrote "1,923" - refused as unsourced. Measure how often real scans are refused and for what before changing anything; a computed figure (shares x price) is rightly refused, a re-formatted one may not be |
 | **#197's commit title on `main` reads "wip: PR 7a before merging main"** | git history | Cosmetic and permanent (the ruleset forbids the force push a fix would need); the PR and this file name it correctly |
@@ -4846,7 +4885,7 @@ grant tests fail for the wrong reason.
 
 ### Next session: after M9 (written 2026-10-21)
 
-**State:** M9 is complete in code: the exit test (D236) passes on a throwaway Postgres as
+**State:** M9 is complete in code: the exit test (D240) passes on a throwaway Postgres as
 `traders_app`. No standing grant - ask before each PR, merge only on "merge", redeploy only on
 "redeploy".
 
@@ -4856,7 +4895,7 @@ grant tests fail for the wrong reason.
    more on the deploy day** because its key changed; harmless (idempotent). Check: the approved
    user `f36b1a45` gets `snapshot` / `portfolio_scan` / `daily_digest` runs of their own, and
    George (their agent) is planned by `agent_scans` at its next slot.
-2. **kind (k8s) is far behind** (`0059`). Its CronJobs and its code change together when it is
+2. **kind (k8s): its CronJobs and its code change together** when it is next
    redeployed (the manifests send `RUN_FOR: every_active_user` for user kinds, which this code
    requires), so apply the manifests with the images - a new image under the old CronJobs would
    answer every user kind 400 `no_user`.

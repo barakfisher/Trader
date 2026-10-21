@@ -182,7 +182,7 @@ async function claimAnd(
   }
 }
 
-/** The installation's work (D234): no user, no agent, the installation's day. */
+/** The installation's work (D238): no user, no agent, the installation's day. */
 async function runForInstallation(context: Context, request: RunRequest): Promise<RunOutcome> {
   const config = context.get('config');
   const kind = request.kind;

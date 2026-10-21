@@ -267,7 +267,7 @@ describe('the ask, through POST /internal/runs (D71)', () => {
     expect(queries.claimRun).not.toHaveBeenCalled();
   });
 
-  it("claims the installation's 15-minute run and plans every active user's agents (D234)", async () => {
+  it("claims the installation's 15-minute run and plans every active user's agents (D238)", async () => {
     const queue = { add: vi.fn(async () => undefined) };
     const response = await ask(queue);
     expect(await response.json()).toMatchObject({ status: 'ok', result: { users: 1, agents: 1 } });

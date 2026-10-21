@@ -125,7 +125,7 @@ export function roundRobin<T>(lists: T[][]): T[] {
 
 /**
  * One 15-minute ask: put every due attempt of every active user on the queue
- * (D161, D234). The queue works through jobs in the order they are added, so
+ * (D161, D238). The queue works through jobs in the order they are added, so
  * the users' attempts are added in turn - one user's ten agents cannot push
  * another's one slot to the back of the line.
  */

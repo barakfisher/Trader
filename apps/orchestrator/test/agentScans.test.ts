@@ -348,6 +348,17 @@ describe('the Decisions tab (D50)', () => {
     }
   });
 
+  it('marks only a pass the AI service flagged for not explaining its idle cash (D237)', async () => {
+    const queries = await import('../src/db/queries.js');
+    vi.mocked(queries.listAgentScans).mockResolvedValueOnce([
+      scanRow({ outcome: 'no_trade', proposals: [], answer: { trades: [], thesis: 'Nothing fits.', cash_unjustified: true } }),
+      scanRow({ outcome: 'no_trade', proposals: [], answer: { trades: [], thesis: 'Nothing fits.', problems: [] } }),
+    ] as never);
+    const { get } = await signedIn(async () => RESULT);
+    const body = await (await get(`/agents/${AGENT}/scans`)).json();
+    expect(body.scans.map((scan: { cashUnjustified: boolean }) => scan.cashUnjustified)).toEqual([true, false]);
+  });
+
   it('is a 404 for a scan that is not this agent\'s, or an id that is not one', async () => {
     const { get } = await signedIn(async () => RESULT);
     expect((await get(`/agents/${AGENT}/scans/${SCAN}`)).status).toBe(404);

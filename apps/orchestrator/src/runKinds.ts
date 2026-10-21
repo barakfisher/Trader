@@ -1,5 +1,5 @@
 /**
- * Whose work each scheduled run kind is (D161, D234) - read by the route that
+ * Whose work each scheduled run kind is (D161, D238) - read by the route that
  * runs it, the local timer and the CronJob contract, so the three cannot
  * disagree about which kinds fan out to users.
  */
@@ -14,7 +14,7 @@ import { RESCREEN_KIND } from './services/universeRescreen.js';
 export const EVERY_ACTIVE_USER = 'every_active_user';
 
 /**
- * The installation's own work (D161, D234): done once a bucket for everybody,
+ * The installation's own work (D161, D238): done once a bucket for everybody,
  * under no user, and never through a user's model key - none of them calls a
  * model. Backfill and news read the union of the active users' instruments;
  * the agent-scan plan takes every active user's due slots in turn.

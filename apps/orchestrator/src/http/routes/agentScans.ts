@@ -116,6 +116,7 @@ export function toScanSummary(row: AgentScanRow, now: Date): AgentScanSummary {
     model: row.model,
     trades,
     problems: textsOf(answer.problems),
+    cashUnjustified: answer.cash_unjustified === true,
     error: row.error,
   };
 }

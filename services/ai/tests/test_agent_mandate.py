@@ -20,6 +20,7 @@ from app.agents.mandate import (
     _Book,
     _Profile,
     cap_band,
+    cash_above_buffer,
     mandate_brief,
     percent,
     risk_band,
@@ -151,3 +152,29 @@ def test_the_briefing_states_limits_as_percentages_of_capital() -> None:
         "etfs_allowed": False,
         "sectors": ["Energy"],
     }
+
+
+# -- idle cash (D235) -------------------------------------------------------------------
+
+
+def test_cash_above_the_buffer_is_rounded_down_to_the_cent() -> None:
+    # Capital 1000.01, buffer 25%: 250.0025 is buffer, so 750.0075 is idle -> 750.00.
+    idle = cash_above_buffer(Mandate(cash_buffer_bps=2_500), 100_001, Decimal(0))
+    assert idle == {"amount": "750.00", "percent_of_capital": "75"}
+
+
+def test_with_no_buffer_all_cash_is_idle_and_a_whole_percent_has_no_places() -> None:
+    assert cash_above_buffer(Mandate(), 100_000, Decimal(0)) == {
+        "amount": "1000.00",
+        "percent_of_capital": "100",
+    }
+
+
+def test_holdings_at_cost_count_in_capital() -> None:
+    idle = cash_above_buffer(Mandate(), 51_088, Decimal(47_412))
+    assert idle == {"amount": "510.88", "percent_of_capital": "51.9"}
+
+
+@pytest.mark.parametrize("cash", [25_000, 10_000, 0])
+def test_cash_at_or_under_the_buffer_is_not_idle(cash: int) -> None:
+    assert cash_above_buffer(Mandate(cash_buffer_bps=2_500), cash, Decimal(100_000 - cash)) is None

@@ -27,7 +27,7 @@ answer breaks a rule too.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_FLOOR, Decimal
 from typing import Any
 
 from sqlalchemy import text
@@ -110,6 +110,26 @@ def cap_band(market_cap_minor: int) -> str:
     if market_cap_minor >= MID_CAP_FLOOR_MINOR:
         return "mid"
     return "small"
+
+
+def cash_above_buffer(
+    mandate: Mandate, cash_minor: int, holdings_cost: Decimal
+) -> dict[str, str] | None:
+    """The cash above the agent's buffer, for the briefing (D235); None when there is none.
+
+    Capital is cash plus holdings at cost, as for every limit (D171), and the cash is what
+    remains after the waiting buys. The amount is rounded down to the cent, once: it is
+    cash the agent has, never more. The percent is of capital, to one place, under a key
+    the figure check reads as a percent - a key with "pct" in it is read as a ratio, so
+    "75%" would not match it. No buffer set is a buffer of zero.
+    """
+    capital = cash_minor + holdings_cost
+    buffer = Decimal(mandate.cash_buffer_bps or 0) * capital / BPS
+    amount = int((cash_minor - buffer).to_integral_value(rounding=ROUND_FLOOR))
+    if amount <= 0:
+        return None
+    share = (Decimal(amount) * 100 / capital).quantize(Decimal("0.1"))
+    return {"amount": money(amount, "USD"), "percent_of_capital": f"{share.normalize():f}"}
 
 
 def mandate_brief(mandate: Mandate) -> dict[str, Any] | None:

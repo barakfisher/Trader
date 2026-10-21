@@ -481,7 +481,7 @@ describe('API', () => {
     expect(queries.claimRun).not.toHaveBeenCalled();
   });
 
-  it("refuses a user for the installation's work (D234)", async () => {
+  it("refuses a user for the installation's work (D238)", async () => {
     const response = await app.request('/internal/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
@@ -491,7 +491,7 @@ describe('API', () => {
     expect(await response.json()).toMatchObject({ error: 'installation_kind' });
   });
 
-  it('runs news collection once, as the installation, over every active user\'s instruments (D234)', async () => {
+  it('runs news collection once, as the installation, over every active user\'s instruments (D238)', async () => {
     const response = await app.request('/internal/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },

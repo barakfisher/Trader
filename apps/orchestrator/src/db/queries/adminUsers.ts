@@ -1,7 +1,7 @@
 import { query, queryOne } from '../pool.js';
 
 /**
- * The admin's user list and its actions (D162, D235). Operations only: nothing
+ * The admin's user list and its actions (D162, D239). Operations only: nothing
  * here reads an account's holdings, proposals, agents or conversations. Every
  * action refuses the admin's own row - an admin locked out uses
  * `scripts/admin-password.sh`, and is never disabled or capped by a click.
@@ -47,7 +47,7 @@ export function listUsersForAdmin(): Promise<AdminUserRow[]> {
 }
 
 /**
- * Disable or re-enable a user (D235). Disabling bumps `session_version`, which
+ * Disable or re-enable a user (D239). Disabling bumps `session_version`, which
  * ends every session they hold at once (D160); their data is untouched, and
  * scheduled work skips them while disabled (D161). Null when the user is not
  * in the `from` state, or is the admin.
@@ -66,7 +66,7 @@ export function setUserStatus(
   );
 }
 
-/** A user's monthly cap, after approval (D235). Takes effect on their next call. */
+/** A user's monthly cap, after approval (D239). Takes effect on their next call. */
 export function setUserCap(userId: string, capMicroUsd: number): Promise<{ id: string } | null> {
   return queryOne<{ id: string }>(
     `UPDATE users

@@ -41,7 +41,7 @@ from app.agents.answer import (
     thesis_problems,
 )
 from app.agents.briefing import build_briefing
-from app.agents.mandate import Mandate, mandate_brief, risk_band
+from app.agents.mandate import Mandate, cash_above_buffer, mandate_brief, risk_band
 from app.agents.pending_trades import pending_trades
 from app.agents.scan_budget import agent_budget
 from app.agents.scan_log import (
@@ -52,7 +52,7 @@ from app.agents.scan_log import (
     start_scan,
 )
 from app.agents.tools import TOOLS, ToolContext, money, run_tool
-from app.agents.trade_review import TradeReview
+from app.agents.trade_review import TradeReview, holdings_cost, load_book
 from app.core.fees import FEE_PER_SHARE_MINOR, MIN_FEE_MINOR
 from app.core.logging import get_logger
 from app.llm.base import (
@@ -64,6 +64,7 @@ from app.llm.base import (
 )
 from app.llm.tool_loop import LoopState, LoopStop, run_tool_loop
 from app.models import Mover
+from app.narration.evidence_validator import quotes_any
 
 log = get_logger("agents.scan")
 
@@ -95,6 +96,16 @@ RETRY_PREFIX = "The server refused these trades: they break your mandate."
 FIGURES_RETRY_PREFIX = (
     "The server refused these trades: their theses have figures it cannot source."
 )
+#: D234: the user's own words, shown when the briefing has cash above the buffer.
+IDLE_CASH_RULE = (
+    "Uninvested cash above your set buffer carries an opportunity cost. Holding idle"
+    " cash requires explicit strategy-based justification in every scan."
+)
+#: D236: why a pass that did not address its idle cash goes back.
+IDLE_CASH_PROBLEM = (
+    "you trade nothing while cash sits above your buffer, and the thesis does not quote"
+    " the briefing's cash_above_buffer amount or percent"
+)
 
 
 def _mandate_lines(mandate: Mandate) -> str:
@@ -114,9 +125,14 @@ def _mandate_lines(mandate: Mandate) -> str:
     return "\n".join(lines)
 
 
-def instructions(agent: ScanAgent, step_limit: int = SCAN_STEP_LIMIT) -> str:
+def instructions(
+    agent: ScanAgent, step_limit: int = SCAN_STEP_LIMIT, *, idle_cash: bool = False
+) -> str:
     """The system prompt: the user's mandate, then their own words, then the rules the code
-    enforces. The mandate ranks above the words (D170): a contradiction resolves to it."""
+    enforces. The mandate ranks above the words (D170): a contradiction resolves to it.
+
+    `idle_cash` is whether the briefing has `cash_above_buffer`: then the user's rule on
+    idle cash follows the decision step (D234), and the server holds a pass to it (D236)."""
     language = THESIS_LANGUAGES.get(agent.language, "English")
     mandate = _mandate_lines(agent.mandate)
     mandate_block = f"\nYour mandate, set by the user:\n{mandate}\n" if mandate else ""
@@ -124,6 +140,13 @@ def instructions(agent: ScanAgent, step_limit: int = SCAN_STEP_LIMIT) -> str:
         "\nAdditional instructions from the user. They add detail; where they contradict"
         f" your mandate or the rules below, the mandate and the rules win:\n{agent.persona}\n"
         if agent.persona
+        else ""
+    )
+    idle_block = (
+        f"\n   {IDLE_CASH_RULE} The briefing's `cash_above_buffer` gives it as an amount"
+        "\n   and a percent of capital: when you trade nothing, quote one of them and say"
+        "\n   why holding it fits your strategy."
+        if idle_cash
         else ""
     )
     return f"""You are "{agent.name}", a simulated investor in a paper-trading sandbox. No real
@@ -135,8 +158,8 @@ How to work:
 2. Use the tools to look into what matters to your mandate. Check the news and
    the price history before acting on a move. You have at most {step_limit} tool
    calls; most scans need far fewer.
-3. Decide: {_decide_line(agent.max_decisions)} Doing nothing is a good answer and
-   the most common one.
+3. Decide: {_decide_line(agent.max_decisions)} Doing nothing is right when nothing
+   fits your mandate; with cash above your buffer, say why in your thesis.{idle_block}
 
 What a trade costs (the broker's published rate, charged by the ledger):
 - Every buy and every sell pays a fee of {money(FEE_PER_SHARE_MINOR, "USD")} USD a share, at
@@ -242,6 +265,11 @@ async def run_briefed(
         briefing["mandate"] = brief
     pending = pending_trades(engine, agent.user_id, agent.agent_id, context.now)
     briefing["waiting_for_approval"] = [trade.as_briefing() for trade in pending]
+    # D235: a re-check is about one trade (D216), so it is not asked about idle cash.
+    if focus is None:
+        cash, positions = load_book(context, pending)
+        if (idle := cash_above_buffer(agent.mandate, cash, holdings_cost(positions))) is not None:
+            briefing["cash_above_buffer"] = idle
     scan_id = start_scan(
         engine,
         agent,
@@ -317,7 +345,14 @@ async def _converse(
     ones refused for figures (D189) or the mandate (D170) go back to the model
     once per kind - just those trades, named with their reasons - and what still
     fails is dropped and stored with why. At most three answers a scan.
+
+    A pass goes back once too, for its reason's figures (D189) or for not quoting
+    the cash above the buffer (D236), or both in one message. That return uses
+    the figures return, so a trade the second answer makes is sent back only for
+    the mandate, and three answers stay the most. A pass that still does not
+    quote its idle cash is kept, flagged `cash_unjustified` (D237).
     """
+    idle = briefing.get("cash_above_buffer")
     opening = "Today's briefing:\n" + json.dumps(briefing, ensure_ascii=False, indent=1)
     state = LoopState(
         # A re-check's preface is not evidence: it may quote the old thesis, whose
@@ -351,7 +386,11 @@ async def _converse(
             stop = await run_tool_loop(
                 state,
                 llm=llm,
-                system=instructions(agent, focus.step_limit if focus else SCAN_STEP_LIMIT),
+                system=instructions(
+                    agent,
+                    focus.step_limit if focus else SCAN_STEP_LIMIT,
+                    idle_cash=idle is not None,
+                ),
                 tools=[tool.spec for tool in TOOLS],
                 run_tool=run,
                 step_limit=focus.step_limit if focus else SCAN_STEP_LIMIT,
@@ -388,11 +427,14 @@ async def _converse(
     used: set[str] = set()
     bad_reason = overall_thesis_problems(parsed.thesis, evidence)
     passes = not parsed.trades and not parsed.refused
-    if passes and bad_reason and all(p.startswith(UNSOURCED_PREFIX) for p in bad_reason):
-        # D189 holds for a pass too: its reason's figures go back once.
+    # D189 holds for a pass too: its reason's figures go back once.
+    figures_back = bool(bad_reason) and all(p.startswith(UNSOURCED_PREFIX) for p in bad_reason)
+    cash_back = idle is not None and not _quotes_idle(parsed.thesis, idle)
+    if passes and (figures_back or cash_back):
         used.add("figures")
-        state.messages.append(UserMessage(_returned_reason(bad_reason)))
-        state.transcript.append({"role": "returned", "problems": bad_reason})
+        reasons = (bad_reason if figures_back else []) + ([IDLE_CASH_PROBLEM] if cash_back else [])
+        state.messages.append(UserMessage(_returned_pass(reasons, figures=figures_back)))
+        state.transcript.append({"role": "returned", "problems": reasons})
         again = await ask()
         if again is None:
             return
@@ -431,6 +473,14 @@ async def _converse(
         refused += list(again[0].refused) + await review.review(resent)
 
     _conclude(result, review, refused, thesis, evidence)
+    if result.outcome == "no_trade" and idle is not None and not _quotes_idle(thesis, idle):
+        assert result.answer is not None
+        result.answer["cash_unjustified"] = True
+
+
+def _quotes_idle(thesis: str | None, idle: dict[str, Any]) -> bool:
+    """Whether a pass's reason quotes the cash above the buffer, amount or percent (D236)."""
+    return thesis is not None and quotes_any(thesis, idle)
 
 
 def _outcome_for(stop: LoopStop) -> ScanOutcome:
@@ -443,14 +493,25 @@ def _outcome_for(stop: LoopStop) -> ScanOutcome:
     return stop.end if stop.end != "answer" else "failed"
 
 
-def _returned_reason(problems: list[str]) -> str:
-    return "\n".join(
-        [FIGURES_RETRY_PREFIX, *(f"- {p}" for p in problems)]
-        + [
-            "Copy every figure from the briefing or a tool result as it is given, or leave"
-            " it out. Answer again."
-        ]
+def _returned_pass(problems: list[str], *, figures: bool) -> str:
+    """What the model hears about a pass sent back: its figures (D189), its idle cash
+    (D236), or both."""
+    head = (
+        FIGURES_RETRY_PREFIX
+        if figures
+        else "The server sent back your answer: it does not address your idle cash."
     )
+    fix = (
+        "Copy every figure from the briefing or a tool result as it is given, or leave it out."
+        if figures
+        else ""
+    )
+    if IDLE_CASH_PROBLEM in problems:
+        fix += (
+            " Propose a trade, or say why holding the cash fits your strategy and quote"
+            " the cash_above_buffer amount or percent."
+        )
+    return "\n".join([head, *(f"- {p}" for p in problems), f"{fix.strip()} Answer again."])
 
 
 def _returned(kind: str, back: list[Refused]) -> str:

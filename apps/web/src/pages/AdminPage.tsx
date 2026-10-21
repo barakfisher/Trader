@@ -431,7 +431,7 @@ function SignupRequestsCard() {
 }
 
 /**
- * The accounts (D162, D235): status, cap, this month's spend, own key and last
+ * The accounts (D162, D239): status, cap, this month's spend, own key and last
  * sign-in - operations only, never a user's finances. Each user can be
  * disabled (signed out at once, data kept) and enabled again, have their cap
  * changed, or be given a one-time password, shown here once to pass on. The

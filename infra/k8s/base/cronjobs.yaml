@@ -8,7 +8,7 @@
 # internal key - and, for a user's kind (RUN_FOR), for: "every_active_user", so
 # the orchestrator runs it once for each active user in turn (D161). The
 # installation's kinds (backfill, news, names, the sweep, the scan plan, the
-# rescreen) name no user and run once (D234). Continuing:
+# rescreen) name no user and run once (D238). Continuing:
 # internal key: the same single trigger path the local timer uses (DESIGN.md
 # section 2). It calls the orchestrator Service inside the cluster; the front
 # door does not expose /internal/*.

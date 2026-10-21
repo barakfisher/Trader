@@ -195,14 +195,14 @@ function useAdminUserMutation<Input extends { userId: string }, Output>(send: (i
   });
 }
 
-/** Disable or re-enable a user (D235). */
+/** Disable or re-enable a user (D239). */
 export function useSetUserStatus() {
   return useAdminUserMutation((input: { userId: string; action: 'disable' | 'enable' }) =>
     api.post<{ userId: string; status: string }>(`/admin/users/${encodeURIComponent(input.userId)}/${input.action}`),
   );
 }
 
-/** A user's monthly cap after approval (D235). */
+/** A user's monthly cap after approval (D239). */
 export function useSetUserCap() {
   return useAdminUserMutation((input: { userId: string; llmCapMicroUsd: number }) =>
     api.put<{ userId: string }>(`/admin/users/${encodeURIComponent(input.userId)}/cap`, {

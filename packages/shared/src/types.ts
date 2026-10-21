@@ -290,6 +290,8 @@ export interface AgentScanSummary {
   trades: AgentScanTrade[];
   /** Why the answer was refused, as the validator named it. */
   problems: string[];
+  /** A pass that never quoted its cash above the buffer, even when sent back (D237). */
+  cashUnjustified: boolean;
   error: string | null;
 }
 
@@ -436,13 +438,13 @@ export interface AdminUsersResponse {
   users: AdminUserView[];
 }
 
-/** A user's new monthly cap (D235): the same bounds as at approval. */
+/** A user's new monthly cap (D239): the same bounds as at approval. */
 export interface UserCapInput {
   llmCapMicroUsd: number;
 }
 
 /**
- * A one-time password the app made (D162, D235). Shown to the admin once, in
+ * A one-time password the app made (D162, D239). Shown to the admin once, in
  * this answer only: stored hashed, never audited, never logged.
  */
 export interface OneTimePasswordResponse {

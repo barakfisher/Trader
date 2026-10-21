@@ -244,6 +244,10 @@ while this file is out of date.
 | 231 | The cards add the real portfolio and the agents together under *All*, and the split is one click away |
 | 232 | An agent's trade is approved from its row, through the proposal's own card |
 | 233 | Order: the four cards, the scope toggle, the holdings table, then the charts |
-| 234 | The installation's runs refuse a user; the agent-scan plan is one installation run over every active user |
-| 235 | The admin's user list: disable/enable, a cap edit, an app-made one-time password; reset is each user's own |
-| 236 | M9's exit test reads the routes from the app and asks each with the other user's ids |
+| 234 | "Doing nothing" is right only when nothing fits, and idle cash carries the user's rule |
+| 235 | The briefing states idle cash as `cash_above_buffer`: the amount and the percent of capital, left out at or under the buffer |
+| 236 | A pass that does not quote its idle cash goes back once |
+| 237 | A pass that still does not quote it is kept and flagged `cash_unjustified` |
+| 238 | The installation's runs refuse a user; the agent-scan plan is one installation run over every active user |
+| 239 | The admin's user list: disable/enable, a cap edit, an app-made one-time password; reset is each user's own |
+| 240 | M9's exit test reads the routes from the app and asks each with the other user's ids |

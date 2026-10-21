@@ -134,6 +134,11 @@ function ScanRow({ agentId, scan, linked }: { agentId: string; scan: AgentScanSu
                 .join(' · ')}
             </span>
           )}
+          {scan.cashUnjustified && (
+            <span className="rounded-full bg-warn/15 px-2 py-0.5 text-xs font-medium text-warn">
+              {t('agents.decisions.cashUnjustified')}
+            </span>
+          )}
           <span className="text-xs text-text-muted">{t(`agents.decisions.trigger.${scan.trigger}`)}</span>
         </span>
         <span className="text-xs text-text-muted">

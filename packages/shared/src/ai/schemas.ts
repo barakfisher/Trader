@@ -330,6 +330,8 @@ export const agentScanResponseSchema = z.object({
         .optional(),
       thesis: z.string().nullable().optional(),
       problems: z.array(z.string()).optional(),
+      // D237: a pass that never quoted its cash above the buffer.
+      cash_unjustified: z.boolean(),
     })
     .nullable(),
   error: z.string().nullable(),

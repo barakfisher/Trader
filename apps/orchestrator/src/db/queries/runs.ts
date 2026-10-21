@@ -249,14 +249,14 @@ export function getLatestFinishedRun(
 }
 
 /**
- * The installation's latest finished run of a kind (D234) - news collection,
+ * The installation's latest finished run of a kind (D238) - news collection,
  * which runs once for every user and so belongs to none of them.
  */
 export function getLatestInstallationRun(
   kind: string,
 ): Promise<{ started_at: Date; status: string; stats: unknown } | null> {
   return queryOne(
-    `-- agent-blind: the installation's runs belong to no user and no agent (D234).
+    `-- agent-blind: the installation's runs belong to no user and no agent (D238).
      SELECT started_at, status, stats
        FROM runs
       WHERE user_id IS NULL AND kind = $1 AND finished_at IS NOT NULL
