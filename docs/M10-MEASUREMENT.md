@@ -481,6 +481,8 @@ missing.
 
     **Recommendation: (a).**
 
+    *Decided 2026-10-22: (a) - [D251](DECISIONS.md).*
+
 18. **The quick actions in an agent's row.** Candidates:
     - *Run a scan now* (D196);
     - *Pause* / *Resume*;

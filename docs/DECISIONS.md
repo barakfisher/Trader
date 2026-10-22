@@ -261,3 +261,4 @@ while this file is out of date.
 | 248 | The ratio counts its own period and names it |
 | 249 | The spend figure is read when a page loads, cached 15 minutes per user on the server, and read again right after a refused call |
 | 250 | A user may set an optional monthly safety limit in the app, which stops their model calls even on an unlimited key |
+| 251 | The Admin page's Keys tab shows status, never values; installation keys stay in `.env` / Secrets |

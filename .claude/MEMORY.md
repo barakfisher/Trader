@@ -3745,6 +3745,17 @@ failure they prevent.
       OpenRouter's number as the warning's basis. This is a brake in addition to it. It counts
       only this app's calls, which is what a runaway loop here spends.
     - **Rejected:** relying on OpenRouter's limit alone (an unlimited key has no brake at all).
+251. **The Admin page's Keys tab shows status, never values; installation keys stay in `.env` /
+    Secrets** (the user, 2026-10-22; M10 decision 17 (a); guideline 9 stands).
+    - **What it shows, per provider key:** set or not, the provider it serves, its last error,
+      and a *Test* button that makes one free check call.
+    - **Off the tab entirely:** the app's own secrets - `SESSION_SECRET`, `INTERNAL_API_KEY`,
+      `LLM_KEY_ENCRYPTION_KEYS`, the Telegram signing and webhook secrets. They have nothing to
+      test, and listing them only maps them for an intruder.
+    - **Rotating a key** remains an edit and a redeploy.
+    - **Rejected:** entering keys in the app, encrypted with D208's vault. It amends guideline 9,
+      puts the installation's most valuable keys one stolen admin session from being read or
+      swapped as the app faces the internet, and copies them into the unencrypted backups.
 
 ---
 
