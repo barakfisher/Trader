@@ -3898,6 +3898,24 @@ failure they prevent.
       - verifying at signup only (that gap stays open);
       - existing accounts verifying at their next sign-in (an extra step for addresses the
         admin already trusts).
+260. **Reset and verification links are single-use tokens in one `auth_tokens` table, stored as
+    SHA-256 hashes** (the user, 2026-10-22; M10 decision 7 (a); migration **0068** unless an
+    earlier M10 PR takes it).
+    - **A row holds:** the purpose (`verify_email`, `verify_new_email`, `reset_password`), the
+      user, the hash, the expiry and the time it was used.
+    - **Rules:**
+      - A token works once.
+      - A new request cancels the user's earlier token of the same purpose.
+      - Expired rows are pruned with the installation's runs (D238).
+    - **Expiries are named constants:** `RESET_TOKEN_TTL` 30 minutes, `VERIFY_TOKEN_TTL` 24 hours.
+    - **A reset:**
+      - answers the same whatever the email (D185);
+      - bumps `session_version`, ending every session (D160);
+      - is rate-limited (D257).
+    - **Why the hash:** a leaked database or backup (unencrypted, M10-MEASUREMENT §6) holds no
+      usable link.
+    - **Rejected:** a signed token with no table (it cannot be single-use - a used or forwarded
+      reset link would work until it expired).
 
 ---
 

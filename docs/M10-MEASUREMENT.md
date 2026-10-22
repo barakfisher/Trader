@@ -352,6 +352,9 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
    The same answer whatever the email (D185). Success bumps `session_version`, ending every
    session. **Recommendation: the table**, one migration for both purposes.
 
+   *Decided 2026-10-22: (a), `auth_tokens` with hashed single-use tokens; reset 30 min,
+   verification 24 h - [D260](DECISIONS.md).*
+
 8. **Sessions table.**
    - (a) Keep D160's cookie and add "sign out everywhere" (a version bump). Costs: sign-out on a
      shared computer still leaves a copied cookie valid for up to 7 days.
