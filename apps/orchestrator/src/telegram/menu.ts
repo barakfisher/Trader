@@ -1,10 +1,10 @@
 /**
- * The bot's menu (M11 slice A1, D268-D271): `/help` and the read-only views
+ * The bot's menu (M11 slice A1, D269-D272): `/help` and the read-only views
  * its buttons open - the real portfolio, alerts and mute, what is pending, and
  * each simulated agent with its last scan.
  *
  * **A command sends; a button edits.** `/portfolio` posts a new message, and
- * every tap on it rewrites that same message in place (D269), so moving about
+ * every tap on it rewrites that same message in place (D270), so moving about
  * the menu leaves one message behind rather than a column of them. Because an
  * edited message can sit in the chat for days, every view that shows data says
  * when it was read and carries Refresh, and every tap reads afresh.

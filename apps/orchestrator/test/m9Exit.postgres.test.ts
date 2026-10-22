@@ -27,6 +27,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { TEST_SESSION_SECRET, sessionCookie } from './session.js';
+import { memoryRateLimits } from '../src/http/rateLimits.js';
 
 const DATABASE_URL = process.env.TEST_DATABASE_URL ?? '';
 
@@ -498,7 +499,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
       INTERNAL_API_KEY: 'internal-test-key',
       TELEGRAM_SIGNING_SECRET: 'telegram-signing-secret-for-tests',
     } as unknown as NodeJS.ProcessEnv);
-    const deps = { config, notifier: buildNotifier(config), ai: createFakeAi() };
+    const deps = { config, notifier: buildNotifier(config), ai: createFakeAi(), rateLimits: memoryRateLimits() };
 
     const before = await omersRows();
     for (const action of ['approve', 'confirm', 'reject', 'snooze', 'undo', 'recheck'] as const) {
@@ -549,7 +550,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     } as unknown as ReturnType<typeof createFakeAi>;
 
     await handleTelegramUpdate(
-      { config, notifier: buildNotifier(config), ai },
+      { config, notifier: buildNotifier(config), ai, rateLimits: memoryRateLimits() },
       { update_id: 2, message: { text: 'What do I hold?', chat: { id: dana.chatId, type: 'private' } } },
     );
     await vi.waitFor(() => expect(asked).toHaveLength(1));

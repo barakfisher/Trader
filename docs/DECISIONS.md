@@ -278,8 +278,9 @@ while this file is out of date.
 | 265 | The app ships `/privacy` and `/terms`, records which version each user accepted, and public signup stays closed until their text exists |
 | 266 | The isolation test walks writes as well as reads, seeds every user-owned kind, and tries Telegram; no row-level security in M10 |
 | 267 | M10's PRs come in sixteen steps: what is usable now first, then the path to public, and deployment last, on the user's word |
-| 268 | Telegram menu buttons are unsigned; the tapping chat's binding is their authority |
-| 269 | A command sends a view; a button rewrites that message, says when it was read, and carries Refresh |
-| 270 | The `/` command list is set at every start, English by default and Hebrew for Hebrew phones |
-| 271 | `/portfolio` is the real portfolio alone, in its base currency, with what is unpriced named |
-| 272 | The bot serves private chats only |
+| 268 | While Redis cannot be reached, the rate limits count in each process's memory |
+| 269 | Telegram menu buttons are unsigned; the tapping chat's binding is their authority |
+| 270 | A command sends a view; a button rewrites that message, says when it was read, and carries Refresh |
+| 271 | The `/` command list is set at every start, English by default and Hebrew for Hebrew phones |
+| 272 | `/portfolio` is the real portfolio alone, in its base currency, with what is unpriced named |
+| 273 | The bot serves private chats only |

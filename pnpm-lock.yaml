@@ -44,6 +44,9 @@ importers:
       pino:
         specifier: ^9.4.0
         version: 9.14.0
+      rate-limiter-flexible:
+        specifier: 11.2.1
+        version: 11.2.1
       zod:
         specifier: ^3.23.8
         version: 3.25.76
@@ -2027,6 +2030,9 @@ packages:
 
   quick-format-unescaped@4.0.4:
     resolution: {integrity: sha512-tYC1Q1hgyRuHgloV/YXs2w15unPVh8qfu/qCTfhTYamaw7fyhumKa2yGpdSo87vY32rIclj+4fWYQXUMs9EHvg==}
+
+  rate-limiter-flexible@11.2.1:
+    resolution: {integrity: sha512-JAaz01HZ893zAw+Hx5MdM1z3lLAkyVvNpqR+GNp0k3kjuQB8gY91fXhf5C0osWs+A7iKgFv585qzwmjS3aBHlA==}
 
   react-dom@18.3.1:
     resolution: {integrity: sha512-5m4nQKp+rZRb09LNH59GM4BxTh9251/ylbKIbpe7TpGxfJ+9kv6BLkLBXIjjspbgbnIBNqlI23tRnTWT0snUIw==}
@@ -4311,6 +4317,8 @@ snapshots:
   punycode@2.3.1: {}
 
   quick-format-unescaped@4.0.4: {}
+
+  rate-limiter-flexible@11.2.1: {}
 
   react-dom@18.3.1(react@18.3.1):
     dependencies:

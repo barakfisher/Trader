@@ -34,6 +34,7 @@ import { aiRefusal, badRequest, conflict, notFound, upstreamFailure } from '../e
 import { proposeFromScan } from '../../services/tradeProposals.js';
 import { readyToScan } from '../../services/agentReadiness.js';
 import { agentIdFrom } from './agents.js';
+import { limitPerUser } from '../rateLimits.js';
 
 /** A page of the *Decisions* tab. */
 export const SCANS_PAGE_SIZE = 20;
@@ -146,7 +147,7 @@ export function toScanStep(raw: unknown): AgentScanStep | null {
 }
 
 export function registerAgentScanRoutes(app: Hono<AppEnv>): void {
-  app.post('/agents/:id/scans', async (context) => {
+  app.post('/agents/:id/scans', limitPerUser('agentScan'), async (context) => {
     const userId = currentUserId(context);
     const agent = await getAgent(userId, agentIdFrom(context.req.param('id')));
     if (!agent) throw notFound('agent not found');

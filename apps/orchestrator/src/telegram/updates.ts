@@ -49,6 +49,7 @@ import {
 } from '../services/proposalState.js';
 import { applyDecision, factsOf } from '../services/proposals.js';
 import { MESSAGES, messagesFor, type Messages } from '../notify/messages.js';
+import type { RateLimits } from '../http/rateLimits.js';
 import { startQuestion } from './assistantQuestion.js';
 import { decodeBindToken } from './bindToken.js';
 import { BUSY_CALLBACK_DATA, decodeCallbackData } from './callbackToken.js';
@@ -66,6 +67,8 @@ export interface UpdateDeps {
   notifier: Notifier;
   /** Prices a trade's preview and fill (`tradeApproval.ts`). */
   ai: AiClient;
+  /** The routes' limits: a question and a re-check count with the page's (D257). */
+  rateLimits: RateLimits;
 }
 
 /** How long a `/mute` lasts when the user names no duration. */
@@ -84,10 +87,10 @@ export const TELEGRAM_SNOOZE_HOURS = 4;
 const chatSchema = z.object({ id: z.number(), type: z.string().optional() }).passthrough();
 
 /**
- * Only a one-to-one chat with the bot is served (D272). In a group the chat is
+ * Only a one-to-one chat with the bot is served (D273). In a group the chat is
  * not the person: every member could read the portfolio, mute the owner's
  * alerts or `/stop` them, and the binding - the whole authority of a menu tap
- * (D268) - would speak for all of them.
+ * (D269) - would speak for all of them.
  */
 function isPrivate(chat: z.infer<typeof chatSchema>): boolean {
   return chat.type === 'private';
@@ -319,7 +322,14 @@ async function handleMessage(
   // Anything that is not a command is a question to the assistant (D221),
   // answered off the poller and in the question's own language.
   if (text !== '' && !text.startsWith('/')) {
-    await startQuestion({ telegram, ai: deps.ai, userId: binding.user_id, chatId, question: text });
+    await startQuestion({
+      telegram,
+      ai: deps.ai,
+      userId: binding.user_id,
+      chatId,
+      question: text,
+      rateLimits: deps.rateLimits,
+    });
     return;
   }
 
@@ -332,7 +342,7 @@ async function handleMessage(
     return;
   }
 
-  // The read-only views (D268-D271): a command sends one, its buttons edit it.
+  // The read-only views (D269-D272): a command sends one, its buttons edit it.
   const views: Partial<Record<string, MenuView>> = {
     '/start': { view: 'help' },
     '/help': { view: 'help' },
@@ -447,7 +457,7 @@ async function handleCallback(
   }
 
   if (callback.message !== undefined && !isPrivate(callback.message.chat)) {
-    // Before any lookup: a button in a group decides nothing, whoever tapped it (D272).
+    // Before any lookup: a button in a group decides nothing, whoever tapped it (D273).
     logger().warn({ chatId, type: callback.message.chat.type ?? null }, 'telegram.callback_from_non_private_chat');
     await telegram?.answerCallback(callback.id, messagesFor('en').buttonInvalid);
     return;
@@ -540,6 +550,7 @@ async function handleCallback(
       chatId,
       ...(message === undefined ? {} : { message }),
       payload: { ...payload, action: 'recheck' },
+      rateLimits: deps.rateLimits,
     });
     return;
   }
@@ -648,7 +659,7 @@ async function handleCallback(
 }
 
 /**
- * A menu button (D268): unsigned, so the chat's binding is the whole of its
+ * A menu button (D269): unsigned, so the chat's binding is the whole of its
  * authority - the tapping chat's user is the one whose data is read. An
  * unbound chat is told the button is not for it, as a signed one would be.
  */

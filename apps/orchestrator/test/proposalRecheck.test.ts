@@ -16,6 +16,8 @@ import { AiServiceError } from '@traders/shared/ai';
 
 import { createFakeAi } from './fakeAi.js';
 import { ACTIVE_SESSION, sessionCookie } from './session.js';
+import { RATE_LIMITS, memoryRateLimits, userKey } from '../src/http/rateLimits.js';
+import { minutesOf } from '../src/telegram/assistantQuestion.js';
 
 const USER = { ...ACTIVE_SESSION, id: '00000000-0000-0000-0000-000000000001', email: null, base_currency: 'USD', timezone: 'UTC' };
 const AGENT = '90000000-0000-0000-0000-0000000000a1';
@@ -305,11 +307,17 @@ describe('Re-check from Telegram (D217)', () => {
     };
   }
 
-  async function tap(telegram: ReturnType<typeof chat>, ai = fakeAi(async () => SCAN), language = 'en') {
+  async function tap(
+    telegram: ReturnType<typeof chat>,
+    ai = fakeAi(async () => SCAN),
+    language = 'en',
+    rateLimits = memoryRateLimits(),
+  ) {
     const started = await startRecheckCallback({
       telegram: telegram as never,
       ai,
       notifier: NOTIFIER,
+      rateLimits,
       userId: USER.id,
       language,
       callbackId: 'cb-1',
@@ -329,6 +337,21 @@ describe('Re-check from Telegram (D217)', () => {
     const [, , text, options] = telegram.editMessage.mock.calls[0]! as unknown as [string, number, string, { keyboard: string }];
     expect(text).toContain('Re-checked (15:00): no new proposal. The agent: Above where it was worth buying.');
     expect(options.keyboard).toBe('none');
+  });
+
+  it("counts with the page's limit and, once it is spent, says when to try again and keeps the button (D257)", async () => {
+    const rateLimits = memoryRateLimits();
+    for (let point = 0; point < RATE_LIMITS.proposalRecheck.points; point += 1) {
+      await rateLimits.take('proposalRecheck', userKey(USER.id));
+    }
+    const telegram = chat();
+    const ai = fakeAi(async () => SCAN);
+    await tap(telegram, ai, 'he', rateLimits);
+    const [, toast] = telegram.answerCallback.mock.calls[0]! as unknown as [string, string];
+    expect(toast).toBe(messagesFor('he').rateLimited(minutesOf(RATE_LIMITS.proposalRecheck.durationSeconds)));
+    expect(ai.recheckProposal).not.toHaveBeenCalled();
+    expect(telegram.setKeyboard).not.toHaveBeenCalled();
+    expect(telegram.showWorking).not.toHaveBeenCalled();
   });
 
   it('keeps the button when the re-check reached no answer', async () => {

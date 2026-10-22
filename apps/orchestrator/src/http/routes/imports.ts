@@ -18,6 +18,7 @@ import { ImportParseError, buildImportRows, countByStatus } from '../../services
 import { deletePreview, getPreview, savePreview } from '../../services/previewStore.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, notFound, unprocessable } from '../errors.js';
+import { limitPerUser } from '../rateLimits.js';
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
@@ -29,7 +30,7 @@ const commitSchema = z.object({
 });
 
 export function registerImportRoutes(app: Hono<AppEnv>): void {
-  app.post('/imports/preview', async (context) => {
+  app.post('/imports/preview', limitPerUser('symbolResolve'), async (context) => {
     const userId = currentUserId(context);
     const user = await getUser(userId);
     if (!user) throw notFound('user not found');

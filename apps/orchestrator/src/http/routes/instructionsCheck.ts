@@ -22,6 +22,7 @@ import { instructionsFingerprint } from '../../services/instructionsCheck.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { conflict, notFound } from '../errors.js';
 import { agentIdFrom } from './agents.js';
+import { limitPerUser } from '../rateLimits.js';
 
 const skipped = (reason: InstructionsCheckResult['reason']): InstructionsCheckResult => ({
   status: 'skipped',
@@ -30,7 +31,7 @@ const skipped = (reason: InstructionsCheckResult['reason']): InstructionsCheckRe
 });
 
 export function registerInstructionsCheckRoutes(app: Hono<AppEnv>): void {
-  app.post('/agents/:id/instructions-check', async (context) => {
+  app.post('/agents/:id/instructions-check', limitPerUser('instructionsCheck'), async (context) => {
     const userId = currentUserId(context);
     const agentId = agentIdFrom(context.req.param('id'));
     const agent = await getAgent(userId, agentId);

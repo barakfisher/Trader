@@ -10,6 +10,7 @@
 import type { AssistantReply } from '@traders/shared/ai';
 import { AiServiceError } from '@traders/shared/ai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RATE_LIMITS, memoryRateLimits, userKey } from '../src/http/rateLimits.js';
 
 const USER = '00000000-0000-0000-0000-000000000001';
 const CHAT = 987654321;
@@ -26,7 +27,7 @@ vi.mock('../src/db/queries.js', () => ({
 
 const queries = await import('../src/db/queries.js');
 const { handleTelegramUpdate } = await import('../src/telegram/updates.js');
-const { MAX_QUESTION_CHARS, QUIET_HOURS, startQuestion } = await import('../src/telegram/assistantQuestion.js');
+const { MAX_QUESTION_CHARS, QUIET_HOURS, minutesOf, startQuestion } = await import('../src/telegram/assistantQuestion.js');
 const { TelegramNotifier } = await import('../src/telegram/client.js');
 const { MESSAGES } = await import('../src/notify/messages.js');
 const { MAX_NEWS_SOURCES, flattenMarkdown, plainAnswer } = await import('../src/telegram/plainAnswer.js');
@@ -74,7 +75,7 @@ function deps(webBaseUrl: string | null = null) {
       return new Response('{"ok":true}', { status: 200 });
     },
   });
-  return { config: loadConfig(ENV), notifier, ai: { assistantMessage } as never };
+  return { config: loadConfig(ENV), notifier, ai: { assistantMessage } as never, rateLimits: memoryRateLimits() };
 }
 
 const message = (text?: string) => ({ message: { chat: { id: CHAT, type: 'private' }, ...(text === undefined ? {} : { text }) } });
@@ -89,6 +90,7 @@ async function askAndWait(text: string, webBaseUrl: string | null = null) {
     userId: USER,
     chatId: String(CHAT),
     question: text,
+    rateLimits: d.rateLimits,
   });
   await done;
 }
@@ -144,6 +146,27 @@ describe('a question in the chat', () => {
     expect(queries.setTelegramConversation).not.toHaveBeenCalled();
   });
 
+  it("counts with the Ask page's limit and, once it is spent, says when to try again in the question's language (D257)", async () => {
+    const d = deps();
+    for (let point = 0; point < RATE_LIMITS.assistantQuestion.points; point += 1) {
+      await d.rateLimits.take('assistantQuestion', userKey(USER));
+    }
+    const { done } = await startQuestion({
+      telegram: d.notifier,
+      ai: d.ai,
+      userId: USER,
+      chatId: String(CHAT),
+      question: 'מה שווה התיק שלי?',
+      rateLimits: d.rateLimits,
+    });
+    await done;
+
+    expect(assistantMessage).not.toHaveBeenCalled();
+    expect(messagesSent().map((m) => m.text)).toEqual([
+      MESSAGES.he.rateLimited(minutesOf(RATE_LIMITS.assistantQuestion.durationSeconds)),
+    ]);
+  });
+
   it('refuses a question past the bound before any call', async () => {
     await askAndWait('x'.repeat(MAX_QUESTION_CHARS + 1));
 
@@ -155,7 +178,7 @@ describe('a question in the chat', () => {
     let release!: (value: AssistantReply) => void;
     assistantMessage.mockReturnValueOnce(new Promise<AssistantReply>((resolve) => (release = resolve)));
     const d = deps();
-    const input = { telegram: d.notifier, ai: d.ai, userId: USER, chatId: String(CHAT) };
+    const input = { telegram: d.notifier, ai: d.ai, userId: USER, chatId: String(CHAT), rateLimits: d.rateLimits };
     const first = await startQuestion({ ...input, question: 'First?' });
     await startQuestion({ ...input, question: 'Second?' });
 

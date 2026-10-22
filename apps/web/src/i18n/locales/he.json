@@ -97,7 +97,10 @@
   },
   "api": {
     "unreachable": "לא ניתן להגיע לשרת. האם ה-orchestrator פועל?",
-    "failedWithStatus": "הבקשה נכשלה עם סטטוס {{status}}"
+    "failedWithStatus": "הבקשה נכשלה עם סטטוס {{status}}",
+    "rateLimited_one": "יותר מדי בקשות בזמן קצר. נסו שוב בעוד דקה.",
+    "rateLimited_two": "יותר מדי בקשות בזמן קצר. נסו שוב בעוד שתי דקות.",
+    "rateLimited_other": "יותר מדי בקשות בזמן קצר. נסו שוב בעוד {{count}} דקות."
   },
   "addHolding": {
     "title": "הוספת אחזקה",

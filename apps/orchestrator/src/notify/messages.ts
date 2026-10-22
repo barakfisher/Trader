@@ -155,6 +155,8 @@ export interface Messages {
   outcomeLines: Partial<Record<string, string>>;
   nowState: (state: string) => string;
   proposalGone: string;
+  /** A question or a re-check refused by its rate limit (D257), with when to retry. */
+  rateLimited: (minutes: number) => string;
   cannotChange: string;
   stillWorking: string;
   buttonUnusable: string;
@@ -171,11 +173,11 @@ export interface Messages {
   chatTaken: string;
   linkUsed: string;
   linkInvalid: string;
-  /** `/start` in a group (D272): connect in a one-to-one chat. */
+  /** `/start` in a group (D273): connect in a one-to-one chat. */
   privateChatOnly: string;
 
   /**
-   * The bot's menu (M11 slice A1, D268-D271): `/help`, the views its buttons
+   * The bot's menu (M11 slice A1, D269-D272): `/help`, the views its buttons
    * open, and the descriptions in Telegram's command list. Every figure arrives
    * formatted in this language's locale; these only frame them.
    */
@@ -457,6 +459,8 @@ const en: Messages = {
   },
   nowState: (state) => `Now ${state}.`,
   proposalGone: 'That proposal no longer exists.',
+  rateLimited: (minutes) =>
+    `Too many requests in a short time. Try again in ${minutes === 1 ? 'a minute' : `${minutes} minutes`}.`,
   cannotChange: 'That can no longer be changed.',
   stillWorking: 'Still working on it…',
   buttonUnusable: 'This button is no longer usable.',
@@ -890,6 +894,8 @@ const he: Messages = {
   },
   nowState: (state) => `המצב כעת: ${ltr(state)}.`,
   proposalGone: 'ההצעה הזו כבר לא קיימת.',
+  rateLimited: (minutes) =>
+    `יותר מדי בקשות בזמן קצר. נסו שוב ${minutes === 1 ? 'בעוד דקה' : minutes === 2 ? 'בעוד שתי דקות' : `בעוד ${minutes} דקות`}.`,
   cannotChange: 'כבר אי אפשר לשנות את זה.',
   stillWorking: 'עדיין מטפל בזה…',
   buttonUnusable: 'הכפתור הזה כבר לא שמיש.',

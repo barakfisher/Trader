@@ -1,5 +1,5 @@
 /**
- * The list Telegram shows when the user types `/` (M11 slice A1, D270).
+ * The list Telegram shows when the user types `/` (M11 slice A1, D271).
  *
  * Set with `setMyCommands` at every start: the call replaces the whole list,
  * so running it again is free, and a list that drifted from the code - a

@@ -4,7 +4,26 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-21 - **Handoff at a milestone boundary: M9 (multiple users) is complete in one
+Updated: 2026-10-22 - **Handoff by count, five merges since #290: M10 (public access) is
+measured, decided and two PRs in.**
+- **Merges since #290:**
+  - #291 and #292, another session's;
+  - #293, the measurement (`docs/M10-MEASUREMENT.md`) and **every M10 decision, D243-D267,
+    asked one at a time**;
+  - #294, PR 1: the production baseline (D256);
+  - #295, PR 2: the write-route isolation test (D266).
+- **Decisions reached 268** (next: **269**; D268 is PR 3's, Redis down).
+- **Migrations: none in M10 yet.** `0067_telegram_conversation` is head; next free is `0068`,
+  planned for D260's `auth_tokens` but numbered when its PR is written.
+- **Deployed:**
+  - compose's orchestrator image was built 2026-10-21 15:10 UTC and has none of M10;
+  - kind runs `c7e23ee` (#292), read 2026-10-22;
+  - #294's `Origin` rule and security headers reach them only on the user's "redeploy".
+- **There is no standing grant.** Ask before each PR, merge only on "merge", redeploy only on
+  "redeploy".
+- **Next:** "Next session: M10 PR 3".
+
+Previous update, 2026-10-21 - **Handoff at a milestone boundary: M9 (multiple users) is complete in one
 PR** - scheduling per user (D238), the user's own zone (D163's reads, guideline 10 amended), the
 admin's user list and each user's own reset (D239), and the exit test (D240), all asked up front
 and built without stopping, as the user asked. Merges since handoff #285: #286 (memory), #287
@@ -4084,7 +4103,21 @@ failure they prevent.
       exists, D265);
     - alternating feature and security PRs (neither stream finishes early, and a handoff carries
       both).
-268. **Telegram menu buttons are unsigned; the tapping chat's binding is their authority**
+268. **While Redis cannot be reached, the rate limits count in each process's memory** (the
+    user, 2026-10-22; M10 PR 3, extends D257).
+    - **How:** each `RateLimiterRedis` carries an in-memory `insuranceLimiter` with the same
+      numbers, and `rejectIfRedisNotReady` sends a request to it at once instead of after a
+      timeout. The limits' ioredis client never queues commands while down
+      (`enableOfflineQueue: false`). Measured on a throwaway Redis: stopped mid-run, the next 31
+      requests were answered in 1 ms and the 31st past the limit was refused.
+    - **Accepted cost:** during an outage each replica allows the full count, and a restart
+      forgets it. Only while Redis is down.
+    - **Rejected:**
+      - fail open (no login-guessing limit and no spend limit during an outage; the monthly cap
+        bounds LLM money, but embeddings and market data have no other bound);
+      - fail closed (a Redis outage would also stop sign-in, signup, Ask, scans, holdings and
+        topics for everyone).
+269. **Telegram menu buttons are unsigned; the tapping chat's binding is their authority**
     (2026-10-22; M11 A1, `telegram/menuData.ts`). A menu button is `m:` plus a view letter and,
     for an agent, its 16 bytes in base64url (24 bytes at most). Every view is read for the user
     the tapping chat is bound to, and an agent is looked up with `getAgent(user, id)`, so a
@@ -4094,7 +4127,7 @@ failure they prevent.
     a MAC proves we wrote the button, which grants nothing when the binding decides whose data
     it is, and a nonce has nothing to burn on a read. Buttons that spend money or change an agent
     (slice A2) are signed, because there the button's own content is the decision.
-269. **A command sends a view; a button rewrites that message, says when it was read, and
+270. **A command sends a view; a button rewrites that message, says when it was read, and
     carries Refresh** (2026-10-22; `telegram/menu.ts`). Moving about the menu leaves one message,
     not a column of them. An edited message can sit in the chat for days, so every data view
     ends "As of HH:MM" in the user's zone and every tap reads afresh; a Refresh within the same
@@ -4107,7 +4140,7 @@ failure they prevent.
     servers); the app shows it. *Rejected:* a new message per tap (the chat
     fills with stale copies, each looking current); a reply keyboard under the input box (its
     buttons send their label as text, and plain text is a question to the assistant, D221).
-270. **The `/` command list is set at every start, English by default and Hebrew for Hebrew
+271. **The `/` command list is set at every start, English by default and Hebrew for Hebrew
     phones** (2026-10-22; `telegram/commandMenu.ts`). `setMyCommands` replaces the whole list,
     so repeating it is free and a list that drifted heals on deploy; a failure is logged and
     never stops the boot. Telegram picks the list by the phone's language, not by
@@ -4116,7 +4149,7 @@ failure they prevent.
     one-time link from Settings, and typed bare in a bound chat it shows `/help`. An unknown
     command shows `/help`. *Rejected:* a list per chat (`scope: chat`) re-set when the language
     changes - a call per user, and one more thing to fall out of step, for nine words.
-271. **`/portfolio` is the real portfolio alone, in its base currency, with what is unpriced
+272. **`/portfolio` is the real portfolio alone, in its base currency, with what is unpriced
     named** (2026-10-22; `telegram/menu.ts`). It is `valuePortfolio` over the primary agent's
     holdings, as the dashboard's `/portfolio` read is: value, today's change (or "not known"
     without a previous close), holdings priced of total, and the unpriced symbols named as left
@@ -4125,11 +4158,11 @@ failure they prevent.
     there is no ILS rate source, and a converted total would need one. *Rejected:* replacing the
     old `/portfolio`, which only named the alert floor, with a "see the app" line - the user asked
     for the numbers, and the valuation already exists.
-272. **The bot serves private chats only** (2026-10-22; `telegram/updates.ts` `isPrivate`; the
+273. **The bot serves private chats only** (2026-10-22; `telegram/updates.ts` `isPrivate`; the
     user's choice after the security review of M11 A1). Nothing stopped a bind link being
     redeemed in a group, and there the chat is not the person: every member would read the
     assistant's answers and alerts, and with the menu open `/portfolio`, mute the owner's alerts
-    or `/stop` them - the binding, D268's whole authority, would speak for all of them. A message
+    or `/stop` them - the binding, D269's whole authority, would speak for all of them. A message
     or tap from a chat whose `type` is not `private` (a missing type included) is refused before
     any lookup: `/start` there says to connect privately and leaves the link unused; anything
     else is ignored, as from an unbound chat; a button is "not valid for this chat". Measured
@@ -4140,6 +4173,21 @@ failure they prevent.
 ---
 
 ## Bugs that cost real time, and the lesson from each
+
+**Count proxies in `X-Forwarded-For` alone, never from the socket (2026-10-22, #294).** The first
+`clientAddress` appended the socket's address to the chain and stepped back N from the end. A
+request with no socket - every `app.request` in a test - shifted it one step, and it returned the
+address the *client* wrote. The rule that holds is that with N proxies the client is the N-th
+`X-Forwarded-For` entry from the end, because the nearest proxy is the socket and writes nothing
+about itself. Only an existing audit test caught it.
+
+**A security test that passes against a loosened query may be guarded by a second wall - prove
+it with a control and by loosening both (2026-10-22, #295).** The Telegram tap test stayed green
+with `findProposal`'s user scope removed. That was not because it was useless:
+`applyProposalTransition`'s UPDATE also says `AND user_id = $5`. A positive control (the user's
+own tap does take) showed the taps reached the decision, and loosening both made it fail. Without
+the control a green test cannot tell "protected" from "never reached".
+
 
 **A tool name in text the model reads is an invitation to call it (2026-10-20, D226).** The
 product guide listed the agents' tools by name; the assistant, asked something the guide did not
@@ -5045,6 +5093,18 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 
 ## Local environment (this machine)
 
+- **Integration tests in a worktree (2026-10-22):**
+  - **Python:** give the worktree its own venv the way CI does: `cd services/ai && uv venv
+    --python 3.12 && uv pip install -e '.[dev]'`. The shared venv in the main checkout lacks
+    `cryptography` (#278's dependency), so pytest fails at import there.
+  - **Postgres:** a throwaway `pgvector/pgvector:pg16` on its own port (55440 was free), then
+    `scripts/migrate.py` with `APP_DB_PASSWORD=traders_app`, then `TEST_DATABASE_URL=
+    postgresql://traders_app:traders_app@127.0.0.1:<port>/traders_ci`.
+  - Remove the container afterwards.
+- **The browser pane keeps the user's session for `127.0.0.1`** across ports. A production web
+  image run on `127.0.0.1:<port>` against compose's network opens signed in, on real data. It is
+  fine for reading (#294's CSP check); never act there.
+
 - **The daily backup is a launchd agent** (`~/Library/LaunchAgents/com.traders.db-backup.plist`,
   installed 2026-10-11 from the main checkout at the user's request): 04:00 local, both databases,
   into `~/Backups/traders/<kind|compose>/`, log `~/Library/Logs/traders-db-backup.log`. It runs
@@ -5395,6 +5455,43 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: M10 PR 3 (written 2026-10-22)
+
+**State:**
+- M10's decisions are complete (D243-D267). The order is D267's sixteen PRs; PRs 1-2 are merged
+  (#294, #295).
+- `docs/M10-MEASUREMENT.md` holds the facts each decision was argued from; read its decision
+  list before a PR.
+- No standing grant: ask before each PR, "merge" and "redeploy" are the user's words. The handoff
+  count restarts at #295.
+
+**Next: PR 3, rate limits (D257).**
+- `rate-limiter-flexible` is approved under convention 5. Use the orchestrator's existing
+  `ioredis` client and a small Hono middleware.
+- Key on `requestClientAddress(context, config.TRUSTED_PROXY_HOPS)` (#294's
+  `http/clientAddress.ts`), on the email in the body and on the user. D257 lists the scopes.
+- Limits are named constants, and tests assert the constants.
+- 429 says when to retry. The web needs a translated message for it in en and he (guideline 1).
+
+**Then:** PR 4, own key only plus the safety limit (D245, D246, D250). It changes who pays, and
+the Settings wording that promises the installation's fallback (`settings.ownKey.intro`,
+`limitHint`, the failure lines).
+
+**Things a later PR must not rediscover:**
+- **D264's erase needs a privileged step.** The app's role cannot delete `agent_scans`, `fills`,
+  `cash_movements` or `proposal_attempts` (history). A migration or a function owned by the
+  migration role must do it. #295 found this when its own cleanup was refused.
+- **Every new user-owned table is fingerprinted by D266's test automatically.** It needs a seeded
+  row there to mean anything.
+- **Every new write route** fails `describes every write` until it has an entry in
+  `WRITE_BODIES` (`m9Exit.postgres.test.ts`). Give it a body valid enough to reach its lookup.
+- **`PUT /topics/:id` resolves the label (an embedding call) before checking ownership.** It is
+  harmless, and PR 3's limits bound it. Reorder only if it shows up in costs.
+- **`ALLOWED_ORIGINS` must list every address the page is opened at.** Since #294 a write with no
+  Origin is refused, and the old `.env.example` comment said the web app did not need it.
+- **D254's open legal question** (are sentiment ratings advice for strangers?) gates public
+  signup together with D265's text. Neither is code.
 
 ### Next session: after M9 (written 2026-10-21)
 

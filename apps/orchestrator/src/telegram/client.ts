@@ -384,7 +384,7 @@ export class TelegramNotifier implements Notifier {
     });
   }
 
-  /** The command list for one phone language, or the default list (D270, `commandMenu.ts`). */
+  /** The command list for one phone language, or the default list (D271, `commandMenu.ts`). */
   async setCommands(
     commands: { command: string; description: string }[],
     languageCode: string | null,

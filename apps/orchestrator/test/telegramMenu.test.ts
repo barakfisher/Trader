@@ -1,5 +1,5 @@
 /**
- * The bot's menu (M11 slice A1, D268-D271): the read-only views, the buttons
+ * The bot's menu (M11 slice A1, D269-D272): the read-only views, the buttons
  * that move between them by editing one message, and the `/` command list.
  *
  * The menu's buttons are unsigned, so the tests that matter most are the ones
@@ -144,6 +144,7 @@ const { TelegramNotifier } = await import('../src/telegram/client.js');
 const { MESSAGES } = await import('../src/notify/messages.js');
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
 const { createFakeAi } = await import('./fakeAi.js');
+const { memoryRateLimits } = await import('../src/http/rateLimits.js');
 const { decodeMenuData, encodeMenuData, QUICK_MUTE_HOURS, MENU_PREFIX } = await import('../src/telegram/menuData.js');
 const { MAX_CALLBACK_DATA_BYTES, decodeCallbackData, encodeCallbackData, mintNonce, BUSY_CALLBACK_DATA } = await import(
   '../src/telegram/callbackToken.js'
@@ -200,7 +201,7 @@ function deps(webBaseUrl: string | null = null) {
     },
   });
   const ai = { ...createFakeAi({ unpriceable: ['ACME'] }), marketSessions: vi.fn(async () => ({ sessions: [sessionAhead()] })) };
-  return { config: loadConfig(ENV), notifier, ai: ai as never };
+  return { config: loadConfig(ENV), notifier, ai: ai as never, rateLimits: memoryRateLimits() };
 }
 
 const command = (text: string) => ({ message: { chat: { id: CHAT, type: 'private' }, text } });
@@ -609,7 +610,7 @@ describe('whose data a tap reads', () => {
   });
 });
 
-describe('private chats only (D272)', () => {
+describe('private chats only (D273)', () => {
   const GROUP = -100123456;
   const inChat = (type: string | undefined, text: string) => ({
     message: { chat: { id: GROUP, ...(type === undefined ? {} : { type }) }, text },
