@@ -3707,6 +3707,14 @@ failure they prevent.
     - **Rejected:** an app-side budget (a second number that can disagree with what OpenRouter
       refuses); the limit alone with nothing shown for a key without one.
     - **Open, as M10 decisions 23-24:** which period "$12" counts, and how fresh the figure is.
+248. **The ratio counts its own period and names it** (the user, 2026-10-22; M10 decision 23 (a)).
+    - **With a limit:** used = `limit - limit_remaining`, labelled with the limit's reset period
+      ("$12 / $50 this month", "today", "this week"; a limit that never resets is labelled
+      "in total").
+    - **With no limit:** `usage_monthly`, shown as "$12 / Unlimited this month". "Unlimited" is a
+      catalogue word, so every language has it; it replaces D247's "∞".
+    - **Rejected:** lifetime `usage` (a key that resets reads "$80 / $50"); this app's own
+      `llm_calls` (it misses other apps' spend, which OpenRouter counts against the limit).
 
 ---
 

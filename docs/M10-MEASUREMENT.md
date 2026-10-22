@@ -569,6 +569,9 @@ What D245-D246 still need on that screen:
 
     **Recommendation: (a)**, with the period named beside the ratio.
 
+    *Decided 2026-10-22: (a) - [D248](DECISIONS.md). With no limit the ratio reads "$12 / Unlimited
+    this month".*
+
 24. **How fresh the indicator is.** The top bar is on every screen, and D247's "once a day" read
     would show a stale figure after a busy hour.
     - (a) One read a day.
