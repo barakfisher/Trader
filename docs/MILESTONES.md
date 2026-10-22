@@ -266,6 +266,12 @@ data isolation, outbound email and the privacy surface, with the decisions M10 n
 *Done 2026-10-22: [M10-MEASUREMENT.md](M10-MEASUREMENT.md).* The decisions are asked one at a
 time and recorded from D243; code follows in the order they set.
 
+**Scope added 2026-10-22 (the user):** replacing one's own key (already built, D206-D207), a
+model per agent and action, the Admin page in tabs with the installation's keys the admin's
+alone, and the portfolio table - sortable, P/L as $ and %, quick actions in agents' rows,
+rebalance suggestions for the main portfolio. Measured and argued in M10-MEASUREMENT
+(decisions 16-21). None of it depends on public exposure.
+
 ---
 
 ## Ordering notes

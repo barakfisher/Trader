@@ -271,6 +271,8 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
    **Recommendation: (b).** It is what M10 says. The switch lets the admin fall back to approval
    or close the door in one setting, the way `max_pending_signups = 0` closes it today.
 
+   *Decided 2026-10-22: (b) - [D243](DECISIONS.md).*
+
 2. **Where it is served, and under what name.**
    - (a) Tailscale Funnel from this Mac. Costs: no domain of your own (`ts.net`), so mail
      cannot be sent from it; Funnel's limits and terms were not checked.
@@ -406,7 +408,7 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
 
     **Recommendation: extend the test; no row-level security in M10.**
 
-15. **Order of the PRs.** A proposal, to settle once the answers above are in:
+15. **Order of the PRs** (asked last, after decisions 16-21 below). A proposal, to settle once the answers above are in:
     1. the production baseline and rate limits;
     2. email (the sender, verification and reset), with `0068`;
     3. sessions;
@@ -416,3 +418,96 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
     7. the legal pages;
     8. the isolation test;
     9. exposure itself, last, on your word.
+
+## Scope added on 2026-10-22: settings, the Admin page and the portfolio table
+
+After decision 1, the user added three groups to M10. None of them depends on public exposure.
+Each was measured the same way as the rest of this document, so the plan builds only what is
+missing.
+
+**What already exists:**
+
+| Asked for | What is there | Where |
+|---|---|---|
+| Replace one's own OpenRouter key, validated, with invalid or expired keys handled | **Built and checked live (2026-10-20).** Saving upserts the key (`ON CONFLICT (user_id) DO UPDATE`), and the Settings card has *Replace key*. A key is checked on save with OpenRouter's `GET /key`. A key refused later is marked `rejected` (401) or `no_credit` (402), Settings says which, and calls fall back to the installation under the cap (D206-D207) | `llm/own_key.py:174`, `OwnLlmKeyForm.tsx`, `en.json` `replace` |
+| A model per agent and per action | **One model per scope for the whole installation, set by the admin.** There are three scopes, `agent`, `assistant` and `explain` (narration), and all three are `google/gemini-3.5-flash-lite` on compose. `agents` has no model column. No user can choose | `llm_model_choices`, `PUT /admin/llm/models/:scope` |
+| "Rebalance" as an action | **A rebalance proposal exists**, raised by the rule `allocation_drift` against **the user's own target weights** (`/targets`). It uses no model to decide, and narration explains it in the `explain` scope. On the main portfolio it is an **acknowledgement, never a trade**: D1 makes the main portfolio passive, and a database trigger (`0038`) refuses any other kind there | `services/proposals.ts` `PRIMARY_PROPOSAL_KINDS`, `analysis/allocation_drift.py` |
+| An Admin page in tabs | **One page of 1,279 lines with 12 cards**, no tabs | `pages/AdminPage.tsx` |
+| Global API keys controlled only by the admin | **Already only the admin's, because no user can touch them.** The installation's keys (OpenRouter, news, market data) live in `.env` or Kubernetes Secrets (guideline 9). No screen shows or edits them, the admin's included. A user can set only their own OpenRouter key | `.env.example`, CLAUDE.md guideline 9 |
+| Sortable portfolio table | **Not sortable**: no sort state in either holdings table | `CombinedHoldingsTable.tsx`, `HoldingsTable.tsx` |
+| P/L as % and $ | **One cell holds both**: "money (percent)" | `CombinedHoldingsTable.tsx:363-366` |
+| Quick actions in the agents' rows | An agent's trade can already be approved from its row (D232). Nothing else is there | `HoldingsActions.tsx` |
+
+**What it adds to the decisions:**
+
+16. **Who may choose a model, and from what list.**
+    - (a) Only a user on their own key picks a model per agent, plus one for Ask and one for
+      explanations. Everyone on the installation's key keeps the admin's choice.
+    - (b) Every user picks; the monthly cap bounds the cost.
+    - (c) Every user picks from a list the admin curates.
+
+    Costs:
+    - (a) needs a nullable `agents.model` and a per-user choice for the other two scopes.
+    - (b) lets a capped user on the installation's key choose a model 50x the price; the cap
+      still holds, but it is reached in a few calls.
+    - (c) is (b) plus an admin list.
+
+    A model's fitness is not only its price either: the evidence validator and the scans' tool
+    calls were tuned on Flash-Lite (D75, D227). Another model may fail them more often. That
+    shows up as refused scans, not as an error.
+
+    **Recommendation: (a)**, from OpenRouter's model list (already fetched for the Admin page),
+    with a "tested" mark on the models the scans were tuned on. Needs a migration.
+
+17. **Installation keys on the Admin page.**
+    - (a) The values stay in `.env`/Secrets. A *Keys* tab shows which keys are set, which
+      provider each serves, its last error and a *Test* button, but never a value.
+    - (b) The admin enters and replaces the values in the app, stored encrypted with the
+      existing vault (D208).
+
+    Costs:
+    - (a) means changing a key is still a redeploy.
+    - (b) **amends guideline 9** ("Secrets live in `.env` / Kubernetes Secrets only"). It puts
+      the installation's most valuable secrets one admin session away from being read or
+      replaced, on an app that is about to face the internet. It also makes the database
+      backups (unencrypted, §6) carry them.
+
+    **Recommendation: (a).**
+
+18. **The quick actions in an agent's row.** Candidates:
+    - *Run a scan now* (D196);
+    - *Pause* / *Resume*;
+    - *Open its pending proposals*;
+    - *Approve* (already there).
+
+    The cost is width on a phone, where the table is already full. **Recommendation:** Run scan
+    and Pause/Resume as icon buttons with labels for screen readers, plus a "…" menu for the rest.
+
+19. **"Rebalance suggestions" for the main portfolio.** D1 and guideline 2 constrain this one.
+    - (a) A table on the main portfolio of what the user's **own target weights** imply: per
+      holding, the current weight, the target, the drift, and the quantity and money that would
+      restore the target at the current price. It is arithmetic and uses no model. It is shown,
+      not proposed, and approving nothing writes anything. D1 and guideline 2 hold, because the
+      target is the user's and the figures are the evidence.
+    - (b) The same, but each row can be approved into the virtual ledger as a trade. This
+      **reverses D1** (the main portfolio becomes an agent that trades) and needs a migration
+      to the `0038` trigger.
+    - (c) Model-written rebalance ideas without targets. This is **personalized advice**, which
+      guideline 2 rules out.
+
+    **Recommendation: (a).** It answers "what would rebalancing take" without crossing either
+    line. With no targets set, the table says so and links to `/targets`.
+
+20. **Admin tabs.** Low risk, so it is stated as an assumption rather than asked:
+    - *Users*: sign-up requests and the user list;
+    - *Models and keys*: model choices, and the keys' status (17);
+    - *Operations*: runs, gaps, LLM calls, the audit;
+    - *Settings*: installation settings.
+
+    Each tab lives in the URL, so a link opens it.
+
+21. **Table sorting and P/L.** Also assumptions:
+    - Sorting happens in the browser, on any column, and the order is kept in the URL.
+    - Rows with no figure (unpriced, or no cost basis, D230) sort last in both directions.
+    - P/L becomes two columns, $ and %, each sortable.
+    - On a phone, % stays visible and $ hides first.

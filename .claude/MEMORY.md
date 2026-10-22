@@ -3644,6 +3644,17 @@ failure they prevent.
     Every attempt is still recorded by the service and listed on the web proposal page (D49).
     *Rejected:* a count ("3 attempts") - a new plural sentence in both catalogues for a number
     nobody acts on.
+243. **A stranger is let in automatically once their email is verified, under a daily limit on
+    new accounts; approval stays as a switch** (the user, 2026-10-22; M10 decision 1,
+    docs/M10-MEASUREMENT.md). Signup has three modes, an installation setting: *automatic*
+    (the account turns `active` when its email is verified), *approval* (D156 as built) and
+    *closed*. A daily ceiling on new accounts bounds how fast strangers arrive. The admin can fall
+    back to approval or close signup in one setting, as `max_pending_signups = 0` closes it
+    today. *Rejected:* keeping approval for strangers (the admin judges people they cannot
+    judge, and every request pings Telegram); invite codes (not "people the admin does not
+    know", which is M10's purpose). Accepted cost: one person can open several verified
+    accounts. The free tier (M10 decision 11) and the rate limits (decision 4) bound what each
+    account can cost.
 
 ---
 
