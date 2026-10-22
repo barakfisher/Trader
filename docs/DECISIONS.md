@@ -253,3 +253,8 @@ while this file is out of date.
 | 240 | M9's exit test reads the routes from the app and asks each with the other user's ids |
 | 241 | A closed-market quote is cached until the next open at most, the TTL floor included |
 | 242 | In Telegram a refusal after a refusal replaces its line |
+| 243 | Telegram menu buttons are unsigned; the tapping chat's binding is their authority |
+| 244 | A command sends a view; a button rewrites that message, says when it was read, and carries Refresh |
+| 245 | The `/` command list is set at every start, English by default and Hebrew for Hebrew phones |
+| 246 | `/portfolio` is the real portfolio alone, in its base currency, with what is unpriced named |
+| 247 | The bot serves private chats only |

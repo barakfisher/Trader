@@ -263,6 +263,29 @@ internet exposure, abuse handling and holding strangers' financial data.
 
 ---
 
+## M11 — Telegram menu & quick actions *(added 2026-10-22; D268-D272)*
+
+The bot grows from five typed commands into a menu: Telegram's `/` list, `/help` with buttons, and
+views that edit one message in place instead of posting new ones. Three slices, one PR each:
+
+- **A1 - read-only views and the menu framework** *(2026-10-22)*: the `/` command list in English
+  and Hebrew (`setMyCommands`, D270); `/help` with Portfolio, Agents, Status and Pending buttons;
+  a real `/portfolio` (value, today's change, holdings, what is unpriced - USD, the real portfolio
+  only, D271); `/status` with quick mutes (1h, 4h, Unmute) and `/unmute`; `/pending` as a list;
+  `/agents` with each agent's schedule in New York slots, next scan, money and last run. Every
+  data view says when it was read and carries Refresh (D269). Menu buttons are unsigned: the
+  chat's binding is their authority (D268). The bot serves private chats only (D272).
+- **A2 - agent controls**: Run scan now (a confirm that names the cost, a single-tap guard, run in
+  the background as Re-check is), Pause/Resume (refused when the active-agent limit is full,
+  D199), Change schedule (the market-hours intervals and edges the web offers). These buttons are
+  signed.
+- **B - deciding from `/pending`**: each open proposal with its own signed buttons.
+
+Not in M11: placing orders (never), editing holdings from the chat, a shekel view of the portfolio
+(no exchange-rate source for it yet).
+
+---
+
 ## Ordering notes
 - M2 depends on M1's provider layer; M3 is independent of M2 and can be parallelised if you want.
 - The Telegram bot (M4) is deliberately after observations exist — a bot with nothing to say is untestable.

@@ -127,7 +127,7 @@ const tap = (action: 'approve' | 'confirm' | 'reject', priceMinor?: bigint, text
           { proposalId: PROPOSAL, action, nonce: mintNonce(), ...(priceMinor === undefined ? {} : { priceMinor }) },
           SIGNING_SECRET,
         ),
-        message: { message_id: 99, text, chat: { id: CHAT } },
+        message: { message_id: 99, text, chat: { id: CHAT, type: 'private' } },
       },
     }),
   });

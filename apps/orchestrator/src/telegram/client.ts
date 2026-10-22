@@ -384,6 +384,17 @@ export class TelegramNotifier implements Notifier {
     });
   }
 
+  /** The command list for one phone language, or the default list (D270, `commandMenu.ts`). */
+  async setCommands(
+    commands: { command: string; description: string }[],
+    languageCode: string | null,
+  ): Promise<DeliveryResult> {
+    return this.call('setMyCommands', {
+      commands,
+      ...(languageCode === null ? {} : { language_code: languageCode }),
+    });
+  }
+
   /** Send plain text with no buttons: command replies and confirmations. */
   async sendText(chatId: string, text: string): Promise<DeliveryResult> {
     return this.call('sendMessage', { chat_id: chatId, text: clampMessage(text) });

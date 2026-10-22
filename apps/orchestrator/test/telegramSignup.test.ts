@@ -101,7 +101,7 @@ const tap = (data: string) =>
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': WEBHOOK_SECRET },
     body: JSON.stringify({
-      callback_query: { id: 'cb-1', data, message: { message_id: 7, text: REQUEST_TEXT, chat: { id: CHAT } } },
+      callback_query: { id: 'cb-1', data, message: { message_id: 7, text: REQUEST_TEXT, chat: { id: CHAT, type: 'private' } } },
     }),
   });
 

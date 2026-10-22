@@ -21,6 +21,7 @@ vi.mock('../src/db/queries.js', () => ({
   findTelegramConversation: vi.fn(async () => null),
   setTelegramConversation: vi.fn(async () => undefined),
   getOrCreateUserSettings: vi.fn(async () => ({ language: 'en', notify_severity: 'high' })),
+  getUser: vi.fn(async () => ({ id: USER, timezone: 'Asia/Jerusalem', base_currency: 'USD' })),
 }));
 
 const queries = await import('../src/db/queries.js');
@@ -76,7 +77,7 @@ function deps(webBaseUrl: string | null = null) {
   return { config: loadConfig(ENV), notifier, ai: { assistantMessage } as never };
 }
 
-const message = (text?: string) => ({ message: { chat: { id: CHAT }, ...(text === undefined ? {} : { text }) } });
+const message = (text?: string) => ({ message: { chat: { id: CHAT, type: 'private' }, ...(text === undefined ? {} : { text }) } });
 const messagesSent = () => sent.filter((call) => call.method === 'sendMessage').map((call) => call.body);
 
 /** Ask, and wait for the answer: the update returns before it arrives. */
@@ -203,12 +204,13 @@ describe('the commands around it', () => {
     expect(messagesSent().map((m) => m.text)).toEqual([MESSAGES.en.ask.textOnly]);
   });
 
-  it('an unknown command still lists the commands, and the list says to write a question', async () => {
-    await handleTelegramUpdate(deps(), message('/help'));
+  it.each(['/help', '/teapot'])('%s shows the help, and the help says to write a question', async (command) => {
+    await handleTelegramUpdate(deps(), message(command));
 
     expect(assistantMessage).not.toHaveBeenCalled();
-    expect(messagesSent().map((m) => m.text)).toEqual([MESSAGES.en.commands]);
-    expect(MESSAGES.en.commands).toContain('/new');
+    expect(messagesSent().map((m) => m.text)).toEqual([MESSAGES.en.menu.help]);
+    expect(MESSAGES.en.menu.help).toContain('/new');
+    expect(MESSAGES.en.menu.help).toContain('Write any question');
   });
 });
 
