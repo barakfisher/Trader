@@ -436,6 +436,8 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
 
     **Recommendation: extend the test; no row-level security in M10.**
 
+    *Decided 2026-10-22: (a), the extended test, no RLS - [D266](DECISIONS.md).*
+
 15. **Order of the PRs** (asked last, after decisions 16-21 below). A proposal, to settle once the answers above are in:
     1. the production baseline and rate limits;
     2. email (the sender, verification and reset), with `0068`;

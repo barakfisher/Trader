@@ -4032,6 +4032,23 @@ failure they prevent.
     - **Rejected:**
       - the pages without a record (no proof of what was agreed, or when);
       - no pages (strangers' data held under no stated terms).
+266. **The isolation test walks writes as well as reads, seeds every user-owned kind, and tries
+    Telegram; no row-level security in M10** (the user, 2026-10-22; M10 decision 14 (a); extends
+    D240).
+    - **Writes:** every POST/PUT/PATCH/DELETE route is read from the app, as D240 reads the GETs,
+      so a new route is covered without editing the test. Each is asked with the other user's ids.
+      It must answer 404 and change nothing, checked by reading the other user's rows before and
+      after.
+    - **Seeds:** every user-owned kind is seeded and marked - proposals, observations,
+      notifications, scans, fills, snapshots and own keys, plus M10's new sessions, identities,
+      tokens, deletion markers, consent records and research ratings. Each later M10 PR adds its
+      own table's seed.
+    - **Telegram:** callbacks and messages from another user's chat are tried.
+    - **Rejected:**
+      - RLS on every table (every query would run with the user set on the connection - a
+        rewrite of the data layer M10 leaves alone, which also has to let D238's cross-user
+        installation runs through; a candidate for its own milestone);
+      - keeping D240 as it is (a write touching another user's row is caught by nothing).
 
 ---
 
