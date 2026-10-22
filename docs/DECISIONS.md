@@ -273,3 +273,4 @@ while this file is out of date.
 | 260 | Reset and verification links are single-use tokens in one `auth_tokens` table, stored as SHA-256 hashes |
 | 261 | Sessions get a table; signing out ends that session, and Settings lists devices |
 | 262 | OAuth uses `arctic`, with our own `user_identities` table |
+| 263 | An OAuth sign-in links to an existing account only when the provider vouches for the email, and every link is announced by email |

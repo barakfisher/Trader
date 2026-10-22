@@ -391,6 +391,8 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
     account; (c) lets anyone who controls an unverified provider address take an account.
     **Recommendation: (a)**, falling back to (b) when the provider cannot vouch for the address.
 
+    *Decided 2026-10-22: (a), with a notification email on every link - [D263](DECISIONS.md).*
+
 11. **The free tier.**
     - (a) Self-signed-up accounts get the existing default cap ($10).
     - (b) A separate, lower default for automatic accounts, set on the Admin page.

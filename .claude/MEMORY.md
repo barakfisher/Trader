@@ -3960,6 +3960,23 @@ failure they prevent.
       - `openid-client` (GitHub is not OpenID Connect, so it needs a second path);
       - `better-auth` / Auth.js (their own users, sessions and flows would replace M9's login and
         D259-D261, the layer M10 leaves alone).
+263. **An OAuth sign-in links to an existing account only when the provider vouches for the email,
+    and every link is announced by email** (the user, 2026-10-22; M10 decision 10 (a)).
+    - **"Vouches" means:** Google's `email_verified`, or GitHub's verified primary email. Without
+      it there is no automatic link; the user links from Settings while signed in.
+    - **A new OAuth sign-up** with a provider-verified email counts as verified (D243, D259). In
+      *automatic* mode it is `active` at once; in *approval* mode it reaches the admin.
+    - **On every link:**
+      - an email goes to the account ("Google was linked to your account"), so a surprise link
+        is seen;
+      - the account's existing sessions are untouched.
+    - **Settings lists linked providers with *Unlink*.** Unlinking the account's only way to sign
+      in (no password set) is refused.
+    - **Accepted cost:** the rule relies on Google and GitHub verifying correctly.
+    - **Rejected:**
+      - linking only from Settings (the same person ends up with a second, empty account);
+      - linking on any matching email (anyone who makes a provider account show your
+        unverified address signs in as you).
 
 ---
 
