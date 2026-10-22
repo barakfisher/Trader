@@ -29,6 +29,7 @@ import { writtenLanguage } from '@traders/shared';
 import { AiServiceError, type AiClient, type AssistantReply } from '@traders/shared/ai';
 
 import { findTelegramConversation, setTelegramConversation } from '../db/queries.js';
+import { userKey, type RateLimits } from '../http/rateLimits.js';
 import { logger } from '../logger.js';
 import { messagesFor, type Messages } from '../notify/messages.js';
 import type { TelegramNotifier } from './client.js';
@@ -52,6 +53,8 @@ export interface Question {
   userId: string;
   chatId: string;
   question: string;
+  /** The Ask page's limit, counted with it (D257). */
+  rateLimits: RateLimits;
 }
 
 /**
@@ -69,6 +72,11 @@ export async function startQuestion(input: Question): Promise<{ done: Promise<vo
     await telegram?.sendText(chatId, messages.ask.stillAnswering);
     return { done: Promise.resolve() };
   }
+  const refusal = await input.rateLimits.take('assistantQuestion', userKey(input.userId));
+  if (refusal !== null) {
+    await telegram?.sendText(chatId, messages.rateLimited(minutesOf(refusal.retryAfterSeconds)));
+    return { done: Promise.resolve() };
+  }
   answering.add(chatId);
   const done = answer(input, messages)
     .catch((error: unknown) => {
@@ -76,6 +84,11 @@ export async function startQuestion(input: Question): Promise<{ done: Promise<vo
     })
     .finally(() => answering.delete(chatId));
   return { done };
+}
+
+/** Whole minutes to wait, at least one: what a chat message can say. */
+export function minutesOf(seconds: number): number {
+  return Math.max(1, Math.ceil(seconds / 60));
 }
 
 async function answer(input: Question, messages: Messages): Promise<void> {

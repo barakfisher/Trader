@@ -13,6 +13,8 @@ export class ApiProblem extends HTTPException {
     readonly code: string,
     message: string,
     readonly details?: unknown,
+    /** Sent with the error response, such as a 429's `Retry-After`. */
+    readonly headers?: Record<string, string>,
   ) {
     super(status, { message });
   }
@@ -57,12 +59,16 @@ export function aiRefusal(body: unknown): { code: string; message: string } | nu
     : null;
 }
 
-export function toErrorResponse(error: unknown, context: Context): { body: ApiError; status: number } {
+export function toErrorResponse(
+  error: unknown,
+  context: Context,
+): { body: ApiError; status: number; headers?: Record<string, string> } {
   const requestId = context.get('requestId') as string | undefined;
   if (error instanceof ApiProblem) {
     return {
       status: error.status,
       body: { error: error.code, message: error.message, details: error.details, requestId },
+      ...(error.headers === undefined ? {} : { headers: error.headers }),
     };
   }
   if (error instanceof HTTPException) {

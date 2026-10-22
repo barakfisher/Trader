@@ -20,10 +20,12 @@ import type { AiClient } from '@traders/shared/ai';
 
 import { findProposal, getUser } from '../db/queries.js';
 import { ApiProblem } from '../http/errors.js';
+import { userKey, type RateLimits } from '../http/rateLimits.js';
 import { logger } from '../logger.js';
 import { messagesFor, type Messages } from '../notify/messages.js';
 import type { Notifier } from '../notify/notifier.js';
 import { recheckProposal, recheckStatus } from '../services/proposalRecheck.js';
+import { minutesOf } from './assistantQuestion.js';
 import type { CallbackPayload } from './callbackToken.js';
 import type { TelegramNotifier } from './client.js';
 
@@ -37,6 +39,8 @@ export interface RecheckCallback {
   chatId: string;
   message?: { message_id: number; text?: string };
   payload: CallbackPayload & { action: 'recheck' };
+  /** The page's limit, counted with it (D257). */
+  rateLimits: RateLimits;
   now?: () => Date;
 }
 
@@ -92,6 +96,13 @@ export async function startRecheckCallback(input: RecheckCallback): Promise<{ do
   const { telegram, userId, payload, message, chatId, language } = input;
   const messages = messagesFor(language);
   const clock = input.now ?? (() => new Date());
+  // The page's limit, counted with it and at the same point: before anything
+  // is read (D257). The button stays, for when the hour is over.
+  const refusal = await input.rateLimits.take('proposalRecheck', userKey(userId));
+  if (refusal !== null) {
+    await telegram?.answerCallback(input.callbackId, messages.rateLimited(minutesOf(refusal.retryAfterSeconds)));
+    return { done: Promise.resolve() };
+  }
   const row = await findProposal(userId, payload.proposalId);
   const status = row === null ? null : await recheckStatus(userId, row, clock());
 

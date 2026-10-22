@@ -30,6 +30,7 @@ import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, notFound, unprocessable, upstreamFailure } from '../errors.js';
 import { articleOut, collectionState } from '../newsArticles.js';
 import { recordMissingTicker } from '../../services/universeGaps.js';
+import { limitPerUser } from '../rateLimits.js';
 
 const DECIMAL = /^\d+(\.\d+)?$/;
 
@@ -154,7 +155,7 @@ export function registerHoldingsRoutes(app: Hono<AppEnv>): void {
     return context.json(body);
   });
 
-  app.post('/holdings', async (context) => {
+  app.post('/holdings', limitPerUser('symbolResolve'), async (context) => {
     const userId = currentUserId(context);
     const user = await getUser(userId);
     if (!user) throw notFound('user not found');

@@ -45,6 +45,7 @@ import {
 import { currentUserId, type AppEnv } from '../app.js';
 import type { Context } from 'hono';
 import { badRequest, notFound, unprocessable } from '../errors.js';
+import { limitPerUser } from '../rateLimits.js';
 
 /** A ceiling on one page of the inbox, matching the observations feed. */
 const MAX_PROPOSALS = 200;
@@ -205,7 +206,7 @@ export function registerProposalsRoutes(app: Hono<AppEnv>): void {
    * *Re-check* on an expired trade proposal (D212): the agent looks at that one
    * trade again, once, and either proposes it anew or says why not.
    */
-  app.post('/proposals/:id/recheck', async (context) => {
+  app.post('/proposals/:id/recheck', limitPerUser('proposalRecheck'), async (context) => {
     const body: RecheckResult = await recheckProposal(currentUserId(context), context.req.param('id'), {
       ai: context.get('ai'),
       notifier: context.get('notifier'),

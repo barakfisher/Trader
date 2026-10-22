@@ -27,6 +27,15 @@ export class ApiRequestError extends Error {
   }
 }
 
+/** The orchestrator's code for a request refused by a rate limit (`http/rateLimits.ts`). */
+export const RATE_LIMITED = 'rate_limited';
+
+/** `Retry-After` in whole minutes, at least one: what the sentence can say. */
+export function retryAfterMinutes(header: string | null): number {
+  const seconds = Number(header);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds / 60) : 1;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
   try {
@@ -47,6 +56,16 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!response.ok) {
     const error = (body ?? {}) as ApiError;
+    if (error.error === RATE_LIMITED) {
+      // The one refusal said here rather than by each caller: any limited
+      // route can answer it, and every caller shows `message` (D257).
+      throw new ApiRequestError(
+        t('api.rateLimited', { count: retryAfterMinutes(response.headers.get('retry-after')) }),
+        response.status,
+        RATE_LIMITED,
+        error.details,
+      );
+    }
     throw new ApiRequestError(
       error.message ?? t('api.failedWithStatus', { status: response.status }),
       response.status,

@@ -97,7 +97,9 @@
   },
   "api": {
     "unreachable": "Cannot reach the server. Is the orchestrator running?",
-    "failedWithStatus": "Request failed with status {{status}}"
+    "failedWithStatus": "Request failed with status {{status}}",
+    "rateLimited_one": "Too many requests in a short time. Try again in a minute.",
+    "rateLimited_other": "Too many requests in a short time. Try again in {{count}} minutes."
   },
   "addHolding": {
     "title": "Add a holding",

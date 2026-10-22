@@ -20,6 +20,7 @@ import type { Notifier } from '../notify/notifier.js';
 import type { Config } from '../config.js';
 import { logger } from '../logger.js';
 import { SESSION_COOKIE, verifySessionToken } from './auth.js';
+import { memoryRateLimits, type RateLimits } from './rateLimits.js';
 import { getUser, insertAdminAudit, type UserRow } from '../db/queries.js';
 import { auditEntry } from './adminAudit.js';
 import { forbidden, toErrorResponse, unauthorized, ApiProblem } from './errors.js';
@@ -61,6 +62,8 @@ export interface AppEnv {
     notifier: Notifier;
     /** Null where scheduled scans are off (D71): the ask then does nothing. */
     scanQueue: ScanQueue | null;
+    /** How often a caller may do what costs money or shared quota (D257). */
+    rateLimits: RateLimits;
   };
 }
 
@@ -118,12 +121,15 @@ export function isAdminPath(path: string): boolean {
  * `notifier` is injectable so a test can assert what would have been sent
  * without a bot token, and defaults to whatever the configuration describes -
  * which, with no token set, is a channel that declines with the reason.
+ * `rateLimits` counts in memory unless given Redis's (`server.ts` does), so a
+ * test never needs a Redis.
  */
 export function createApp(
   config: Config,
   ai: AiClient,
   notifier: Notifier = buildNotifier(config),
   scanQueue: ScanQueue | null = null,
+  rateLimits: RateLimits = memoryRateLimits(),
 ): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
@@ -134,6 +140,7 @@ export function createApp(
     context.set('ai', ai);
     context.set('notifier', notifier);
     context.set('scanQueue', scanQueue);
+    context.set('rateLimits', rateLimits);
     context.header('x-request-id', requestId);
     const startedAt = Date.now();
     await next();
@@ -205,13 +212,13 @@ export function createApp(
   });
 
   app.onError((error, context) => {
-    const { body, status } = toErrorResponse(error, context);
+    const { body, status, headers } = toErrorResponse(error, context);
     if (status >= 500) {
       logger().error({ err: error, requestId: body.requestId }, 'unhandled error');
     } else {
       logger().warn({ err: error, requestId: body.requestId, status }, 'request rejected');
     }
-    return context.json(body, status as 400);
+    return context.json(body, status as 400, headers);
   });
 
   app.notFound((context) =>
