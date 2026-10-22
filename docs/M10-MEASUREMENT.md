@@ -381,7 +381,10 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
     against it is a per-user share of `LLM_DAILY_BUDGET_USD`.
 
     **Recommendation: (b)**, plus a per-user daily share, so one stranger cannot silence
-    everyone's narration (§3). Embeddings and market data are bounded by rate limits (4), not
+    everyone's narration (§3).
+
+    *Answered by D245 (2026-10-22): (c). Non-admin users run on their own key only, so only the
+    admin spends the installation's money and the per-user share is moot.* Embeddings and market data are bounded by rate limits (4), not
     metered.
 
 12. **Deletion and export.**
@@ -459,6 +462,10 @@ missing.
     **Recommendation: (a)**, from OpenRouter's model list (already fetched for the Admin page),
     with a "tested" mark on the models the scans were tuned on. Needs a migration.
 
+    *Decided 2026-10-22: (a) - [D244](DECISIONS.md). In the same answer the user removed the
+    fallback to the installation's key ([D245](DECISIONS.md)), which also answers decision 11 as
+    (c), own key only. The warning and stop flow is [D246](DECISIONS.md).*
+
 17. **Installation keys on the Admin page.**
     - (a) The values stay in `.env`/Secrets. A *Keys* tab shows which keys are set, which
       provider each serves, its last error and a *Test* button, but never a value.
@@ -511,3 +518,37 @@ missing.
     - Rows with no figure (unpriced, or no cost basis, D230) sort last in both directions.
     - P/L becomes two columns, $ and %, each sortable.
     - On a phone, % stays visible and $ hides first.
+
+**The own-key screen, checked against D245-D246** (source and tests; not yet seen in a browser,
+because signing in is the user's):
+- *Add*: a password-type field and *Save*, shown when no key is saved.
+- *Replace*: *Replace key* opens the same field.
+- *Remove*: a button.
+- A saved key shows its last four characters and the date it was saved.
+- A refused key says why and since when (D207).
+
+What D245-D246 still need on that screen:
+- the warning reminder;
+- the stopped state;
+- wording that no longer promises the installation's fallback (`settings.ownKey.intro`,
+  `limitHint` and the failure lines say calls continue under the cap).
+
+22. **What "budget" means for D246's five-day warning.**
+    - (a) The key's credit limit on OpenRouter (D211). Days left = `limit_remaining` / the
+      recent daily spend. `usage_daily` from `GET /key` counts everything on the key, this app
+      and anything else; the app's own `llm_calls` counts only this app.
+    - (b) A monthly budget the user sets in the app. It reverses D211 ("the app has no field for
+      it").
+    - (c) (a) when the key has a limit, and otherwise a plain "no limit set on this key, so we
+      cannot warn you" with a link to OpenRouter.
+
+    Costs:
+    - (a) alone leaves a key with no limit unwarned.
+    - (b) is a second number that can disagree with what OpenRouter actually refuses.
+    - (c) means one call to `GET /key` (free) per user per day.
+
+    The account balance behind a key with no limit is not in `GET /key`. Whether an endpoint
+    for it accepts an ordinary key was **not measured**. **Recommendation: (c)**, using
+    `usage_daily` averaged over the last 7 days, because a key shared with other apps spends
+    there too. A refused key (401/402) stops at once (D246): OpenRouter reports no expiry date,
+    so invalidation cannot be warned ahead.

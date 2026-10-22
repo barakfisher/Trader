@@ -3655,6 +3655,41 @@ failure they prevent.
     know", which is M10's purpose). Accepted cost: one person can open several verified
     accounts. The free tier (M10 decision 11) and the rate limits (decision 4) bound what each
     account can cost.
+244. **A user on their own key chooses the model for each agent, for Ask and for explanations**
+    (the user, 2026-10-22; M10 decision 16). "Rebalance" maps to the explanations scope
+    (`explain`): the rebalance proposal itself is a rule over the user's own targets
+    (`allocation_drift`) and uses no model, and its explanation is narration. The choice comes from
+    OpenRouter's model list (already fetched for the Admin page). The models the scans were tuned
+    on carry a "tested" mark, because the evidence validator and the tool calls were tuned on
+    Flash-Lite (D75, D227), and another model may get more scans refused. Needs a nullable
+    `agents.model` and a per-user choice for the other two scopes. *Rejected:* every user choosing
+    under the cap (a capped user could pick a model 50x the price); an admin-curated list (the
+    same plus a list to keep). With D245 every non-admin user is on their own key, so in practice
+    every non-admin user chooses, and the admin's `llm_model_choices` governs the admin alone.
+245. **A non-admin user's model calls run only on their own key; nothing falls back to the
+    installation's** (the user, 2026-10-22; **supersedes D207's "the next ones run under the cap"
+    and D206's "while it works"**, and answers M10 decision 11 as "own key only"). A non-admin user
+    with no key, or with a key OpenRouter refused (`rejected`, `no_credit`), makes no model call.
+    Their agent scans, Ask turns, instruction checks and re-checks are refused with a reason that
+    says to add or replace the key. Scheduled scans for them are skipped, not run and failed.
+    Narration falls back to its template, as it does for a spent budget (D158), so alerts still
+    arrive. The admin stays on the installation's key and its daily ceiling. Installation work
+    (D238) calls no model and is unchanged. **Assumed, low risk:** embeddings for concept and topic
+    search stay on the installation (about 10 tokens a query, not a per-user model call). Revisit
+    if that is wrong. **Consequence:** the monthly cap (D157, D203-D205) no longer bounds any
+    non-admin call. Whether to keep it dormant or remove it is the implementing PR's question.
+    *Rejected (by the user):* the fallback under the cap - an installation-paid path for
+    strangers.
+246. **Own-key spend is warned ahead and stopped cleanly; reading never stops** (the user,
+    2026-10-22). From five days before the key's projected depletion, the UI shows a daily
+    reminder to top up or replace the key. When the key is refused or spent, every model-dependent
+    operation stops (agent scans, Ask, rebalance explanations) and the user is asked to update the
+    key. Portfolio, holdings, agents and every table stay fully usable, because no read depends on
+    a model. **Measured (OpenRouter's limits reference, 2026-10-22):** `GET /key` reports the key's
+    own `limit` and `limit_remaining` and its `usage_daily`/`weekly`/`monthly`, but not the
+    account's balance and not an expiry date. So a projection exists only for a key with a credit
+    limit, and an invalidation is known only when a call is refused. What "budget" means is M10
+    decision 22.
 
 ---
 

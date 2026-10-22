@@ -254,3 +254,6 @@ while this file is out of date.
 | 241 | A closed-market quote is cached until the next open at most, the TTL floor included |
 | 242 | In Telegram a refusal after a refusal replaces its line |
 | 243 | A stranger is let in automatically once their email is verified, under a daily limit on new accounts; approval stays as a switch |
+| 244 | A user on their own key chooses the model for each agent, for Ask and for explanations |
+| 245 | A non-admin user's model calls run only on their own key; nothing falls back to the installation's |
+| 246 | Own-key spend is warned ahead and stopped cleanly; reading never stops |
