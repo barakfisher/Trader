@@ -268,3 +268,4 @@ while this file is out of date.
 | 255 | The public service runs on a small rented host under a domain the user owns, not on the Mac |
 | 256 | The production baseline is M10's first code PR, all five parts together |
 | 257 | Rate limits use `rate-limiter-flexible` on the existing Redis, through a small Hono middleware |
+| 258 | Email leaves through `nodemailer` over SMTP, behind an `EmailSender` interface; the provider is chosen at deployment |

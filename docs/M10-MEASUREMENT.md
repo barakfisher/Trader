@@ -330,6 +330,8 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
    **Recommendation: `nodemailer` + SMTP behind the interface**, with a fixture sender in tests
    (hermetic, guideline 7's spirit). The provider is your account to open.
 
+   *Decided 2026-10-22: (a), `nodemailer` over SMTP; provider at deployment - [D258](DECISIONS.md).*
+
 6. **Email verification.**
    - (a) Required before an account is active.
    - (b) Required before a reset can be sent.

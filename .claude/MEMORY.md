@@ -3870,6 +3870,19 @@ failure they prevent.
       - hand-written `INCR`/`EXPIRE` (we would own the atomicity and the windows);
       - limits only at the host's edge (D255's provider is not chosen yet, and an edge cannot
         see users). The edge may be added later as a second layer, never instead.
+258. **Email leaves through `nodemailer` over SMTP, behind an `EmailSender` interface; the
+    provider is chosen at deployment** (the user, 2026-10-22; M10 decision 5 (a); the dependency
+    was approved under convention 5).
+    - **The provider** is configuration: an SMTP host, user and password in `.env` / Secrets
+      (guideline 9). Changing provider changes settings, not code.
+    - **Mail is sent from the user's domain (D255).** It needs SPF and DKIM records there, or it
+      lands in spam.
+    - **Tests use a fixture sender** that records what would have been sent, so no test sends
+      mail (hermetic).
+    - **What it serves:** D243's verification and decision 7's reset.
+    - **Rejected:**
+      - a provider's SDK (`resend`, `postmark`): ties the code to one provider;
+      - Telegram only: a stranger has no binding at signup, which contradicts D243.
 
 ---
 
