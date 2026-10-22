@@ -4017,6 +4017,21 @@ failure they prevent.
       - immediate erase (a mistake or a stolen session is permanent);
       - no self-service deletion (the admin becomes the process, and a stranger cannot leave);
       - no export.
+265. **The app ships `/privacy` and `/terms`, records which version each user accepted, and public
+    signup stays closed until their text exists** (the user, 2026-10-22; M10 decision 13 (a)).
+    - **The pages:** both are reachable signed out, rendered from one Markdown file per language.
+      The Hebrew text is its own file, never machine-translated, because a translated legal text
+      is a different document.
+    - **The consent record:** signup stores the accepted version and a timestamp (a migration).
+      A new version asks existing users to accept it at their next sign-in.
+    - **The gate:** automatic or approval signup for the public is not switched on until the user
+      supplies the text and the D254 question - whether per-stock sentiment ratings are advice
+      where users live - has an answer.
+    - **Who writes what:** the wording is the user's, or a lawyer's. The app's part is the pages,
+      the record and the gate. M10-MEASUREMENT §6 lists the facts a privacy page must state.
+    - **Rejected:**
+      - the pages without a record (no proof of what was agreed, or when);
+      - no pages (strangers' data held under no stated terms).
 
 ---
 

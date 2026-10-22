@@ -426,6 +426,8 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
     The app ships the pages and the record; **their wording is yours or a lawyer's**, not this
     document's. **Recommendation: (a), and no public signup until the pages have content.**
 
+    *Decided 2026-10-22: (a), pages, a consent record and the gate - [D265](DECISIONS.md).*
+
 14. **The isolation proof for strangers.**
     - Extend D240's test to write routes, asked with the other user's ids, and to seed every
       user-owned kind of §4.

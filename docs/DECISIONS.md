@@ -275,3 +275,4 @@ while this file is out of date.
 | 262 | OAuth uses `arctic`, with our own `user_identities` table |
 | 263 | An OAuth sign-in links to an existing account only when the provider vouches for the email, and every link is announced by email |
 | 264 | A user deletes their own account with a 7-day grace period, and can export their data as JSON |
+| 265 | The app ships `/privacy` and `/terms`, records which version each user accepted, and public signup stays closed until their text exists |
