@@ -492,6 +492,8 @@ missing.
     The cost is width on a phone, where the table is already full. **Recommendation:** Run scan
     and Pause/Resume as icon buttons with labels for screen readers, plus a "…" menu for the rest.
 
+    *Decided 2026-10-22: on the Agents page rows - [D252](DECISIONS.md).*
+
 19. **"Rebalance suggestions" for the main portfolio.** D1 and guideline 2 constrain this one.
     - (a) A table on the main portfolio of what the user's **own target weights** imply: per
       holding, the current weight, the target, the drift, and the quantity and money that would

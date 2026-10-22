@@ -3756,6 +3756,17 @@ failure they prevent.
     - **Rejected:** entering keys in the app, encrypted with D208's vault. It amends guideline 9,
       puts the installation's most valuable keys one stolen admin session from being read or
       swapped as the app faces the internet, and copies them into the unencrypted backups.
+252. **An agent's quick actions live on its row on the Agents page; the dashboard keeps only
+    *Approve*** (the user, 2026-10-22; M10 decision 18 (a)).
+    - **The row:** icon buttons for *Run scan* (D196) and *Pause*/*Resume*, each labelled for
+      screen readers, and a "⋯" menu with *Pending proposals* and *Open agent*. The agent's name
+      stays the link.
+    - **What changes structurally:** the row is a whole-row link today, and a button cannot sit
+      inside a link, so the row becomes a container.
+    - **Assumed, low risk:** *Run scan* shows a queued or running scan as the agent's page does.
+      An archived agent shows no actions.
+    - **Rejected:** buttons in the dashboard's "who holds it" cell (that cell is per holding, so an
+      agent holding ten symbols would repeat them ten times, on a table already full on a phone).
 
 ---
 
