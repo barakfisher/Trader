@@ -103,6 +103,13 @@ const PROTECTED_PREFIXES = [
  */
 export const ADMIN_PREFIX = '/admin';
 
+/** The two write paths whose callers are not browsers and authenticate with a secret instead. */
+const TELEGRAM_WEBHOOK_PATH = '/telegram/webhook';
+
+function isNotFromABrowser(path: string): boolean {
+  return path.startsWith('/internal/') || path === TELEGRAM_WEBHOOK_PATH;
+}
+
 export function isAdminPath(path: string): boolean {
   return path === ADMIN_PREFIX || path.startsWith(`${ADMIN_PREFIX}/`);
 }
@@ -158,15 +165,20 @@ export function createApp(
 
   /**
    * CSRF defence: the session cookie is SameSite=Lax, and every state-changing
-   * request must additionally carry an Origin we recognise. Service-to-service
-   * calls hit /internal/* and authenticate with the shared key instead.
+   * request must additionally carry an Origin we recognise - a missing one
+   * included (D256): a browser sends Origin with every POST, PUT, PATCH and
+   * DELETE, same-origin ones too, so a write without it did not come from our
+   * page. Two callers are not browsers and prove themselves otherwise:
+   * /internal/* with the shared key, and Telegram's webhook with its secret
+   * header.
    */
   app.use('*', async (context, next) => {
-    if (SAFE_METHODS.has(context.req.method) || context.req.path.startsWith('/internal/')) {
+    if (SAFE_METHODS.has(context.req.method) || isNotFromABrowser(context.req.path)) {
       return next();
     }
     const origin = context.req.header('origin');
-    if (origin && !config.allowedOrigins.includes(origin)) {
+    if (!origin) throw new ApiProblem(403, 'missing_origin', 'a state-changing request must carry an Origin header');
+    if (!config.allowedOrigins.includes(origin)) {
       throw new ApiProblem(403, 'bad_origin', `origin ${origin} is not allowed`);
     }
     return next();

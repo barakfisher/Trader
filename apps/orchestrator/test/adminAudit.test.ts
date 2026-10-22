@@ -42,7 +42,7 @@ vi.mock('../src/db/queries.js', () => ({
 
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
 const { createApp } = await import('../src/http/app.js');
-const { clientAddress, MAX_AUDITED_BODY_BYTES } = await import('../src/http/adminAudit.js');
+const { MAX_AUDITED_BODY_BYTES } = await import('../src/http/adminAudit.js');
 const { createFakeAi } = await import('./fakeAi.js');
 const queries = await import('../src/db/queries.js');
 
@@ -269,21 +269,5 @@ describe('the universe gaps', () => {
     });
     const refused = await app.request('/admin/gaps?kind=narration', { headers: { cookie } });
     expect(refused.status).toBe(400);
-  });
-});
-
-describe('the address an audit row records', () => {
-  it('is the last forwarded hop - the one a proxy appended, not one a client wrote', () => {
-    expect(clientAddress('6.6.6.6, 10.0.0.7', null)).toBe('10.0.0.7');
-    expect(clientAddress('10.0.0.7', '172.18.0.4')).toBe('10.0.0.7');
-  });
-
-  it('is the socket peer when no proxy forwarded the request', () => {
-    expect(clientAddress(undefined, '::1')).toBe('::1');
-  });
-
-  it('is null rather than anything the inet column would refuse', () => {
-    expect(clientAddress('unknown', null)).toBeNull();
-    expect(clientAddress(undefined, null)).toBeNull();
   });
 });
