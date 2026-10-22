@@ -13,6 +13,7 @@ import { AiClient } from '@traders/shared/ai';
 import { loadConfig } from './config.js';
 import { closePool, initPool } from './db/pool.js';
 import { createApp } from './http/app.js';
+import { connectRateLimitRedis, redisRateLimits } from './http/rateLimits.js';
 import { initLogger, logger } from './logger.js';
 import { buildNotifier } from './notify/factory.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
@@ -44,7 +45,10 @@ function main(): void {
     ? startScanQueue(config, (job) => runSlotAttempt(job, { ai, notifier }))
     : null;
   if (scanQueue === null) log.info('scheduled scans are off on this installation (ENABLE_SCHEDULED_SCANS)');
-  const app = createApp(config, ai, notifier, scanQueue);
+  // D257: counted in Redis, so a restart or a second replica forgets nothing.
+  const rateLimitRedis = connectRateLimitRedis(config.REDIS_URL);
+  const rateLimits = redisRateLimits(rateLimitRedis);
+  const app = createApp(config, ai, notifier, scanQueue, rateLimits);
   const server = serve({ fetch: app.fetch, port: config.ORCHESTRATOR_PORT }, (info) =>
     log.info({ port: info.port }, 'orchestrator listening'),
   );
@@ -54,7 +58,7 @@ function main(): void {
   const poller =
     config.TELEGRAM_UPDATES === 'polling' && notifier instanceof TelegramNotifier
       ? new TelegramPoller(notifier, {
-          handle: (update) => handleTelegramUpdate({ config, notifier, ai }, update),
+          handle: (update) => handleTelegramUpdate({ config, notifier, ai, rateLimits }, update),
         })
       : null;
   poller?.start();
@@ -68,6 +72,7 @@ function main(): void {
     poller?.stop();
     server.close(async () => {
       await scanQueue?.close();
+      rateLimitRedis.disconnect();
       await closePool();
       process.exit(0);
     });

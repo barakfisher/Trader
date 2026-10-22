@@ -50,6 +50,7 @@ import {
 } from '../services/proposalState.js';
 import { applyDecision, factsOf } from '../services/proposals.js';
 import { MESSAGES, messagesFor, observationTextIn, type Messages } from '../notify/messages.js';
+import type { RateLimits } from '../http/rateLimits.js';
 import { startQuestion } from './assistantQuestion.js';
 import { decodeBindToken } from './bindToken.js';
 import { BUSY_CALLBACK_DATA, decodeCallbackData } from './callbackToken.js';
@@ -65,6 +66,8 @@ export interface UpdateDeps {
   notifier: Notifier;
   /** Prices a trade's preview and fill (`tradeApproval.ts`). */
   ai: AiClient;
+  /** The routes' limits: a question and a re-check count with the page's (D257). */
+  rateLimits: RateLimits;
 }
 
 /** How long a `/mute` lasts when the user names no duration. */
@@ -285,7 +288,14 @@ async function handleMessage(
   // Anything that is not a command is a question to the assistant (D221),
   // answered off the poller and in the question's own language.
   if (text !== '' && !text.startsWith('/')) {
-    await startQuestion({ telegram, ai: deps.ai, userId: binding.user_id, chatId, question: text });
+    await startQuestion({
+      telegram,
+      ai: deps.ai,
+      userId: binding.user_id,
+      chatId,
+      question: text,
+      rateLimits: deps.rateLimits,
+    });
     return;
   }
 
@@ -485,6 +495,7 @@ async function handleCallback(
       chatId,
       ...(message === undefined ? {} : { message }),
       payload: { ...payload, action: 'recheck' },
+      rateLimits: deps.rateLimits,
     });
     return;
   }

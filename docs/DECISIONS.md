@@ -278,3 +278,4 @@ while this file is out of date.
 | 265 | The app ships `/privacy` and `/terms`, records which version each user accepted, and public signup stays closed until their text exists |
 | 266 | The isolation test walks writes as well as reads, seeds every user-owned kind, and tries Telegram; no row-level security in M10 |
 | 267 | M10's PRs come in sixteen steps: what is usable now first, then the path to public, and deployment last, on the user's word |
+| 268 | While Redis cannot be reached, the rate limits count in each process's memory |

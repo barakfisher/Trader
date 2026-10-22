@@ -25,6 +25,7 @@ import { AiServiceError } from '@traders/shared/ai';
 
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, notFound, upstreamFailure } from '../errors.js';
+import { limitPerUser } from '../rateLimits.js';
 
 /**
  * Widest result set one request may ask for. Mirrors the AI service's own
@@ -45,7 +46,7 @@ export function registerConceptsRoutes(app: Hono<AppEnv>): void {
    * nobody asked for, which reads as an un-ingested corpus rather than as a
    * shadowed route.
    */
-  app.get('/concepts/search', async (context) => {
+  app.get('/concepts/search', limitPerUser('conceptSearch'), async (context) => {
     currentUserId(context);
 
     const query = context.req.query('q')?.trim() ?? '';

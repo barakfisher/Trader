@@ -38,6 +38,7 @@ import { announceSignupRequest } from '../../telegram/signupApproval.js';
 import type { AppEnv } from '../app.js';
 import { SESSION_COOKIE, createSessionToken } from '../auth.js';
 import { ApiProblem, badRequest, conflict, unauthorized } from '../errors.js';
+import { emailKey, requestAddressKey } from '../rateLimits.js';
 import { PASSWORD_MAX_LENGTH, hashPassword, passwordMatches, passwordProblem } from '../password.js';
 
 /**
@@ -111,11 +112,28 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     const parsed = loginSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) throw badRequest('invalid_body', 'expected { email: string, password: string }');
 
+    // D257: failed attempts are counted per account and per address, and a
+    // spent count is refused before the hash is computed. The account is the
+    // email as typed, existing or not, so a refusal says nothing about which
+    // accounts there are.
+    const limits = context.get('rateLimits');
+    const account = emailKey(normaliseEmail(parsed.data.email));
+    const address = requestAddressKey(context, context.get('config').TRUSTED_PROXY_HOPS);
+    await limits.refuseIfSpent('loginFailuresPerAccount', account);
+    await limits.refuseIfSpent('loginFailuresPerAddress', address);
+
     const credentials = await getUserCredentialsByEmail(parsed.data.email);
     // The same argon2 work whether or not the email exists (`passwordMatches`),
     // and the same answer: neither says which accounts there are.
     const matches = await passwordMatches(parsed.data.password, credentials?.password_hash ?? null);
-    if (!credentials || !matches) throw unauthorized('incorrect email or password');
+    if (!credentials || !matches) {
+      await limits.record('loginFailuresPerAccount', account);
+      await limits.record('loginFailuresPerAddress', address);
+      throw unauthorized('incorrect email or password');
+    }
+    // The right password ends the account's run of failures; the address's
+    // count stays, so one known password does not reopen guessing at others.
+    await limits.reset('loginFailuresPerAccount', account);
 
     // Only someone who knows the password learns the account's state.
     if (credentials.status === 'pending') {
@@ -147,6 +165,11 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
       throw badRequest('invalid_body', 'expected { email, password, timezone, language }');
     }
     const email = normaliseEmail(parsed.data.email);
+    // D257: every request counts, per address and per email, before any work -
+    // a new email messages the admin and each costs a hash.
+    const limits = context.get('rateLimits');
+    await limits.consume('signupPerAddress', requestAddressKey(context, context.get('config').TRUSTED_PROXY_HOPS));
+    await limits.consume('signupPerEmail', emailKey(email));
     const emailIssue = emailProblem(email);
     if (emailIssue !== null) throw badRequest(`email_${emailIssue}`, `the address is ${emailIssue.replace('_', ' ')}`);
     const passwordIssue = passwordProblem(parsed.data.password);

@@ -12,7 +12,7 @@ measured, decided and two PRs in.**
     asked one at a time**;
   - #294, PR 1: the production baseline (D256);
   - #295, PR 2: the write-route isolation test (D266).
-- **Decisions reached 267** (next: **268**).
+- **Decisions reached 268** (next: **269**; D268 is PR 3's, Redis down).
 - **Migrations: none in M10 yet.** `0067_telegram_conversation` is head; next free is `0068`,
   planned for D260's `auth_tokens` but numbered when its PR is written.
 - **Deployed:**
@@ -4103,6 +4103,20 @@ failure they prevent.
       exists, D265);
     - alternating feature and security PRs (neither stream finishes early, and a handoff carries
       both).
+268. **While Redis cannot be reached, the rate limits count in each process's memory** (the
+    user, 2026-10-22; M10 PR 3, extends D257).
+    - **How:** each `RateLimiterRedis` carries an in-memory `insuranceLimiter` with the same
+      numbers, and `rejectIfRedisNotReady` sends a request to it at once instead of after a
+      timeout. The limits' ioredis client never queues commands while down
+      (`enableOfflineQueue: false`). Measured on a throwaway Redis: stopped mid-run, the next 31
+      requests were answered in 1 ms and the 31st past the limit was refused.
+    - **Accepted cost:** during an outage each replica allows the full count, and a restart
+      forgets it. Only while Redis is down.
+    - **Rejected:**
+      - fail open (no login-guessing limit and no spend limit during an outage; the monthly cap
+        bounds LLM money, but embeddings and market data have no other bound);
+      - fail closed (a Redis outage would also stop sign-in, signup, Ask, scans, holdings and
+        topics for everyone).
 
 ---
 

@@ -77,6 +77,7 @@ import {
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, conflict, notFound, unprocessable, upstreamFailure } from '../errors.js';
 import { articleOut, collectionState } from '../newsArticles.js';
+import { limitPerUser } from '../rateLimits.js';
 
 const confirmSchema = z.object({
   label: z.string(),
@@ -236,7 +237,7 @@ async function confirmed(
 export const TOPIC_NEWS_DAYS = 7;
 
 export function registerTopicsRoutes(app: Hono<AppEnv>): void {
-  app.post('/topics/resolve', async (context) => {
+  app.post('/topics/resolve', limitPerUser('topicResolve'), async (context) => {
     // The universe is shared reference data with no `user_id` (migration 0015),
     // but resolving against it is part of the product and sits behind the gate.
     const userId = currentUserId(context);
@@ -286,7 +287,7 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
     return context.json(body);
   });
 
-  app.post('/topics', async (context) => context.json(await confirmed(context, null), 201));
+  app.post('/topics', limitPerUser('topicResolve'), async (context) => context.json(await confirmed(context, null), 201));
 
   app.get('/topics/:id', async (context) => {
     const userId = currentUserId(context);
@@ -341,7 +342,7 @@ export function registerTopicsRoutes(app: Hono<AppEnv>): void {
     return context.json(body);
   });
 
-  app.put('/topics/:id', async (context) =>
+  app.put('/topics/:id', limitPerUser('topicResolve'), async (context) =>
     context.json(await confirmed(context, parseTopicId(context.req.param('id')))),
   );
 

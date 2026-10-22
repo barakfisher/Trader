@@ -38,6 +38,7 @@ import {
 } from '../../db/queries.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, notFound, upstreamFailure } from '../errors.js';
+import { limitPerUser } from '../rateLimits.js';
 
 /** The AI service's own bound (`AssistantMessageRequest.message`). */
 const MAX_MESSAGE_LENGTH = 2000;
@@ -53,7 +54,7 @@ const messageSchema = z
 const conversationId = z.string().uuid();
 
 export function registerAssistantRoutes(app: Hono<AppEnv>): void {
-  app.post('/assistant/messages', async (context) => {
+  app.post('/assistant/messages', limitPerUser('assistantQuestion'), async (context) => {
     const parsed = messageSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
       throw badRequest(
