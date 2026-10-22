@@ -35,7 +35,6 @@ import {
   findTelegramBindingByChat,
   getOrCreateUserSettings,
   getUser,
-  listProposals,
   muteUntil,
   redeemTelegramBindToken,
   setTelegramConversation,
@@ -49,12 +48,14 @@ import {
   type RefusalReason,
 } from '../services/proposalState.js';
 import { applyDecision, factsOf } from '../services/proposals.js';
-import { MESSAGES, messagesFor, observationTextIn, type Messages } from '../notify/messages.js';
+import { MESSAGES, messagesFor, type Messages } from '../notify/messages.js';
 import type { RateLimits } from '../http/rateLimits.js';
 import { startQuestion } from './assistantQuestion.js';
 import { decodeBindToken } from './bindToken.js';
 import { BUSY_CALLBACK_DATA, decodeCallbackData } from './callbackToken.js';
 import { TelegramNotifier, type Keyboard } from './client.js';
+import { clock, handleMenuTap, sendView } from './menu.js';
+import { decodeMenuData, isMenuData, type MenuView } from './menuData.js';
 import { handleSignupCallback } from './signupApproval.js';
 import { decodeSignupData } from './signupToken.js';
 import { recheckOffered, startRecheckCallback } from './proposalRecheck.js';
@@ -80,6 +81,22 @@ export const MAX_MUTE_HOURS = 24 * 7;
 export const TELEGRAM_SNOOZE_HOURS = 4;
 
 /**
+ * A chat as Telegram describes it. `type` is `private`, `group`, `supergroup`
+ * or `channel`; Telegram always sends it, and a chat without it is not private.
+ */
+const chatSchema = z.object({ id: z.number(), type: z.string().optional() }).passthrough();
+
+/**
+ * Only a one-to-one chat with the bot is served (D273). In a group the chat is
+ * not the person: every member could read the portfolio, mute the owner's
+ * alerts or `/stop` them, and the binding - the whole authority of a menu tap
+ * (D269) - would speak for all of them.
+ */
+function isPrivate(chat: z.infer<typeof chatSchema>): boolean {
+  return chat.type === 'private';
+}
+
+/**
  * Telegram's update envelope, narrowed to the two kinds this bot handles.
  *
  * Deliberately permissive - `passthrough` everywhere, every field optional -
@@ -91,7 +108,7 @@ const updateSchema = z
     message: z
       .object({
         text: z.string().optional(),
-        chat: z.object({ id: z.number() }).passthrough(),
+        chat: chatSchema,
         from: z.object({ username: z.string().optional() }).passthrough().optional(),
       })
       .passthrough()
@@ -106,7 +123,7 @@ const updateSchema = z
             // which one, and the text is what the outcome line is appended to.
             message_id: z.number(),
             text: z.string().optional(),
-            chat: z.object({ id: z.number() }).passthrough(),
+            chat: chatSchema,
           })
           .passthrough()
           .optional(),
@@ -269,18 +286,35 @@ async function handleMessage(
   if (message === undefined) return;
   const chatId = String(message.chat.id);
   const text = message.text?.trim() ?? '';
-  const [command, argument] = text.split(/\s+/, 2);
+  const [typed, argument] = text.split(/\s+/, 2);
+  // `/help@traders_bot` is how a command chosen from the menu arrives in a group.
+  const command = typed?.split('@')[0];
   const telegram = telegramOf(deps);
 
-  if (command === '/start') {
+  if (!isPrivate(message.chat)) {
+    logger().info({ chatId, type: message.chat.type ?? null }, 'telegram.message_from_non_private_chat');
+    // Whoever sends /start here holds a link and is trying to connect: say where
+    // to do it, and leave the link unused. Everything else is ignored, as from
+    // an unbound chat.
+    if (command === '/start') await telegram?.sendText(chatId, messagesFor('en').privateChatOnly);
+    return;
+  }
+
+  if (command === '/start' && argument !== undefined) {
     await handleStart(deps, chatId, argument, message.from?.username ?? null);
     return;
   }
 
-  // Check two, for every command except /start: an unbound chat is ignored in
-  // silence. /start is the exception because binding is precisely what it does.
+  // Check two, for every command except /start with a link: an unbound chat is
+  // ignored in silence. /start is the exception because binding is precisely
+  // what it does.
   const binding = await findTelegramBindingByChat(chatId);
   if (binding === null) {
+    if (command === '/start') {
+      // A bare /start in a chat that is not connected: say how to connect.
+      await handleStart(deps, chatId, undefined, message.from?.username ?? null);
+      return;
+    }
     logger().info({ chatId }, 'telegram.message_from_unbound_chat');
     return;
   }
@@ -308,24 +342,27 @@ async function handleMessage(
     return;
   }
 
+  // The read-only views (D269-D272): a command sends one, its buttons edit it.
+  const views: Partial<Record<string, MenuView>> = {
+    '/start': { view: 'help' },
+    '/help': { view: 'help' },
+    '/portfolio': { view: 'portfolio' },
+    '/agents': { view: 'agents' },
+    '/status': { view: 'status' },
+    '/pending': { view: 'pending' },
+  };
+  const view = command === undefined ? undefined : views[command];
+  if (view !== undefined) {
+    if (telegram !== null) {
+      await sendView({ config: deps.config, ai: deps.ai, telegram }, chatId, binding.user_id, view, settings.language);
+    }
+    return;
+  }
+
   switch (command) {
     case '/new': {
       await setTelegramConversation(binding.user_id, null);
       await telegram?.sendText(chatId, messages.ask.newConversation);
-      return;
-    }
-    case '/pending': {
-      const open = await listProposals(binding.user_id, { open: true, limit: 10 });
-      const now = new Date();
-      const live = open.filter((row) => effectiveState(factsOf(row), now) !== 'expired');
-      await telegram?.sendText(
-        chatId,
-        live.length === 0
-          ? messages.nothingPending
-          : live
-              .map((row) => `• ${observationTextIn(row, settings.language).headline}`)
-              .join('\n'),
-      );
       return;
     }
     case '/mute': {
@@ -335,7 +372,16 @@ async function handleMessage(
         return;
       }
       await muteUntil(binding.user_id, until);
-      await telegram?.sendText(chatId, messages.mutedUntil(until.toISOString()));
+      const user = await getUser(binding.user_id);
+      await telegram?.sendText(
+        chatId,
+        messages.mutedUntil(clock(until, { messages, timezone: user?.timezone ?? 'UTC', now: new Date() })),
+      );
+      return;
+    }
+    case '/unmute': {
+      await muteUntil(binding.user_id, null);
+      await telegram?.sendText(chatId, messages.unmuted);
       return;
     }
     case '/stop': {
@@ -345,14 +391,11 @@ async function handleMessage(
       await telegram?.sendText(chatId, messages.disconnected);
       return;
     }
-    case '/portfolio': {
-      await telegram?.sendText(chatId, messages.alertingFrom(
-          messages.severities[settings.notify_severity] ?? settings.notify_severity,
-        ));
-      return;
-    }
     default:
-      await telegram?.sendText(chatId, messages.commands);
+      // An unknown command is answered with what exists.
+      if (telegram !== null) {
+        await sendView({ config: deps.config, ai: deps.ai, telegram }, chatId, binding.user_id, { view: 'help' }, settings.language);
+      }
   }
 }
 
@@ -410,6 +453,18 @@ async function handleCallback(
     // and decides nothing; this answer is the whole of what it does.
     // A busy tap arrives before any lookup; English, as for an unknown chat.
     await telegram?.answerCallback(callback.id, messagesFor('en').stillWorking);
+    return;
+  }
+
+  if (callback.message !== undefined && !isPrivate(callback.message.chat)) {
+    // Before any lookup: a button in a group decides nothing, whoever tapped it (D273).
+    logger().warn({ chatId, type: callback.message.chat.type ?? null }, 'telegram.callback_from_non_private_chat');
+    await telegram?.answerCallback(callback.id, messagesFor('en').buttonInvalid);
+    return;
+  }
+
+  if (callback.data !== undefined && isMenuData(callback.data)) {
+    await handleMenuCallback(deps, callback, chatId);
     return;
   }
 
@@ -601,4 +656,47 @@ async function handleCallback(
       'telegram.edit_failed',
     );
   }
+}
+
+/**
+ * A menu button (D269): unsigned, so the chat's binding is the whole of its
+ * authority - the tapping chat's user is the one whose data is read. An
+ * unbound chat is told the button is not for it, as a signed one would be.
+ */
+async function handleMenuCallback(
+  deps: UpdateDeps,
+  callback: NonNullable<z.infer<typeof updateSchema>['callback_query']>,
+  chatId: string | null,
+): Promise<void> {
+  const telegram = telegramOf(deps);
+  if (telegram === null) return;
+  const tap = decodeMenuData(callback.data ?? '');
+  let binding: Awaited<ReturnType<typeof findTelegramBindingByChat>>;
+  let language: string;
+  try {
+    binding = chatId === null || tap === null ? null : await findTelegramBindingByChat(chatId);
+    language = binding === null ? 'en' : (await getOrCreateUserSettings(binding.user_id)).language;
+  } catch (error) {
+    // A tap is always answered, or its spinner runs until Telegram gives up.
+    logger().error({ err: error }, 'telegram.menu_tap_failed');
+    await telegram.answerCallback(callback.id, messagesFor('en').menu.unavailable);
+    return;
+  }
+  if (chatId === null || binding === null || callback.message === undefined || tap === null) {
+    logger().warn({ chatId, bound: binding !== null, decoded: tap !== null }, 'telegram.menu_tap_rejected');
+    await telegram.answerCallback(callback.id, messagesFor('en').buttonInvalid);
+    return;
+  }
+  // Not awaited: a view waits on the AI service, and the poller must not (`menu.ts`).
+  void handleMenuTap(
+    { config: deps.config, ai: deps.ai, telegram },
+    {
+      callbackId: callback.id,
+      chatId,
+      messageId: callback.message.message_id,
+      userId: binding.user_id,
+      language,
+      data: tap,
+    },
+  );
 }

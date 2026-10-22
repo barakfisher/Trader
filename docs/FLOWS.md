@@ -109,6 +109,11 @@ sequenceDiagram
 ```
 Unbound chat ⇒ ignored silently. Replayed callback ⇒ nonce already burned ⇒ answered with the
 current state. Bot commands in v1: `/start`, `/portfolio`, `/pending`, `/mute <duration>`, `/stop`.
+Since M11 (D269-D272): `/help`, `/agents`, `/status`, `/unmute` and `/new` as well, listed in
+Telegram's `/` menu; `/help`, `/portfolio`, `/agents`, `/status` and `/pending` send a view whose
+buttons rewrite that same message. Menu buttons are unsigned and read only the tapping chat's
+user; buttons that decide or spend stay signed. Only a private chat is served (D273): a group's `/start` is told to
+connect privately, and everything else from a group is ignored.
 
 ---
 

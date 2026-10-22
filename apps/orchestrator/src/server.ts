@@ -18,6 +18,7 @@ import { initLogger, logger } from './logger.js';
 import { buildNotifier } from './notify/factory.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
 import { TelegramNotifier } from './telegram/client.js';
+import { registerBotCommands } from './telegram/commandMenu.js';
 import { TelegramPoller } from './telegram/poller.js';
 import { handleTelegramUpdate } from './telegram/updates.js';
 import { startScanQueue } from './services/scanQueue.js';
@@ -62,6 +63,8 @@ function main(): void {
         })
       : null;
   poller?.start();
+  // The `/` menu (D271), set on every start so it follows the code. Never fails the boot.
+  if (notifier instanceof TelegramNotifier) void registerBotCommands(notifier);
   if (poller === null && notifier instanceof TelegramNotifier) {
     log.info({ transport: config.TELEGRAM_UPDATES }, 'telegram updates not polled');
   }

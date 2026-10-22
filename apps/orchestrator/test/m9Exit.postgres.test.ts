@@ -509,7 +509,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
       );
       await handleTelegramUpdate(deps, {
         update_id: 1,
-        callback_query: { id: `tap-${action}`, data, message: { message_id: 1, text: 'x', chat: { id: dana.chatId } } },
+        callback_query: { id: `tap-${action}`, data, message: { message_id: 1, text: 'x', chat: { id: dana.chatId, type: 'private' } } },
       });
     }
     expect(await omersRows()).toEqual(before);
@@ -521,7 +521,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
       callback_query: {
         id: 'tap-own',
         data: encodeCallbackData({ proposalId: dana.proposal, action: 'reject', nonce: mintNonce() }, config.TELEGRAM_SIGNING_SECRET!),
-        message: { message_id: 1, text: 'x', chat: { id: dana.chatId } },
+        message: { message_id: 1, text: 'x', chat: { id: dana.chatId, type: 'private' } },
       },
     });
     const { rows } = await getPool().query<{ state: string }>('SELECT state FROM proposals WHERE id = $1', [dana.proposal]);
@@ -551,7 +551,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
 
     await handleTelegramUpdate(
       { config, notifier: buildNotifier(config), ai, rateLimits: memoryRateLimits() },
-      { update_id: 2, message: { text: 'What do I hold?', chat: { id: dana.chatId } } },
+      { update_id: 2, message: { text: 'What do I hold?', chat: { id: dana.chatId, type: 'private' } } },
     );
     await vi.waitFor(() => expect(asked).toHaveLength(1));
     expect(asked[0]!.user_id).toBe(dana.id);

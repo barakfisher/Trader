@@ -24,6 +24,7 @@
 
 import {
   RECHECK_WINDOW_DAYS,
+  type AgentScanOutcome,
   type AssistantOutcome,
   type DigestReason,
   type EvidenceChecked,
@@ -37,6 +38,7 @@ import {
 } from '@traders/shared';
 
 import type { CallbackAction } from '../telegram/callbackToken.js';
+import type { BotCommand } from '../telegram/commandMenu.js';
 import type { FailureCause } from '../services/scheduledScans.js';
 import { slotClock, type ScanSlot } from '../services/scanSchedule.js';
 import type { NarrationState } from '../services/narrationHealth.js';
@@ -166,12 +168,104 @@ export interface Messages {
   disconnected: string;
   /** Severity names, for a sentence: `notify_severity` is stored in English. */
   severities: Record<string, string>;
-  alertingFrom: (severity: string) => string;
-  commands: string;
+  unmuted: string;
   connected: string;
   chatTaken: string;
   linkUsed: string;
   linkInvalid: string;
+  /** `/start` in a group (D273): connect in a one-to-one chat. */
+  privateChatOnly: string;
+
+  /**
+   * The bot's menu (M11 slice A1, D269-D272): `/help`, the views its buttons
+   * open, and the descriptions in Telegram's command list. Every figure arrives
+   * formatted in this language's locale; these only frame them.
+   */
+  menu: {
+    /** Shown beside each command when the user types `/` (`commandMenu.ts`). */
+    commands: Record<BotCommand, string>;
+    help: string;
+    buttons: {
+      portfolio: string;
+      agents: string;
+      status: string;
+      pending: string;
+      refresh: string;
+      menu: string;
+      lastRun: string;
+      backToAgents: string;
+      backToAgent: string;
+      mute: (hours: number) => string;
+      unmute: string;
+    };
+    asOf: (time: string) => string;
+    /** A view that could not be read: the toast, and the message is left as it was. */
+    unavailable: string;
+    portfolio: {
+      title: string;
+      empty: string;
+      value: (value: string) => string;
+      today: (change: string, percent: string) => string;
+      todayUnknown: string;
+      holdings: (count: number, priced: number) => string;
+      /** The total leaves these out: never valued at zero (guideline 7). */
+      unpriced: (symbols: string[]) => string;
+      stale: string;
+      agentsApart: string;
+    };
+    status: {
+      title: string;
+      alertingFrom: (severity: string) => string;
+      mutedUntil: (until: string) => string;
+      notMuted: string;
+      quietHours: (start: string, end: string) => string;
+      mutedToast: (hours: number) => string;
+      unmutedToast: string;
+    };
+    pending: {
+      title: string;
+      /** Proposal states, for a sentence: stored in English. */
+      states: Record<string, string>;
+    };
+    agents: {
+      title: string;
+      empty: string;
+      choose: string;
+      gone: string;
+      scansADay: (count: number) => string;
+    };
+    agent: {
+      states: Record<'active' | 'paused', string>;
+      running: (since: string) => string;
+      schedule: (slots: string[]) => string;
+      onlyWhenAsked: string;
+      nextScan: (at: string) => string;
+      /** The market calendar could not be read just now. */
+      nextScanUnknown: string;
+      /** This installation does not run scheduled scans (D71). */
+      notScheduledHere: string;
+      waitingForBrief: string;
+      cash: (cash: string, deposited: string) => string;
+      netWorth: (worth: string, pnl: string, percent: string) => string;
+      unpriced: (symbols: string[]) => string;
+      holdings: (count: number) => string;
+      spentToday: (spent: string, budget: string) => string;
+    };
+    log: {
+      title: (agent: string) => string;
+      none: string;
+      started: (at: string, trigger: string) => string;
+      triggers: Record<'manual' | 'schedule' | 'refresh', string>;
+      running: string;
+      outcome: (outcome: string) => string;
+      outcomes: Record<AgentScanOutcome, string>;
+      trade: (side: 'buy' | 'sell', quantity: string, symbol: string) => string;
+      proposalNow: (state: string) => string;
+      refused: (problems: string) => string;
+      cost: (cost: string, model: string | null) => string;
+      fullOnDecisions: string;
+    };
+  };
 
   /** A trade proposal's headline (D51: the frame is the catalogue's; the thesis the model's). */
   tradeProposalHeadline: (agent: string, side: 'buy' | 'sell', quantity: string, symbol: string, price: string) => string;
@@ -377,13 +471,129 @@ const en: Messages = {
   mutedUntil: (until) => `Muted until ${until}. Findings still reach your feed and the digest.`,
   disconnected: 'Disconnected. Your portfolio is still being watched; nothing will be sent here.',
   severities: { info: 'info', notable: 'notable', high: 'high' },
-  alertingFrom: (severity) =>
-    `Alerting on ${severity} and above. Open the app for the full portfolio.`,
-  commands: 'Write a question to ask the assistant. Commands: /new /portfolio /pending /mute /stop',
-  connected: 'Connected. Alerts will arrive here.',
+  unmuted: 'Alerts are on again.',
+  connected: 'Connected. Alerts will arrive here. /help shows what this bot can do.',
   chatTaken: 'This chat is already connected to another account.',
   linkUsed: 'That link has already been used. Generate a new one.',
   linkInvalid: 'That link is not valid or has expired. Generate a new one.',
+  privateChatOnly:
+    'This bot works only in a private chat: in a group, every member would see your portfolio. Open the link from Settings again and connect in a chat with the bot itself.',
+
+  menu: {
+    commands: {
+      help: 'What this bot can do',
+      portfolio: "Your real portfolio: value and today's change",
+      agents: 'Your simulated agents and their last scans',
+      pending: 'Proposals waiting on you',
+      status: 'Alerts and mute',
+      mute: 'Pause alerts: /mute 2h or /mute 30m',
+      unmute: 'Turn alerts back on',
+      new: 'Start a new conversation with the assistant',
+      stop: 'Disconnect this chat',
+    },
+    help: [
+      '🧭 Traders',
+      'Write any question and the assistant answers it.',
+      '',
+      "/portfolio - your real portfolio: value and today's change",
+      '/agents - your simulated agents, their schedules and last scans',
+      '/pending - proposals waiting on you',
+      '/status - alerts and mute',
+      '/mute 2h · /unmute - pause or resume alerts',
+      '/new - a new conversation with the assistant',
+      '/stop - disconnect this chat',
+      '',
+      'Nothing here places an order: approvals write to the virtual ledger only.',
+    ].join('\n'),
+    buttons: {
+      portfolio: '📊 Portfolio',
+      agents: '🤖 Agents',
+      status: '🔔 Status / Mute',
+      pending: '⏳ Pending',
+      refresh: '🔄 Refresh',
+      menu: '⬅️ Menu',
+      lastRun: '📜 Last run',
+      backToAgents: '⬅️ Agents',
+      backToAgent: '⬅️ Agent',
+      mute: (hours) => `🔕 Mute ${hours}h`,
+      unmute: '🔔 Unmute',
+    },
+    asOf: (time) => `As of ${time}`,
+    unavailable: 'Could not load this right now. Try again in a minute.',
+    portfolio: {
+      title: '📊 Your portfolio',
+      empty: 'No holdings yet. Add them in the app.',
+      value: (value) => `Value: ${value}`,
+      today: (change, percent) => `Today: ${change} (${percent})`,
+      todayUnknown: "Today: not known - no previous close to compare with",
+      holdings: (count, priced) =>
+        count === priced
+          ? `${count} ${count === 1 ? 'holding' : 'holdings'}, all priced`
+          : `${count} ${count === 1 ? 'holding' : 'holdings'}, ${priced} priced`,
+      unpriced: (symbols) => `⚠️ No price for ${symbols.join(', ')}: left out of the value, not counted as zero.`,
+      stale: 'Some prices are delayed or from the last close.',
+      agentsApart: 'Simulated agents are not included: see /agents.',
+    },
+    status: {
+      title: '🔔 Alerts',
+      alertingFrom: (severity) => `Alerting on ${severity} and above.`,
+      mutedUntil: (until) => `🔕 Muted until ${until}.`,
+      notMuted: 'Not muted.',
+      quietHours: (start, end) => `Quiet hours ${start}-${end}.`,
+      mutedToast: (hours) => `Muted for ${hours}h`,
+      unmutedToast: 'Alerts are on',
+    },
+    pending: {
+      title: '⏳ Waiting on you',
+      states: { pending: 'pending', snoozed: 'snoozed', approved: 'approved', rejected: 'rejected', expired: 'expired' },
+    },
+    agents: {
+      title: '🤖 Your agents',
+      empty: 'No simulated agents yet. Create one in the app.',
+      choose: 'Choose one to see its schedule and last scan.',
+      gone: 'That agent no longer exists.',
+      scansADay: (count) => (count === 0 ? 'on request' : `${count} ${count === 1 ? 'scan' : 'scans'}/day`),
+    },
+    agent: {
+      states: { active: 'Active', paused: 'Paused' },
+      running: (since) => `🔄 Scanning now (since ${since})`,
+      schedule: (slots) => `Schedule: ${slots.join(' · ')}, trading days`,
+      onlyWhenAsked: 'Schedule: none - scans only when you ask',
+      nextScan: (at) => `Next scan: ${at}`,
+      nextScanUnknown: 'Next scan: not known right now (the market calendar could not be read)',
+      notScheduledHere: 'Scheduled scans are off on this installation.',
+      waitingForBrief: 'Waiting for instructions or settings: it does not scan until it has them.',
+      cash: (cash, deposited) => `Cash: ${cash} of ${deposited} deposited`,
+      netWorth: (worth, pnl, percent) => `Net worth: ${worth} (P&L ${pnl}, ${percent})`,
+      unpriced: (symbols) => `⚠️ No price for ${symbols.join(', ')}: net worth not known.`,
+      holdings: (count) => `${count} ${count === 1 ? 'holding' : 'holdings'}`,
+      spentToday: (spent, budget) => `AI spend today: ${spent} of ${budget}`,
+    },
+    log: {
+      title: (agent) => `📜 ${agent}: last scan`,
+      none: 'No scans yet.',
+      started: (at, trigger) => `${at}, ${trigger}`,
+      triggers: { manual: 'run by you', schedule: 'scheduled', refresh: 're-check' },
+      running: 'Still running.',
+      outcome: (outcome) => `Outcome: ${outcome}`,
+      outcomes: {
+        trade: 'proposed trades',
+        no_trade: 'no trade',
+        invalid_answer: 'the answer could not be read',
+        budget_reached: "the agent's daily AI budget ran out",
+        step_limit: 'stopped at its step limit',
+        failed: 'failed',
+        rule_rejected: 'refused by the checks',
+        cap_reached: 'your monthly AI limit was reached',
+        own_key_failed: 'your own OpenRouter key was refused',
+      },
+      trade: (side, quantity, symbol) => `• ${side === 'buy' ? 'Buy' : 'Sell'} ${quantity} ${symbol}`,
+      proposalNow: (state) => ` - ${state}`,
+      refused: (problems) => ` - not proposed: ${problems}`,
+      cost: (cost, model) => (model === null ? `Cost ${cost}` : `Cost ${cost} (${model})`),
+      fullOnDecisions: "The full transcript is on the agent's Decisions tab.",
+    },
+  },
 
   tradeProposalHeadline: (agent, side, quantity, symbol, price) =>
     `${agent} proposes to ${side} ${quantity} ${symbol} at ${price}`,
@@ -693,15 +903,134 @@ const he: Messages = {
 
   nothingPending: 'שום דבר לא ממתין לך.',
   muteUsage: `נסו ${ltr('/mute 2h')} או ${ltr('/mute 30m')}.`,
-  mutedUntil: (until) => `מושתק עד ${ltr(until)}. ממצאים עדיין מגיעים לפיד ולסיכום היומי.`,
+  mutedUntil: (until) => `מושתק עד ${isolated(until)}. ממצאים עדיין מגיעים לפיד ולסיכום היומי.`,
   disconnected: 'החיבור נותק. התיק שלך עדיין במעקב; שום דבר לא יישלח לכאן.',
   severities: { info: 'מידע', notable: 'בולט', high: 'גבוה' },
-  alertingFrom: (severity) => `התראות מרמת ${severity} ומעלה. התיק המלא באפליקציה.`,
-  commands: `כתבו שאלה כדי לשאול את העוזר. פקודות: ${ltr('/new /portfolio /pending /mute /stop')}`,
-  connected: 'מחובר. ההתראות יגיעו לכאן.',
+  unmuted: 'ההתראות פועלות שוב.',
+  connected: `מחובר. ההתראות יגיעו לכאן. ${ltr('/help')} מציג מה הבוט יודע לעשות.`,
   chatTaken: 'הצ׳אט הזה כבר מחובר לחשבון אחר.',
   linkUsed: 'בקישור הזה כבר השתמשו. צרו קישור חדש.',
   linkInvalid: 'הקישור הזה לא תקף או שפג תוקפו. צרו קישור חדש.',
+  privateChatOnly:
+    'הבוט עובד רק בצ׳אט פרטי: בקבוצה כל החברים היו רואים את התיק שלך. פתחו שוב את הקישור מההגדרות והתחברו בצ׳אט עם הבוט עצמו.',
+
+  menu: {
+    commands: {
+      help: 'מה הבוט יודע לעשות',
+      portfolio: 'התיק האמיתי שלך: שווי ושינוי יומי',
+      agents: 'הסוכנים המדומים שלך והסריקות האחרונות שלהם',
+      pending: 'הצעות שממתינות לך',
+      status: 'התראות והשתקה',
+      mute: `השתקת התראות: ${ltr('/mute 2h')} או ${ltr('/mute 30m')}`,
+      unmute: 'הפעלת ההתראות מחדש',
+      new: 'שיחה חדשה עם העוזר',
+      stop: 'ניתוק הצ׳אט הזה',
+    },
+    help: [
+      `🧭 ${ltr('Traders')}`,
+      'כתבו כל שאלה והעוזר יענה עליה.',
+      '',
+      `${ltr('/portfolio')} - התיק האמיתי שלך: שווי ושינוי יומי`,
+      `${ltr('/agents')} - הסוכנים המדומים שלך, הלו״ז והסריקות האחרונות שלהם`,
+      `${ltr('/pending')} - הצעות שממתינות לך`,
+      `${ltr('/status')} - התראות והשתקה`,
+      `${ltr('/mute 2h')} · ${ltr('/unmute')} - השתקה או חידוש של ההתראות`,
+      `${ltr('/new')} - שיחה חדשה עם העוזר`,
+      `${ltr('/stop')} - ניתוק הצ׳אט הזה`,
+      '',
+      'שום דבר כאן לא שולח פקודה: אישורים נרשמים ביומן הווירטואלי בלבד.',
+    ].join('\n'),
+    buttons: {
+      portfolio: '📊 תיק',
+      agents: '🤖 סוכנים',
+      status: '🔔 מצב / השתקה',
+      pending: '⏳ ממתינות',
+      refresh: '🔄 רענון',
+      menu: '➡️ תפריט',
+      lastRun: '📜 ריצה אחרונה',
+      backToAgents: '➡️ סוכנים',
+      backToAgent: '➡️ סוכן',
+      mute: (hours) => (hours === 1 ? '🔕 השתקה לשעה' : `🔕 השתקה ל־${ltr(hours)} שעות`),
+      unmute: '🔔 ביטול השתקה',
+    },
+    asOf: (time) => `נכון ל־${ltr(time)}`,
+    unavailable: 'לא הצלחתי לטעון את זה כרגע. נסו שוב בעוד דקה.',
+    portfolio: {
+      title: '📊 התיק שלך',
+      empty: 'עדיין אין אחזקות. הוסיפו אותן באפליקציה.',
+      value: (value) => `שווי: ${ltr(value)}`,
+      today: (change, percent) => `היום: ${ltr(change)} (${ltr(percent)})`,
+      todayUnknown: 'היום: לא ידוע - אין מחיר סגירה קודם להשוואה',
+      holdings: (count, priced) =>
+        count === priced
+          ? `${hebrewCount(count, 'אחזקה אחת', 'אחזקות')}, לכולן יש מחיר`
+          : `${hebrewCount(count, 'אחזקה אחת', 'אחזקות')}, ל־${ltr(priced)} יש מחיר`,
+      unpriced: (symbols) =>
+        `⚠️ אין מחיר ל־${symbols.map(ltr).join(', ')}: לא נכללו בשווי, ולא נספרו כאפס.`,
+      stale: 'חלק מהמחירים מעוכבים או ממחיר הסגירה האחרון.',
+      agentsApart: `הסוכנים המדומים לא נכללים: ראו ${ltr('/agents')}.`,
+    },
+    status: {
+      title: '🔔 התראות',
+      alertingFrom: (severity) => `התראות מרמת ${severity} ומעלה.`,
+      mutedUntil: (until) => `🔕 מושתק עד ${isolated(until)}.`,
+      notMuted: 'לא מושתק.',
+      quietHours: (start, end) => `שעות שקט ${ltr(`${start}-${end}`)}.`,
+      mutedToast: (hours) => (hours === 1 ? 'הושתק לשעה' : `הושתק ל־${ltr(hours)} שעות`),
+      unmutedToast: 'ההתראות פועלות',
+    },
+    pending: {
+      title: '⏳ ממתינות לך',
+      states: { pending: 'ממתינה', snoozed: 'מושהית', approved: 'אושרה', rejected: 'נדחתה', expired: 'פג תוקף' },
+    },
+    agents: {
+      title: '🤖 הסוכנים שלך',
+      empty: 'עדיין אין סוכנים מדומים. צרו סוכן באפליקציה.',
+      choose: 'בחרו סוכן כדי לראות את הלו״ז ואת הסריקה האחרונה.',
+      gone: 'הסוכן הזה כבר לא קיים.',
+      scansADay: (count) =>
+        count === 0 ? 'לפי בקשה' : count === 1 ? 'סריקה אחת ביום' : `${ltr(count)} סריקות ביום`,
+    },
+    agent: {
+      states: { active: 'פעיל', paused: 'מושהה' },
+      running: (since) => `🔄 סורק עכשיו (מאז ${isolated(since)})`,
+      schedule: (slots) => `לו״ז: ${slots.join(' · ')}, בימי מסחר`,
+      onlyWhenAsked: 'לו״ז: אין - סורק רק כשמבקשים',
+      nextScan: (at) => `הסריקה הבאה: ${isolated(at)}`,
+      nextScanUnknown: 'הסריקה הבאה: לא ידוע כרגע (לא ניתן היה לקרוא את לוח המסחר)',
+      notScheduledHere: 'סריקות מתוזמנות כבויות בהתקנה הזו.',
+      waitingForBrief: 'ממתין להוראות או להגדרות: הוא לא סורק עד שיהיו לו.',
+      cash: (cash, deposited) => `מזומן: ${ltr(cash)} מתוך ${ltr(deposited)} שהופקדו`,
+      netWorth: (worth, pnl, percent) => `שווי נקי: ${ltr(worth)} (רווח/הפסד ${ltr(pnl)}, ${ltr(percent)})`,
+      unpriced: (symbols) => `⚠️ אין מחיר ל־${symbols.map(ltr).join(', ')}: השווי הנקי לא ידוע.`,
+      holdings: (count) => hebrewCount(count, 'אחזקה אחת', 'אחזקות'),
+      spentToday: (spent, budget) => `הוצאת בינה מלאכותית היום: ${ltr(spent)} מתוך ${ltr(budget)}`,
+    },
+    log: {
+      title: (agent) => `📜 ${isolated(agent)}: הסריקה האחרונה`,
+      none: 'עדיין אין סריקות.',
+      started: (at, trigger) => `${isolated(at)}, ${trigger}`,
+      triggers: { manual: 'הורצה על ידך', schedule: 'מתוזמנת', refresh: 'בדיקה חוזרת' },
+      running: 'עדיין רצה.',
+      outcome: (outcome) => `תוצאה: ${outcome}`,
+      outcomes: {
+        trade: 'הציע עסקאות',
+        no_trade: 'ללא עסקה',
+        invalid_answer: 'לא ניתן היה לקרוא את התשובה',
+        budget_reached: 'תקציב הבינה המלאכותית היומי של הסוכן נגמר',
+        step_limit: 'נעצרה במגבלת הצעדים',
+        failed: 'נכשלה',
+        rule_rejected: 'נדחתה בבדיקות',
+        cap_reached: 'הגעת למגבלת הבינה המלאכותית החודשית שלך',
+        own_key_failed: `מפתח ה־${ltr('OpenRouter')} שלך נדחה`,
+      },
+      trade: (side, quantity, symbol) => `• ${side === 'buy' ? 'קנייה' : 'מכירה'} של ${ltr(quantity)} ${ltr(symbol)}`,
+      proposalNow: (state) => ` - ${state}`,
+      refused: (problems) => ` - לא הוצעה: ${isolated(problems)}`,
+      cost: (cost, model) => (model === null ? `עלות ${ltr(cost)}` : `עלות ${ltr(cost)} (${ltr(model)})`),
+      fullOnDecisions: 'התמליל המלא בלשונית ההחלטות של הסוכן.',
+    },
+  },
 
   tradeProposalHeadline: (agent, side, quantity, symbol, price) =>
     `${isolated(agent)} מציע ${side === 'buy' ? 'לקנות' : 'למכור'} ${ltr(quantity)} ${ltr(symbol)} ב־${ltr(price)}`,
