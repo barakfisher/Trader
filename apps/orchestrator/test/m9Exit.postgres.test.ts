@@ -9,13 +9,22 @@
  *
  * The routes are read from the app itself, so a route added later is covered
  * without editing this file. A route with a parameter is asked with each of
- * the other user's ids in turn - agent, holding, topic, conversation - and must
- * answer without any of the other user's marks.
+ * the other user's ids in turn - agent, holding, topic, conversation,
+ * observation, proposal - and every combination of them where it takes two,
+ * and must answer without any of the other user's marks.
+ *
+ * M10 extends it to writes (D266): every POST, PUT, PATCH and DELETE is asked
+ * with the other user's ids too, and must answer 404 - or 403 behind the admin
+ * gate - and leave every one of the other user's rows exactly as it was. "Every
+ * row" is read from the schema (each table with a `user_id`), so a table added
+ * later is fingerprinted without editing this file either. Telegram is tried
+ * the same way: a tap on the other user's proposal and a question, both from
+ * this user's chat.
  */
 
 import { randomUUID } from 'node:crypto';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { TEST_SESSION_SECRET, sessionCookie } from './session.js';
 
@@ -28,19 +37,115 @@ if (DATABASE_URL === '' && process.env.INTEGRATION_REQUIRED === '1') {
 /** Prefixes that are not a signed-in user's: the gate, the bot, the probes and the installation's. */
 const NOT_USER_FACING = ['/admin', '/internal', '/auth', '/health', '/healthz', '/readyz', '/telegram/webhook'];
 
+/** Prefixes no signed-in user's request reaches: the scheduler's (a key) and Telegram's (a secret header). */
+const NOT_A_USERS_WRITE = ['/internal', '/telegram/webhook'];
+
+/**
+ * A body for every write a signed-in user can send, keyed `METHOD path`, valid
+ * enough to get past the route's own checks to its lookup - a 400 for a
+ * malformed body would say nothing about whose rows the lookup reads. `null`:
+ * the route reads no body. An id inside a body is Omer's (`OMERS`), filled in
+ * when the test runs. A write route added later fails "describes every write"
+ * until it has an entry here: the list is checked against the app, so it cannot
+ * silently fall behind it.
+ */
+const OMERS = {
+  conversation: '<omer.conversation>',
+  symbol: '<omer.symbol>',
+} as const;
+
+const WRITE_BODIES: Record<string, unknown> = {
+  'POST /account/reset': {},
+  'POST /admin/signups/:userId/approve': {},
+  'POST /admin/signups/:userId/reject': null,
+  'POST /admin/signups/:userId/restore': null,
+  'POST /admin/universe/rescreen': {},
+  'POST /admin/users/:userId/disable': null,
+  'POST /admin/users/:userId/enable': null,
+  'POST /admin/users/:userId/one-time-password': null,
+  'PUT /admin/llm/models/:scope': { model: 'test/model' },
+  'PUT /admin/settings': {},
+  'PUT /admin/users/:userId/cap': { capDollars: '5' },
+  'POST /agents': {},
+  'PATCH /agents/:id': { name: 'Renamed' },
+  'POST /agents/:id/instructions-check': null,
+  'POST /agents/:id/instructions-check/dismiss': null,
+  'POST /agents/:id/scans': null,
+  'POST /agents/:id/top-ups': { amount: '10' },
+  'POST /agents/:id/trades': { symbol: OMERS.symbol, side: 'buy', quantity: '1' },
+  'POST /agents/:id/trades/preview': { symbol: OMERS.symbol, side: 'buy', quantity: '1' },
+  'POST /assistant/messages': { message: 'What do I hold?', conversationId: OMERS.conversation },
+  'DELETE /assistant/conversations/:id': null,
+  'POST /auth/email': { email: 'someone@example.com', currentPassword: 'not the password' },
+  'POST /auth/login': {},
+  'POST /auth/logout': null,
+  'POST /auth/password': { currentPassword: 'not the password', newPassword: 'a new password here' },
+  'POST /auth/signup': {},
+  'POST /auth/timezone': { timezone: 'Europe/London' },
+  'POST /holdings': {},
+  'PATCH /holdings/:id': { notes: 'changed' },
+  'DELETE /holdings/:id': null,
+  'POST /imports/commit': {},
+  'POST /imports/preview': {},
+  'POST /notifications/digest/seen': { sentAt: '2099-01-01T00:00:00Z' },
+  'POST /observations/seen': { upTo: '2099-01-01T00:00:00Z' },
+  'POST /proposals/:id/confirm': { shownPriceMinor: 10000 },
+  'POST /proposals/:id/decision': { action: 'reject' },
+  'POST /proposals/:id/preview': null,
+  'POST /proposals/:id/recheck': null,
+  'PUT /settings': {},
+  'PUT /settings/llm-key': {},
+  'DELETE /settings/llm-key': null,
+  'POST /telegram/bind-token': null,
+  'PUT /targets': {},
+  'POST /topics': {},
+  'POST /topics/resolve': {},
+  // AAPL, which the fake resolves: an unresolvable symbol is refused (422) before the topic is looked up.
+  'PUT /topics/:id': { label: 'Renamed', symbols: ['AAPL'] },
+  'DELETE /topics/:id': null,
+  'POST /topics/:id/reject': null,
+};
+
+/** Writes with no id in the path that name one of Omer's in the body - so they, too, must answer "not found". */
+const NAMES_OMERS_ROW_IN_BODY = new Set(['POST /assistant/messages']);
+
+interface SeededUser {
+  id: string;
+  mark: string;
+  symbol: string;
+  chatId: number;
+  /** Every id of the user's rows, asked of each route with a parameter. */
+  ids: string[];
+  proposal: string;
+  conversation: string;
+}
+
+function newUser(mark: string): SeededUser {
+  return {
+    id: randomUUID(),
+    mark,
+    symbol: mark.replace('-', '').slice(0, 12),
+    chatId: 1_000_000 + Math.floor(Math.random() * 1_000_000_000),
+    ids: [],
+    proposal: '',
+    conversation: '',
+  };
+}
+
 describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only their own", async () => {
   const { getPool, initPool } = await import('../src/db/pool.js');
   const { loadConfig, resetConfigForTests } = await import('../src/config.js');
   const { createApp } = await import('../src/http/app.js');
   const { createFakeAi } = await import('./fakeAi.js');
+  const { AiServiceError } = await import('@traders/shared/ai');
 
   const run = randomUUID().slice(0, 8);
-  const dana = { id: randomUUID(), mark: `DANA-${run}`, ids: [] as string[] };
-  const omer = { id: randomUUID(), mark: `OMER-${run}`, ids: [] as string[] };
+  const dana = newUser(`DANA-${run}`);
+  const omer = newUser(`OMER-${run}`);
   const disabled = randomUUID();
   let app: ReturnType<typeof createApp>;
 
-  async function seed(user: { id: string; mark: string; ids: string[] }): Promise<void> {
+  async function seed(user: SeededUser): Promise<void> {
     const pool = getPool();
     await pool.query(
       `INSERT INTO users (id, email, status, llm_cap_micro_usd, timezone)
@@ -58,7 +163,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     const instrument = (
       await pool.query<{ id: string }>(
         `INSERT INTO instruments (symbol, asset_class, name) VALUES ($1, 'equity', $2) RETURNING id`,
-        [user.mark.replace('-', '').slice(0, 12), `${user.mark} Corp`],
+        [user.symbol, `${user.mark} Corp`],
       )
     ).rows[0]!.id;
     const holding = (
@@ -81,7 +186,44 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
         [user.id, `${user.mark} conversation`],
       )
     ).rows[0]!.id;
-    user.ids.push(primary, agent, holding, topic, conversation);
+    // An observation and the rebalance proposed on it - the rows the proposal
+    // routes and Telegram's buttons act on. A rebalance rather than a buy: a
+    // buy needs its agent scan, and the app's role cannot delete scans (they
+    // are history), so a user who has one could not be removed afterwards. The
+    // lookup every proposal route makes is the same for both kinds.
+    const observation = (
+      await pool.query<{ id: string }>(
+        `INSERT INTO observations (user_id, agent_id, kind, severity, subject_ref, headline, dedupe_key)
+         VALUES ($1, $2, 'price_move', 'notable', $3, $4, $5) RETURNING id`,
+        [user.id, primary, `instrument:${user.symbol}`, `${user.mark} headline`, `${user.mark}-observation`],
+      )
+    ).rows[0]!.id;
+    const proposal = (
+      await pool.query<{ id: string }>(
+        `INSERT INTO proposals (user_id, agent_id, observation_id, kind, expires_at)
+         VALUES ($1, $2, $3, 'rebalance', now() + interval '1 day') RETURNING id`,
+        [user.id, primary, observation],
+      )
+    ).rows[0]!.id;
+    await pool.query(
+      `INSERT INTO notifications (user_id, agent_id, channel, ref_kind, ref_id, route, reason, dedupe_key)
+       VALUES ($1, $2, 'digest', 'observation', $3, 'digest', 'above_floor', $4)`,
+      [user.id, primary, observation, `${user.mark}-notification`],
+    );
+    await pool.query(
+      `INSERT INTO portfolio_snapshots (user_id, agent_id, as_of, total_minor, currency)
+       VALUES ($1, $2, current_date, 30000, 'USD')`,
+      [user.id, primary],
+    );
+    await pool.query(
+      `INSERT INTO target_weights (user_id, agent_id, instrument_id, weight) VALUES ($1, $2, $3, 0.5)`,
+      [user.id, primary, instrument],
+    );
+    await pool.query(`INSERT INTO telegram_bindings (user_id, chat_id) VALUES ($1, $2)`, [user.id, user.chatId]);
+    await pool.query(`INSERT INTO user_settings (user_id) VALUES ($1) ON CONFLICT DO NOTHING`, [user.id]);
+    user.proposal = proposal;
+    user.conversation = conversation;
+    user.ids.push(primary, agent, holding, topic, conversation, observation, proposal);
   }
 
   beforeAll(async () => {
@@ -105,14 +247,58 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
         INTERNAL_API_KEY: 'internal-test-key',
         ALLOWED_ORIGINS: 'http://localhost:5173',
       } as unknown as NodeJS.ProcessEnv),
-      createFakeAi(),
+      isolationAi(),
     );
   });
+
+  /** Who the app asked the assistant for, in the order it asked. */
+  const askedFor: string[] = [];
+
+  /**
+   * The fake AI service, plus the two calls the writes reach that it lacks.
+   * The assistant answers as the real service does (`assistant/conversations.py`
+   * `find`, proved by `test_another_users_conversation_is_not_found`): a
+   * conversation that is not the asking user's is 404. So the app passing on
+   * the signed-in user's id is what makes Omer's conversation "not found" here -
+   * had it sent his id, the stub would have answered.
+   */
+  function isolationAi(): ReturnType<typeof createFakeAi> {
+    return {
+      ...createFakeAi(),
+      async resolveTopic(topic: string) {
+        return {
+          topic,
+          verdict: 'none',
+          ambiguous: false,
+          best_similarity: null,
+          confident_above: 0.5,
+          refuse_below: 0.3,
+          embedding_model: 'fixture',
+          vector_is_semantic: false,
+          interpretations: [],
+          universe: { state: 'loaded', profiles: 0, embedded: 0 },
+        };
+      },
+      async assistantMessage(request: { user_id: string; conversation_id?: string | null }) {
+        askedFor.push(request.user_id);
+        const { rows } = await getPool().query(
+          'SELECT 1 FROM assistant_conversations WHERE id = $1 AND user_id = $2',
+          [request.conversation_id, request.user_id],
+        );
+        if (rows.length === 0) throw new AiServiceError('no such conversation', 404);
+        throw new Error('only a refusal is expected of this stub');
+      },
+    } as unknown as ReturnType<typeof createFakeAi>;
+  }
 
   afterAll(async () => {
     const pool = getPool();
     const users = [dana.id, omer.id, disabled];
-    // Not every table cascades from `users` (0052's conversations do not).
+    // Not every table cascades from `users` (M9-MEASUREMENT §7): those that do
+    // not go first, proposals before the scans they name.
+    await pool.query('DELETE FROM proposals WHERE user_id = ANY($1::uuid[])', [users]);
+    // Scans, fills, cash movements and refused attempts are history the app's
+    // role cannot delete, and no request here makes one - Omer's ids are refused.
     await pool.query('DELETE FROM assistant_conversations WHERE user_id = ANY($1::uuid[])', [users]);
     await pool.query('DELETE FROM runs WHERE user_id = ANY($1::uuid[])', [users]);
     // `agent_cash` names the user without a cascade; the agent's own delete takes it.
@@ -129,6 +315,19 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
       .filter((path) => !NOT_USER_FACING.some((prefix) => path === prefix || path.startsWith(`${prefix}/`)))
       .filter((path) => !path.includes('*'));
     return [...new Set(paths)];
+  }
+
+  /**
+   * Every concrete path for a route asked with Omer's ids: each id in each
+   * parameter, so a route with two (`/agents/:id/scans/:scanId`) is asked with
+   * his agent and his scan together, not only the same id twice.
+   */
+  function withOmersIds(path: string): string[] {
+    let paths = [path];
+    while (paths.some((candidate) => /:[A-Za-z]+/.test(candidate))) {
+      paths = paths.flatMap((candidate) => omer.ids.map((id) => candidate.replace(/:[A-Za-z]+/, id)));
+    }
+    return paths;
   }
 
   async function read(path: string): Promise<{ status: number; text: string }> {
@@ -158,10 +357,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
   it("never answers Dana with anything of Omer's, on any GET route, with any of his ids", async () => {
     const found: string[] = [];
     for (const path of userFacingGets()) {
-      const asked = path.includes(':')
-        ? omer.ids.map((id) => path.replace(/:[A-Za-z]+/g, id))
-        : [path];
-      for (const concrete of asked) {
+      for (const concrete of withOmersIds(path)) {
         const { status, text } = await read(concrete);
         const leaked = leaks(text);
         if (leaked.length > 0) found.push(`${concrete} -> ${status}: ${leaked.join(', ')}`);
@@ -204,5 +400,160 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
   it("refuses a disabled user's session at once (D160, D239)", async () => {
     const response = await app.request('/portfolio', { headers: { cookie: sessionCookie(disabled) } });
     expect(response.status).toBe(401);
+  });
+  /** Every route a signed-in user could send a write to, as `METHOD path`. */
+  function userWrites(): string[] {
+    const writes = app.routes
+      .filter((route) => route.method !== 'GET' && route.method !== 'ALL')
+      .filter((route) => !NOT_A_USERS_WRITE.some((prefix) => route.path === prefix || route.path.startsWith(`${prefix}/`)))
+      .filter((route) => !route.path.includes('*'))
+      .map((route) => `${route.method} ${route.path}`);
+    return [...new Set(writes)].sort();
+  }
+
+  /**
+   * A fingerprint of every row of Omer's: each table with a `user_id`, read from
+   * the schema, plus his own `users` row. Equal before and after means nothing
+   * of his changed - inserted, updated or deleted.
+   */
+  async function omersRows(): Promise<Record<string, string>> {
+    const pool = getPool();
+    const { rows: tables } = await pool.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND column_name = 'user_id' ORDER BY table_name`,
+    );
+    const fingerprint: Record<string, string> = {};
+    for (const { table_name: table } of tables) {
+      const { rows } = await pool.query<{ digest: string; count: number }>(
+        `SELECT md5(coalesce(string_agg(t::text, '|' ORDER BY t::text), '')) AS digest, count(*)::int AS count
+         FROM ${table} t WHERE user_id = $1`,
+        [omer.id],
+      );
+      fingerprint[table] = `${rows[0]!.count}:${rows[0]!.digest}`;
+    }
+    const { rows } = await pool.query<{ row: string }>(`SELECT u::text AS row FROM users u WHERE id = $1`, [omer.id]);
+    fingerprint.users = rows[0]!.row;
+    return fingerprint;
+  }
+
+  function bodyFor(write: string): string | undefined {
+    const body = WRITE_BODIES[write];
+    if (body === null || body === undefined) return undefined;
+    return JSON.stringify(body)
+      .replaceAll(OMERS.conversation, omer.conversation)
+      .replaceAll(OMERS.symbol, omer.symbol);
+  }
+
+  it('describes every write a signed-in user can send, so a new one is not skipped (D266)', () => {
+    const writes = userWrites();
+    expect(writes.length).toBeGreaterThan(30);
+    expect(writes.filter((write) => !(write in WRITE_BODIES))).toEqual([]);
+    // And nothing listed that the app no longer has, so the list stays the app's.
+    expect(Object.keys(WRITE_BODIES).filter((write) => !writes.includes(write))).toEqual([]);
+  });
+
+  it("never lets Dana change or read anything of Omer's, through any write, with any of his ids (D266)", async () => {
+    const before = await omersRows();
+    const wrong: string[] = [];
+    for (const write of userWrites()) {
+      const [method, path] = write.split(' ') as [string, string];
+      const expected = path.startsWith('/admin') ? 403 : path.includes(':') || NAMES_OMERS_ROW_IN_BODY.has(write) ? 404 : null;
+      for (const concrete of withOmersIds(path)) {
+        const body = bodyFor(write);
+        const response = await app.request(concrete, {
+          method,
+          headers: {
+            cookie: sessionCookie(dana.id),
+            origin: 'http://localhost:5173',
+            ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+          },
+          ...(body === undefined ? {} : { body }),
+        });
+        const text = await response.text();
+        const leaked = leaks(text);
+        if (leaked.length > 0) wrong.push(`${method} ${concrete} -> ${response.status} leaked ${leaked.join(', ')}`);
+        if (expected !== null && response.status !== expected) {
+          wrong.push(`${method} ${concrete} -> ${response.status}, expected ${expected}: ${text.slice(0, 120)}`);
+        }
+      }
+    }
+    expect(wrong).toEqual([]);
+    expect(await omersRows()).toEqual(before);
+    // Ask was reached, and asked only ever for the signed-in user.
+    expect(askedFor.length).toBeGreaterThan(0);
+    expect(new Set(askedFor)).toEqual(new Set([dana.id]));
+  });
+
+  it("does nothing to Omer's proposal when Dana's chat taps any of its buttons (D266)", async () => {
+    const { buildNotifier } = await import('../src/notify/factory.js');
+    const { encodeCallbackData, mintNonce } = await import('../src/telegram/callbackToken.js');
+    const { handleTelegramUpdate } = await import('../src/telegram/updates.js');
+    resetConfigForTests();
+    const config = loadConfig({
+      APP_ENV: 'test',
+      LOG_LEVEL: 'error',
+      SESSION_SECRET: TEST_SESSION_SECRET,
+      DATABASE_URL,
+      AI_SERVICE_URL: 'http://ai-service:8000',
+      INTERNAL_API_KEY: 'internal-test-key',
+      TELEGRAM_SIGNING_SECRET: 'telegram-signing-secret-for-tests',
+    } as unknown as NodeJS.ProcessEnv);
+    const deps = { config, notifier: buildNotifier(config), ai: createFakeAi() };
+
+    const before = await omersRows();
+    for (const action of ['approve', 'confirm', 'reject', 'snooze', 'undo', 'recheck'] as const) {
+      const data = encodeCallbackData(
+        { proposalId: omer.proposal, action, nonce: mintNonce(), ...(action === 'confirm' ? { priceMinor: 10000n } : {}) },
+        config.TELEGRAM_SIGNING_SECRET!,
+      );
+      await handleTelegramUpdate(deps, {
+        update_id: 1,
+        callback_query: { id: `tap-${action}`, data, message: { message_id: 1, text: 'x', chat: { id: dana.chatId } } },
+      });
+    }
+    expect(await omersRows()).toEqual(before);
+
+    // The control: the same tap on Dana's own proposal does take - so the taps
+    // above reached the decision and were refused there, not lost on the way.
+    await handleTelegramUpdate(deps, {
+      update_id: 1,
+      callback_query: {
+        id: 'tap-own',
+        data: encodeCallbackData({ proposalId: dana.proposal, action: 'reject', nonce: mintNonce() }, config.TELEGRAM_SIGNING_SECRET!),
+        message: { message_id: 1, text: 'x', chat: { id: dana.chatId } },
+      },
+    });
+    const { rows } = await getPool().query<{ state: string }>('SELECT state FROM proposals WHERE id = $1', [dana.proposal]);
+    expect(rows[0]!.state).toBe('rejected');
+  });
+
+  it("answers a question from Dana's chat as Dana, never in Omer's conversation (D266)", async () => {
+    const { buildNotifier } = await import('../src/notify/factory.js');
+    const { handleTelegramUpdate } = await import('../src/telegram/updates.js');
+    resetConfigForTests();
+    const config = loadConfig({
+      APP_ENV: 'test',
+      LOG_LEVEL: 'error',
+      SESSION_SECRET: TEST_SESSION_SECRET,
+      DATABASE_URL,
+      AI_SERVICE_URL: 'http://ai-service:8000',
+      INTERNAL_API_KEY: 'internal-test-key',
+    } as unknown as NodeJS.ProcessEnv);
+    const asked: { user_id: string; conversation_id?: string | null }[] = [];
+    const ai = {
+      ...createFakeAi(),
+      async assistantMessage(request: { user_id: string; conversation_id?: string | null }) {
+        asked.push(request);
+        throw new Error('answered elsewhere: this test reads only who asked');
+      },
+    } as unknown as ReturnType<typeof createFakeAi>;
+
+    await handleTelegramUpdate(
+      { config, notifier: buildNotifier(config), ai },
+      { update_id: 2, message: { text: 'What do I hold?', chat: { id: dana.chatId } } },
+    );
+    await vi.waitFor(() => expect(asked).toHaveLength(1));
+    expect(asked[0]!.user_id).toBe(dana.id);
+    expect(asked[0]!.conversation_id ?? null).not.toBe(omer.conversation);
   });
 });
