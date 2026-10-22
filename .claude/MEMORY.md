@@ -3916,6 +3916,32 @@ failure they prevent.
       usable link.
     - **Rejected:** a signed token with no table (it cannot be single-use - a used or forwarded
       reset link would work until it expired).
+261. **Sessions get a table; signing out ends that session, and Settings lists devices** (the
+    user, 2026-10-22; M10 decision 8 (b); **supersedes D160's "no sessions table"**; migration
+    **0069** after D260's 0068).
+    - **The cookie** stays signed and carries a session id. Each request reads the session row
+      with the user row it already reads (one indexed lookup).
+    - **Ending sessions:**
+      - *Sign out* deletes this session's row.
+      - Settings lists the user's sessions, with *Sign out* per device and *Sign out
+        everywhere*.
+      - A password change, a reset (D260), a disable (D239) and an admin one-time password
+        delete all of the user's rows.
+    - **Expired rows** are pruned with the installation's runs.
+    - **Why now:** D160 was right for a household that needed only "end everything now". With
+      strangers on shared or lost devices, "sign out ends this session" is a requirement, and
+      OAuth adds devices per person.
+    - **Assumed, low risk:**
+      - A device is shown as the browser and OS from the user agent, plus last seen.
+      - **No location:** a place from the address needs a GeoIP database, which is a dependency
+        to ask about under convention 5.
+      - The address and user agent kept per session are personal data, and they go with the
+        session row.
+      - `session_version` stays as a second check until the sessions PR shows it adds nothing,
+        then it is retired in its own change.
+    - **Rejected:**
+      - D160 plus *Sign out everywhere* (a copied cookie outlives a sign-out by up to 7 days);
+      - a shorter cookie (everyone signs in more often, and sign-out still does not end a copy).
 
 ---
 

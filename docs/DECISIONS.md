@@ -271,3 +271,4 @@ while this file is out of date.
 | 258 | Email leaves through `nodemailer` over SMTP, behind an `EmailSender` interface; the provider is chosen at deployment |
 | 259 | Email is verified everywhere it matters |
 | 260 | Reset and verification links are single-use tokens in one `auth_tokens` table, stored as SHA-256 hashes |
+| 261 | Sessions get a table; signing out ends that session, and Settings lists devices |

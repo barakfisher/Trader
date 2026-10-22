@@ -367,6 +367,8 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
    **Recommendation: (b).** D160 rejected it for a household where "end at once" was the whole
    requirement. With strangers, "sign out ends this session" is a requirement too.
 
+   *Decided 2026-10-22: (b), a `sessions` table with a device list - [D261](DECISIONS.md).*
+
 9. **OAuth package.**
    - `arctic`: small OAuth 2.0 clients for Google and GitHub, with no opinion on sessions or
      users. Costs: we store `state`/PKCE (a short cookie) and the identities table.
