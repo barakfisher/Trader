@@ -417,6 +417,8 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
     Costs: one migration and two routes. Not offering them is a fact strangers would have to be
     told. **Recommendation: delete with a 7-day grace period, and a JSON export.**
 
+    *Decided 2026-10-22: delete with a 7-day grace period, and a JSON export - [D264](DECISIONS.md).*
+
 13. **Legal pages and consent.**
     - (a) Privacy policy and terms pages, with the signup recording which version was accepted.
     - (b) No pages.

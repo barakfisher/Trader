@@ -274,3 +274,4 @@ while this file is out of date.
 | 261 | Sessions get a table; signing out ends that session, and Settings lists devices |
 | 262 | OAuth uses `arctic`, with our own `user_identities` table |
 | 263 | An OAuth sign-in links to an existing account only when the provider vouches for the email, and every link is announced by email |
+| 264 | A user deletes their own account with a 7-day grace period, and can export their data as JSON |

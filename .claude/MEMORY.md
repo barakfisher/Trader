@@ -3977,6 +3977,33 @@ failure they prevent.
       - linking only from Settings (the same person ends up with a second, empty account);
       - linking on any matching email (anyone who makes a provider account show your
         unverified address signs in as you).
+264. **A user deletes their own account with a 7-day grace period, and can export their data as
+    JSON** (the user, 2026-10-22; M10 decision 12 (b) + (d)).
+    - **Deleting:**
+      - It is confirmed with the password, or by signing in again for an account that only uses
+        OAuth.
+      - The account turns `disabled` at once, with a deletion date, and its sessions end (D261).
+      - Signing in within 7 days cancels it.
+      - After the 7 days an installation run erases it.
+    - **The erase:**
+      - It needs one migration that settles the seven foreign keys with no delete rule
+        (M10-MEASUREMENT §6).
+      - `account_resets` rows go with the user.
+      - `admin_audit` keeps its rows with the user reference cleared.
+      - Shared market data stays.
+    - **The export:**
+      - It covers the user's own rows: holdings, agents, ledgers, proposals, observations,
+        conversations and settings.
+      - Never the API key, sessions, tokens or password hash.
+      - It is rate-limited (D257).
+    - **Assumed, low risk:**
+      - In *automatic* mode, rejected sign-up requests are erased after 90 days (D156 kept them
+        forever, for a household).
+      - The privacy page (decision 13) says backups keep a deleted account for up to 56 days.
+    - **Rejected:**
+      - immediate erase (a mistake or a stolen session is permanent);
+      - no self-service deletion (the admin becomes the process, and a stranger cannot leave);
+      - no export.
 
 ---
 
