@@ -3767,6 +3767,21 @@ failure they prevent.
       An archived agent shows no actions.
     - **Rejected:** buttons in the dashboard's "who holds it" cell (that cell is per holding, so an
       agent holding ten symbols would repeat them ten times, on a table already full on a phone).
+253. **The main portfolio gets a read-only rebalance table computed from the user's own targets**
+    (the user, 2026-10-22; M10 decision 19 (a); D1 and guideline 2 stand).
+    - **The table:** per holding, the current weight, the target from `/targets`, the drift, and
+      the quantity and money that would restore the target at the current price.
+    - **How it is made:** arithmetic, with no model deciding anything. It is shown, not proposed:
+      nothing is written and nothing waits for approval. The explanation of a row uses the
+      user's explanations model (D244).
+    - **With no targets set,** it says so and links to the targets editor. Measured 2026-10-22 on
+      compose: no user had any `target_weights`, and no rebalance proposal had ever been raised,
+      so this empty state is what every user sees first.
+    - **Rejected:** approvable rows (reverses D1 and needs the `0038` trigger changed); a
+      model's rebalance ideas without targets (personalized advice, guideline 2).
+    - **Still open:** the user's items 2-3 of the same answer, agents scanning the main portfolio
+      and proposing to trim, sell or accumulate. They conflict with guideline 2 and are asked
+      as M10 decision 19b before anything is recorded.
 
 ---
 

@@ -606,3 +606,37 @@ What D245-D246 still need on that screen:
 - With no spend in the last 7 days there is no projection, and the indicator says "no recent
   spend".
 - The wording says "on this key", not "in Traders".
+
+*Decision 19 (a) decided 2026-10-22: [D253](DECISIONS.md).*
+
+19b. **Agents analysing the main portfolio** (the user's items 2-3 of 2026-10-22). Agents would
+    scan the real holdings, on a schedule or on demand, and in Ask, and suggest trimming, selling
+    or accumulating. The main portfolio stays read-only (D1).
+
+    **The conflict.** Guideline 2 reads "no personalized investment advice; output is
+    observation + explanation". The assistant enforces it today: "Say whether to buy, sell, hold
+    or approve" is on its never-do list (`assistant/instructions.py:70`), and the product guide
+    says it "does not give personal investment advice". A suggestion to sell a position the user
+    really holds is that advice, and M10 is the milestone that offers it to strangers.
+
+    **Options:**
+    - (a) **Amend guideline 2** so that agents may suggest actions on real holdings.
+      Costs:
+      - CLAUDE.md, the assistant's instructions, the product guide and the disclaimer all
+        change.
+      - The legal surface of §6 grows. Whether advice to strangers needs a licence where they
+        live is a question for a lawyer, not measured here.
+    - (b) **Mandate fit, guideline 2 kept.** An assigned agent reads the main portfolio through
+      its own written rules: max position size, sectors, blocked symbols, cash buffer, market
+      caps, ETFs.
+      - It reports observations only, for example "AAPL is 18% of the portfolio; Warren's
+        mandate caps a position at 10%", with the persona explaining them.
+      - There are no buy, sell or hold verbs, and it runs on demand, on a schedule or from Ask.
+      - Costs: it is not "what would this agent do". The rules are arithmetic, so only the
+        explanation needs a model.
+    - (c) **A paper copy.** The user seeds a simulated agent with a copy of the real holdings,
+      and the agent then trades the copy as agents already trade (D1 allows it; it is simulation).
+      Costs: a seeding path. The line blurs - the copy is the user's real positions, so its
+      proposals read as advice about them.
+
+    **Recommendation: (b), with (c) as a later decision if the user still wants it.**

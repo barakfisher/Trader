@@ -263,3 +263,4 @@ while this file is out of date.
 | 250 | A user may set an optional monthly safety limit in the app, which stops their model calls even on an unlimited key |
 | 251 | The Admin page's Keys tab shows status, never values; installation keys stay in `.env` / Secrets |
 | 252 | An agent's quick actions live on its row on the Agents page; the dashboard keeps only *Approve |
+| 253 | The main portfolio gets a read-only rebalance table computed from the user's own targets |
