@@ -28,6 +28,9 @@ const optionalSetting = (minLength = 1) =>
 /** Rejection memory's default cooldown; see `TOPIC_REJECTION_COOLDOWN_DAYS`. */
 export const DEFAULT_REJECTION_COOLDOWN_DAYS = 90;
 
+/** nginx alone: what stood in front of the orchestrator before `TRUSTED_PROXY_HOPS` existed. */
+export const DEFAULT_TRUSTED_PROXY_HOPS = 1;
+
 /** How long an unanswered auto-proposal stays open; see `TOPIC_PROPOSAL_TTL_DAYS`. */
 export const DEFAULT_PROPOSAL_TTL_DAYS = 14;
 
@@ -39,6 +42,13 @@ const schema = z.object({
 
   ORCHESTRATOR_PORT: z.coerce.number().int().positive().default(8080),
   ALLOWED_ORIGINS: z.string().default('http://localhost:5173'),
+  /**
+   * How many proxies in front of this process append to `X-Forwarded-For`, so
+   * the client is the entry the outermost of them wrote (D256,
+   * `http/clientAddress.ts`). nginx alone is one; a host's load balancer in
+   * front of nginx makes it two.
+   */
+  TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(DEFAULT_TRUSTED_PROXY_HOPS),
 
   SESSION_SECRET: z.string().min(16, 'SESSION_SECRET must be at least 16 characters'),
   SESSION_TTL_HOURS: z.coerce.number().int().positive().default(24 * 7),

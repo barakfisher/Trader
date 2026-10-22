@@ -263,6 +263,30 @@ describe('API', () => {
     expect(await response.json()).toMatchObject({ error: 'bad_origin' });
   });
 
+  it('blocks a state-changing request that carries no Origin at all (D256)', async () => {
+    const cookie = sessionCookie();
+    const response = await app.request('/holdings', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ symbol: 'AAPL', quantity: '1' }),
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ error: 'missing_origin' });
+  });
+
+  it('lets the two callers that are not browsers write without an Origin - they prove themselves with a secret', async () => {
+    // Past the Origin check, each meets its own secret check instead: 401 or
+    // 403 for a missing key, never `missing_origin`.
+    for (const path of ['/internal/runs', '/telegram/webhook']) {
+      const response = await app.request(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+      expect((await response.json()) as { error?: string }, path).not.toMatchObject({ error: 'missing_origin' });
+    }
+  });
+
   it('rejects a holding whose symbol no provider can price', async () => {
     const cookie = sessionCookie();
     const response = await app.request('/holdings', {

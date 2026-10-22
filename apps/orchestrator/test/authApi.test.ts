@@ -130,6 +130,17 @@ describe('signing in', () => {
     expect((await session(app, cookieOf(response))).authenticated).toBe(true);
   });
 
+  it('marks the cookie Secure in production, and only there (D256)', async () => {
+    const plain = (await login(app, USER.email, PASSWORD)).headers.get('set-cookie') ?? '';
+    expect(plain).not.toContain('Secure');
+
+    resetConfigForTests();
+    const production = createApp(loadConfig({ ...ENV, APP_ENV: 'production' }), createFakeAi());
+    const header = (await login(production, USER.email, PASSWORD)).headers.get('set-cookie') ?? '';
+    expect(header).toContain('Secure');
+    expect(header).toContain('HttpOnly');
+  });
+
   it('gives a wrong password and an unknown email the same answer', async () => {
     const wrong = await login(app, USER.email, 'not the password at all');
     vi.mocked(queries.getUserCredentialsByEmail).mockResolvedValue(null);
