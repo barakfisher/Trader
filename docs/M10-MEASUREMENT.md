@@ -317,6 +317,8 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
 
    **Recommendation: `rate-limiter-flexible` on the existing Redis.**
 
+   *Decided 2026-10-22: (a), `rate-limiter-flexible` on the existing Redis - [D257](DECISIONS.md).*
+
 5. **Outbound email: provider and package.**
    - `nodemailer` over SMTP behind an `EmailSender` interface (guideline 6), with the provider
      chosen by environment (Postmark, Resend and SES all speak SMTP). Costs: one dependency;

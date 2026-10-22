@@ -3851,6 +3851,25 @@ failure they prevent.
       - each part landing in whichever PR first needs it (a stretch where some are missing,
         with nothing tracking which);
       - all of them in the deployment PR (first tested on the day the app goes public).
+257. **Rate limits use `rate-limiter-flexible` on the existing Redis, through a small Hono
+    middleware** (the user, 2026-10-22; M10 decision 4 (a); pays D182's debt; the dependency was
+    approved under convention 5).
+    - **Where the counts live:** in Redis, through the orchestrator's existing `ioredis`
+      client, so they survive restarts and are shared across replicas.
+    - **What a refusal looks like:** 429, with when to retry.
+    - **What is keyed on what:**
+      - login: per account and per address;
+      - signup, reset and verification requests: per address and per email;
+      - the routes that cost money or shared quota - scans, Ask, research (D254), symbol
+        resolves and imports: per user.
+    - **The address** is the one D256 takes from the host's proxy header.
+    - **The limits are named constants,** and the tests assert the constants (convention 1).
+    - **Rejected:**
+      - `hono-rate-limiter` (its Redis store is a second package, and keying by the email in a
+        body is awkward);
+      - hand-written `INCR`/`EXPIRE` (we would own the atomicity and the windows);
+      - limits only at the host's edge (D255's provider is not chosen yet, and an edge cannot
+        see users). The edge may be added later as a second layer, never instead.
 
 ---
 
