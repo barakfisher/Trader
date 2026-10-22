@@ -264,3 +264,4 @@ while this file is out of date.
 | 251 | The Admin page's Keys tab shows status, never values; installation keys stay in `.env` / Secrets |
 | 252 | An agent's quick actions live on its row on the Agents page; the dashboard keeps only *Approve |
 | 253 | The main portfolio gets a read-only rebalance table computed from the user's own targets |
+| 254 | An assigned agent researches each main-portfolio holding and rates its sentiment, Bullish / Bearish / Neutral, with the rationale; the dashboard shows the latest rating |

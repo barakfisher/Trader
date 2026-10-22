@@ -640,3 +640,7 @@ What D245-D246 still need on that screen:
       proposals read as advice about them.
 
     **Recommendation: (b), with (c) as a later decision if the user still wants it.**
+
+    *Decided 2026-10-22: none of the three - per-stock research with a Bullish / Bearish / Neutral
+    sentiment rating and a Sentiment column on the dashboard, under guardrails that keep it an
+    observation ([D254](DECISIONS.md)).*

@@ -3782,6 +3782,37 @@ failure they prevent.
     - **Still open:** the user's items 2-3 of the same answer, agents scanning the main portfolio
       and proposing to trim, sell or accumulate. They conflict with guideline 2 and are asked
       as M10 decision 19b before anything is recorded.
+254. **An assigned agent researches each main-portfolio holding and rates its sentiment, Bullish /
+    Bearish / Neutral, with the rationale; the dashboard shows the latest rating** (the user,
+    2026-10-22; M10 decision 19b, chosen over amending guideline 2, mandate fit and a paper copy).
+    - **Research:** per holding, the agent reads recent news, articles, sector trends and market
+      data. Its evidence includes the stored article sentiment (`article_sentiment`, 80,382
+      lexicon-scored rows on compose, 2026-10-22).
+    - **Output:** per stock, a research assessment - a sentiment rating plus the rationale and
+      findings - never a buy, sell or hold instruction, a size or a target price.
+    - **Who runs it:** the user assigns an active agent from `/agents`. It runs on a schedule or
+      on demand, and the user can ask any agent about the main portfolio in Ask. The agent's
+      persona and strategy shape the lens (its existing instructions).
+    - **On the dashboard:** a *Sentiment* column with the latest rating per holding - green
+      Bullish, red Bearish, gray Neutral.
+    - **Guardrails that keep it within guideline 2 (part of this decision):**
+      1. The rating is about the stock's outlook, not the user's position. Its wording never says
+         "you", "your position", buy, sell, hold, trim or accumulate, and the assistant's
+         never-do list stays as it is.
+      2. Every figure in the rationale is checked by the evidence validator (guideline 7).
+      3. Each rating carries its agent's name and date, and is marked stale past a set age.
+      4. The color is never alone: the word is always shown (accessibility, and color-blind
+         users).
+      5. The disclaimer is on the research page.
+    - **Cost:** about one model call per holding per run, on the user's own key (D245), bounded by
+      their safety limit (D250).
+    - **Assumed, low risk:** one agent is assigned to the main portfolio at a time, and the column
+      shows that agent's latest rating. "Neutral" is gray rather than yellow, because yellow
+      already means a warning in the app.
+    - **Residual risk, recorded rather than resolved:** a per-stock Bullish/Bearish rating shown
+      beside the user's real holdings reads close to a recommendation. Whether it counts as
+      advice for strangers where they live is a question for a lawyer before public signup
+      (decision 13), not one this decision settles.
 
 ---
 
