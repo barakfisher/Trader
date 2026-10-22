@@ -3982,9 +3982,22 @@ failure they prevent.
     - **Deleting:**
       - It is confirmed with the password, or by signing in again for an account that only uses
         OAuth.
-      - The account turns `disabled` at once, with a deletion date, and its sessions end (D261).
+      - The account is closed at once (signed in nowhere, no scheduled work), with a deletion
+        date, and its sessions end (D261).
       - Signing in within 7 days cancels it.
       - After the 7 days an installation run erases it.
+    - **What the user is told** (the user's addition, 2026-10-22):
+      1. On confirming: a screen saying the account is disabled now, will be permanently
+         deleted on <date>, and that signing in before then restores it.
+      2. At once, by email (D258): the deletion request confirmed, with the permanent deletion
+         date.
+      3. On signing in during the 7 days: a banner saying the sign-in cancelled the pending
+         deletion and full access is back.
+    - **A pending deletion is its own marker, not D239's `disabled`.** It is a deletion date on
+      the account. Sign-in reactivates only an account with that marker, and never one the admin
+      disabled - otherwise any disabled user could undo the admin by signing in. Login refuses
+      `disabled` today (`account_not_active`), so this is a deliberate exception for the marker
+      alone.
     - **The erase:**
       - It needs one migration that settles the seven foreign keys with no delete rule
         (M10-MEASUREMENT §6).
