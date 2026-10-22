@@ -552,3 +552,46 @@ What D245-D246 still need on that screen:
     `usage_daily` averaged over the last 7 days, because a key shared with other apps spends
     there too. A refused key (401/402) stops at once (D246): OpenRouter reports no expiry date,
     so invalidation cannot be warned ahead.
+
+    *Decided 2026-10-22: (c), with the user's UI spec - [D247](DECISIONS.md).*
+
+23. **Which period "$12" counts.** `GET /key` offers lifetime `usage`, `usage_daily`,
+    `usage_weekly` and `usage_monthly`, and for a limited key `limit_remaining` and `limit_reset`
+    (a limit may reset daily, weekly or monthly).
+    - (a) With a limit, used = `limit - limit_remaining`, so the ratio is the limit's own period.
+      With no limit, `usage_monthly`, labelled "this month".
+    - (b) Lifetime `usage` in both cases.
+    - (c) This app's own spend from `llm_calls`.
+
+    Costs:
+    - (b) can exceed the limit of a key that resets (for example $80 / $50).
+    - (c) misses spend by other apps on the same key, which OpenRouter counts against the limit.
+
+    **Recommendation: (a)**, with the period named beside the ratio.
+
+24. **How fresh the indicator is.** The top bar is on every screen, and D247's "once a day" read
+    would show a stale figure after a busy hour.
+    - (a) One read a day.
+    - (b) A read when a page loads, cached for 15 minutes on the server per user, plus a fresh
+      read right after a refused call.
+    - (c) A live estimate from this app's `llm_calls`, added to the last OpenRouter figure.
+
+    Costs:
+    - (b) means more `GET /key` calls. They are free, and OpenRouter's rate limit on them was
+      not measured.
+    - (c) is two sources joined into one number.
+
+    **Recommendation: (b).**
+
+**Assumptions for D247's indicator** (low risk; stated, not asked):
+- The admin sees no indicator, because the admin is on the installation's key, whose spend is
+  on the Admin page.
+- A user with no key sees an *Add key* chip.
+- Hover is only a convenience: tap or click opens it, so it works on a phone, and it is keyboard
+  reachable.
+- On a phone the top bar keeps the bar and the figure only.
+- Amounts are in USD, OpenRouter's currency, formatted with `Intl` in the UI language. They are
+  never converted to the user's base currency.
+- With no spend in the last 7 days there is no projection, and the indicator says "no recent
+  spend".
+- The wording says "on this key", not "in Traders".

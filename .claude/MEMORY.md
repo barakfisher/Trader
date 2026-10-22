@@ -3690,6 +3690,23 @@ failure they prevent.
     account's balance and not an expiry date. So a projection exists only for a key with a credit
     limit, and an invalidation is known only when a call is refused. What "budget" means is M10
     decision 22.
+247. **"Budget" is the key's OpenRouter credit limit when it has one; spend is always shown as a
+    ratio, in the top bar and in Settings** (the user, 2026-10-22; M10 decision 22 (c), with the
+    user's UI spec).
+    - **With a limit:** "$12 / $50", with a progress bar. The five-day warning comes from the
+      7-day average of `usage_daily`, and the bar takes a warning color when five days or fewer
+      remain.
+    - **With no limit:** "$12 / ∞". There is no warning and nothing is blocked ahead; a refusal
+      still stops work at once (D246).
+    - **Placement:** a compact indicator in the top bar on every screen, beside the account
+      menu. Opening it shows the 7-day average, the projected days left and a link to Settings.
+      Full details sit in Settings, beside the key's controls.
+    - **Why the limit and not an app budget:** it is the number OpenRouter enforces (D211
+      stands). The average is OpenRouter's own figure, so spend by other apps on the same key
+      counts.
+    - **Rejected:** an app-side budget (a second number that can disagree with what OpenRouter
+      refuses); the limit alone with nothing shown for a key without one.
+    - **Open, as M10 decisions 23-24:** which period "$12" counts, and how fresh the figure is.
 
 ---
 

@@ -257,3 +257,4 @@ while this file is out of date.
 | 244 | A user on their own key chooses the model for each agent, for Ask and for explanations |
 | 245 | A non-admin user's model calls run only on their own key; nothing falls back to the installation's |
 | 246 | Own-key spend is warned ahead and stopped cleanly; reading never stops |
+| 247 | "Budget" is the key's OpenRouter credit limit when it has one; spend is always shown as a ratio, in the top bar and in Settings |
