@@ -258,8 +258,44 @@ user (today `POST /internal/runs` does exactly that, which a signed-in test cann
 
 Self-signup for people the admin does not know, with OAuth (Google, GitHub), automated free-tier
 limits and self-service password reset - **without changing the isolated data layer** M9 relies
-on. Not started; planned only after M9's exit. It brings what M9 deliberately leaves out:
+on. Planned only after M9's exit. It brings what M9 deliberately leaves out:
 internet exposure, abuse handling and holding strangers' financial data.
+
+**PR 1 - measure, read-only, before any design.** Exposure, auth, the abuse and cost surface,
+data isolation, outbound email and the privacy surface, with the decisions M10 needs.
+*Done 2026-10-22: [M10-MEASUREMENT.md](M10-MEASUREMENT.md).* The decisions are asked one at a
+time and recorded from D243; code follows in the order they set.
+
+**Scope added 2026-10-22 (the user):** replacing one's own key (already built, D206-D207), a
+model per agent and action, the Admin page in tabs with the installation's keys the admin's
+alone, and the portfolio table - sortable, P/L as $ and %, quick actions in agents' rows,
+rebalance suggestions for the main portfolio. Measured and argued in M10-MEASUREMENT
+(decisions 16-21). None of it depends on public exposure.
+
+**Decisions complete (2026-10-22): D243-D267.** The PRs, in order (D267):
+1. the production baseline;
+2. the write-route isolation test;
+3. rate limits;
+4. own key only and the safety limit;
+5. the spend indicator;
+6. model choice;
+7. the portfolio table and the rebalance table;
+8. the Admin tabs and the Keys tab;
+9. research and the Sentiment column;
+10. email, verification and the signup modes;
+11. password reset;
+12. sessions;
+13. OAuth;
+14. deletion and export;
+15. legal pages and consent;
+16. deployment to a rented host under the user's domain - only on the user's word, and not
+    before the legal text exists (D265).
+
+**Exit:**
+- a stranger can sign up, verify, sign in by password or OAuth, reset a forgotten password, sign
+  out a device, export and delete their account, all on their own key and under their own limits;
+- the write-route isolation test passes;
+- the app runs on the public host with the production baseline.
 
 ---
 

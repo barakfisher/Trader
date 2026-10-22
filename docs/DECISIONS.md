@@ -253,3 +253,28 @@ while this file is out of date.
 | 240 | M9's exit test reads the routes from the app and asks each with the other user's ids |
 | 241 | A closed-market quote is cached until the next open at most, the TTL floor included |
 | 242 | In Telegram a refusal after a refusal replaces its line |
+| 243 | A stranger is let in automatically once their email is verified, under a daily limit on new accounts; approval stays as a switch |
+| 244 | A user on their own key chooses the model for each agent, for Ask and for explanations |
+| 245 | A non-admin user's model calls run only on their own key; nothing falls back to the installation's |
+| 246 | Own-key spend is warned ahead and stopped cleanly; reading never stops |
+| 247 | "Budget" is the key's OpenRouter credit limit when it has one; spend is always shown as a ratio, in the top bar and in Settings |
+| 248 | The ratio counts its own period and names it |
+| 249 | The spend figure is read when a page loads, cached 15 minutes per user on the server, and read again right after a refused call |
+| 250 | A user may set an optional monthly safety limit in the app, which stops their model calls even on an unlimited key |
+| 251 | The Admin page's Keys tab shows status, never values; installation keys stay in `.env` / Secrets |
+| 252 | An agent's quick actions live on its row on the Agents page; the dashboard keeps only *Approve |
+| 253 | The main portfolio gets a read-only rebalance table computed from the user's own targets |
+| 254 | An assigned agent researches each main-portfolio holding and rates its sentiment, Bullish / Bearish / Neutral, with the rationale; the dashboard shows the latest rating |
+| 255 | The public service runs on a small rented host under a domain the user owns, not on the Mac |
+| 256 | The production baseline is M10's first code PR, all five parts together |
+| 257 | Rate limits use `rate-limiter-flexible` on the existing Redis, through a small Hono middleware |
+| 258 | Email leaves through `nodemailer` over SMTP, behind an `EmailSender` interface; the provider is chosen at deployment |
+| 259 | Email is verified everywhere it matters |
+| 260 | Reset and verification links are single-use tokens in one `auth_tokens` table, stored as SHA-256 hashes |
+| 261 | Sessions get a table; signing out ends that session, and Settings lists devices |
+| 262 | OAuth uses `arctic`, with our own `user_identities` table |
+| 263 | An OAuth sign-in links to an existing account only when the provider vouches for the email, and every link is announced by email |
+| 264 | A user deletes their own account with a 7-day grace period, and can export their data as JSON |
+| 265 | The app ships `/privacy` and `/terms`, records which version each user accepted, and public signup stays closed until their text exists |
+| 266 | The isolation test walks writes as well as reads, seeds every user-owned kind, and tries Telegram; no row-level security in M10 |
+| 267 | M10's PRs come in sixteen steps: what is usable now first, then the path to public, and deployment last, on the user's word |

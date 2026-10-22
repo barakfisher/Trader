@@ -3644,6 +3644,446 @@ failure they prevent.
     Every attempt is still recorded by the service and listed on the web proposal page (D49).
     *Rejected:* a count ("3 attempts") - a new plural sentence in both catalogues for a number
     nobody acts on.
+243. **A stranger is let in automatically once their email is verified, under a daily limit on
+    new accounts; approval stays as a switch** (the user, 2026-10-22; M10 decision 1,
+    docs/M10-MEASUREMENT.md). Signup has three modes, an installation setting: *automatic*
+    (the account turns `active` when its email is verified), *approval* (D156 as built) and
+    *closed*. A daily ceiling on new accounts bounds how fast strangers arrive. The admin can fall
+    back to approval or close signup in one setting, as `max_pending_signups = 0` closes it
+    today. *Rejected:* keeping approval for strangers (the admin judges people they cannot
+    judge, and every request pings Telegram); invite codes (not "people the admin does not
+    know", which is M10's purpose). Accepted cost: one person can open several verified
+    accounts. The free tier (M10 decision 11) and the rate limits (decision 4) bound what each
+    account can cost.
+244. **A user on their own key chooses the model for each agent, for Ask and for explanations**
+    (the user, 2026-10-22; M10 decision 16). "Rebalance" maps to the explanations scope
+    (`explain`): the rebalance proposal itself is a rule over the user's own targets
+    (`allocation_drift`) and uses no model, and its explanation is narration. The choice comes from
+    OpenRouter's model list (already fetched for the Admin page). The models the scans were tuned
+    on carry a "tested" mark, because the evidence validator and the tool calls were tuned on
+    Flash-Lite (D75, D227), and another model may get more scans refused. Needs a nullable
+    `agents.model` and a per-user choice for the other two scopes. *Rejected:* every user choosing
+    under the cap (a capped user could pick a model 50x the price); an admin-curated list (the
+    same plus a list to keep). With D245 every non-admin user is on their own key, so in practice
+    every non-admin user chooses, and the admin's `llm_model_choices` governs the admin alone.
+245. **A non-admin user's model calls run only on their own key; nothing falls back to the
+    installation's** (the user, 2026-10-22; **supersedes D207's "the next ones run under the cap"
+    and D206's "while it works"**, and answers M10 decision 11 as "own key only"). A non-admin user
+    with no key, or with a key OpenRouter refused (`rejected`, `no_credit`), makes no model call.
+    Their agent scans, Ask turns, instruction checks and re-checks are refused with a reason that
+    says to add or replace the key. Scheduled scans for them are skipped, not run and failed.
+    Narration falls back to its template, as it does for a spent budget (D158), so alerts still
+    arrive. The admin stays on the installation's key and its daily ceiling. Installation work
+    (D238) calls no model and is unchanged. **Assumed, low risk:** embeddings for concept and topic
+    search stay on the installation (about 10 tokens a query, not a per-user model call). Revisit
+    if that is wrong. **Consequence:** the monthly cap (D157, D203-D205) no longer bounds any
+    non-admin call. Whether to keep it dormant or remove it is the implementing PR's question.
+    *Rejected (by the user):* the fallback under the cap - an installation-paid path for
+    strangers.
+246. **Own-key spend is warned ahead and stopped cleanly; reading never stops** (the user,
+    2026-10-22). From five days before the key's projected depletion, the UI shows a daily
+    reminder to top up or replace the key. When the key is refused or spent, every model-dependent
+    operation stops (agent scans, Ask, rebalance explanations) and the user is asked to update the
+    key. Portfolio, holdings, agents and every table stay fully usable, because no read depends on
+    a model. **Measured (OpenRouter's limits reference, 2026-10-22):** `GET /key` reports the key's
+    own `limit` and `limit_remaining` and its `usage_daily`/`weekly`/`monthly`, but not the
+    account's balance and not an expiry date. So a projection exists only for a key with a credit
+    limit, and an invalidation is known only when a call is refused. What "budget" means is M10
+    decision 22.
+247. **"Budget" is the key's OpenRouter credit limit when it has one; spend is always shown as a
+    ratio, in the top bar and in Settings** (the user, 2026-10-22; M10 decision 22 (c), with the
+    user's UI spec).
+    - **With a limit:** "$12 / $50", with a progress bar. The five-day warning comes from the
+      7-day average of `usage_daily`, and the bar takes a warning color when five days or fewer
+      remain.
+    - **With no limit:** "$12 / ∞". There is no warning and nothing is blocked ahead; a refusal
+      still stops work at once (D246).
+    - **Placement:** a compact indicator in the top bar on every screen, beside the account
+      menu. Opening it shows the 7-day average, the projected days left and a link to Settings.
+      Full details sit in Settings, beside the key's controls.
+    - **Why the limit and not an app budget:** it is the number OpenRouter enforces (D211
+      stands). The average is OpenRouter's own figure, so spend by other apps on the same key
+      counts.
+    - **Rejected:** an app-side budget (a second number that can disagree with what OpenRouter
+      refuses); the limit alone with nothing shown for a key without one.
+    - **Open, as M10 decisions 23-24:** which period "$12" counts, and how fresh the figure is.
+248. **The ratio counts its own period and names it** (the user, 2026-10-22; M10 decision 23 (a)).
+    - **With a limit:** used = `limit - limit_remaining`, labelled with the limit's reset period
+      ("$12 / $50 this month", "today", "this week"; a limit that never resets is labelled
+      "in total").
+    - **With no limit:** `usage_monthly`, shown as "$12 / Unlimited this month". "Unlimited" is a
+      catalogue word, so every language has it; it replaces D247's "∞".
+    - **Rejected:** lifetime `usage` (a key that resets reads "$80 / $50"); this app's own
+      `llm_calls` (it misses other apps' spend, which OpenRouter counts against the limit).
+249. **The spend figure is read when a page loads, cached 15 minutes per user on the server, and
+    read again right after a refused call** (the user, 2026-10-22; M10 decision 24 (b)).
+    - Every number on the indicator is OpenRouter's.
+    - An idle app makes no `GET /key` calls; an active user makes at most four an hour.
+    - A spent or refused key shows at once, not at the next page load.
+    - **Rejected:** once a day (stale after a busy hour); a live estimate from `llm_calls` added
+      to the last reading (two sources joined into one number, which jumps when the next real
+      reading arrives).
+250. **A user may set an optional monthly safety limit in the app, which stops their model calls
+    even on an unlimited key** (the user, 2026-10-22; a circuit breaker against a runaway agent
+    loop; **amends D211**, whose "the app has no field for it" held while the installation's cap
+    bounded everyone).
+    - **What it is:** a user's own monthly ceiling, for example $20. It is optional, and with
+      none set nothing changes. It is set in Settings beside the key.
+    - **How it counts:** in the user's calendar month and zone, over this app's own-key calls
+      (`llm_calls`, `paid_by = 'own_key'`).
+    - **How it is enforced:** before each call, like the cap (D203). It is built on
+      `MonthlyCapProvider`, which already sums a user's month and filters on `paid_by`, and which
+      D245 left unused for non-admin users.
+    - **When it is reached:** the same stop as D246, with its own reason - "your safety limit",
+      not "your key".
+    - **How it shows (assumed, low risk):**
+      - The indicator compares with whichever limit binds first: the key's limit (D247-D248) or
+        this one.
+      - The five-day warning projects against the lower of the two.
+      - Settings shows both.
+    - **Why it does not repeat D247's rejected app budget:** that was a replacement for
+      OpenRouter's number as the warning's basis. This is a brake in addition to it. It counts
+      only this app's calls, which is what a runaway loop here spends.
+    - **Rejected:** relying on OpenRouter's limit alone (an unlimited key has no brake at all).
+251. **The Admin page's Keys tab shows status, never values; installation keys stay in `.env` /
+    Secrets** (the user, 2026-10-22; M10 decision 17 (a); guideline 9 stands).
+    - **What it shows, per provider key:** set or not, the provider it serves, its last error,
+      and a *Test* button that makes one free check call.
+    - **Off the tab entirely:** the app's own secrets - `SESSION_SECRET`, `INTERNAL_API_KEY`,
+      `LLM_KEY_ENCRYPTION_KEYS`, the Telegram signing and webhook secrets. They have nothing to
+      test, and listing them only maps them for an intruder.
+    - **Rotating a key** remains an edit and a redeploy.
+    - **Rejected:** entering keys in the app, encrypted with D208's vault. It amends guideline 9,
+      puts the installation's most valuable keys one stolen admin session from being read or
+      swapped as the app faces the internet, and copies them into the unencrypted backups.
+252. **An agent's quick actions live on its row on the Agents page; the dashboard keeps only
+    *Approve*** (the user, 2026-10-22; M10 decision 18 (a)).
+    - **The row:** icon buttons for *Run scan* (D196) and *Pause*/*Resume*, each labelled for
+      screen readers, and a "⋯" menu with *Pending proposals* and *Open agent*. The agent's name
+      stays the link.
+    - **What changes structurally:** the row is a whole-row link today, and a button cannot sit
+      inside a link, so the row becomes a container.
+    - **Assumed, low risk:** *Run scan* shows a queued or running scan as the agent's page does.
+      An archived agent shows no actions.
+    - **Rejected:** buttons in the dashboard's "who holds it" cell (that cell is per holding, so an
+      agent holding ten symbols would repeat them ten times, on a table already full on a phone).
+253. **The main portfolio gets a read-only rebalance table computed from the user's own targets**
+    (the user, 2026-10-22; M10 decision 19 (a); D1 and guideline 2 stand).
+    - **The table:** per holding, the current weight, the target from `/targets`, the drift, and
+      the quantity and money that would restore the target at the current price.
+    - **How it is made:** arithmetic, with no model deciding anything. It is shown, not proposed:
+      nothing is written and nothing waits for approval. The explanation of a row uses the
+      user's explanations model (D244).
+    - **With no targets set,** it says so and links to the targets editor. Measured 2026-10-22 on
+      compose: no user had any `target_weights`, and no rebalance proposal had ever been raised,
+      so this empty state is what every user sees first.
+    - **Rejected:** approvable rows (reverses D1 and needs the `0038` trigger changed); a
+      model's rebalance ideas without targets (personalized advice, guideline 2).
+    - **Still open:** the user's items 2-3 of the same answer, agents scanning the main portfolio
+      and proposing to trim, sell or accumulate. They conflict with guideline 2 and are asked
+      as M10 decision 19b before anything is recorded.
+254. **An assigned agent researches each main-portfolio holding and rates its sentiment, Bullish /
+    Bearish / Neutral, with the rationale; the dashboard shows the latest rating** (the user,
+    2026-10-22; M10 decision 19b, chosen over amending guideline 2, mandate fit and a paper copy).
+    - **Research:** per holding, the agent reads recent news, articles, sector trends and market
+      data. Its evidence includes the stored article sentiment (`article_sentiment`, 80,382
+      lexicon-scored rows on compose, 2026-10-22).
+    - **Output:** per stock, a research assessment - a sentiment rating plus the rationale and
+      findings - never a buy, sell or hold instruction, a size or a target price.
+    - **Who runs it:** the user assigns an active agent from `/agents`. It runs on a schedule or
+      on demand, and the user can ask any agent about the main portfolio in Ask. The agent's
+      persona and strategy shape the lens (its existing instructions).
+    - **On the dashboard:** a *Sentiment* column with the latest rating per holding - green
+      Bullish, red Bearish, gray Neutral.
+    - **Guardrails that keep it within guideline 2 (part of this decision):**
+      1. The rating is about the stock's outlook, not the user's position. Its wording never says
+         "you", "your position", buy, sell, hold, trim or accumulate, and the assistant's
+         never-do list stays as it is.
+      2. Every figure in the rationale is checked by the evidence validator (guideline 7).
+      3. Each rating carries its agent's name and date, and is marked stale past a set age.
+      4. The color is never alone: the word is always shown (accessibility, and color-blind
+         users).
+      5. The disclaimer is on the research page.
+    - **Cost:** about one model call per holding per run, on the user's own key (D245), bounded by
+      their safety limit (D250).
+    - **Assumed, low risk:** one agent is assigned to the main portfolio at a time, and the column
+      shows that agent's latest rating. "Neutral" is gray rather than yellow, because yellow
+      already means a warning in the app.
+    - **Residual risk, recorded rather than resolved:** a per-stock Bullish/Bearish rating shown
+      beside the user's real holdings reads close to a recommendation. Whether it counts as
+      advice for strangers where they live is a question for a lawyer before public signup
+      (decision 13), not one this decision settles.
+255. **The public service runs on a small rented host under a domain the user owns, not on the
+    Mac** (the user, 2026-10-22; M10 decision 2 (c)).
+    - **Why:** it is up 24/7, it does not depend on the Mac, and strangers' data does not live on
+      a laptop.
+    - **The provider is chosen at the deployment stage** (examples named: Render, Oracle's free
+      tier).
+    - **What the stack requires of any host** (from the compose file and the manifests, for that
+      choice):
+      - Postgres 16 with `pgvector` and `pg_stat_statements`;
+      - Redis with persistence (BullMQ and the caches);
+      - three services: web (nginx), orchestrator, AI service;
+      - one-shot jobs: Alembic `migrate`, the `corpus` ingest, the `universe` load;
+      - a scheduler for the runs (kind's 11 CronJobs, or the orchestrator's own timer);
+      - secrets outside the image;
+      - backups off the host.
+    - **TLS ends at the host's edge.** So `APP_ENV=production` and `Secure` cookies become
+      possible, and which `X-Forwarded-For` hop is the client is that host's to say.
+    - **Kind and compose stay the local environments.** Tailscale access (#171) is unchanged.
+    - **Rejected:**
+      - Tailscale Funnel: a `ts.net` name, so no domain to send mail from, and OAuth uncertain.
+      - A Cloudflare Tunnel from the Mac: the service would live and die with the Mac, and
+        Cloudflare decrypts the traffic.
+256. **The production baseline is M10's first code PR, all five parts together** (the user,
+    2026-10-22; M10 decision 3 (a)).
+    - **The five parts:**
+      1. `APP_ENV=production` on the public host, so cookies are `Secure`;
+      2. nginx sends a CSP, HSTS, `frame-ancestors 'none'` and `nosniff`;
+      3. non-GET requests with no `Origin` are refused (today only a foreign one is);
+      4. only the nginx production build is ever public, never compose's Vite dev server;
+      5. the client address comes from the host's proxy header, for the rate limits (decision 4).
+    - **Checked locally in production mode before any host exists.** Kind and compose stay
+      `development` otherwise.
+    - **The PR's first step is measuring what the CSP must allow.** Whether the page needs
+      inline scripts or styles was not measured.
+    - **Rejected:**
+      - each part landing in whichever PR first needs it (a stretch where some are missing,
+        with nothing tracking which);
+      - all of them in the deployment PR (first tested on the day the app goes public).
+257. **Rate limits use `rate-limiter-flexible` on the existing Redis, through a small Hono
+    middleware** (the user, 2026-10-22; M10 decision 4 (a); pays D182's debt; the dependency was
+    approved under convention 5).
+    - **Where the counts live:** in Redis, through the orchestrator's existing `ioredis`
+      client, so they survive restarts and are shared across replicas.
+    - **What a refusal looks like:** 429, with when to retry.
+    - **What is keyed on what:**
+      - login: per account and per address;
+      - signup, reset and verification requests: per address and per email;
+      - the routes that cost money or shared quota - scans, Ask, research (D254), symbol
+        resolves and imports: per user.
+    - **The address** is the one D256 takes from the host's proxy header.
+    - **The limits are named constants,** and the tests assert the constants (convention 1).
+    - **Rejected:**
+      - `hono-rate-limiter` (its Redis store is a second package, and keying by the email in a
+        body is awkward);
+      - hand-written `INCR`/`EXPIRE` (we would own the atomicity and the windows);
+      - limits only at the host's edge (D255's provider is not chosen yet, and an edge cannot
+        see users). The edge may be added later as a second layer, never instead.
+258. **Email leaves through `nodemailer` over SMTP, behind an `EmailSender` interface; the
+    provider is chosen at deployment** (the user, 2026-10-22; M10 decision 5 (a); the dependency
+    was approved under convention 5).
+    - **The provider** is configuration: an SMTP host, user and password in `.env` / Secrets
+      (guideline 9). Changing provider changes settings, not code.
+    - **Mail is sent from the user's domain (D255).** It needs SPF and DKIM records there, or it
+      lands in spam.
+    - **Tests use a fixture sender** that records what would have been sent, so no test sends
+      mail (hermetic).
+    - **What it serves:** D243's verification and decision 7's reset.
+    - **Rejected:**
+      - a provider's SDK (`resend`, `postmark`): ties the code to one provider;
+      - Telegram only: a stranger has no binding at signup, which contradicts D243.
+259. **Email is verified everywhere it matters** (the user, 2026-10-22; M10 decision 6 (a)).
+    - **Signup:** in *automatic* mode the account turns `active` on verification (D243). In
+      *approval* mode the request reaches the admin only once the email is verified, so the
+      admin never sees an unverified request.
+    - **Changing the email** (`/auth/email`): the new address is stored as pending and takes
+      effect only when it is verified. The old address stays active until then, and reset mail
+      goes to it.
+    - **Accounts that exist today:** the migration marks every `active` account verified (people
+      the admin invited). A `pending` or `rejected` request is not marked.
+    - **Why:** without the email-change rule, a stolen session could move the reset address to
+      the thief's mailbox, turning a lost session into a lost account.
+    - **Rejected:**
+      - verifying at signup only (that gap stays open);
+      - existing accounts verifying at their next sign-in (an extra step for addresses the
+        admin already trusts).
+260. **Reset and verification links are single-use tokens in one `auth_tokens` table, stored as
+    SHA-256 hashes** (the user, 2026-10-22; M10 decision 7 (a); migration **0068** unless an
+    earlier M10 PR takes it).
+    - **A row holds:** the purpose (`verify_email`, `verify_new_email`, `reset_password`), the
+      user, the hash, the expiry and the time it was used.
+    - **Rules:**
+      - A token works once.
+      - A new request cancels the user's earlier token of the same purpose.
+      - Expired rows are pruned with the installation's runs (D238).
+    - **Expiries are named constants:** `RESET_TOKEN_TTL` 30 minutes, `VERIFY_TOKEN_TTL` 24 hours.
+    - **A reset:**
+      - answers the same whatever the email (D185);
+      - bumps `session_version`, ending every session (D160);
+      - is rate-limited (D257).
+    - **Why the hash:** a leaked database or backup (unencrypted, M10-MEASUREMENT §6) holds no
+      usable link.
+    - **Rejected:** a signed token with no table (it cannot be single-use - a used or forwarded
+      reset link would work until it expired).
+261. **Sessions get a table; signing out ends that session, and Settings lists devices** (the
+    user, 2026-10-22; M10 decision 8 (b); **supersedes D160's "no sessions table"**; migration
+    **0069** after D260's 0068).
+    - **The cookie** stays signed and carries a session id. Each request reads the session row
+      with the user row it already reads (one indexed lookup).
+    - **Ending sessions:**
+      - *Sign out* deletes this session's row.
+      - Settings lists the user's sessions, with *Sign out* per device and *Sign out
+        everywhere*.
+      - A password change, a reset (D260), a disable (D239) and an admin one-time password
+        delete all of the user's rows.
+    - **Expired rows** are pruned with the installation's runs.
+    - **Why now:** D160 was right for a household that needed only "end everything now". With
+      strangers on shared or lost devices, "sign out ends this session" is a requirement, and
+      OAuth adds devices per person.
+    - **Assumed, low risk:**
+      - A device is shown as the browser and OS from the user agent, plus last seen.
+      - **No location:** a place from the address needs a GeoIP database, which is a dependency
+        to ask about under convention 5.
+      - The address and user agent kept per session are personal data, and they go with the
+        session row.
+      - `session_version` stays as a second check until the sessions PR shows it adds nothing,
+        then it is retired in its own change.
+    - **Rejected:**
+      - D160 plus *Sign out everywhere* (a copied cookie outlives a sign-out by up to 7 days);
+      - a shorter cookie (everyone signs in more often, and sign-out still does not end a copy).
+262. **OAuth uses `arctic`, with our own `user_identities` table** (the user, 2026-10-22; M10
+    decision 9 (a); the dependency was approved under convention 5).
+    - **`arctic` provides:** the Google and GitHub OAuth 2.0 clients, with PKCE and `state`.
+    - **We own:**
+      - the short-lived `state`/PKCE cookie;
+      - the callback routes;
+      - `user_identities` (provider, provider subject, `user_id`; unique on provider and
+        subject), a migration after 0069;
+      - signing in through D261's sessions.
+    - **The provider apps** are registered in Google's and GitHub's consoles on the user's
+      domain (D255), at deployment, by the user.
+    - **`password_hash` is already nullable,** so an account that only uses OAuth fits `users`
+      unchanged.
+    - **The linking rule is M10 decision 10.**
+    - **Rejected:**
+      - `openid-client` (GitHub is not OpenID Connect, so it needs a second path);
+      - `better-auth` / Auth.js (their own users, sessions and flows would replace M9's login and
+        D259-D261, the layer M10 leaves alone).
+263. **An OAuth sign-in links to an existing account only when the provider vouches for the email,
+    and every link is announced by email** (the user, 2026-10-22; M10 decision 10 (a)).
+    - **"Vouches" means:** Google's `email_verified`, or GitHub's verified primary email. Without
+      it there is no automatic link; the user links from Settings while signed in.
+    - **A new OAuth sign-up** with a provider-verified email counts as verified (D243, D259). In
+      *automatic* mode it is `active` at once; in *approval* mode it reaches the admin.
+    - **On every link:**
+      - an email goes to the account ("Google was linked to your account"), so a surprise link
+        is seen;
+      - the account's existing sessions are untouched.
+    - **Settings lists linked providers with *Unlink*.** Unlinking the account's only way to sign
+      in (no password set) is refused.
+    - **Accepted cost:** the rule relies on Google and GitHub verifying correctly.
+    - **Rejected:**
+      - linking only from Settings (the same person ends up with a second, empty account);
+      - linking on any matching email (anyone who makes a provider account show your
+        unverified address signs in as you).
+264. **A user deletes their own account with a 7-day grace period, and can export their data as
+    JSON** (the user, 2026-10-22; M10 decision 12 (b) + (d)).
+    - **Deleting:**
+      - It is confirmed with the password, or by signing in again for an account that only uses
+        OAuth.
+      - The account is closed at once (signed in nowhere, no scheduled work), with a deletion
+        date, and its sessions end (D261).
+      - Signing in within 7 days cancels it.
+      - After the 7 days an installation run erases it.
+    - **What the user is told** (the user's addition, 2026-10-22):
+      1. On confirming: a screen saying the account is disabled now, will be permanently
+         deleted on <date>, and that signing in before then restores it.
+      2. At once, by email (D258): the deletion request confirmed, with the permanent deletion
+         date.
+      3. On signing in during the 7 days: a banner saying the sign-in cancelled the pending
+         deletion and full access is back.
+    - **A pending deletion is its own marker, not D239's `disabled`.** It is a deletion date on
+      the account. Sign-in reactivates only an account with that marker, and never one the admin
+      disabled - otherwise any disabled user could undo the admin by signing in. Login refuses
+      `disabled` today (`account_not_active`), so this is a deliberate exception for the marker
+      alone.
+    - **The erase:**
+      - It needs one migration that settles the seven foreign keys with no delete rule
+        (M10-MEASUREMENT §6).
+      - `account_resets` rows go with the user.
+      - `admin_audit` keeps its rows with the user reference cleared.
+      - Shared market data stays.
+    - **The export:**
+      - It covers the user's own rows: holdings, agents, ledgers, proposals, observations,
+        conversations and settings.
+      - Never the API key, sessions, tokens or password hash.
+      - It is rate-limited (D257).
+    - **Assumed, low risk:**
+      - In *automatic* mode, rejected sign-up requests are erased after 90 days (D156 kept them
+        forever, for a household).
+      - The privacy page (decision 13) says backups keep a deleted account for up to 56 days.
+    - **Rejected:**
+      - immediate erase (a mistake or a stolen session is permanent);
+      - no self-service deletion (the admin becomes the process, and a stranger cannot leave);
+      - no export.
+265. **The app ships `/privacy` and `/terms`, records which version each user accepted, and public
+    signup stays closed until their text exists** (the user, 2026-10-22; M10 decision 13 (a)).
+    - **The pages:** both are reachable signed out, rendered from one Markdown file per language.
+      The Hebrew text is its own file, never machine-translated, because a translated legal text
+      is a different document.
+    - **The consent record:** signup stores the accepted version and a timestamp (a migration).
+      A new version asks existing users to accept it at their next sign-in.
+    - **The gate:** automatic or approval signup for the public is not switched on until the user
+      supplies the text and the D254 question - whether per-stock sentiment ratings are advice
+      where users live - has an answer.
+    - **Who writes what:** the wording is the user's, or a lawyer's. The app's part is the pages,
+      the record and the gate. M10-MEASUREMENT §6 lists the facts a privacy page must state.
+    - **Rejected:**
+      - the pages without a record (no proof of what was agreed, or when);
+      - no pages (strangers' data held under no stated terms).
+266. **The isolation test walks writes as well as reads, seeds every user-owned kind, and tries
+    Telegram; no row-level security in M10** (the user, 2026-10-22; M10 decision 14 (a); extends
+    D240).
+    - **Writes:** every POST/PUT/PATCH/DELETE route is read from the app, as D240 reads the GETs,
+      so a new route is covered without editing the test. Each is asked with the other user's ids.
+      It must answer 404 and change nothing, checked by reading the other user's rows before and
+      after.
+    - **Seeds:** every user-owned kind is seeded and marked - proposals, observations,
+      notifications, scans, fills, snapshots and own keys, plus M10's new sessions, identities,
+      tokens, deletion markers, consent records and research ratings. Each later M10 PR adds its
+      own table's seed.
+    - **Telegram:** callbacks and messages from another user's chat are tried.
+    - **Rejected:**
+      - RLS on every table (every query would run with the user set on the connection - a
+        rewrite of the data layer M10 leaves alone, which also has to let D238's cross-user
+        installation runs through; a candidate for its own milestone);
+      - keeping D240 as it is (a write touching another user's row is caught by nothing).
+267. **M10's PRs come in sixteen steps: what is usable now first, then the path to public, and
+    deployment last, on the user's word** (the user, 2026-10-22; M10 decision 15 (a)).
+    1. production baseline (D256);
+    2. the write-route isolation test (D266);
+    3. rate limits (D257);
+    4. own key only plus the safety limit (D245, D246, D250);
+    5. the spend indicator (D247-D249);
+    6. model choice (D244);
+    7. the portfolio table - sorting, P/L in $ and %, agent row actions, the rebalance table
+       (D252, D253);
+    8. the Admin tabs and the Keys tab (D251);
+    9. research and the Sentiment column (D254);
+    10. email, verification and the signup modes (D258, D259, D243);
+    11. password reset (D260);
+    12. sessions (D261);
+    13. OAuth and linking (D262, D263);
+    14. deletion and export (D264);
+    15. legal pages and consent (D265);
+    16. deployment to the rented host (D255).
+
+    **Rules for every PR:**
+    - One branch off `main` at a time; no stacking.
+    - A vertical slice.
+    - Migrations take the next free number when each PR is written.
+    - Each PR seeds its new tables in D266's test.
+    - The user is asked before each PR, a merge happens only on "merge", and a redeploy only on
+      "redeploy".
+    - A handoff after every five merged PRs (CLAUDE.md).
+
+    **Rejected:**
+    - the path to public first (the features the user asked for, usable now on compose and
+      kind, would wait about ten PRs, while going public is blocked anyway until the legal text
+      exists, D265);
+    - alternating feature and security PRs (neither stream finishes early, and a handoff carries
+      both).
 
 ---
 
