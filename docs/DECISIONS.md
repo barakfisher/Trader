@@ -259,3 +259,5 @@ while this file is out of date.
 | 246 | Own-key spend is warned ahead and stopped cleanly; reading never stops |
 | 247 | "Budget" is the key's OpenRouter credit limit when it has one; spend is always shown as a ratio, in the top bar and in Settings |
 | 248 | The ratio counts its own period and names it |
+| 249 | The spend figure is read when a page loads, cached 15 minutes per user on the server, and read again right after a refused call |
+| 250 | A user may set an optional monthly safety limit in the app, which stops their model calls even on an unlimited key |

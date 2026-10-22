@@ -3715,6 +3715,36 @@ failure they prevent.
       catalogue word, so every language has it; it replaces D247's "∞".
     - **Rejected:** lifetime `usage` (a key that resets reads "$80 / $50"); this app's own
       `llm_calls` (it misses other apps' spend, which OpenRouter counts against the limit).
+249. **The spend figure is read when a page loads, cached 15 minutes per user on the server, and
+    read again right after a refused call** (the user, 2026-10-22; M10 decision 24 (b)).
+    - Every number on the indicator is OpenRouter's.
+    - An idle app makes no `GET /key` calls; an active user makes at most four an hour.
+    - A spent or refused key shows at once, not at the next page load.
+    - **Rejected:** once a day (stale after a busy hour); a live estimate from `llm_calls` added
+      to the last reading (two sources joined into one number, which jumps when the next real
+      reading arrives).
+250. **A user may set an optional monthly safety limit in the app, which stops their model calls
+    even on an unlimited key** (the user, 2026-10-22; a circuit breaker against a runaway agent
+    loop; **amends D211**, whose "the app has no field for it" held while the installation's cap
+    bounded everyone).
+    - **What it is:** a user's own monthly ceiling, for example $20. It is optional, and with
+      none set nothing changes. It is set in Settings beside the key.
+    - **How it counts:** in the user's calendar month and zone, over this app's own-key calls
+      (`llm_calls`, `paid_by = 'own_key'`).
+    - **How it is enforced:** before each call, like the cap (D203). It is built on
+      `MonthlyCapProvider`, which already sums a user's month and filters on `paid_by`, and which
+      D245 left unused for non-admin users.
+    - **When it is reached:** the same stop as D246, with its own reason - "your safety limit",
+      not "your key".
+    - **How it shows (assumed, low risk):**
+      - The indicator compares with whichever limit binds first: the key's limit (D247-D248) or
+        this one.
+      - The five-day warning projects against the lower of the two.
+      - Settings shows both.
+    - **Why it does not repeat D247's rejected app budget:** that was a replacement for
+      OpenRouter's number as the warning's basis. This is a brake in addition to it. It counts
+      only this app's calls, which is what a runaway loop here spends.
+    - **Rejected:** relying on OpenRouter's limit alone (an unlimited key has no brake at all).
 
 ---
 

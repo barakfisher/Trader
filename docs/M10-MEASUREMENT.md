@@ -586,6 +586,10 @@ What D245-D246 still need on that screen:
 
     **Recommendation: (b).**
 
+    *Decided 2026-10-22: (b) - [D249](DECISIONS.md). In the same answer the user added an
+    optional monthly safety limit in the app, enforced before each own-key call even on an
+    unlimited key ([D250](DECISIONS.md)).*
+
 **Assumptions for D247's indicator** (low risk; stated, not asked):
 - The admin sees no indicator, because the admin is on the installation's key, whose spend is
   on the Admin page.
