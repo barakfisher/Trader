@@ -258,8 +258,13 @@ user (today `POST /internal/runs` does exactly that, which a signed-in test cann
 
 Self-signup for people the admin does not know, with OAuth (Google, GitHub), automated free-tier
 limits and self-service password reset - **without changing the isolated data layer** M9 relies
-on. Not started; planned only after M9's exit. It brings what M9 deliberately leaves out:
+on. Planned only after M9's exit. It brings what M9 deliberately leaves out:
 internet exposure, abuse handling and holding strangers' financial data.
+
+**PR 1 - measure, read-only, before any design.** Exposure, auth, the abuse and cost surface,
+data isolation, outbound email and the privacy surface, with the decisions M10 needs.
+*Done 2026-10-22: [M10-MEASUREMENT.md](M10-MEASUREMENT.md).* The decisions are asked one at a
+time and recorded from D243; code follows in the order they set.
 
 ---
 
