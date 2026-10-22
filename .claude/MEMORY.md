@@ -4049,6 +4049,41 @@ failure they prevent.
         rewrite of the data layer M10 leaves alone, which also has to let D238's cross-user
         installation runs through; a candidate for its own milestone);
       - keeping D240 as it is (a write touching another user's row is caught by nothing).
+267. **M10's PRs come in sixteen steps: what is usable now first, then the path to public, and
+    deployment last, on the user's word** (the user, 2026-10-22; M10 decision 15 (a)).
+    1. production baseline (D256);
+    2. the write-route isolation test (D266);
+    3. rate limits (D257);
+    4. own key only plus the safety limit (D245, D246, D250);
+    5. the spend indicator (D247-D249);
+    6. model choice (D244);
+    7. the portfolio table - sorting, P/L in $ and %, agent row actions, the rebalance table
+       (D252, D253);
+    8. the Admin tabs and the Keys tab (D251);
+    9. research and the Sentiment column (D254);
+    10. email, verification and the signup modes (D258, D259, D243);
+    11. password reset (D260);
+    12. sessions (D261);
+    13. OAuth and linking (D262, D263);
+    14. deletion and export (D264);
+    15. legal pages and consent (D265);
+    16. deployment to the rented host (D255).
+
+    **Rules for every PR:**
+    - One branch off `main` at a time; no stacking.
+    - A vertical slice.
+    - Migrations take the next free number when each PR is written.
+    - Each PR seeds its new tables in D266's test.
+    - The user is asked before each PR, a merge happens only on "merge", and a redeploy only on
+      "redeploy".
+    - A handoff after every five merged PRs (CLAUDE.md).
+
+    **Rejected:**
+    - the path to public first (the features the user asked for, usable now on compose and
+      kind, would wait about ten PRs, while going public is blocked anyway until the legal text
+      exists, D265);
+    - alternating feature and security PRs (neither stream finishes early, and a handoff carries
+      both).
 
 ---
 

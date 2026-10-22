@@ -449,6 +449,8 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
     8. the isolation test;
     9. exposure itself, last, on your word.
 
+    *Decided 2026-10-22: (a), sixteen PRs, value first and deployment last - [D267](DECISIONS.md).*
+
 ## Scope added on 2026-10-22: settings, the Admin page and the portfolio table
 
 After decision 1, the user added three groups to M10. None of them depends on public exposure.

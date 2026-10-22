@@ -272,6 +272,31 @@ alone, and the portfolio table - sortable, P/L as $ and %, quick actions in agen
 rebalance suggestions for the main portfolio. Measured and argued in M10-MEASUREMENT
 (decisions 16-21). None of it depends on public exposure.
 
+**Decisions complete (2026-10-22): D243-D267.** The PRs, in order (D267):
+1. the production baseline;
+2. the write-route isolation test;
+3. rate limits;
+4. own key only and the safety limit;
+5. the spend indicator;
+6. model choice;
+7. the portfolio table and the rebalance table;
+8. the Admin tabs and the Keys tab;
+9. research and the Sentiment column;
+10. email, verification and the signup modes;
+11. password reset;
+12. sessions;
+13. OAuth;
+14. deletion and export;
+15. legal pages and consent;
+16. deployment to a rented host under the user's domain - only on the user's word, and not
+    before the legal text exists (D265).
+
+**Exit:**
+- a stranger can sign up, verify, sign in by password or OAuth, reset a forgotten password, sign
+  out a device, export and delete their account, all on their own key and under their own limits;
+- the write-route isolation test passes;
+- the app runs on the public host with the production baseline.
+
 ---
 
 ## Ordering notes
