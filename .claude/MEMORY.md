@@ -3942,6 +3942,24 @@ failure they prevent.
     - **Rejected:**
       - D160 plus *Sign out everywhere* (a copied cookie outlives a sign-out by up to 7 days);
       - a shorter cookie (everyone signs in more often, and sign-out still does not end a copy).
+262. **OAuth uses `arctic`, with our own `user_identities` table** (the user, 2026-10-22; M10
+    decision 9 (a); the dependency was approved under convention 5).
+    - **`arctic` provides:** the Google and GitHub OAuth 2.0 clients, with PKCE and `state`.
+    - **We own:**
+      - the short-lived `state`/PKCE cookie;
+      - the callback routes;
+      - `user_identities` (provider, provider subject, `user_id`; unique on provider and
+        subject), a migration after 0069;
+      - signing in through D261's sessions.
+    - **The provider apps** are registered in Google's and GitHub's consoles on the user's
+      domain (D255), at deployment, by the user.
+    - **`password_hash` is already nullable,** so an account that only uses OAuth fits `users`
+      unchanged.
+    - **The linking rule is M10 decision 10.**
+    - **Rejected:**
+      - `openid-client` (GitHub is not OpenID Connect, so it needs a second path);
+      - `better-auth` / Auth.js (their own users, sessions and flows would replace M9's login and
+        D259-D261, the layer M10 leaves alone).
 
 ---
 

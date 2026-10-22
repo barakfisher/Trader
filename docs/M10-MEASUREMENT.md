@@ -379,6 +379,8 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
 
    **Recommendation: `arctic`**, plus a `user_identities` table (provider, subject, `user_id`).
 
+   *Decided 2026-10-22: (a), `arctic` - [D262](DECISIONS.md).*
+
 10. **Linking an OAuth sign-in to an existing account.**
     - (a) Link automatically when the provider says the email is verified (Google's
       `email_verified`; GitHub's verified primary email).
