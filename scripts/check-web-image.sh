@@ -64,8 +64,21 @@ check "/api/internal/* is not reachable through the web entrance" "404" \
   "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/internal/runs")"
 
 head -c 1100000 /dev/zero | tr '\0' 'a' > "$SCRATCH/upload.csv"
+# With the compose web app's Origin, so the orchestrator's Origin check (D256)
+# passes and the session gate's 401 proves the body arrived.
 check "a file over nginx's default 1 MB reaches the orchestrator" "401" \
-  "$(curl -s -o /dev/null -w '%{http_code}' -F "file=@$SCRATCH/upload.csv" "$BASE/api/imports/preview")"
+  "$(curl -s -o /dev/null -w '%{http_code}' -H 'Origin: http://localhost:5173' \
+    -F "file=@$SCRATCH/upload.csv" "$BASE/api/imports/preview")"
+
+# The security headers (D256, security-headers.conf) on each kind of response:
+# a location that sets its own add_header drops the server's, so every one is
+# asked, not just the page.
+for path in / /holdings/x /assets/missing.js /api/readyz /api/internal/runs; do
+  headers="$(curl -s -o /dev/null -D - "$BASE$path" | tr -d '\r')"
+  check "$path carries a CSP that forbids framing" "frame-ancestors 'none'" "$headers"
+  check "$path carries HSTS" "strict-transport-security: max-age=" "$(echo "$headers" | tr 'A-Z' 'a-z')"
+  check "$path carries nosniff" "x-content-type-options: nosniff" "$(echo "$headers" | tr 'A-Z' 'a-z')"
+done
 
 # Both halves: "no localhost" alone passes on an image with no bundle at all.
 check "the bundle calls /api" "yes" \

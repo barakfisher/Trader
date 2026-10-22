@@ -238,4 +238,27 @@ revokes them). An index the report lists as never scanned is a candidate, not a 
 window that covered every scheduled run - a full week - says it is unused, and unique indexes are
 left out because they enforce a rule whether or not a query reads them.
 
+## 7. Serving it on the internet: the production baseline
+
+Before any public address points at Traders (D256), every item here must hold. The rented host and
+its domain are chosen at deployment (D255). Until then, kind and compose stay `development`.
+
+| Setting | Value on the public host | Why |
+|---|---|---|
+| `APP_ENV` | `production` | The session cookie becomes `Secure`, sent only over HTTPS. TLS ends at the host's edge; never set it where the browser reaches the app over plain HTTP, or nobody stays signed in |
+| `ALLOWED_ORIGINS` | `https://<the domain>` only | A write whose Origin is missing or not listed is refused (`missing_origin`, `bad_origin`) |
+| `TRUSTED_PROXY_HOPS` | nginx plus the host's own proxies (2 behind one load balancer) | The client's address is read past exactly these. Too high, and a client chooses its own address with a header |
+| The web image | the `prod` target (nginx) | It serves the security headers (`infra/docker/security-headers.conf`) and refuses `/api/internal/*`. Compose's `dev` target is the Vite dev server and is never public |
+
+Check it from outside, against the public address:
+
+```bash
+curl -sI https://<the domain>/ | grep -iE "content-security-policy|strict-transport|x-content-type"
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<the domain>/api/auth/logout   # 403: no Origin
+```
+
+The same header checks run on every PR against the image (`scripts/check-web-image.sh`). A new
+third-party origin in the page - a font, a script - is blocked by the browser until it is named in
+the CSP there.
+
 More on the cluster: [infra/k8s/README.md](../infra/k8s/README.md).
