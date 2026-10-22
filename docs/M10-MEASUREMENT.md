@@ -341,6 +341,9 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
    (a)**, because decision 1(b) rests on it. Applies to signup and to `/auth/email` (a new
    address is verified before it replaces the old one).
 
+   *Decided 2026-10-22: (a) everywhere - signup, email change, existing accounts marked verified,
+   approval-mode requests verified first - [D259](DECISIONS.md).*
+
 7. **Self-service reset.** Design options:
    - A single-use token, stored as its SHA-256, expiring in 30-60 minutes (an `auth_tokens`
      table shared with verification: `0068`).

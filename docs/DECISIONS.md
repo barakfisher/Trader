@@ -269,3 +269,4 @@ while this file is out of date.
 | 256 | The production baseline is M10's first code PR, all five parts together |
 | 257 | Rate limits use `rate-limiter-flexible` on the existing Redis, through a small Hono middleware |
 | 258 | Email leaves through `nodemailer` over SMTP, behind an `EmailSender` interface; the provider is chosen at deployment |
+| 259 | Email is verified everywhere it matters |

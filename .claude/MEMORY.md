@@ -3883,6 +3883,21 @@ failure they prevent.
     - **Rejected:**
       - a provider's SDK (`resend`, `postmark`): ties the code to one provider;
       - Telegram only: a stranger has no binding at signup, which contradicts D243.
+259. **Email is verified everywhere it matters** (the user, 2026-10-22; M10 decision 6 (a)).
+    - **Signup:** in *automatic* mode the account turns `active` on verification (D243). In
+      *approval* mode the request reaches the admin only once the email is verified, so the
+      admin never sees an unverified request.
+    - **Changing the email** (`/auth/email`): the new address is stored as pending and takes
+      effect only when it is verified. The old address stays active until then, and reset mail
+      goes to it.
+    - **Accounts that exist today:** the migration marks every `active` account verified (people
+      the admin invited). A `pending` or `rejected` request is not marked.
+    - **Why:** without the email-change rule, a stolen session could move the reset address to
+      the thief's mailbox, turning a lost session into a lost account.
+    - **Rejected:**
+      - verifying at signup only (that gap stays open);
+      - existing accounts verifying at their next sign-in (an extra step for addresses the
+        admin already trusts).
 
 ---
 
