@@ -3813,6 +3813,28 @@ failure they prevent.
       beside the user's real holdings reads close to a recommendation. Whether it counts as
       advice for strangers where they live is a question for a lawyer before public signup
       (decision 13), not one this decision settles.
+255. **The public service runs on a small rented host under a domain the user owns, not on the
+    Mac** (the user, 2026-10-22; M10 decision 2 (c)).
+    - **Why:** it is up 24/7, it does not depend on the Mac, and strangers' data does not live on
+      a laptop.
+    - **The provider is chosen at the deployment stage** (examples named: Render, Oracle's free
+      tier).
+    - **What the stack requires of any host** (from the compose file and the manifests, for that
+      choice):
+      - Postgres 16 with `pgvector` and `pg_stat_statements`;
+      - Redis with persistence (BullMQ and the caches);
+      - three services: web (nginx), orchestrator, AI service;
+      - one-shot jobs: Alembic `migrate`, the `corpus` ingest, the `universe` load;
+      - a scheduler for the runs (kind's 11 CronJobs, or the orchestrator's own timer);
+      - secrets outside the image;
+      - backups off the host.
+    - **TLS ends at the host's edge.** So `APP_ENV=production` and `Secure` cookies become
+      possible, and which `X-Forwarded-For` hop is the client is that host's to say.
+    - **Kind and compose stay the local environments.** Tailscale access (#171) is unchanged.
+    - **Rejected:**
+      - Tailscale Funnel: a `ts.net` name, so no domain to send mail from, and OAuth uncertain.
+      - A Cloudflare Tunnel from the Mac: the service would live and die with the Mac, and
+        Cloudflare decrypts the traffic.
 
 ---
 

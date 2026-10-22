@@ -287,6 +287,9 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
    number of users asks for it. Exposure is flipped on only on your word, after the hardening
    PRs.
 
+   *Decided 2026-10-22: (c), a rented host under the user's domain; provider chosen at deployment -
+   [D255](DECISIONS.md).*
+
 3. **The production baseline** (no new dependency).
    - `APP_ENV=production` behind TLS, which turns on `Secure` cookies; the k8s README's warning
      about plain HTTP is satisfied by the tunnel.
