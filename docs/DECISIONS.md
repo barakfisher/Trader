@@ -266,3 +266,4 @@ while this file is out of date.
 | 253 | The main portfolio gets a read-only rebalance table computed from the user's own targets |
 | 254 | An assigned agent researches each main-portfolio holding and rates its sentiment, Bullish / Bearish / Neutral, with the rationale; the dashboard shows the latest rating |
 | 255 | The public service runs on a small rented host under a domain the user owns, not on the Mac |
+| 256 | The production baseline is M10's first code PR, all five parts together |

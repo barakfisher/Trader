@@ -302,6 +302,8 @@ has one Alembic head, `0067_telegram_conversation` (read 2026-10-22).
    The alternative is to take these piecemeal, per PR. Its cost: a gap while some are missing.
    **Recommendation: all of it, as the first code PR.**
 
+   *Decided 2026-10-22: (a), all five in the first code PR - [D256](DECISIONS.md).*
+
 4. **Rate limiting** (D182's debt). Package options:
    - `rate-limiter-flexible` on the Redis the orchestrator already uses. Costs: one dependency;
      sliding counters keyed by anything.

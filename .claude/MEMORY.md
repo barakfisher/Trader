@@ -3835,6 +3835,22 @@ failure they prevent.
       - Tailscale Funnel: a `ts.net` name, so no domain to send mail from, and OAuth uncertain.
       - A Cloudflare Tunnel from the Mac: the service would live and die with the Mac, and
         Cloudflare decrypts the traffic.
+256. **The production baseline is M10's first code PR, all five parts together** (the user,
+    2026-10-22; M10 decision 3 (a)).
+    - **The five parts:**
+      1. `APP_ENV=production` on the public host, so cookies are `Secure`;
+      2. nginx sends a CSP, HSTS, `frame-ancestors 'none'` and `nosniff`;
+      3. non-GET requests with no `Origin` are refused (today only a foreign one is);
+      4. only the nginx production build is ever public, never compose's Vite dev server;
+      5. the client address comes from the host's proxy header, for the rate limits (decision 4).
+    - **Checked locally in production mode before any host exists.** Kind and compose stay
+      `development` otherwise.
+    - **The PR's first step is measuring what the CSP must allow.** Whether the page needs
+      inline scripts or styles was not measured.
+    - **Rejected:**
+      - each part landing in whichever PR first needs it (a stretch where some are missing,
+        with nothing tracking which);
+      - all of them in the deployment PR (first tested on the day the app goes public).
 
 ---
 
