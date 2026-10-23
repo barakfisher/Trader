@@ -45,6 +45,7 @@ function reply(overrides: Partial<AssistantReplyView> = {}): AssistantReplyView 
       { kind: 'news', label: 'Reuters: Chips slide', link: null, url: 'https://r.example/1', published: null },
     ],
     suggestions: ['Which holding moved most?'],
+    fallbackFrom: null,
     ...overrides,
   };
 }
@@ -95,6 +96,13 @@ describe('a reply', () => {
     expect(news.getAttribute('rel')).toContain('noopener');
     expect(screen.getByText('Sources (2)')).toBeTruthy();
     expect(post).toHaveBeenCalledWith('/assistant/messages', { message: 'How am I doing?' });
+  });
+
+  it("says when an answer ran on a fallback because the chosen model is gone (D283)", async () => {
+    post.mockResolvedValueOnce(reply({ fallbackFrom: 'acme/retired-1' }));
+    renderAsk();
+    await ask('How did I do?');
+    expect((await screen.findByText(/Answered on a fallback model/)).textContent).toContain('acme/retired-1');
   });
 
   it('marks a reply with the language it is written in, not the page language (D220)', async () => {

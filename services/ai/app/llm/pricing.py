@@ -103,7 +103,39 @@ _reported_unpriced: set[str] = set()
 
 
 def parse_model_prices(raw: str) -> dict[str, ModelPrice]:
-    """Parse LLM_MODEL_PRICES ("model=prompt/completion, ...") over the defaults.
+    """Parse LLM_MODEL_PRICES ("model=prompt/completion, ...") over the defaults."""
+    return {**DEFAULT_MODEL_PRICES, **configured_model_prices(raw)}
+
+
+class PriceBook(dict[str, ModelPrice]):
+    """The prices every call is charged at, one dict shared by every adapter.
+
+    Three layers, the later winning: the defaults above, the prices OpenRouter
+    lists (`openrouter_models.py`, D282 - the billing party's own figures, so
+    fresher than a table read in September), and `LLM_MODEL_PRICES`, which an
+    operator sets precisely to overrule both. Rebuilt in place when the list is
+    read again, so adapters built at startup see the new prices; the rebuild
+    awaits nothing, so no call observes it half done.
+    """
+
+    def __init__(self, raw: str = "") -> None:
+        super().__init__()
+        self._configured = configured_model_prices(raw)
+        self._listed: dict[str, ModelPrice] = {}
+        self._rebuild()
+
+    def use_listed(self, listed: dict[str, ModelPrice]) -> None:
+        self._listed = {model.strip().lower(): price for model, price in listed.items()}
+        self._rebuild()
+
+    def _rebuild(self) -> None:
+        merged = {**DEFAULT_MODEL_PRICES, **self._listed, **self._configured}
+        self.clear()
+        self.update(merged)
+
+
+def configured_model_prices(raw: str) -> dict[str, ModelPrice]:
+    """Only the entries LLM_MODEL_PRICES sets ("model=prompt/completion, ...").
 
     Prices are USD per million tokens, e.g.
     "anthropic/claude-sonnet-4.5=3/15, openai/gpt-4o-mini=0.15/0.60".
@@ -113,7 +145,7 @@ def parse_model_prices(raw: str) -> dict[str, ModelPrice]:
     "this model has no price", which downgrades it to the pessimistic rate and
     makes a typo look like a budget that empties for no reason.
     """
-    prices = dict(DEFAULT_MODEL_PRICES)
+    prices: dict[str, ModelPrice] = {}
     for item in raw.split(","):
         entry = item.strip()
         if not entry:

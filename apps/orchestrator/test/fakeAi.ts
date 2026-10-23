@@ -43,6 +43,38 @@ export function createFakeAi(options: FakeAiOptions = {}): AiClient {
     async checkMandate() {
       return { status: 'checked' as const, reason: null, conflicts: [] };
     },
+    /** OpenRouter's list as the AI service filters it (D282): the tested model only. */
+    async llmListed() {
+      return {
+        choosable: true,
+        live: true,
+        fallback_model: 'google/gemini-3.5-flash-lite',
+        models: [
+          {
+            id: 'google/gemini-3.5-flash-lite',
+            name: 'Google: Gemini 3.5 Flash-Lite',
+            prompt_usd_per_mtok: '0.3',
+            completion_usd_per_mtok: '2.5',
+            tested: true,
+            scan_estimate_micro_usd: 900,
+          },
+        ],
+      };
+    },
+    /** A user who chose nothing, with no agent that scans (D244). */
+    async userLlmModels() {
+      const nothing = { saved: null, effective: 'google/gemini-3.5-flash-lite', fallback: false };
+      return {
+        admin: false,
+        choosable: true,
+        live: true,
+        choices: [
+          { scope: 'explain' as const, ...nothing },
+          { scope: 'assistant' as const, ...nothing },
+        ],
+        agents: [],
+      };
+    },
     /** A claimed rescreen, accepted: the real one builds in the background. */
     async rescreen(runId: string) {
       return { run_id: runId, status: 'started' as const, reason: null };

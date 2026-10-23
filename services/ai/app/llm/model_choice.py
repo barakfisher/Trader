@@ -1,4 +1,9 @@
-"""The model a call uses: the one chosen on the Admin page for its purpose (D43).
+"""The model a call uses: the user's own choice (D244), or the Admin page's for its purpose (D43).
+
+**A user who is not the admin** runs on what they chose for the agent, for Ask
+or for explanations, resolved against OpenRouter's list (`user_models.py`,
+D282-D283) - never on the admin's choice. Everything below is about the admin,
+and about calls for no user, which keep `llm_model_choices`.
 
 `llm_model_choices` holds one model per scope (migration 0041), written by the
 orchestrator's admin route and read here on every call, so a choice takes
@@ -29,7 +34,9 @@ from sqlalchemy.engine import Engine
 
 from app.core.logging import get_logger
 from app.llm.base import Caller, LLMCompletion, LLMProvider, Message, Purpose, ToolSpec, Verdict
-from app.llm.catalogue import Scope
+from app.llm.catalogue import FALLBACK_MODEL, Scope
+from app.llm.openrouter_models import OpenRouterModels
+from app.llm.user_models import UserModelStore, resolve
 
 log = get_logger("llm.model_choice")
 
@@ -69,18 +76,47 @@ class DatabaseModelChoices:
 
 
 class ChoosingProvider:
-    """Passes each call the model chosen for its purpose."""
+    """Passes each call the model chosen for its purpose: the user's, or the admin's."""
 
-    def __init__(self, inner: LLMProvider, choices: ModelChoices) -> None:
+    def __init__(
+        self,
+        inner: LLMProvider,
+        choices: ModelChoices,
+        *,
+        users: UserModelStore | None = None,
+        listed: OpenRouterModels | None = None,
+    ) -> None:
         self._inner = inner
         self._choices = choices
+        self._users = users
+        self._listed = listed
         self.name = inner.name
         self.charges_per_token = inner.charges_per_token
 
-    def _model_for(self, caller: Caller | None) -> str | None:
+    async def _model_for(self, caller: Caller | None) -> str | None:
         if caller is None:
             return None
         scope = SCOPE_FOR_PURPOSE[caller.purpose]
+        if caller.user_id is not None and self._users is not None and self._listed is not None:
+            try:
+                choice = self._users.choice(caller.user_id, scope, caller.agent_id)
+            except Exception as error:  # noqa: BLE001 - never fail the caller
+                # Unknown whether this is the admin: the tested model is the
+                # cheap answer, and never a stranger's call on the admin's pick.
+                log.warning("llm.user_model_unreadable", scope=scope, error=str(error))
+                return FALLBACK_MODEL
+            if choice is not None and not choice.admin:
+                resolution = resolve(
+                    choice.saved, await self._listed.current(), self._listed.prices
+                )
+                if resolution.fallback:
+                    try:
+                        self._users.record_fallback(
+                            caller.user_id, scope, caller.agent_id, resolution
+                        )
+                    except Exception as error:  # noqa: BLE001 - never fail the caller
+                        log.warning("llm.model_fallback_unrecorded", scope=scope, error=str(error))
+                return resolution.effective
         try:
             return self._choices.chosen(scope)
         except Exception as error:  # noqa: BLE001 - never fail the caller
@@ -105,7 +141,7 @@ class ChoosingProvider:
             temperature=temperature,
             reasoning_effort=reasoning_effort,
             caller=caller,
-            model=model or self._model_for(caller),
+            model=model or await self._model_for(caller),
         )
 
     async def converse(
@@ -128,7 +164,7 @@ class ChoosingProvider:
             temperature=temperature,
             reasoning_effort=reasoning_effort,
             caller=caller,
-            model=model or self._model_for(caller),
+            model=model or await self._model_for(caller),
         )
 
     async def record_verdict(self, call_id: int | None, verdict: Verdict) -> None:

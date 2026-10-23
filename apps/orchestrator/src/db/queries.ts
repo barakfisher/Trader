@@ -31,6 +31,7 @@ export * from './queries/opsEvents.js';
 export * from './queries/universe.js';
 export * from './queries/llmCalls.js';
 export * from './queries/llmModels.js';
+export * from './queries/modelChoices.js';
 export * from './queries/observations.js';
 export * from './queries/alerts.js';
 export * from './queries/narration.js';

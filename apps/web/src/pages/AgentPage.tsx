@@ -45,6 +45,7 @@ import {
   useUpdateAgent,
 } from '../queries/agents.ts';
 import { KindBadge, WaitingForBrief } from './AgentsPage.tsx';
+import { AgentModelCard } from '../components/ModelChoiceCards.tsx';
 
 const TABS = ['holdings', 'performance', 'activity', 'scans', 'settings'] as const;
 type Tab = (typeof TABS)[number];
@@ -177,6 +178,7 @@ function SimulatedAgent({ agent }: { agent: AgentView }) {
       {tab === 'settings' && (
         <>
           <SettingsForm agent={agent} />
+          <AgentModelCard agentId={agent.id} />
           <ScanScheduleCard agent={agent} />
           <StateControls agent={agent} />
         </>

@@ -28,6 +28,7 @@ import { logger } from '../logger.js';
 import type { Notifier } from '../notify/notifier.js';
 import { watchNarration, type NarrationWatchOutcome } from './narrationWatch.js';
 import { fanOut, settingsForNotification, type NotifiableFinding } from './notifications.js';
+import { announceModelFallbacks } from './modelFallbacks.js';
 
 /**
  * Days of daily closes fetched for an instrument the analysis reads. The daily
@@ -140,6 +141,8 @@ export async function runTopicScan(
           requestId,
         )
       : 'not_measured';
+  // A narration that ran on a fallback model is announced once (D285).
+  await announceModelFallbacks(user.id, notifier);
 
   const skipped = response.stats.skipped ?? {};
   const result: TopicScanResult = {

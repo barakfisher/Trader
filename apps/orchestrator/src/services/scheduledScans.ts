@@ -42,6 +42,7 @@ import type { Notifier } from '../notify/notifier.js';
 import { dueSlots, scheduleOf, slotKey, type DueSlot, type ScanSlot, type Session } from './scanSchedule.js';
 import { readyToScan } from './agentReadiness.js';
 import { proposeFromScan } from './tradeProposals.js';
+import { announceModelFallbacks } from './modelFallbacks.js';
 
 /** D69: one attempt and at most two retries per slot. */
 export const MAX_SLOT_ATTEMPTS = 3;
@@ -244,6 +245,7 @@ export async function runSlotAttempt(job: SlotAttemptJob, deps: AttemptDeps): Pr
   try {
     const scan = await deps.ai.scanAgent(agent.id, { user_id: job.userId, trigger: 'schedule' });
     const proposalIds = await proposeFromScan(job.userId, agent, scan, { ai: deps.ai, notifier: deps.notifier });
+    await announceModelFallbacks(job.userId, deps.notifier);
     const stats = { outcome: scan.outcome, scanId: scan.scan_id, proposalIds, costMicroUsd: scan.cost_micro_usd };
     if (scan.outcome === 'failed') {
       // The scan ran and the model call failed: the provider's trouble, worth another try.

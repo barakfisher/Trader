@@ -324,3 +324,15 @@ UPDATE agents SET instructions_check = '{"fingerprint": "f", "conflicts": [{"set
  WHERE id = '90000000-0000-0000-0000-0000000000a1';
 UPDATE telegram_bindings SET assistant_conversation_id = '80000000-0000-0000-0000-000000000001'
  WHERE user_id = '00000000-0000-0000-0000-00000000000a';
+-- Model choice (0069, D244): a user's model for each scope, an agent's, and a
+-- fallback in every scope, one of them announced (D285).
+UPDATE user_settings SET llm_explain_model = 'anthropic/claude-haiku-4.5',
+       llm_assistant_model = 'acme/retired-model'
+ WHERE user_id = '00000000-0000-0000-0000-00000000000b';
+UPDATE agents SET model = 'acme/retired-model' WHERE id = '90000000-0000-0000-0000-0000000000a1';
+INSERT INTO model_fallbacks (id, user_id, agent_id, scope, saved_model, effective_model, announced_at) VALUES
+  ('61000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000b', '90000000-0000-0000-0000-00000000000b', 'explain', 'acme/retired-model', 'google/gemini-3.5-flash-lite', NULL),
+  ('61000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000b', '90000000-0000-0000-0000-00000000000b', 'assistant', 'acme/retired-model', 'google/gemini-3.5-flash-lite', '2026-10-23T12:00:00Z'),
+  ('61000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'agent', 'acme/retired-model', 'google/gemini-3.5-flash-lite', NULL);
+INSERT INTO notifications (user_id, agent_id, channel, ref_kind, ref_id, route, reason, status, sent_at, dedupe_key) VALUES
+  ('00000000-0000-0000-0000-00000000000b', '90000000-0000-0000-0000-00000000000b', 'telegram', 'model_fallback', '61000000-0000-0000-0000-000000000002', 'push', 'above_floor', 'sent', '2026-10-23T12:00:00Z', 'seed-n-model-fallback');

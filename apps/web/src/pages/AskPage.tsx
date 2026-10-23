@@ -17,6 +17,7 @@ import { useAssistantConversationsQuery } from '../queries/assistant.ts';
 import { useModelAccess } from '../queries/modelAccess.ts';
 import { MAX_QUESTION_LENGTH, type AskTurn } from '../stores/AskStore.ts';
 import { useStore } from '../stores/context.tsx';
+import { leftToRight } from '../i18n/format.ts';
 
 /**
  * Questions to start from, one of each kind the assistant answers - three of
@@ -216,6 +217,11 @@ function ReplyView({
         <p className="text-xs uppercase tracking-wide text-text-muted">{t(`ask.declined.${reply.reason}`)}</p>
       )}
       <AssistantText text={reply.text} />
+      {reply.fallbackFrom && (
+        <p role="status" className="text-xs text-warn">
+          {t('models.answerFallback', { model: leftToRight(reply.fallbackFrom) })}
+        </p>
+      )}
       <Sources sources={reply.sources} />
       {showSuggestions && reply.suggestions.length > 0 && (
         <Suggestions suggestions={reply.suggestions} onPick={onPick} />

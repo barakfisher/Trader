@@ -50,6 +50,16 @@ CATALOGUE: tuple[CatalogueModel, ...] = (
 )
 
 
+#: The models the scans' evidence validator and tool calls were tuned on (D75,
+#: D227), marked "tested" wherever a user chooses (D284). A constant, because the
+#: claim changes only after a measurement, and a measurement ends in a code change
+#: and a decision anyway. The first is the fallback for a chosen model OpenRouter
+#: no longer lists, and the model of a user who has chosen none (D282, D283).
+TESTED_MODELS: tuple[str, ...] = ("google/gemini-3.5-flash-lite",)
+#: Where a user's model falls back to (D283).
+FALLBACK_MODEL = TESTED_MODELS[0]
+
+
 @dataclass(frozen=True)
 class OfferedModel:
     model: CatalogueModel

@@ -1252,6 +1252,53 @@ export interface LlmModelChoiceInput {
   model: string;
 }
 
+// --- A user's own model choice (M10 PR 6, D244, D282-D285) -------------------
+
+/** The two scopes a user chooses beside each agent: Ask, and explanations (narration). */
+export const USER_LLM_SCOPES = ['assistant', 'explain'] as const;
+export type UserLlmScope = (typeof USER_LLM_SCOPES)[number];
+
+/** A model from OpenRouter's list, filtered (D282). Its id and name are data, not copy. */
+export interface ListedModelView {
+  id: string;
+  name: string;
+  /** USD per million tokens, decimal strings. */
+  promptUsdPerMtok: string;
+  completionUsdPerMtok: string;
+  /** The scans were tuned on it (D284). */
+  tested: boolean;
+  /** One agent scan at the installation's measured basis (D46), integer micro-USD. */
+  scanEstimateMicroUsd: number;
+}
+
+/** What was chosen, what the next call runs on, and whether that is a fallback (D283). */
+export interface ModelResolutionView {
+  saved: string | null;
+  effective: string | null;
+  fallback: boolean;
+}
+
+/** `GET /settings/llm-models`. */
+export interface ModelChoicesResponse {
+  /** The admin chooses on the Admin page; nothing else here applies to them (D244). */
+  admin: boolean;
+  /** False unless the installation runs on OpenRouter: nothing can be chosen. */
+  choosable: boolean;
+  /** False while OpenRouter's list has never been read; a saved model is then used as it is. */
+  live: boolean;
+  /** The tested model a choice falls back to. */
+  fallbackModel: string;
+  models: ListedModelView[];
+  choices: Record<UserLlmScope, ModelResolutionView>;
+  /** Every agent that scans, oldest first. */
+  agents: (ModelResolutionView & { agentId: string; name: string })[];
+}
+
+/** `PUT /settings/llm-models/:scope` and `PUT /agents/:id/model`; null is "not chosen". */
+export interface ModelChoiceInput {
+  model: string | null;
+}
+
 /**
  * What a reset may erase, one checkbox each (migration 0045, task 18). The
  * migration's `RESET_GROUPS` is tested against this list.
@@ -2203,6 +2250,11 @@ export interface AssistantReplyView {
   text: string;
   sources: AssistantSourceView[];
   suggestions: string[];
+  /**
+   * The model the user chose for Ask, when this answer ran on a fallback because
+   * OpenRouter no longer lists it (D283); null otherwise. A model id: data, not copy.
+   */
+  fallbackFrom: string | null;
 }
 
 export interface AssistantConversationSummary {

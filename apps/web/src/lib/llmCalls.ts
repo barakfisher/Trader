@@ -88,6 +88,12 @@ export function decimalUsdToMicro(text: string): number | null {
   return sign === '-' ? -micro : micro;
 }
 
+/** A price per million tokens the server sent as a decimal string, as dollars; the text itself if it is not one. */
+export function formatPerMtok(text: string): string {
+  const micro = decimalUsdToMicro(text);
+  return micro === null ? text : formatMicroUsd(micro);
+}
+
 /** Dollars and cents typed into a field, as integer micro-USD; null for anything else. */
 export function dollarsTextToMicro(value: string): number | null {
   return /^\d+(\.\d{1,2})?$/.test(value.trim()) ? decimalUsdToMicro(value) : null;

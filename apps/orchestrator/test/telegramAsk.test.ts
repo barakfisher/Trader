@@ -270,6 +270,12 @@ describe('the reply as plain text (D223)', () => {
     ]);
   });
 
+  it('marks an answer that ran on a fallback model, under it (D283)', () => {
+    const text = plainAnswer(reply({ text: 'Chips slid.', fallback_from: 'acme/retired-1' }), MESSAGES.en, null);
+
+    expect(text).toBe(`Chips slid.\n\n${MESSAGES.en.modelFallback.answerMark('acme/retired-1')}`);
+  });
+
   it("says the catalogue's sentence for an outcome with no reply, in the language given (D224)", () => {
     for (const outcome of ['failed', 'budget_reached', 'cap_reached', 'no_model', 'own_key_failed'] as const) {
       expect(plainAnswer(reply({ outcome, text: 'English server text' }), MESSAGES.he, null)).toBe(

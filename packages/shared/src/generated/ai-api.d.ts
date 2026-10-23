@@ -212,6 +212,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/llm/listed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Llm Listed */
+        get: operations["llm_listed_llm_listed_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/llm/models": {
         parameters: {
             query?: never;
@@ -263,6 +280,23 @@ export interface paths {
          *     refused is said by its state, not read again.
          */
         get: operations["own_key_usage_llm_own_keys__user_id__usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/llm/users/{user_id}/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** User Llm Models */
+        get: operations["user_llm_models_llm_users__user_id__models_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -550,6 +584,34 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AgentLlmModel */
+        AgentLlmModel: {
+            /**
+             * Agent Id
+             * Format: uuid
+             */
+            agent_id: string;
+            /**
+             * Effective
+             * @description What the next call runs on; null when nothing can be chosen and no model is configured.
+             */
+            effective: string | null;
+            /**
+             * Fallback
+             * @description The saved model is no longer listed (D283).
+             */
+            fallback: boolean;
+            /**
+             * Name
+             * @description The agent's name: the user's own text.
+             */
+            name: string;
+            /**
+             * Saved
+             * @description What the user chose; null when nothing.
+             */
+            saved: string | null;
+        };
         /**
          * AgentRecheckRequest
          * @description Re-check one of the agent's expired trade proposals (D212).
@@ -698,6 +760,11 @@ export interface components {
             conversation_id: string | null;
             /** Cost Micro Usd */
             cost_micro_usd: number;
+            /**
+             * Fallback From
+             * @description The model the user chose, when this answer ran on a fallback because OpenRouter no longer lists it (D283); null otherwise.
+             */
+            fallback_from?: string | null;
             /** Message Id */
             message_id: string | null;
             /** Model */
@@ -1146,6 +1213,65 @@ export interface components {
             prompt_tokens_per_day: number;
             /** Window Days */
             window_days: number;
+        };
+        /**
+         * LlmListedModel
+         * @description A model a user on their own key may choose, from OpenRouter's list (D244, D282).
+         */
+        LlmListedModel: {
+            /**
+             * Completion Usd Per Mtok
+             * @description USD per million output tokens, a decimal.
+             */
+            completion_usd_per_mtok: string;
+            /**
+             * Id
+             * @description OpenRouter's id, e.g. 'google/gemini-3.5-flash-lite'.
+             */
+            id: string;
+            /**
+             * Name
+             * @description OpenRouter's name for it. Data, not copy.
+             */
+            name: string;
+            /**
+             * Prompt Usd Per Mtok
+             * @description USD per million input tokens, a decimal.
+             */
+            prompt_usd_per_mtok: string;
+            /**
+             * Scan Estimate Micro Usd
+             * @description One agent scan at the agent basis (D46).
+             */
+            scan_estimate_micro_usd: number;
+            /**
+             * Tested
+             * @description The scans were tuned on it (D284).
+             */
+            tested: boolean;
+        };
+        /**
+         * LlmListedModelsResponse
+         * @description What a user's model pickers offer (D282).
+         */
+        LlmListedModelsResponse: {
+            /**
+             * Choosable
+             * @description False unless LLM_PROVIDER is openrouter: nothing can be chosen.
+             */
+            choosable: boolean;
+            /**
+             * Fallback Model
+             * @description The tested model a choice falls back to (D283).
+             */
+            fallback_model: string;
+            /**
+             * Live
+             * @description False while OpenRouter's list has never been read: the Admin page's catalogue stands in, and a saved model is used as it is (D283).
+             */
+            live: boolean;
+            /** Models */
+            models: components["schemas"]["LlmListedModel"][];
         };
         /**
          * LlmModelsResponse
@@ -2203,6 +2329,51 @@ export interface components {
              */
             state: "ready" | "partially_embedded" | "not_embedded" | "not_loaded";
         };
+        /**
+         * UserLlmModelsResponse
+         * @description A user's models, resolved against OpenRouter's list (D244, D283).
+         */
+        UserLlmModelsResponse: {
+            /**
+             * Admin
+             * @description The admin's models are the Admin page's (D244).
+             */
+            admin: boolean;
+            /**
+             * Agents
+             * @description Every agent that scans, oldest first.
+             */
+            agents: components["schemas"]["AgentLlmModel"][];
+            /** Choices */
+            choices: components["schemas"]["UserLlmScopeModel"][];
+            /** Choosable */
+            choosable: boolean;
+            /** Live */
+            live: boolean;
+        };
+        /** UserLlmScopeModel */
+        UserLlmScopeModel: {
+            /**
+             * Effective
+             * @description What the next call runs on; null when nothing can be chosen and no model is configured.
+             */
+            effective: string | null;
+            /**
+             * Fallback
+             * @description The saved model is no longer listed (D283).
+             */
+            fallback: boolean;
+            /**
+             * Saved
+             * @description What the user chose; null when nothing.
+             */
+            saved: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "explain" | "assistant";
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -2561,6 +2732,37 @@ export interface operations {
             };
         };
     };
+    llm_listed_llm_listed_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmListedModelsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     llm_models_llm_models_get: {
         parameters: {
             query?: never;
@@ -2715,6 +2917,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OwnLlmKeyUsageState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    user_llm_models_llm_users__user_id__models_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserLlmModelsResponse"];
                 };
             };
             /** @description Validation Error */

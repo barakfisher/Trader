@@ -292,3 +292,7 @@ while this file is out of date.
 | 279 | The monthly cap is retired from every screen and from enforcement; its column stays, unread |
 | 280 | A user nobody may pay for is told up front, where the work would start |
 | 281 | The spend indicator's daily pace is this UTC week's: `usage_weekly` over the days since Monday |
+| 282 | A user chooses from OpenRouter's live model list, filtered; its prices price the call |
+| 283 | A chosen model that leaves the list falls back, cheaper, and says so everywhere |
+| 284 | The "tested" mark is a constant in code: `TESTED_MODELS`, Flash-Lite only |
+| 285 | Telegram hears about a fallback once, when it starts |

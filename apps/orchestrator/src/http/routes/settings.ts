@@ -31,7 +31,10 @@ import {
   type OwnLlmKeyResponse,
   SAFETY_LIMIT_CEILING_MICRO_USD,
   type SafetyLimitInput,
+  type ModelChoicesResponse,
   type UiLanguage,
+  USER_LLM_SCOPES,
+  type UserLlmScope,
   type UserSettings,
 } from '@traders/shared';
 
@@ -40,13 +43,15 @@ import {
   getOrCreateUserSettings,
   replaceUserSettings,
   setSafetyLimit,
+  setUserModel,
   type UserSettingsRow,
 } from '../../db/queries.js';
 import { AiServiceError, type OwnLlmKeyState } from '@traders/shared/ai';
 
 import { keySpendOf } from '../../services/keySpend.js';
+import { modelChoiceRefusal, modelChoiceSchema, readModelChoices, relayModels } from '../../services/modelChoices.js';
 import { currentUserId, type AppEnv } from '../app.js';
-import { ApiProblem, badRequest, forbidden, unprocessable, upstreamFailure } from '../errors.js';
+import { ApiProblem, badRequest, forbidden, notFound, unprocessable, upstreamFailure } from '../errors.js';
 
 /**
  * The severity ladder, ascending, mirroring the CHECK on both severity columns
@@ -244,6 +249,34 @@ export function registerSettingsRoutes(app: Hono<AppEnv>): void {
     return context.json(
       toOwnKeyResponse(await relayOwnKey(() => context.get('ai').removeOwnLlmKey(userId, context.get('requestId')))),
     );
+  });
+
+  // A user's own model for Ask and for explanations, from OpenRouter's list
+  // (D244, D282); each agent's is under `/agents/:id/model`. The admin chooses
+  // on the Admin page, so this answers them with `admin: true` and no list, and
+  // refuses their writes.
+  app.get('/settings/llm-models', async (context) => {
+    const body: ModelChoicesResponse = await relayModels(() =>
+      readModelChoices(context.get('ai'), currentUserId(context), context.get('requestId')),
+    );
+    return context.json(body);
+  });
+
+  app.put('/settings/llm-models/:scope', async (context) => {
+    const userId = ownKeyUser(context);
+    const scope = context.req.param('scope');
+    if (!(USER_LLM_SCOPES as readonly string[]).includes(scope)) {
+      // An unknown scope is no resource of this user's, like an unknown id.
+      throw notFound(`no such model scope; the scopes are ${USER_LLM_SCOPES.join(', ')}`);
+    }
+    const parsed = modelChoiceSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) throw badRequest('invalid_body', 'expected { model: string | null }', parsed.error.issues);
+    const ai = context.get('ai');
+    const refusal = modelChoiceRefusal(await relayModels(() => ai.llmListed(context.get('requestId'))), parsed.data.model);
+    if (refusal !== null) throw refusal;
+    await setUserModel(userId, scope as UserLlmScope, parsed.data.model);
+    const body: ModelChoicesResponse = await relayModels(() => readModelChoices(ai, userId, context.get('requestId')));
+    return context.json(body);
   });
 
   app.put('/settings', async (context) => {

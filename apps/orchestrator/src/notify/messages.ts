@@ -419,8 +419,22 @@ export interface Messages {
   /** A state added to `NarrationState` without words here still says something true. */
   narrationFallback: NoticeText;
 
+  /**
+   * D283, D285: a model the user chose that OpenRouter no longer lists, said once
+   * when a call first falls back. Model ids are data, set in isolation; `where`
+   * names the scope - an agent by its name, Ask, or explanations.
+   */
+  modelFallback: {
+    where: { assistant: string; explain: string; agent: (name: string) => string };
+    notice: (where: string, saved: string, effective: string) => NoticeText;
+    /** Under a Telegram answer that ran on a fallback. */
+    answerMark: (saved: string) => string;
+    /** The digest's line for the notices held for it. */
+    digestLine: (count: number) => string;
+  };
+
   digest: {
-    title: (findings: number, topics: number, narrationChanged: boolean) => string;
+    title: (findings: number, topics: number, narrationChanged: boolean, modelFallbacks: number) => string;
     reasons: Record<DigestReason, string>;
     reasonLine: (count: number, reason: string) => string;
     topicsHeading: string;
@@ -871,12 +885,26 @@ const en: Messages = {
     explanation: 'Every figure in them is still checked against the evidence before it is shown.',
   },
 
+  modelFallback: {
+    where: { assistant: 'Ask', explain: 'explanations', agent: (name) => name },
+    notice: (where, saved, effective) => ({
+      headline: `⚠️ ${saved} is no longer offered for ${where}`,
+      explanation: `OpenRouter no longer lists it, so ${where} now runs on ${effective}, the model the scans were tuned on. Choose another model in Settings or on the agent's page; until then this stays.`,
+    }),
+    answerMark: (saved) => `Answered on a fallback model: ${saved} is no longer offered. Choose another in Settings.`,
+    digestLine: (count) =>
+      count === 1
+        ? 'A model you chose is no longer offered; a fallback is in use'
+        : `${count} models you chose are no longer offered; fallbacks are in use`,
+  },
+
   digest: {
-    title: (findings, topics, narrationChanged) => {
+    title: (findings, topics, narrationChanged, modelFallbacks) => {
       const parts: string[] = [];
       if (findings > 0) parts.push(`${findings} finding${findings === 1 ? '' : 's'}`);
       if (topics > 0) parts.push(`${topics} topic${topics === 1 ? '' : 's'}`);
       if (narrationChanged) parts.push('explanations changed');
+      if (modelFallbacks > 0) parts.push('a model fell back');
       return `Daily digest: ${parts.join(', ')}`;
     },
     reasons: {
@@ -1360,12 +1388,26 @@ const he: Messages = {
     explanation: 'כל נתון בהם עדיין נבדק מול הראיות לפני שהוא מוצג.',
   },
 
+  modelFallback: {
+    where: { assistant: 'שאלות', explain: 'ההסברים', agent: (name) => isolated(name) },
+    notice: (where, saved, effective) => ({
+      headline: `⚠️ המודל ${ltr(saved)} כבר לא מוצע עבור ${where}`,
+      explanation: `${ltr('OpenRouter')} כבר לא מציג אותו, ולכן מעכשיו נעשה שימוש ב־${ltr(effective)} עבור ${where} – המודל שעליו כוונו הסריקות. אפשר לבחור מודל אחר בהגדרות או בדף הסוכן; עד אז זה יישאר כך.`,
+    }),
+    answerMark: (saved) => `התשובה נכתבה במודל חלופי: ${ltr(saved)} כבר לא מוצע. אפשר לבחור מודל אחר בהגדרות.`,
+    digestLine: (count) =>
+      count === 1
+        ? 'מודל שבחרתם כבר לא מוצע; נעשה שימוש במודל חלופי'
+        : `${ltr(count)} מודלים שבחרתם כבר לא מוצעים; נעשה שימוש במודלים חלופיים`,
+  },
+
   digest: {
-    title: (findings, topics, narrationChanged) => {
+    title: (findings, topics, narrationChanged, modelFallbacks) => {
       const parts: string[] = [];
       if (findings > 0) parts.push(hebrewCount(findings, 'ממצא אחד', 'ממצאים'));
       if (topics > 0) parts.push(hebrewCount(topics, 'נושא אחד', 'נושאים'));
       if (narrationChanged) parts.push('ההסברים השתנו');
+      if (modelFallbacks > 0) parts.push('מודל הוחלף בחלופי');
       return `סיכום יומי: ${parts.join(', ')}`;
     },
     reasons: {
