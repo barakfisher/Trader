@@ -9,6 +9,7 @@ import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Drawer } from '../components/Drawer.tsx';
 import { EmailChange } from '../components/EmailChange.tsx';
 import { OwnLlmKeyForm } from '../components/OwnLlmKeyForm.tsx';
+import { KeySpendDetails } from '../components/SpendIndicator.tsx';
 import { PasswordChange } from '../components/PasswordChange.tsx';
 import { TelegramConnect } from '../components/TelegramConnect.tsx';
 import { TimeZoneChange } from '../components/TimeZoneChange.tsx';
@@ -29,7 +30,13 @@ import {
 } from '../stores/SettingsStore.ts';
 import { errorMessage } from '../api/client.ts';
 import { LANGUAGES, useTranslation, type Language } from '../i18n/index.ts';
-import { useMonthlySpendQuery, useOwnLlmKeyQuery, useSetSafetyLimit, useSettingsQuery } from '../queries/settings.ts';
+import {
+  useKeySpendQuery,
+  useMonthlySpendQuery,
+  useOwnLlmKeyQuery,
+  useSetSafetyLimit,
+  useSettingsQuery,
+} from '../queries/settings.ts';
 import { useStore } from '../stores/context.tsx';
 
 /**
@@ -404,6 +411,8 @@ function SpendCard() {
   const { t } = useTranslation();
   const spend = useMonthlySpendQuery().data;
   const ownKey = useOwnLlmKeyQuery(Boolean(spend)).data;
+  // OpenRouter's own figures (D247-D249), beside this app's count against the safety limit.
+  const keySpend = useKeySpendQuery(Boolean(spend)).data;
   if (!spend) return null;
   return (
     <>
@@ -417,6 +426,12 @@ function SpendCard() {
           <bdi>{t('settings.spend.ownKeyLine', { spent: formatMicroUsd(spend.ownKeySpentMicroUsd) })}</bdi>
         </p>
         <p className="mt-1 max-w-2xl text-xs text-text-muted">{t('settings.spend.hint')}</p>
+        {keySpend?.key === 'valid' && (
+          <div className="mt-3 rounded-lg border border-border-subtle p-3">
+            <p className="mb-1 text-sm font-medium">{t('settings.spend.onOpenRouter')}</p>
+            <KeySpendDetails spend={keySpend} />
+          </div>
+        )}
         <SafetyLimitForm spend={spend} />
       </Card>
     </>

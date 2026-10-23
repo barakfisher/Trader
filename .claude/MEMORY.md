@@ -4,24 +4,26 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-22 - **Handoff by count, five merges since #290: M10 (public access) is
-measured, decided and two PRs in.**
-- **Merges since #290:**
-  - #291 and #292, another session's;
-  - #293, the measurement (`docs/M10-MEASUREMENT.md`) and **every M10 decision, D243-D267,
-    asked one at a time**;
-  - #294, PR 1: the production baseline (D256);
-  - #295, PR 2: the write-route isolation test (D266).
-- **Decisions reached 280** (next: **281**; D268 is PR 3's; D269-D273 are M11 A1's (#297), D274-D278 M11 A2's (#299); D279-D280 are PR 4's).
-- **Migrations:** `0068_own_key_only` (M10 PR 4: `user_settings.llm_safety_limit_micro_usd`,
-  `own_key_required` outcomes, the re-check index) is head once PR 4 merges; next free is `0069`.
-- **Deployed:**
-  - compose's orchestrator image was built 2026-10-21 15:10 UTC and has none of M10;
-  - kind runs `c7e23ee` (#292), read 2026-10-22;
-  - #294's `Origin` rule and security headers reach them only on the user's "redeploy".
+Updated: 2026-10-23 - **Handoff by count, five merges since #295: M10 PRs 3-5 are merged and
+live; M11 A1-A2 landed beside them from another session.**
+- **Merges since #295:**
+  - #297 and #299, M11 A1-A2 (the Telegram menu and agent controls; D269-D278), another session's;
+  - #298, PR 3: rate limits (D257, D268);
+  - #300, PR 4: own key only plus the safety limit (D245, D246, D250, D279, D280; migration `0068`);
+  - #301, PR 5: the spend indicator (D247-D250, D281).
+- **Decisions reached 281** (next: **282**).
+- **Migrations:** `0068_own_key_only` is head; next free is `0069`. `git fetch` and check `main`
+  has one head before writing one: two sessions work on `main` at once now.
+- **Deployed:** compose and kind both run `04bb7e3` (#301) at `0068`, redeployed 2026-10-23
+  ~12:00 UTC after backups (`~/Backups/traders/*/traders-*-20261023T1200*Z.dump`). Both readyz
+  ok. **Tailscale serve was not forwarding to kind** at that redeploy (the script's `!!` line);
+  the fix is the user's: `tailscale serve --bg http://127.0.0.1:80`.
 - **There is no standing grant.** Ask before each PR, merge only on "merge", redeploy only on
   "redeploy".
-- **Next:** "Next session: M10 PR 3".
+- **Next:** "Next session: M10 PR 6".
+
+Previous update, 2026-10-22 - **Handoff by count, five merges since #290: M10 (public access) is
+measured, decided and two PRs in.** Merges #291-#295; decisions reached 268 then.
 
 Previous update, 2026-10-21 - **Handoff at a milestone boundary: M9 (multiple users) is complete in one
 PR** - scheduling per user (D238), the user's own zone (D163's reads, guideline 10 amended), the
@@ -4259,6 +4261,21 @@ failure they prevent.
       unseen); a Telegram message when a scheduled scan first skips (a new notification kind and
       dedupe key; PR 5's top-bar chip makes the state visible on every screen instead).
 
+281. **The spend indicator's daily pace is this UTC week's: `usage_weekly` over the days since
+    Monday** (the user, 2026-10-23; M10 PR 5, refines D247's "7-day average of `usage_daily`").
+    - **Measured (OpenRouter's limits reference, 2026-10-23):** `GET /key` reports
+      `usage_daily`, `usage_weekly` and `usage_monthly` as **calendar windows in UTC** - today,
+      the week since Monday, the month - and no rolling 7 days and no history. D247's average
+      cannot be read from it.
+    - **How:** pace = `usage_weekly` / days since Monday 00:00 UTC, at least one day
+      (`services/keySpend.ts`). Days left = what the binding limit has left / pace, rounded down;
+      the warning starts at `SPEND_WARNING_DAYS` (5) or fewer. With no spend this week, or no limit,
+      nothing is projected.
+    - **Accepted cost:** early on a Monday the pace rests on a few hours of spend.
+    - *Rejected:* this app's own `llm_calls` over 7 days (misses other apps on the key, which
+      OpenRouter counts against its limit - the projection reads optimistic); storing a daily
+      reading per user (a migration and a table for a figure with gaps on days the app is not
+      opened, and no projection for the first week).
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -5544,6 +5561,53 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: M10 PR 6 (written 2026-10-23)
+
+**State:** M10 PRs 1-5 are merged and deployed (#294, #295, #298, #300, #301). D267's order
+continues with **PR 6: model choice (D244)** - a nullable `agents.model` and a per-user choice for
+Ask and explanations, from OpenRouter's model list with a "tested" mark on Flash-Lite. Ask the
+user before starting it.
+
+**What PRs 4-5 settled that a later PR must not undo:**
+- **Who pays (`services/ai/app/llm/payer.py`):** the admin and no-user calls on the installation's
+  key; everyone else on their own key only, refused before any call without one
+  (`OwnKeyRequiredError`, 409 `own_key_required` / `own_key_failed` / `safety_limit_reached`).
+  Model choice (PR 6) must route through the same provider chain, not around it.
+- **The monthly cap is retired, not dropped (D279).** `users.llm_cap_micro_usd`, its
+  `users_active_user_has_cap` CHECK and `installation_settings.default_llm_cap_micro_usd` stay;
+  approval writes the default only to satisfy the CHECK. A later migration may drop all three
+  together (the CHECK first). `cap_reached` now means "your safety limit".
+- **The spend indicator reads OpenRouter, never `llm_calls`** (D248), cached 15 minutes per
+  user keyed on the saved key's state (D249); the pace is this UTC week's (D281).
+
+**Lessons from this stretch:**
+- **Decision numbers collide when two sessions decide at once.** #297 and #299 took D269-D278
+  while PR 4 was open with D269-D270; renumbering took three passes. Before opening a PR, fetch
+  `main` and take the next free numbers then; when merging `main` in, renumber only lines this
+  branch wrote (compare against `git show origin/main:<file>`), since the other session's
+  references to the same numbers must stay.
+- **A ratio of amounts in a Hebrew sentence reads backwards** unless isolated: no letters set its
+  direction, and `he` currency formatting carries its own RLM marks. Wrap the pair in LRI..PDI
+  and each amount in FSI..PDI (`SpendIndicator.tsx` `ratioText`). Seen only in the browser.
+- **`formatMicroUsd` is for a call's cost** (four places); a spend, a limit or a daily pace is to
+  the cent (`formatMicroUsdCents`).
+- **`pnpm -r test` on this machine times out page tests under load** (load average ~87 with
+  compose and kind up). Compare against a clean `main` worktree under the same load before
+  blaming code; CI is the authority. Two test files carry longer waits for this; no assertion
+  was loosened.
+- **`sync_with_base_branch` fails here** - git has no global identity. Merge `origin/main` by hand
+  with `git -c user.name=... -c user.email=... merge`.
+- **`docker exec` with a heredoc needs `-i`**, or psql runs nothing and says nothing.
+
+**Debt, as consequences:**
+- The assistant's product guide does not mention the own key, so a keyless user asking "why
+  can't I scan" gets no help from it (they cannot ask anyway; the notice says it).
+- Telegram's new sentences (payer refusals, safety limit, sign-up without amounts) were never
+  seen live; the user's phone check is owed, with M11's.
+- The spend indicator was never run against a real OpenRouter key; a test key against a local
+  fake proved the path. The first real reading will show whether OpenRouter's `limit_reset`
+  values are `daily`/`weekly`/`monthly` as mapped.
 
 ### Next session: M10 PR 3 (written 2026-10-22)
 

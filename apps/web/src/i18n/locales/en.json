@@ -1009,7 +1009,8 @@
     "spend": {
       "title": "Model spending",
       "hint": "Every model call made for you counts: agent scans, questions and explanations. Other apps that use the same key are not counted here.",
-      "ownKeyLine": "On your own key this month: {{spent}} (estimated here; your OpenRouter account shows the actual bill)."
+      "ownKeyLine": "On your own key this month: {{spent}} (estimated here; your OpenRouter account shows the actual bill).",
+      "onOpenRouter": "On OpenRouter"
     },
     "ownKey": {
       "title": "Your OpenRouter key",
@@ -1902,5 +1903,34 @@
     "unavailable": "This installation isn't set up to use your own OpenRouter key, so scans and questions can't run. Ask the admin.",
     "safety_limit": "Your monthly safety limit on AI spending is reached, so scans and questions are stopped until {{date}}. You can raise the limit in Settings.",
     "openSettings": "Open Settings"
+  },
+  "spendIndicator": {
+    "addKey": "Add key",
+    "keyRefused": "Key refused",
+    "unreadable": "OpenRouter couldn't be read just now",
+    "unlimited": "Unlimited",
+    "label": "Spend on your OpenRouter key: {{ratio}}",
+    "periods": {
+      "day": "today",
+      "week": "this week",
+      "month": "this month",
+      "total": "in total"
+    },
+    "keyLine": "On this key: {{ratio}} {{period}}",
+    "safetyLine": "Your safety limit: {{ratio}}, resets on {{date}}",
+    "pace": "This week's pace on this key: {{pace}} a day",
+    "noPace": "No spend on this key this week, so nothing is projected.",
+    "noLimit": "No limit on this key, so nothing is projected. A refusal still stops work at once.",
+    "daysLeft_one": "About {{count}} day left at this pace.",
+    "daysLeft_other": "About {{count}} days left at this pace.",
+    "warningKey": "Top up your OpenRouter account, raise the key's limit, or replace the key before it runs out.",
+    "warningSafety": "Raise your safety limit in Settings before it is reached.",
+    "readAt": "Read from OpenRouter at {{time}}.",
+    "openSettings": "Open Settings",
+    "reminderKey_one": "Your OpenRouter key has about {{count}} day of spend left at this week's pace. Top it up or replace it.",
+    "reminderKey_other": "Your OpenRouter key has about {{count}} days of spend left at this week's pace. Top it up or replace it.",
+    "reminderSafety_one": "Your safety limit will be reached in about {{count}} day at this week's pace.",
+    "reminderSafety_other": "Your safety limit will be reached in about {{count}} days at this week's pace.",
+    "dismiss": "Dismiss for today"
   }
 }

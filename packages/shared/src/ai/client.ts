@@ -32,6 +32,7 @@ import {
   marketSessionsSchema,
   narrationConfigSchema,
   ownLlmKeyStateSchema,
+  ownLlmKeyUsageStateSchema,
   portfolioScanResponseSchema,
   profileRequestResponseSchema,
   rescreenResponseSchema,
@@ -64,6 +65,7 @@ export type MarketCalendarStatus = components['schemas']['MarketCalendarStatus']
 export type MarketSessions = components['schemas']['MarketSessions'];
 export type LlmModelsResponse = components['schemas']['LlmModelsResponse'];
 export type OwnLlmKeyState = components['schemas']['OwnLlmKeyState'];
+export type OwnLlmKeyUsageState = components['schemas']['OwnLlmKeyUsageState'];
 export type AgentScanRequest = components['schemas']['AgentScanRequest'];
 export type AgentScanResponse = components['schemas']['AgentScanResponse'];
 export type AgentRecheckRequest = components['schemas']['AgentRecheckRequest'];
@@ -433,6 +435,19 @@ export class AiClient {
       method: 'GET',
       requestId,
     });
+  }
+
+  /**
+   * The key's state and what OpenRouter's `GET /key` says it spent (D247-D249),
+   * read at most every 15 minutes per user by the AI service. `usage` is null
+   * with no working key, or when OpenRouter could not be read.
+   */
+  ownLlmKeyUsage(userId: string, requestId?: string): Promise<OwnLlmKeyUsageState> {
+    return this.request<OwnLlmKeyUsageState>(
+      `/llm/own-keys/${encodeURIComponent(userId)}/usage`,
+      ownLlmKeyUsageStateSchema,
+      { method: 'GET', requestId },
+    );
   }
 
   /**
