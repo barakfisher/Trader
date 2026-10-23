@@ -24,7 +24,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.agents.mandate import Mandate, ready_to_scan
 
-#: Matches `0065_own_llm_keys.SCAN_OUTCOMES`; a test holds the two equal.
+#: Matches `0068_own_key_only.SCAN_OUTCOMES`; a test holds the two equal.
 ScanOutcome = Literal[
     "trade",
     "no_trade",
@@ -35,6 +35,7 @@ ScanOutcome = Literal[
     "rule_rejected",
     "cap_reached",
     "own_key_failed",
+    "own_key_required",
 ]
 #: Matches `0066_proposal_refresh.TRIGGERS`; a re-check is `refresh` (D212).
 ScanTrigger = Literal["manual", "schedule", "refresh"]

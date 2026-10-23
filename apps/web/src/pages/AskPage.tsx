@@ -7,12 +7,14 @@ import { writtenLanguage, type AssistantReplyView, type AssistantSourceView } fr
 
 import { AssistantText } from '../components/AssistantText.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
+import { OwnKeyNotice } from '../components/OwnKeyNotice.tsx';
 import { Button, Card, ErrorNote, Spinner } from '../components/ui.tsx';
 import { useTranslation } from '../i18n/index.ts';
 import { capResetLabel } from '../lib/monthlyCap.ts';
 import { formatAge } from '../lib/relativeTime.ts';
 import { SERVER_ENGLISH } from '../lib/textDirection.ts';
 import { useAssistantConversationsQuery } from '../queries/assistant.ts';
+import { useModelAccess } from '../queries/modelAccess.ts';
 import { MAX_QUESTION_LENGTH, type AskTurn } from '../stores/AskStore.ts';
 import { useStore } from '../stores/context.tsx';
 
@@ -43,6 +45,9 @@ export const AskPage = observer(function AskPage() {
   const { t } = useTranslation();
   const box = useRef<HTMLTextAreaElement>(null);
   const tooLong = ask.draft.length > MAX_QUESTION_LENGTH;
+  // D245, D280: a question that nobody may pay for is not sent; the notice says why.
+  const access = useModelAccess();
+  const blocked = access.block !== null;
   const fill = (text: string) => {
     ask.setDraft(text);
     box.current?.focus();
@@ -50,7 +55,7 @@ export const AskPage = observer(function AskPage() {
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    void ask.send();
+    if (!blocked) void ask.send();
   };
 
   return (
@@ -67,6 +72,8 @@ export const AskPage = observer(function AskPage() {
           </span>
         </Button>
       </header>
+
+      <OwnKeyNotice access={access} />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_16rem]">
         <Card>
@@ -97,7 +104,7 @@ export const AskPage = observer(function AskPage() {
                 // Enter sends, as in a chat box; Shift+Enter is a new line.
                 if (event.key === 'Enter' && !event.shiftKey) {
                   event.preventDefault();
-                  void ask.send();
+                  if (!blocked) void ask.send();
                 }
               }}
               rows={2}
@@ -113,7 +120,9 @@ export const AskPage = observer(function AskPage() {
               )}
               <Button
                 type="submit"
-                disabled={ask.pending !== null || ask.opening !== null || ask.draft.trim() === '' || tooLong}
+                disabled={
+                  blocked || ask.pending !== null || ask.opening !== null || ask.draft.trim() === '' || tooLong
+                }
               >
                 {ask.pending ? t('ask.answering') : t('ask.submit')}
               </Button>
@@ -190,10 +199,11 @@ function ReplyView({
     reply.outcome === 'failed' ||
     reply.outcome === 'budget_reached' ||
     reply.outcome === 'no_model' ||
-    reply.outcome === 'own_key_failed'
+    reply.outcome === 'own_key_failed' ||
+    reply.outcome === 'own_key_required'
   ) {
     // Said in the page's language: the server's wording is a fallback for
-    // other callers, and these four mean exactly one thing each.
+    // other callers, and these five mean exactly one thing each.
     return (
       <p role="status" className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">
         {t(`ask.outcome.${reply.outcome}`)}

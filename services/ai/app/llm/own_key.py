@@ -1,33 +1,34 @@
-"""A user's own OpenRouter key: checked on save, stored encrypted, used for their calls.
+"""A user's own OpenRouter key: checked on save, stored encrypted, the only key their calls use.
 
-**While a user has a working key of their own, their model calls are made with
-it and nothing of the installation's applies to them** (D206): not their
-monthly cap (D157) and not the installation's daily guard (`LLM_DAILY_BUDGET_USD`,
-D210) - both bound the installation's bill, and these calls are not on it. The
-smaller daily limits underneath, each agent's allowance and the assistant's,
-still apply: they stop a runaway loop, whoever pays.
+**A user who is not the admin runs on their own key, and only on it** (D206's
+key, D245's rule; `payer.py` decides): nothing of the installation's applies to
+those calls - not the installation's daily guard (`LLM_DAILY_BUDGET_USD`, D210),
+which bounds the installation's bill - and nothing falls back to the
+installation's key when there is no key. The smaller daily limits underneath,
+each agent's allowance and the assistant's, still apply: they stop a runaway
+loop, whoever pays; so does the user's own monthly safety limit (D250).
 
-`OwnKeyProvider` sits inside the recorder and outside the cap (`factory.py`):
+`OwnKeyProvider` sits inside the recorder (`factory.py`):
 
     ChoosingProvider(RecordingProvider(OwnKeyProvider(
-        MonthlyCapProvider(BudgetedProvider(installation adapter)),
-        own key -> OpenAICompatibleProvider(with that key))))
+        BudgetedProvider(installation adapter),                  # the admin, and no user
+        own key -> MonthlyCapProvider(safety limit,
+                       OpenAICompatibleProvider(with that key)))))
 
-For each call with a user it looks up a key marked `valid`; with one, the call
-goes to an adapter built with that key (cheap: the adapter builds a client per
-call anyway), and the completion - or the error - is marked `paid_by="own_key"`
-so the recorder writes it and the cap leaves it out of the month's sum (D209).
+For each metered call with a user it asks the `PayerGate`: the admin goes to
+the installation's adapter; anyone else with a valid key goes to an adapter
+built with it (cheap: the adapter builds a client per call anyway), and the
+completion - or the error - is marked `paid_by="own_key"` (D209); anyone else
+without one is refused before a call is made (`OwnKeyRequiredError`).
 
 **A key OpenRouter refuses** (401: revoked or wrong; 402: out of credit) is
 marked failed and that one call fails with `OwnKeyFailedError` (D207): a scan
 or an `/ask` reply ends as `own_key_failed`, narration falls back to its
-template. From the next call on the user has no valid key, so they run on the
-installation's key under their cap until they save one that works. The call is
-not retried on the installation's key: the user is told, not quietly moved.
+template. From the next call on the user has no working key, so every call is
+refused until they save one that works.
 
-A key that cannot be read (database down, or no configured key decrypts it)
-is treated as no key: the call takes the cap's path, which fails closed on its
-own when the database is down.
+A payer that cannot be read (the database is down) fails the call as
+unavailable: unknown is never read as "the installation pays".
 """
 
 from __future__ import annotations
@@ -35,7 +36,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 import httpx
 from sqlalchemy import text
@@ -48,12 +49,17 @@ from app.llm.base import (
     LLMError,
     LLMProvider,
     LLMRequestError,
+    LLMUnavailableError,
     Message,
     OwnKeyFailedError,
+    OwnKeyRequiredError,
     ToolSpec,
     Verdict,
 )
 from app.llm.key_vault import KeyVault, KeyVaultError
+
+if TYPE_CHECKING:
+    from app.llm.payer import Payer, PayerGate
 
 log = get_logger("llm.own_key")
 
@@ -90,8 +96,8 @@ class UsableKey:
 
 
 class OwnKeyStore(Protocol):
-    def usable_key(self, user_id: str) -> UsableKey | None:
-        """The user's key when it is marked valid and decrypts. May raise."""
+    def payer(self, user_id: str) -> Payer:
+        """The user's role and saved key, as a payer (`payer.py`). May raise."""
         ...
 
     def mark_failed(self, user_id: str, token: str, failure: KeyFailure) -> None:
@@ -114,25 +120,37 @@ class DatabaseOwnKeyStore:
     def can_save(self) -> bool:
         return self._vault is not None
 
-    def usable_key(self, user_id: str) -> UsableKey | None:
-        if self._vault is None:
-            return None
+    def payer(self, user_id: str) -> Payer:
+        """The admin is the installation's; anyone else pays with a saved key that is
+        marked valid and decrypts, or is refused - a user unknown here too."""
+        from app.llm.payer import INSTALLATION, Payer
+
         with self._engine.connect() as connection:
-            token = connection.execute(
+            row = connection.execute(
                 text(
-                    "SELECT ciphertext FROM user_llm_keys"
-                    " WHERE user_id = CAST(:user AS uuid) AND status = 'valid'"
+                    """
+                    SELECT u.role, k.ciphertext, k.status
+                      FROM users u
+                      LEFT JOIN user_llm_keys k ON k.user_id = u.id
+                     WHERE u.id = CAST(:user AS uuid)
+                    """
                 ),
                 {"user": user_id},
-            ).scalar_one_or_none()
-        if token is None:
-            return None
+            ).one_or_none()
+        if row is not None and row.role == "admin":
+            return INSTALLATION
+        if row is None or row.ciphertext is None:
+            return Payer(refusal="own_key_required")
+        if row.status == "failed":
+            return Payer(refusal="own_key_failed")
+        if self._vault is None:
+            return Payer(refusal="own_key_required")
         try:
-            return UsableKey(self._vault.decrypt(token), token)
+            return Payer(key=UsableKey(self._vault.decrypt(row.ciphertext), row.ciphertext))
         except KeyVaultError:
-            # A removed encryption key: loud, and the user falls back to the cap.
+            # A removed encryption key: loud, and the user is asked for their key again.
             log.error("llm.own_key_undecryptable", user_id=user_id)
-            return None
+            return Payer(refusal="own_key_required")
 
     def mark_failed(self, user_id: str, token: str, failure: KeyFailure) -> None:
         with self._engine.begin() as connection:
@@ -258,11 +276,11 @@ AdapterFactory = Callable[[str], LLMProvider]
 
 
 class OwnKeyProvider:
-    """Sends a user's calls to their own key while they have a valid one."""
+    """Sends the admin's calls to the installation and everyone else's to their own key."""
 
-    def __init__(self, inner: LLMProvider, store: OwnKeyStore, adapter: AdapterFactory) -> None:
+    def __init__(self, inner: LLMProvider, gate: PayerGate, adapter: AdapterFactory) -> None:
         self._inner = inner
-        self._store = store
+        self._gate = gate
         self._adapter = adapter
         self.name = inner.name
         self.charges_per_token = inner.charges_per_token
@@ -323,9 +341,16 @@ class OwnKeyProvider:
         caller: Caller | None,
     ) -> LLMCompletion:
         user_id = caller.user_id if caller is not None else None
-        key = self._key_for(user_id)
-        if user_id is None or key is None:
+        if user_id is None or not self.charges_per_token:
+            # The installation's own work, or a provider that costs nothing per token.
             return await call(self._inner)
+        payer = self._payer_for(user_id)
+        if payer.installation:
+            return await call(self._inner)
+        if payer.key is None:
+            log.info("llm.own_key_required", user_id=user_id, refusal=payer.refusal)
+            raise OwnKeyRequiredError(payer.refusal or "own_key_required")
+        key = payer.key
         try:
             completion = await call(self._adapter(key.api_key))
         except LLMRequestError as error:
@@ -345,19 +370,17 @@ class OwnKeyProvider:
             raise
         return replace(completion, paid_by="own_key")
 
-    def _key_for(self, user_id: str | None) -> UsableKey | None:
-        if user_id is None:
-            return None
+    def _payer_for(self, user_id: str) -> Payer:
         try:
-            return self._store.usable_key(user_id)
-        except Exception as error:  # noqa: BLE001 - the cap's path is the safe one
-            log.error("llm.own_key_unreadable", user_id=user_id, error=str(error))
-            return None
+            return self._gate.payer(user_id)
+        except Exception as error:
+            log.error("llm.payer_unreadable", user_id=user_id, error=str(error))
+            raise LLMUnavailableError("whose key pays for this call could not be read") from error
 
     def _mark_failed(self, user_id: str, key: UsableKey, failure: KeyFailure) -> None:
         log.warning("llm.own_key_failed", user_id=user_id, failure=failure)
         try:
-            self._store.mark_failed(user_id, key.token, failure)
+            self._gate.store.mark_failed(user_id, key.token, failure)
         except Exception as error:  # noqa: BLE001 - the call has failed either way
             log.error("llm.own_key_not_marked", user_id=user_id, error=str(error))
 

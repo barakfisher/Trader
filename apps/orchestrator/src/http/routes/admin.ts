@@ -23,11 +23,9 @@ import {
   type AdminUsersResponse,
   type AdminUserView,
   type OneTimePasswordResponse,
-  type SignupApprovalInput,
   type SignupDecisionResponse,
   type SignupRequestView,
   ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD,
-  LLM_CAP_CEILING_MICRO_USD,
   MAX_AGENTS_PER_USER_CEILING,
   MAX_PENDING_SIGNUPS_CEILING,
   type RescreenStartResponse,
@@ -46,14 +44,12 @@ import {
   type AdminUserRow,
   listUsersForAdmin,
   setOneTimePassword,
-  setUserCap,
   setUserStatus,
   countUniverse,
   firstLlmCallAt,
   chooseLlmModel,
   getInstallationSettings,
   setAssistantDailyBudget,
-  setDefaultLlmCap,
   setMaxAgentsPerUser,
   setMaxPendingSignups,
   getLatestUniverseLoad,
@@ -97,7 +93,6 @@ const settingsSchema = z
       .min(0)
       .max(ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD)
       .optional(),
-    defaultLlmCapMicroUsd: z.number().int().min(0).max(LLM_CAP_CEILING_MICRO_USD).optional(),
     maxPendingSignups: z.number().int().min(0).max(MAX_PENDING_SIGNUPS_CEILING).optional(),
   })
   .strict()
@@ -108,15 +103,10 @@ async function adminSettings(): Promise<AdminSettingsResponse> {
   return {
     maxAgentsPerUser: row.max_agents_per_user,
     assistantDailyBudgetMicroUsd: row.assistant_daily_budget_micro_usd,
-    defaultLlmCapMicroUsd: row.default_llm_cap_micro_usd,
     maxPendingSignups: row.max_pending_signups,
     updatedAt: row.updated_at.toISOString(),
   };
 }
-
-const approvalSchema = z
-  .object({ llmCapMicroUsd: z.number().int().min(0).max(LLM_CAP_CEILING_MICRO_USD) })
-  .strict() satisfies z.ZodType<SignupApprovalInput>;
 
 const uuidParam = z.string().uuid();
 
@@ -132,7 +122,6 @@ function adminUserView(row: AdminUserRow): AdminUserView {
     role: row.role,
     status: row.status,
     timezone: row.timezone,
-    llmCapMicroUsd: row.llm_cap_micro_usd === null ? null : Number(row.llm_cap_micro_usd),
     spentThisMonthMicroUsd: Number(row.spent_this_month_micro_usd),
     ownKey: row.own_key_status ?? 'none',
     lastSignInAt: row.last_sign_in_at ? row.last_sign_in_at.toISOString() : null,
@@ -310,7 +299,7 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
   });
 
   /**
-   * The user list (D162): status, cap, this month's spend, own key, last sign-in.
+   * The user list (D162): status, this month's spend, own key, last sign-in.
    * Operations only - never an account's holdings, proposals, agents or
    * conversations.
    */
@@ -336,18 +325,6 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
     return context.json({ userId: changed.id, status: 'active' });
   });
 
-  /** A user's monthly cap after approval (D239); the same bounds as at approval. */
-  app.put('/admin/users/:userId/cap', async (context) => {
-    const userId = signupId(context);
-    const parsed = approvalSchema.safeParse(await context.req.json().catch(() => null));
-    if (!parsed.success) {
-      throw badRequest('invalid_body', `expected { llmCapMicroUsd: 0-${LLM_CAP_CEILING_MICRO_USD} }`, parsed.error.issues);
-    }
-    const changed = await setUserCap(userId, parsed.data.llmCapMicroUsd);
-    if (!changed) throw conflict('not_cappable', 'only an approved user who is not the admin has a cap');
-    return context.json({ userId: changed.id, llmCapMicroUsd: parsed.data.llmCapMicroUsd });
-  });
-
   /**
    * A forgotten password (D162, D239): the app makes a one-time password,
    * stores its hash, ends the user's sessions, and answers it here once for the
@@ -369,11 +346,10 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
    * the account itself (D162).
    */
   app.get('/admin/signups', async (context) => {
-    const [requests, settings] = await Promise.all([listSignupRequests(), getInstallationSettings()]);
+    const requests = await listSignupRequests();
     const body: AdminSignupsResponse = {
       pending: requests.pending.map(signupView),
       rejected: requests.rejected.map(signupView),
-      defaultLlmCapMicroUsd: settings.default_llm_cap_micro_usd,
     };
     return context.json(body);
   });
@@ -388,11 +364,10 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
    */
   app.post('/admin/signups/:userId/approve', async (context) => {
     const userId = signupId(context);
-    const parsed = approvalSchema.safeParse(await context.req.json().catch(() => null));
-    if (!parsed.success) {
-      throw badRequest('invalid_body', `expected { llmCapMicroUsd: 0-${LLM_CAP_CEILING_MICRO_USD} }`, parsed.error.issues);
-    }
-    return context.json(decisionBody(await approveSignup(userId, parsed.data.llmCapMicroUsd, currentUserId(context))));
+    // No amount: a user runs on their own key only (D245), and the retired monthly
+    // cap keeps its column's CHECK satisfied with the installation's default (D279).
+    const { default_llm_cap_micro_usd: retiredCap } = await getInstallationSettings();
+    return context.json(decisionBody(await approveSignup(userId, retiredCap, currentUserId(context))));
   });
 
   app.post('/admin/signups/:userId/reject', async (context) =>
@@ -418,7 +393,6 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
         'invalid_body',
         `expected { maxAgentsPerUser?: 1-${MAX_AGENTS_PER_USER_CEILING}, ` +
           `assistantDailyBudgetMicroUsd?: 0-${ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD}, ` +
-          `defaultLlmCapMicroUsd?: 0-${LLM_CAP_CEILING_MICRO_USD}, ` +
           `maxPendingSignups?: 0-${MAX_PENDING_SIGNUPS_CEILING} }`,
         parsed.error.issues,
       );
@@ -428,7 +402,6 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
     if (parsed.data.assistantDailyBudgetMicroUsd !== undefined) {
       await setAssistantDailyBudget(parsed.data.assistantDailyBudgetMicroUsd, admin);
     }
-    if (parsed.data.defaultLlmCapMicroUsd !== undefined) await setDefaultLlmCap(parsed.data.defaultLlmCapMicroUsd, admin);
     if (parsed.data.maxPendingSignups !== undefined) await setMaxPendingSignups(parsed.data.maxPendingSignups, admin);
     return context.json(await adminSettings());
   });

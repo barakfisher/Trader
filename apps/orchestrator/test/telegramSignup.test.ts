@@ -1,7 +1,8 @@
 /**
- * The admin's sign-up request message in Telegram (D156, D184, D187, D188):
- * its signed buttons, the preset amounts behind *Custom budget*, the decision
- * each tap applies, and a stale message healing. No bot token, no network.
+ * The admin's sign-up request message in Telegram (D156, D187, D188, D279):
+ * its signed buttons - Approve and Reject, no amount since users run on their
+ * own key (D245) - the decision each tap applies, an old *Custom budget* button,
+ * and a stale message healing. No bot token, no network.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,6 +14,8 @@ const REQUESTER = '11111111-1111-4111-8111-111111111111';
 const CHAT = 987654321;
 const WEBHOOK_SECRET = 'a-webhook-secret-long-enough';
 const SIGNING_SECRET = 'a-signing-secret-long-enough';
+/** The retired monthly cap the approval writes to satisfy its column (D279). */
+const RETIRED_CAP = 10_000_000;
 
 let admin = true;
 let requestStatus = 'pending';
@@ -38,7 +41,7 @@ vi.mock('../src/db/queries.js', () => ({
     status: requestStatus,
     created_at: new Date(),
   })),
-  getInstallationSettings: vi.fn(async () => ({ default_llm_cap_micro_usd: 10_000_000 })),
+  getInstallationSettings: vi.fn(async () => ({ default_llm_cap_micro_usd: RETIRED_CAP })),
   listAdminChats: vi.fn(async () => [{ user_id: ADMIN, chat_id: String(CHAT), language: 'en' }]),
   approveSignup: vi.fn(async () => ({ applied: true, status: 'active', email: 'noa@example.com' })),
   rejectSignup: vi.fn(async () => ({ applied: true, status: 'rejected', email: 'noa@example.com' })),
@@ -52,7 +55,9 @@ const { createFakeAi } = await import('./fakeAi.js');
 const { TelegramNotifier } = await import('../src/telegram/client.js');
 const { MAX_CALLBACK_DATA_BYTES, decodeCallbackData } = await import('../src/telegram/callbackToken.js');
 const { decodeSignupData, encodeSignupData } = await import('../src/telegram/signupToken.js');
-const { announceSignupRequest, PRESET_CAPS_MICRO_USD } = await import('../src/telegram/signupApproval.js');
+const { announceSignupRequest } = await import('../src/telegram/signupApproval.js');
+const { messagesFor } = await import('../src/notify/messages.js');
+const en = messagesFor('en');
 const queries = await import('../src/db/queries.js');
 
 const ENV = {
@@ -147,18 +152,18 @@ describe('announcing a request', () => {
     build();
   });
 
-  it("messages the admin's chat with the default cap, Custom budget and Reject", async () => {
+  it("messages the admin's chat with Approve and Reject, and no amount", async () => {
     await announceSignupRequest({ notifier, signingSecret: SIGNING_SECRET }, REQUESTER);
     const sent = last('sendMessage');
     expect(sent.body.chat_id).toBe(String(CHAT));
     expect(String(sent.body.text)).toContain('noa@example.com');
     expect(String(sent.body.text)).toContain('Europe/London');
     const buttons = buttonsOf(sent);
-    expect(buttons.map((button) => button.text)).toEqual(['Approve, $10/month', 'Custom budget', 'Reject']);
+    expect(buttons.map((button) => button.text)).toEqual([en.signup.buttons.approve, en.signup.buttons.reject]);
     expect(decodeSignupData(buttons[0]!.callback_data!, SIGNING_SECRET)).toEqual({
       userId: REQUESTER,
       action: 'approve',
-      capMicroUsd: 10_000_000,
+      capMicroUsd: RETIRED_CAP,
     });
   });
 
@@ -177,25 +182,14 @@ describe('a tap on a request', () => {
     build();
   });
 
-  it('Custom budget offers the presets, a link for any other amount, and Reject', async () => {
+  it('an old Custom budget button shows Approve and Reject again, and decides nothing', async () => {
     await tap(encodeSignupData({ userId: REQUESTER, action: 'custom' }, SIGNING_SECRET));
     const buttons = buttonsOf(last('editMessageReplyMarkup'));
-    expect(buttons.map((button) => button.text)).toEqual(['$5/month', '$20/month', '$50/month', 'Other amount', 'Reject']);
-    expect(buttons.slice(0, 3).map((button) => decodeSignupData(button.callback_data!, SIGNING_SECRET))).toEqual(
-      PRESET_CAPS_MICRO_USD.map((cap) => ({ userId: REQUESTER, action: 'approve', capMicroUsd: cap })),
-    );
-    expect(buttons[3]!.url).toBe('https://traders.example.ts.net/admin');
+    expect(buttons.map((button) => button.text)).toEqual([en.signup.buttons.approve, en.signup.buttons.reject]);
     expect(queries.approveSignup).not.toHaveBeenCalled();
   });
 
-  it('without a link to the app, says where any other amount is set', async () => {
-    build(null);
-    await tap(encodeSignupData({ userId: REQUESTER, action: 'custom' }, SIGNING_SECRET));
-    expect(toast()).toContain('Admin page');
-    expect(buttonsOf(last('editMessageReplyMarkup')).map((button) => button.text)).not.toContain('Other amount');
-  });
-
-  it('approves at the amount the button carried, audits it first, and reminds the admin to tell them', async () => {
+  it('approves with the figure the button carried, audits it first, and reminds the admin to tell them', async () => {
     await tap(encodeSignupData({ userId: REQUESTER, action: 'approve', capMicroUsd: 20_000_000 }, SIGNING_SECRET));
     expect(queries.approveSignup).toHaveBeenCalledWith(REQUESTER, 20_000_000, ADMIN);
     expect(vi.mocked(queries.insertAdminAudit).mock.invocationCallOrder[0]).toBeLessThan(
@@ -203,7 +197,8 @@ describe('a tap on a request', () => {
     );
     expect(toast()).toBe('Approved.');
     const edit = last('editMessageText');
-    expect(String(edit.body.text)).toMatch(/^New sign-up request[\s\S]*✅ Approved with \$20\/month \(\d\d:\d\d\)\. Let them know they can sign in\.$/);
+    expect(String(edit.body.text)).toMatch(/^New sign-up request[\s\S]*✅ Approved \(\d\d:\d\d\)\./);
+    expect(String(edit.body.text)).not.toContain('/month');
     expect(buttonsOf(edit)).toEqual([]);
   });
 

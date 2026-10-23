@@ -107,42 +107,41 @@ export function countNarrationFallbacks(
   );
 }
 
-/** A capped user's month (D157): the cap, what is spent, and the local date it resets. */
+/** A user's own-key month (D209, D250): what this app spent on their key, their limit, the reset. */
 export interface MonthlySpendRow {
-  cap_micro_usd: string;
-  /** The installation's calls only: what the cap counts (D209). */
-  spent_micro_usd: string;
   /** Calls made on the user's own OpenRouter key, as estimated here. */
   own_key_spent_micro_usd: string;
+  /** The user's monthly safety limit, or null when none is set. */
+  safety_limit_micro_usd: string | null;
   /** `YYYY-MM-DD`: the first day of the user's next calendar month, in their zone. */
   resets_on: string;
 }
 
 /**
- * The user's spend against their monthly cap, or null when they have none (the
- * admin). The same month the AI service enforces (`app/llm/monthly_cap.py`):
- * the calendar month in `users.timezone`, summed over every recorded call the
- * installation paid for; calls on the user's own key are summed beside it (D209).
+ * The user's own-key spend this month against their safety limit, or null for
+ * the admin, who runs on the installation's key (D245). The same month the AI
+ * service enforces (`app/llm/monthly_cap.py`): the calendar month in
+ * `users.timezone`, summed over every recorded call made on the user's own key.
  */
 export function getMonthlySpend(userId: string): Promise<MonthlySpendRow | null> {
   return queryOne<MonthlySpendRow>(
     `WITH month AS (
-       SELECT id, llm_cap_micro_usd AS cap, timezone,
-              date_trunc('month', now() AT TIME ZONE timezone) AS local_start
-         FROM users
-        WHERE id = $1 AND llm_cap_micro_usd IS NOT NULL
+       SELECT u.id, u.timezone, s.llm_safety_limit_micro_usd AS safety_limit,
+              date_trunc('month', now() AT TIME ZONE u.timezone) AS local_start
+         FROM users u
+         LEFT JOIN user_settings s ON s.user_id = u.id
+        WHERE u.id = $1 AND u.role <> 'admin'
      )
-     SELECT m.cap::text AS cap_micro_usd,
-            coalesce(s.installation, 0)::text AS spent_micro_usd,
-            coalesce(s.own_key, 0)::text AS own_key_spent_micro_usd,
+     SELECT coalesce(sp.own_key, 0)::text AS own_key_spent_micro_usd,
+            m.safety_limit::text AS safety_limit_micro_usd,
             to_char(m.local_start + interval '1 month', 'YYYY-MM-DD') AS resets_on
        FROM month m
        CROSS JOIN LATERAL (
-         SELECT sum(c.cost_micro_usd) FILTER (WHERE c.paid_by = 'installation') AS installation,
-                sum(c.cost_micro_usd) FILTER (WHERE c.paid_by = 'own_key') AS own_key
+         SELECT sum(c.cost_micro_usd) AS own_key
            FROM llm_calls c
-          WHERE c.user_id = m.id AND c.started_at >= (m.local_start AT TIME ZONE m.timezone)
-       ) s`,
+          WHERE c.user_id = m.id AND c.paid_by = 'own_key'
+            AND c.started_at >= (m.local_start AT TIME ZONE m.timezone)
+       ) sp`,
     [userId],
   );
 }

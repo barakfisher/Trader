@@ -289,3 +289,5 @@ while this file is out of date.
 | 276 | The bot never imports a route; what a route and the bot share is a service |
 | 277 | The schedule picker sets a whole schedule per button: the current one with one thing changed |
 | 278 | A disabled user's Telegram chat reads as unbound |
+| 279 | The monthly cap is retired from every screen and from enforcement; its column stays, unread |
+| 280 | A user nobody may pay for is told up front, where the work would start |

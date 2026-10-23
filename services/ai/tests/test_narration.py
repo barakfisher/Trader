@@ -16,6 +16,7 @@ from app.llm.base import (
     LLMRequestError,
     LLMUnavailableError,
     MonthlyCapReachedError,
+    OwnKeyRequiredError,
     TokenUsage,
 )
 from app.narration import CandidateArticle, correlate, narrate
@@ -127,8 +128,11 @@ async def test_a_looping_reply_is_malformed_even_as_valid_json():
     [
         (LLMUnavailableError("no model configured"), "no_provider"),
         (LLMBudgetExceededError(500_000, 500_000, "2026-09-16"), "budget_exhausted"),
-        # A capped user's alerts still arrive, explained by the template (D158).
+        # A user past their safety limit still gets alerts, explained by the template (D158).
         (MonthlyCapReachedError(1, 1, 1, datetime(2026, 11, 1, tzinfo=UTC)), "budget_exhausted"),
+        # So does a user with no working key of their own, and it says so (D245).
+        (OwnKeyRequiredError("own_key_required"), "own_key_required"),
+        (OwnKeyRequiredError("own_key_failed"), "own_key_required"),
         (LLMRequestError("stub", "upstream exploded", status_code=500), "provider_error"),
     ],
 )

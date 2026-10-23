@@ -41,6 +41,7 @@ from app.llm.base import (
     Message,
     MonthlyCapReachedError,
     OwnKeyFailedError,
+    OwnKeyRequiredError,
     UserMessage,
 )
 from app.llm.tool_loop import LoopState, run_tool_loop
@@ -71,6 +72,7 @@ ReplyOutcome = Literal[
     "cap_reached",
     "no_model",
     "own_key_failed",
+    "own_key_required",
 ]
 
 #: What the user reads when there is no checked reply. Server text in English, the
@@ -86,14 +88,17 @@ NO_REPLY_TEXT: dict[str, str] = {
         "The assistant has reached today's spending limit. It will answer again after midnight."
     ),
     "cap_reached": (
-        "This month's spending limit for your account is reached. The assistant will answer "
-        "again when the next month begins."
+        "Your monthly safety limit on model spending is reached. The assistant will answer "
+        "again when the next month begins, or when you raise the limit in Settings."
     ),
     "no_model": "The assistant needs a model, and none is configured. An admin can choose one.",
     "own_key_failed": (
-        "OpenRouter refused your own API key, so this question was not answered. Until you "
-        "save a working key in Settings, questions use the installation's account under your "
-        "monthly limit."
+        "OpenRouter refused your own API key, so this question was not answered. Questions "
+        "are answered again once you save a working key in Settings."
+    ),
+    "own_key_required": (
+        "The assistant answers on your own OpenRouter key, and none is saved. Add one in "
+        "Settings to ask questions."
     ),
 }
 CLARIFY_BLANK = (
@@ -301,14 +306,19 @@ async def _converse(
             ),
         )
         if stop.end == "budget_reached":
-            # The user's monthly cap is told apart from today's allowance: the
-            # screen says a different reset for each.
+            # The user's monthly safety limit is told apart from today's allowance:
+            # the screen says a different reset for each.
             capped = isinstance(stop.cause, MonthlyCapReachedError)
             turn.outcome = "cap_reached" if capped else "budget_reached"
             return
+        if isinstance(stop.cause, OwnKeyRequiredError):
+            # No working key of the user's own, and nothing falls back (D245).
+            failed = stop.cause.refusal == "own_key_failed"
+            turn.outcome = "own_key_failed" if failed else "own_key_required"
+            return
         if isinstance(stop.cause, OwnKeyFailedError):
-            # Not repaired: the key is marked failed, and a second try would run on
-            # the installation's account without the user having been told (D207).
+            # Not repaired: the key is marked failed, and a second try would be
+            # refused for want of a working key (D207, D245).
             turn.outcome = "own_key_failed"
             return
         if stop.end != "answer" or stop.reply is None:

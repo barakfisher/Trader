@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { createMemoryHistory } from '@tanstack/react-router';
 
-import type { AssistantConversationResponse, AssistantReplyView } from '@traders/shared';
+import type { AssistantConversationResponse, AssistantReplyView, OwnLlmKeyResponse } from '@traders/shared';
 
 const get = vi.fn();
 const post = vi.fn();
@@ -222,7 +222,7 @@ describe('the conversation', () => {
     expect(root.ask.conversationId).toBe(CONVERSATION);
   });
 
-  it("names the cap's reset from the month a stored refusal was written in", async () => {
+  it("names the safety limit's reset from the month a stored refusal was written in", async () => {
     const stored: AssistantConversationResponse = {
       conversation: CONVERSATIONS.conversations[0]!,
       messages: [
@@ -241,7 +241,7 @@ describe('the conversation', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /^How am I doing\?/ }));
 
-    expect(await screen.findByText(/monthly spending limit|spending limit for your account/)).toBeTruthy();
+    expect(await screen.findByText(/monthly safety limit on AI spending/)).toBeTruthy();
     expect(screen.getByText(/1 November 2026/)).toBeTruthy();
     expect(screen.queryByText('server words')).toBeNull();
   });
@@ -291,4 +291,47 @@ it('is linked from the app bar', async () => {
   });
   const link = await screen.findByRole('link', { name: /Ask/ });
   await waitFor(() => expect(link.getAttribute('href')).toBe('/ask'));
+});
+
+describe('a user with no working key of their own (D245, D280)', () => {
+  const MONTH = { ownKeySpentMicroUsd: 0, safetyLimitMicroUsd: null, resetsOn: '2026-11-01' };
+
+  function serveKey(spend: typeof MONTH | null, key: OwnLlmKeyResponse) {
+    get.mockImplementation((path: string) =>
+      path === '/assistant/conversations'
+        ? Promise.resolve(CONVERSATIONS)
+        : path === '/settings/llm-spend'
+          ? Promise.resolve({ spend })
+          : path === '/settings/llm-key'
+            ? Promise.resolve(key)
+            : new Promise(() => {}),
+    );
+  }
+
+  it('is told up front, links to Settings, and cannot send', async () => {
+    serveKey(MONTH, { available: true, key: null });
+    renderAsk();
+
+    expect(await screen.findByText(/run on your own OpenRouter API key, and none is saved/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open Settings' }).getAttribute('href')).toBe('/settings');
+    fireEvent.change(await screen.findByLabelText('Your question'), { target: { value: 'How am I doing?' } });
+    expect((screen.getByRole('button', { name: 'Ask' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.keyDown(screen.getByLabelText('Your question'), { key: 'Enter' });
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('asks normally with a working key, and the admin is never told', async () => {
+    serveKey(MONTH, { available: true, key: { lastFour: 'c0de', status: 'valid', savedAt: '2026-10-20T12:00:00Z', failedAt: null, failure: null } });
+    const { unmount } = renderAsk();
+    fireEvent.change(await screen.findByLabelText('Your question'), { target: { value: 'How am I doing?' } });
+    await waitFor(() => expect(get).toHaveBeenCalledWith('/settings/llm-key'));
+    expect((screen.getByRole('button', { name: 'Ask' }) as HTMLButtonElement).disabled).toBe(false);
+    unmount();
+
+    serveKey(null, { available: true, key: null });
+    renderAsk();
+    expect(await screen.findByLabelText('Your question')).toBeTruthy();
+    await waitFor(() => expect(get).toHaveBeenCalledWith('/settings/llm-spend'));
+    expect(screen.queryByRole('link', { name: 'Open Settings' })).toBeNull();
+  });
 });

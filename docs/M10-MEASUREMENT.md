@@ -566,6 +566,9 @@ What D245-D246 still need on that screen:
 - wording that no longer promises the installation's fallback (`settings.ownKey.intro`,
   `limitHint` and the failure lines say calls continue under the cap).
 
+*Built in M10 PR 4 (D279-D280): the stopped state is the up-front notice and the Settings
+wording; the five-day warning comes with the spend indicator (PR 5, D247-D249).*
+
 22. **What "budget" means for D246's five-day warning.**
     - (a) The key's credit limit on OpenRouter (D211). Days left = `limit_remaining` / the
       recent daily spend. `usage_daily` from `GET /key` counts everything on the key, this app

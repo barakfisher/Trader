@@ -1,7 +1,9 @@
-"""The monthly cap (D157, D158, D203-D205): checked before each call, keyed by the caller's user.
+"""A user's monthly limit (D203-D205's wrapper, now the safety limit of D250): checked
+before each call, keyed by the caller's user.
 
-The ledger is a fake here; `tests/integration/test_monthly_cap_sql.py` reads
-the real `users` and `llm_calls`.
+The ledger is a fake here; `tests/integration/test_safety_limit_sql.py` reads the real
+`user_settings` and `llm_calls`, and `test_llm_own_key.py` checks it assembled around a
+user's own key.
 """
 
 from __future__ import annotations
@@ -10,7 +12,6 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-import httpx
 import pytest
 from pydantic import ValidationError
 
@@ -24,8 +25,6 @@ from app.llm.base import (
     ToolSpec,
     UserMessage,
 )
-from app.llm.call_log import CallEntry
-from app.llm.factory import build_llm
 from app.llm.monthly_cap import (
     MIN_RETENTION_DAYS,
     CapMonth,
@@ -39,7 +38,6 @@ from app.llm.pricing import (
     ModelPrice,
     ceiling_cost_micro_usd,
 )
-from tests.fakes import FakeRedis
 
 PRICED = "vendor/priced"
 PRICES = {PRICED: ModelPrice(Decimal("2"), Decimal("10"))}
@@ -208,39 +206,3 @@ async def test_a_ledger_that_cannot_be_read_refuses_the_call() -> None:
 
 
 # -- assembled ------------------------------------------------------------------
-
-
-class _Log:
-    def __init__(self) -> None:
-        self.entries: list[CallEntry] = []
-
-    def record(self, entry: CallEntry) -> int:
-        self.entries.append(entry)
-        return len(self.entries)
-
-    def set_verdict(self, call_id: int, verdict: str) -> None:
-        return None
-
-
-async def test_the_factory_checks_the_cap_inside_the_recorder() -> None:
-    def unreachable(request: httpx.Request) -> httpx.Response:
-        raise AssertionError("a refused call reached the network")
-
-    log = _Log()
-    provider = build_llm(
-        Settings(
-            _env_file=None,
-            app_env="test",
-            llm_provider="openrouter",
-            openrouter_api_key="k",
-            llm_model=PRICED,
-        ),
-        FakeRedis(),
-        transport=httpx.MockTransport(unreachable),
-        call_log=log,
-        cap_ledger=_Ledger(CapMonth(0, 0, RESETS)),
-    )
-    with pytest.raises(MonthlyCapReachedError):
-        await provider.complete(system=None, user="q", caller=Caller("ask", user_id=USER))
-    [entry] = log.entries
-    assert (entry.outcome, entry.cost_micro_usd, entry.user_id) == ("budget_exhausted", 0, USER)

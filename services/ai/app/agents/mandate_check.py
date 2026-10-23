@@ -29,7 +29,14 @@ from typing import Literal
 from app.agents.mandate import Mandate, percent, risk_band
 from app.agents.scan_log import ScanAgent
 from app.core.logging import get_logger
-from app.llm.base import Caller, LLMBudgetExceededError, LLMError, LLMProvider
+from app.llm.base import (
+    Caller,
+    LLMBudgetExceededError,
+    LLMError,
+    LLMProvider,
+    MonthlyCapReachedError,
+    OwnKeyRequiredError,
+)
 
 log = get_logger("agents.mandate_check")
 
@@ -58,7 +65,16 @@ SETTINGS: tuple[Setting, ...] = (
     "sectors",
     "blocked",
 )
-SkipReason = Literal["no_instructions", "no_settings", "budget_spent", "no_model", "failed"]
+SkipReason = Literal[
+    "no_instructions",
+    "no_settings",
+    "budget_spent",
+    "no_model",
+    "failed",
+    "own_key_required",
+    "own_key_failed",
+    "safety_limit_reached",
+]
 
 #: Enough to name three conflicts; a check that writes more is not answering.
 MAX_OUTPUT_TOKENS = 400
@@ -204,8 +220,13 @@ async def check_instructions(llm: LLMProvider, agent: ScanAgent) -> CheckResult:
             temperature=0,
             caller=Caller("mandate_check", user_id=agent.user_id, agent_id=agent.agent_id),
         )
+    except MonthlyCapReachedError:
+        return CheckResult("skipped", reason="safety_limit_reached")
     except LLMBudgetExceededError:
         return CheckResult("skipped", reason="budget_spent")
+    except OwnKeyRequiredError as error:
+        failed = error.refusal == "own_key_failed"
+        return CheckResult("skipped", reason="own_key_failed" if failed else "own_key_required")
     except LLMError as error:
         log.warning("agents.mandate_check_failed", agent_id=agent.agent_id, error=str(error))
         return CheckResult("skipped", reason="failed")

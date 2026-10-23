@@ -110,6 +110,17 @@ def test_the_agent_is_held_to_a_manual_scans_rules(
     assert recheck["ran"] == []
 
 
+def test_a_user_nobody_may_pay_for_is_refused_before_the_recheck_runs(
+    client: TestClient,  # noqa: F811
+    recheck: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.routers.agents.payer_refusal", lambda *_a: "own_key_required")
+    response = _post(client)
+    assert (response.status_code, response.json()["detail"]["code"]) == (409, "own_key_required")
+    assert recheck["ran"] == []
+
+
 @pytest.mark.parametrize(
     ("code", "status"),
     [

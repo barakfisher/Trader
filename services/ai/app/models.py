@@ -933,7 +933,17 @@ class MandateCheckResponse(BaseModel):
 
     status: Literal["checked", "skipped"]
     reason: (
-        Literal["no_instructions", "no_settings", "budget_spent", "no_model", "failed"] | None
+        Literal[
+            "no_instructions",
+            "no_settings",
+            "budget_spent",
+            "no_model",
+            "failed",
+            "own_key_required",
+            "own_key_failed",
+            "safety_limit_reached",
+        ]
+        | None
     ) = None
     conflicts: list[MandateConflict] = Field(default_factory=list)
 
@@ -1008,6 +1018,7 @@ class AgentScanResponse(BaseModel):
         "rule_rejected",
         "cap_reached",
         "own_key_failed",
+        "own_key_required",
     ]
     steps: int = Field(description="Tool calls made (D15's step limit counts these).")
     cost_micro_usd: int
@@ -1056,6 +1067,7 @@ class AssistantReply(BaseModel):
         "cap_reached",
         "no_model",
         "own_key_failed",
+        "own_key_required",
     ]
     reason: Literal["off_domain", "advice", "action", "prompt"] | None = Field(
         description="Why it declined; null unless outcome is 'decline'."

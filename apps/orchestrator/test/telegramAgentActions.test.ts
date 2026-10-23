@@ -7,6 +7,7 @@
  * is the fixture fake with a scripted `scanAgent`.
  */
 
+import { PAYER_REFUSALS } from '@traders/shared';
 import { AiServiceError } from '@traders/shared/ai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -316,6 +317,14 @@ describe('Run a scan now', () => {
     await tap(action({ agentId: AGENT, action: 'run' }));
     await vi.waitFor(() =>
       expect(String(lastEdit()?.text)).toContain(MESSAGES.en.menu.run.failed(MESSAGES.en.menu.run.refusals.scan_running)),
+    );
+  });
+
+  it.each(PAYER_REFUSALS)('a user nobody may pay for is told why in their words (%s, D245)', async (code) => {
+    scanAgent.mockRejectedValue(new AiServiceError('AI service 409', 409, { detail: { code, message: 'x' } }));
+    await tap(action({ agentId: AGENT, action: 'run' }));
+    await vi.waitFor(() =>
+      expect(String(lastEdit()?.text)).toContain(MESSAGES.en.menu.run.failed(MESSAGES.en.menu.run.refusals[code])),
     );
   });
 

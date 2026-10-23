@@ -10,6 +10,7 @@ from fastapi import Depends, Header, HTTPException, Request, status
 from app.config import Settings, get_settings
 from app.corpus.embeddings import BaseEmbedder
 from app.corpus.vector_store import VectorStore
+from app.llm.payer import PayerRefusal
 from app.providers.registry import MarketDataService
 from app.universe.membership import DatabaseMembership, UniverseMembership
 from app.universe.profile_source import InstrumentProfileSource
@@ -75,3 +76,17 @@ UniverseMembershipDep = Annotated[UniverseMembership, Depends(get_universe_membe
 def get_profile_source(request: Request) -> InstrumentProfileSource | None:
     """None when the installation fetches no profiles; see `build_profile_source`."""
     return getattr(request.app.state, "profile_source", None)
+
+
+def payer_refusal(request: Request, user_id: str) -> PayerRefusal | None:
+    """Why this user's model work may not start (D245, D250), or None.
+
+    Asked before a scan, a re-check or an instructions check, so the refusal is a
+    reason the screen can say and a scheduled scan is skipped, not run and failed.
+    The provider chain enforces the same rule on every call regardless.
+    """
+    gate = getattr(request.app.state, "payer", None)
+    llm = getattr(request.app.state, "llm", None)
+    if gate is None or llm is None:
+        return None
+    return gate.refusal(user_id, metered=llm.charges_per_token)

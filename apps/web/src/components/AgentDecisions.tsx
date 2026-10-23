@@ -77,7 +77,12 @@ function outcomeClass(scan: AgentScanSummary): string {
   ) {
     return 'bg-loss/15 text-loss';
   }
-  if (scan.outcome === 'budget_reached' || scan.outcome === 'cap_reached' || scan.outcome === 'step_limit') {
+  if (
+    scan.outcome === 'budget_reached' ||
+    scan.outcome === 'cap_reached' ||
+    scan.outcome === 'own_key_required' ||
+    scan.outcome === 'step_limit'
+  ) {
     return 'bg-warn/15 text-warn';
   }
   return 'bg-surface-hover text-text-muted';
@@ -167,6 +172,7 @@ function ScanDetail({ agentId, scanId }: { agentId: string; scanId: string }) {
         <p className="text-warn">{t('agents.decisions.capReached', { date: capResetLabel(data.startedAt) })}</p>
       )}
       {data.outcome === 'own_key_failed' && <p className="text-loss">{t('agents.decisions.ownKeyFailed')}</p>}
+      {data.outcome === 'own_key_required' && <p className="text-warn">{t('agents.decisions.ownKeyRequired')}</p>}
       <Briefing briefing={data.briefing} />
       {data.transcript.map((step, index) =>
         isAnswerTurn(step) ? (

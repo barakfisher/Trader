@@ -9,6 +9,7 @@ import type {
   MonthlySpend,
   MonthlySpendResponse,
   OwnLlmKeyResponse,
+  SafetyLimitInput,
   SaveOwnLlmKeyRequest,
   UserSettingsResponse,
 } from '@traders/shared';
@@ -25,7 +26,7 @@ export function useSettingsQuery() {
   return useQuery(settingsQuery);
 }
 
-/** This month's spend against the user's cap (D157); null for a user without one. */
+/** This month's own-key spend and the user's safety limit (D250); null for the admin. */
 export const monthlySpendQuery = queryOptions({
   queryKey: queryKeys.monthlySpend,
   queryFn: async (): Promise<MonthlySpend | null> =>
@@ -42,14 +43,14 @@ export const ownLlmKeyQuery = queryOptions({
   queryFn: () => api.get<OwnLlmKeyResponse>('/settings/llm-key'),
 });
 
-/** Only for a user with a cap: the admin runs on the installation's key, and is refused. */
+/** Not for the admin, who runs on the installation's key and is refused (D245). */
 export function useOwnLlmKeyQuery(enabled: boolean) {
   return useQuery({ ...ownLlmKeyQuery, enabled });
 }
 
 /**
- * Save or remove the key. Either changes who pays for the user's calls, so the
- * month's card is read again with the key's new state.
+ * Save or remove the key. Either decides whether the user's calls can run at
+ * all (D245), so the month's card is read again with the key's new state.
  */
 export function useSaveOwnLlmKey() {
   const client = useQueryClient();
@@ -71,6 +72,16 @@ export function useRemoveOwnLlmKey() {
       client.setQueryData(queryKeys.ownLlmKey, body);
       void client.invalidateQueries({ queryKey: queryKeys.monthlySpend });
     },
+  });
+}
+
+/** Set or clear the user's monthly safety limit on own-key spend (D250). */
+export function useSetSafetyLimit() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (limitMicroUsd: number | null) =>
+      api.put<SafetyLimitInput>('/settings/llm-safety-limit', { limitMicroUsd } satisfies SafetyLimitInput),
+    onSuccess: () => void client.invalidateQueries({ queryKey: queryKeys.monthlySpend }),
   });
 }
 

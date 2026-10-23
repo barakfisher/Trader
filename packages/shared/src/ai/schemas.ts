@@ -287,6 +287,7 @@ export const agentScanResponseSchema = z.object({
     'rule_rejected',
     'cap_reached',
     'own_key_failed',
+    'own_key_required',
   ]),
   steps: z.number().int(),
   cost_micro_usd: z.number().int(),
@@ -339,7 +340,19 @@ export const agentScanResponseSchema = z.object({
 
 export const mandateCheckResponseSchema = z.object({
   status: z.enum(['checked', 'skipped']),
-  reason: z.enum(['no_instructions', 'no_settings', 'budget_spent', 'no_model', 'failed']).nullable().optional(),
+  reason: z
+    .enum([
+      'no_instructions',
+      'no_settings',
+      'budget_spent',
+      'no_model',
+      'failed',
+      'own_key_required',
+      'own_key_failed',
+      'safety_limit_reached',
+    ])
+    .nullable()
+    .optional(),
   conflicts: z
     .array(
       z.object({
@@ -364,7 +377,17 @@ export const mandateCheckResponseSchema = z.object({
 export const assistantReplySchema = z.object({
   conversation_id: z.string().nullable(),
   message_id: z.string().nullable(),
-  outcome: z.enum(['answer', 'decline', 'clarify', 'failed', 'budget_reached', 'cap_reached', 'no_model', 'own_key_failed']),
+  outcome: z.enum([
+    'answer',
+    'decline',
+    'clarify',
+    'failed',
+    'budget_reached',
+    'cap_reached',
+    'no_model',
+    'own_key_failed',
+    'own_key_required',
+  ]),
   reason: z.enum(['off_domain', 'advice', 'action', 'prompt']).nullable(),
   text: z.string(),
   sources: z.array(

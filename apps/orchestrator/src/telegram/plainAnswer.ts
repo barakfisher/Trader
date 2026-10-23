@@ -24,7 +24,14 @@ export const MAX_NEWS_SOURCES = 3;
 /** The outcomes with no reply of the model's: each is a sentence of the catalogue. */
 type NoReplyOutcome = keyof Messages['ask']['noReply'];
 
-const NO_REPLY = new Set<string>(['failed', 'budget_reached', 'cap_reached', 'no_model', 'own_key_failed']);
+const NO_REPLY = new Set<string>([
+  'failed',
+  'budget_reached',
+  'cap_reached',
+  'no_model',
+  'own_key_failed',
+  'own_key_required',
+]);
 
 function isNoReply(outcome: string): outcome is NoReplyOutcome {
   return NO_REPLY.has(outcome);

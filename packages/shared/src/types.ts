@@ -155,7 +155,14 @@ export interface InstructionsConflict {
 /** `POST /agents/:id/instructions-check`: checked, or skipped and why - never an error (D177). */
 export interface InstructionsCheckResult {
   status: 'checked' | 'skipped';
-  reason: 'no_instructions' | 'no_settings' | 'budget_spent' | 'no_model' | 'failed' | null;
+  reason:
+    | 'no_instructions'
+    | 'no_settings'
+    | 'budget_spent'
+    | 'no_model'
+    | 'failed'
+    | PayerRefusal
+    | null;
   conflicts: InstructionsConflict[];
 }
 
@@ -267,10 +274,12 @@ export type AgentScanOutcome =
   | 'step_limit'
   | 'failed'
   | 'rule_rejected'
-  /** The user's monthly LLM spend cap was reached (D157, D158). */
+  /** The user's own monthly safety limit was reached (D250; the name is the retired cap's). */
   | 'cap_reached'
   /** OpenRouter refused the user's own API key mid-scan (D207). */
-  | 'own_key_failed';
+  | 'own_key_failed'
+  /** The user has no working key of their own, and nothing falls back (D245). */
+  | 'own_key_required';
 
 /** One scan, as a row of the *Decisions* tab (D50). */
 /** What started a scan: a person, the schedule, or a re-check of an expired proposal (D212). */
@@ -371,7 +380,10 @@ export const MAX_AGENTS_PER_USER_CEILING = 50;
 /** The most the assistant's daily limit may be set to: migration 0052's CHECK, $100. */
 export const ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD = 100_000_000;
 
-/** The most a monthly LLM cap, or its default, may be: migration 0058's CHECK, $1,000. */
+/**
+ * The most a monthly LLM cap may be: migration 0058's CHECK, $1,000. The cap is
+ * retired (D279); the bound remains for the column and the approval button's token.
+ */
 export const LLM_CAP_CEILING_MICRO_USD = 1_000_000_000;
 
 /** The most waiting sign-up requests the setting may allow at once: 0058's CHECK. */
@@ -382,8 +394,6 @@ export interface AdminSettingsResponse {
   maxAgentsPerUser: number;
   /** What one user's questions to the assistant may spend a day, integer micro-USD. */
   assistantDailyBudgetMicroUsd: number;
-  /** The monthly cap an approval offers (D157), integer micro-USD. */
-  defaultLlmCapMicroUsd: number;
   /** Waiting sign-up requests allowed at once (D156); 0 closes sign-up. */
   maxPendingSignups: number;
   updatedAt: string;
@@ -393,7 +403,6 @@ export interface AdminSettingsResponse {
 export interface AdminSettingsInput {
   maxAgentsPerUser?: number;
   assistantDailyBudgetMicroUsd?: number;
-  defaultLlmCapMicroUsd?: number;
   maxPendingSignups?: number;
 }
 
@@ -409,14 +418,12 @@ export interface SignupRequestView {
 export interface AdminSignupsResponse {
   pending: SignupRequestView[];
   rejected: SignupRequestView[];
-  /** What the cap field is prefilled with. */
-  defaultLlmCapMicroUsd: number;
 }
 
 /**
  * One account on the Admin page's user list (D162): operations only - status,
- * cap, this month's spend, last sign-in - never holdings, proposals, agents or
- * conversations.
+ * this month's spend, their key, last sign-in - never holdings, proposals, agents
+ * or conversations.
  */
 export interface AdminUserView {
   userId: string;
@@ -424,9 +431,10 @@ export interface AdminUserView {
   role: 'user' | 'admin';
   status: 'active' | 'disabled';
   timezone: string;
-  /** Null for the admin: uncapped (D157). Integer micro-USD. */
-  llmCapMicroUsd: number | null;
-  /** What the installation paid for this user's calls this month, in their zone. */
+  /**
+   * This user's recorded calls this month, in their zone: the installation's key
+   * for the admin, their own for everyone else (D245). Integer micro-USD.
+   */
   spentThisMonthMicroUsd: number;
   /** Their own OpenRouter key (D206): none, working, or refused by OpenRouter. */
   ownKey: 'none' | 'valid' | 'failed';
@@ -438,11 +446,6 @@ export interface AdminUsersResponse {
   users: AdminUserView[];
 }
 
-/** A user's new monthly cap (D239): the same bounds as at approval. */
-export interface UserCapInput {
-  llmCapMicroUsd: number;
-}
-
 /**
  * A one-time password the app made (D162, D239). Shown to the admin once, in
  * this answer only: stored hashed, never audited, never logged.
@@ -450,11 +453,6 @@ export interface UserCapInput {
 export interface OneTimePasswordResponse {
   userId: string;
   password: string;
-}
-
-/** Approving a request sets the user's monthly cap (D157). */
-export interface SignupApprovalInput {
-  llmCapMicroUsd: number;
 }
 
 /**
@@ -1470,23 +1468,38 @@ export interface UserSettingsResponse {
 }
 
 /**
- * A capped user's LLM spend this month (D157, D158): the Settings card. Integer
- * micro-USD, as `llm_calls` counts it. The month is the user's calendar month in
- * their zone; `resetsOn` is its successor's first day, `YYYY-MM-DD`, a local date.
+ * A user's own-key spend this month against their safety limit (D209, D250): the
+ * Settings card. Integer micro-USD, as `llm_calls` counts it. The month is the
+ * user's calendar month in their zone; `resetsOn` is its successor's first day,
+ * `YYYY-MM-DD`, a local date.
  */
 export interface MonthlySpend {
-  capMicroUsd: number;
-  /** What the installation paid for this month: the cap counts only this (D209). */
-  spentMicroUsd: number;
-  /** What the user's own OpenRouter key paid for this month, as estimated here. */
+  /** What this app spent on the user's own OpenRouter key this month, as estimated here. */
   ownKeySpentMicroUsd: number;
+  /** The user's monthly safety limit, or null when none is set. */
+  safetyLimitMicroUsd: number | null;
   resetsOn: string;
 }
 
-/** `spend` is null for a user with no cap - the admin - who sees no card. */
+/** `spend` is null for the admin, who runs on the installation's key and sees no card. */
 export interface MonthlySpendResponse {
   spend: MonthlySpend | null;
 }
+
+/** The most a monthly safety limit may be: migration 0068's CHECK, $1,000. */
+export const SAFETY_LIMIT_CEILING_MICRO_USD = 1_000_000_000;
+
+/** `PUT /settings/llm-safety-limit`: a limit in micro-USD, or null for none (D250). */
+export interface SafetyLimitInput {
+  limitMicroUsd: number | null;
+}
+
+/**
+ * Why a user's model work may not start (D245, D250): no working key of their own,
+ * one OpenRouter refused, or their own monthly safety limit spent. A 409's `code`.
+ */
+export type PayerRefusal = 'own_key_required' | 'own_key_failed' | 'safety_limit_reached';
+export const PAYER_REFUSALS = ['own_key_required', 'own_key_failed', 'safety_limit_reached'] as const;
 
 /** Why OpenRouter refused a saved key: 401 `rejected`, 402 `no_credit` (D207). */
 export type OwnLlmKeyFailure = 'rejected' | 'no_credit';
@@ -1713,7 +1726,13 @@ export const RECHECK_CHECKS = [
 export type RecheckCheck = (typeof RECHECK_CHECKS)[number];
 
 /** A re-check that reached no answer, and so did not use the refresh up (D213). */
-export const RECHECK_UNANSWERED = ['failed', 'budget_reached', 'cap_reached', 'own_key_failed'] as const;
+export const RECHECK_UNANSWERED = [
+  'failed',
+  'budget_reached',
+  'cap_reached',
+  'own_key_failed',
+  'own_key_required',
+] as const;
 export type RecheckUnanswered = (typeof RECHECK_UNANSWERED)[number];
 
 /** Why a re-check proposed nothing: the agent's own reason, or the check that refused it (D214). */
@@ -1818,7 +1837,9 @@ export type NarrationState =
   /** The model answers and the evidence validator refuses its figures. */
   | 'rejected'
   /** Nothing recorded yet, or the AI service could not be reached. */
-  | 'unknown';
+  | 'unknown'
+  /** The user has no working OpenRouter key of their own, so templates explain (D245). */
+  | 'own_key';
 
 /** `free` bills nothing and shares a pool; `paid` bills per token. */
 export type NarrationTier = 'free' | 'paid' | 'none';
@@ -2105,7 +2126,8 @@ export type AssistantOutcome =
   | 'budget_reached'
   | 'cap_reached'
   | 'no_model'
-  | 'own_key_failed';
+  | 'own_key_failed'
+  | 'own_key_required';
 export type AssistantDeclineReason = 'off_domain' | 'advice' | 'action' | 'prompt';
 
 /** Where a fact in a reply came from, built by the server from the tools that ran. */

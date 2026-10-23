@@ -34,6 +34,7 @@ from app.llm.base import (
     LLMCompletion,
     LLMRequestError,
     MonthlyCapReachedError,
+    OwnKeyRequiredError,
     TokenUsage,
 )
 from app.main import app
@@ -201,12 +202,14 @@ async def test_a_check_is_an_agent_call_on_the_agents_budget() -> None:
         (_agent(persona="  "), "{}", "no_instructions"),
         (_agent(mandate=Mandate()), "{}", "no_settings"),
         (_agent(), LLMBudgetExceededError(500_000, 500_000, "2026-10-19"), "budget_spent"),
-        # The user's monthly cap degrades it the same quiet way (D158).
+        # The user's safety limit, and a missing or refused key, each say which (D245).
         (
             _agent(),
             MonthlyCapReachedError(1, 1, 1, datetime(2026, 11, 1, tzinfo=UTC)),
-            "budget_spent",
+            "safety_limit_reached",
         ),
+        (_agent(), OwnKeyRequiredError("own_key_required"), "own_key_required"),
+        (_agent(), OwnKeyRequiredError("own_key_failed"), "own_key_failed"),
         (_agent(), LLMRequestError("stub", "down"), "failed"),
         (_agent(), "not json", "failed"),
     ],
@@ -263,6 +266,15 @@ def test_the_route_answers_the_conflicts(route: dict[str, Any]) -> None:
 def test_the_route_skips_with_the_budget_spent_before_any_call(route: dict[str, Any]) -> None:
     route["spent"] = 500_000
     assert _post(route).json() == {"status": "skipped", "reason": "budget_spent", "conflicts": []}
+    assert app.state.llm.calls == []
+
+
+@pytest.mark.parametrize("refusal", ["own_key_required", "own_key_failed", "safety_limit_reached"])
+def test_the_route_skips_when_nobody_may_pay_before_any_call(
+    route: dict[str, Any], monkeypatch: pytest.MonkeyPatch, refusal: str
+) -> None:
+    monkeypatch.setattr("app.routers.agents.payer_refusal", lambda *_a: refusal)
+    assert _post(route).json() == {"status": "skipped", "reason": refusal, "conflicts": []}
     assert app.state.llm.calls == []
 
 

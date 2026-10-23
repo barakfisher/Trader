@@ -73,6 +73,17 @@ export function decimalUsdToMicro(text: string): number | null {
   return sign === '-' ? -micro : micro;
 }
 
+/** Dollars and cents typed into a field, as integer micro-USD; null for anything else. */
+export function dollarsTextToMicro(value: string): number | null {
+  return /^\d+(\.\d{1,2})?$/.test(value.trim()) ? decimalUsdToMicro(value) : null;
+}
+
+/** Integer micro-USD as dollars and cents for an input ("0.50"), with no float. */
+export function microToDollarsText(micro: number): string {
+  const cents = Math.floor(micro / 10_000);
+  return `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, '0')}`;
+}
+
 function usd(dollars: number, minimumFractionDigits: number, maximumFractionDigits: number): string {
   return formatNumber(dollars, { style: 'currency', currency: 'USD', minimumFractionDigits, maximumFractionDigits });
 }

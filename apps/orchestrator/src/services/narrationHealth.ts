@@ -30,7 +30,9 @@ export type NarrationState =
   /** The model answers, and the evidence validator refuses its figures. */
   | 'rejected'
   /** Nothing has been recorded yet. Not a claim in either direction. */
-  | 'unknown';
+  | 'unknown'
+  /** The user has no working OpenRouter key of their own (D245). Adding one fixes it. */
+  | 'own_key';
 
 export interface NarrationHealth {
   state: NarrationState;
@@ -70,12 +72,13 @@ export function narrationStateFrom(
 }
 
 /**
- * Most serious first. `no_provider` outranks the rest because it means nothing
- * was even attempted, and `budget_exhausted` outranks a transport failure
- * because it will not clear by itself.
+ * Most serious first. `no_provider` and `own_key_required` outrank the rest
+ * because they mean nothing was even attempted, and `budget_exhausted` outranks
+ * a transport failure because it will not clear by itself.
  */
 const PRECEDENCE = [
   'no_provider',
+  'own_key_required',
   'budget_exhausted',
   'unsourced_figures',
   'malformed',
@@ -85,6 +88,7 @@ const PRECEDENCE = [
 const STATE_BY_REASON: Record<string, NarrationState> = {
   none: 'narrating',
   no_provider: 'off',
+  own_key_required: 'own_key',
   budget_exhausted: 'exhausted',
   provider_error: 'unavailable',
   // Both mean the same thing to a reader: the model answered and its answer was

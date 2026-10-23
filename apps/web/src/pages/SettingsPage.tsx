@@ -1,6 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { observer } from 'mobx-react-lite';
 import { AtSign, BellOff, KeyRound, Settings as SettingsIcon } from 'lucide-react';
+
+import { SAFETY_LIMIT_CEILING_MICRO_USD, type MonthlySpend } from '@traders/shared';
 
 import { AccountResetCard } from '../components/AccountResetCard.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
@@ -18,7 +20,7 @@ import {
   isMuted,
 } from '../lib/notificationSchedule.ts';
 import { SEVERITY_BANDS, SEVERITY_CHOICES, describeSeverityFloor } from '../lib/severityScale.ts';
-import { formatMicroUsd } from '../lib/llmCalls.ts';
+import { dollarsTextToMicro, formatMicroUsd, microToDollarsText } from '../lib/llmCalls.ts';
 import { formatResetDate } from '../lib/monthlyCap.ts';
 import { formatClockTime, formatExactTime, getDisplayTimeZone } from '../lib/relativeTime.ts';
 import {
@@ -27,7 +29,7 @@ import {
 } from '../stores/SettingsStore.ts';
 import { errorMessage } from '../api/client.ts';
 import { LANGUAGES, useTranslation, type Language } from '../i18n/index.ts';
-import { useMonthlySpendQuery, useOwnLlmKeyQuery, useSettingsQuery } from '../queries/settings.ts';
+import { useMonthlySpendQuery, useOwnLlmKeyQuery, useSetSafetyLimit, useSettingsQuery } from '../queries/settings.ts';
 import { useStore } from '../stores/context.tsx';
 
 /**
@@ -392,48 +394,103 @@ const SignInCard = observer(function SignInCard() {
  * 2026-09-29 - no schema or backend change in M6).
  */
 /**
- * A capped user's month against their LLM spend cap (D157, D158), and their own
- * OpenRouter key (D206), which - while it works - takes them out from under the
- * cap. The admin has no cap and no key to save, and sees neither card; a failed
- * read shows nothing rather than a guess.
+ * The user's own OpenRouter key (D206), which every model call of theirs runs on
+ * and nothing replaces (D245), then what this app spent on it this month and
+ * their optional monthly safety limit (D250). The admin runs on the
+ * installation's key and sees neither card; a failed read shows nothing rather
+ * than a guess.
  */
 function SpendCard() {
   const { t } = useTranslation();
   const spend = useMonthlySpendQuery().data;
   const ownKey = useOwnLlmKeyQuery(Boolean(spend)).data;
   if (!spend) return null;
-  const ownKeyWorks = ownKey?.key?.status === 'valid';
   return (
     <>
-      <Card title={t('settings.spend.title')}>
-        {ownKeyWorks ? (
-          <p className="text-sm font-medium">{t('settings.spend.ownKeyActive')}</p>
-        ) : (
-          <>
-            <p className="text-sm font-medium">
-              <bdi>
-                {t('settings.spend.line', {
-                  spent: formatMicroUsd(spend.spentMicroUsd),
-                  cap: formatMicroUsd(spend.capMicroUsd),
-                  date: formatResetDate(spend.resetsOn),
-                })}
-              </bdi>
-            </p>
-            <p className="mt-1 text-xs text-text-muted">{t('settings.spend.hint')}</p>
-          </>
-        )}
-        {(ownKeyWorks || spend.ownKeySpentMicroUsd > 0) && (
-          <p className="mt-2 text-sm">
-            <bdi>{t('settings.spend.ownKeyLine', { spent: formatMicroUsd(spend.ownKeySpentMicroUsd) })}</bdi>
-          </p>
-        )}
-      </Card>
       {ownKey && (
         <Card title={t('settings.ownKey.title')}>
           <OwnLlmKeyForm available={ownKey.available} saved={ownKey.key} />
         </Card>
       )}
+      <Card title={t('settings.spend.title')}>
+        <p className="text-sm font-medium">
+          <bdi>{t('settings.spend.ownKeyLine', { spent: formatMicroUsd(spend.ownKeySpentMicroUsd) })}</bdi>
+        </p>
+        <p className="mt-1 max-w-2xl text-xs text-text-muted">{t('settings.spend.hint')}</p>
+        <SafetyLimitForm spend={spend} />
+      </Card>
     </>
+  );
+}
+
+/**
+ * The user's own monthly brake on what this app spends on their key (D250):
+ * optional, in dollars and cents, cleared by *Remove limit*. Reaching it stops
+ * scans, questions and explanations by the model until the month resets.
+ */
+/** The smallest limit the field takes: a cent, the finest step dollars and cents can type. */
+const MICRO_USD_PER_CENT = 10_000;
+
+function SafetyLimitForm({ spend }: { spend: MonthlySpend }) {
+  const { t } = useTranslation();
+  const save = useSetSafetyLimit();
+  const stored = spend.safetyLimitMicroUsd === null ? '' : microToDollarsText(spend.safetyLimitMicroUsd);
+  const [draft, setDraft] = useState(stored);
+  useEffect(() => setDraft(stored), [stored]);
+  const micro = dollarsTextToMicro(draft);
+  const valid = micro !== null && micro >= MICRO_USD_PER_CENT && micro <= SAFETY_LIMIT_CEILING_MICRO_USD;
+  const limit = spend.safetyLimitMicroUsd;
+  const reached = limit !== null && spend.ownKeySpentMicroUsd >= limit;
+  return (
+    <div className="mt-4 space-y-2 border-t border-border-subtle pt-4">
+      <p className="text-sm font-medium">{t('settings.safetyLimit.title')}</p>
+      <p className="max-w-2xl text-xs text-text-muted">{t('settings.safetyLimit.intro')}</p>
+      {limit !== null && (
+        <p className={`text-sm ${reached ? 'text-warn' : ''}`} role={reached ? 'status' : undefined}>
+          <bdi>
+            {t(reached ? 'settings.safetyLimit.reached' : 'settings.safetyLimit.line', {
+              spent: formatMicroUsd(spend.ownKeySpentMicroUsd),
+              limit: formatMicroUsd(limit),
+              date: formatResetDate(spend.resetsOn),
+            })}
+          </bdi>
+        </p>
+      )}
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (valid) save.mutate(micro);
+        }}
+        className="flex flex-wrap items-end gap-2"
+      >
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-text-muted">{t('settings.safetyLimit.label')}</span>
+          <input
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            inputMode="decimal"
+            dir="ltr"
+            aria-invalid={draft !== '' && !valid}
+            className="w-28 rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
+          />
+        </label>
+        <Button type="submit" disabled={!valid || draft === stored || save.isPending}>
+          {t('settings.safetyLimit.save')}
+        </Button>
+        {limit !== null && (
+          <Button variant="ghost" disabled={save.isPending} onClick={() => save.mutate(null)}>
+            {t('settings.safetyLimit.remove')}
+          </Button>
+        )}
+      </form>
+      <p className="text-xs text-text-muted">
+        {t('settings.safetyLimit.bounds', {
+          min: formatMicroUsd(MICRO_USD_PER_CENT),
+          max: formatMicroUsd(SAFETY_LIMIT_CEILING_MICRO_USD),
+        })}
+      </p>
+      {save.error && <ErrorNote message={errorMessage(save.error, t('settings.safetyLimit.failed'))} />}
+    </div>
   );
 }
 
