@@ -20,6 +20,7 @@ import {
   type RouterHistory,
 } from '@tanstack/react-router';
 
+import { SpendReminder } from './components/SpendIndicator.tsx';
 import { AppBar } from './components/AppBar.tsx';
 import { ConceptDialog } from './components/ConceptDialog.tsx';
 import { AgentPage } from './pages/AgentPage.tsx';
@@ -42,6 +43,8 @@ const rootRoute = createRootRoute({
       {/* One bar for every page (UX2): it was the dashboard's own header, so
           every other page needed a way back to it. */}
       <AppBar />
+      {/* D246: from five days before the key runs out, once a day until dismissed. */}
+      <SpendReminder />
       <Outlet />
       {/* Mounted beside the routes rather than inside the feed: it is an
           overlay, and a concept opened from one view must not be unmounted by

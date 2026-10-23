@@ -291,3 +291,4 @@ while this file is out of date.
 | 278 | A disabled user's Telegram chat reads as unbound |
 | 279 | The monthly cap is retired from every screen and from enforcement; its column stays, unread |
 | 280 | A user nobody may pay for is told up front, where the work would start |
+| 281 | The spend indicator's daily pace is this UTC week's: `usage_weekly` over the days since Monday |

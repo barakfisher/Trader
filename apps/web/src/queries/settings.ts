@@ -6,6 +6,8 @@ import type {
   AccountResetGroup,
   AccountResetInput,
   AccountResetResponse,
+  KeySpend,
+  KeySpendResponse,
   MonthlySpend,
   MonthlySpendResponse,
   OwnLlmKeyResponse,
@@ -37,6 +39,19 @@ export function useMonthlySpendQuery() {
   return useQuery(monthlySpendQuery);
 }
 
+/**
+ * What OpenRouter says the user's own key spent, against the limit that binds
+ * first (D247-D250, D281); null for the admin. The server reads OpenRouter at most
+ * every 15 minutes per user (D249), so a read on every page load costs nothing.
+ */
+export function useKeySpendQuery(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.keySpend,
+    queryFn: async (): Promise<KeySpend | null> => (await api.get<KeySpendResponse>('/settings/llm-usage')).spend,
+    enabled,
+  });
+}
+
 /** The user's own OpenRouter key (D206): never the key, only its last four and state. */
 export const ownLlmKeyQuery = queryOptions({
   queryKey: queryKeys.ownLlmKey,
@@ -60,6 +75,7 @@ export function useSaveOwnLlmKey() {
     onSuccess: (body) => {
       client.setQueryData(queryKeys.ownLlmKey, body);
       void client.invalidateQueries({ queryKey: queryKeys.monthlySpend });
+      void client.invalidateQueries({ queryKey: queryKeys.keySpend });
     },
   });
 }
@@ -71,6 +87,7 @@ export function useRemoveOwnLlmKey() {
     onSuccess: (body) => {
       client.setQueryData(queryKeys.ownLlmKey, body);
       void client.invalidateQueries({ queryKey: queryKeys.monthlySpend });
+      void client.invalidateQueries({ queryKey: queryKeys.keySpend });
     },
   });
 }
@@ -81,7 +98,10 @@ export function useSetSafetyLimit() {
   return useMutation({
     mutationFn: (limitMicroUsd: number | null) =>
       api.put<SafetyLimitInput>('/settings/llm-safety-limit', { limitMicroUsd } satisfies SafetyLimitInput),
-    onSuccess: () => void client.invalidateQueries({ queryKey: queryKeys.monthlySpend }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.monthlySpend });
+      void client.invalidateQueries({ queryKey: queryKeys.keySpend });
+    },
   });
 }
 

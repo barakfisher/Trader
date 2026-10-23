@@ -1486,6 +1486,50 @@ export interface MonthlySpendResponse {
   spend: MonthlySpend | null;
 }
 
+/** The period a key's spend ratio counts (D248): its limit's reset, or all time. */
+export type KeySpendPeriod = 'day' | 'week' | 'month' | 'total';
+
+/** Days of projected spend left at or below which the indicator warns (D246, D247). */
+export const SPEND_WARNING_DAYS = 5;
+
+/** What OpenRouter said the key has spent, against its own limit (D247-D249). */
+export interface KeySpendReading {
+  /** Spent in `period`: `limit - limit_remaining` with a limit, this UTC month without one (D248). */
+  usedMicroUsd: number;
+  /** The key's credit limit on OpenRouter; null when it is unlimited. */
+  limitMicroUsd: number | null;
+  /** Null only for a reset OpenRouter names that this app does not know. */
+  period: KeySpendPeriod | null;
+  /** When OpenRouter was asked; at most 15 minutes ago (D249). */
+  readAt: string;
+}
+
+/**
+ * The top bar's spend indicator and its Settings details (D247-D250, D281), for a
+ * user on their own key. Integer micro-USD, in USD, OpenRouter's currency.
+ */
+export interface KeySpend {
+  key: 'none' | 'valid' | 'failed' | 'unavailable';
+  failure: OwnLlmKeyFailure | null;
+  /** Null with no working key, or when OpenRouter could not be read. */
+  reading: KeySpendReading | null;
+  /** The user's own monthly safety limit (D250), with this app's spend against it. */
+  safetyLimit: { limitMicroUsd: number; spentMicroUsd: number; resetsOn: string } | null;
+  /** Which limit binds first, the one the bar shows; null when neither exists. */
+  binding: 'key' | 'safety' | null;
+  /** This UTC week's spend on the key per day since Monday (D281); null with none this week. */
+  dailyPaceMicroUsd: number | null;
+  /** Whole days left at that pace against the binding limit; null with no limit or no pace. */
+  daysLeft: number | null;
+  /** `daysLeft <= SPEND_WARNING_DAYS`: the bar's warning color and the daily reminder. */
+  warning: boolean;
+}
+
+/** `GET /settings/llm-usage`: null for the admin, who runs on the installation's key. */
+export interface KeySpendResponse {
+  spend: KeySpend | null;
+}
+
 /** The most a monthly safety limit may be: migration 0068's CHECK, $1,000. */
 export const SAFETY_LIMIT_CEILING_MICRO_USD = 1_000_000_000;
 

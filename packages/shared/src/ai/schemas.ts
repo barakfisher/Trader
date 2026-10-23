@@ -550,6 +550,24 @@ export type _AssertOwnLlmKeyState = Expect<
   Equal<z.infer<typeof ownLlmKeyStateSchema>, Schemas['OwnLlmKeyState']>
 >;
 
+export const ownLlmKeyUsageStateSchema = ownLlmKeyStateSchema.extend({
+  usage: z
+    .object({
+      limit_micro_usd: z.number().int().nullable(),
+      limit_remaining_micro_usd: z.number().int().nullable(),
+      limit_reset: z.string().nullable(),
+      usage_daily_micro_usd: z.number().int(),
+      usage_weekly_micro_usd: z.number().int(),
+      usage_monthly_micro_usd: z.number().int(),
+      read_at: z.string(),
+    })
+    .nullable(),
+});
+
+export type _AssertOwnLlmKeyUsageState = Expect<
+  Equal<z.infer<typeof ownLlmKeyUsageStateSchema>, Schemas['OwnLlmKeyUsageState']>
+>;
+
 export const conceptSectionSchema = z.object({
   id: z.string(),
   ord: z.number(),
