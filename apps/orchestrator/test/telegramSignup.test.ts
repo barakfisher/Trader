@@ -1,5 +1,5 @@
 /**
- * The admin's sign-up request message in Telegram (D156, D187, D188, D269):
+ * The admin's sign-up request message in Telegram (D156, D187, D188, D274):
  * its signed buttons - Approve and Reject, no amount since users run on their
  * own key (D245) - the decision each tap applies, an old *Custom budget* button,
  * and a stale message healing. No bot token, no network.
@@ -14,7 +14,7 @@ const REQUESTER = '11111111-1111-4111-8111-111111111111';
 const CHAT = 987654321;
 const WEBHOOK_SECRET = 'a-webhook-secret-long-enough';
 const SIGNING_SECRET = 'a-signing-secret-long-enough';
-/** The retired monthly cap the approval writes to satisfy its column (D269). */
+/** The retired monthly cap the approval writes to satisfy its column (D274). */
 const RETIRED_CAP = 10_000_000;
 
 let admin = true;
@@ -106,7 +106,7 @@ const tap = (data: string) =>
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': WEBHOOK_SECRET },
     body: JSON.stringify({
-      callback_query: { id: 'cb-1', data, message: { message_id: 7, text: REQUEST_TEXT, chat: { id: CHAT } } },
+      callback_query: { id: 'cb-1', data, message: { message_id: 7, text: REQUEST_TEXT, chat: { id: CHAT, type: 'private' } } },
     }),
   });
 

@@ -338,7 +338,7 @@ class LLMBudgetExceededError(LLMError):
 class MonthlyCapReachedError(LLMBudgetExceededError):
     """This call would take its user past their monthly safety limit (D250); not attempted.
 
-    Written for the admin-set monthly cap (D157, D158), retired with D245/D269;
+    Written for the admin-set monthly cap (D157, D158), retired with D245/D274;
     the user's own safety limit on their key's spend is the limit it carries now.
 
     A kind of `LLMBudgetExceededError`, so every caller that already degrades on

@@ -566,7 +566,7 @@ What D245-D246 still need on that screen:
 - wording that no longer promises the installation's fallback (`settings.ownKey.intro`,
   `limitHint` and the failure lines say calls continue under the cap).
 
-*Built in M10 PR 4 (D269-D270): the stopped state is the up-front notice and the Settings
+*Built in M10 PR 4 (D274-D275): the stopped state is the up-front notice and the Settings
 wording; the five-day warning comes with the spend indicator (PR 5, D247-D249).*
 
 22. **What "budget" means for D246's five-day warning.**

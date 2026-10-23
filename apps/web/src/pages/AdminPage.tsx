@@ -385,7 +385,7 @@ function GapItem({ gap }: { gap: UniverseGap }) {
 /**
  * Sign-up requests (D156, D188), first on the page because someone is waiting
  * on each. A waiting request is approved - with no amount: users run on their
- * own key only (D245, D269) - or rejected; a rejection can be undone, which
+ * own key only (D245, D274) - or rejected; a rejection can be undone, which
  * puts the request back to waiting. A request already decided
  * in Telegram simply leaves the list when it is read again.
  */
@@ -575,7 +575,7 @@ function RejectedSignup({ request }: { request: SignupRequestView }) {
 /**
  * The sign-up setting (D156): how many requests may wait at once - 0 closes
  * sign-up. It changes no request already waiting. The monthly cap an approval
- * offered is retired (D269): users run on their own key only (D245).
+ * offered is retired (D274): users run on their own key only (D245).
  */
 function SignupSettingsCard() {
   const { t } = useTranslation();

@@ -70,7 +70,7 @@ export function AgentsPage() {
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   // Here, not in the form: the drawer closes on create, and the check outlives it (D178).
   const check = useCheckInstructions();
-  // D245, D270: scans run on the user's own key only; say so before anyone presses Scan.
+  // D245, D275: scans run on the user's own key only; say so before anyone presses Scan.
   const access = useModelAccess();
 
   return (

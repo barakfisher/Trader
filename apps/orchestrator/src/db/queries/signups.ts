@@ -125,7 +125,7 @@ async function decided(
 }
 
 /**
- * Let a waiting user in. The cap is retired (D269): it is written only for
+ * Let a waiting user in. The cap is retired (D274): it is written only for
  * 0058's CHECK, from the installation's default, and nothing reads it. The 0058 trigger seeds
  * their primary agent on this very transition, so a pending user never had one.
  */

@@ -382,7 +382,7 @@ export const ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD = 100_000_000;
 
 /**
  * The most a monthly LLM cap may be: migration 0058's CHECK, $1,000. The cap is
- * retired (D269); the bound remains for the column and the approval button's token.
+ * retired (D274); the bound remains for the column and the approval button's token.
  */
 export const LLM_CAP_CEILING_MICRO_USD = 1_000_000_000;
 

@@ -12,7 +12,7 @@ measured, decided and two PRs in.**
     asked one at a time**;
   - #294, PR 1: the production baseline (D256);
   - #295, PR 2: the write-route isolation test (D266).
-- **Decisions reached 270** (next: **271**; D268 is PR 3's, Redis down; D269-D270 are PR 4's).
+- **Decisions reached 275** (next: **276**; D268 is PR 3's, Redis down; D269-D273 are M11 A1's (#297); D274-D275 are PR 4's).
 - **Migrations:** `0068_own_key_only` (M10 PR 4: `user_settings.llm_safety_limit_micro_usd`,
   `own_key_required` outcomes, the re-check index) is head once PR 4 merges; next free is `0069`.
 - **Deployed:**
@@ -4117,7 +4117,59 @@ failure they prevent.
         bounds LLM money, but embeddings and market data have no other bound);
       - fail closed (a Redis outage would also stop sign-in, signup, Ask, scans, holdings and
         topics for everyone).
-269. **The monthly cap is retired from every screen and from enforcement; its column stays,
+269. **Telegram menu buttons are unsigned; the tapping chat's binding is their authority**
+    (2026-10-22; M11 A1, `telegram/menuData.ts`). A menu button is `m:` plus a view letter and,
+    for an agent, its 16 bytes in base64url (24 bytes at most). Every view is read for the user
+    the tapping chat is bound to, and an agent is looked up with `getAgent(user, id)`, so a
+    forwarded or hand-edited button shows its holder their own data and an agent that is not
+    theirs reads "gone". The quick mutes change only the tapper's own mute. An unbound chat gets
+    "not valid for this chat" and nothing is read. *Rejected:* signing them like proposal buttons -
+    a MAC proves we wrote the button, which grants nothing when the binding decides whose data
+    it is, and a nonce has nothing to burn on a read. Buttons that spend money or change an agent
+    (slice A2) are signed, because there the button's own content is the decision.
+270. **A command sends a view; a button rewrites that message, says when it was read, and
+    carries Refresh** (2026-10-22; `telegram/menu.ts`). Moving about the menu leaves one message,
+    not a column of them. An edited message can sit in the chat for days, so every data view
+    ends "As of HH:MM" in the user's zone and every tap reads afresh; a Refresh within the same
+    minute is refused by Telegram as "not modified" and only logged, any other refused edit is
+    said. A view that cannot be read is a toast and leaves the message as it was; a command whose
+    view fails says so. A tap runs off the poller, as a re-check does: a view waits on quotes and
+    the market calendar, and the poller handles one update at a time, so one slow AI service
+    call would otherwise hold every user's taps. The last-run view shows the outcome, never the
+    scan's `error` text (exception text - SQL, hostnames, a provider's body - copied to Telegram's
+    servers); the app shows it. *Rejected:* a new message per tap (the chat
+    fills with stale copies, each looking current); a reply keyboard under the input box (its
+    buttons send their label as text, and plain text is a question to the assistant, D221).
+271. **The `/` command list is set at every start, English by default and Hebrew for Hebrew
+    phones** (2026-10-22; `telegram/commandMenu.ts`). `setMyCommands` replaces the whole list,
+    so repeating it is free and a list that drifted heals on deploy; a failure is logged and
+    never stops the boot. Telegram picks the list by the phone's language, not by
+    `user_settings.language`, so a user whose phone and Settings disagree sees the list in one
+    language and the replies in the other - accepted. `/start` is not listed: it needs the
+    one-time link from Settings, and typed bare in a bound chat it shows `/help`. An unknown
+    command shows `/help`. *Rejected:* a list per chat (`scope: chat`) re-set when the language
+    changes - a call per user, and one more thing to fall out of step, for nine words.
+272. **`/portfolio` is the real portfolio alone, in its base currency, with what is unpriced
+    named** (2026-10-22; `telegram/menu.ts`). It is `valuePortfolio` over the primary agent's
+    holdings, as the dashboard's `/portfolio` read is: value, today's change (or "not known"
+    without a previous close), holdings priced of total, and the unpriced symbols named as left
+    out, never counted as zero (guideline 7). The simulated agents are under `/agents`, each with
+    cash, net worth and P&L - real and simulated are never summed in the chat. No shekel figure:
+    there is no ILS rate source, and a converted total would need one. *Rejected:* replacing the
+    old `/portfolio`, which only named the alert floor, with a "see the app" line - the user asked
+    for the numbers, and the valuation already exists.
+273. **The bot serves private chats only** (2026-10-22; `telegram/updates.ts` `isPrivate`; the
+    user's choice after the security review of M11 A1). Nothing stopped a bind link being
+    redeemed in a group, and there the chat is not the person: every member would read the
+    assistant's answers and alerts, and with the menu open `/portfolio`, mute the owner's alerts
+    or `/stop` them - the binding, D269's whole authority, would speak for all of them. A message
+    or tap from a chat whose `type` is not `private` (a missing type included) is refused before
+    any lookup: `/start` there says to connect privately and leaves the link unused; anything
+    else is ignored, as from an unbound chat; a button is "not valid for this chat". Measured
+    before the change: no binding was to a group (1 binding, private), so nothing existing
+    breaks. *Rejected:* allowing groups and recording that any member acts as the owner - a
+    household sharing one view is better served by M9's separate accounts.
+274. **The monthly cap is retired from every screen and from enforcement; its column stays,
     unread** (the user, 2026-10-22; M10 PR 4, answers D245's "dormant or removed").
     - **What changed:** no non-admin call is installation-paid any more (D245), so the cap bounds
       nothing. Approval (Admin page and the Telegram buttons) carries no amount, the Admin page
@@ -4134,7 +4186,7 @@ failure they prevent.
     - *Rejected:* dropping the column, CHECK and default in a migration now (an irreversible
       schema change bundled into a PR about payment; a later migration can do it); keeping the
       cap fields on screen (the admin would set a dollar figure that limits nothing).
-270. **A user nobody may pay for is told up front, where the work would start** (the user,
+275. **A user nobody may pay for is told up front, where the work would start** (the user,
     2026-10-22; M10 PR 4, D245's screens).
     - **How:** one notice (`OwnKeyNotice`, from `useModelAccess`) on Ask, the Agents page, an
       agent's Scans tab and a re-check, for no key, a refused key, an installation that cannot
@@ -5458,7 +5510,7 @@ grant tests fail for the wrong reason.
 - 429 says when to retry. The web needs a translated message for it in en and he (guideline 1).
 
 **Then:** PR 4, own key only plus the safety limit (D245, D246, D250) - built as its own PR
-(D269-D270, migration `0068_own_key_only`); after it, PR 5 is the spend indicator (D247-D249).
+(D274-D275, migration `0068_own_key_only`); after it, PR 5 is the spend indicator (D247-D249).
 
 **Things a later PR must not rediscover:**
 - **D264's erase needs a privileged step.** The app's role cannot delete `agent_scans`, `fills`,

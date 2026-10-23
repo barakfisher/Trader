@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[3]
 CALENDAR_DIR = ROOT / "data" / "calendar"
 SCAN_SCHEDULE_TS = ROOT / "apps" / "orchestrator" / "src" / "services" / "scanSchedule.ts"
 SHARED_TYPES_TS = ROOT / "packages" / "shared" / "src" / "types.ts"
-AGENTS_ROUTE_TS = ROOT / "apps" / "orchestrator" / "src" / "http" / "routes" / "agents.ts"
+AGENT_SCHEDULING_TS = ROOT / "apps" / "orchestrator" / "src" / "services" / "agentScheduling.ts"
 NEW_YORK = ZoneInfo("America/New_York")
 
 PRE_OPEN = ScanSchedule(every_hours=None, pre_open=True, post_close=False)
@@ -84,8 +84,8 @@ def test_the_slot_times_are_the_orchestrators() -> None:
 
 
 def test_the_horizon_is_the_orchestrators() -> None:
-    match = re.search(r"NEXT_SLOT_HORIZON_MS = ([^;]+);", AGENTS_ROUTE_TS.read_text())
-    assert match, "NEXT_SLOT_HORIZON_MS not found in routes/agents.ts"
+    match = re.search(r"NEXT_SLOT_HORIZON_MS = ([^;]+);", AGENT_SCHEDULING_TS.read_text())
+    assert match, "NEXT_SLOT_HORIZON_MS not found in services/agentScheduling.ts"
 
     assert timedelta(milliseconds=_ms(match.group(1))) == NEXT_SLOT_HORIZON
 

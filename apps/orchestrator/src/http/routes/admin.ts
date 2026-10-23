@@ -365,7 +365,7 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
   app.post('/admin/signups/:userId/approve', async (context) => {
     const userId = signupId(context);
     // No amount: a user runs on their own key only (D245), and the retired monthly
-    // cap keeps its column's CHECK satisfied with the installation's default (D269).
+    // cap keeps its column's CHECK satisfied with the installation's default (D274).
     const { default_llm_cap_micro_usd: retiredCap } = await getInstallationSettings();
     return context.json(decisionBody(await approveSignup(userId, retiredCap, currentUserId(context))));
   });

@@ -1,6 +1,6 @@
 /**
  * What stops a user's model calls, read from the Settings month and key (D245,
- * D250, D270): the rule the notice on Ask, Agents and a re-check shows.
+ * D250, D275): the rule the notice on Ask, Agents and a re-check shows.
  */
 
 import { describe, expect, it } from 'vitest';

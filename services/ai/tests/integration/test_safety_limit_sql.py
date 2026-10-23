@@ -12,7 +12,7 @@ from app.llm.monthly_cap import DatabaseSafetyLimitLedger, month_bounds
 ZONE = "Asia/Jerusalem"
 NOW = datetime(2026, 11, 10, 12, tzinfo=UTC)
 LIMIT = 5_000_000
-#: Any active non-admin needs a cap while the retired column's CHECK stands (D269).
+#: Any active non-admin needs a cap while the retired column's CHECK stands (D274).
 RETIRED_CAP = 0
 
 

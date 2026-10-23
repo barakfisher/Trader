@@ -79,7 +79,7 @@ export function ScanScheduleCard({ agent }: { agent: AgentView }) {
 function RunScan({ agent }: { agent: AgentView }) {
   const { t } = useTranslation();
   const run = useRunScan(agent.id);
-  // D245, D270: no scan is offered that nobody may pay for; the notice says why.
+  // D245, D275: no scan is offered that nobody may pay for; the notice says why.
   const access = useModelAccess();
   const running = agent.runningScan;
   const soon = running ? null : minutesUntilSoonScan(agent.scheduling?.nextAt);

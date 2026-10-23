@@ -45,7 +45,7 @@ export const AskPage = observer(function AskPage() {
   const { t } = useTranslation();
   const box = useRef<HTMLTextAreaElement>(null);
   const tooLong = ask.draft.length > MAX_QUESTION_LENGTH;
-  // D245, D270: a question that nobody may pay for is not sent; the notice says why.
+  // D245, D275: a question that nobody may pay for is not sent; the notice says why.
   const access = useModelAccess();
   const blocked = access.block !== null;
   const fill = (text: string) => {

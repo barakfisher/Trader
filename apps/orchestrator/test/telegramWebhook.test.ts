@@ -134,13 +134,13 @@ const callbackUpdate = (data: string) => ({
     message: {
       message_id: 99,
       text: 'VOO is 12.4pp above your target weight',
-      chat: { id: CHAT },
+      chat: { id: CHAT, type: 'private' },
     },
   },
 });
 
 const messageUpdate = (text: string) => ({
-  message: { text, chat: { id: CHAT }, from: { username: 'someone' } },
+  message: { text, chat: { id: CHAT, type: 'private' }, from: { username: 'someone' } },
 });
 
 /** The text of the toast a tap was answered with. */
@@ -509,7 +509,7 @@ describe('a signed callback from a bound chat', () => {
         message: {
           message_id: 99,
           text: 'VOO is 12.4pp above your target weight\n\n\u2705 Approved \u2014 recorded in your ledger. No order was placed. (10:02)',
-          chat: { id: CHAT },
+          chat: { id: CHAT, type: 'private' },
         },
       },
     });
@@ -703,12 +703,12 @@ describe('a chat whose user reads Hebrew', () => {
       },
     ] as never);
     await post(messageUpdate('/pending'));
-    expect(sentCalls[0]?.body.text).toBe('• משקל \u2066VOO\u2069 נמוך');
+    expect(sentCalls[0]?.body.text).toContain('\n• משקל \u2066VOO\u2069 נמוך\n');
   });
 
   it('names the alert floor in Hebrew', async () => {
-    await post(messageUpdate('/portfolio'));
-    expect(sentCalls[0]?.body.text).toBe(MESSAGES.he.alertingFrom('גבוה'));
+    await post(messageUpdate('/status'));
+    expect(sentCalls[0]?.body.text).toContain(MESSAGES.he.menu.status.alertingFrom('גבוה'));
   });
 
   it('still answers an unbound chat in English: nobody’s language is known', async () => {
@@ -779,8 +779,8 @@ describe('malformed updates', () => {
   it.each([
     ['empty object', {}],
     ['null body', null],
-    ['a message with no text', { message: { chat: { id: CHAT } } }],
-    ['a callback with no data', { callback_query: { id: 'x', message: { chat: { id: CHAT } } } }],
+    ['a message with no text', { message: { chat: { id: CHAT, type: 'private' } } }],
+    ['a callback with no data', { callback_query: { id: 'x', message: { chat: { id: CHAT, type: 'private' } } } }],
     ['an unrecognised update kind', { poll_answer: { option_ids: [1] } }],
   ])('answers 200 to %s rather than inviting a redelivery loop', async (_label, body) => {
     expect((await post(body)).status).toBe(200);

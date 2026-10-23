@@ -6,7 +6,7 @@ import { formatResetDate } from '../lib/monthlyCap.ts';
 import type { ModelAccess } from '../queries/modelAccess.ts';
 
 /**
- * What stops the user's model calls, said where they would be made (D245, D270):
+ * What stops the user's model calls, said where they would be made (D245, D275):
  * no key of their own, one OpenRouter refused, an installation that cannot use
  * keys, or their safety limit spent - each with the way out, in Settings.
  * Nothing when nothing stops them; the admin never sees it.

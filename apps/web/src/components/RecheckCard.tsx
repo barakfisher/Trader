@@ -45,7 +45,7 @@ export function RecheckCard({
 }) {
   const { t } = useTranslation();
   const run = useRecheckProposal(proposalId, agentId);
-  // D245, D270: no re-check is offered that nobody may pay for; the notice says why.
+  // D245, D275: no re-check is offered that nobody may pay for; the notice says why.
   const access = useModelAccess();
   // The answer just given is the freshest; the page's own read follows it.
   const last = run.data ?? recheck.last;

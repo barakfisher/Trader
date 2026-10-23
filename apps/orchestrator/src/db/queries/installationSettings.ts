@@ -10,7 +10,7 @@ export interface InstallationSettingsRow {
   /** Migration 0052. A bigint, read as a number: its CHECK keeps it under 1e8. */
   assistant_daily_budget_micro_usd: number;
   /** Migration 0058: the cap an approval offers (D157). Under 1e9 by its CHECK. */
-  /** The retired monthly cap (D269): written at approval to satisfy its CHECK, read by nothing. */
+  /** The retired monthly cap (D274): written at approval to satisfy its CHECK, read by nothing. */
   default_llm_cap_micro_usd: number;
   /** Migration 0058: waiting sign-up requests allowed at once (D156); 0 closes sign-up. */
   max_pending_signups: number;

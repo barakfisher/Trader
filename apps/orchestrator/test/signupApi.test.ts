@@ -165,7 +165,7 @@ describe('deciding a request on the Admin page (D188)', () => {
     vi.mocked(queries.approveSignup).mockResolvedValue({ applied: true, status: 'active', email: 'noa@example.com' });
     const response = await post(`/admin/signups/${REQUESTER}/approve`, {});
     expect(await response.json()).toEqual({ applied: true, status: 'active' });
-    // The retired cap (D269) is written with the installation's default, only for its CHECK.
+    // The retired cap (D274) is written with the installation's default, only for its CHECK.
     const { default_llm_cap_micro_usd: retired } = await queries.getInstallationSettings();
     expect(queries.approveSignup).toHaveBeenCalledWith(REQUESTER, retired, ADMIN.id);
     expect(queries.insertAdminAudit).toHaveBeenCalledTimes(1);
