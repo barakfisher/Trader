@@ -1,5 +1,6 @@
 /**
- * When a user's monthly LLM cap starts again (D157): the first day of the
+ * When a user's monthly limit starts again - their safety limit (D250), and the
+ * retired cap (D157) before it: the first day of the
  * calendar month after a moment, in the user's zone - the same month the AI
  * service enforces. A refused scan or question names the month it was refused
  * in, so the date comes from when it happened, not from today.

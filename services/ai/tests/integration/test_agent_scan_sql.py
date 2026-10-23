@@ -44,7 +44,7 @@ from app.llm.base import (
     TokenUsage,
     ToolCall,
 )
-from app.llm.monthly_cap import DatabaseCapLedger, MonthlyCapProvider
+from app.llm.monthly_cap import DatabaseSafetyLimitLedger, MonthlyCapProvider
 from app.llm.pricing import DEFAULT_UNKNOWN_MODEL_PRICE_USD_PER_MTOK
 from tests.integration.conftest import run_script
 from tests.integration.test_agent_tools_sql import NOW as QUOTED_AT
@@ -53,6 +53,8 @@ from tests.integration.test_agent_tools_sql import ScriptedMarket, _instrument
 FIXTURE_EMBEDDER = {"EMBEDDINGS_PROVIDER": "fixture"}
 NOW = datetime.now(UTC)
 STEP_COST = 1_000
+#: A safety limit the seeded spend meets exactly (D250).
+SAFETY_LIMIT = 2_000_000
 
 
 def _turn(text_: str = "", calls: tuple[ToolCall, ...] = ()) -> LLMCompletion:
@@ -461,22 +463,30 @@ async def test_the_installations_spend_guard_also_reads_as_budget_reached(
     assert (await _scan(loaded, agent, llm)).outcome == "budget_reached"
 
 
-async def test_the_users_monthly_cap_ends_the_scan_as_cap_reached(
+async def test_the_users_safety_limit_ends_the_scan_as_cap_reached(
     loaded: Engine, agent: ScanAgent
 ) -> None:
     with loaded.begin() as connection:
         connection.execute(
             text(
-                "INSERT INTO llm_calls (user_id, purpose, provider, outcome, latency_ms, prompt, "
-                "cost_micro_usd) VALUES (CAST(:u AS uuid), 'ask', 'openrouter', 'ok', 1, 'p', "
-                "(SELECT llm_cap_micro_usd FROM users WHERE id = CAST(:u AS uuid)))"
+                "INSERT INTO user_settings (user_id, llm_safety_limit_micro_usd) "
+                "VALUES (CAST(:u AS uuid), :limit) ON CONFLICT (user_id) DO UPDATE "
+                "SET llm_safety_limit_micro_usd = EXCLUDED.llm_safety_limit_micro_usd"
             ),
-            {"u": agent.user_id},
+            {"u": agent.user_id, "limit": SAFETY_LIMIT},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO llm_calls (user_id, purpose, provider, outcome, latency_ms, prompt, "
+                "cost_micro_usd, paid_by) VALUES (CAST(:u AS uuid), 'ask', 'openrouter', 'ok', 1, "
+                "'p', :limit, 'own_key')"
+            ),
+            {"u": agent.user_id, "limit": SAFETY_LIMIT},
         )
     inner = ScriptedLLM()
     capped = MonthlyCapProvider(
         inner,  # type: ignore[arg-type]
-        DatabaseCapLedger(loaded),
+        DatabaseSafetyLimitLedger(loaded),
         model="vendor/unpriced",
         prices={},
         unknown_price_usd_per_mtok=DEFAULT_UNKNOWN_MODEL_PRICE_USD_PER_MTOK,

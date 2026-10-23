@@ -304,6 +304,23 @@ class LLMUnavailableError(LLMError):
     """
 
 
+class OwnKeyRequiredError(LLMUnavailableError):
+    """A user who is not the admin has no working key of their own; no call was made (D245).
+
+    `refusal` is `own_key_required` (no key that can be used) or `own_key_failed`
+    (OpenRouter refused the saved one, D207). A kind of `LLMUnavailableError`, so
+    narration falls back to its template; a scan or an `/ask` reply ends with the
+    refusal as its outcome, and the screen says to add or replace the key. Nothing
+    falls back to the installation's key.
+    """
+
+    paid_by: PaidBy = "own_key"
+
+    def __init__(self, refusal: str) -> None:
+        super().__init__(f"no working key of the user's own ({refusal}); not called")
+        self.refusal = refusal
+
+
 class LLMBudgetExceededError(LLMError):
     """The configured daily spend ceiling is reached; no call was attempted."""
 
@@ -319,7 +336,10 @@ class LLMBudgetExceededError(LLMError):
 
 
 class MonthlyCapReachedError(LLMBudgetExceededError):
-    """This call would take its user past their monthly cap (D157, D158); not attempted.
+    """This call would take its user past their monthly safety limit (D250); not attempted.
+
+    Written for the admin-set monthly cap (D157, D158), retired with D245/D269;
+    the user's own safety limit on their key's spend is the limit it carries now.
 
     A kind of `LLMBudgetExceededError`, so every caller that already degrades on
     a spent budget - narration to its template, a tool loop to `budget_reached` -
@@ -368,10 +388,11 @@ class LLMRequestError(LLMError):
 class OwnKeyFailedError(LLMRequestError):
     """OpenRouter refused the user's own saved key - revoked, or out of credit (D206).
 
-    The key is marked failed before this is raised, so the user's next call runs
-    on the installation's key under their monthly cap. This call is not retried
-    on the installation's key: the user is told their key stopped working, and
-    a scan or an `/ask` reply ends as `own_key_failed`.
+    The key is marked failed before this is raised, so the user's next call is
+    refused before it is made (`OwnKeyRequiredError`, D245) until they save a
+    working key. Nothing is retried on the installation's key: the user is told
+    their key stopped working, and a scan or an `/ask` reply ends as
+    `own_key_failed`.
     """
 
     paid_by: PaidBy = "own_key"

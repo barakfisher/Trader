@@ -30,6 +30,9 @@ INSERT INTO user_settings (user_id, proposal_severity, notify_severity, quiet_ho
   ('00000000-0000-0000-0000-00000000000a', 'notable', 'info', '22:00', '07:00', 'en'),
   ('00000000-0000-0000-0000-00000000000b', 'high', 'notable', NULL, NULL, 'he'),
   ('00000000-0000-0000-0000-00000000000c', 'info', 'high', NULL, NULL, 'en');
+-- A monthly safety limit on own-key spend (0068, D250).
+UPDATE user_settings SET llm_safety_limit_micro_usd = 20000000
+ WHERE user_id = '00000000-0000-0000-0000-00000000000c';
 
 -- Agents (0036). The users' primaries were made by the `users_seed_primary_agent`
 -- trigger; they are given known ids here so the rows below can name them. The
@@ -211,7 +214,7 @@ INSERT INTO user_llm_keys (user_id, ciphertext, last_four, status, failure, fail
   ('00000000-0000-0000-0000-00000000000f', 'not-a-real-token', '9f3e', 'failed', 'rejected', now());
 INSERT INTO user_llm_keys (user_id, ciphertext, last_four) VALUES
   ('00000000-0000-0000-0000-00000000000c', 'not-a-real-token', '77aa');
--- Scans (0043, 0064, 0065): one finished with each outcome, both triggers, and one running.
+-- Scans (0043, 0064, 0065, 0068): one finished with each outcome, both triggers, and one running.
 INSERT INTO agent_scans (user_id, agent_id, trigger, started_at, finished_at, outcome, steps, cost_micro_usd, model, briefing, transcript, answer, error) VALUES
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'manual', now() - interval '6 days', now() - interval '6 days', 'trade', 3, 41000, 'm', '{}', '[]', '{"decision": "buy", "symbol": "EQTY", "quantity": "2", "thesis": "t"}', NULL),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', now() - interval '5 days', now() - interval '5 days', 'no_trade', 1, 9000, 'm', '{}', '[]', '{"decision": "none", "thesis": "t"}', NULL),
@@ -220,6 +223,7 @@ INSERT INTO agent_scans (user_id, agent_id, trigger, started_at, finished_at, ou
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', now() - interval '3 days', now() - interval '3 days', 'budget_reached', 0, 0, NULL, '{}', '[]', NULL, NULL),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', now() - interval '3 days', now() - interval '3 days', 'cap_reached', 0, 0, NULL, '{}', '[]', NULL, NULL),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', now() - interval '3 days', now() - interval '3 days', 'own_key_failed', 0, 0, NULL, '{}', '[]', NULL, 'OwnKeyFailedError: x'),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'manual', now() - interval '3 days', now() - interval '3 days', 'own_key_required', 0, 0, NULL, '{}', '[]', NULL, 'OwnKeyRequiredError: x'),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', now() - interval '2 days', now() - interval '2 days', 'step_limit', 12, 380000, 'm', '{}', '[]', NULL, NULL),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'manual', now() - interval '1 day', now() - interval '1 day', 'failed', 0, 0, NULL, '{}', '[]', NULL, 'LLMRequestError: x'),
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a2', 'manual', now(), NULL, NULL, 0, 0, NULL, '{}', '[]', NULL, NULL);
@@ -304,6 +308,7 @@ INSERT INTO assistant_messages (conversation_id, user_id, role, content, outcome
   ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'x', 'budget_reached', NULL, '[]', '[]', '[]', NULL, 0),
   ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'x', 'cap_reached', NULL, '[]', '[]', '[]', NULL, 0),
   ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'x', 'own_key_failed', NULL, '[]', '[]', '[]', NULL, 0),
+  ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'x', 'own_key_required', NULL, '[]', '[]', '[]', NULL, 0),
   ('80000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', 'assistant', 'x', 'no_model', NULL, '[]', '[]', '[]', NULL, 0);
 UPDATE installation_settings SET assistant_daily_budget_micro_usd = 750000;
 -- The universe taxonomy (0056): an equity industry, a sector ETF category and

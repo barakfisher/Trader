@@ -28,6 +28,8 @@ import {
   type MonthlySpendResponse,
   type ObservationSeverity,
   type OwnLlmKeyResponse,
+  SAFETY_LIMIT_CEILING_MICRO_USD,
+  type SafetyLimitInput,
   type UiLanguage,
   type UserSettings,
 } from '@traders/shared';
@@ -36,6 +38,7 @@ import {
   getMonthlySpend,
   getOrCreateUserSettings,
   replaceUserSettings,
+  setSafetyLimit,
   type UserSettingsRow,
 } from '../../db/queries.js';
 import { AiServiceError, type OwnLlmKeyState } from '@traders/shared/ai';
@@ -108,6 +111,11 @@ function toWire(row: UserSettingsRow): UserSettings {
 
 const saveKeySchema = z.object({ apiKey: z.string().min(1).max(1000) }).strict();
 
+/** Migration 0068's CHECK, restated so a wrong value is a named 400, not a 500. */
+const safetyLimitSchema = z
+  .object({ limitMicroUsd: z.number().int().min(1).max(SAFETY_LIMIT_CEILING_MICRO_USD).nullable() })
+  .strict() satisfies z.ZodType<SafetyLimitInput>;
+
 /** The AI service's refusals of a save, said to the browser under the same codes. */
 const OWN_KEY_REFUSALS: Record<string, { status: 422 | 502 | 503; message: string }> = {
   key_malformed: { status: 422, message: 'that is not an API key' },
@@ -158,24 +166,41 @@ export function registerSettingsRoutes(app: Hono<AppEnv>): void {
     return context.json({ settings: toWire(row) });
   });
 
-  // The monthly cap's card (D157): read-only, and null for a user without a cap.
+  // Own-key spend and the safety limit (D209, D250): null for the admin, who
+  // runs on the installation's key and sees no card.
   app.get('/settings/llm-spend', async (context) => {
     const row = await getMonthlySpend(currentUserId(context));
     const body: MonthlySpendResponse = {
       spend: row && {
-        capMicroUsd: Number(row.cap_micro_usd),
-        spentMicroUsd: Number(row.spent_micro_usd),
         ownKeySpentMicroUsd: Number(row.own_key_spent_micro_usd),
+        safetyLimitMicroUsd: row.safety_limit_micro_usd === null ? null : Number(row.safety_limit_micro_usd),
         resetsOn: row.resets_on,
       },
     };
     return context.json(body);
   });
 
+  // The user's own monthly brake on what this app spends on their key (D250).
+  // Not the admin's: the admin runs on the installation's key and its daily guard.
+  app.put('/settings/llm-safety-limit', async (context) => {
+    const userId = ownKeyUser(context);
+    const parsed = safetyLimitSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) {
+      throw badRequest(
+        'invalid_body',
+        `expected { limitMicroUsd: 1-${SAFETY_LIMIT_CEILING_MICRO_USD} or null }`,
+        parsed.error.issues,
+      );
+    }
+    const limit = await setSafetyLimit(userId, parsed.data.limitMicroUsd);
+    const body: SafetyLimitInput = { limitMicroUsd: limit };
+    return context.json(body);
+  });
+
   // A user's own OpenRouter key (D206). Relayed to the AI service, which alone
   // holds the encryption key; the key arrives once, in the PUT's body, and no
   // answer carries more than its last four characters. The admin runs on the
-  // installation's key and has no cap to escape, so the routes refuse them.
+  // installation's key (D245), so the routes refuse them.
   app.get('/settings/llm-key', async (context) => {
     const userId = ownKeyUser(context);
     return context.json(toOwnKeyResponse(await relayOwnKey(() => context.get('ai').ownLlmKey(userId, context.get('requestId')))));

@@ -12,9 +12,9 @@ measured, decided and two PRs in.**
     asked one at a time**;
   - #294, PR 1: the production baseline (D256);
   - #295, PR 2: the write-route isolation test (D266).
-- **Decisions reached 268** (next: **269**; D268 is PR 3's, Redis down).
-- **Migrations: none in M10 yet.** `0067_telegram_conversation` is head; next free is `0068`,
-  planned for D260's `auth_tokens` but numbered when its PR is written.
+- **Decisions reached 270** (next: **271**; D268 is PR 3's, Redis down; D269-D270 are PR 4's).
+- **Migrations:** `0068_own_key_only` (M10 PR 4: `user_settings.llm_safety_limit_micro_usd`,
+  `own_key_required` outcomes, the re-check index) is head once PR 4 merges; next free is `0069`.
 - **Deployed:**
   - compose's orchestrator image was built 2026-10-21 15:10 UTC and has none of M10;
   - kind runs `c7e23ee` (#292), read 2026-10-22;
@@ -4117,6 +4117,41 @@ failure they prevent.
         bounds LLM money, but embeddings and market data have no other bound);
       - fail closed (a Redis outage would also stop sign-in, signup, Ask, scans, holdings and
         topics for everyone).
+269. **The monthly cap is retired from every screen and from enforcement; its column stays,
+    unread** (the user, 2026-10-22; M10 PR 4, answers D245's "dormant or removed").
+    - **What changed:** no non-admin call is installation-paid any more (D245), so the cap bounds
+      nothing. Approval (Admin page and the Telegram buttons) carries no amount, the Admin page
+      has no cap field and no default-cap setting, `PUT /admin/users/:id/cap` is gone, and
+      Settings shows own-key spend and the safety limit instead. `MonthlyCapProvider` now wraps
+      the user's own-key adapter, and its ledger reads the safety limit (D250), not the cap.
+    - **What stays:** `users.llm_cap_micro_usd`, its `users_active_user_has_cap` CHECK and
+      `installation_settings.default_llm_cap_micro_usd`. Approval writes the default into the
+      column only to satisfy the CHECK. The Telegram approve token still carries the figure, so
+      buttons sent before this PR decode, and an old *Custom budget* tap shows Approve/Reject.
+    - **`cap_reached` now means "your safety limit".** The outcome name is kept (scans, replies,
+      re-checks); its copy says the safety limit. Compose held no `cap_reached` rows when
+      measured (2026-10-22), so no old row is relabelled in practice.
+    - *Rejected:* dropping the column, CHECK and default in a migration now (an irreversible
+      schema change bundled into a PR about payment; a later migration can do it); keeping the
+      cap fields on screen (the admin would set a dollar figure that limits nothing).
+270. **A user nobody may pay for is told up front, where the work would start** (the user,
+    2026-10-22; M10 PR 4, D245's screens).
+    - **How:** one notice (`OwnKeyNotice`, from `useModelAccess`) on Ask, the Agents page, an
+      agent's Scans tab and a re-check, for no key, a refused key, an installation that cannot
+      use keys, or a spent safety limit, with a link to Settings. Ask's send, *Run a scan now*
+      and *Re-check* are disabled while it shows. The admin never sees it (`/settings/llm-spend`
+      is null for them).
+    - **The server is the gate, the notice is not:** the AI service refuses before any work
+      (`payer_refusal`: 409 `own_key_required` / `own_key_failed` / `safety_limit_reached` for
+      scans and re-checks, a `skipped` reason for the instructions check), and the provider
+      chain refuses every call again (`OwnKeyRequiredError`), so narration and Telegram are
+      covered. An Ask turn is a 200 with outcome `own_key_required` and is kept, like `no_model`.
+      A scheduled scan meets the 409 and its run is `skipped` (D245), silently.
+    - **Narration** for such a user falls back to its template with reason `own_key_required`,
+      shown as the narration state `own_key`.
+    - *Rejected:* refusing only on click (the user learns after the fact, and scheduled scans skip
+      unseen); a Telegram message when a scheduled scan first skips (a new notification kind and
+      dedupe key; PR 5's top-bar chip makes the state visible on every screen instead).
 
 ---
 
@@ -5422,9 +5457,8 @@ grant tests fail for the wrong reason.
 - Limits are named constants, and tests assert the constants.
 - 429 says when to retry. The web needs a translated message for it in en and he (guideline 1).
 
-**Then:** PR 4, own key only plus the safety limit (D245, D246, D250). It changes who pays, and
-the Settings wording that promises the installation's fallback (`settings.ownKey.intro`,
-`limitHint`, the failure lines).
+**Then:** PR 4, own key only plus the safety limit (D245, D246, D250) - built as its own PR
+(D269-D270, migration `0068_own_key_only`); after it, PR 5 is the spend indicator (D247-D249).
 
 **Things a later PR must not rediscover:**
 - **D264's erase needs a privileged step.** The app's role cannot delete `agent_scans`, `fills`,

@@ -9,6 +9,7 @@ import { InstructionsField } from '../components/InstructionsField.tsx';
 import { MandateFields } from '../components/MandateFields.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Drawer } from '../components/Drawer.tsx';
+import { OwnKeyNotice } from '../components/OwnKeyNotice.tsx';
 import { Button, ErrorNote, Spinner } from '../components/ui.tsx';
 import { errorMessage } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
@@ -40,6 +41,7 @@ import {
   type PersonaTemplate,
 } from '../lib/personaTemplates.ts';
 import { useAgentLimitQuery, useAgentsQuery, useCheckInstructions, useCreateAgent } from '../queries/agents.ts';
+import { useModelAccess } from '../queries/modelAccess.ts';
 import { useConsolidatedQuery } from '../queries/portfolio.ts';
 import { useTaxonomyQuery } from '../queries/taxonomy.ts';
 
@@ -68,6 +70,8 @@ export function AgentsPage() {
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   // Here, not in the form: the drawer closes on create, and the check outlives it (D178).
   const check = useCheckInstructions();
+  // D245, D270: scans run on the user's own key only; say so before anyone presses Scan.
+  const access = useModelAccess();
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
@@ -88,6 +92,7 @@ export function AgentsPage() {
           </Button>
         </div>
       </header>
+      <OwnKeyNotice access={access} />
 
       <p className="max-w-3xl text-sm text-text-muted">{t('agents.intro')}</p>
       {ceiling ? (

@@ -6,7 +6,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { LLM_CAP_CEILING_MICRO_USD, passwordProblem } from '@traders/shared';
+import { passwordProblem } from '@traders/shared';
 import { ACTIVE_SESSION, sessionCookie } from './session.js';
 
 const ADMIN = {
@@ -38,7 +38,6 @@ vi.mock('../src/db/queries.js', () => ({
       role: 'admin',
       status: 'active',
       timezone: 'Asia/Jerusalem',
-      llm_cap_micro_usd: null,
       spent_this_month_micro_usd: '0',
       own_key_status: null,
       last_sign_in_at: new Date('2026-10-21T05:00:00Z'),
@@ -50,7 +49,6 @@ vi.mock('../src/db/queries.js', () => ({
       role: 'user',
       status: 'disabled',
       timezone: 'Europe/London',
-      llm_cap_micro_usd: '5000000',
       spent_this_month_micro_usd: '1250',
       own_key_status: 'valid',
       last_sign_in_at: null,
@@ -58,7 +56,6 @@ vi.mock('../src/db/queries.js', () => ({
     },
   ]),
   setUserStatus: vi.fn(async (id: string) => ({ id })),
-  setUserCap: vi.fn(async (id: string) => ({ id })),
   setOneTimePassword: vi.fn(async (id: string) => ({ id })),
 }));
 
@@ -110,13 +107,13 @@ describe("the admin's user list (D162, D239)", () => {
       role: 'user',
       status: 'disabled',
       timezone: 'Europe/London',
-      llmCapMicroUsd: 5_000_000,
       spentThisMonthMicroUsd: 1250,
       ownKey: 'valid',
       lastSignInAt: null,
       approvedAt: '2026-10-20T12:00:00.000Z',
     });
-    expect(users[0]).toMatchObject({ role: 'admin', llmCapMicroUsd: null, ownKey: 'none' });
+    expect(users[0]).toMatchObject({ role: 'admin', ownKey: 'none' });
+    expect(users[0]).not.toHaveProperty('llmCapMicroUsd');
   });
 
   it('is the admin\'s only', async () => {
@@ -143,13 +140,8 @@ describe("the admin's user list (D162, D239)", () => {
     expect(await response.json()).toMatchObject({ error: 'not_disableable' });
   });
 
-  it('sets a cap within the approval\'s bounds', async () => {
-    expect((await request('PUT', `/admin/users/${DANA}/cap`, { llmCapMicroUsd: 20_000_000 })).status).toBe(200);
-    expect(queries.setUserCap).toHaveBeenCalledWith(DANA, 20_000_000);
-    for (const body of [{ llmCapMicroUsd: -1 }, { llmCapMicroUsd: LLM_CAP_CEILING_MICRO_USD + 1 }, { llmCapMicroUsd: 1.5 }, {}]) {
-      expect((await request('PUT', `/admin/users/${DANA}/cap`, body)).status, JSON.stringify(body)).toBe(400);
-    }
-    expect((await request('PUT', '/admin/users/not-a-uuid/cap', { llmCapMicroUsd: 1 })).status).toBe(400);
+  it('has no cap to set: the route is gone with the cap (D269)', async () => {
+    expect((await request('PUT', `/admin/users/${DANA}/cap`, { llmCapMicroUsd: 20_000_000 })).status).toBe(404);
   });
 
   it('makes a one-time password that passes the length rule, stores only its hash, and never audits it', async () => {

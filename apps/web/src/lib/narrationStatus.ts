@@ -36,6 +36,7 @@ const TONES: Record<NarrationState, NarrationCopy['tone']> = {
   exhausted: 'warn',
   unavailable: 'warn',
   unknown: 'neutral',
+  own_key: 'warn',
 };
 
 export function describeNarration(state: NarrationState): NarrationCopy {

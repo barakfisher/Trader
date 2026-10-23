@@ -2,10 +2,12 @@
  * The admin's sign-up request message in Telegram, and its buttons (D156,
  * D184, D187, D188).
  *
- * A new request is announced to every active admin's bound chat with *Approve
- * at the default cap*, *Custom budget* and *Reject*. *Custom budget* swaps the
- * buttons for preset amounts and a link to the Admin page for any other - the
- * amount rides in the signed button, so the bot keeps no conversation state.
+ * A new request is announced to every active admin's bound chat with *Approve*
+ * and *Reject*. There is no amount to choose: a user runs on their own key only
+ * (D245), and the retired monthly cap (D269) is written with the installation's
+ * default only to keep its column's CHECK satisfied. The signed button still
+ * carries that figure, so a button sent before D269 decodes as before; its
+ * *Custom budget* button now shows the two buttons again.
  *
  * The page and the chat apply the same conditional transitions
  * (`queries/signups.ts`). A message decided on the page keeps its buttons until
@@ -30,53 +32,26 @@ import type { Notifier } from '../notify/notifier.js';
 import { TelegramNotifier, type InlineKeyboard } from './client.js';
 import { encodeSignupData, type SignupPayload } from './signupToken.js';
 
-/** What *Custom budget* offers (D184): $5, $20, $50 a month. */
-export const PRESET_CAPS_MICRO_USD = [5_000_000, 20_000_000, 50_000_000] as const;
-
-/** A cap in dollars, in the admin's locale: whole dollars bare, anything else to the cent. */
-export function formatCap(microUsd: number, messages: Messages): string {
-  const whole = microUsd % 1_000_000 === 0;
-  return new Intl.NumberFormat(messages.numberLocale, {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: whole ? 0 : 2,
-    maximumFractionDigits: 2,
-  }).format(microUsd / 1_000_000);
-}
-
-type SignupButtons = 'decide' | 'amounts' | 'none';
+type SignupButtons = 'decide' | 'none';
 
 function keyboard(
   which: SignupButtons,
   userId: string,
-  defaultCapMicroUsd: number,
+  retiredCapMicroUsd: number,
   messages: Messages,
   secret: string,
-  linkBase: string | null,
 ): InlineKeyboard {
   const button = (payload: SignupPayload, text: string) => ({
     text,
     callback_data: encodeSignupData(payload, secret),
   });
-  const reject = button({ userId, action: 'reject' }, messages.signup.buttons.reject);
   switch (which) {
     case 'decide':
       return [
         [
-          button(
-            { userId, action: 'approve', capMicroUsd: defaultCapMicroUsd },
-            messages.signup.buttons.approveDefault(formatCap(defaultCapMicroUsd, messages)),
-          ),
+          button({ userId, action: 'approve', capMicroUsd: retiredCapMicroUsd }, messages.signup.buttons.approve),
+          button({ userId, action: 'reject' }, messages.signup.buttons.reject),
         ],
-        [button({ userId, action: 'custom' }, messages.signup.buttons.custom), reject],
-      ];
-    case 'amounts':
-      return [
-        PRESET_CAPS_MICRO_USD.map((cap) =>
-          button({ userId, action: 'approve', capMicroUsd: cap }, messages.signup.buttons.amount(formatCap(cap, messages))),
-        ),
-        ...(linkBase === null ? [] : [[{ text: messages.signup.buttons.otherAmount, url: `${linkBase}/admin` }]]),
-        [reject],
       ];
     case 'none':
       return [];
@@ -112,7 +87,7 @@ export async function announceSignupRequest(deps: AnnounceDeps, userId: string):
       const sent = await telegram.sendWithButtons(
         chat.chat_id,
         messages.signup.request(request.email ?? '', request.timezone),
-        keyboard('decide', userId, settings.default_llm_cap_micro_usd, messages, deps.signingSecret, telegram.linkBase),
+        keyboard('decide', userId, settings.default_llm_cap_micro_usd, messages, deps.signingSecret),
       );
       if (!sent.delivered) logger().warn({ userId, err: sent.error }, 'signup.announce_failed');
     }
@@ -163,24 +138,19 @@ export async function handleSignupCallback(callback: SignupCallback): Promise<vo
   };
 
   if (payload.action === 'custom') {
+    // A *Custom budget* button from before D269: there is no amount to choose now.
     const request = await getSignupRequest(payload.userId);
     if (request?.status !== 'pending') {
       await healed({ status: request?.status ?? 'gone' });
       return;
     }
-    const linkBase = telegram?.linkBase ?? null;
-    await telegram?.answerCallback(
-      callback.callbackId,
-      linkBase === null
-        ? `${messages.signup.chooseAmountToast} ${messages.signup.otherAmountInApp}`
-        : messages.signup.chooseAmountToast,
-    );
+    await telegram?.answerCallback(callback.callbackId, messages.signup.already.pending);
     if (telegram !== null && message !== undefined) {
-      const { default_llm_cap_micro_usd: defaultCap } = await getInstallationSettings();
+      const { default_llm_cap_micro_usd: retiredCap } = await getInstallationSettings();
       await telegram.setButtons(
         chatId,
         message.message_id,
-        keyboard('amounts', payload.userId, defaultCap, messages, callback.signingSecret, linkBase),
+        keyboard('decide', payload.userId, retiredCap, messages, callback.signingSecret),
       );
     }
     return;
@@ -212,7 +182,7 @@ export async function handleSignupCallback(callback: SignupCallback): Promise<vo
   const at = stamp(admin?.timezone ?? 'UTC', messages);
   const line =
     payload.action === 'approve'
-      ? messages.signup.approvedLine(formatCap(payload.capMicroUsd, messages), at)
+      ? messages.signup.approvedLine(at)
       : messages.signup.rejectedLine(at);
   const edited = await telegram.editWithButtons(
     chatId,

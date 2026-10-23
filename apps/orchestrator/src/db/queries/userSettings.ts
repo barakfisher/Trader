@@ -107,6 +107,27 @@ export async function replaceUserSettings(
 }
 
 /**
+ * A user's monthly safety limit on own-key spend (D250), micro-USD, or null for
+ * none. Its own statement rather than a field of `replaceUserSettings`: a whole-
+ * object replace from the notifications form would otherwise have to carry it,
+ * and a form that did not would clear the user's brake. Migration 0068's CHECK
+ * is the authority on its bounds.
+ */
+export async function setSafetyLimit(userId: string, limitMicroUsd: number | null): Promise<number | null> {
+  const row = await queryOne<{ limit: string | null }>(
+    `INSERT INTO user_settings (user_id, llm_safety_limit_micro_usd, updated_at)
+     VALUES ($1, $2, now())
+     ON CONFLICT (user_id) DO UPDATE
+        SET llm_safety_limit_micro_usd = EXCLUDED.llm_safety_limit_micro_usd,
+            updated_at = now()
+     RETURNING llm_safety_limit_micro_usd::text AS "limit"`,
+    [userId, limitMicroUsd],
+  );
+  if (row === null) throw new Error(`user_settings could not be written for ${userId}`);
+  return row.limit === null ? null : Number(row.limit);
+}
+
+/**
  * The send time of the last digest the user opened or dismissed (migration
  * 0046), or null if none. Read without materialising a settings row: no row
  * means nothing was seen, which is what null says.

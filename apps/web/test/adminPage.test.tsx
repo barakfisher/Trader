@@ -158,7 +158,6 @@ const LLM_PANEL = {
 const SETTINGS = {
   maxAgentsPerUser: 3,
   assistantDailyBudgetMicroUsd: 500_000,
-  defaultLlmCapMicroUsd: 10_000_000,
   maxPendingSignups: 5,
   updatedAt: '2026-10-08T09:00:00Z',
 };
@@ -170,18 +169,17 @@ const SIGNUPS = {
   rejected: [
     { userId: 'u-omer', email: 'omer@example.com', timezone: 'Asia/Jerusalem', status: 'rejected', requestedAt: '2026-10-18T08:00:00Z' },
   ],
-  defaultLlmCapMicroUsd: 10_000_000,
 };
 
 const USERS = {
   users: [
     {
       userId: 'u-admin', email: 'admin@example.com', role: 'admin', status: 'active', timezone: 'Asia/Jerusalem',
-      llmCapMicroUsd: null, spentThisMonthMicroUsd: 0, ownKey: 'none', lastSignInAt: '2026-10-21T05:00:00Z', approvedAt: null,
+      spentThisMonthMicroUsd: 0, ownKey: 'none', lastSignInAt: '2026-10-21T05:00:00Z', approvedAt: null,
     },
     {
       userId: 'u-dana', email: 'dana@example.com', role: 'user', status: 'active', timezone: 'Europe/London',
-      llmCapMicroUsd: 5_000_000, spentThisMonthMicroUsd: 1_250_000, ownKey: 'valid', lastSignInAt: null, approvedAt: '2026-10-20T12:00:00Z',
+      spentThisMonthMicroUsd: 1_250_000, ownKey: 'valid', lastSignInAt: null, approvedAt: '2026-10-20T12:00:00Z',
     },
   ],
 };
@@ -302,23 +300,16 @@ describe('the admin page', () => {
     expect(await screen.findByRole('link', { name: /Admin\s*1/ })).toBeTruthy();
   });
 
-  it('approves a request at the cap typed, in integer micro-USD, and rejects another (D188)', async () => {
+  it('approves a request with no amount, and rejects another (D188, D269)', async () => {
     post.mockResolvedValue({ applied: true, status: 'active' });
     renderAt('/admin', ADMIN);
-    const cap = (await screen.findByLabelText('Monthly AI cap ($)')) as HTMLInputElement;
-    expect(cap.value).toBe('10.00');
-    const row = within(cap.closest('li')!);
-    expect(row.getByText('noa@example.com')).toBeTruthy();
-    const approve = row.getByRole('button', { name: 'Approve' }) as HTMLButtonElement;
-    for (const refused of ['1.255', 'abc', '1000.01']) {
-      fireEvent.change(cap, { target: { value: refused } });
-      expect(approve.disabled, refused).toBe(true);
-    }
-    fireEvent.change(cap, { target: { value: '25' } });
+    const row = within((await screen.findByText('noa@example.com')).closest('li')!);
+    // Users run on their own key only (D245): there is no cap to type.
+    expect(row.queryByRole('textbox')).toBeNull();
     await act(async () => {
-      fireEvent.click(approve);
+      fireEvent.click(row.getByRole('button', { name: 'Approve' }));
     });
-    expect(post).toHaveBeenCalledWith('/admin/signups/u-noa/approve', { llmCapMicroUsd: 25_000_000 });
+    expect(post).toHaveBeenCalledWith('/admin/signups/u-noa/approve', {});
     await act(async () => {
       fireEvent.click(row.getByRole('button', { name: 'Reject' }));
     });
@@ -335,21 +326,20 @@ describe('the admin page', () => {
     expect(post).toHaveBeenCalledWith('/admin/signups/u-omer/restore', undefined);
   });
 
-  it('sets the default cap and how many requests may wait, 0 closing sign-up', async () => {
-    put.mockResolvedValue({ ...SETTINGS, defaultLlmCapMicroUsd: 7_500_000, maxPendingSignups: 0 });
+  it('sets how many requests may wait, 0 closing sign-up, and offers no cap', async () => {
+    put.mockResolvedValue({ ...SETTINGS, maxPendingSignups: 0 });
     renderAt('/admin', ADMIN);
-    const cap = (await screen.findByLabelText('Default monthly AI cap ($)')) as HTMLInputElement;
-    const max = screen.getByLabelText('Requests that may wait at once') as HTMLInputElement;
-    expect([cap.value, max.value]).toEqual(['10.00', '5']);
-    const save = within(cap.closest('form')!).getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    const max = (await screen.findByLabelText('Requests that may wait at once')) as HTMLInputElement;
+    expect(max.value).toBe('5');
+    expect(screen.queryByLabelText(/cap/i)).toBeNull();
+    const save = within(max.closest('form')!).getByRole('button', { name: 'Save' }) as HTMLButtonElement;
     fireEvent.change(max, { target: { value: '51' } });
     expect(save.disabled).toBe(true);
-    fireEvent.change(cap, { target: { value: '7.50' } });
     fireEvent.change(max, { target: { value: '0' } });
     await act(async () => {
       fireEvent.click(save);
     });
-    expect(put).toHaveBeenCalledWith('/admin/settings', { defaultLlmCapMicroUsd: 7_500_000, maxPendingSignups: 0 });
+    expect(put).toHaveBeenCalledWith('/admin/settings', { maxPendingSignups: 0 });
   });
 
   it('is not linked for anyone else', async () => {
@@ -569,7 +559,8 @@ describe('the admin page', () => {
     post.mockResolvedValue({ userId: 'u-dana', password: 'Abc123-xyz_PQRstuvW' });
     renderAt('/admin', ADMIN);
     expect(await screen.findByText('dana@example.com')).toBeTruthy();
-    expect(screen.getByText(/\$1\.25 of \$5\.00 this month/)).toBeTruthy();
+    expect(screen.getByText(/\$1\.25 this month on their own key/)).toBeTruthy();
+    expect(screen.getByText(/this month on the installation's key/)).toBeTruthy();
     expect(screen.getByText(/own key working/)).toBeTruthy();
     // One row of actions: Dana's. The admin's row has none.
     expect(screen.getAllByRole('button', { name: 'Disable' })).toHaveLength(1);
@@ -584,16 +575,10 @@ describe('the admin page', () => {
     expect(post).toHaveBeenCalledWith('/admin/users/u-dana/disable');
   });
 
-  it("changes a user's cap", async () => {
-    put.mockResolvedValue({ userId: 'u-dana' });
+  it('offers no cap to change: it is retired (D269)', async () => {
     renderAt('/admin', ADMIN);
-    const field = (await screen.findByLabelText('Monthly cap (USD)')) as HTMLInputElement;
-    expect(field.value).toBe('5.00');
-    fireEvent.change(field, { target: { value: '20' } });
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Save cap' }));
-    });
-    expect(put).toHaveBeenCalledWith('/admin/users/u-dana/cap', { llmCapMicroUsd: 20_000_000 });
+    expect(await screen.findByText('dana@example.com')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /cap/i })).toBeNull();
   });
 
   it('asks the server for nothing when the account is not an admin', async () => {

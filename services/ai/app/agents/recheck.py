@@ -8,7 +8,7 @@ the quantity set again at the fresh price (D216) - or says why not.
 **It is a scan, narrowed** (D212): the same instructions, mandate and checks
 (`scan.run_briefed`, `trade_review.py`), the same evidence validator, the same
 budgets and caller - a scan's `Caller("agent_scan", user_id, agent_id)`, so the
-monthly cap and the user's own key apply as to any scan. What differs:
+own-key rule and the safety limit apply as to any scan (D245, D250). What differs:
 
 - the briefing is about this one trade: the fresh quote, its findings, the
   agent's cash and holdings, and what was proposed and when it expired;
@@ -53,8 +53,14 @@ from app.llm.base import LLMProvider
 RECHECK_WINDOW = timedelta(days=7)
 #: Tool calls a re-check may make: the briefing already has the quote and findings.
 RECHECK_STEP_LIMIT = 4
-#: Matches `0066_proposal_refresh.UNANSWERED_OUTCOMES`: these do not use the refresh up.
-UNANSWERED_OUTCOMES = ("failed", "budget_reached", "cap_reached", "own_key_failed")
+#: Matches `0068_own_key_only.UNANSWERED_OUTCOMES`: these do not use the refresh up.
+UNANSWERED_OUTCOMES = (
+    "failed",
+    "budget_reached",
+    "cap_reached",
+    "own_key_failed",
+    "own_key_required",
+)
 
 
 class NotRecheckableError(Exception):

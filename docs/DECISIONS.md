@@ -279,3 +279,5 @@ while this file is out of date.
 | 266 | The isolation test walks writes as well as reads, seeds every user-owned kind, and tries Telegram; no row-level security in M10 |
 | 267 | M10's PRs come in sixteen steps: what is usable now first, then the path to public, and deployment last, on the user's word |
 | 268 | While Redis cannot be reached, the rate limits count in each process's memory |
+| 269 | The monthly cap is retired from every screen and from enforcement; its column stays, unread |
+| 270 | A user nobody may pay for is told up front, where the work would start |

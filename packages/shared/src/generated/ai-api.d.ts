@@ -590,7 +590,7 @@ export interface components {
              * Outcome
              * @enum {string}
              */
-            outcome: "trade" | "no_trade" | "invalid_answer" | "budget_reached" | "step_limit" | "failed" | "rule_rejected" | "cap_reached" | "own_key_failed";
+            outcome: "trade" | "no_trade" | "invalid_answer" | "budget_reached" | "step_limit" | "failed" | "rule_rejected" | "cap_reached" | "own_key_failed" | "own_key_required";
             /**
              * Scan Id
              * Format: uuid
@@ -683,7 +683,7 @@ export interface components {
              * Outcome
              * @enum {string}
              */
-            outcome: "answer" | "decline" | "clarify" | "failed" | "budget_reached" | "cap_reached" | "no_model" | "own_key_failed";
+            outcome: "answer" | "decline" | "clarify" | "failed" | "budget_reached" | "cap_reached" | "no_model" | "own_key_failed" | "own_key_required";
             /**
              * Reason
              * @description Why it declined; null unless outcome is 'decline'.
@@ -1237,7 +1237,7 @@ export interface components {
             /** Conflicts */
             conflicts?: components["schemas"]["MandateConflict"][];
             /** Reason */
-            reason?: ("no_instructions" | "no_settings" | "budget_spent" | "no_model" | "failed") | null;
+            reason?: ("no_instructions" | "no_settings" | "budget_spent" | "no_model" | "failed" | "own_key_required" | "own_key_failed" | "safety_limit_reached") | null;
             /**
              * Status
              * @enum {string}

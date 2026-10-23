@@ -49,19 +49,24 @@ export function NarrationBadge() {
         <p className="text-xs text-text-primary">{copy.summary}</p>
         {copy.consequence && <p className="mt-1.5 text-xs text-text-muted">{copy.consequence}</p>}
 
-        <div className="mt-3 space-y-2 border-t border-border-subtle pt-2">
-          {options.map((option) => (
-            <div key={option.title}>
-              <p className="text-xs font-medium text-text-primary">{option.title}</p>
-              <p className="text-xs text-text-muted">{option.detail}</p>
-            </div>
-          ))}
-        </div>
+        {/* The way out of `own_key` is the user's own key (D245), said in the summary;
+            funding the installation's model is not theirs to do. */}
+        {health.state !== 'own_key' && (
+          <div className="mt-3 space-y-2 border-t border-border-subtle pt-2">
+            {options.map((option) => (
+              <div key={option.title}>
+                <p className="text-xs font-medium text-text-primary">{option.title}</p>
+                <p className="text-xs text-text-muted">{option.detail}</p>
+              </div>
+            ))}
+          </div>
+        )}
 
         {health.model && (
           <p className="mt-2 border-t border-border-subtle pt-2 text-[11px] text-text-muted">
             {health.model}
-            {health.lastFallbackReason && t('narration.fallback', { reason: health.lastFallbackReason })}
+            {health.lastFallbackReason &&
+              t('narration.fallback', { reason: health.lastFallbackReason })}
             {health.sampleSize > 0 && t('narration.sample', { count: health.sampleSize })}
           </p>
         )}

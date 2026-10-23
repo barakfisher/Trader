@@ -14,9 +14,10 @@ const SAVE_REFUSALS = ['key_rejected', 'key_malformed', 'key_check_unreachable',
 /**
  * Save, replace or remove the user's own OpenRouter key (D206). The key is typed
  * here, sent once, and never comes back: the server answers with its last four
- * characters, and this field is emptied whatever the answer. A key OpenRouter
- * has refused since (D207) is said in full - what happened, and what the user's
- * calls do until they act.
+ * characters, and this field is emptied whatever the answer. Every model call of
+ * the user's runs on it, and nothing replaces it (D245): with none saved, or one
+ * OpenRouter has refused since (D207), scans and questions stop until they act,
+ * and the card says so.
  */
 export function OwnLlmKeyForm({ available, saved }: { available: boolean; saved: OwnLlmKey | null }) {
   const { t } = useTranslation();
@@ -78,6 +79,11 @@ export function OwnLlmKeyForm({ available, saved }: { available: boolean; saved:
           <bdi>
             {t('settings.ownKey.saved', { lastFour: saved.lastFour, date: formatExactTime(saved.savedAt) })}
           </bdi>
+        </p>
+      )}
+      {available && saved === null && !removed && (
+        <p role="status" className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">
+          {t('settings.ownKey.none')}
         </p>
       )}
       {!available && <p className="text-sm text-text-muted">{t('settings.ownKey.unavailable')}</p>}

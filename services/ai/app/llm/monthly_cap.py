@@ -1,28 +1,33 @@
-"""Each non-admin user's monthly LLM spend cap, enforced before every call (D157, D158).
+"""A user's monthly limit on model spend, enforced before every call: their safety limit (D250).
 
-`users.llm_cap_micro_usd` is written when the admin approves a signup; the
-admin's is NULL and is never capped. **The month is the user's calendar month,
-in `users.timezone`**, and spent is `sum(llm_calls.cost_micro_usd)` for the
-user since it began, over the calls the installation paid for (`paid_by`: a
-call on the user's own key is theirs, D209) - `llm_calls` is already the
+Written for the admin-set monthly cap (D157, D158), which bounded what the
+installation paid for each user. Since D245 no user but the admin runs on the
+installation's key, so that cap has nothing to bound and is retired (D269): its
+column stays, unread. **The limit this module enforces now is the user's own
+optional safety limit on their key** (`user_settings.llm_safety_limit_micro_usd`),
+a brake against a runaway loop that binds even a key with no OpenRouter limit.
+
+**The month is the user's calendar month, in `users.timezone`**, and spent is
+`sum(llm_calls.cost_micro_usd)` for the user since it began, over the calls made
+on their own key (`paid_by = 'own_key'`, D209) - `llm_calls` is already the
 ledger of every call, refused ones included, so there is no second counter to
 drift from it. That holds only while the log keeps a whole month, which is why
 `LLM_CALL_RETENTION_DAYS` may not be set below `MIN_RETENTION_DAYS` (D204).
 
 **Checked before each call, tool loops included.** A call's cost is known after
 it returns, so the honest form of strict is to refuse when spent plus the most
-the call can cost would pass the cap: its prompt's characters at the input
+the call can cost would pass the limit: its prompt's characters at the input
 price and every token it may write at the output price
 (`pricing.ceiling_cost_micro_usd`). Two calls of the same user checked at the
 same instant can both pass; the overshoot is bounded by one call.
 
 A refusal raises `MonthlyCapReachedError`, a kind of `LLMBudgetExceededError`:
 narration falls back to its template and the instructions check skips, as
-they do for the installation's daily ceiling, and an agent scan or an `/ask`
-turn ends as `cap_reached`, which the screens explain with the reset date.
+they do for a spent budget, and an agent scan or an `/ask` turn ends as
+`cap_reached`, which the screens explain as the safety limit with its reset date.
 
-The wrapper sits inside `RecordingProvider` (`factory.py`), so a refused call is
-recorded like one the daily guard refused - at no cost, as `budget_exhausted`.
+The wrapper sits around the user's own-key adapter (`factory.py`), inside the
+recorder, so a refused call is recorded - at no cost, as `budget_exhausted`.
 """
 
 from __future__ import annotations
@@ -72,7 +77,7 @@ def month_bounds(now: datetime, timezone: str) -> tuple[datetime, datetime]:
 
 @dataclass(frozen=True)
 class CapMonth:
-    """One capped user's month: the cap, what is spent, and when it starts again."""
+    """One limited user's month: the limit, what is spent, and when it starts again."""
 
     cap_micro_usd: int
     spent_micro_usd: int
@@ -81,12 +86,12 @@ class CapMonth:
 
 class CapLedger(Protocol):
     def month(self, user_id: str, now: datetime) -> CapMonth | None:
-        """The user's month, or None when the user has no cap (the admin). May raise."""
+        """The user's month, or None when the user has set no limit. May raise."""
         ...
 
 
-class DatabaseCapLedger:
-    """`users` for the cap and the zone, `llm_calls` for what is spent."""
+class DatabaseSafetyLimitLedger:
+    """`user_settings` for the limit, `users` for the zone, `llm_calls` for own-key spend."""
 
     def __init__(self, engine: Engine) -> None:
         self._engine = engine
@@ -95,8 +100,12 @@ class DatabaseCapLedger:
         with self._engine.connect() as connection:
             user = connection.execute(
                 text(
-                    "SELECT llm_cap_micro_usd AS cap, timezone FROM users"
-                    " WHERE id = CAST(:user AS uuid)"
+                    """
+                    SELECT s.llm_safety_limit_micro_usd AS cap, u.timezone
+                      FROM users u
+                      LEFT JOIN user_settings s ON s.user_id = u.id
+                     WHERE u.id = CAST(:user AS uuid)
+                    """
                 ),
                 {"user": user_id},
             ).one_or_none()
@@ -108,7 +117,7 @@ class DatabaseCapLedger:
                     """
                     SELECT coalesce(sum(cost_micro_usd), 0) FROM llm_calls
                      WHERE user_id = CAST(:user AS uuid) AND started_at >= :since
-                       AND paid_by = 'installation'
+                       AND paid_by = 'own_key'
                     """
                 ),
                 {"user": user_id, "since": start},
@@ -134,7 +143,7 @@ def prompt_chars(system: str | None, messages: Sequence[Message], tools: Sequenc
 
 
 class MonthlyCapProvider:
-    """Refuses a call that would take its user past their monthly cap."""
+    """Refuses a call that would take its user past their monthly limit."""
 
     def __init__(
         self,
@@ -221,11 +230,11 @@ class MonthlyCapProvider:
         chars: int,
         max_output_tokens: int | None,
     ) -> None:
-        """Raise `MonthlyCapReachedError` when this call could pass the user's cap.
+        """Raise `MonthlyCapReachedError` when this call could pass the user's limit.
 
-        A call for no user, a user without a cap, and a provider that does not
+        A call for no user, a user without a limit, and a provider that does not
         charge per token are never refused. A ledger that cannot be read fails
-        closed: the cap exists to bound a bill, and "unknown" read as "nothing
+        closed: the limit exists to bound a bill, and "unknown" read as "nothing
         spent" is the expensive direction to be wrong in.
         """
         if caller is None or caller.user_id is None or not self.charges_per_token:

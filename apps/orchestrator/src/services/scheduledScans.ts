@@ -24,6 +24,7 @@
  * "skipped" with the reason. *Run a scan now* is the route's, not this.
  */
 
+import { PAYER_REFUSALS } from '@traders/shared';
 import { AiServiceError, type AiClient } from '@traders/shared/ai';
 
 import {
@@ -198,8 +199,18 @@ function failureOf(error: unknown): { cause: FailureCause; retryable: boolean; d
   return { cause: /timeout|aborted/i.test(message) ? 'timeout' : 'provider_error', retryable: true, detail: message };
 }
 
-/** Refusals that are the slot's answer, not a failure: nothing to retry, nothing to report. */
-const FINAL_REFUSALS = new Set(['budget_spent', 'agent_not_active', 'no_persona', 'primary_agent']);
+/**
+ * Refusals that are the slot's answer, not a failure: nothing to retry, nothing to
+ * report. A user nobody may pay for - no working key of their own, or their safety
+ * limit spent - is skipped, not run and failed (D245, D250); the app says why.
+ */
+const FINAL_REFUSALS = new Set<string>([
+  'budget_spent',
+  'agent_not_active',
+  'no_persona',
+  'primary_agent',
+  ...PAYER_REFUSALS,
+]);
 
 export interface AttemptDeps {
   ai: AiClient;
@@ -243,7 +254,10 @@ export async function runSlotAttempt(job: SlotAttemptJob, deps: AttemptDeps): Pr
     // Everything else is the slot's answer - a refused answer, a spent budget or cap, and a
     // refused own key too (D69, D207): retrying the slot would not change any of them.
     const spent =
-      scan.outcome === 'budget_reached' || scan.outcome === 'cap_reached' || scan.outcome === 'own_key_failed';
+      scan.outcome === 'budget_reached' ||
+      scan.outcome === 'cap_reached' ||
+      scan.outcome === 'own_key_failed' ||
+      scan.outcome === 'own_key_required';
     await finishRun(runId, spent ? 'degraded' : 'ok', stats);
   } catch (error) {
     const code = (error instanceof AiServiceError

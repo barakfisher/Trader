@@ -26,10 +26,11 @@ from app.llm.base import LLMProvider
 from app.llm.budget import BudgetedProvider, DailySpendGuard
 from app.llm.call_log import CallLog, RecordingProvider
 from app.llm.model_choice import ChoosingProvider, ModelChoices
-from app.llm.monthly_cap import CapLedger, MonthlyCapProvider
+from app.llm.monthly_cap import MonthlyCapProvider
 from app.llm.null_provider import NullProvider
 from app.llm.openai_compatible import OpenAICompatibleProvider
-from app.llm.own_key import OwnKeyProvider, OwnKeyStore
+from app.llm.own_key import OwnKeyProvider
+from app.llm.payer import PayerGate
 
 log = get_logger("llm.factory")
 
@@ -48,8 +49,7 @@ def build_llm(
     transport: object | None = None,
     call_log: CallLog | None = None,
     choices: ModelChoices | None = None,
-    cap_ledger: CapLedger | None = None,
-    own_keys: OwnKeyStore | None = None,
+    payer: PayerGate | None = None,
 ) -> LLMProvider:
     """The configured provider, recorded call by call when given a `call_log`.
 
@@ -62,28 +62,29 @@ def build_llm(
     every call, outermost of all so the recorder sees the model chosen. Only
     for OpenRouter: the offered models are OpenRouter ids (`catalogue.py`).
 
-    Given a `cap_ledger`, each user's monthly cap (D157, D158) is checked
-    before every call, inside the recorder so a refused call is recorded too.
-
-    Given `own_keys`, a user with a valid OpenRouter key of their own is served
-    with it, outside the cap and the daily guard and inside the recorder (D206).
-    Only for OpenRouter: the saved keys are OpenRouter keys.
+    Given a `payer` gate, every metered call for a user who is not the admin
+    runs on that user's own OpenRouter key, under their monthly safety limit,
+    or is refused (D245, D250); the admin's calls and the installation's own
+    stay on the installation's key and its daily guard. Inside the recorder,
+    so a refused call is recorded too.
     """
     provider = _build_provider(settings, redis, transport=transport)
     model = configured_model(settings)
-    if cap_ledger is not None and model is not None:
-        provider = MonthlyCapProvider(
-            provider,
-            cap_ledger,
-            model=model,
-            prices=settings.llm_model_price_map,
-            unknown_price_usd_per_mtok=settings.llm_unknown_model_price_usd_per_mtok,
-            max_output_tokens=settings.llm_max_output_tokens,
-        )
-    if own_keys is not None and models_are_choosable(settings):
-        provider = OwnKeyProvider(
-            provider, own_keys, lambda api_key: own_key_adapter(settings, api_key, transport)
-        )
+    if payer is not None:
+        ledger = payer.ledger
+
+        def own(api_key: str) -> LLMProvider:
+            adapter = own_key_adapter(settings, api_key, transport)
+            return MonthlyCapProvider(
+                adapter,
+                ledger,
+                model=settings.llm_model,
+                prices=settings.llm_model_price_map,
+                unknown_price_usd_per_mtok=settings.llm_unknown_model_price_usd_per_mtok,
+                max_output_tokens=settings.llm_max_output_tokens,
+            )
+
+        provider = OwnKeyProvider(provider, payer, own)
     if call_log is not None:
         provider = RecordingProvider(provider, call_log, model=model)
     if choices is not None and models_are_choosable(settings):

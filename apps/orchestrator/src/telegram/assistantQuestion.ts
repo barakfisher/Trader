@@ -3,8 +3,8 @@
  *
  * **The Ask page's call, not a copy of it.** The question goes to the AI
  * service's `POST /assistant/messages` with the bound user, exactly as the Ask
- * page's does, so the daily allowance, the monthly cap and the user's own key
- * apply to it unchanged - and the conversation it lands in is an ordinary one,
+ * page's does, so the daily allowance, the safety limit and the own-key rule
+ * (D245, D250) apply to it unchanged - and the conversation it lands in is an ordinary one,
  * listed on the Ask page.
  *
  * **One rolling conversation per chat** (D222): the binding names it, and a

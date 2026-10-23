@@ -33,6 +33,7 @@ import {
   type ScanToolName,
   type TopicSentimentGap,
   type TranslatedLanguage,
+  type PayerRefusal,
   type UiLanguage,
 } from '@traders/shared';
 
@@ -63,6 +64,7 @@ export type RecheckRefusal =
   | 'scan_running'
   | 'agent_not_active'
   | 'no_persona'
+  | PayerRefusal
   | 'other';
 
 /** A refused trade approval's code, as `fills.ts` and `tradeApproval.ts` throw it. */
@@ -248,26 +250,20 @@ export interface Messages {
   };
 
   /**
-   * A sign-up request, said to the admin (D156, D184, D187). Figures - the cap,
-   * the time - arrive formatted in this language's locale; the email and zone
-   * are the requester's own text.
+   * A sign-up request, said to the admin (D156, D184, D187). The time arrives
+   * formatted in this language's locale; the email and zone are the requester's
+   * own text. No amount: a user runs on their own key only (D245, D269).
    */
   signup: {
     request: (email: string, timezone: string) => string;
     buttons: {
-      approveDefault: (cap: string) => string;
+      approve: string;
       reject: string;
-      custom: string;
-      amount: (cap: string) => string;
-      otherAmount: string;
     };
-    /** Under the preset amounts when there is no link to the Admin page to show. */
-    otherAmountInApp: string;
     approvedToast: string;
     rejectedToast: string;
-    chooseAmountToast: string;
     /** The outcome lines under the message; approval reminds the admin to tell them. */
-    approvedLine: (cap: string, at: string) => string;
+    approvedLine: (at: string) => string;
     rejectedLine: (at: string) => string;
     /** A tap on a request that had already moved on - decided on the page, say. */
     already: Record<'pending' | 'active' | 'rejected' | 'disabled' | 'gone', string>;
@@ -440,10 +436,13 @@ const en: Messages = {
     noReply: {
       failed: "No answer I could check against the data, so none is shown. Try asking again, or more narrowly.",
       budget_reached: "Today's spending limit for questions is reached. Questions work again after midnight.",
-      cap_reached: "This month's spending limit for your account is reached. Questions work again when the next month begins.",
+      cap_reached:
+        'Your monthly safety limit on AI spending is reached. Questions work again when the next month begins, or when you raise the limit in Settings.',
       no_model: 'The assistant needs a model, and none is set up. An admin can choose one on the Admin page.',
       own_key_failed:
-        "OpenRouter refused your own API key, so this question wasn't answered. Settings says why; until you save a working key, questions use this installation's account under your monthly limit.",
+        "OpenRouter refused your own API key, so this question wasn't answered. Settings says why; questions work again once you save a working key there.",
+      own_key_required:
+        'Questions are answered on your own OpenRouter API key, and none is saved. Add one in Settings to ask questions.',
     },
     tooLong: (limit) => `That question is too long. Ask it in at most ${limit} characters.`,
     stillAnswering: 'Still answering your last question. Send this one again when that answer arrives.',
@@ -478,8 +477,9 @@ const en: Messages = {
     causes: {
       failed: 'it failed.',
       budget_reached: "the agent's daily AI budget ran out.",
-      cap_reached: 'your monthly AI limit is reached.',
+      cap_reached: 'your monthly safety limit on AI spending is reached.',
       own_key_failed: 'your own OpenRouter key stopped working.',
+      own_key_required: 'no OpenRouter key of your own is saved.',
     },
     refusals: {
       not_expired: 'Only an expired proposal can be re-checked.',
@@ -490,25 +490,23 @@ const en: Messages = {
       scan_running: 'The agent is scanning right now - try again in a minute.',
       agent_not_active: 'The agent is paused or archived.',
       no_persona: 'The agent has no instructions or settings to decide by.',
+      own_key_required: 'Re-checks run on your own OpenRouter API key. Add one in Settings first.',
+      own_key_failed: 'OpenRouter refused your saved API key. Replace it in Settings first.',
+      safety_limit_reached: 'Your monthly safety limit on AI spending is reached.',
       other: 'The re-check could not run.',
     },
   },
 
   signup: {
     request: (email, timezone) =>
-      `New sign-up request\n\n${email}\nTime zone: ${timezone}\n\nApprove to let them in with a monthly AI spending cap.`,
+      `New sign-up request\n\n${email}\nTime zone: ${timezone}\n\nApprove to let them in. Their agents and questions run on their own OpenRouter key.`,
     buttons: {
-      approveDefault: (cap) => `Approve, ${cap}/month`,
+      approve: 'Approve',
       reject: 'Reject',
-      custom: 'Custom budget',
-      amount: (cap) => `${cap}/month`,
-      otherAmount: 'Other amount',
     },
-    otherAmountInApp: 'For another amount, approve on the Admin page.',
     approvedToast: 'Approved.',
     rejectedToast: 'Rejected.',
-    chooseAmountToast: 'Choose a monthly cap.',
-    approvedLine: (cap, at) => `✅ Approved with ${cap}/month (${at}). Let them know they can sign in.`,
+    approvedLine: (at) => `✅ Approved (${at}). Let them know they can sign in and add their OpenRouter key.`,
     rejectedLine: (at) => `❌ Rejected (${at}).`,
     already: {
       pending: 'This request is still waiting.',
@@ -562,6 +560,11 @@ const en: Messages = {
       headline: 'Explanations fell back to templates: the model is unavailable',
       explanation:
         'The provider refused or failed the recent requests. Templates are used meanwhile; this often clears by itself.',
+    },
+    own_key: {
+      headline: 'Explanations are written by templates: no OpenRouter key of your own works',
+      explanation:
+        'Model calls run on your own OpenRouter key, and none is saved or the saved one was refused. Every figure is still checked and correct; add or replace the key in Settings to have the model write them again.',
     },
   },
   narrationFallback: {
@@ -758,9 +761,11 @@ const he: Messages = {
     noReply: {
       failed: 'לא נמצאה תשובה שאפשר לבדוק מול הנתונים, ולכן לא מוצגת תשובה. נסו לשאול שוב, או בצורה ממוקדת יותר.',
       budget_reached: 'הגעתם למגבלת ההוצאה היומית על שאלות. אפשר לשאול שוב אחרי חצות.',
-      cap_reached: 'הגעתם למגבלת ההוצאה החודשית של החשבון. אפשר לשאול שוב כשיתחיל החודש הבא.',
+      cap_reached:
+        'הגעתם למגבלת הבטיחות החודשית שלכם על הוצאה לבינה מלאכותית. אפשר לשאול שוב כשיתחיל החודש הבא, או אחרי שתעלו את המגבלה בהגדרות.',
       no_model: 'העוזר צריך מודל, ולא הוגדר אחד. מנהל יכול לבחור מודל בדף הניהול.',
-      own_key_failed: `${ltr('OpenRouter')} דחה את מפתח ה־${ltr('API')} שלכם, ולכן השאלה לא נענתה. בהגדרות מוסבר למה; עד שתשמרו מפתח תקין, השאלות עוברות דרך חשבון המערכת במסגרת המגבלה החודשית.`,
+      own_key_failed: `${ltr('OpenRouter')} דחה את מפתח ה־${ltr('API')} שלכם, ולכן השאלה לא נענתה. בהגדרות מוסבר למה; אפשר לשאול שוב אחרי שתשמרו שם מפתח תקין.`,
+      own_key_required: `השאלות נענות על מפתח ה־${ltr('API')} של ${ltr('OpenRouter')} שלכם, ולא נשמר מפתח. הוסיפו מפתח בהגדרות כדי לשאול שאלות.`,
     },
     tooLong: (limit) => `השאלה ארוכה מדי. נסחו אותה בעד ${ltr(limit)} תווים.`,
     stillAnswering: 'עדיין עונה על השאלה הקודמת. שלחו את זו שוב כשהתשובה תגיע.',
@@ -795,8 +800,9 @@ const he: Messages = {
     causes: {
       failed: 'היא נכשלה.',
       budget_reached: 'תקציב הבינה המלאכותית היומי של הסוכן נגמר.',
-      cap_reached: 'הגעת למגבלת הבינה המלאכותית החודשית שלך.',
+      cap_reached: 'הגעת למגבלת הבטיחות החודשית שלך על הוצאה לבינה מלאכותית.',
       own_key_failed: `מפתח ה־${ltr('OpenRouter')} שלך הפסיק לעבוד.`,
+      own_key_required: `לא שמרת מפתח ${ltr('OpenRouter')} משלך.`,
     },
     refusals: {
       not_expired: 'אפשר לבדוק שוב רק הצעה שפג תוקפה.',
@@ -807,25 +813,23 @@ const he: Messages = {
       scan_running: 'הסוכן סורק כרגע - נסו שוב בעוד דקה.',
       agent_not_active: 'הסוכן מושהה או בארכיון.',
       no_persona: 'לסוכן אין הוראות או הגדרות להחליט לפיהן.',
+      own_key_required: `בדיקות חוזרות רצות על מפתח ה־${ltr('API')} של ${ltr('OpenRouter')} שלכם. הוסיפו מפתח בהגדרות קודם.`,
+      own_key_failed: `${ltr('OpenRouter')} דחה את מפתח ה־${ltr('API')} השמור שלכם. החליפו אותו בהגדרות קודם.`,
+      safety_limit_reached: 'הגעתם למגבלת הבטיחות החודשית שלכם על הוצאה לבינה מלאכותית.',
       other: 'הבדיקה החוזרת לא הצליחה לרוץ.',
     },
   },
 
   signup: {
     request: (email, timezone) =>
-      `בקשת הרשמה חדשה\n\n${ltr(email)}\nאזור זמן: ${ltr(timezone)}\n\nאשרו כדי לצרף אותם עם תקרת הוצאה חודשית על בינה מלאכותית.`,
+      `בקשת הרשמה חדשה\n\n${ltr(email)}\nאזור זמן: ${ltr(timezone)}\n\nאשרו כדי לצרף אותם. הסוכנים והשאלות שלהם רצים על מפתח ${ltr('OpenRouter')} משלהם.`,
     buttons: {
-      approveDefault: (cap) => `אישור, ${ltr(cap)} לחודש`,
+      approve: 'אישור',
       reject: 'דחייה',
-      custom: 'תקציב אחר',
-      amount: (cap) => `${ltr(cap)} לחודש`,
-      otherAmount: 'סכום אחר',
     },
-    otherAmountInApp: 'לסכום אחר, אשרו בעמוד הניהול.',
     approvedToast: 'אושר.',
     rejectedToast: 'נדחה.',
-    chooseAmountToast: 'בחרו תקרה חודשית.',
-    approvedLine: (cap, at) => `✅ אושר עם ${ltr(cap)} לחודש (${ltr(at)}). עדכנו אותם שאפשר להתחבר.`,
+    approvedLine: (at) => `✅ אושר (${ltr(at)}). עדכנו אותם שאפשר להתחבר ולהוסיף מפתח ${ltr('OpenRouter')}.`,
     rejectedLine: (at) => `❌ נדחה (${ltr(at)}).`,
     already: {
       pending: 'הבקשה עדיין ממתינה.',
@@ -881,6 +885,11 @@ const he: Messages = {
       headline: 'ההסברים חזרו לתבניות: המודל לא זמין',
       explanation:
         'הספק דחה או נכשל בבקשות האחרונות. בינתיים משתמשים בתבניות; לעתים קרובות זה מסתדר מעצמו.',
+    },
+    own_key: {
+      headline: `ההסברים נכתבים מתבניות: אין מפתח ${ltr('OpenRouter')} תקין משלך`,
+      explanation:
+        `הקריאות למודל רצות על מפתח ה־${ltr('OpenRouter')} שלך, ולא נשמר מפתח או שהמפתח השמור נדחה. כל נתון עדיין נבדק ונכון; הוסיפו או החליפו את המפתח בהגדרות כדי שהמודל יכתוב אותם שוב.`,
     },
   },
   narrationFallback: {

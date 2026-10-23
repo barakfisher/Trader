@@ -6,7 +6,9 @@ import { RECHECK_WINDOW_DAYS, type ProposalRecheck, type RecheckResult } from '@
 import { ApiRequestError, errorMessage } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
+import { useModelAccess } from '../queries/modelAccess.ts';
 import { useRecheckProposal } from '../queries/proposals.ts';
+import { OwnKeyNotice } from './OwnKeyNotice.tsx';
 import { Button, Card, ErrorNote } from './ui.tsx';
 
 /** The AI service's refusals the catalogue says in the user's language (D212); others show the server's text. */
@@ -19,6 +21,9 @@ const REFUSALS = [
   'scan_running',
   'agent_not_active',
   'no_persona',
+  'own_key_required',
+  'own_key_failed',
+  'safety_limit_reached',
 ] as const;
 
 /**
@@ -40,6 +45,8 @@ export function RecheckCard({
 }) {
   const { t } = useTranslation();
   const run = useRecheckProposal(proposalId, agentId);
+  // D245, D270: no re-check is offered that nobody may pay for; the notice says why.
+  const access = useModelAccess();
   // The answer just given is the freshest; the page's own read follows it.
   const last = run.data ?? recheck.last;
   if (!recheck.available && last === null && recheck.supersededBy === null) return null;
@@ -75,7 +82,8 @@ export function RecheckCard({
             <p className="text-xs text-text-muted">
               {t('proposalPage.recheck.once', { count: RECHECK_WINDOW_DAYS })}
             </p>
-            <Button disabled={run.isPending} onClick={() => run.mutate()}>
+            <OwnKeyNotice access={access} />
+            <Button disabled={run.isPending || access.block !== null} onClick={() => run.mutate()}>
               <span className="flex items-center gap-1.5">
                 <RefreshCw className={`size-4 ${run.isPending ? 'animate-spin' : ''}`} aria-hidden />
                 {run.isPending ? t('proposalPage.recheck.running') : t('proposalPage.recheck.button')}
