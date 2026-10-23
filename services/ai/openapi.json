@@ -1,6 +1,58 @@
 {
   "components": {
     "schemas": {
+      "AgentLlmModel": {
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "effective": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the next call runs on; null when nothing can be chosen and no model is configured.",
+            "title": "Effective"
+          },
+          "fallback": {
+            "description": "The saved model is no longer listed (D284).",
+            "title": "Fallback",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "The agent's name: the user's own text.",
+            "title": "Name",
+            "type": "string"
+          },
+          "saved": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the user chose; null when nothing.",
+            "title": "Saved"
+          }
+        },
+        "required": [
+          "saved",
+          "effective",
+          "fallback",
+          "agent_id",
+          "name"
+        ],
+        "title": "AgentLlmModel",
+        "type": "object"
+      },
       "AgentRecheckRequest": {
         "description": "Re-check one of the agent's expired trade proposals (D212).",
         "properties": {
@@ -337,6 +389,18 @@
           "cost_micro_usd": {
             "title": "Cost Micro Usd",
             "type": "integer"
+          },
+          "fallback_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The model the user chose, when this answer ran on a fallback because OpenRouter no longer lists it (D284); null otherwise.",
+            "title": "Fallback From"
           },
           "message_id": {
             "anyOf": [
@@ -1269,6 +1333,86 @@
           "completion_tokens_per_day"
         ],
         "title": "LlmExplainBasis",
+        "type": "object"
+      },
+      "LlmListedModel": {
+        "description": "A model a user on their own key may choose, from OpenRouter's list (D244, D283).",
+        "properties": {
+          "completion_usd_per_mtok": {
+            "description": "USD per million output tokens, a decimal.",
+            "title": "Completion Usd Per Mtok",
+            "type": "string"
+          },
+          "id": {
+            "description": "OpenRouter's id, e.g. 'google/gemini-3.5-flash-lite'.",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "OpenRouter's name for it. Data, not copy.",
+            "title": "Name",
+            "type": "string"
+          },
+          "prompt_usd_per_mtok": {
+            "description": "USD per million input tokens, a decimal.",
+            "title": "Prompt Usd Per Mtok",
+            "type": "string"
+          },
+          "scan_estimate_micro_usd": {
+            "description": "One agent scan at the agent basis (D46).",
+            "title": "Scan Estimate Micro Usd",
+            "type": "integer"
+          },
+          "tested": {
+            "description": "The scans were tuned on it (D285).",
+            "title": "Tested",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "prompt_usd_per_mtok",
+          "completion_usd_per_mtok",
+          "tested",
+          "scan_estimate_micro_usd"
+        ],
+        "title": "LlmListedModel",
+        "type": "object"
+      },
+      "LlmListedModelsResponse": {
+        "description": "What a user's model pickers offer (D283).",
+        "properties": {
+          "choosable": {
+            "description": "False unless LLM_PROVIDER is openrouter: nothing can be chosen.",
+            "title": "Choosable",
+            "type": "boolean"
+          },
+          "fallback_model": {
+            "description": "The tested model a choice falls back to (D284).",
+            "title": "Fallback Model",
+            "type": "string"
+          },
+          "live": {
+            "description": "False while OpenRouter's list has never been read: the Admin page's catalogue stands in, and a saved model is used as it is (D284).",
+            "title": "Live",
+            "type": "boolean"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/LlmListedModel"
+            },
+            "title": "Models",
+            "type": "array"
+          }
+        },
+        "required": [
+          "choosable",
+          "live",
+          "fallback_model",
+          "models"
+        ],
+        "title": "LlmListedModelsResponse",
         "type": "object"
       },
       "LlmModelsResponse": {
@@ -3290,6 +3434,97 @@
         "title": "UniverseCoverageOut",
         "type": "object"
       },
+      "UserLlmModelsResponse": {
+        "description": "A user's models, resolved against OpenRouter's list (D244, D284).",
+        "properties": {
+          "admin": {
+            "description": "The admin's models are the Admin page's (D244).",
+            "title": "Admin",
+            "type": "boolean"
+          },
+          "agents": {
+            "description": "Every agent that scans, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/AgentLlmModel"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/UserLlmScopeModel"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "choosable": {
+            "title": "Choosable",
+            "type": "boolean"
+          },
+          "live": {
+            "title": "Live",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "admin",
+          "choosable",
+          "live",
+          "choices",
+          "agents"
+        ],
+        "title": "UserLlmModelsResponse",
+        "type": "object"
+      },
+      "UserLlmScopeModel": {
+        "properties": {
+          "effective": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the next call runs on; null when nothing can be chosen and no model is configured.",
+            "title": "Effective"
+          },
+          "fallback": {
+            "description": "The saved model is no longer listed (D284).",
+            "title": "Fallback",
+            "type": "boolean"
+          },
+          "saved": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the user chose; null when nothing.",
+            "title": "Saved"
+          },
+          "scope": {
+            "enum": [
+              "explain",
+              "assistant"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "saved",
+          "effective",
+          "fallback",
+          "scope"
+        ],
+        "title": "UserLlmScopeModel",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -3938,6 +4173,55 @@
         ]
       }
     },
+    "/llm/listed": {
+      "get": {
+        "operationId": "llm_listed_llm_listed_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmListedModelsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Llm Listed",
+        "tags": [
+          "llm"
+        ]
+      }
+    },
     "/llm/models": {
       "get": {
         "operationId": "llm_models_llm_models_get",
@@ -4225,6 +4509,65 @@
           }
         },
         "summary": "Own Key Usage",
+        "tags": [
+          "llm"
+        ]
+      }
+    },
+    "/llm/users/{user_id}/models": {
+      "get": {
+        "operationId": "user_llm_models_llm_users__user_id__models_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserLlmModelsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "User Llm Models",
         "tags": [
           "llm"
         ]

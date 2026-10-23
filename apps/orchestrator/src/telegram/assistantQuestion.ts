@@ -34,6 +34,7 @@ import { logger } from '../logger.js';
 import { messagesFor, type Messages } from '../notify/messages.js';
 import type { TelegramNotifier } from './client.js';
 import { plainAnswer } from './plainAnswer.js';
+import { announceModelFallbacks } from '../services/modelFallbacks.js';
 
 /** The AI service's own bound on a question (`AssistantMessageRequest.message`). */
 export const MAX_QUESTION_CHARS = 2000;
@@ -105,6 +106,7 @@ async function answer(input: Question, messages: Messages): Promise<void> {
     }
     if (reply.conversation_id !== null) await setTelegramConversation(userId, reply.conversation_id);
     await telegram?.sendAnswer(chatId, plainAnswer(reply, messages, telegram.linkBase), reply.suggestions);
+    if (telegram) await announceModelFallbacks(userId, telegram);
   } finally {
     clearInterval(typing);
   }

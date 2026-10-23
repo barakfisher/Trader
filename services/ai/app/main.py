@@ -27,8 +27,11 @@ from app.llm.factory import build_llm, models_are_choosable
 from app.llm.key_vault import build_vault
 from app.llm.model_choice import DatabaseModelChoices
 from app.llm.monthly_cap import DatabaseSafetyLimitLedger
+from app.llm.openrouter_models import OpenRouterModels
 from app.llm.own_key import DatabaseOwnKeyStore
 from app.llm.payer import PayerGate
+from app.llm.pricing import PriceBook
+from app.llm.user_models import DatabaseUserModels
 from app.providers.registry import MarketDataService, build_providers
 from app.routers import (
     agents,
@@ -74,12 +77,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         own_keys_usable=key_store.can_save and models_are_choosable(settings),
     )
     app.state.payer = payer
+    # OpenRouter's model list, for a user's own choice (D244, D283); its prices
+    # are written into the one price book every adapter charges from.
+    prices = PriceBook(settings.llm_model_prices)
+    app.state.listed_models = OpenRouterModels(settings.openrouter_base_url, prices)
+    app.state.user_models = DatabaseUserModels(get_engine())
     app.state.llm = build_llm(
         settings,
         redis,
         call_log=DatabaseCallLog(get_engine(), settings.llm_call_retention_days),
         choices=DatabaseModelChoices(get_engine()),
         payer=payer,
+        prices=prices,
+        users=app.state.user_models,
+        listed=app.state.listed_models,
     )
     # Unlike the LLM above, a misconfigured embedder raises here in every
     # environment and stops the service starting. There is no honest null

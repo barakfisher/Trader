@@ -24,6 +24,7 @@ import { ALL_SCOPE, holdingsScopeFrom, holdingsSearchValue, inScope, type Holdin
 import { useAgentsQuery } from '../queries/agents.ts';
 import { useConsolidatedQuery, usePortfolioQuery } from '../queries/portfolio.ts';
 import { queryKeys } from '../queries/queryKeys.ts';
+import { ModelFallbackBanner } from '../components/ModelFallbackBanner.tsx';
 import { useStore } from '../stores/context.tsx';
 
 export const DashboardPage = observer(function DashboardPage() {
@@ -106,6 +107,7 @@ export const DashboardPage = observer(function DashboardPage() {
       </header>
 
       <DigestBanner />
+      <ModelFallbackBanner />
 
       {portfolio.isPending && <Spinner label={t('dashboard.loading')} />}
       {portfolio.error && (

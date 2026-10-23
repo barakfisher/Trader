@@ -60,7 +60,9 @@ export function flattenMarkdown(markdown: string, linkBase: string | null): stri
 /** The whole message for a reply: the answer, or the catalogue's sentence for its outcome. */
 export function plainAnswer(reply: AssistantReply, messages: Messages, linkBase: string | null): string {
   if (isNoReply(reply.outcome)) return messages.ask.noReply[reply.outcome];
-  const text = flattenMarkdown(reply.text, linkBase);
+  const answer = flattenMarkdown(reply.text, linkBase);
+  // D284: an answer that ran on a fallback says so, under it.
+  const text = reply.fallback_from ? `${answer}\n\n${messages.modelFallback.answerMark(reply.fallback_from)}` : answer;
   const news = reply.sources
     .filter((source) => source.kind === 'news' && typeof source.url === 'string' && source.url !== '')
     .slice(0, MAX_NEWS_SOURCES);

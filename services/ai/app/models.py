@@ -889,6 +889,62 @@ class LlmModelsResponse(BaseModel):
     )
 
 
+class LlmListedModel(BaseModel):
+    """A model a user on their own key may choose, from OpenRouter's list (D244, D283)."""
+
+    id: str = Field(description="OpenRouter's id, e.g. 'google/gemini-3.5-flash-lite'.")
+    name: str = Field(description="OpenRouter's name for it. Data, not copy.")
+    prompt_usd_per_mtok: str = Field(description="USD per million input tokens, a decimal.")
+    completion_usd_per_mtok: str = Field(description="USD per million output tokens, a decimal.")
+    tested: bool = Field(description="The scans were tuned on it (D285).")
+    scan_estimate_micro_usd: int = Field(description="One agent scan at the agent basis (D46).")
+
+
+class LlmListedModelsResponse(BaseModel):
+    """What a user's model pickers offer (D283)."""
+
+    choosable: bool = Field(
+        description="False unless LLM_PROVIDER is openrouter: nothing can be chosen."
+    )
+    live: bool = Field(
+        description="False while OpenRouter's list has never been read: the Admin page's "
+        "catalogue stands in, and a saved model is used as it is (D284)."
+    )
+    fallback_model: str = Field(description="The tested model a choice falls back to (D284).")
+    models: list[LlmListedModel]
+
+
+UserLlmScope = Literal["explain", "assistant"]
+
+
+class LlmModelResolution(BaseModel):
+    saved: str | None = Field(description="What the user chose; null when nothing.")
+    effective: str | None = Field(
+        description="What the next call runs on; null when nothing can be chosen and no "
+        "model is configured."
+    )
+    fallback: bool = Field(description="The saved model is no longer listed (D284).")
+
+
+class UserLlmScopeModel(LlmModelResolution):
+    scope: UserLlmScope
+
+
+class AgentLlmModel(LlmModelResolution):
+    agent_id: UUID
+    name: str = Field(description="The agent's name: the user's own text.")
+
+
+class UserLlmModelsResponse(BaseModel):
+    """A user's models, resolved against OpenRouter's list (D244, D284)."""
+
+    admin: bool = Field(description="The admin's models are the Admin page's (D244).")
+    choosable: bool
+    live: bool
+    choices: list[UserLlmScopeModel]
+    agents: list[AgentLlmModel] = Field(description="Every agent that scans, oldest first.")
+
+
 class AgentScanRequest(BaseModel):
     """Run one scan of a simulated agent now (Stage 4, D15)."""
 
@@ -1076,6 +1132,11 @@ class AssistantReply(BaseModel):
     sources: list[AssistantSource]
     suggestions: list[str] = Field(description="Questions to ask next.")
     model: str | None
+    fallback_from: str | None = Field(
+        default=None,
+        description="The model the user chose, when this answer ran on a fallback because "
+        "OpenRouter no longer lists it (D284); null otherwise.",
+    )
     cost_micro_usd: int
     steps: int = Field(description="Tool calls made.")
 

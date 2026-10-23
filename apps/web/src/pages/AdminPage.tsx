@@ -33,6 +33,7 @@ import {
   purposeCost,
   callCost,
   decimalUsdToMicro,
+  formatPerMtok,
   dollarsTextToMicro,
   formatLatency,
   formatMicroUsd,
@@ -893,11 +894,6 @@ function ScopePicker({
       {choose.error && <ErrorNote message={errorMessage(choose.error, t('admin.models.saveFailed'))} />}
     </section>
   );
-}
-
-function formatPerMtok(text: string): string {
-  const micro = decimalUsdToMicro(text);
-  return micro === null ? text : formatMicroUsd(micro);
 }
 
 function Credits({

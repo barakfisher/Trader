@@ -30,6 +30,7 @@ import { fanOut, settingsForNotification, type NotifiableFinding } from './notif
 import { mayRaiseProposal, raiseProposals } from './proposals.js';
 import { recordBenchmarkQuotes } from './marketBenchmarks.js';
 import { valuePortfolio } from './valuation.js';
+import { announceModelFallbacks } from './modelFallbacks.js';
 
 export interface ScanResult {
   holdings: number;
@@ -327,6 +328,8 @@ export async function runPortfolioScan(
           requestId,
         )
       : 'not_measured';
+  // A narration that ran on a fallback model is announced once (D286).
+  await announceModelFallbacks(user.id, notifier);
 
   const result: ScanResult = {
     holdings: rows.length,

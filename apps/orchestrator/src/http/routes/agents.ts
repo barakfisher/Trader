@@ -23,6 +23,7 @@ import {
   MIN_SCAN_EVERY_HOURS,
   type AgentView,
   type AgentsResponse,
+  type ModelChoicesResponse,
   type ScanSchedule,
 } from '@traders/shared';
 
@@ -41,12 +42,14 @@ import {
   limitAfter,
 } from '../../services/agentControl.js';
 import { currentConflicts } from '../../services/instructionsCheck.js';
+import { modelChoiceRefusal, modelChoiceSchema, readModelChoices, relayModels } from '../../services/modelChoices.js';
 
 import {
   agentHasTraded,
   createAgent,
   getAgent,
   listAgents,
+  setAgentModel,
   updateAgent,
   type AgentRow,
   type UserRow,
@@ -59,7 +62,7 @@ import {
   toMandateView,
 } from '../agentMandate.js';
 import { currentUserId, type AppEnv } from '../app.js';
-import { badRequest, conflict, notFound, unprocessable } from '../errors.js';
+import { badRequest, conflict, forbidden, notFound, unprocessable } from '../errors.js';
 
 /** Agents trade USD-listed instruments only in v1 (decision D7), so their budgets are USD. */
 export const AGENT_CURRENCY = 'USD';
@@ -336,5 +339,25 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
       if (isBudgetCutAfterTrade(error)) throw budgetCutAfterTrade();
       return limitAfter(error);
     }
+  });
+
+  // An agent's own model, from OpenRouter's list (D244, D283). Not the admin's:
+  // the admin's agents run on the Admin page's choice. Answers the user's whole
+  // model picture, as `PUT /settings/llm-models/:scope` does.
+  app.put('/agents/:id/model', async (context) => {
+    const userId = currentUserId(context);
+    if (context.get('user')?.role === 'admin') throw forbidden('the admin chooses models on the Admin page');
+    const parsed = modelChoiceSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) throw badRequest('invalid_body', 'expected { model: string | null }', parsed.error.issues);
+    const agentId = agentIdFrom(context.req.param('id'));
+    const existing = await getAgent(userId, agentId);
+    if (!existing) throw notFound('agent not found');
+    if (existing.is_primary) throw conflict('primary_agent_is_passive', 'the real portfolio makes no model calls of its own');
+    const ai = context.get('ai');
+    const refusal = modelChoiceRefusal(await relayModels(() => ai.llmListed(context.get('requestId'))), parsed.data.model);
+    if (refusal !== null) throw refusal;
+    if (!(await setAgentModel(userId, agentId, parsed.data.model))) throw notFound('agent not found');
+    const body: ModelChoicesResponse = await relayModels(() => readModelChoices(ai, userId, context.get('requestId')));
+    return context.json(body);
   });
 }

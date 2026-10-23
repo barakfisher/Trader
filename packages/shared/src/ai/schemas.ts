@@ -401,8 +401,39 @@ export const assistantReplySchema = z.object({
   ),
   suggestions: z.array(z.string()),
   model: z.string().nullable(),
+  fallback_from: z.string().nullable().optional(),
   cost_micro_usd: z.number().int(),
   steps: z.number().int(),
+});
+
+export const llmListedModelsResponseSchema = z.object({
+  choosable: z.boolean(),
+  live: z.boolean(),
+  fallback_model: z.string(),
+  models: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      prompt_usd_per_mtok: z.string(),
+      completion_usd_per_mtok: z.string(),
+      tested: z.boolean(),
+      scan_estimate_micro_usd: z.number().int(),
+    }),
+  ),
+});
+
+const llmModelResolutionShape = {
+  saved: z.string().nullable(),
+  effective: z.string().nullable(),
+  fallback: z.boolean(),
+};
+
+export const userLlmModelsResponseSchema = z.object({
+  admin: z.boolean(),
+  choosable: z.boolean(),
+  live: z.boolean(),
+  choices: z.array(z.object({ scope: z.enum(['explain', 'assistant']), ...llmModelResolutionShape })),
+  agents: z.array(z.object({ agent_id: z.string(), name: z.string(), ...llmModelResolutionShape })),
 });
 
 export const llmModelsResponseSchema = z.object({
@@ -502,6 +533,12 @@ export type _AssertMandateCheckResponse = Expect<
 >;
 export type _AssertAssistantReply = Expect<
   Equal<z.infer<typeof assistantReplySchema>, Schemas['AssistantReply']>
+>;
+export type _AssertLlmListedModels = Expect<
+  Equal<z.infer<typeof llmListedModelsResponseSchema>, Schemas['LlmListedModelsResponse']>
+>;
+export type _AssertUserLlmModels = Expect<
+  Equal<z.infer<typeof userLlmModelsResponseSchema>, Schemas['UserLlmModelsResponse']>
 >;
 export type _AssertLlmModels = Expect<
   Equal<z.infer<typeof llmModelsResponseSchema>, Schemas['LlmModelsResponse']>

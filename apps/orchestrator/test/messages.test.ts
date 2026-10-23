@@ -114,8 +114,19 @@ function everySentence(messages: Messages): string[] {
     messages.menu.log.trade('sell', '0.5', 'VOO') + messages.menu.log.refused('cash buffer'),
     messages.menu.log.cost('$0.04', 'google/gemini-2.5-flash'),
     messages.menu.log.cost('$0.04', null),
-    digest.title(1, 1, true),
-    digest.title(3, 2, false),
+    digest.title(1, 1, true, 0),
+    digest.title(3, 2, false, 1),
+    ...[
+      messages.modelFallback.where.assistant,
+      messages.modelFallback.where.explain,
+      messages.modelFallback.where.agent('Tech Agent'),
+    ].flatMap((where) => {
+      const notice = messages.modelFallback.notice(where, 'acme/retired-1', 'google/gemini-3.5-flash-lite');
+      return [notice.headline, notice.explanation];
+    }),
+    messages.modelFallback.answerMark('acme/retired-1'),
+    messages.modelFallback.digestLine(1),
+    messages.modelFallback.digestLine(2),
     digest.reasonLine(2, digest.reasons.quiet_hours),
     digest.noUnusualMove('uranium'),
     digest.notMeasured('nuclear', '1 of 4 instruments priced'),
@@ -136,7 +147,7 @@ describe('the Hebrew', () => {
   });
 
   it('says one of a thing in words, as the web catalogue does', () => {
-    expect(MESSAGES.he.digest.title(1, 1, false)).toBe('סיכום יומי: ממצא אחד, נושא אחד');
+    expect(MESSAGES.he.digest.title(1, 1, false, 0)).toBe('סיכום יומי: ממצא אחד, נושא אחד');
   });
 });
 

@@ -68,6 +68,7 @@ const WRITE_BODIES: Record<string, unknown> = {
   'PUT /admin/settings': {},
   'POST /agents': {},
   'PATCH /agents/:id': { name: 'Renamed' },
+  'PUT /agents/:id/model': { model: 'google/gemini-3.5-flash-lite' },
   'POST /agents/:id/instructions-check': null,
   'POST /agents/:id/instructions-check/dismiss': null,
   'POST /agents/:id/scans': null,
@@ -97,6 +98,7 @@ const WRITE_BODIES: Record<string, unknown> = {
   'PUT /settings/llm-key': {},
   'DELETE /settings/llm-key': null,
   'PUT /settings/llm-safety-limit': { limitMicroUsd: 20_000_000 },
+  'PUT /settings/llm-models/:scope': { model: 'google/gemini-3.5-flash-lite' },
   'POST /telegram/bind-token': null,
   'PUT /targets': {},
   'POST /topics': {},
@@ -159,8 +161,8 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     const primary = (await pool.query<{ id: string }>('SELECT id FROM agents WHERE user_id = $1 AND is_primary', [user.id])).rows[0]!.id;
     const agent = (
       await pool.query<{ id: string }>(
-        `INSERT INTO agents (user_id, slug, name, persona, budget_minor)
-         VALUES ($1, $2, $3, $4, 100000) RETURNING id`,
+        `INSERT INTO agents (user_id, slug, name, persona, budget_minor, model)
+         VALUES ($1, $2, $3, $4, 100000, 'acme/retired-model') RETURNING id`,
         [user.id, `agent-${user.mark.toLowerCase()}`, `${user.mark} agent`, `${user.mark} persona`],
       )
     ).rows[0]!.id;
@@ -224,11 +226,23 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
       [user.id, primary, instrument],
     );
     await pool.query(`INSERT INTO telegram_bindings (user_id, chat_id) VALUES ($1, $2)`, [user.id, user.chatId]);
-    await pool.query(`INSERT INTO user_settings (user_id) VALUES ($1) ON CONFLICT DO NOTHING`, [user.id]);
+    await pool.query(
+      `INSERT INTO user_settings (user_id, llm_explain_model, llm_assistant_model)
+       VALUES ($1, 'acme/explain-model', 'acme/retired-model') ON CONFLICT DO NOTHING`,
+      [user.id],
+    );
+    // A fallback the AI service recorded (D286), so its table is fingerprinted with a row.
+    const fallback = (
+      await pool.query<{ id: string }>(
+        `INSERT INTO model_fallbacks (user_id, agent_id, scope, saved_model, effective_model)
+         VALUES ($1, $2, 'agent', 'acme/retired-model', 'google/gemini-3.5-flash-lite') RETURNING id`,
+        [user.id, agent],
+      )
+    ).rows[0]!.id;
     user.proposal = proposal;
     user.agent = agent;
     user.conversation = conversation;
-    user.ids.push(primary, agent, holding, topic, conversation, observation, proposal);
+    user.ids.push(primary, agent, holding, topic, conversation, observation, proposal, fallback);
   }
 
   beforeAll(async () => {

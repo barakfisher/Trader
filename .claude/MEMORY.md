@@ -4291,6 +4291,58 @@ failure they prevent.
     drawn redraws the list and says so. *Rejected:* A, one message per proposal (every
     `/pending` and every Refresh would post them again - D270's one message per view); storing
     where a message came from (a table for what the message already carries).
+283. **A user chooses from OpenRouter's live model list, filtered; its prices price the call**
+    (the user, 2026-10-23; M10 PR 6, corrects D244's premise). **Measured:** the Admin page never
+    fetched OpenRouter's list - it offers `catalogue.py`'s five hand-picked models, each priced by
+    `pricing.py`'s table, and that table also prices every call and the own-key safety limit's
+    pre-call ceiling. OpenRouter's public `GET /api/v1/models` (no key) returned 468 models; 371
+    call tools, are not `:free`, have a fixed positive price and no `expiration_date`; output
+    $0.03-$180/Mtok (Flash-Lite $2.50; 24 above 10x it, 3 above 50x). **How:** the AI service
+    fetches the list (`app/llm/openrouter_models.py`), keeps it in memory for
+    `OFFERED_MODELS_TTL_SECONDS`, and offers the same filter to every scope, **less `~` aliases**
+    ("the latest Sonnet": the id stays while the model and its price move) - **352 offered** when
+    read through the code on 2026-10-23. A failed fetch keeps the last good list (retried after
+    `RETRY_AFTER_FAILURE_SECONDS`), an empty answer is treated as a failure, and with no list yet
+    the Admin page's catalogue stands in (`live = False`).
+    A listed model's own prices price its calls (below `LLM_MODEL_PRICES`, above the default
+    table), so the safety limit counts it at OpenRouter's price, not the $20/Mtok unknown rate.
+    **The admin is unchanged:** `llm_model_choices` and the catalogue govern the admin alone
+    (D244); **a user who has chosen nothing runs on the tested model**, not the admin's choice.
+    *Rejected:* the fixed five-model list (not D244's list; nothing cheaper or newer without a
+    code edit); the live list priced from the table (~365 models at $20/Mtok, so the safety limit
+    trips early for no visible reason).
+284. **A chosen model that leaves the list falls back to the tested model, and says so everywhere** (the user,
+    2026-10-23). The next call runs on the tested model (Flash-Lite, D285); if that is not listed
+    either, on the listed model with the highest output price at or below Flash-Lite's table price
+    - so a fallback never costs more than the tested model (it can cost more than a cheaper model
+    the user had saved; the notice says only that it is the tested model). The saved choice is
+    kept, so the model returns by itself if it is listed again. While the list has never been
+    read, a saved model is used as-is only if the price table knows it; an unpriced one runs on the
+    tested model, because at the $20/Mtok unknown rate a dearer model would be counted low against
+    the safety limit (the security review's finding, 2026-10-23). The warning is shown on the agent's page, as a Dashboard banner, on
+    Settings' model card and as a mark on an Ask answer that ran on a fallback; Telegram gets
+    one message (D286). **Accepted cost:** the chooser is outermost in the chain, so a call the
+    payer then refuses (no key) still records the fallback, and the notice says the scope now
+    runs on the tested model although nothing ran. It is true of the next call that does run.
+    *Rejected:* refusing until re-chosen (a scheduled agent stops overnight, quietly); calling the
+    saved id anyway (a `provider_error` nobody can explain).
+285. **The "tested" mark is a constant in code: `TESTED_MODELS`, Flash-Lite only** (the user,
+    2026-10-23). The mark claims the evidence validator and tool calls were tuned against the
+    model (D75, D227); that changes only after a measurement, which ends in a code change and a
+    decision anyway. Its first entry is the fallback (D284). Sonnet 5.5's 15 scans (2 accepted,
+    2 refused) are too few to mark it. *Rejected:* data the admin edits (a migration, a route and
+    a mark set without measuring); measured automatically from `llm_calls` (a threshold to tune
+    and a mark that flickers).
+286. **Telegram hears about a fallback once, when it starts** (the user, 2026-10-23). The AI
+    service records the first fallback per user, scope, agent and saved model in
+    `model_fallbacks` (migration 0069); the orchestrator announces unannounced rows through
+    `fanOut` (`ref_kind = 'model_fallback'`) right after the work that can fall back - a scan,
+    an Ask turn, a portfolio or topic scan (`services/modelFallbacks.ts`) - so quiet hours, mutes
+    and the dedupe key apply as to any finding, and a held notice is its own digest line, never
+    a finding. Not a timer: that would be a new run kind, a CronJob and a CHECK to widen. A Telegram Ask answer that ran on a fallback carries a one-line
+    mark. *Rejected:* Ask answers only (a scheduled agent's fallback reaches Telegram only if the
+    user asks something); a line on every message (every path learns the resolution, and the
+    repeated line teaches the user to skip it).
 ---
 
 ## Bugs that cost real time, and the lesson from each

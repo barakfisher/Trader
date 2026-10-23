@@ -108,6 +108,7 @@ describe('the assistant routes', () => {
       text: REPLY.text,
       sources: [{ kind: 'page', label: 'Portfolio', link: '/', url: null, published: null }],
       suggestions: ['Which holding moved most?'],
+      fallbackFrom: null,
     });
   });
 
@@ -118,6 +119,14 @@ describe('the assistant routes', () => {
 
     expect(body).not.toHaveProperty('model');
     expect(body).not.toHaveProperty('costMicroUsd');
+  });
+
+  it("names the user's own chosen model when the answer ran on a fallback (D284)", async () => {
+    assistantMessage.mockResolvedValue({ ...REPLY, fallback_from: 'acme/retired-1' });
+
+    const body = await (await send({ message: 'Hi' })).json();
+
+    expect(body.fallbackFrom).toBe('acme/retired-1');
   });
 
   it('passes a decline and a spent budget through as 200s, not errors', async () => {

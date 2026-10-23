@@ -90,3 +90,17 @@ function percent(value: number, digits: number, signDisplay: 'always' | 'auto'):
     signDisplay,
   }).format(value / 100);
 }
+
+/**
+ * Text that is data in a left-to-right script, such as a model id, as a
+ * left-to-right isolate: its slashes, dashes and colons stay in its own order in
+ * a Hebrew sentence instead of joining the sentence's direction.
+ */
+export function leftToRight(text: string): string {
+  return `⁦${text}⁩`;
+}
+
+/** A user's own text in either script, such as an agent's name, as a first-strong isolate. */
+export function ownDirection(text: string): string {
+  return `⁨${text}⁩`;
+}

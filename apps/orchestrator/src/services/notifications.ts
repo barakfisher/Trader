@@ -58,7 +58,7 @@ export interface NotifiableFinding {
    * What `ref_id` points at: an observation, a proposal, or a narration
    * transition (`narrationWatch.ts`).
    */
-  refKind: 'observation' | 'proposal' | 'narration';
+  refKind: 'observation' | 'proposal' | 'narration' | 'model_fallback';
   refId: string;
   severity: string;
   headline: string;
@@ -339,7 +339,10 @@ export async function sendDigest(
   const messages = messagesFor(settings.language);
   // A narration notice is not a finding, and counting it as one would tell the
   // user something moved in the market. It gets its own line, naming the state.
-  const findings = pending.filter((entry) => entry.ref_kind !== 'narration');
+  // A model's fallback notice (D286) is not a finding either, for the same reason.
+  const findings = pending.filter((entry) => entry.ref_kind !== 'narration' && entry.ref_kind !== 'model_fallback');
+  const modelFallbacks = pending.filter((entry) => entry.ref_kind === 'model_fallback').length;
+  const fallbackLine = modelFallbacks > 0 ? messages.modelFallback.digestLine(modelFallbacks) : null;
   const narrationLine = renderNarrationLine(
     await listNarrationTransitions(
       user.id,
@@ -369,7 +372,7 @@ export async function sendDigest(
     : await notifier
         .send({
           userId: user.id,
-          title: messages.digest.title(findings.length, topics, narrationLine !== null),
+          title: messages.digest.title(findings.length, topics, narrationLine !== null, modelFallbacks),
           // The digest names how many findings and of what kind. It does not
           // restate their figures: those were evidence-validated when the
           // observation was written, and re-rendering them here would be a
@@ -378,6 +381,7 @@ export async function sendDigest(
           body: [
             findings.length > 0 ? summariseDigest(findings, messages) : null,
             narrationLine,
+            fallbackLine,
             topicSection,
           ]
             .filter((part): part is string => part !== null)

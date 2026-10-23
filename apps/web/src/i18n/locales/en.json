@@ -1932,5 +1932,47 @@
     "reminderSafety_one": "Your safety limit will be reached in about {{count}} day at this week's pace.",
     "reminderSafety_other": "Your safety limit will be reached in about {{count}} days at this week's pace.",
     "dismiss": "Dismiss for today"
+  },
+  "models": {
+    "title": "Models",
+    "intro": "Your questions and explanations run on your own OpenRouter key, on the model you choose here; each agent's is on its Settings tab. Models come from OpenRouter's list, with their prices. Not chosen means the tested model, the one the scans and the figure check were tuned on.",
+    "agentTitle": "Model",
+    "agentNotScanning": "An archived agent doesn't scan, so it has no model to choose.",
+    "loading": "Loading models…",
+    "loadFailed": "The models couldn't be loaded.",
+    "notChoosable": "Models can be chosen only when this installation runs on OpenRouter.",
+    "scope": {
+      "assistant": "Ask",
+      "explain": "Explanations of findings",
+      "agent": "The model this agent scans with"
+    },
+    "inUse": "In use: {{model}}",
+    "fallback": "{{saved}} is no longer offered by OpenRouter, so {{effective}} is used until you choose another.",
+    "search": "Search by name or id",
+    "searchLabel": "Search the models for {{label}}",
+    "notChosen": "Not chosen: the tested model",
+    "noLongerOffered": "{{model}} (no longer offered)",
+    "optionTested": "{{name}} (tested)",
+    "matches_one": "{{count}} model matches.",
+    "matches_other": "{{count}} models match.",
+    "showing_one": "Showing {{shown}} of {{count}} model; search to narrow the list.",
+    "showing_other": "Showing {{shown}} of {{count}} models; search to narrow the list.",
+    "price": "{{input}} per million input tokens, {{output}} per million output tokens.",
+    "perScan": "About {{cost}} a scan, at this installation's average scan size.",
+    "tested": "Tested: the scans and the figure check were tuned on this model.",
+    "untested": "Not tested here. The scans and the figure check were tuned on {{model}}; with another model more scans, answers or explanations may be refused.",
+    "notLive": "OpenRouter's list couldn't be read, so only a short list is shown. A model you saved is still used.",
+    "save": "Save",
+    "saving": "Saving…",
+    "saveFailed": "The model couldn't be saved.",
+    "answerFallback": "Answered on a fallback model: {{model}}, the model you chose for Ask, is no longer offered. Choose another in Settings.",
+    "banner": {
+      "line": "{{saved}} is no longer offered for {{where}}, so {{effective}} is used instead.",
+      "assistant": "Ask",
+      "explain": "explanations",
+      "agent": "{{name}}",
+      "chooseSettings": "Choose in Settings",
+      "chooseAgent": "Choose on the agent's page"
+    }
   }
 }

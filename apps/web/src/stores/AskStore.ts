@@ -167,6 +167,8 @@ function pairTurns(body: AssistantConversationResponse, nextId: () => number): A
       text: message.text,
       sources: message.sources,
       suggestions: message.suggestions,
+      // A stored answer does not record whether it ran on a fallback; only a fresh reply says (D284).
+      fallbackFrom: null,
     };
   }
   // A question whose reply never arrived is shown as such, not as still waiting.

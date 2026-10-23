@@ -18,6 +18,7 @@ import type { AgentRow } from '../db/queries.js';
 import { ApiProblem, aiRefusal, conflict, notFound, upstreamFailure } from '../http/errors.js';
 import { readyToScan } from './agentReadiness.js';
 import { proposeFromScan, type TradeProposalContext } from './tradeProposals.js';
+import { announceModelFallbacks } from './modelFallbacks.js';
 
 /** Why a scan cannot start, before the AI service is asked; null when it can. */
 export function scanBlocked(agent: AgentRow): ApiProblem | null {
@@ -55,5 +56,6 @@ export async function runManualScan(
     throw error;
   }
   const proposalIds = await proposeFromScan(userId, agent, scan, context);
+  await announceModelFallbacks(userId, context.notifier);
   return { scan, proposalIds };
 }

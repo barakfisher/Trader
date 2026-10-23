@@ -28,11 +28,13 @@ import {
   priceHistoryResponseSchema,
   instrumentResolutionSchema,
   marketCalendarStatusSchema,
+  llmListedModelsResponseSchema,
   llmModelsResponseSchema,
   marketSessionsSchema,
   narrationConfigSchema,
   ownLlmKeyStateSchema,
   ownLlmKeyUsageStateSchema,
+  userLlmModelsResponseSchema,
   portfolioScanResponseSchema,
   profileRequestResponseSchema,
   rescreenResponseSchema,
@@ -64,6 +66,8 @@ export type PriceHistoryResponse = components['schemas']['PriceHistoryResponse']
 export type MarketCalendarStatus = components['schemas']['MarketCalendarStatus'];
 export type MarketSessions = components['schemas']['MarketSessions'];
 export type LlmModelsResponse = components['schemas']['LlmModelsResponse'];
+export type LlmListedModelsResponse = components['schemas']['LlmListedModelsResponse'];
+export type UserLlmModelsResponse = components['schemas']['UserLlmModelsResponse'];
 export type OwnLlmKeyState = components['schemas']['OwnLlmKeyState'];
 export type OwnLlmKeyUsageState = components['schemas']['OwnLlmKeyUsageState'];
 export type AgentScanRequest = components['schemas']['AgentScanRequest'];
@@ -423,6 +427,23 @@ export class AiClient {
       method: 'GET',
       requestId,
     });
+  }
+
+  /** The models a user on their own key may choose: OpenRouter's list, filtered (D283). */
+  llmListed(requestId?: string): Promise<LlmListedModelsResponse> {
+    return this.request<LlmListedModelsResponse>('/llm/listed', llmListedModelsResponseSchema, {
+      method: 'GET',
+      requestId,
+    });
+  }
+
+  /** What a user chose for each scope and agent, resolved against that list (D244, D284). */
+  userLlmModels(userId: string, requestId?: string): Promise<UserLlmModelsResponse> {
+    return this.request<UserLlmModelsResponse>(
+      `/llm/users/${encodeURIComponent(userId)}/models`,
+      userLlmModelsResponseSchema,
+      { method: 'GET', requestId },
+    );
   }
 
   /**

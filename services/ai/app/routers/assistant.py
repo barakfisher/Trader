@@ -40,6 +40,7 @@ from app.deps import (
     require_internal_key,
 )
 from app.llm.factory import configured_model
+from app.llm.user_models import fallback_from
 from app.models import AssistantMessageRequest, AssistantReply, AssistantSource
 from app.news.on_demand import news_on_demand
 from app.providers.price_provenance import excluded_price_sources
@@ -118,6 +119,16 @@ async def assistant_message(
         sources=[AssistantSource(**source) for source in turn.sources],
         suggestions=turn.suggestions,
         model=turn.model,
+        fallback_from=(
+            await fallback_from(
+                getattr(request.app.state, "user_models", None),
+                getattr(request.app.state, "listed_models", None),
+                user_id,
+                "assistant",
+            )
+            if turn.model is not None
+            else None
+        ),
         cost_micro_usd=turn.cost_micro_usd,
         steps=turn.steps,
     )

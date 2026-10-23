@@ -29,8 +29,11 @@ from app.llm.model_choice import ChoosingProvider, ModelChoices
 from app.llm.monthly_cap import MonthlyCapProvider
 from app.llm.null_provider import NullProvider
 from app.llm.openai_compatible import OpenAICompatibleProvider
+from app.llm.openrouter_models import OpenRouterModels
 from app.llm.own_key import OwnKeyProvider
 from app.llm.payer import PayerGate
+from app.llm.pricing import PriceBook
+from app.llm.user_models import UserModelStore
 
 log = get_logger("llm.factory")
 
@@ -50,6 +53,9 @@ def build_llm(
     call_log: CallLog | None = None,
     choices: ModelChoices | None = None,
     payer: PayerGate | None = None,
+    prices: PriceBook | None = None,
+    users: UserModelStore | None = None,
+    listed: OpenRouterModels | None = None,
 ) -> LLMProvider:
     """The configured provider, recorded call by call when given a `call_log`.
 
@@ -67,19 +73,26 @@ def build_llm(
     or is refused (D245, D250); the admin's calls and the installation's own
     stay on the installation's key and its daily guard. Inside the recorder,
     so a refused call is recorded too.
+
+    Given `users` and `listed`, a user who is not the admin runs on their own
+    choice from OpenRouter's list instead (D244, D283). `prices` is the one
+    price book every adapter charges from; OpenRouter's list writes its prices
+    into it (`openrouter_models.py`). Without one, the configured table is used.
     """
-    provider = _build_provider(settings, redis, transport=transport)
+    if prices is None:
+        prices = PriceBook(settings.llm_model_prices)
+    provider = _build_provider(settings, redis, transport=transport, prices=prices)
     model = configured_model(settings)
     if payer is not None:
         ledger = payer.ledger
 
         def own(api_key: str) -> LLMProvider:
-            adapter = own_key_adapter(settings, api_key, transport)
+            adapter = own_key_adapter(settings, api_key, transport, prices=prices)
             return MonthlyCapProvider(
                 adapter,
                 ledger,
                 model=settings.llm_model,
-                prices=settings.llm_model_price_map,
+                prices=prices,
                 unknown_price_usd_per_mtok=settings.llm_unknown_model_price_usd_per_mtok,
                 max_output_tokens=settings.llm_max_output_tokens,
             )
@@ -88,12 +101,16 @@ def build_llm(
     if call_log is not None:
         provider = RecordingProvider(provider, call_log, model=model)
     if choices is not None and models_are_choosable(settings):
-        provider = ChoosingProvider(provider, choices)
+        provider = ChoosingProvider(provider, choices, users=users, listed=listed)
     return provider
 
 
 def own_key_adapter(
-    settings: Settings, api_key: str, transport: object | None = None
+    settings: Settings,
+    api_key: str,
+    transport: object | None = None,
+    *,
+    prices: PriceBook | None = None,
 ) -> OpenAICompatibleProvider:
     """OpenRouter with a user's own key: the installation's adapter in every
     other respect, and no daily guard around it (D210)."""
@@ -103,7 +120,7 @@ def own_key_adapter(
         model=settings.llm_model,
         api_key=api_key,
         extra_headers={"x-title": "Traders"},
-        **_shared_options(settings),
+        **_shared_options(settings, prices),
         transport=transport,
     )
 
@@ -126,6 +143,7 @@ def _build_provider(
     redis: Redis | None = None,
     *,
     transport: object | None = None,
+    prices: PriceBook | None = None,
 ) -> LLMProvider:
     """Build the provider named by LLM_PROVIDER, wrapped in the spend guard.
 
@@ -176,7 +194,7 @@ def _build_provider(
             # Harmless elsewhere, and it makes our traffic identifiable in their
             # dashboard, which is where a spend question gets answered.
             extra_headers={"x-title": "Traders"},
-            **_shared_options(settings),
+            **_shared_options(settings, prices),
             transport=transport,
         )
     elif name == "openai":
@@ -187,7 +205,7 @@ def _build_provider(
             base_url=settings.openai_base_url,
             model=settings.llm_model,
             api_key=settings.openai_api_key,
-            **_shared_options(settings),
+            **_shared_options(settings, prices),
             transport=transport,
         )
     elif name == "ollama":
@@ -203,7 +221,7 @@ def _build_provider(
             # guard therefore does not apply, and pricing.py returns zero by
             # declaration rather than because a price is missing.
             charges_per_token=False,
-            **_shared_options(settings),
+            **_shared_options(settings, prices),
             transport=transport,
         )
     else:
@@ -243,10 +261,10 @@ def _build_provider(
     return BudgetedProvider(provider, DailySpendGuard(redis, settings.llm_daily_budget_usd))
 
 
-def _shared_options(settings: Settings) -> dict[str, object]:
+def _shared_options(settings: Settings, prices: PriceBook | None = None) -> dict[str, object]:
     """Options every OpenAI-compatible adapter takes from configuration."""
     return {
-        "prices": settings.llm_model_price_map,
+        "prices": prices if prices is not None else settings.llm_model_price_map,
         "unknown_price_usd_per_mtok": settings.llm_unknown_model_price_usd_per_mtok,
         "timeout_seconds": settings.llm_timeout_seconds,
         "max_output_tokens": settings.llm_max_output_tokens,

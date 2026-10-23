@@ -39,6 +39,7 @@ import {
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, notFound, upstreamFailure } from '../errors.js';
 import { limitPerUser } from '../rateLimits.js';
+import { announceModelFallbacks } from '../../services/modelFallbacks.js';
 
 /** The AI service's own bound (`AssistantMessageRequest.message`). */
 const MAX_MESSAGE_LENGTH = 2000;
@@ -86,7 +87,9 @@ export function registerAssistantRoutes(app: Hono<AppEnv>): void {
       text: reply.text,
       sources: reply.sources.map(toSource),
       suggestions: reply.suggestions,
+      fallbackFrom: reply.fallback_from ?? null,
     };
+    await announceModelFallbacks(currentUserId(context), context.get('notifier'));
     return context.json(body);
   });
 

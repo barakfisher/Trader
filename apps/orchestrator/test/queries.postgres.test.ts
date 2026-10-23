@@ -1998,4 +1998,52 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       }
     });
   });
+
+  describe("a user's own model choice and its fallbacks (0069, D244, D286)", () => {
+    const MODEL = 'acme/model-1';
+
+    it("saves and clears the models for Ask and explanations, each in its own column", async () => {
+      await queries.setUserModel(USER, 'assistant', MODEL);
+      await queries.setUserModel(USER, 'explain', 'acme/model-2');
+      const read = () =>
+        getPool().query('SELECT llm_assistant_model, llm_explain_model FROM user_settings WHERE user_id = $1', [USER]);
+      expect((await read()).rows[0]).toEqual({ llm_assistant_model: MODEL, llm_explain_model: 'acme/model-2' });
+      await queries.setUserModel(USER, 'assistant', null);
+      expect((await read()).rows[0]).toEqual({ llm_assistant_model: null, llm_explain_model: 'acme/model-2' });
+    });
+
+    it("sets an agent's model, never the main portfolio's, nor another user's agent", async () => {
+      const agent = (
+        await getPool().query<{ id: string }>(
+          `INSERT INTO agents (user_id, slug, name, budget_minor) VALUES ($1, 'model-agent', 'Model agent', 100000)
+           RETURNING id`,
+          [USER],
+        )
+      ).rows[0]!.id;
+      expect(await queries.setAgentModel(USER, agent, MODEL)).toBe(true);
+      expect(await queries.setAgentModel(USER, AGENT, MODEL)).toBe(false);
+      expect(await queries.setAgentModel(randomUUID(), agent, 'acme/other')).toBe(false);
+      const { rows } = await getPool().query('SELECT id, model FROM agents WHERE user_id = $1 ORDER BY is_primary', [USER]);
+      expect(rows).toEqual([
+        { id: agent, model: MODEL },
+        { id: AGENT, model: null },
+      ]);
+      // `agent_cash` does not cascade from `users`; the agent's own delete takes it.
+      await getPool().query('DELETE FROM agents WHERE id = $1', [agent]);
+    });
+
+    it('lists the unannounced fallbacks with their agent, and marks one announced', async () => {
+      const id = (
+        await getPool().query<{ id: string }>(
+          `INSERT INTO model_fallbacks (user_id, agent_id, scope, saved_model, effective_model)
+           VALUES ($1, $2, 'assistant', $3, 'google/gemini-3.5-flash-lite') RETURNING id`,
+          [USER, AGENT, MODEL],
+        )
+      ).rows[0]!.id;
+      const [row] = await queries.listUnannouncedModelFallbacks(USER);
+      expect(row).toMatchObject({ id, agent_id: AGENT, scope: 'assistant', saved_model: MODEL });
+      await queries.markModelFallbackAnnounced(USER, id);
+      expect(await queries.listUnannouncedModelFallbacks(USER)).toEqual([]);
+    });
+  });
 });
