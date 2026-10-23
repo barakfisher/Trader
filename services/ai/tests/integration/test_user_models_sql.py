@@ -70,9 +70,15 @@ def test_a_user_without_settings_has_chosen_nothing_and_the_admin_is_known(
 ) -> None:
     admin = _user(migrated, role="admin")
     store = DatabaseUserModels(migrated)
-    assert store.choice(admin, "explain", None).admin
-    assert store.choice(admin, "explain", None).saved is None
-    assert store.choice("00000000-0000-0000-0000-000000000000", "explain", None) is None
+    try:
+        assert store.choice(admin, "explain", None).admin
+        assert store.choice(admin, "explain", None).saved is None
+        assert store.choice("00000000-0000-0000-0000-000000000000", "explain", None) is None
+    finally:
+        # The schema is left at head for the orchestrator's suites, one of which
+        # counts the admins (`queries.postgres.test.ts`): leave none behind.
+        with migrated.begin() as connection:
+            connection.execute(text("DELETE FROM users WHERE id = CAST(:u AS uuid)"), {"u": admin})
 
 
 def test_every_scanning_agent_is_listed_oldest_first(migrated: Engine) -> None:
