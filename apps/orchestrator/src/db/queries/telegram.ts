@@ -75,11 +75,18 @@ export function findTelegramBindingByUser(userId: string): Promise<TelegramBindi
  * The webhook's authorisation check. An unbound chat resolves to null and is
  * ignored in silence (FLOWS.md F4) - answering it would confirm the bot exists
  * to anybody who found it, and there is nothing useful to say to a stranger.
+ *
+ * Only an active user's chat speaks for them (D278): a disabled user is locked
+ * out of the web at once (D239), and their bound chat reads as unbound - no
+ * question, decision, scan or change - until they are enabled again. The
+ * binding itself is kept, so enabling them needs no new link.
  */
 export function findTelegramBindingByChat(chatId: string): Promise<TelegramBindingRow | null> {
   return queryOne<TelegramBindingRow>(
-    `SELECT user_id, chat_id::text AS chat_id, username, bound_at
-       FROM telegram_bindings WHERE chat_id = $1`,
+    `SELECT b.user_id, b.chat_id::text AS chat_id, b.username, b.bound_at
+       FROM telegram_bindings b
+       JOIN users u ON u.id = b.user_id AND u.status = 'active'
+      WHERE b.chat_id = $1`,
     [chatId],
   );
 }

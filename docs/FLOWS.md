@@ -114,6 +114,9 @@ Telegram's `/` menu; `/help`, `/portfolio`, `/agents`, `/status` and `/pending` 
 buttons rewrite that same message. Menu buttons are unsigned and read only the tapping chat's
 user; buttons that decide or spend stay signed. Only a private chat is served (D273): a group's `/start` is told to
 connect privately, and everything else from a group is ignored.
+Since M11 A2 (D274-D277) an agent's view also offers Run scan now (behind a confirm naming its cost),
+Pause or Resume, and a schedule picker; those buttons are signed and expire after 15 minutes. A disabled user's chat
+reads as unbound (D278).
 
 ---
 

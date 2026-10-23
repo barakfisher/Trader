@@ -17,29 +17,35 @@ import { z } from 'zod';
 import {
   HORIZON_MAX_DECISIONS,
   HORIZON_SCHEDULES,
-  MAX_AGENTS_PER_USER_CEILING,
   MAX_DECISIONS_PER_SCAN,
   MAX_SCAN_EVERY_HOURS,
   MIN_DECISIONS_PER_SCAN,
   MIN_SCAN_EVERY_HOURS,
   type AgentView,
   type AgentsResponse,
-  type ScanCostEstimate,
   type ScanSchedule,
 } from '@traders/shared';
 
 import { schedulingOf } from '../../services/agentScheduling.js';
+import { scanCostOf } from '../../services/scanCost.js';
+
+// The estimate's home is the service; re-exported for the route's own tests.
+export { MEASURED_SCAN_COST_MICRO_USD, scanCostOf } from '../../services/scanCost.js';
 import { scheduleOf } from '../../services/scanSchedule.js';
 import { readyToScan } from '../../services/agentReadiness.js';
+import {
+  activeLimitFor,
+  assertRoomToActivate,
+  assertRoomToKeep,
+  CHECK_VIOLATION,
+  limitAfter,
+} from '../../services/agentControl.js';
 import { currentConflicts } from '../../services/instructionsCheck.js';
 
 import {
   agentHasTraded,
-  countActiveAgents,
-  countLiveAgents,
   createAgent,
   getAgent,
-  getInstallationSettings,
   listAgents,
   updateAgent,
   type AgentRow,
@@ -76,14 +82,11 @@ export const DEFAULT_SCHEDULE: ScanSchedule = { everyHours: null, preOpen: true,
 /** D45's ceiling, as migration 0042's CHECK has it: $100 a day. */
 export const MAX_LLM_BUDGET_MICRO_USD = 100_000_000;
 
-/** One scan's cost as measured on 2026-10-07 (§14.3): the estimate before any scan exists (D46). */
-export const MEASURED_SCAN_COST_MICRO_USD = 36_000;
 
 /** Dollars and cents, no more: a third decimal would round on the way in. */
 export const BUDGET_PATTERN = /^\d+(\.\d{1,2})?$/;
 
 const UNIQUE_VIOLATION = '23505';
-const CHECK_VIOLATION = '23514';
 
 const name = z.string().trim().min(1).max(MAX_NAME_LENGTH);
 const budget = z.string().trim().regex(BUDGET_PATTERN, 'budget must be an amount in dollars, at most two decimal places');
@@ -137,16 +140,6 @@ export function llmBudgetToMicroUsd(text: string): number {
   return micro;
 }
 
-/** D46: this agent's recent average, else the installation's, else what was measured. */
-export function scanCostOf(row: AgentRow): ScanCostEstimate {
-  if (row.agent_scan_cost_micro_usd !== null) {
-    return { microUsd: Number(row.agent_scan_cost_micro_usd), basis: 'agent' };
-  }
-  if (row.installation_scan_cost_micro_usd !== null) {
-    return { microUsd: Number(row.installation_scan_cost_micro_usd), basis: 'installation' };
-  }
-  return { microUsd: MEASURED_SCAN_COST_MICRO_USD, basis: 'measured' };
-}
 
 /** Whole cents from a validated decimal string, refusing zero and the ceiling. */
 export function budgetToMinor(text: string): number {
@@ -223,60 +216,6 @@ export function agentIdFrom(raw: string): string {
 }
 
 const nameTaken = () => conflict('agent_name_taken', 'you already have an agent with that name');
-
-/** The database's own refusals (migrations 0062, 0063), met when a racing write got there first. */
-function isRefusal(error: unknown, code: 'agent_limit_reached' | 'agent_total_reached'): boolean {
-  const pg = error as { code?: string; message?: string };
-  return pg.code === CHECK_VIOLATION && (pg.message ?? '').startsWith(code);
-}
-
-function agentLimitReached(max: number) {
-  return conflict(
-    'agent_limit_reached',
-    `you have ${max} active agents, the most this installation allows: pause one to make room`,
-    { max },
-  );
-}
-
-function agentTotalReached() {
-  return conflict(
-    'agent_total_reached',
-    `you have ${MAX_AGENTS_PER_USER_CEILING} agents, the most anyone may keep: archive one to make room`,
-    { max: MAX_AGENTS_PER_USER_CEILING },
-  );
-}
-
-/** D201: the admin has no limit; anyone else has the installation's. */
-async function activeLimitFor(user: UserRow | undefined): Promise<number | null> {
-  if (user?.role === 'admin') return null;
-  return (await getInstallationSettings()).max_agents_per_user;
-}
-
-/**
- * Refuse before writing when one more active agent would pass the limit (D199):
- * a create as active, a resume, a restore into active. Paused never counts.
- */
-async function assertRoomToActivate(userId: string, user: UserRow | undefined): Promise<void> {
-  const [max, used] = await Promise.all([activeLimitFor(user), countActiveAgents(userId)]);
-  if (max !== null && used >= max) throw agentLimitReached(max);
-}
-
-/**
- * Refuse before writing when one more agent that is not archived would pass the
- * fixed ceiling (D202): a create in any state, a restore. The admin has none (D201).
- */
-async function assertRoomToKeep(userId: string, user: UserRow | undefined): Promise<void> {
-  if (user?.role === 'admin') return;
-  if ((await countLiveAgents(userId)) >= MAX_AGENTS_PER_USER_CEILING) throw agentTotalReached();
-}
-
-async function limitAfter(error: unknown): Promise<never> {
-  if (isRefusal(error, 'agent_total_reached')) throw agentTotalReached();
-  if (isRefusal(error, 'agent_limit_reached')) {
-    throw agentLimitReached((await getInstallationSettings()).max_agents_per_user);
-  }
-  throw error;
-}
 
 export function registerAgentsRoutes(app: Hono<AppEnv>): void {
   app.get('/agents', async (context) => {

@@ -184,6 +184,8 @@ describe('running a scan', () => {
     });
     const response = await send(`/agents/${AGENT}/scans`);
     expect(response.status).toBe(503);
+    // The code the agent page translates; the generic `ai_service_error` left it in English.
+    expect(((await response.json()) as { error: string }).error).toBe('no_model');
   });
 });
 

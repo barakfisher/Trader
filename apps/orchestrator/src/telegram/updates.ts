@@ -54,6 +54,8 @@ import { startQuestion } from './assistantQuestion.js';
 import { decodeBindToken } from './bindToken.js';
 import { BUSY_CALLBACK_DATA, decodeCallbackData } from './callbackToken.js';
 import { TelegramNotifier, type Keyboard } from './client.js';
+import { decodeAgentActionData, type DecodedAgentAction } from './agentActionToken.js';
+import { handleAgentActionTap } from './agentActions.js';
 import { clock, handleMenuTap, sendView } from './menu.js';
 import { decodeMenuData, isMenuData, type MenuView } from './menuData.js';
 import { handleSignupCallback } from './signupApproval.js';
@@ -474,8 +476,13 @@ async function handleCallback(
   }
 
   // Verified before the payload is interpreted, so nothing an attacker writes
-  // steers what happens next. A sign-up button is signed under its own domain,
-  // so at most one of the two decodes succeeds.
+  // steers what happens next. Agent, sign-up and proposal buttons are each
+  // signed under their own domain, so at most one of the decodes succeeds.
+  const agentAction = decodeAgentActionData(callback.data, config.TELEGRAM_SIGNING_SECRET);
+  if (agentAction !== null) {
+    await handleAgentCallback(deps, callback, chatId, agentAction);
+    return;
+  }
   const signup = decodeSignupData(callback.data, config.TELEGRAM_SIGNING_SECRET);
   const payload = signup === null ? decodeCallbackData(callback.data, config.TELEGRAM_SIGNING_SECRET) : null;
   const binding = await findTelegramBindingByChat(chatId);
@@ -697,6 +704,39 @@ async function handleMenuCallback(
       userId: binding.user_id,
       language,
       data: tap,
+    },
+  );
+}
+
+/**
+ * A signed agent button (M11 A2): the binding names the user, as for the menu,
+ * and the agent is looked up under them by the service the tap goes through.
+ */
+async function handleAgentCallback(
+  deps: UpdateDeps,
+  callback: NonNullable<z.infer<typeof updateSchema>['callback_query']>,
+  chatId: string,
+  decoded: DecodedAgentAction,
+): Promise<void> {
+  const telegram = telegramOf(deps);
+  if (telegram === null) return;
+  const binding = await findTelegramBindingByChat(chatId);
+  if (binding === null || callback.message === undefined) {
+    logger().warn({ chatId, bound: binding !== null }, 'telegram.agent_action_rejected');
+    await telegram.answerCallback(callback.id, messagesFor('en').buttonInvalid);
+    return;
+  }
+  const { language } = await getOrCreateUserSettings(binding.user_id);
+  // Not awaited: a pause is quick, but a scan is a model call (`agentActions.ts`).
+  void handleAgentActionTap(
+    { config: deps.config, ai: deps.ai, telegram, notifier: deps.notifier, rateLimits: deps.rateLimits },
+    {
+      callbackId: callback.id,
+      chatId,
+      messageId: callback.message.message_id,
+      userId: binding.user_id,
+      language,
+      decoded,
     },
   );
 }

@@ -311,10 +311,11 @@ views that edit one message in place instead of posting new ones. Three slices, 
   `/agents` with each agent's schedule in New York slots, next scan, money and last run. Every
   data view says when it was read and carries Refresh (D270). Menu buttons are unsigned: the
   chat's binding is their authority (D269). The bot serves private chats only (D273).
-- **A2 - agent controls**: Run scan now (a confirm that names the cost, a single-tap guard, run in
-  the background as Re-check is), Pause/Resume (refused when the active-agent limit is full,
-  D199), Change schedule (the market-hours intervals and edges the web offers). These buttons are
-  signed.
+- **A2 - agent controls** *(2026-10-22, D274-D277)*: Run scan now (a confirm that names the cost
+  and the budget it comes from, counted against the page's `agentScan` limit, run in the
+  background), Pause/Resume (refused when the active-agent limit is full, D199), and a schedule
+  picker (none or every 1-6 hours, pre-open and after-close). These buttons are signed and expire
+  after 15 minutes. What the routes and the bot share moved into services (D276).
 - **B - deciding from `/pending`**: each open proposal with its own signed buttons.
 
 Not in M11: placing orders (never), editing holdings from the chat, a shekel view of the portfolio

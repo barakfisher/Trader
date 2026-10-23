@@ -4170,6 +4170,60 @@ failure they prevent.
     breaks. *Rejected:* allowing groups and recording that any member acts as the owner - a
     household sharing one view is better served by M9's separate accounts.
 
+274. **Telegram's agent buttons are signed for their age: they expire after 15 minutes and carry
+    no nonce** (2026-10-22; M11 A2, `telegram/agentActionToken.ts`). Run, Pause, Resume and a
+    schedule are `<agent><action>[<schedule>]<minute>.<mac>` under their own HMAC domain, at most
+    53 bytes. Whose agent it is still comes from the chat's binding (D269); what the signature
+    adds is the minute it was drawn, so a Run confirmed in a message read an hour ago - at an
+    older cost, perhaps on an agent paused since - is redrawn with fresh buttons instead of
+    obeyed, and an edited button cannot move its own clock. *Rejected:* a nonce per button, as
+    proposals have (Pause, Resume and a schedule are idempotent; a second Run is stopped by the
+    one-running-scan index and the `agentScan` limit - the confirm is edited away on the first
+    tap, but a modified client can still send an old button's data, so that edit is tidiness,
+    not a guard - and a nonce table would add nothing); unsigned like the menu (an expiry anyone
+    can rewrite is no expiry).
+275. **Run a scan now from Telegram: a confirm that names the cost, then the scan off the poller**
+    (2026-10-22; `telegram/agentActions.ts`). The agent's view offers Run only when a scan could
+    start; the confirm says the expected cost (D46's estimate), from which daily AI budget and how
+    much of it is spent, and that nothing is bought for real. Confirming counts against the
+    page's `agentScan` limit before anything is read (D257), edits the message to "scanning" with
+    no buttons, answers at once, and runs the scan in the background - a model call of up to a
+    minute must not hold the poller; the last run replaces the message when it ends, and its
+    proposals arrive as their own messages. Pause and Resume have no confirm: both are undone by
+    one tap. Resume meets D199's active-agent limit (none for the admin, D201). Known and
+    accepted: the scan runs in the orchestrator's memory, so a restart during it leaves the
+    message on "scanning" with no buttons; the scan itself is recorded by the AI service, and
+    `/agents` shows it.
+276. **The bot never imports a route; what a route and the bot share is a service** (2026-10-22;
+    `services/agentControl.ts`, `manualScan.ts`, `scanCost.ts`, `scanSummary.ts`). Route modules
+    import `http/app.ts` for `currentUserId`, and `app.ts` imports every route: a cycle that holds
+    only while `app.ts` loads first. A1's menu took `toScanSummary` from a route and worked by
+    that luck; A2's first import of `scanCostOf` from a route failed in a script with "Cannot access
+    'BUDGET_PATTERN' before initialization". The manual scan with its refusals, the cost
+    estimate, the scan summary and D199's limit checks now live in services. The scan route
+    calls `runManualScan` as the bot does; the agent PATCH route calls the same limit checks
+    (`assertRoomToActivate`, `limitAfter`) but still writes a pause or a schedule itself,
+    because one PATCH carries many fields - so a new rule about pausing belongs in
+    `agentControl.ts` *and* that route. `test/telegramAgentActions.test.ts` fails if a module
+    under `src/telegram` or `src/services` imports a route again. One fix came with it: a scan
+    refused for having no model now answers `no_model` (was `ai_service_error`), the code the
+    agent page already translates.
+277. **The schedule picker sets a whole schedule per button: the current one with one thing
+    changed** (2026-10-22; `telegram/menu.ts` `scheduleScreen`). Intervals none and 1-6 hours
+    (D195's range) with the current one marked, and pre-open and after-close as toggles. A button
+    carries the full schedule, so a tap is idempotent and the picker needs no state between taps.
+    *Rejected:* the horizon presets (short/medium/long) - they name a style, not the times that
+    run, and the agent view already shows the times.
+278. **A disabled user's Telegram chat reads as unbound** (2026-10-22; found by the security
+    review of M11 A2; `db/queries/telegram.ts` `findTelegramBindingByChat`). Disabling a user
+    ends their web sessions at once (D239) but kept their binding, and every Telegram path
+    authorised by the binding alone: a disabled user could still ask the assistant, decide and
+    re-check proposals and - with A2 - resume agents and run paid scans, the one route around
+    D161's "scheduled work skips them". The lookup now joins `users` and matches only
+    `status = 'active'`, so one query closes every path; the binding is kept, so enabling the user
+    needs no new link. Asserted over real SQL in `m9Exit.postgres.test.ts`. *Rejected:* deleting
+    the binding on disable (re-enabling would need a new link, and a second writer of bindings);
+    a status check per handler (the next handler would forget it).
 ---
 
 ## Bugs that cost real time, and the lesson from each
