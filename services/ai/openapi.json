@@ -127,7 +127,8 @@
               "failed",
               "rule_rejected",
               "cap_reached",
-              "own_key_failed"
+              "own_key_failed",
+              "own_key_required"
             ],
             "title": "Outcome",
             "type": "string"
@@ -369,7 +370,8 @@
               "budget_reached",
               "cap_reached",
               "no_model",
-              "own_key_failed"
+              "own_key_failed",
+              "own_key_required"
             ],
             "title": "Outcome",
             "type": "string"
@@ -1519,7 +1521,10 @@
                   "no_settings",
                   "budget_spent",
                   "no_model",
-                  "failed"
+                  "failed",
+                  "own_key_required",
+                  "own_key_failed",
+                  "safety_limit_reached"
                 ],
                 "type": "string"
               },

@@ -336,6 +336,11 @@
         "label": "Not recorded",
         "summary": "Nothing has been recorded about how the recent explanations were written.",
         "consequence": "Observations written before this was tracked do not say who wrote them, and are shown as they are rather than guessed at."
+      },
+      "own_key": {
+        "label": "Explanations by template",
+        "summary": "Explanations are written by the model on your own OpenRouter key, and no working key is saved, so templates write them.",
+        "consequence": "Every figure is still checked and still correct. Add or replace your key in Settings to have the model write them again."
       }
     },
     "fund": {
@@ -632,7 +637,8 @@
       "provider_error": "provider error",
       "budget_exhausted": "spend limit reached",
       "no_provider": "no model configured",
-      "not_judged": "no verdict given"
+      "not_judged": "no verdict given",
+      "own_key_required": "no own key"
     },
     "belowSmallest": "<{{amount}}",
     "freeRoute": "free route",
@@ -720,8 +726,9 @@
       "failed": "No answer I could check against the data, so none is shown. Try asking again, or more narrowly.",
       "budget_reached": "Today's spending limit for questions is reached. Questions work again after midnight.",
       "no_model": "The assistant needs a model, and none is set up. An admin can choose one on the Admin page.",
-      "cap_reached": "This month's spending limit for your account is reached. Questions work again on {{date}}.",
-      "own_key_failed": "OpenRouter refused your own API key, so this question wasn't answered. Settings says why; until you save a working key, questions use this installation's account under your monthly limit."
+      "cap_reached": "Your monthly safety limit on AI spending is reached. Questions work again on {{date}}, or when you raise the limit in Settings.",
+      "own_key_failed": "OpenRouter refused your own API key, so this question wasn't answered. Settings says why; questions work again once you save a working key there.",
+      "own_key_required": "Questions are answered on your own OpenRouter API key, and none is saved. Add one in Settings to ask questions."
     },
     "declined": {
       "off_domain": "Outside what I cover",
@@ -936,8 +943,9 @@
       "causes": {
         "failed": "it failed.",
         "budget_reached": "the agent's daily AI budget ran out.",
-        "cap_reached": "your monthly AI limit is reached.",
-        "own_key_failed": "your own OpenRouter key stopped working."
+        "cap_reached": "your monthly safety limit on AI spending is reached.",
+        "own_key_failed": "your own OpenRouter key stopped working.",
+        "own_key_required": "no OpenRouter key of your own is saved."
       },
       "refusals": {
         "not_expired": "Only an expired proposal can be re-checked.",
@@ -947,7 +955,10 @@
         "budget_spent": "The agent's AI budget for today is spent.",
         "scan_running": "The agent is scanning right now - try again in a minute.",
         "agent_not_active": "The agent is paused or archived.",
-        "no_persona": "The agent has no instructions or settings to decide by."
+        "no_persona": "The agent has no instructions or settings to decide by.",
+        "own_key_required": "Re-checks run on your own OpenRouter API key. Add one in Settings first.",
+        "own_key_failed": "OpenRouter refused your saved API key. Replace it in Settings first.",
+        "safety_limit_reached": "Your monthly safety limit on AI spending is reached."
       },
       "failed": "The re-check could not run.",
       "superseded": "A later proposal for the same trade was approved, so there is nothing to re-check.",
@@ -997,25 +1008,23 @@
     "signIn": "Sign-in",
     "spend": {
       "title": "Model spending",
-      "line": "This month: {{spent}} of {{cap}}, resets on {{date}}.",
-      "hint": "Every model call made for you counts: agent scans, questions and explanations. At the limit, scans and questions stop until the month resets; alerts still arrive, explained by their templates.",
-      "ownKeyActive": "Your own OpenRouter key pays for your model calls, so the monthly limit doesn't apply while it works.",
+      "hint": "Every model call made for you counts: agent scans, questions and explanations. Other apps that use the same key are not counted here.",
       "ownKeyLine": "On your own key this month: {{spent}} (estimated here; your OpenRouter account shows the actual bill)."
     },
     "ownKey": {
       "title": "Your OpenRouter key",
-      "intro": "Save an OpenRouter API key of your own and your agent scans, questions and explanations are paid from your OpenRouter account instead of this installation's, with no monthly limit. The key is checked with OpenRouter, stored encrypted, and never shown again: only its last four characters.",
-      "limitHint": "To cap what your key spends, set a credit limit on the key in your OpenRouter account. When it is reached, the call that hits it fails and your calls move to this installation's account under your monthly limit, until you save the key again.",
+      "intro": "Your agent scans, questions and model-written explanations run on an OpenRouter API key of your own, paid from your OpenRouter account. This installation's key is not used for them. The key is checked with OpenRouter, stored encrypted, and never shown again: only its last four characters.",
+      "limitHint": "To cap what your key spends, set a credit limit on the key in your OpenRouter account, or a monthly safety limit below. When OpenRouter refuses the key, scans and questions stop until you save it again.",
       "label": "API key",
       "saved": "Key ending {{lastFour}}, saved {{date}}.",
       "save": "Save key",
       "saving": "Checking with OpenRouter…",
       "replace": "Replace key",
       "remove": "Remove key",
-      "removed": "Key removed. Your calls use this installation's account under your monthly limit.",
+      "removed": "Key removed. Scans and questions stop until you save a key.",
       "failed": {
-        "rejected": "OpenRouter stopped accepting your key ending {{lastFour}} on {{date}}. Until you save a working key, your calls use this installation's account under your monthly limit.",
-        "no_credit": "On {{date}} OpenRouter said your key ending {{lastFour}} has no credit left: your account ran out, or the key reached the credit limit set on it. Until you add credit or raise the limit and save the key again, your calls use this installation's account under your monthly limit."
+        "rejected": "OpenRouter stopped accepting your key ending {{lastFour}} on {{date}}. Scans and questions are stopped until you save a working key.",
+        "no_credit": "On {{date}} OpenRouter said your key ending {{lastFour}} has no credit left: your account ran out, or the key reached the credit limit set on it. Scans and questions are stopped until you add credit or raise the limit and save the key again."
       },
       "unavailable": "This installation isn't set up to use your own key.",
       "errors": {
@@ -1025,7 +1034,19 @@
         "own_keys_unavailable": "This installation isn't set up to use your own key.",
         "failed": "The key couldn't be saved.",
         "removeFailed": "The key couldn't be removed."
-      }
+      },
+      "none": "No key is saved, so scans and questions can't run. Explanations are written by templates meanwhile."
+    },
+    "safetyLimit": {
+      "title": "Monthly safety limit",
+      "intro": "Optional. A ceiling on what this app may spend on your key in a calendar month, as a brake against an agent that runs away. At the limit, scans and questions stop until the month resets; alerts still arrive, explained by their templates. It works even on a key with no credit limit on OpenRouter.",
+      "line": "This month: {{spent}} of your {{limit}} limit; it resets on {{date}}.",
+      "reached": "Reached: {{spent}} of your {{limit}} limit this month. Scans and questions are stopped until {{date}}, or until you raise the limit.",
+      "label": "Limit per month (USD)",
+      "save": "Save limit",
+      "remove": "Remove limit",
+      "bounds": "Any amount from {{min}} to {{max}}. Leave it unset for no limit.",
+      "failed": "The limit couldn't be saved."
     }
   },
   "topicsPage": {
@@ -1231,7 +1252,6 @@
       "title": "Sign-up requests",
       "none": "No requests are waiting.",
       "asked": "asked {{age}}",
-      "cap": "Monthly AI cap ($)",
       "approve": "Approve",
       "reject": "Reject",
       "undo": "Undo rejection",
@@ -1240,11 +1260,10 @@
     },
     "signupSettings": {
       "title": "Sign-up",
-      "cap": "Default monthly AI cap ($)",
       "max": "Requests that may wait at once",
       "save": "Save",
       "saved": "Saved",
-      "hint": "An approval offers the default cap; approvals already made keep theirs. The cap is $0 to {{cap}}. Up to {{max}} requests may wait; 0 closes sign-up."
+      "hint": "Up to {{max}} requests may wait; 0 closes sign-up. Approved users run on their own OpenRouter key."
     },
     "users": {
       "title": "Users",
@@ -1260,19 +1279,17 @@
       },
       "lastSignIn": "signed in {{age}}",
       "neverSignedIn": "never signed in",
-      "spent": "{{spent}} of {{cap}} this month",
-      "spentUncapped": "{{spent}} this month, no cap",
       "ownKey": {
         "none": "no own key",
         "valid": "own key working",
         "failed": "own key refused"
       },
-      "cap": "Monthly cap (USD)",
-      "saveCap": "Save cap",
       "oneTimePassword": "One-time password",
       "oneTimeShown": "Shown once - pass it on. They must change it when they sign in, and every session they had has ended.",
       "disable": "Disable",
-      "enable": "Enable"
+      "enable": "Enable",
+      "spentInstallation": "{{spent}} this month on the installation's key",
+      "spentOwnKey": "{{spent}} this month on their own key"
     }
   },
   "languages": {
@@ -1518,8 +1535,9 @@
         "budget_reached": "Stopped: today's model budget is spent.",
         "step_limit": "Stopped at the step limit without an answer.",
         "failed": "The scan failed; the scan below says why.",
-        "cap_reached": "Stopped: this month's spending limit for your account is reached. Scans run again on {{date}}.",
-        "own_key_failed": "Stopped: OpenRouter refused your own API key. Settings says why; until you save a working key, scans use this installation's account under your monthly limit."
+        "cap_reached": "Stopped: your monthly safety limit on AI spending is reached. Scans run again on {{date}}.",
+        "own_key_failed": "Stopped: OpenRouter refused your own API key. Settings says why; scans run again once you save a working key.",
+        "own_key_required": "Stopped: no OpenRouter key of your own is saved. Add one in Settings."
       },
       "openProposal": "Review the proposal",
       "refusals": {
@@ -1527,7 +1545,10 @@
         "no_persona": "Give the agent instructions or settings first: it decides by them.",
         "budget_spent": "Today's model budget is spent. It resets at midnight UTC, or raise it on the Settings tab.",
         "scan_running": "This agent is already scanning.",
-        "no_model": "No model is chosen for agents. Choose one on the Admin page."
+        "no_model": "No model is chosen for agents. Choose one on the Admin page.",
+        "own_key_required": "Scans run on your own OpenRouter API key. Add one in Settings first.",
+        "own_key_failed": "OpenRouter refused your saved API key. Replace it in Settings first.",
+        "safety_limit_reached": "Your monthly safety limit on AI spending is reached. Raise it in Settings, or wait for the next month."
       },
       "schedule": "When it scans",
       "runningNow": {
@@ -1590,8 +1611,9 @@
         "step_limit": "Step limit",
         "failed": "Failed",
         "running": "Running",
-        "cap_reached": "Monthly limit",
-        "own_key_failed": "Key refused"
+        "cap_reached": "Safety limit",
+        "own_key_failed": "Key refused",
+        "own_key_required": "No key"
       },
       "proposed": "{{side}} {{quantity}} {{symbol}}",
       "cost_one": "{{cost}} · {{count}} step",
@@ -1614,8 +1636,9 @@
       "model": "Model: {{model}}",
       "fundedBy": "Paid for by selling {{symbols}}: approve that first.",
       "notProposed": "Not proposed: {{problems}}",
-      "capReached": "Stopped: this month's spending limit for your account was reached. It resets on {{date}}.",
-      "ownKeyFailed": "Stopped: OpenRouter refused your own API key during this scan. Settings says why."
+      "capReached": "Stopped: your monthly safety limit on AI spending was reached. It resets on {{date}}.",
+      "ownKeyFailed": "Stopped: OpenRouter refused your own API key during this scan. Settings says why.",
+      "ownKeyRequired": "Stopped: no OpenRouter key of your own was saved when this scan ran."
     },
     "sides": {
       "buy": "Buy",
@@ -1872,5 +1895,12 @@
     "failed": "The reset did not run; nothing was erased.",
     "done_one": "Done: {{count}} row erased. Backup {{id}}.",
     "done_other": "Done: {{count}} rows erased. Backup {{id}}."
+  },
+  "ownKeyNotice": {
+    "no_key": "Agent scans, questions and model-written explanations run on your own OpenRouter API key, and none is saved. Add one in Settings to use them.",
+    "key_failed": "OpenRouter refused your saved API key, so scans and questions are stopped. Replace the key in Settings to start them again.",
+    "unavailable": "This installation isn't set up to use your own OpenRouter key, so scans and questions can't run. Ask the admin.",
+    "safety_limit": "Your monthly safety limit on AI spending is reached, so scans and questions are stopped until {{date}}. You can raise the limit in Settings.",
+    "openSettings": "Open Settings"
   }
 }

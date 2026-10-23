@@ -358,7 +358,7 @@ describe('Re-check from Telegram (D217)', () => {
     const telegram = chat();
     await tap(telegram, fakeAi(async () => ({ ...SCAN, outcome: 'cap_reached', answer: null })));
     const [, , text, options] = telegram.editMessage.mock.calls[0]! as unknown as [string, number, string, { keyboard: string }];
-    expect(text).toContain('your monthly AI limit is reached. You can try again.');
+    expect(text).toContain(`${messagesFor('en').recheck.causes.cap_reached} You can try again.`);
     expect(options.keyboard).toBe('recheck');
   });
 

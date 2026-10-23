@@ -125,7 +125,8 @@ async function decided(
 }
 
 /**
- * Let a waiting user in with this monthly cap (D157). The 0058 trigger seeds
+ * Let a waiting user in. The cap is retired (D279): it is written only for
+ * 0058's CHECK, from the installation's default, and nothing reads it. The 0058 trigger seeds
  * their primary agent on this very transition, so a pending user never had one.
  */
 export async function approveSignup(

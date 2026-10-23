@@ -1,4 +1,4 @@
-"""Users' own keys against the real `user_llm_keys` and `llm_calls` (D206-D209)."""
+"""Users' own keys against the real `user_llm_keys` and `llm_calls` (D206-D209, D245, D250)."""
 
 from __future__ import annotations
 
@@ -10,8 +10,9 @@ from sqlalchemy.engine import Engine
 
 from app.llm.call_log import CallEntry, DatabaseCallLog
 from app.llm.key_vault import KeyVault
-from app.llm.monthly_cap import MIN_RETENTION_DAYS, DatabaseCapLedger
-from app.llm.own_key import DatabaseOwnKeyStore
+from app.llm.monthly_cap import MIN_RETENTION_DAYS, DatabaseSafetyLimitLedger
+from app.llm.own_key import DatabaseOwnKeyStore, UsableKey
+from app.llm.payer import INSTALLATION, Payer
 
 KEY = "sk-or-v1-" + "b" * 56 + "9f3e"
 NEWER = "sk-or-v1-" + "c" * 56 + "77aa"
@@ -25,6 +26,10 @@ def _user(engine: Engine) -> str:
                 "VALUES ('user', 'active', 5000000, 'Asia/Jerusalem') RETURNING id::text"
             )
         ).scalar_one()
+
+
+def _usable(store: DatabaseOwnKeyStore, user: str) -> UsableKey | None:
+    return store.payer(user).key
 
 
 def _vault() -> KeyVault:
@@ -41,7 +46,7 @@ def test_a_saved_key_is_stored_encrypted_and_described_by_its_last_four(migrated
     with migrated.connect() as connection:
         stored = connection.execute(text("SELECT ciphertext FROM user_llm_keys")).scalar_one()
     assert KEY not in stored
-    usable = store.usable_key(user)
+    usable = _usable(store, user)
     assert usable is not None and usable.api_key == KEY
 
 
@@ -49,12 +54,12 @@ def test_a_failed_key_is_not_used_and_a_new_one_replaces_it(migrated: Engine) ->
     user = _user(migrated)
     store = DatabaseOwnKeyStore(migrated, _vault())
     store.save(user, KEY)
-    usable = store.usable_key(user)
+    usable = _usable(store, user)
     assert usable is not None
 
     store.mark_failed(user, usable.token, "no_credit")
 
-    assert store.usable_key(user) is None
+    assert store.payer(user) == Payer(refusal="own_key_failed")
     failed = store.saved(user)
     assert failed is not None
     assert (failed.status, failed.failure, failed.failed_at is not None) == (
@@ -70,21 +75,43 @@ def test_marking_an_old_key_failed_leaves_one_saved_since_alone(migrated: Engine
     user = _user(migrated)
     store = DatabaseOwnKeyStore(migrated, _vault())
     store.save(user, KEY)
-    old = store.usable_key(user)
+    old = _usable(store, user)
     assert old is not None
     store.save(user, NEWER)
 
     store.mark_failed(user, old.token, "rejected")
 
-    current = store.usable_key(user)
+    current = _usable(store, user)
     assert current is not None and current.api_key == NEWER
 
 
 def test_a_key_no_configured_key_decrypts_is_not_used(migrated: Engine) -> None:
     user = _user(migrated)
     DatabaseOwnKeyStore(migrated, _vault()).save(user, KEY)
-    assert DatabaseOwnKeyStore(migrated, _vault()).usable_key(user) is None
-    assert DatabaseOwnKeyStore(migrated, None).usable_key(user) is None
+    refused = Payer(refusal="own_key_required")
+    assert DatabaseOwnKeyStore(migrated, _vault()).payer(user) == refused
+    assert DatabaseOwnKeyStore(migrated, None).payer(user) == refused
+
+
+def test_the_admin_is_the_installations_and_a_user_without_a_key_is_refused(
+    migrated: Engine,
+) -> None:
+    store = DatabaseOwnKeyStore(migrated, _vault())
+    with migrated.connect() as connection:
+        admin = connection.execute(
+            text("SELECT id::text FROM users WHERE role = 'admin' LIMIT 1")
+        ).scalar_one_or_none()
+    if admin is None:
+        with migrated.begin() as connection:
+            admin = connection.execute(
+                text(
+                    "INSERT INTO users (role, status) VALUES ('admin', 'active') RETURNING id::text"
+                )
+            ).scalar_one()
+    assert store.payer(admin) == INSTALLATION
+    assert store.payer(_user(migrated)) == Payer(refusal="own_key_required")
+    nobody = "00000000-0000-0000-0000-0000000000ff"
+    assert store.payer(nobody) == Payer(refusal="own_key_required")
 
 
 def test_reencrypting_moves_every_key_to_the_first_vault_key(migrated: Engine) -> None:
@@ -97,7 +124,7 @@ def test_reencrypting_moves_every_key_to_the_first_vault_key(migrated: Engine) -
 
     assert DatabaseOwnKeyStore(migrated, KeyVault([new, old])).reencrypt_all() == (1, 0)
 
-    usable = DatabaseOwnKeyStore(migrated, KeyVault([new])).usable_key(user)
+    usable = DatabaseOwnKeyStore(migrated, KeyVault([new])).payer(user).key
     assert usable is not None and usable.api_key == KEY
 
 
@@ -114,8 +141,16 @@ def test_removing_a_key_and_removing_the_user(migrated: Engine) -> None:
     assert store.saved(user) is None
 
 
-def test_the_cap_sums_only_what_the_installation_paid_for(migrated: Engine) -> None:
+def test_the_safety_limit_sums_only_what_the_users_own_key_paid_for(migrated: Engine) -> None:
     user = _user(migrated)
+    with migrated.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO user_settings (user_id, llm_safety_limit_micro_usd) "
+                "VALUES (CAST(:u AS uuid), 20000000)"
+            ),
+            {"u": user},
+        )
     log = DatabaseCallLog(migrated, MIN_RETENTION_DAYS)
     for paid_by, cost in (("installation", 300), ("own_key", 9_000_000)):
         log.record(
@@ -137,6 +172,6 @@ def test_the_cap_sums_only_what_the_installation_paid_for(migrated: Engine) -> N
             )
         )
 
-    month = DatabaseCapLedger(migrated).month(user, datetime.now(UTC))
+    month = DatabaseSafetyLimitLedger(migrated).month(user, datetime.now(UTC))
 
-    assert month is not None and month.spent_micro_usd == 300
+    assert month is not None and month.spent_micro_usd == 9_000_000

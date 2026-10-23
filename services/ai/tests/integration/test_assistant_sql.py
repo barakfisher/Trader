@@ -43,6 +43,7 @@ from app.llm.base import (
     LLMRequestError,
     LLMUnavailableError,
     MonthlyCapReachedError,
+    OwnKeyRequiredError,
     TokenUsage,
     ToolCall,
     UserMessage,
@@ -798,6 +799,20 @@ async def test_the_monthly_cap_is_an_outcome_of_its_own(
     assert turn.outcome == "cap_reached"
     assert turn.text == NO_REPLY_TEXT["cap_reached"]
     assert [m.outcome for m in _stored(loaded, turn.conversation_id)] == [None, "cap_reached"]
+
+
+@pytest.mark.parametrize("refusal", ["own_key_required", "own_key_failed"])
+async def test_no_working_key_of_ones_own_is_an_outcome_and_the_question_is_kept(
+    loaded: Engine, account: dict[str, Any], refusal: str
+) -> None:
+    llm = ScriptedLLM(OwnKeyRequiredError(refusal))
+    turn = await _ask(loaded, account, llm, "How is my portfolio?")
+
+    # D245: said as an outcome, and not asked again on anyone's key.
+    assert turn.outcome == refusal
+    assert turn.text == NO_REPLY_TEXT[refusal]
+    assert len(llm.sent) == 1
+    assert [m.outcome for m in _stored(loaded, turn.conversation_id)] == [None, refusal]
 
 
 async def test_no_model_is_an_outcome_and_the_question_is_kept(

@@ -23,11 +23,12 @@ from app.corpus.embedder_factory import build_embedder
 from app.corpus.vector_store import PgVectorStore
 from app.db import get_engine
 from app.llm.call_log import DatabaseCallLog
-from app.llm.factory import build_llm
+from app.llm.factory import build_llm, models_are_choosable
 from app.llm.key_vault import build_vault
 from app.llm.model_choice import DatabaseModelChoices
-from app.llm.monthly_cap import DatabaseCapLedger
+from app.llm.monthly_cap import DatabaseSafetyLimitLedger
 from app.llm.own_key import DatabaseOwnKeyStore
+from app.llm.payer import PayerGate
 from app.providers.registry import MarketDataService, build_providers
 from app.routers import (
     agents,
@@ -63,16 +64,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # quotes API is never taken down by a narration setting.
     # Every call through it is recorded in `llm_calls` for the admin page.
     # Users' own OpenRouter keys (D206), encrypted with LLM_KEY_ENCRYPTION_KEYS;
-    # without it saved keys can be read about and removed, never used.
+    # without it saved keys can be read about and removed, never used - and then
+    # nobody but the admin can make a metered call (D245).
     key_store = DatabaseOwnKeyStore(get_engine(), build_vault(settings.llm_key_encryption_keys))
     app.state.own_keys = key_store
+    payer = PayerGate(
+        key_store,
+        DatabaseSafetyLimitLedger(get_engine()),
+        own_keys_usable=key_store.can_save and models_are_choosable(settings),
+    )
+    app.state.payer = payer
     app.state.llm = build_llm(
         settings,
         redis,
         call_log=DatabaseCallLog(get_engine(), settings.llm_call_retention_days),
         choices=DatabaseModelChoices(get_engine()),
-        cap_ledger=DatabaseCapLedger(get_engine()),
-        own_keys=key_store if key_store.can_save else None,
+        payer=payer,
     )
     # Unlike the LLM above, a misconfigured embedder raises here in every
     # environment and stops the service starting. There is no honest null

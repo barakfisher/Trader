@@ -134,45 +134,43 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
-  describe('the monthly cap (D157, D203)', () => {
-    it("sums the user's calls since their month began, in their zone; none for the admin", async () => {
-      const capped = randomUUID();
+  describe("the own-key month and the safety limit (D209, D250)", () => {
+    it("sums the user's own-key calls since their month began, in their zone; none for the admin", async () => {
+      const user = randomUUID();
       const zone = 'Pacific/Kiritimati'; // UTC+14: its month starts a day before UTC's
       await getPool().query(
-        "INSERT INTO users (id, status, llm_cap_micro_usd, timezone) VALUES ($1, 'active', 5000000, $2)",
-        [capped, zone],
+        "INSERT INTO users (id, status, llm_cap_micro_usd, timezone) VALUES ($1, 'active', 0, $2)",
+        [user, zone],
       );
       try {
+        expect((await queries.getMonthlySpend(user))?.safety_limit_micro_usd).toBeNull();
+        expect(await queries.setSafetyLimit(user, 20_000_000)).toBe(20_000_000);
         const start = `date_trunc('month', now() AT TIME ZONE '${zone}') AT TIME ZONE '${zone}'`;
         await getPool().query(
-          `INSERT INTO llm_calls (user_id, purpose, provider, outcome, latency_ms, prompt, cost_micro_usd, started_at)
-           VALUES ($1, 'ask', 'openrouter', 'ok', 1, 'p', 700, ${start} - interval '1 second'),
-                  ($1, 'ask', 'openrouter', 'ok', 1, 'p', 11, ${start}),
-                  ($1, 'ask', 'openrouter', 'budget_exhausted', 1, 'p', 0, now())`,
-          [capped],
-        );
-        // D209: a call on the user's own key is summed beside the cap, not in it.
-        await getPool().query(
-          `INSERT INTO llm_calls (user_id, purpose, provider, outcome, latency_ms, prompt, cost_micro_usd, paid_by)
-           VALUES ($1, 'ask', 'openrouter', 'ok', 1, 'p', 4000, 'own_key')`,
-          [capped],
+          `INSERT INTO llm_calls (user_id, purpose, provider, outcome, latency_ms, prompt, cost_micro_usd, started_at, paid_by)
+           VALUES ($1, 'ask', 'openrouter', 'ok', 1, 'p', 700, ${start} - interval '1 second', 'own_key'),
+                  ($1, 'ask', 'openrouter', 'ok', 1, 'p', 11, ${start}, 'own_key'),
+                  ($1, 'ask', 'openrouter', 'ok', 1, 'p', 900, now(), 'installation')`,
+          [user],
         );
         const { rows } = await getPool().query<{ resets: string }>(
           `SELECT to_char(date_trunc('month', now() AT TIME ZONE '${zone}') + interval '1 month', 'YYYY-MM-DD') AS resets`,
         );
-        expect(await queries.getMonthlySpend(capped)).toEqual({
-          cap_micro_usd: '5000000',
-          spent_micro_usd: '11',
-          own_key_spent_micro_usd: '4000',
+        expect(await queries.getMonthlySpend(user)).toEqual({
+          own_key_spent_micro_usd: '11',
+          safety_limit_micro_usd: '20000000',
           resets_on: rows[0]!.resets,
         });
+        expect(await queries.setSafetyLimit(user, null)).toBeNull();
+        await expect(queries.setSafetyLimit(user, 0)).rejects.toThrow();
         const { rows: admins } = await getPool().query<{ id: string }>(
           "SELECT id FROM users WHERE role = 'admin' LIMIT 1",
         );
         if (admins[0]) expect(await queries.getMonthlySpend(admins[0].id)).toBeNull();
       } finally {
-        await getPool().query('DELETE FROM llm_calls WHERE user_id = $1', [capped]);
-        await getPool().query('DELETE FROM users WHERE id = $1', [capped]);
+        await getPool().query('DELETE FROM llm_calls WHERE user_id = $1', [user]);
+        await getPool().query('DELETE FROM user_settings WHERE user_id = $1', [user]);
+        await getPool().query('DELETE FROM users WHERE id = $1', [user]);
       }
     });
   });

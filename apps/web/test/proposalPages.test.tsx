@@ -413,7 +413,7 @@ describe('re-checking an expired trade proposal (D212)', () => {
   it('keeps the button after a re-check that reached no answer, and says why', async () => {
     serveRecheck({ available: true, last: { outcome: 'unanswered', scanId: 's-2', at: AT, cause: 'cap_reached' } });
     renderAt('/proposals/p-trade');
-    expect(await screen.findByText(/your monthly AI limit is reached\. You can try again\./)).toBeTruthy();
+    expect(await screen.findByText(/your monthly safety limit on AI spending is reached\. You can try again\./)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Re-check' })).toBeTruthy();
   });
 

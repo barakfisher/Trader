@@ -10,7 +10,11 @@ formed, but the agent is not in a state to scan - the primary never scans (D1),
 a paused or archived agent does not (D18), an agent with neither instructions nor
 a mandate has nothing to decide by (D174; the code keeps its old name,
 `no_persona`), one asked to scan now with its day's budget spent is refused (D52),
-and one already scanning would be billed twice. A model that is
+and one already scanning would be billed twice. A user who is not the admin and
+has no working key of their own, or has spent their monthly safety limit, is
+refused before anything runs (`own_key_required`, `own_key_failed`,
+`safety_limit_reached`; D245, D250) - a scheduled scan too, which the
+orchestrator then skips. A model that is
 not configured is a 503: the service cannot do this at all right now.
 
 `POST /agents/{agent_id}/proposals/{proposal_id}/recheck` re-checks one expired
@@ -48,6 +52,7 @@ from app.deps import (
     get_embedder,
     get_market_data,
     get_vector_store,
+    payer_refusal,
     require_internal_key,
 )
 from app.llm.factory import configured_model
@@ -92,6 +97,7 @@ async def scan_agent(
     # shows the slot that did not happen and why.
     agent = _scannable(engine, user_id, agent_id, asked_now=payload.trigger == "manual")
     llm = _model(request, settings)
+    _payable(request, user_id)
     context = scan_context(
         engine=engine,
         market=market,
@@ -138,6 +144,7 @@ async def recheck_proposal(
         code = status.HTTP_404_NOT_FOUND if error.code == "proposal_not_found" else None
         raise _refuse(error.code, error.message, code or status.HTTP_409_CONFLICT) from error
     llm = _model(request, settings)
+    _payable(request, user_id)
     context = scan_context(
         engine=engine,
         market=market,
@@ -174,6 +181,21 @@ def _scannable(engine: Engine, user_id: str, agent_id: str, *, asked_now: bool) 
     if asked_now and agent_budget(engine, agent.agent_id, _now()).exhausted:
         raise _refuse("budget_spent", "the agent's model budget for today is spent")
     return agent
+
+
+#: What each refusal of the payer rule says, in the 409's message (server text).
+PAYER_REFUSALS = {
+    "own_key_required": "add your own OpenRouter key in Settings to run this",
+    "own_key_failed": "OpenRouter refused your saved key; replace it in Settings",
+    "safety_limit_reached": "your monthly safety limit on model spending is reached",
+}
+
+
+def _payable(request: Request, user_id: str) -> None:
+    """Refuse up front when nobody may pay for this user's calls (D245, D250)."""
+    refusal = payer_refusal(request, user_id)
+    if refusal is not None:
+        raise _refuse(refusal, PAYER_REFUSALS[refusal])
 
 
 def _model(request: Request, settings: SettingsDep) -> Any:
@@ -223,6 +245,9 @@ async def mandate_check(
         return MandateCheckResponse(status="skipped", reason="no_model")
     if agent_budget(engine, agent.agent_id, _now()).exhausted:
         return MandateCheckResponse(status="skipped", reason="budget_spent")
+    refusal = payer_refusal(request, str(payload.user_id))
+    if refusal is not None:
+        return MandateCheckResponse(status="skipped", reason=refusal)
     result = await check_instructions(llm, agent)
     return MandateCheckResponse(
         status=result.status,

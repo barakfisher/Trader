@@ -24,7 +24,9 @@ import { capResetLabel } from '../lib/monthlyCap.ts';
 import { formatClockTime, formatExactTime } from '../lib/relativeTime.ts';
 import { minutesUntilSoonScan, sameSchedule, scheduleTimes, schedulesAnything } from '../lib/scanTimes.ts';
 import { useRunScan, useUpdateAgent } from '../queries/agents.ts';
+import { useModelAccess } from '../queries/modelAccess.ts';
 import { AgentField } from './AgentField.tsx';
+import { OwnKeyNotice } from './OwnKeyNotice.tsx';
 import { Button, Card, ErrorNote } from './ui.tsx';
 
 /** Micro-USD per cent: a budget is set in dollars and cents. */
@@ -36,7 +38,16 @@ export function llmBudgetText(micro: number): string {
 }
 
 /** The refusals *Run a scan now* can meet, in the reader's words; anything else, the server's. */
-const RUN_REFUSALS = ['agent_not_active', 'no_persona', 'budget_spent', 'scan_running', 'no_model'] as const;
+const RUN_REFUSALS = [
+  'agent_not_active',
+  'no_persona',
+  'budget_spent',
+  'scan_running',
+  'no_model',
+  'own_key_required',
+  'own_key_failed',
+  'safety_limit_reached',
+] as const;
 type RunRefusal = (typeof RUN_REFUSALS)[number];
 
 const isRunRefusal = (code: string): code is RunRefusal => (RUN_REFUSALS as readonly string[]).includes(code);
@@ -68,6 +79,8 @@ export function ScanScheduleCard({ agent }: { agent: AgentView }) {
 function RunScan({ agent }: { agent: AgentView }) {
   const { t } = useTranslation();
   const run = useRunScan(agent.id);
+  // D245, D280: no scan is offered that nobody may pay for; the notice says why.
+  const access = useModelAccess();
   const running = agent.runningScan;
   const soon = running ? null : minutesUntilSoonScan(agent.scheduling?.nextAt);
   const spent = (agent.llmSpentTodayMicroUsd ?? 0) >= (agent.llmBudgetMicroUsd ?? 0);
@@ -87,8 +100,12 @@ function RunScan({ agent }: { agent: AgentView }) {
         : null;
   return (
     <div className="space-y-2">
+      <OwnKeyNotice access={access} />
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={() => run.mutate()} disabled={run.isPending || blocked !== null || running !== null}>
+        <Button
+          onClick={() => run.mutate()}
+          disabled={run.isPending || blocked !== null || access.block !== null || running !== null}
+        >
           <span className="flex items-center gap-1">
             <Play className="size-4" aria-hidden />
             {t('agents.scans.run')}

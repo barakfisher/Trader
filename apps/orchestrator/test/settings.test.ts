@@ -10,6 +10,8 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SAFETY_LIMIT_CEILING_MICRO_USD } from '@traders/shared';
+
 import { ACTIVE_SESSION, sessionCookie } from './session.js';
 
 const USER = {
@@ -56,6 +58,7 @@ vi.mock('../src/db/queries.js', () => ({
   listTargetWeights: vi.fn(async () => []),
   getOrCreateUserSettings: vi.fn(async () => ({ ...DEFAULT_SETTINGS_ROW })),
   getMonthlySpend: vi.fn(async () => null),
+  setSafetyLimit: vi.fn(async (_userId: string, limit: number | null) => limit),
   // Echoes the input back in row form, which is what the real statement's
   // RETURNING does. The route must be seen to render the stored row.
   replaceUserSettings: vi.fn(async (_userId: string, input: Record<string, unknown>) => ({
@@ -342,28 +345,80 @@ describe('user settings', () => {
     );
   });
 
-  it("reads the user's month against their cap, and nothing for a user without one", async () => {
+  it("reads the user's own-key month and safety limit, and nothing for the admin", async () => {
     vi.mocked(queries.getMonthlySpend).mockResolvedValueOnce({
-      cap_micro_usd: '5000000',
-      spent_micro_usd: '280462',
       own_key_spent_micro_usd: '1200000',
+      safety_limit_micro_usd: '20000000',
       resets_on: '2026-11-01',
     });
-    const capped = await app.request('/settings/llm-spend', { headers: { cookie } });
-    expect(capped.status).toBe(200);
-    expect(await capped.json()).toEqual({
-      spend: {
-        capMicroUsd: 5_000_000,
-        spentMicroUsd: 280_462,
-        ownKeySpentMicroUsd: 1_200_000,
-        resetsOn: '2026-11-01',
-      },
+    const limited = await app.request('/settings/llm-spend', { headers: { cookie } });
+    expect(limited.status).toBe(200);
+    expect(await limited.json()).toEqual({
+      spend: { ownKeySpentMicroUsd: 1_200_000, safetyLimitMicroUsd: 20_000_000, resetsOn: '2026-11-01' },
     });
     expect(queries.getMonthlySpend).toHaveBeenCalledWith(USER.id);
+
+    vi.mocked(queries.getMonthlySpend).mockResolvedValueOnce({
+      own_key_spent_micro_usd: '0',
+      safety_limit_micro_usd: null,
+      resets_on: '2026-11-01',
+    });
+    expect((await (await app.request('/settings/llm-spend', { headers: { cookie } })).json()).spend).toEqual({
+      ownKeySpentMicroUsd: 0,
+      safetyLimitMicroUsd: null,
+      resetsOn: '2026-11-01',
+    });
 
     const admin = await app.request('/settings/llm-spend', { headers: { cookie } });
     expect(await admin.json()).toEqual({ spend: null });
     expect((await app.request('/settings/llm-spend')).status).toBe(401);
+  });
+});
+
+describe("a user's monthly safety limit (D250)", () => {
+  let app: ReturnType<typeof buildApp>;
+  let cookie: string;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    app = buildApp();
+    cookie = sessionCookie();
+  });
+
+  const put = (body: unknown) =>
+    app.request('/settings/llm-safety-limit', {
+      method: 'PUT',
+      headers: { ...ORIGIN, cookie },
+      body: JSON.stringify(body),
+    });
+
+  it('sets a limit within 0068\'s bounds, and clears it with null', async () => {
+    const set = await put({ limitMicroUsd: SAFETY_LIMIT_CEILING_MICRO_USD });
+    expect(set.status).toBe(200);
+    expect(await set.json()).toEqual({ limitMicroUsd: SAFETY_LIMIT_CEILING_MICRO_USD });
+    expect(queries.setSafetyLimit).toHaveBeenLastCalledWith(USER.id, SAFETY_LIMIT_CEILING_MICRO_USD);
+
+    expect(await (await put({ limitMicroUsd: null })).json()).toEqual({ limitMicroUsd: null });
+    expect(queries.setSafetyLimit).toHaveBeenLastCalledWith(USER.id, null);
+  });
+
+  it('refuses a limit out of bounds, a fraction, or a body that names anything else', async () => {
+    for (const body of [
+      { limitMicroUsd: 0 },
+      { limitMicroUsd: SAFETY_LIMIT_CEILING_MICRO_USD + 1 },
+      { limitMicroUsd: 1.5 },
+      { limitMicroUsd: 5, extra: true },
+      {},
+    ]) {
+      expect((await put(body)).status, JSON.stringify(body)).toBe(400);
+    }
+    expect(queries.setSafetyLimit).not.toHaveBeenCalled();
+  });
+
+  it("is not the admin's, who runs on the installation's key", async () => {
+    vi.mocked(queries.getUser).mockResolvedValueOnce({ ...USER, role: 'admin' } as never);
+    expect((await put({ limitMicroUsd: 5 })).status).toBe(403);
+    expect(queries.setSafetyLimit).not.toHaveBeenCalled();
   });
 });
 

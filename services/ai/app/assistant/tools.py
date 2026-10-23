@@ -1015,8 +1015,9 @@ async def replay_scan(context: ToolContext, arguments: Mapping[str, Any]) -> dic
             "outcomes: trade (a proposal was made), no_trade, invalid_answer (the answer failed "
             "the server's checks, so nothing was proposed), rule_rejected (the trade broke the "
             "agent's mandate twice, so nothing was proposed), budget_reached, cap_reached (the "
-            "user's monthly spending limit was reached), own_key_failed (OpenRouter refused "
-            "the user's own API key), step_limit, failed"
+            "user's own monthly safety limit was reached), own_key_failed (OpenRouter refused "
+            "the user's own API key), own_key_required (no key of the user's own was saved), "
+            "step_limit, failed"
         ),
     }
 

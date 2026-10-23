@@ -79,6 +79,12 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "DELETE FROM assistant_messages WHERE outcome = 'own_key_failed'; "
         "DELETE FROM user_llm_keys",
     ),
+    # A refusal for want of a key has no name in 0067's outcomes (D245).
+    "0068_own_key_only": (
+        "own_key_required rows exist",
+        "DELETE FROM agent_scans WHERE outcome = 'own_key_required'; "
+        "DELETE FROM assistant_messages WHERE outcome = 'own_key_required'",
+    ),
     # A re-check names the proposal it was for; 0065's triggers cannot (D212).
     "0066_proposal_refresh": (
         "agent_scans holds re-checks",

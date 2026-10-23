@@ -60,6 +60,7 @@ from app.llm.base import (
     LLMProvider,
     MonthlyCapReachedError,
     OwnKeyFailedError,
+    OwnKeyRequiredError,
     UserMessage,
 )
 from app.llm.tool_loop import LoopState, LoopStop, run_tool_loop
@@ -484,10 +485,13 @@ def _quotes_idle(thesis: str | None, idle: dict[str, Any]) -> bool:
 
 
 def _outcome_for(stop: LoopStop) -> ScanOutcome:
-    """How a loop that ended without an answer ends the scan: the user's monthly
-    cap is told apart from the other budgets, because the screen says when it resets."""
+    """How a loop that ended without an answer ends the scan: the user's safety
+    limit is told apart from the other budgets, because the screen says when it
+    resets, and a missing or refused key says to add or replace it (D245)."""
     if isinstance(stop.cause, MonthlyCapReachedError):
         return "cap_reached"
+    if isinstance(stop.cause, OwnKeyRequiredError):
+        return "own_key_failed" if stop.cause.refusal == "own_key_failed" else "own_key_required"
     if isinstance(stop.cause, OwnKeyFailedError):
         return "own_key_failed"
     return stop.end if stop.end != "answer" else "failed"

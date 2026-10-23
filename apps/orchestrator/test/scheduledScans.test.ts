@@ -7,6 +7,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { PAYER_REFUSALS } from '@traders/shared';
 import { AiServiceError } from '@traders/shared/ai';
 import { ACTIVE_SESSION } from './session.js';
 
@@ -227,6 +228,16 @@ describe('one attempt', () => {
     });
     await runSlotAttempt(job, { ai, notifier: channel, now: () => NOW });
     expect(queries.finishRun).toHaveBeenCalledWith('run-1', 'skipped', { reason: 'budget_spent' });
+    expect(channel.send).not.toHaveBeenCalled();
+  });
+
+  it.each(PAYER_REFUSALS)('skips a user nobody may pay for (%s), silently: D245', async (code) => {
+    const channel = notifier();
+    const ai = fakeAi(async () => {
+      throw new AiServiceError('refused', 409, { detail: { code, message: 'no key' } });
+    });
+    await runSlotAttempt(job, { ai, notifier: channel, now: () => NOW });
+    expect(queries.finishRun).toHaveBeenCalledWith('run-1', 'skipped', { reason: code });
     expect(channel.send).not.toHaveBeenCalled();
   });
 

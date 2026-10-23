@@ -29,6 +29,7 @@ from app.llm.base import (
     LLMError,
     LLMProvider,
     LLMUnavailableError,
+    OwnKeyRequiredError,
 )
 from app.llm.degenerate_text import is_degenerate
 from app.narration.correlation import CandidateArticle, as_evidence
@@ -43,7 +44,13 @@ NarrationSource = Literal["llm", "template"]
 #: Why a narration fell back, recorded on the observation so the rate is
 #: measurable rather than anecdotal.
 FallbackReason = Literal[
-    "none", "no_provider", "budget_exhausted", "provider_error", "unsourced_figures", "malformed"
+    "none",
+    "no_provider",
+    "own_key_required",
+    "budget_exhausted",
+    "provider_error",
+    "unsourced_figures",
+    "malformed",
 ]
 
 SYSTEM_PROMPT = """You explain movements in someone's investment portfolio.
@@ -279,6 +286,9 @@ async def narrate(
 
 
 def _reason_for(error: LLMError) -> FallbackReason:
+    if isinstance(error, OwnKeyRequiredError):
+        # A user with no working key of their own (D245): templates until they add one.
+        return "own_key_required"
     if isinstance(error, LLMUnavailableError):
         return "no_provider"
     if isinstance(error, LLMBudgetExceededError):

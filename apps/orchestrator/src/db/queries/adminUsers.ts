@@ -13,7 +13,6 @@ export interface AdminUserRow {
   role: 'user' | 'admin';
   status: 'active' | 'disabled';
   timezone: string;
-  llm_cap_micro_usd: string | null;
   spent_this_month_micro_usd: string;
   own_key_status: 'valid' | 'failed' | null;
   last_sign_in_at: Date | null;
@@ -22,19 +21,18 @@ export interface AdminUserRow {
 
 /**
  * Active and disabled accounts, the admin first, then by approval. Waiting and
- * rejected requests are the sign-up list's. This month's spend is the cap's own
- * sum (`getMonthlySpend`): installation-paid calls since the start of the month
- * in the user's zone.
+ * rejected requests are the sign-up list's. This month's spend is every recorded
+ * call since the start of the month in the user's zone, whoever's key paid: the
+ * admin's are the installation's, everyone else's their own (D245).
  */
 export function listUsersForAdmin(): Promise<AdminUserRow[]> {
   return query<AdminUserRow>(
-    `-- agent-blind: a user's whole month, every agent's calls and the assistant's (D157).
+    `-- agent-blind: a user's whole month, every agent's calls and the assistant's.
      SELECT u.id, u.email, u.role, u.status, u.timezone,
-            u.llm_cap_micro_usd::text AS llm_cap_micro_usd,
             coalesce((
               SELECT sum(c.cost_micro_usd)
                 FROM llm_calls c
-               WHERE c.user_id = u.id AND c.paid_by = 'installation'
+               WHERE c.user_id = u.id
                  AND c.started_at >= (date_trunc('month', now() AT TIME ZONE u.timezone) AT TIME ZONE u.timezone)
             ), 0)::text AS spent_this_month_micro_usd,
             k.status AS own_key_status,
@@ -63,17 +61,6 @@ export function setUserStatus(
       WHERE id = $1 AND status = $2 AND role <> 'admin'
   RETURNING id`,
     [userId, from, to],
-  );
-}
-
-/** A user's monthly cap, after approval (D239). Takes effect on their next call. */
-export function setUserCap(userId: string, capMicroUsd: number): Promise<{ id: string } | null> {
-  return queryOne<{ id: string }>(
-    `UPDATE users
-        SET llm_cap_micro_usd = $2
-      WHERE id = $1 AND role <> 'admin' AND status IN ('active', 'disabled')
-  RETURNING id`,
-    [userId, capMicroUsd],
   );
 }
 

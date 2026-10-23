@@ -22,6 +22,7 @@ from app.config import Settings, get_settings
 from app.db import get_engine
 from app.deps import get_embedder, get_market_data, get_vector_store
 from app.main import app
+from app.routers.agents import PAYER_REFUSALS
 
 INTERNAL_KEY = "test-key"
 USER = "00000000-0000-0000-0000-000000000001"
@@ -168,4 +169,20 @@ def test_with_no_model_configured_nothing_runs(client: TestClient, scan: dict[st
     app.dependency_overrides[get_settings] = lambda: off
     response = _post(client)
     assert (response.status_code, response.json()["detail"]["code"]) == (503, "no_model")
+    assert scan["ran"] == []
+
+
+@pytest.mark.parametrize("refusal", sorted(PAYER_REFUSALS))
+@pytest.mark.parametrize("trigger", ["manual", "schedule"])
+def test_a_user_nobody_may_pay_for_is_refused_before_anything_runs(
+    client: TestClient,
+    scan: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    refusal: str,
+    trigger: str,
+) -> None:
+    # D245: a scheduled scan too, which the orchestrator then skips rather than fails.
+    monkeypatch.setattr("app.routers.agents.payer_refusal", lambda *_a: refusal)
+    response = _post(client, trigger=trigger)
+    assert (response.status_code, response.json()["detail"]["code"]) == (409, refusal)
     assert scan["ran"] == []

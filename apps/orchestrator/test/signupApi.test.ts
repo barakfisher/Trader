@@ -5,7 +5,6 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { LLM_CAP_CEILING_MICRO_USD } from '@traders/shared';
 import { ACTIVE_SESSION, TEST_USER_ID, sessionCookie } from './session.js';
 
 const ADMIN = {
@@ -141,7 +140,7 @@ describe('deciding a request on the Admin page (D188)', () => {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
 
-  it('lists waiting requests and rejections with the default cap, and nothing of the account', async () => {
+  it('lists waiting requests and rejections, and nothing of the account', async () => {
     vi.mocked(queries.listSignupRequests).mockResolvedValue({
       pending: [
         { user_id: REQUESTER, email: 'noa@example.com', timezone: 'Europe/London', status: 'pending', created_at: new Date('2026-10-19T08:00:00Z') },
@@ -154,7 +153,6 @@ describe('deciding a request on the Admin page (D188)', () => {
         { userId: REQUESTER, email: 'noa@example.com', timezone: 'Europe/London', status: 'pending', requestedAt: '2026-10-19T08:00:00.000Z' },
       ],
       rejected: [],
-      defaultLlmCapMicroUsd: 10_000_000,
     });
   });
 
@@ -163,11 +161,13 @@ describe('deciding a request on the Admin page (D188)', () => {
     expect(await response.json()).toEqual({ pending: 2 });
   });
 
-  it('approves with the cap given, names the admin, and audits the request first', async () => {
+  it('approves with no amount, names the admin, and audits the request first', async () => {
     vi.mocked(queries.approveSignup).mockResolvedValue({ applied: true, status: 'active', email: 'noa@example.com' });
-    const response = await post(`/admin/signups/${REQUESTER}/approve`, { llmCapMicroUsd: 20_000_000 });
+    const response = await post(`/admin/signups/${REQUESTER}/approve`, {});
     expect(await response.json()).toEqual({ applied: true, status: 'active' });
-    expect(queries.approveSignup).toHaveBeenCalledWith(REQUESTER, 20_000_000, ADMIN.id);
+    // The retired cap (D279) is written with the installation's default, only for its CHECK.
+    const { default_llm_cap_micro_usd: retired } = await queries.getInstallationSettings();
+    expect(queries.approveSignup).toHaveBeenCalledWith(REQUESTER, retired, ADMIN.id);
     expect(queries.insertAdminAudit).toHaveBeenCalledTimes(1);
   });
 
@@ -183,15 +183,6 @@ describe('deciding a request on the Admin page (D188)', () => {
     const response = await post(`/admin/signups/${REQUESTER}/restore`);
     expect(await response.json()).toEqual({ applied: true, status: 'pending' });
   });
-
-  it.each([{ llmCapMicroUsd: -1 }, { llmCapMicroUsd: LLM_CAP_CEILING_MICRO_USD + 1 }, { llmCapMicroUsd: 1.5 }, {}])(
-    'refuses the cap %j',
-    async (body) => {
-      const response = await post(`/admin/signups/${REQUESTER}/approve`, body);
-      expect(response.status).toBe(400);
-      expect(queries.approveSignup).not.toHaveBeenCalled();
-    },
-  );
 
   it('refuses an id that is not one', async () => {
     const response = await post('/admin/signups/not-a-uuid/reject');
