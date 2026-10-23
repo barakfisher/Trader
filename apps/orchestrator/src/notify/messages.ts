@@ -216,6 +216,7 @@ export interface Messages {
       noMarketHours: string;
       preOpen: (on: boolean) => string;
       postClose: (on: boolean) => string;
+      backToPending: string;
     };
     asOf: (time: string) => string;
     /** A view that could not be read: the toast, and the message is left as it was. */
@@ -307,6 +308,14 @@ export interface Messages {
       title: (agent: string) => string;
       /** `first` is the first market-hours slot as `scheduledScans.slot` names it. */
       hint: (first: string) => string;
+    };
+    /** A proposal opened from `/pending` (M11 B, D279): its own words, then when it closes. */
+    proposal: {
+      openUntil: (at: string) => string;
+      snoozedUntil: (at: string) => string;
+      /** Decided, expired or gone since the list was drawn: the list is drawn again. */
+      notOpen: string;
+      chooseOne: string;
     };
   };
 
@@ -527,7 +536,7 @@ const en: Messages = {
       help: 'What this bot can do',
       portfolio: "Your real portfolio: value and today's change",
       agents: 'Your simulated agents: run, pause, schedule, last scan',
-      pending: 'Proposals waiting on you',
+      pending: 'Proposals waiting on you: read and decide',
       status: 'Alerts and mute',
       mute: 'Pause alerts: /mute 2h or /mute 30m',
       unmute: 'Turn alerts back on',
@@ -540,7 +549,7 @@ const en: Messages = {
       '',
       "/portfolio - your real portfolio: value and today's change",
       '/agents - your simulated agents: run a scan, pause, change the schedule, see the last run',
-      '/pending - proposals waiting on you',
+      '/pending - proposals waiting on you: open one to read and decide it',
       '/status - alerts and mute',
       '/mute 2h · /unmute - pause or resume alerts',
       '/new - a new conversation with the assistant',
@@ -570,6 +579,7 @@ const en: Messages = {
       noMarketHours: 'None',
       preOpen: (on) => `${on ? '✅' : '⬜'} Pre-open`,
       postClose: (on) => `${on ? '✅' : '⬜'} After close`,
+      backToPending: '⬅️ Pending',
     },
     asOf: (time) => `As of ${time}`,
     unavailable: 'Could not load this right now. Try again in a minute.',
@@ -676,6 +686,12 @@ const en: Messages = {
     schedule: {
       title: (agent) => `⏱ ${agent}: when it scans`,
       hint: (first) => `Market-hours scans start at ${first} and repeat at the chosen interval until the close; trading days only.`,
+    },
+    proposal: {
+      openUntil: (at) => `Open until ${at}.`,
+      snoozedUntil: (at) => `Snoozed until ${at}; you can still decide it now.`,
+      notOpen: 'That is no longer waiting on you.',
+      chooseOne: 'Tap one to read it and decide.',
     },
   },
 
@@ -1003,7 +1019,7 @@ const he: Messages = {
       help: 'מה הבוט יודע לעשות',
       portfolio: 'התיק האמיתי שלך: שווי ושינוי יומי',
       agents: 'הסוכנים המדומים שלך: סריקה, השהיה, לו״ז, ריצה אחרונה',
-      pending: 'הצעות שממתינות לך',
+      pending: 'הצעות שממתינות לך: לקרוא ולהכריע',
       status: 'התראות והשתקה',
       mute: `השתקת התראות: ${ltr('/mute 2h')} או ${ltr('/mute 30m')}`,
       unmute: 'הפעלת ההתראות מחדש',
@@ -1016,7 +1032,7 @@ const he: Messages = {
       '',
       `${ltr('/portfolio')} - התיק האמיתי שלך: שווי ושינוי יומי`,
       `${ltr('/agents')} - הסוכנים המדומים שלך: סריקה עכשיו, השהיה, שינוי לו״ז, הריצה האחרונה`,
-      `${ltr('/pending')} - הצעות שממתינות לך`,
+      `${ltr('/pending')} - הצעות שממתינות לך: פתחו אחת כדי לקרוא ולהכריע`,
       `${ltr('/status')} - התראות והשתקה`,
       `${ltr('/mute 2h')} · ${ltr('/unmute')} - השתקה או חידוש של ההתראות`,
       `${ltr('/new')} - שיחה חדשה עם העוזר`,
@@ -1046,6 +1062,7 @@ const he: Messages = {
       noMarketHours: 'ללא',
       preOpen: (on) => `${on ? '✅' : '⬜'} לפני הפתיחה`,
       postClose: (on) => `${on ? '✅' : '⬜'} אחרי הסגירה`,
+      backToPending: '➡️ ממתינות',
     },
     asOf: (time) => `נכון ל־${ltr(time)}`,
     unavailable: 'לא הצלחתי לטעון את זה כרגע. נסו שוב בעוד דקה.',
@@ -1154,6 +1171,12 @@ const he: Messages = {
     schedule: {
       title: (agent) => `⏱ ${isolated(agent)}: מתי הוא סורק`,
       hint: (first) => `סריקות בשעות המסחר מתחילות ב־${first} וחוזרות במרווח שנבחר עד הסגירה; בימי מסחר בלבד.`,
+    },
+    proposal: {
+      openUntil: (at) => `פתוחה עד ${isolated(at)}.`,
+      snoozedUntil: (at) => `מושהית עד ${isolated(at)}; אפשר להכריע בה כבר עכשיו.`,
+      notOpen: 'זה כבר לא ממתין לך.',
+      chooseOne: 'הקישו על אחת כדי לקרוא ולהכריע.',
     },
   },
 

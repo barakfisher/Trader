@@ -37,7 +37,8 @@ export interface RecheckCallback {
   language: string;
   callbackId: string;
   chatId: string;
-  message?: { message_id: number; text?: string };
+  /** `fromPending`: opened from `/pending`, so its redraws keep the way back (D279). */
+  message?: { message_id: number; text?: string; fromPending?: boolean };
   payload: CallbackPayload & { action: 'recheck' };
   /** The page's limit, counted with it (D257). */
   rateLimits: RateLimits;
@@ -111,7 +112,9 @@ export async function startRecheckCallback(input: RecheckCallback): Promise<{ do
     await telegram?.answerCallback(input.callbackId, toast);
     // A message that cannot be re-checked keeps no button; one that is running keeps its placeholder.
     if (telegram !== null && message !== undefined && status?.blocked !== 'scan_running') {
-      await telegram.setKeyboard(chatId, message.message_id, payload.proposalId, 'none', language);
+      await telegram.setKeyboard(chatId, message.message_id, payload.proposalId, 'none', language, {
+        backToPending: message.fromPending === true,
+      });
     }
     return { done: Promise.resolve() };
   }
@@ -151,6 +154,7 @@ async function finish(input: RecheckCallback, messages: Messages, clock: () => D
     proposalId: payload.proposalId,
     keyboard,
     language,
+    backToPending: message.fromPending === true,
   });
   if (!edited.delivered) {
     logger().warn({ chatId, messageId: message.message_id, err: edited.error }, 'telegram.edit_failed');

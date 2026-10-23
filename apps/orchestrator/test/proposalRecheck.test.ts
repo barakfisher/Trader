@@ -379,7 +379,7 @@ describe('Re-check from Telegram (D217)', () => {
     const ai = fakeAi(async () => SCAN);
     await tap(telegram, ai);
     expect(telegram.answerCallback).toHaveBeenCalledWith('cb-1', messagesFor('en').recheck.refusals.already_rechecked);
-    expect(telegram.setKeyboard).toHaveBeenCalledWith('42', 7, PROPOSAL, 'none', 'en');
+    expect(telegram.setKeyboard).toHaveBeenCalledWith('42', 7, PROPOSAL, 'none', 'en', { backToPending: false });
     expect(ai.recheckProposal).not.toHaveBeenCalled();
   });
 
@@ -389,7 +389,7 @@ describe('Re-check from Telegram (D217)', () => {
     const ai = fakeAi(async () => SCAN);
     await tap(telegram, ai, 'he');
     expect(telegram.answerCallback).toHaveBeenCalledWith('cb-1', messagesFor('he').recheck.refusals.superseded);
-    expect(telegram.setKeyboard).toHaveBeenCalledWith('42', 7, PROPOSAL, 'none', 'he');
+    expect(telegram.setKeyboard).toHaveBeenCalledWith('42', 7, PROPOSAL, 'none', 'he', { backToPending: false });
     expect(ai.recheckProposal).not.toHaveBeenCalled();
   });
 

@@ -30,6 +30,7 @@ import {
   mintNonce,
   type CallbackAction,
 } from './callbackToken.js';
+import { encodeMenuData } from './menuData.js';
 
 /** Telegram truncates beyond this; we would rather cut deliberately. */
 export const MAX_MESSAGE_CHARS = 4096;
@@ -184,7 +185,18 @@ export class TelegramNotifier implements Notifier {
    * Approve button that comes back after an undo must not carry the nonce the
    * first approval already spent.
    */
-  private keyboardFor(proposalId: string, keyboard: Keyboard, language: string) {
+  private keyboardFor(proposalId: string, keyboard: Keyboard, language: string, backToPending = false) {
+    const { inline_keyboard } = this.decisionKeyboard(proposalId, keyboard, language);
+    // A proposal opened from `/pending` keeps its way back there through every
+    // state, a decided one included (M11 B, D279): the list is what is left to do.
+    const back = backToPending
+      ? [[{ text: messagesFor(language).menu.buttons.backToPending, callback_data: encodeMenuData({ view: 'pending' }) }]]
+      : [];
+    return { inline_keyboard: [...inline_keyboard, ...back] };
+  }
+
+  /** A proposal's signed buttons for a state, and its link to the app. */
+  private decisionKeyboard(proposalId: string, keyboard: Keyboard, language: string): { inline_keyboard: InlineKeyboard } {
     const messages = messagesFor(language);
     const button = (action: CallbackAction, label: string, priceMinor?: bigint) => ({
       text: label,
@@ -264,12 +276,18 @@ export class TelegramNotifier implements Notifier {
     proposalId: string,
     keyboard: Keyboard,
     language: string,
+    { backToPending = false }: { backToPending?: boolean } = {},
   ): Promise<DeliveryResult> {
     return this.call('editMessageReplyMarkup', {
       chat_id: chatId,
       message_id: messageId,
-      reply_markup: this.keyboardFor(proposalId, keyboard, language),
+      reply_markup: this.keyboardFor(proposalId, keyboard, language, backToPending),
     });
+  }
+
+  /** A proposal's buttons for a view that draws them itself: the `/pending` proposal view (D279). */
+  proposalButtons(proposalId: string, keyboard: Keyboard, language: string): InlineKeyboard {
+    return this.keyboardFor(proposalId, keyboard, language, true).inline_keyboard;
   }
 
   /** Acknowledge a tap, so Telegram stops showing the button's spinner. */
@@ -301,13 +319,18 @@ export class TelegramNotifier implements Notifier {
     chatId: string,
     messageId: number,
     text: string,
-    { proposalId, keyboard, language }: { proposalId: string; keyboard: Keyboard; language: string },
+    {
+      proposalId,
+      keyboard,
+      language,
+      backToPending = false,
+    }: { proposalId: string; keyboard: Keyboard; language: string; backToPending?: boolean },
   ): Promise<DeliveryResult> {
     return this.call('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
       text: clampMessage(text),
-      reply_markup: this.keyboardFor(proposalId, keyboard, language),
+      reply_markup: this.keyboardFor(proposalId, keyboard, language, backToPending),
     });
   }
 

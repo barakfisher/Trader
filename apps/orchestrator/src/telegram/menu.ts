@@ -20,6 +20,7 @@
 
 import {
   formatMoney,
+  isTradeProposalKind,
   MAX_SCAN_EVERY_HOURS,
   MIN_SCAN_EVERY_HOURS,
   REGULAR_SESSION_MINUTES,
@@ -37,6 +38,7 @@ import {
   listAgents,
   listAgentScans,
   listHoldings,
+  findProposal,
   listProposals,
   muteUntil,
   primaryAgentId,
@@ -47,6 +49,7 @@ import { isolated, messagesFor, observationTextIn, type Messages } from '../noti
 import { readyToScan } from '../services/agentReadiness.js';
 import { valueAgentAccount } from '../services/agentAccount.js';
 import { schedulingOf } from '../services/agentScheduling.js';
+import { evidenceCheckedFrom } from '../services/evidenceChecked.js';
 import { effectiveState } from '../services/proposalState.js';
 import { factsOf } from '../services/proposals.js';
 import { scheduleOf, slotsOf, type ScanSlot, type Session } from '../services/scanSchedule.js';
@@ -223,24 +226,82 @@ async function statusScreen(reader: Reader): Promise<Screen> {
   return { text: lines.join('\n'), keyboard: [mutes, footer(reader, { view: 'status' })] };
 }
 
+/** A list button's label: long enough to tell proposals apart, short enough for a phone. */
+export const PENDING_BUTTON_CHARS = 40;
+
+/** Open proposals, live now: a stored `pending` past its deadline is not offered (D279). */
+async function liveProposals(reader: Reader) {
+  const open = await listProposals(reader.userId, { open: true, limit: PENDING_LIST_LIMIT });
+  return open
+    .map((row) => ({ row, state: effectiveState(factsOf(row), reader.now) }))
+    .filter(({ state }) => state === 'pending' || state === 'snoozed');
+}
+
+/** What is waiting, each a button that opens it in place (M11 B, D279). */
 async function pendingScreen(reader: Reader, language: string): Promise<Screen> {
   const { messages } = reader;
-  const open = await listProposals(reader.userId, { open: true, limit: PENDING_LIST_LIMIT });
-  const live = open
-    .map((row) => ({ row, state: effectiveState(factsOf(row), reader.now) }))
-    .filter(({ state }) => state !== 'expired');
+  const live = await liveProposals(reader);
+  const labelOf = ({ row, state }: (typeof live)[number], index: number) => {
+    const headline = observationTextIn(row, language).headline;
+    return `${index + 1}. ${state === 'snoozed' ? '⏸ ' : ''}${headline}`;
+  };
   const lines =
     live.length === 0
       ? [messages.nothingPending]
       : [
           messages.menu.pending.title,
-          ...live.map(({ row, state }) => {
-            const headline = observationTextIn(row, language).headline;
-            return state === 'snoozed' ? `• ${headline} (${messages.menu.pending.states.snoozed})` : `• ${headline}`;
-          }),
+          ...live.map((item, index) =>
+            item.state === 'snoozed'
+              ? `${labelOf(item, index)} (${messages.menu.pending.states.snoozed})`
+              : labelOf(item, index),
+          ),
+          '',
+          messages.menu.proposal.chooseOne,
         ];
   lines.push('', messages.menu.asOf(clock(reader.now, reader)));
-  return { text: lines.join('\n'), keyboard: [footer(reader, { view: 'pending' })] };
+  return {
+    text: lines.join('\n'),
+    keyboard: [
+      ...live.map((item, index) => [
+        tapButton(clip(labelOf(item, index), PENDING_BUTTON_CHARS), { view: 'proposal', proposalId: item.row.id }),
+      ]),
+      footer(reader, { view: 'pending' }),
+    ],
+  };
+}
+
+/**
+ * One open proposal, drawn as its alert is - its own words, what its scan
+ * checked, when it closes - with the alert's own signed buttons (D279). A tap
+ * on them is the alert's tap: the same handler, the same state machine.
+ */
+async function proposalScreen(
+  reader: Reader,
+  language: string,
+  proposalId: string,
+  deps: MenuDeps,
+): Promise<Screen & { toast?: string }> {
+  const { messages } = reader;
+  const row = await findProposal(reader.userId, proposalId);
+  const state = row === null ? null : effectiveState(factsOf(row), reader.now);
+  if (row === null || (state !== 'pending' && state !== 'snoozed')) {
+    return { ...(await pendingScreen(reader, language)), toast: messages.menu.proposal.notOpen };
+  }
+  const text = observationTextIn(row, language);
+  const lines = [text.headline];
+  if (text.explanation) lines.push('', text.explanation);
+  if (row.scan_tool_calls !== null) lines.push('', messages.evidenceChecked(evidenceCheckedFrom(row.scan_tool_calls)));
+  lines.push(
+    '',
+    state === 'snoozed' && row.snoozed_until !== null
+      ? messages.menu.proposal.snoozedUntil(clock(row.snoozed_until, reader))
+      : messages.menu.proposal.openUntil(clock(row.expires_at, reader)),
+    messages.menu.asOf(clock(reader.now, reader)),
+  );
+  return {
+    text: lines.join('\n'),
+    keyboard: deps.telegram.proposalButtons(row.id, isTradeProposalKind(row.kind) ? 'trade' : 'decide', language),
+  };
 }
 
 /** The simulated agents a user can see here: not the real portfolio, not archived. */
@@ -468,6 +529,8 @@ export async function renderView(
       return statusScreen(reader);
     case 'pending':
       return pendingScreen(reader, language);
+    case 'proposal':
+      return proposalScreen(reader, language, view.proposalId, deps);
     case 'agents':
       return agentsScreen(reader);
     case 'agent':

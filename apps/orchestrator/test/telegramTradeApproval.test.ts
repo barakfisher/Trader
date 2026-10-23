@@ -79,6 +79,7 @@ const proposals = await import('../src/services/proposals.js');
 const { ApiProblem } = await import('../src/http/errors.js');
 const { bpsAsPercent, withRefusal } = await import('../src/telegram/tradeApproval.js');
 const { messagesFor } = await import('../src/notify/messages.js');
+const { decodeMenuData, encodeMenuData } = await import('../src/telegram/menuData.js');
 
 const ENV = {
   APP_ENV: 'test',
@@ -116,7 +117,12 @@ let app: ReturnType<typeof buildApp>;
 
 const HEADLINE = 'Value proposes to buy 2 NVDA at 238.68';
 
-const tap = (action: 'approve' | 'confirm' | 'reject', priceMinor?: bigint, text = HEADLINE) =>
+const tap = (
+  action: 'approve' | 'confirm' | 'reject',
+  priceMinor?: bigint,
+  text = HEADLINE,
+  replyMarkup?: { inline_keyboard: { text: string; callback_data?: string }[][] },
+) =>
   app.request('/telegram/webhook', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-telegram-bot-api-secret-token': WEBHOOK_SECRET },
@@ -127,7 +133,12 @@ const tap = (action: 'approve' | 'confirm' | 'reject', priceMinor?: bigint, text
           { proposalId: PROPOSAL, action, nonce: mintNonce(), ...(priceMinor === undefined ? {} : { priceMinor }) },
           SIGNING_SECRET,
         ),
-        message: { message_id: 99, text, chat: { id: CHAT, type: 'private' } },
+        message: {
+          message_id: 99,
+          text,
+          chat: { id: CHAT, type: 'private' },
+          ...(replyMarkup === undefined ? {} : { reply_markup: replyMarkup }),
+        },
       },
     }),
   });
@@ -175,6 +186,20 @@ describe('the announcement', () => {
   it('offers Approve and Reject only on a trade (D48)', async () => {
     await notifier.send({ userId: USER, title: HEADLINE, body: 'thesis', proposalId: PROPOSAL, trade: true, severity: 'notable', language: 'en' });
     expect(keyboardOf(sentCalls[0]!).map((button) => button.text)).toEqual(['Approve', 'Reject']);
+  });
+});
+
+describe('a trade opened from /pending (D279)', () => {
+  const fromPending = { inline_keyboard: [[{ text: '⬅️ Pending', callback_data: encodeMenuData({ view: 'pending' }) }]] };
+
+  it('keeps its way back to the list through the preview, and only there', async () => {
+    await tap('approve', undefined, HEADLINE, fromPending);
+    const back = keyboardOf(lastEdit()).at(-1)!;
+    expect(decodeMenuData(back.callback_data!)).toEqual({ view: 'pending' });
+
+    sentCalls = [];
+    await tap('approve');
+    expect(keyboardOf(lastEdit()).map((button) => button.callback_data).some((data) => data?.startsWith('m:'))).toBe(false);
   });
 });
 

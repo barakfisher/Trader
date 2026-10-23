@@ -57,7 +57,7 @@ import { TelegramNotifier, type Keyboard } from './client.js';
 import { decodeAgentActionData, type DecodedAgentAction } from './agentActionToken.js';
 import { handleAgentActionTap } from './agentActions.js';
 import { clock, handleMenuTap, sendView } from './menu.js';
-import { decodeMenuData, isMenuData, type MenuView } from './menuData.js';
+import { decodeMenuData, encodeMenuData, isMenuData, type MenuView } from './menuData.js';
 import { handleSignupCallback } from './signupApproval.js';
 import { decodeSignupData } from './signupToken.js';
 import { recheckOffered, startRecheckCallback } from './proposalRecheck.js';
@@ -126,6 +126,15 @@ const updateSchema = z
             message_id: z.number(),
             text: z.string().optional(),
             chat: chatSchema,
+            // Read only to see whether the message was opened from `/pending` (D279).
+            reply_markup: z
+              .object({
+                inline_keyboard: z
+                  .array(z.array(z.object({ callback_data: z.string().optional() }).passthrough()))
+                  .optional(),
+              })
+              .passthrough()
+              .optional(),
           })
           .passthrough()
           .optional(),
@@ -188,20 +197,23 @@ async function undoIsOpen(userId: string, proposalId: string, now: Date): Promis
  */
 function scheduleUndoRemoval(
   telegram: TelegramNotifier,
-  target: { userId: string; proposalId: string; chatId: string; messageId: number; language: string },
+  target: {
+    userId: string;
+    proposalId: string;
+    chatId: string;
+    messageId: number;
+    language: string;
+    backToPending: boolean;
+  },
 ): void {
   const timer = setTimeout(() => {
     void (async () => {
       try {
         const row = await findProposal(target.userId, target.proposalId);
         if (row === null || effectiveState(factsOf(row), new Date()) !== 'approved') return;
-        await telegram.setKeyboard(
-          target.chatId,
-          target.messageId,
-          target.proposalId,
-          'none',
-          target.language,
-        );
+        await telegram.setKeyboard(target.chatId, target.messageId, target.proposalId, 'none', target.language, {
+          backToPending: target.backToPending,
+        });
       } catch (error) {
         logger().warn({ err: error, proposalId: target.proposalId }, 'telegram.undo_removal_failed');
       }
@@ -239,6 +251,17 @@ export function appendOutcome(text: string, outcome: string): string {
   // Any language's: the user may have switched language between two taps.
   const followsOutcome = OUTCOME_LINES.some((line) => lastLine.startsWith(line));
   return `${text}${followsOutcome ? '\n' : '\n\n'}${outcome}`;
+}
+
+const PENDING_DATA = encodeMenuData({ view: 'pending' });
+
+/** Whether a tapped message carries the way back to `/pending`: it was opened from there (D279). */
+export function openedFromPending(message: {
+  reply_markup?: { inline_keyboard?: { callback_data?: string }[][] } | undefined;
+}): boolean {
+  return (message.reply_markup?.inline_keyboard ?? []).some((row) =>
+    row.some((button) => button.callback_data === PENDING_DATA),
+  );
 }
 
 /** Parse `/mute 3h`, `/mute 30m`, or bare `/mute`. Null means "not a duration". */
@@ -510,7 +533,10 @@ async function handleCallback(
     return;
   }
 
-  const message = callback.message;
+  // A proposal opened from `/pending` keeps its way back through every redraw (D279).
+  const message =
+    callback.message === undefined ? undefined : { ...callback.message, fromPending: openedFromPending(callback.message) };
+  const backToPending = message?.fromPending ?? false;
   const { language } = await getOrCreateUserSettings(binding.user_id);
   const messages = messagesFor(language);
 
@@ -604,7 +630,7 @@ async function handleCallback(
   if (telegram === null || message === undefined) return;
 
   if (result.outcome === 'not_found') {
-    await telegram.setKeyboard(chatId, message.message_id, payload.proposalId, 'none', language);
+    await telegram.setKeyboard(chatId, message.message_id, payload.proposalId, 'none', language, { backToPending });
     return;
   }
 
@@ -626,6 +652,7 @@ async function handleCallback(
             trade,
           ),
       language,
+      { backToPending },
     );
     return;
   }
@@ -646,7 +673,7 @@ async function handleCallback(
     appendOutcome(message.text ?? '', outcome),
     // A decision that has just been applied as an approval is, by definition,
     // at the start of its undo window.
-    { proposalId: payload.proposalId, keyboard: keyboardFor(result.state, true, trade), language },
+    { proposalId: payload.proposalId, keyboard: keyboardFor(result.state, true, trade), language, backToPending },
   );
   if (result.state === 'approved' && !trade) {
     scheduleUndoRemoval(telegram, {
@@ -655,6 +682,7 @@ async function handleCallback(
       chatId,
       messageId: message.message_id,
       language,
+      backToPending,
     });
   }
   if (!edited.delivered) {

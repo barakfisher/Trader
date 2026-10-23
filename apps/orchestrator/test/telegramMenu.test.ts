@@ -355,7 +355,7 @@ describe('commands send a view', () => {
     expect(tapsOf(lastButtons())).toContainEqual({ view: 'mute', hours: 0 });
   });
 
-  it('/pending stays a read-only list: headlines, a snoozed one marked, no decision buttons', async () => {
+  it('/pending lists what is waiting, each a button that opens it; the list itself decides nothing', async () => {
     const proposal = (id: string, headline: string, overrides: Record<string, unknown> = {}) => ({
       id,
       state: 'pending',
@@ -378,12 +378,17 @@ describe('commands send a view', () => {
 
     expect(queries.listProposals).toHaveBeenCalledWith(USER, { open: true, limit: PENDING_LIST_LIMIT });
     const text = lastText();
-    expect(text).toContain('• VOO is above its target\n');
-    expect(text).toContain(`• NVDA fell 7% (${MESSAGES.en.menu.pending.states.snoozed})`);
+    expect(text).toContain('1. VOO is above its target\n');
+    expect(text).toContain(`2. ⏸ NVDA fell 7% (${MESSAGES.en.menu.pending.states.snoozed})`);
     expect(text).not.toContain('An expired one');
-    // Every button is a menu button: nothing here decides a proposal.
+    // Every button is a menu button: deciding happens on the proposal's own view (D279).
     expect(lastButtons().every((b) => b.callback_data !== undefined && decodeMenuData(b.callback_data) !== null)).toBe(true);
-    expect(tapsOf(lastButtons())).toEqual([{ view: 'pending' }, { view: 'help' }]);
+    expect(tapsOf(lastButtons())).toEqual([
+      { view: 'proposal', proposalId: '11111111-0000-0000-0000-000000000001' },
+      { view: 'proposal', proposalId: '11111111-0000-0000-0000-000000000002' },
+      { view: 'pending' },
+      { view: 'help' },
+    ]);
   });
 
   it('/agents lists the simulated agents that are not archived, each a button to its view', async () => {
