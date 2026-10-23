@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { observer } from 'mobx-react-lite';
 import { ShieldCheck } from 'lucide-react';
 
@@ -41,6 +41,7 @@ import {
   nonZero,
   reasonLabel,
 } from '../lib/llmCalls.ts';
+import { useDraft } from '../lib/draft.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { gapExplanation, gapProfile, gapSubject, isRealGap } from '../lib/universeGaps.ts';
 import {
@@ -583,8 +584,7 @@ function SignupSettingsCard() {
   const settings = useAdminSettingsQuery();
   const update = useUpdateAdminSettings();
   const storedMax = settings.data ? String(settings.data.maxPendingSignups) : '';
-  const [max, setMax] = useState(storedMax);
-  useEffect(() => setMax(storedMax), [storedMax]);
+  const [max, setMax] = useDraft(storedMax);
   const maxValid = /^\d+$/.test(max) && Number(max) <= MAX_PENDING_SIGNUPS_CEILING;
   const unchanged = max === storedMax;
   const submit = (event: FormEvent) => {
@@ -636,8 +636,7 @@ function AssistantLimitCard() {
   const settings = useAdminSettingsQuery();
   const update = useUpdateAdminSettings();
   const stored = settings.data ? microToDollarsText(settings.data.assistantDailyBudgetMicroUsd) : '';
-  const [value, setValue] = useState(stored);
-  useEffect(() => setValue(stored), [stored]);
+  const [value, setValue] = useDraft(stored);
   const micro = /^\d+(\.\d{1,2})?$/.test(value.trim()) ? decimalUsdToMicro(value) : null;
   const valid = micro !== null && micro <= ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD;
   const submit = (event: FormEvent) => {
@@ -685,8 +684,7 @@ function AgentLimitCard() {
   const settings = useAdminSettingsQuery();
   const update = useUpdateAdminSettings();
   const stored = settings.data ? String(settings.data.maxAgentsPerUser) : '';
-  const [value, setValue] = useState(stored);
-  useEffect(() => setValue(stored), [stored]);
+  const [value, setValue] = useDraft(stored);
   const number = Number(value);
   const valid = /^\d+$/.test(value) && number >= 1 && number <= MAX_AGENTS_PER_USER_CEILING;
   const submit = (event: FormEvent) => {
