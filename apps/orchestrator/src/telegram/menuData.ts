@@ -30,13 +30,18 @@ export type MenuView =
   | { view: 'status' }
   | { view: 'pending' }
   | { view: 'agent'; agentId: string }
-  | { view: 'agentLog'; agentId: string };
+  | { view: 'agentLog'; agentId: string }
+  /** M11 A2: the confirm before a paid scan, and the schedule picker. Views, so unsigned. */
+  | { view: 'runConfirm'; agentId: string }
+  | { view: 'schedule'; agentId: string };
+
+type AgentView = Extract<MenuView, { agentId: string }>['view'];
 
 /** A tap: a view to show, or a quick mute (`hours: 0` unmutes) followed by the status view. */
 export type MenuTap = MenuView | { view: 'mute'; hours: 0 | (typeof QUICK_MUTE_HOURS)[number] };
 
 const PLAIN_CODES = { help: 'h', portfolio: 'p', agents: 'a', status: 's', pending: 'q' } as const;
-const AGENT_CODES = { agent: 'g', agentLog: 'l' } as const;
+const AGENT_CODES: Record<AgentView, string> = { agent: 'g', agentLog: 'l', runConfirm: 'r', schedule: 'c' };
 const MUTE_CODE = 'u';
 
 const PLAIN_BY_CODE = new Map<string, string>(Object.entries(PLAIN_CODES).map(([view, code]) => [code, view]));
@@ -50,6 +55,8 @@ export function encodeMenuData(tap: MenuTap): string {
   switch (tap.view) {
     case 'agent':
     case 'agentLog':
+    case 'runConfirm':
+    case 'schedule':
       return `${MENU_PREFIX}${AGENT_CODES[tap.view]}${uuidToBytes(tap.agentId).toString('base64url')}`;
     case 'mute':
       return `${MENU_PREFIX}${MUTE_CODE}${tap.hours}`;
@@ -73,7 +80,7 @@ export function decodeMenuData(data: string): MenuTap | null {
     const bytes = Buffer.from(rest, 'base64url');
     // Re-encoding must give back the same text: rejects characters base64url ignores.
     if (bytes.length !== 16 || bytes.toString('base64url') !== rest) return null;
-    return { view: agentView as 'agent' | 'agentLog', agentId: bytesToUuid(bytes) };
+    return { view: agentView as AgentView, agentId: bytesToUuid(bytes) };
   }
 
   if (code === MUTE_CODE) {

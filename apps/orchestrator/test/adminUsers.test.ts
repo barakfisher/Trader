@@ -140,7 +140,7 @@ describe("the admin's user list (D162, D239)", () => {
     expect(await response.json()).toMatchObject({ error: 'not_disableable' });
   });
 
-  it('has no cap to set: the route is gone with the cap (D274)', async () => {
+  it('has no cap to set: the route is gone with the cap (D279)', async () => {
     expect((await request('PUT', `/admin/users/${DANA}/cap`, { llmCapMicroUsd: 20_000_000 })).status).toBe(404);
   });
 

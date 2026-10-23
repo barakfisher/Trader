@@ -4,7 +4,7 @@
 what this app spends on their key, integer micro-USD; NULL is no limit. It is
 counted in the user's calendar month over `llm_calls` rows `paid_by =
 'own_key'` (`app/llm/payer.py`), and reaching it ends a scan or a reply as
-`cap_reached`, the outcome the retired monthly cap left behind (D274).
+`cap_reached`, the outcome the retired monthly cap left behind (D279).
 
 `own_key_required` joins the outcomes of a scan and of an assistant reply: a
 user who is not the admin asked for a model call with no working key of their

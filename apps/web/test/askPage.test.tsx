@@ -293,7 +293,7 @@ it('is linked from the app bar', async () => {
   await waitFor(() => expect(link.getAttribute('href')).toBe('/ask'));
 });
 
-describe('a user with no working key of their own (D245, D275)', () => {
+describe('a user with no working key of their own (D245, D280)', () => {
   const MONTH = { ownKeySpentMicroUsd: 0, safetyLimitMicroUsd: null, resetsOn: '2026-11-01' };
 
   function serveKey(spend: typeof MONTH | null, key: OwnLlmKeyResponse) {

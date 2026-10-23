@@ -2,7 +2,7 @@
 
 Written for the admin-set monthly cap (D157, D158), which bounded what the
 installation paid for each user. Since D245 no user but the admin runs on the
-installation's key, so that cap has nothing to bound and is retired (D274): its
+installation's key, so that cap has nothing to bound and is retired (D279): its
 column stays, unread. **The limit this module enforces now is the user's own
 optional safety limit on their key** (`user_settings.llm_safety_limit_micro_usd`),
 a brake against a runaway loop that binds even a key with no OpenRouter limit.

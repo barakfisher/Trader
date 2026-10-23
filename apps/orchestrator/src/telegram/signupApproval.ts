@@ -4,9 +4,9 @@
  *
  * A new request is announced to every active admin's bound chat with *Approve*
  * and *Reject*. There is no amount to choose: a user runs on their own key only
- * (D245), and the retired monthly cap (D274) is written with the installation's
+ * (D245), and the retired monthly cap (D279) is written with the installation's
  * default only to keep its column's CHECK satisfied. The signed button still
- * carries that figure, so a button sent before D274 decodes as before; its
+ * carries that figure, so a button sent before D279 decodes as before; its
  * *Custom budget* button now shows the two buttons again.
  *
  * The page and the chat apply the same conditional transitions
@@ -138,7 +138,7 @@ export async function handleSignupCallback(callback: SignupCallback): Promise<vo
   };
 
   if (payload.action === 'custom') {
-    // A *Custom budget* button from before D274: there is no amount to choose now.
+    // A *Custom budget* button from before D279: there is no amount to choose now.
     const request = await getSignupRequest(payload.userId);
     if (request?.status !== 'pending') {
       await healed({ status: request?.status ?? 'gone' });

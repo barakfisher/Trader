@@ -300,7 +300,7 @@ describe('the admin page', () => {
     expect(await screen.findByRole('link', { name: /Admin\s*1/ })).toBeTruthy();
   });
 
-  it('approves a request with no amount, and rejects another (D188, D274)', async () => {
+  it('approves a request with no amount, and rejects another (D188, D279)', async () => {
     post.mockResolvedValue({ applied: true, status: 'active' });
     renderAt('/admin', ADMIN);
     const row = within((await screen.findByText('noa@example.com')).closest('li')!);
@@ -575,7 +575,7 @@ describe('the admin page', () => {
     expect(post).toHaveBeenCalledWith('/admin/users/u-dana/disable');
   });
 
-  it('offers no cap to change: it is retired (D274)', async () => {
+  it('offers no cap to change: it is retired (D279)', async () => {
     renderAt('/admin', ADMIN);
     expect(await screen.findByText('dana@example.com')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /cap/i })).toBeNull();

@@ -17,7 +17,7 @@ against a runaway loop, beside OpenRouter's own limit on the key (D211), and
 it binds even a key with no limit at all. It is enforced before each call by
 `MonthlyCapProvider` (`monthly_cap.py`), whose ledger here is
 `DatabaseSafetyLimitLedger`; the admin cap it was written for is retired
-(D274), and its refusal, `cap_reached`, now means "your safety limit".
+(D279), and its refusal, `cap_reached`, now means "your safety limit".
 
 `PayerGate.refusal` answers the same question before any work starts, so a
 scan, a re-check or an instructions check is refused with a reason the screen

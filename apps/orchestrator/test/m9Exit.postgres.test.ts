@@ -119,6 +119,8 @@ interface SeededUser {
   ids: string[];
   proposal: string;
   conversation: string;
+  /** The simulated agent, for the Telegram agent controls (M11 A2). */
+  agent: string;
 }
 
 function newUser(mark: string): SeededUser {
@@ -130,6 +132,7 @@ function newUser(mark: string): SeededUser {
     ids: [],
     proposal: '',
     conversation: '',
+    agent: '',
   };
 }
 
@@ -223,6 +226,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     await pool.query(`INSERT INTO telegram_bindings (user_id, chat_id) VALUES ($1, $2)`, [user.id, user.chatId]);
     await pool.query(`INSERT INTO user_settings (user_id) VALUES ($1) ON CONFLICT DO NOTHING`, [user.id]);
     user.proposal = proposal;
+    user.agent = agent;
     user.conversation = conversation;
     user.ids.push(primary, agent, holding, topic, conversation, observation, proposal);
   }
@@ -526,6 +530,129 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     });
     const { rows } = await getPool().query<{ state: string }>('SELECT state FROM proposals WHERE id = $1', [dana.proposal]);
     expect(rows[0]!.state).toBe('rejected');
+  });
+
+  it("changes nothing of Omer's agent when Dana's chat taps its signed controls (D274)", async () => {
+    const { TelegramNotifier } = await import('../src/telegram/client.js');
+    const { encodeAgentActionData } = await import('../src/telegram/agentActionToken.js');
+    const { handleTelegramUpdate } = await import('../src/telegram/updates.js');
+    resetConfigForTests();
+    const secret = 'telegram-signing-secret-for-tests';
+    const config = loadConfig({
+      APP_ENV: 'test',
+      LOG_LEVEL: 'error',
+      SESSION_SECRET: TEST_SESSION_SECRET,
+      DATABASE_URL,
+      AI_SERVICE_URL: 'http://ai-service:8000',
+      INTERNAL_API_KEY: 'internal-test-key',
+      TELEGRAM_BOT_TOKEN: 'bot-token',
+      TELEGRAM_SIGNING_SECRET: secret,
+    } as unknown as NodeJS.ProcessEnv);
+    // A recording client: with no Telegram channel the bot would not act at all,
+    // and "nothing changed" would prove nothing.
+    const answered: string[] = [];
+    const notifier = new TelegramNotifier({
+      botToken: 'bot-token',
+      callbackSecret: secret,
+      resolveChatId: async () => String(dana.chatId),
+      fetchImpl: async (url, init) => {
+        if (url.endsWith('/answerCallbackQuery')) answered.push(String(JSON.parse(String(init?.body)).callback_query_id));
+        return new Response('{"ok":true}', { status: 200 });
+      },
+    });
+    const scanAgent = vi.fn(async () => {
+      throw new Error('no scan may start for Omer');
+    });
+    const deps = { config, notifier, ai: { ...createFakeAi(), scanAgent } as never, rateLimits: memoryRateLimits() };
+    const tap = async (id: string, data: string) => {
+      await handleTelegramUpdate(deps, {
+        update_id: 3,
+        callback_query: { id, data, message: { message_id: 1, text: 'x', chat: { id: dana.chatId, type: 'private' } } },
+      });
+      await vi.waitFor(() => expect(answered).toContain(id));
+    };
+
+    const before = await omersRows();
+    const payloads = [
+      { agentId: omer.agent, action: 'pause' },
+      { agentId: omer.agent, action: 'resume' },
+      { agentId: omer.agent, action: 'run' },
+      { agentId: omer.agent, action: 'schedule', schedule: { everyHours: 1, preOpen: false, postClose: true } },
+    ] as const;
+    for (const [index, payload] of payloads.entries()) await tap(`omer-${index}`, encodeAgentActionData(payload, secret));
+    expect(await omersRows()).toEqual(before);
+    expect(scanAgent).not.toHaveBeenCalled();
+
+    // The control: Dana pausing her own agent does take - so the taps above
+    // reached the service and were refused there, not lost on the way.
+    await tap('dana-pause', encodeAgentActionData({ agentId: dana.agent, action: 'pause' }, secret));
+    const { rows } = await getPool().query<{ state: string }>('SELECT state FROM agents WHERE id = $1', [dana.agent]);
+    expect(rows[0]!.state).toBe('paused');
+  });
+
+  it("treats a disabled user's chat as unbound: no question, scan or change (D278)", async () => {
+    const { TelegramNotifier } = await import('../src/telegram/client.js');
+    const { encodeAgentActionData } = await import('../src/telegram/agentActionToken.js');
+    const { findTelegramBindingByChat } = await import('../src/db/queries.js');
+    const { handleTelegramUpdate } = await import('../src/telegram/updates.js');
+    const pool = getPool();
+    const chatId = 2_000_000_000 + Math.floor(Math.random() * 1_000_000);
+    const agent = (
+      await pool.query<{ id: string }>(
+        `INSERT INTO agents (user_id, slug, name, persona, budget_minor, state)
+         VALUES ($1, 'agent-disabled', 'Disabled agent', 'A persona', 100000, 'paused') RETURNING id`,
+        [disabled],
+      )
+    ).rows[0]!.id;
+    await pool.query(`INSERT INTO telegram_bindings (user_id, chat_id) VALUES ($1, $2)`, [disabled, chatId]);
+    try {
+      expect(await findTelegramBindingByChat(String(chatId))).toBeNull();
+
+      resetConfigForTests();
+      const secret = 'telegram-signing-secret-for-tests';
+      const config = loadConfig({
+        APP_ENV: 'test',
+        LOG_LEVEL: 'error',
+        SESSION_SECRET: TEST_SESSION_SECRET,
+        DATABASE_URL,
+        AI_SERVICE_URL: 'http://ai-service:8000',
+        INTERNAL_API_KEY: 'internal-test-key',
+        TELEGRAM_BOT_TOKEN: 'bot-token',
+        TELEGRAM_SIGNING_SECRET: secret,
+      } as unknown as NodeJS.ProcessEnv);
+      const answered: string[] = [];
+      const notifier = new TelegramNotifier({
+        botToken: 'bot-token',
+        callbackSecret: secret,
+        resolveChatId: async () => String(chatId),
+        fetchImpl: async (url, init) => {
+          if (url.endsWith('/answerCallbackQuery')) answered.push(String(JSON.parse(String(init?.body)).text));
+          return new Response('{"ok":true}', { status: 200 });
+        },
+      });
+      const assistantMessage = vi.fn();
+      const scanAgent = vi.fn();
+      const deps = { config, notifier, ai: { ...createFakeAi(), assistantMessage, scanAgent } as never, rateLimits: memoryRateLimits() };
+      const chat = { id: chatId, type: 'private' };
+
+      await handleTelegramUpdate(deps, { update_id: 4, message: { text: 'What do I hold?', chat } });
+      await handleTelegramUpdate(deps, {
+        update_id: 5,
+        callback_query: {
+          id: 'disabled-resume',
+          data: encodeAgentActionData({ agentId: agent, action: 'resume' }, secret),
+          message: { message_id: 1, text: 'x', chat },
+        },
+      });
+      await vi.waitFor(() => expect(answered).toHaveLength(1));
+      expect(assistantMessage).not.toHaveBeenCalled();
+      expect(scanAgent).not.toHaveBeenCalled();
+      const { rows } = await pool.query<{ state: string }>('SELECT state FROM agents WHERE id = $1', [agent]);
+      expect(rows[0]!.state).toBe('paused');
+    } finally {
+      await pool.query('DELETE FROM telegram_bindings WHERE user_id = $1', [disabled]);
+      await pool.query('DELETE FROM agents WHERE id = $1', [agent]);
+    }
   });
 
   it("answers a question from Dana's chat as Dana, never in Omer's conversation (D266)", async () => {

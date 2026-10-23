@@ -284,5 +284,10 @@ while this file is out of date.
 | 271 | The `/` command list is set at every start, English by default and Hebrew for Hebrew phones |
 | 272 | `/portfolio` is the real portfolio alone, in its base currency, with what is unpriced named |
 | 273 | The bot serves private chats only |
-| 274 | The monthly cap is retired from every screen and from enforcement; its column stays, unread |
-| 275 | A user nobody may pay for is told up front, where the work would start |
+| 274 | Telegram's agent buttons are signed for their age: they expire after 15 minutes and carry no nonce |
+| 275 | Run a scan now from Telegram: a confirm that names the cost, then the scan off the poller |
+| 276 | The bot never imports a route; what a route and the bot share is a service |
+| 277 | The schedule picker sets a whole schedule per button: the current one with one thing changed |
+| 278 | A disabled user's Telegram chat reads as unbound |
+| 279 | The monthly cap is retired from every screen and from enforcement; its column stays, unread |
+| 280 | A user nobody may pay for is told up front, where the work would start |

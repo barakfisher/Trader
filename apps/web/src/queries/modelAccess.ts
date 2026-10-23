@@ -1,5 +1,5 @@
 /**
- * Whether the signed-in user's model work can run right now (D245, D250, D275).
+ * Whether the signed-in user's model work can run right now (D245, D250, D280).
  *
  * The admin runs on the installation's key; everyone else on their own
  * OpenRouter key only, under their optional monthly safety limit. This reads the
