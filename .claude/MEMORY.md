@@ -12,7 +12,7 @@ measured, decided and two PRs in.**
     asked one at a time**;
   - #294, PR 1: the production baseline (D256);
   - #295, PR 2: the write-route isolation test (D266).
-- **Decisions reached 280** (next: **281**; D268 is PR 3's; D269-D273 are M11 A1's (#297), D274-D278 M11 A2's (#299); D279-D280 are PR 4's).
+- **Decisions reached 281** (next: **282**; D281 is PR 5's; D268 is PR 3's; D269-D273 are M11 A1's (#297), D274-D278 M11 A2's (#299); D279-D280 are PR 4's).
 - **Migrations:** `0068_own_key_only` (M10 PR 4: `user_settings.llm_safety_limit_micro_usd`,
   `own_key_required` outcomes, the re-check index) is head once PR 4 merges; next free is `0069`.
 - **Deployed:**
@@ -4259,6 +4259,21 @@ failure they prevent.
       unseen); a Telegram message when a scheduled scan first skips (a new notification kind and
       dedupe key; PR 5's top-bar chip makes the state visible on every screen instead).
 
+281. **The spend indicator's daily pace is this UTC week's: `usage_weekly` over the days since
+    Monday** (the user, 2026-10-23; M10 PR 5, refines D247's "7-day average of `usage_daily`").
+    - **Measured (OpenRouter's limits reference, 2026-10-23):** `GET /key` reports
+      `usage_daily`, `usage_weekly` and `usage_monthly` as **calendar windows in UTC** - today,
+      the week since Monday, the month - and no rolling 7 days and no history. D247's average
+      cannot be read from it.
+    - **How:** pace = `usage_weekly` / days since Monday 00:00 UTC, at least one day
+      (`services/keySpend.ts`). Days left = what the binding limit has left / pace, rounded down;
+      the warning starts at `SPEND_WARNING_DAYS` (5) or fewer. With no spend this week, or no limit,
+      nothing is projected.
+    - **Accepted cost:** early on a Monday the pace rests on a few hours of spend.
+    - *Rejected:* this app's own `llm_calls` over 7 days (misses other apps on the key, which
+      OpenRouter counts against its limit - the projection reads optimistic); storing a daily
+      reading per user (a migration and a table for a figure with gaps on days the app is not
+      opened, and no projection for the first week).
 ---
 
 ## Bugs that cost real time, and the lesson from each

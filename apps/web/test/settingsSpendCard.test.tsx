@@ -7,10 +7,16 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, configure, fireEvent, screen, waitFor } from '@testing-library/react';
 import { createMemoryHistory } from '@tanstack/react-router';
 
 import type { MonthlySpendResponse, OwnLlmKeyResponse, UserSettingsResponse } from '@traders/shared';
+
+// The cards wait on a chain of reads (the month, then the key, then OpenRouter's
+// figures); under a parallel `pnpm -r test` the default 1 s ran out before the
+// chain did. A longer wait, not a weaker assertion.
+configure({ asyncUtilTimeout: 5_000 });
+vi.setConfig({ testTimeout: 15_000 });
 
 const get = vi.fn();
 const put = vi.fn();
@@ -126,6 +132,36 @@ describe('the own-key month and the safety limit (D250)', () => {
       fireEvent.change(field, { target: { value: wrong } });
       expect((screen.getByRole('button', { name: 'Save limit' }) as HTMLButtonElement).disabled, wrong).toBe(true);
     }
+  });
+
+  it("shows OpenRouter's own figures for a working key beside this app's count (D247)", async () => {
+    const usage = {
+      key: 'valid',
+      failure: null,
+      reading: { usedMicroUsd: 12_000_000, limitMicroUsd: 50_000_000, period: 'month', readAt: '2026-10-22T11:55:00Z' },
+      safetyLimit: null,
+      binding: 'key',
+      dailyPaceMicroUsd: 2_000_000,
+      daysLeft: 19,
+      warning: false,
+    };
+    get.mockImplementation((path: string) =>
+      path === '/settings'
+        ? Promise.resolve(SETTINGS)
+        : path === '/settings/llm-spend'
+          ? Promise.resolve({ spend: MONTH })
+          : path === '/settings/llm-key'
+            ? Promise.resolve({ available: true, key: SAVED_KEY })
+            : path === '/settings/llm-usage'
+              ? Promise.resolve({ spend: usage })
+              : new Promise(() => {}),
+    );
+    renderSettings();
+    expect(await screen.findByText('On OpenRouter')).toBeTruthy();
+    expect(
+      screen.getAllByText(/On this key: [\u2066-\u2069]*\$12\.00[\u2066-\u2069]* \/ [\u2066-\u2069]*\$50\.00[\u2066-\u2069]* this month/)
+        .length,
+    ).toBeGreaterThan(0);
   });
 
   it('is absent for the admin, who runs on the installation key', async () => {

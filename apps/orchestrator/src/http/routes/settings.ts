@@ -27,6 +27,7 @@ import {
   UI_LANGUAGES,
   type MonthlySpendResponse,
   type ObservationSeverity,
+  type KeySpendResponse,
   type OwnLlmKeyResponse,
   SAFETY_LIMIT_CEILING_MICRO_USD,
   type SafetyLimitInput,
@@ -43,6 +44,7 @@ import {
 } from '../../db/queries.js';
 import { AiServiceError, type OwnLlmKeyState } from '@traders/shared/ai';
 
+import { keySpendOf } from '../../services/keySpend.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { ApiProblem, badRequest, forbidden, unprocessable, upstreamFailure } from '../errors.js';
 
@@ -177,6 +179,26 @@ export function registerSettingsRoutes(app: Hono<AppEnv>): void {
         resetsOn: row.resets_on,
       },
     };
+    return context.json(body);
+  });
+
+  // The top bar's spend indicator (D247-D250, D281): OpenRouter's reading of the
+  // user's own key, cached 15 minutes per user by the AI service (D249), against
+  // whichever limit binds first. Null for the admin, on the installation's key.
+  app.get('/settings/llm-usage', async (context) => {
+    const userId = currentUserId(context);
+    if (context.get('user')?.role === 'admin') {
+      const body: KeySpendResponse = { spend: null };
+      return context.json(body);
+    }
+    let state;
+    try {
+      state = await context.get('ai').ownLlmKeyUsage(userId, context.get('requestId'));
+    } catch (error) {
+      if (!(error instanceof AiServiceError)) throw error;
+      throw upstreamFailure(error.status, 'Your key could not be read.');
+    }
+    const body: KeySpendResponse = { spend: keySpendOf(state, await getMonthlySpend(userId), new Date()) };
     return context.json(body);
   });
 

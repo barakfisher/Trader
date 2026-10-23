@@ -248,6 +248,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/llm/own-keys/{user_id}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Own Key Usage
+         * @description The key's state and what OpenRouter says it spent, read at most every 15 minutes (D249).
+         *
+         *     Asked only for a key that is saved, valid and usable here; a key OpenRouter
+         *     refused is said by its state, not read again.
+         */
+        get: operations["own_key_usage_llm_own_keys__user_id__usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/market/calendar": {
         parameters: {
             query?: never;
@@ -1579,6 +1602,50 @@ export interface components {
             available: boolean;
             key: components["schemas"]["OwnLlmKey"] | null;
         };
+        /**
+         * OwnLlmKeyUsage
+         * @description What OpenRouter's `GET /key` said of the user's key (D247-D249), in integer micro-USD.
+         *
+         *     The usage windows are calendar windows in UTC: today, this week since Monday,
+         *     this month. Every figure counts the whole key, other apps' spend included.
+         */
+        OwnLlmKeyUsage: {
+            /**
+             * Limit Micro Usd
+             * @description The key's credit limit; null when unlimited.
+             */
+            limit_micro_usd: number | null;
+            /** Limit Remaining Micro Usd */
+            limit_remaining_micro_usd: number | null;
+            /**
+             * Limit Reset
+             * @description How the limit resets, as OpenRouter names it; null when it never does.
+             */
+            limit_reset: string | null;
+            /**
+             * Read At
+             * Format: date-time
+             * @description When OpenRouter was asked; at most 15 minutes old.
+             */
+            read_at: string;
+            /** Usage Daily Micro Usd */
+            usage_daily_micro_usd: number;
+            /** Usage Monthly Micro Usd */
+            usage_monthly_micro_usd: number;
+            /** Usage Weekly Micro Usd */
+            usage_weekly_micro_usd: number;
+        };
+        /** OwnLlmKeyUsageState */
+        OwnLlmKeyUsageState: {
+            /**
+             * Available
+             * @description Whether this installation can use users' own keys: LLM_KEY_ENCRYPTION_KEYS is set and the provider is OpenRouter.
+             */
+            available: boolean;
+            key: components["schemas"]["OwnLlmKey"] | null;
+            /** @description Null with no working key, or when OpenRouter could not be read. */
+            usage: components["schemas"]["OwnLlmKeyUsage"] | null;
+        };
         /** PortfolioScanRequest */
         PortfolioScanRequest: {
             /**
@@ -2615,6 +2682,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OwnLlmKeyState"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    own_key_usage_llm_own_keys__user_id__usage_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnLlmKeyUsageState"];
                 };
             };
             /** @description Validation Error */

@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { purposeCost, callCost, formatLatency, formatMicroUsd, nonZero, reasonLabel } from '../src/lib/llmCalls.ts';
+import { formatMicroUsdCents, purposeCost, callCost, formatLatency, formatMicroUsd, nonZero, reasonLabel } from '../src/lib/llmCalls.ts';
 
 describe('cost', () => {
   it('shows fractions of a cent to four places, rounding once', () => {
@@ -62,5 +62,18 @@ describe('decimalUsdToMicro', () => {
     expect(decimalUsdToMicro('0.0000005')).toBe(1);
     expect(decimalUsdToMicro('-0.25')).toBe(-250_000);
     expect(decimalUsdToMicro('1e3')).toBeNull();
+  });
+});
+
+describe('a key spend in cents (D247)', () => {
+  it('rounds half up once, to the cent', () => {
+    expect(formatMicroUsdCents(1_626_726)).toBe('$1.63');
+    expect(formatMicroUsdCents(1_624_999)).toBe('$1.62');
+    expect(formatMicroUsdCents(42_000_000)).toBe('$42.00');
+    expect(formatMicroUsdCents(0)).toBe('$0.00');
+  });
+
+  it('says a nonzero amount under a cent is under a cent', () => {
+    expect(formatMicroUsdCents(4_000)).toBe('<$0.01');
   });
 });
