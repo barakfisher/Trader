@@ -67,6 +67,15 @@ export type RecheckRefusal =
   | 'no_persona'
   | 'other';
 
+/** Why *Run a scan now* would not start, by the code `services/manualScan.ts` throws; `other` for the rest. */
+export type RunRefusal =
+  | 'agent_not_active'
+  | 'no_persona'
+  | 'scan_running'
+  | 'budget_spent'
+  | 'no_model'
+  | 'other';
+
 /** A refused trade approval's code, as `fills.ts` and `tradeApproval.ts` throw it. */
 export type TradeRefusalCode =
   | 'quote_too_old'
@@ -197,6 +206,16 @@ export interface Messages {
       backToAgent: string;
       mute: (hours: number) => string;
       unmute: string;
+      runScan: string;
+      pause: string;
+      resume: string;
+      schedule: string;
+      cancel: string;
+      confirmRun: (cost: string) => string;
+      everyHours: (hours: number) => string;
+      noMarketHours: string;
+      preOpen: (on: boolean) => string;
+      postClose: (on: boolean) => string;
     };
     asOf: (time: string) => string;
     /** A view that could not be read: the toast, and the message is left as it was. */
@@ -264,6 +283,30 @@ export interface Messages {
       refused: (problems: string) => string;
       cost: (cost: string, model: string | null) => string;
       fullOnDecisions: string;
+    };
+    /** *Run a scan now* (M11 A2): the confirm, the wait, and why it would not start. */
+    run: {
+      confirm: (agent: string, cost: string, spent: string, budget: string) => string;
+      startedToast: string;
+      running: (agent: string) => string;
+      refusals: Record<RunRefusal, string>;
+      /** Above the agent's view when a started scan could not finish. */
+      failed: (reason: string) => string;
+    };
+    /** Pause, Resume and a new schedule (M11 A2). */
+    control: {
+      pausedToast: string;
+      resumedToast: string;
+      scheduleSavedToast: string;
+      limitReached: (max: number) => string;
+      /** A signed agent button past its time: the view is drawn again with fresh ones. */
+      expired: string;
+      refused: string;
+    };
+    schedule: {
+      title: (agent: string) => string;
+      /** `first` is the first market-hours slot as `scheduledScans.slot` names it. */
+      hint: (first: string) => string;
     };
   };
 
@@ -483,7 +526,7 @@ const en: Messages = {
     commands: {
       help: 'What this bot can do',
       portfolio: "Your real portfolio: value and today's change",
-      agents: 'Your simulated agents and their last scans',
+      agents: 'Your simulated agents: run, pause, schedule, last scan',
       pending: 'Proposals waiting on you',
       status: 'Alerts and mute',
       mute: 'Pause alerts: /mute 2h or /mute 30m',
@@ -496,7 +539,7 @@ const en: Messages = {
       'Write any question and the assistant answers it.',
       '',
       "/portfolio - your real portfolio: value and today's change",
-      '/agents - your simulated agents, their schedules and last scans',
+      '/agents - your simulated agents: run a scan, pause, change the schedule, see the last run',
       '/pending - proposals waiting on you',
       '/status - alerts and mute',
       '/mute 2h · /unmute - pause or resume alerts',
@@ -517,6 +560,16 @@ const en: Messages = {
       backToAgent: '⬅️ Agent',
       mute: (hours) => `🔕 Mute ${hours}h`,
       unmute: '🔔 Unmute',
+      runScan: '▶️ Run scan now',
+      pause: '⏸ Pause',
+      resume: '▶️ Resume',
+      schedule: '⏱ Schedule',
+      cancel: '✖️ Cancel',
+      confirmRun: (cost) => `✅ Run (about ${cost})`,
+      everyHours: (hours) => `${hours}h`,
+      noMarketHours: 'None',
+      preOpen: (on) => `${on ? '✅' : '⬜'} Pre-open`,
+      postClose: (on) => `${on ? '✅' : '⬜'} After close`,
     },
     asOf: (time) => `As of ${time}`,
     unavailable: 'Could not load this right now. Try again in a minute.',
@@ -592,6 +645,37 @@ const en: Messages = {
       refused: (problems) => ` - not proposed: ${problems}`,
       cost: (cost, model) => (model === null ? `Cost ${cost}` : `Cost ${cost} (${model})`),
       fullOnDecisions: "The full transcript is on the agent's Decisions tab.",
+    },
+    run: {
+      confirm: (agent, cost, spent, budget) =>
+        [
+          `▶️ Run a scan of ${agent} now?`,
+          `It costs about ${cost}, from the agent's AI budget (${spent} of ${budget} spent today).`,
+          'Anything it proposes comes here for your approval. Nothing is ever bought or sold for real.',
+        ].join('\n'),
+      startedToast: 'Scanning - the result appears here.',
+      running: (agent) => `🔄 ${agent} is scanning. The result appears here in about a minute.`,
+      refusals: {
+        agent_not_active: 'The agent is paused: resume it to scan.',
+        no_persona: 'The agent has no instructions or settings to decide by.',
+        scan_running: 'The agent is scanning right now.',
+        budget_spent: "The agent's AI budget for today is spent.",
+        no_model: 'No model is chosen for agents (Admin page).',
+        other: 'The scan could not run.',
+      },
+      failed: (reason) => `⚠️ The scan did not finish: ${reason}`,
+    },
+    control: {
+      pausedToast: 'Paused - no scheduled scans until you resume it.',
+      resumedToast: 'Resumed.',
+      scheduleSavedToast: 'Schedule saved.',
+      limitReached: (max) => `You already have ${max} active agents, the most allowed: pause one first.`,
+      expired: 'That button had expired - here is the current view.',
+      refused: 'That could not be changed.',
+    },
+    schedule: {
+      title: (agent) => `⏱ ${agent}: when it scans`,
+      hint: (first) => `Market-hours scans start at ${first} and repeat at the chosen interval until the close; trading days only.`,
     },
   },
 
@@ -918,7 +1002,7 @@ const he: Messages = {
     commands: {
       help: 'מה הבוט יודע לעשות',
       portfolio: 'התיק האמיתי שלך: שווי ושינוי יומי',
-      agents: 'הסוכנים המדומים שלך והסריקות האחרונות שלהם',
+      agents: 'הסוכנים המדומים שלך: סריקה, השהיה, לו״ז, ריצה אחרונה',
       pending: 'הצעות שממתינות לך',
       status: 'התראות והשתקה',
       mute: `השתקת התראות: ${ltr('/mute 2h')} או ${ltr('/mute 30m')}`,
@@ -931,7 +1015,7 @@ const he: Messages = {
       'כתבו כל שאלה והעוזר יענה עליה.',
       '',
       `${ltr('/portfolio')} - התיק האמיתי שלך: שווי ושינוי יומי`,
-      `${ltr('/agents')} - הסוכנים המדומים שלך, הלו״ז והסריקות האחרונות שלהם`,
+      `${ltr('/agents')} - הסוכנים המדומים שלך: סריקה עכשיו, השהיה, שינוי לו״ז, הריצה האחרונה`,
       `${ltr('/pending')} - הצעות שממתינות לך`,
       `${ltr('/status')} - התראות והשתקה`,
       `${ltr('/mute 2h')} · ${ltr('/unmute')} - השתקה או חידוש של ההתראות`,
@@ -952,6 +1036,16 @@ const he: Messages = {
       backToAgent: '➡️ סוכן',
       mute: (hours) => (hours === 1 ? '🔕 השתקה לשעה' : `🔕 השתקה ל־${ltr(hours)} שעות`),
       unmute: '🔔 ביטול השתקה',
+      runScan: '▶️ סריקה עכשיו',
+      pause: '⏸ השהיה',
+      resume: '▶️ חידוש',
+      schedule: '⏱ לו״ז',
+      cancel: '✖️ ביטול',
+      confirmRun: (cost) => `✅ הרצה (כ־${ltr(cost)})`,
+      everyHours: (hours) => (hours === 1 ? 'כל שעה' : `כל ${ltr(hours)} ש׳`),
+      noMarketHours: 'ללא',
+      preOpen: (on) => `${on ? '✅' : '⬜'} לפני הפתיחה`,
+      postClose: (on) => `${on ? '✅' : '⬜'} אחרי הסגירה`,
     },
     asOf: (time) => `נכון ל־${ltr(time)}`,
     unavailable: 'לא הצלחתי לטעון את זה כרגע. נסו שוב בעוד דקה.',
@@ -1029,6 +1123,37 @@ const he: Messages = {
       refused: (problems) => ` - לא הוצעה: ${isolated(problems)}`,
       cost: (cost, model) => (model === null ? `עלות ${ltr(cost)}` : `עלות ${ltr(cost)} (${ltr(model)})`),
       fullOnDecisions: 'התמליל המלא בלשונית ההחלטות של הסוכן.',
+    },
+    run: {
+      confirm: (agent, cost, spent, budget) =>
+        [
+          `▶️ להריץ עכשיו סריקה של ${isolated(agent)}?`,
+          `העלות כ־${ltr(cost)}, מתקציב הבינה המלאכותית של הסוכן (${ltr(spent)} מתוך ${ltr(budget)} נוצלו היום).`,
+          'כל מה שיוצע יגיע לכאן לאישורך. שום דבר לא נקנה או נמכר באמת.',
+        ].join('\n'),
+      startedToast: 'סורק - התוצאה תופיע כאן.',
+      running: (agent) => `🔄 ${isolated(agent)} סורק. התוצאה תופיע כאן בעוד כדקה.`,
+      refusals: {
+        agent_not_active: 'הסוכן מושהה: חדשו אותו כדי לסרוק.',
+        no_persona: 'לסוכן אין הוראות או הגדרות להחליט לפיהן.',
+        scan_running: 'הסוכן סורק ממש עכשיו.',
+        budget_spent: 'תקציב הבינה המלאכותית של הסוכן להיום נוצל.',
+        no_model: 'לא נבחר מודל לסוכנים (דף הניהול).',
+        other: 'הסריקה לא הצליחה לרוץ.',
+      },
+      failed: (reason) => `⚠️ הסריקה לא הסתיימה: ${reason}`,
+    },
+    control: {
+      pausedToast: 'הושהה - אין סריקות מתוזמנות עד שתחדשו אותו.',
+      resumedToast: 'חודש.',
+      scheduleSavedToast: 'הלו״ז נשמר.',
+      limitReached: (max) => `כבר יש לך ${ltr(max)} סוכנים פעילים, המספר המרבי: השהו אחד קודם.`,
+      expired: 'תוקף הכפתור פג - זו התצוגה העדכנית.',
+      refused: 'לא ניתן היה לשנות את זה.',
+    },
+    schedule: {
+      title: (agent) => `⏱ ${isolated(agent)}: מתי הוא סורק`,
+      hint: (first) => `סריקות בשעות המסחר מתחילות ב־${first} וחוזרות במרווח שנבחר עד הסגירה; בימי מסחר בלבד.`,
     },
   },
 

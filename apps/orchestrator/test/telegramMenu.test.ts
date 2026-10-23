@@ -485,7 +485,10 @@ describe('a tap edits the message it is on', () => {
     expect(text).toContain(menu.agent.cash('$9,303.58', '$10,000.00'));
     expect(text).toContain(menu.agent.netWorth('$10,000.00', '$0.00', '0.00%'));
     expect(text).toContain(menu.agent.spentToday('$0.07', '$0.50'));
-    expect(tapsOf(lastButtons())).toEqual([
+    // The menu's own buttons; Pause is a signed agent button (M11 A2, `telegramAgentActions.test.ts`).
+    expect(tapsOf(lastButtons()).filter((t) => t !== null)).toEqual([
+      { view: 'runConfirm', agentId: AGENT },
+      { view: 'schedule', agentId: AGENT },
       { view: 'agentLog', agentId: AGENT },
       { view: 'agent', agentId: AGENT },
       { view: 'agents' },

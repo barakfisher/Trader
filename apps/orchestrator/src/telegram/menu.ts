@@ -18,7 +18,15 @@
  * signed. The quick mutes change only the tapper's own mute.
  */
 
-import { formatMoney, REGULAR_SESSION_MINUTES, scansPerDay, type AgentScanSummary } from '@traders/shared';
+import {
+  formatMoney,
+  MAX_SCAN_EVERY_HOURS,
+  MIN_SCAN_EVERY_HOURS,
+  REGULAR_SESSION_MINUTES,
+  scansPerDay,
+  type AgentScanSummary,
+  type ScanSchedule,
+} from '@traders/shared';
 import type { AiClient } from '@traders/shared/ai';
 
 import type { Config } from '../config.js';
@@ -34,7 +42,6 @@ import {
   primaryAgentId,
   type AgentRow,
 } from '../db/queries.js';
-import { toScanSummary } from '../http/routes/agentScans.js';
 import { logger } from '../logger.js';
 import { isolated, messagesFor, observationTextIn, type Messages } from '../notify/messages.js';
 import { readyToScan } from '../services/agentReadiness.js';
@@ -43,8 +50,12 @@ import { schedulingOf } from '../services/agentScheduling.js';
 import { effectiveState } from '../services/proposalState.js';
 import { factsOf } from '../services/proposals.js';
 import { scheduleOf, slotsOf, type ScanSlot, type Session } from '../services/scanSchedule.js';
+import { scanBlocked } from '../services/manualScan.js';
+import { scanCostOf } from '../services/scanCost.js';
+import { toScanSummary } from '../services/scanSummary.js';
 import { valuePortfolio } from '../services/valuation.js';
 import type { InlineButton, InlineKeyboard, TelegramNotifier } from './client.js';
+import { encodeAgentActionData, type AgentActionPayload } from './agentActionToken.js';
 import { encodeMenuData, QUICK_MUTE_HOURS, type MenuTap, type MenuView } from './menuData.js';
 
 /** How many open proposals `/pending` lists; the rest are in the app. */
@@ -73,6 +84,17 @@ export interface Screen {
 
 function tapButton(text: string, tap: MenuTap): InlineButton {
   return { text, callback_data: encodeMenuData(tap) };
+}
+
+/** A signed agent button (M11 A2, `agentActionToken.ts`); none when the installation signs nothing. */
+function actionButton(text: string, payload: AgentActionPayload, deps: MenuDeps, now: Date): InlineButton[] {
+  const secret = deps.config.TELEGRAM_SIGNING_SECRET;
+  return secret ? [{ text, callback_data: encodeAgentActionData(payload, secret, now) }] : [];
+}
+
+/** Whether *Run a scan now* is offered: the agent could start one, and none is running. */
+function runnable(agent: AgentRow): boolean {
+  return scanBlocked(agent) === null && agent.running_scan === null;
 }
 
 /** Refresh this view, and go back to `back` (the menu unless said otherwise). */
@@ -244,6 +266,8 @@ async function agentsScreen(reader: Reader): Promise<Screen> {
 
 async function agentScreen(reader: Reader, agent: AgentRow, deps: MenuDeps): Promise<Screen> {
   const { messages } = reader;
+  const { buttons } = messages.menu;
+  const signs = Boolean(deps.config.TELEGRAM_SIGNING_SECRET);
   const text = messages.menu.agent;
   const lines = [`🤖 ${isolated(agent.name)}`, text.states[agent.state as 'active' | 'paused'] ?? agent.state];
   if (agent.running_scan !== null) lines.push(text.running(clock(new Date(agent.running_scan.started_at), reader)));
@@ -285,9 +309,19 @@ async function agentScreen(reader: Reader, agent: AgentRow, deps: MenuDeps): Pro
   return {
     text: lines.join('\n'),
     keyboard: [
-      [tapButton(messages.menu.buttons.lastRun, { view: 'agentLog', agentId: agent.id })],
-      footer(reader, { view: 'agent', agentId: agent.id }, { text: messages.menu.buttons.backToAgents, view: { view: 'agents' } }),
-    ],
+      [
+        ...(runnable(agent) && signs ? [tapButton(buttons.runScan, { view: 'runConfirm', agentId: agent.id })] : []),
+        ...(agent.state === 'active'
+          ? actionButton(buttons.pause, { agentId: agent.id, action: 'pause' }, deps, reader.now)
+          : actionButton(buttons.resume, { agentId: agent.id, action: 'resume' }, deps, reader.now)),
+      ],
+      [
+        // Run's confirm and the picker hold only signed buttons: without a secret they would be dead ends.
+        ...(signs ? [tapButton(buttons.schedule, { view: 'schedule', agentId: agent.id })] : []),
+        tapButton(buttons.lastRun, { view: 'agentLog', agentId: agent.id }),
+      ],
+      footer(reader, { view: 'agent', agentId: agent.id }, { text: buttons.backToAgents, view: { view: 'agents' } }),
+    ].filter((row) => row.length > 0),
   };
 }
 
@@ -333,6 +367,77 @@ async function agentLogScreen(reader: Reader, agent: AgentRow): Promise<Screen> 
   };
 }
 
+/** Why a scan would not start, in the reader's words; null when it would. */
+export function runRefusal(agent: AgentRow, messages: Messages): string | null {
+  if (agent.running_scan !== null) return messages.menu.run.refusals.scan_running;
+  const blocked = scanBlocked(agent);
+  if (blocked === null) return null;
+  return (messages.menu.run.refusals as Record<string, string | undefined>)[blocked.code] ?? messages.menu.run.refusals.other;
+}
+
+/** The confirm before a paid scan: what it costs, from which budget, and the signed Run. */
+function runConfirmScreen(reader: Reader, agent: AgentRow, deps: MenuDeps): Screen {
+  const { messages } = reader;
+  const { buttons } = messages.menu;
+  const cost = microUsd(scanCostOf(agent).microUsd, messages);
+  return {
+    text: [
+      messages.menu.run.confirm(
+        agent.name,
+        cost,
+        microUsd(Number(agent.llm_spent_today_micro_usd), messages),
+        microUsd(Number(agent.llm_budget_micro_usd), messages),
+      ),
+      '',
+      messages.menu.asOf(clock(reader.now, reader)),
+    ].join('\n'),
+    keyboard: [
+      [
+        ...actionButton(buttons.confirmRun(cost), { agentId: agent.id, action: 'run' }, deps, reader.now),
+        tapButton(buttons.cancel, { view: 'agent', agentId: agent.id }),
+      ],
+    ],
+  };
+}
+
+/** The hours a schedule may repeat at, and none: the web's own choices (D195). */
+const EVERY_HOURS: (number | null)[] = [
+  null,
+  ...Array.from({ length: MAX_SCAN_EVERY_HOURS - MIN_SCAN_EVERY_HOURS + 1 }, (_, index) => MIN_SCAN_EVERY_HOURS + index),
+];
+
+/** Every button sets a whole schedule: the current one with one thing changed (D277). */
+function scheduleScreen(reader: Reader, agent: AgentRow, deps: MenuDeps): Screen {
+  const { messages } = reader;
+  const { buttons } = messages.menu;
+  const current = scheduleOf(agent);
+  const set = (schedule: ScanSchedule) => ({ agentId: agent.id, action: 'schedule' as const, schedule });
+  const hourButtons = EVERY_HOURS.flatMap((everyHours) => {
+    const label = everyHours === null ? buttons.noMarketHours : buttons.everyHours(everyHours);
+    const mark = everyHours === current.everyHours ? '• ' : '';
+    return actionButton(`${mark}${label}`, set({ ...current, everyHours }), deps, reader.now);
+  });
+  const slots = slotsOfSchedule(agent);
+  return {
+    text: [
+      messages.menu.schedule.title(agent.name),
+      slots.length === 0 ? messages.menu.agent.onlyWhenAsked : messages.menu.agent.schedule(slots.map(messages.scheduledScans.slot)),
+      messages.menu.schedule.hint(messages.scheduledScans.slot(slotsOfSchedule({ scan_every_hours: 1, scan_pre_open: false, scan_post_close: false })[0]!)),
+      '',
+      messages.menu.asOf(clock(reader.now, reader)),
+    ].join('\n'),
+    keyboard: [
+      hourButtons.slice(0, 4),
+      hourButtons.slice(4),
+      [
+        ...actionButton(buttons.preOpen(current.preOpen), set({ ...current, preOpen: !current.preOpen }), deps, reader.now),
+        ...actionButton(buttons.postClose(current.postClose), set({ ...current, postClose: !current.postClose }), deps, reader.now),
+      ],
+      footer(reader, { view: 'schedule', agentId: agent.id }, { text: buttons.backToAgent, view: { view: 'agent', agentId: agent.id } }),
+    ].filter((row) => row.length > 0),
+  };
+}
+
 async function readerFor(userId: string, now: Date): Promise<{ reader: Reader; language: string }> {
   const [settings, user] = await Promise.all([getOrCreateUserSettings(userId), getUser(userId)]);
   return {
@@ -344,32 +449,47 @@ async function readerFor(userId: string, now: Date): Promise<{ reader: Reader; l
 /**
  * One view, read now. An agent that is not the reader's - archived, deleted,
  * the real portfolio, or somebody else's - falls back to the agent list, and
- * `gone` says so.
+ * `toast` says it is gone. A Run confirm for an agent that cannot scan now
+ * falls back to the agent, and `toast` says why.
  */
 export async function renderView(
   view: MenuView,
   userId: string,
   deps: MenuDeps,
   now = new Date(),
-): Promise<Screen & { gone: boolean }> {
+): Promise<Screen & { toast?: string }> {
   const { reader, language } = await readerFor(userId, now);
   switch (view.view) {
     case 'help':
-      return { ...helpScreen(reader, deps.telegram.linkBase), gone: false };
+      return helpScreen(reader, deps.telegram.linkBase);
     case 'portfolio':
-      return { ...(await portfolioScreen(reader, deps.ai)), gone: false };
+      return portfolioScreen(reader, deps.ai);
     case 'status':
-      return { ...(await statusScreen(reader)), gone: false };
+      return statusScreen(reader);
     case 'pending':
-      return { ...(await pendingScreen(reader, language)), gone: false };
+      return pendingScreen(reader, language);
     case 'agents':
-      return { ...(await agentsScreen(reader)), gone: false };
+      return agentsScreen(reader);
     case 'agent':
-    case 'agentLog': {
+    case 'agentLog':
+    case 'runConfirm':
+    case 'schedule': {
       const agent = await getAgent(userId, view.agentId);
-      if (!visibleAgent(agent)) return { ...(await agentsScreen(reader)), gone: true };
-      const screen = view.view === 'agent' ? await agentScreen(reader, agent, deps) : await agentLogScreen(reader, agent);
-      return { ...screen, gone: false };
+      if (!visibleAgent(agent)) return { ...(await agentsScreen(reader)), toast: reader.messages.menu.agents.gone };
+      switch (view.view) {
+        case 'agent':
+          return agentScreen(reader, agent, deps);
+        case 'agentLog':
+          return agentLogScreen(reader, agent);
+        case 'schedule':
+          return scheduleScreen(reader, agent, deps);
+        case 'runConfirm': {
+          const refusal = runRefusal(agent, reader.messages);
+          return refusal === null
+            ? runConfirmScreen(reader, agent, deps)
+            : { ...(await agentScreen(reader, agent, deps)), toast: refusal };
+        }
+      }
     }
   }
 }
@@ -425,7 +545,7 @@ export async function handleMenuTap(
       view = tap.data;
     }
     const screen = await renderView(view, tap.userId, deps);
-    if (screen.gone) toast = messages.menu.agents.gone;
+    if (screen.toast !== undefined) toast = screen.toast;
     // The edit first, so the toast can say when it failed; Telegram keeps the
     // button's spinner until the answer, which is the "working" sign.
     const edited = await deps.telegram.editWithButtons(tap.chatId, tap.messageId, screen.text, screen.keyboard);

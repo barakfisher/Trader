@@ -256,6 +256,8 @@ export async function updateAgent(
   userId: string,
   agentId: string,
   patch: AgentPatch,
+  /** `unlessArchived`: match no archived agent, so a pause racing an archive cannot restore it (D276). */
+  options: { unlessArchived?: boolean } = {},
 ): Promise<AgentRow | null> {
   const sets: string[] = [];
   const params: unknown[] = [userId, agentId];
@@ -281,7 +283,7 @@ export async function updateAgent(
   if (sets.length === 0) return getAgent(userId, agentId);
   const updated = await queryOne<{ id: string }>(
     `UPDATE agents SET ${sets.join(', ')}
-      WHERE user_id = $1 AND id = $2 AND NOT is_primary
+      WHERE user_id = $1 AND id = $2 AND NOT is_primary${options.unlessArchived ? " AND state <> 'archived'" : ''}
       RETURNING id`,
     params,
   );
