@@ -312,7 +312,7 @@ export interface Messages {
       /** `first` is the first market-hours slot as `scheduledScans.slot` names it. */
       hint: (first: string) => string;
     };
-    /** A proposal opened from `/pending` (M11 B, D281): its own words, then when it closes. */
+    /** A proposal opened from `/pending` (M11 B, D282): its own words, then when it closes. */
     proposal: {
       openUntil: (at: string) => string;
       snoozedUntil: (at: string) => string;

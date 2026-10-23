@@ -34,7 +34,7 @@ export type MenuView =
   /** M11 A2: the confirm before a paid scan, and the schedule picker. Views, so unsigned. */
   | { view: 'runConfirm'; agentId: string }
   | { view: 'schedule'; agentId: string }
-  /** M11 B: one open proposal from `/pending`, with its own signed buttons (D281). */
+  /** M11 B: one open proposal from `/pending`, with its own signed buttons (D282). */
   | { view: 'proposal'; proposalId: string };
 
 type AgentView = Extract<MenuView, { agentId: string }>['view'];

@@ -126,7 +126,7 @@ const updateSchema = z
             message_id: z.number(),
             text: z.string().optional(),
             chat: chatSchema,
-            // Read only to see whether the message was opened from `/pending` (D281).
+            // Read only to see whether the message was opened from `/pending` (D282).
             reply_markup: z
               .object({
                 inline_keyboard: z
@@ -255,7 +255,7 @@ export function appendOutcome(text: string, outcome: string): string {
 
 const PENDING_DATA = encodeMenuData({ view: 'pending' });
 
-/** Whether a tapped message carries the way back to `/pending`: it was opened from there (D281). */
+/** Whether a tapped message carries the way back to `/pending`: it was opened from there (D282). */
 export function openedFromPending(message: {
   reply_markup?: { inline_keyboard?: { callback_data?: string }[][] } | undefined;
 }): boolean {
@@ -533,7 +533,7 @@ async function handleCallback(
     return;
   }
 
-  // A proposal opened from `/pending` keeps its way back through every redraw (D281).
+  // A proposal opened from `/pending` keeps its way back through every redraw (D282).
   const message =
     callback.message === undefined ? undefined : { ...callback.message, fromPending: openedFromPending(callback.message) };
   const backToPending = message?.fromPending ?? false;

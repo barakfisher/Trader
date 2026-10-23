@@ -1,5 +1,5 @@
 /**
- * Deciding from `/pending` (M11 B, D281): the list opens a proposal in place,
+ * Deciding from `/pending` (M11 B, D282): the list opens a proposal in place,
  * drawn as its alert is, with the alert's own signed buttons - and a decision
  * made there is the alert's decision, through the same handler, keeping the
  * way back to the list.

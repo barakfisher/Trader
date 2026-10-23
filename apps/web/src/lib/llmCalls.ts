@@ -58,6 +58,21 @@ export function formatMicroUsd(micro: number): string {
   return usd(units / TEN_THOUSANDTHS_PER_DOLLAR, 2, 4);
 }
 
+/** Micro-USD per cent: the indicator's amounts are dollars and cents. */
+const MICRO_PER_CENT = 10_000;
+
+/**
+ * A key's spend, limits and daily pace (D247), to the cent - not a call's cost to
+ * the ten-thousandth. Rounded half up once, in integers; a nonzero amount under a
+ * cent reads "<$0.01" rather than "$0.00".
+ */
+export function formatMicroUsdCents(micro: number): string {
+  if (micro === 0) return usd(0, 2, 2);
+  const cents = Math.floor((micro + MICRO_PER_CENT / 2) / MICRO_PER_CENT);
+  if (cents === 0) return t('llm.belowSmallest', { amount: usd(0.01, 2, 2) });
+  return usd(cents / 100, 2, 2);
+}
+
 /**
  * A USD amount the server sent as a decimal string ("9.89709208"), in integer
  * micro-USD, rounded half up at the sixth place - parsed digit by digit, so no

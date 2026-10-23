@@ -2126,6 +2126,112 @@
         "title": "OwnLlmKeyState",
         "type": "object"
       },
+      "OwnLlmKeyUsage": {
+        "description": "What OpenRouter's `GET /key` said of the user's key (D247-D249), in integer micro-USD.\n\nThe usage windows are calendar windows in UTC: today, this week since Monday,\nthis month. Every figure counts the whole key, other apps' spend included.",
+        "properties": {
+          "limit_micro_usd": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The key's credit limit; null when unlimited.",
+            "title": "Limit Micro Usd"
+          },
+          "limit_remaining_micro_usd": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Remaining Micro Usd"
+          },
+          "limit_reset": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How the limit resets, as OpenRouter names it; null when it never does.",
+            "title": "Limit Reset"
+          },
+          "read_at": {
+            "description": "When OpenRouter was asked; at most 15 minutes old.",
+            "format": "date-time",
+            "title": "Read At",
+            "type": "string"
+          },
+          "usage_daily_micro_usd": {
+            "title": "Usage Daily Micro Usd",
+            "type": "integer"
+          },
+          "usage_monthly_micro_usd": {
+            "title": "Usage Monthly Micro Usd",
+            "type": "integer"
+          },
+          "usage_weekly_micro_usd": {
+            "title": "Usage Weekly Micro Usd",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "limit_micro_usd",
+          "limit_remaining_micro_usd",
+          "limit_reset",
+          "usage_daily_micro_usd",
+          "usage_weekly_micro_usd",
+          "usage_monthly_micro_usd",
+          "read_at"
+        ],
+        "title": "OwnLlmKeyUsage",
+        "type": "object"
+      },
+      "OwnLlmKeyUsageState": {
+        "properties": {
+          "available": {
+            "description": "Whether this installation can use users' own keys: LLM_KEY_ENCRYPTION_KEYS is set and the provider is OpenRouter.",
+            "title": "Available",
+            "type": "boolean"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OwnLlmKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OwnLlmKeyUsage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null with no working key, or when OpenRouter could not be read."
+          }
+        },
+        "required": [
+          "available",
+          "key",
+          "usage"
+        ],
+        "title": "OwnLlmKeyUsageState",
+        "type": "object"
+      },
       "PortfolioScanRequest": {
         "properties": {
           "base_currency": {
@@ -4059,6 +4165,66 @@
           }
         },
         "summary": "Save Own Key",
+        "tags": [
+          "llm"
+        ]
+      }
+    },
+    "/llm/own-keys/{user_id}/usage": {
+      "get": {
+        "description": "The key's state and what OpenRouter says it spent, read at most every 15 minutes (D249).\n\nAsked only for a key that is saved, valid and usable here; a key OpenRouter\nrefused is said by its state, not read again.",
+        "operationId": "own_key_usage_llm_own_keys__user_id__usage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnLlmKeyUsageState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Own Key Usage",
         "tags": [
           "llm"
         ]

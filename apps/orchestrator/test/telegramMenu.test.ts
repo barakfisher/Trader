@@ -381,7 +381,7 @@ describe('commands send a view', () => {
     expect(text).toContain('1. VOO is above its target\n');
     expect(text).toContain(`2. ⏸ NVDA fell 7% (${MESSAGES.en.menu.pending.states.snoozed})`);
     expect(text).not.toContain('An expired one');
-    // Every button is a menu button: deciding happens on the proposal's own view (D281).
+    // Every button is a menu button: deciding happens on the proposal's own view (D282).
     expect(lastButtons().every((b) => b.callback_data !== undefined && decodeMenuData(b.callback_data) !== null)).toBe(true);
     expect(tapsOf(lastButtons())).toEqual([
       { view: 'proposal', proposalId: '11111111-0000-0000-0000-000000000001' },

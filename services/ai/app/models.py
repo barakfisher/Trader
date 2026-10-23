@@ -1100,6 +1100,30 @@ class OwnLlmKeyState(BaseModel):
     key: OwnLlmKey | None
 
 
+class OwnLlmKeyUsage(BaseModel):
+    """What OpenRouter's `GET /key` said of the user's key (D247-D249), in integer micro-USD.
+
+    The usage windows are calendar windows in UTC: today, this week since Monday,
+    this month. Every figure counts the whole key, other apps' spend included.
+    """
+
+    limit_micro_usd: int | None = Field(description="The key's credit limit; null when unlimited.")
+    limit_remaining_micro_usd: int | None
+    limit_reset: str | None = Field(
+        description="How the limit resets, as OpenRouter names it; null when it never does."
+    )
+    usage_daily_micro_usd: int
+    usage_weekly_micro_usd: int
+    usage_monthly_micro_usd: int
+    read_at: datetime = Field(description="When OpenRouter was asked; at most 15 minutes old.")
+
+
+class OwnLlmKeyUsageState(OwnLlmKeyState):
+    usage: OwnLlmKeyUsage | None = Field(
+        description="Null with no working key, or when OpenRouter could not be read."
+    )
+
+
 class OwnLlmKeySave(BaseModel):
     # A SecretStr is masked in every repr and log line, and the model has no
     # length or pattern constraint because a failed constraint echoes the input

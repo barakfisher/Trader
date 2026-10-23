@@ -516,3 +516,58 @@ describe("a user's own OpenRouter key (D206)", () => {
     expect((await app.request('/settings/llm-key')).status).toBe(401);
   });
 });
+
+describe('the spend indicator (D247-D249)', () => {
+  const USAGE = {
+    available: true,
+    key: { last_four: 'c0de', status: 'valid' as const, saved_at: '2026-10-20T12:00:00Z', failed_at: null, failure: null },
+    usage: {
+      limit_micro_usd: 50_000_000,
+      limit_remaining_micro_usd: 38_000_000,
+      limit_reset: 'monthly',
+      usage_daily_micro_usd: 0,
+      usage_weekly_micro_usd: 0,
+      usage_monthly_micro_usd: 12_000_000,
+      read_at: '2026-10-22T11:55:00Z',
+    },
+  };
+  let cookie: string;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    cookie = sessionCookie();
+  });
+
+  function appWith(ownLlmKeyUsage: ReturnType<typeof vi.fn>) {
+    resetConfigForTests();
+    return createApp(loadConfig(ENV), Object.assign(createFakeAi(), { ownLlmKeyUsage }));
+  }
+
+  it("reads the user's key through the AI service, with their safety limit beside it", async () => {
+    const ownLlmKeyUsage = vi.fn(async () => USAGE);
+    vi.mocked(queries.getMonthlySpend).mockResolvedValueOnce({
+      own_key_spent_micro_usd: '1000000',
+      safety_limit_micro_usd: '20000000',
+      resets_on: '2026-11-01',
+    });
+    const response = await appWith(ownLlmKeyUsage).request('/settings/llm-usage', { headers: { cookie } });
+    expect(response.status).toBe(200);
+    const { spend } = await response.json();
+    expect(spend.key).toBe('valid');
+    expect(spend.reading).toMatchObject({ usedMicroUsd: 12_000_000, limitMicroUsd: 50_000_000, period: 'month' });
+    expect(spend.safetyLimit).toEqual({ limitMicroUsd: 20_000_000, spentMicroUsd: 1_000_000, resetsOn: '2026-11-01' });
+    expect(ownLlmKeyUsage).toHaveBeenCalledWith(USER.id, expect.any(String));
+  });
+
+  it('is null for the admin, and asks OpenRouter nothing', async () => {
+    const ownLlmKeyUsage = vi.fn(async () => USAGE);
+    vi.mocked(queries.getUser).mockResolvedValueOnce({ ...USER, role: 'admin' } as never);
+    const response = await appWith(ownLlmKeyUsage).request('/settings/llm-usage', { headers: { cookie } });
+    expect(await response.json()).toEqual({ spend: null });
+    expect(ownLlmKeyUsage).not.toHaveBeenCalled();
+  });
+
+  it('needs a session', async () => {
+    expect((await appWith(vi.fn()).request('/settings/llm-usage')).status).toBe(401);
+  });
+});

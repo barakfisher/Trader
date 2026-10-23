@@ -189,7 +189,7 @@ describe('the announcement', () => {
   });
 });
 
-describe('a trade opened from /pending (D281)', () => {
+describe('a trade opened from /pending (D282)', () => {
   const fromPending = { inline_keyboard: [[{ text: '⬅️ Pending', callback_data: encodeMenuData({ view: 'pending' }) }]] };
 
   it('keeps its way back to the list through the preview, and only there', async () => {

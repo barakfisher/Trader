@@ -188,7 +188,7 @@ export class TelegramNotifier implements Notifier {
   private keyboardFor(proposalId: string, keyboard: Keyboard, language: string, backToPending = false) {
     const { inline_keyboard } = this.decisionKeyboard(proposalId, keyboard, language);
     // A proposal opened from `/pending` keeps its way back there through every
-    // state, a decided one included (M11 B, D281): the list is what is left to do.
+    // state, a decided one included (M11 B, D282): the list is what is left to do.
     const back = backToPending
       ? [[{ text: messagesFor(language).menu.buttons.backToPending, callback_data: encodeMenuData({ view: 'pending' }) }]]
       : [];
@@ -285,7 +285,7 @@ export class TelegramNotifier implements Notifier {
     });
   }
 
-  /** A proposal's buttons for a view that draws them itself: the `/pending` proposal view (D281). */
+  /** A proposal's buttons for a view that draws them itself: the `/pending` proposal view (D282). */
   proposalButtons(proposalId: string, keyboard: Keyboard, language: string): InlineKeyboard {
     return this.keyboardFor(proposalId, keyboard, language, true).inline_keyboard;
   }

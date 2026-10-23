@@ -20,8 +20,15 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from app.config import Settings
 from app.deps import SettingsDep, require_internal_key
 from app.llm.factory import models_are_choosable
+from app.llm.key_usage import KeyUsageReader, OpenRouterKeyUsageReader, cached_key_usage
 from app.llm.own_key import DatabaseOwnKeyStore, KeyChecker, OpenRouterKeyChecker, SavedKey
-from app.models import OwnLlmKey, OwnLlmKeySave, OwnLlmKeyState
+from app.models import (
+    OwnLlmKey,
+    OwnLlmKeySave,
+    OwnLlmKeyState,
+    OwnLlmKeyUsage,
+    OwnLlmKeyUsageState,
+)
 
 router = APIRouter(
     prefix="/llm/own-keys", tags=["llm"], dependencies=[Depends(require_internal_key)]
@@ -41,8 +48,13 @@ def get_key_checker(settings: SettingsDep) -> KeyChecker:
     return OpenRouterKeyChecker(settings.openrouter_base_url)
 
 
+def get_key_usage_reader(settings: SettingsDep) -> KeyUsageReader:
+    return OpenRouterKeyUsageReader(settings.openrouter_base_url)
+
+
 OwnKeys = Annotated[DatabaseOwnKeyStore, Depends(get_own_keys)]
 Checker = Annotated[KeyChecker, Depends(get_key_checker)]
+UsageReader = Annotated[KeyUsageReader, Depends(get_key_usage_reader)]
 
 
 def _available(settings: Settings, store: DatabaseOwnKeyStore) -> bool:
@@ -67,6 +79,46 @@ def _state(
 
 def _refuse(code: int, reason: str, message: str) -> HTTPException:
     return HTTPException(code, {"code": reason, "message": message})
+
+
+@router.get("/{user_id}/usage", response_model=OwnLlmKeyUsageState)
+async def own_key_usage(
+    user_id: UUID,
+    request: Request,
+    settings: SettingsDep,
+    store: OwnKeys,
+    reader: UsageReader,
+) -> OwnLlmKeyUsageState:
+    """The key's state and what OpenRouter says it spent, read at most every 15 minutes (D249).
+
+    Asked only for a key that is saved, valid and usable here; a key OpenRouter
+    refused is said by its state, not read again.
+    """
+    user = str(user_id)
+    saved = store.saved(user)
+    state = _state(settings, store, saved)
+    usage = None
+    if state.available and saved is not None and saved.status == "valid":
+        key = store.payer(user).key
+        if key is not None:
+            reading = await cached_key_usage(
+                getattr(request.app.state, "redis", None),
+                reader,
+                user_id=user,
+                # A key saved, refused or replaced since is a new key state, so a new read.
+                key_state=f"{saved.saved_at.isoformat()}:{saved.status}",
+                api_key=key.api_key,
+            )
+            usage = reading and OwnLlmKeyUsage(
+                limit_micro_usd=reading.limit_micro_usd,
+                limit_remaining_micro_usd=reading.limit_remaining_micro_usd,
+                limit_reset=reading.limit_reset,
+                usage_daily_micro_usd=reading.usage_daily_micro_usd,
+                usage_weekly_micro_usd=reading.usage_weekly_micro_usd,
+                usage_monthly_micro_usd=reading.usage_monthly_micro_usd,
+                read_at=reading.read_at,
+            )
+    return OwnLlmKeyUsageState(available=state.available, key=state.key, usage=usage)
 
 
 @router.get("/{user_id}", response_model=OwnLlmKeyState)

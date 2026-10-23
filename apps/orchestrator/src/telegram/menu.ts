@@ -248,7 +248,7 @@ async function statusScreen(reader: Reader): Promise<Screen> {
 /** A list button's label: long enough to tell proposals apart, short enough for a phone. */
 export const PENDING_BUTTON_CHARS = 40;
 
-/** Open proposals, live now: a stored `pending` past its deadline is not offered (D281). */
+/** Open proposals, live now: a stored `pending` past its deadline is not offered (D282). */
 async function liveProposals(reader: Reader) {
   const open = await listProposals(reader.userId, { open: true, limit: PENDING_READ_LIMIT });
   return open
@@ -257,7 +257,7 @@ async function liveProposals(reader: Reader) {
     .slice(0, PENDING_LIST_LIMIT);
 }
 
-/** What is waiting, each a button that opens it in place (M11 B, D281). */
+/** What is waiting, each a button that opens it in place (M11 B, D282). */
 async function pendingScreen(reader: Reader, language: string): Promise<Screen> {
   const { messages } = reader;
   const live = await liveProposals(reader);
@@ -292,7 +292,7 @@ async function pendingScreen(reader: Reader, language: string): Promise<Screen> 
 
 /**
  * One open proposal, drawn as its alert is - its own words, what its scan
- * checked, when it closes - with the alert's own signed buttons (D281). A tap
+ * checked, when it closes - with the alert's own signed buttons (D282). A tap
  * on them is the alert's tap: the same handler, the same state machine.
  */
 async function proposalScreen(

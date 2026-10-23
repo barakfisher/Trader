@@ -340,7 +340,7 @@ describe('Re-check from Telegram (D217)', () => {
     expect(options.keyboard).toBe('none');
   });
 
-  it('opened from /pending, its outcome keeps the way back to the list (D281)', async () => {
+  it('opened from /pending, its outcome keeps the way back to the list (D282)', async () => {
     const telegram = chat();
     await tap(telegram, undefined, 'en', memoryRateLimits(), true);
     const [, , , options] = telegram.editMessage.mock.calls[0]! as unknown as [string, number, string, { backToPending: boolean }];
@@ -391,7 +391,7 @@ describe('Re-check from Telegram (D217)', () => {
     expect(ai.recheckProposal).not.toHaveBeenCalled();
   });
 
-  it('a refusal on a message opened from /pending keeps the way back (D281)', async () => {
+  it('a refusal on a message opened from /pending keeps the way back (D282)', async () => {
     latest = scanRow();
     const telegram = chat();
     await tap(telegram, undefined, 'en', memoryRateLimits(), true);

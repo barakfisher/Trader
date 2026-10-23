@@ -37,7 +37,7 @@ export interface RecheckCallback {
   language: string;
   callbackId: string;
   chatId: string;
-  /** `fromPending`: opened from `/pending`, so its redraws keep the way back (D281). */
+  /** `fromPending`: opened from `/pending`, so its redraws keep the way back (D282). */
   message?: { message_id: number; text?: string; fromPending?: boolean };
   payload: CallbackPayload & { action: 'recheck' };
   /** The page's limit, counted with it (D257). */

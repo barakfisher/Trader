@@ -41,6 +41,7 @@ export const queryKeys = {
   monthlySpend: ['settings', 'llm-spend'] as const,
   /** The user's own OpenRouter key, as its last four and its state (D206). */
   ownLlmKey: ['settings', 'llm-key'] as const,
+  keySpend: ['settings', 'llm-usage'] as const,
   targets: ['targets'] as const,
   /** The universe's sectors, industries and ETF categories (D164). */
   taxonomy: ['universe', 'taxonomy'] as const,
