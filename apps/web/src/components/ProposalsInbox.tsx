@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import { Link } from '@tanstack/react-router';
+import { Link, useSearch } from '@tanstack/react-router';
 import { ShieldCheck } from 'lucide-react';
 
 import type { Proposal } from '@traders/shared';
@@ -23,6 +23,17 @@ import {
   useProposalsQuery,
 } from '../queries/proposals.ts';
 import { useStore } from '../stores/context.tsx';
+import { ownDirection } from '../i18n/format.ts';
+import { agentName } from '../lib/agentPresentation.ts';
+import { useAgentsQuery } from '../queries/agents.ts';
+
+const AGENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The agent the address narrows the inbox to, or null for every agent's. Anything else is ignored. */
+export function agentFilterFrom(search: unknown): string | null {
+  const value = ((search ?? {}) as Record<string, unknown>).agent;
+  return typeof value === 'string' && AGENT_ID.test(value) ? value.toLowerCase() : null;
+}
 
 /**
  * The approvals inbox: the Insights page's Proposals tab (decision 134). It was
@@ -57,18 +68,22 @@ export const ProposalsInbox = observer(function ProposalsInbox() {
   const inbox = useProposalsQuery({ live: true });
   const history = useProposalHistoryQuery();
   const baseCurrency = baseCurrencyOf(usePortfolioQuery().data);
-  const open = openProposals(inbox.data);
+  // One agent's proposals only, from its row's "⋯" menu (D252): `?agent=<id>`.
+  const agentFilter = agentFilterFrom(useSearch({ strict: false }));
+  const filterAgent = useAgentsQuery().data?.find((agent) => agent.id === agentFilter) ?? null;
+  const mine = (proposal: Proposal) => agentFilter === null || proposal.agentId === agentFilter;
+  const open = openProposals(inbox.data).filter(mine);
   // Approvals Undo can still reach sit above the history; once their window
   // closes they are history like any other outcome. The clock ticks only while
   // an approval is inside its window.
-  const approvals = recentlyApproved(inbox.data);
+  const approvals = recentlyApproved(inbox.data).filter(mine);
   const now = useNow(approvals.some((proposal) => proposal.undoableUntil !== null));
   const undoable = approvals.filter(
     (proposal) =>
       undoSecondsLeft(proposal.undoableUntil, now) !== null ||
       proposals.decidingAction(proposal.id) === 'undo',
   );
-  const past = decidedHistory(history.data, new Set(undoable.map((proposal) => proposal.id)));
+  const past = decidedHistory(history.data, new Set(undoable.map((proposal) => proposal.id))).filter(mine);
   // Nothing waiting. Recent approvals do not count: they are answers, not
   // questions. And only after a read succeeded: "nothing waiting on you" and
   // "we could not ask" must not look the same, because one of them means a
@@ -89,6 +104,19 @@ export const ProposalsInbox = observer(function ProposalsInbox() {
           <span>{t('proposals.ledgerOnly')}</span>
         </p>
       </Card>
+
+      {agentFilter !== null && (
+        <p className="flex flex-wrap items-center gap-2 text-sm text-text-muted">
+          <span>
+            {filterAgent
+              ? t('proposals.agentFilter', { name: ownDirection(agentName(filterAgent)) })
+              : t('proposals.agentFilterUnknown')}
+          </span>
+          <Link to="/insights" search={{ tab: 'proposals' }} className="font-medium text-accent hover:underline">
+            {t('proposals.showAll')}
+          </Link>
+        </p>
+      )}
 
       {inbox.isPending && <Spinner label={t('proposals.loading')} />}
 

@@ -10,6 +10,7 @@ import { MandateFields } from '../components/MandateFields.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Drawer } from '../components/Drawer.tsx';
 import { OwnKeyNotice } from '../components/OwnKeyNotice.tsx';
+import { AgentRowActions } from '../components/AgentRowActions.tsx';
 import { Button, ErrorNote, Spinner } from '../components/ui.tsx';
 import { errorMessage } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
@@ -41,7 +42,7 @@ import {
   type PersonaTemplate,
 } from '../lib/personaTemplates.ts';
 import { useAgentLimitQuery, useAgentsQuery, useCheckInstructions, useCreateAgent } from '../queries/agents.ts';
-import { useModelAccess } from '../queries/modelAccess.ts';
+import { useModelAccess, type ModelAccess } from '../queries/modelAccess.ts';
 import { useConsolidatedQuery } from '../queries/portfolio.ts';
 import { useTaxonomyQuery } from '../queries/taxonomy.ts';
 
@@ -112,7 +113,7 @@ export function AgentsPage() {
         <ul className="space-y-2">
           {agents.data.map((agent) => (
             <li key={agent.id}>
-              <AgentRow agent={agent} standing={standings.get(agent.id) ?? null} />
+              <AgentRow agent={agent} standing={standings.get(agent.id) ?? null} access={access} />
             </li>
           ))}
         </ul>
@@ -137,16 +138,32 @@ export function AgentsPage() {
   );
 }
 
-function AgentRow({ agent, standing }: { agent: AgentView; standing: SimulatedAgentStanding | null }) {
+/**
+ * One agent: its name is the link to its page, and beside its standing, for a
+ * simulated agent that is not archived, its quick actions (D252). The row was a
+ * whole-row link; a button cannot sit inside a link, so it is a container now.
+ */
+function AgentRow({
+  agent,
+  standing,
+  access,
+}: {
+  agent: AgentView;
+  standing: SimulatedAgentStanding | null;
+  access: ModelAccess;
+}) {
   const { t } = useTranslation();
+  const actionable = !agent.isPrimary && agent.state !== 'archived';
   return (
-    <Link
-      to="/agents/$agentId"
-      params={{ agentId: agent.id }}
-      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border-subtle bg-surface-raised px-4 py-3 hover:border-accent"
-    >
-      <span className="flex flex-wrap items-center gap-2">
-        <bdi className="font-medium">{agentName(agent)}</bdi>
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border-subtle bg-surface-raised px-4 py-3">
+      <span className="flex min-w-0 flex-wrap items-center gap-2">
+        <Link
+          to="/agents/$agentId"
+          params={{ agentId: agent.id }}
+          className="font-medium hover:text-accent hover:underline"
+        >
+          <bdi>{agentName(agent)}</bdi>
+        </Link>
         <KindBadge agent={agent} />
         {agent.state !== 'active' && (
           <span className="rounded-full bg-surface px-2 py-0.5 text-xs text-text-muted">
@@ -159,17 +176,20 @@ function AgentRow({ agent, standing }: { agent: AgentView; standing: SimulatedAg
         )}
         <MandateSummary agent={agent} />
       </span>
-      <span className="text-sm text-text-muted">
-        {agent.isPrimary
-          ? t('agents.holdingsCount', { count: agent.holdingsCount })
-          : standing
-            ? t('agents.netWorthLine', {
-                netWorth: formatMoney(standing.netWorthMinor, standing.currency),
-                budget: formatMoney(agent.budgetMinor, agent.currency),
-              })
-            : t('agents.budgetLine', { budget: formatMoney(agent.budgetMinor, agent.currency) })}
+      <span className="flex flex-wrap items-center justify-end gap-3">
+        <span className="text-sm text-text-muted">
+          {agent.isPrimary
+            ? t('agents.holdingsCount', { count: agent.holdingsCount })
+            : standing
+              ? t('agents.netWorthLine', {
+                  netWorth: formatMoney(standing.netWorthMinor, standing.currency),
+                  budget: formatMoney(agent.budgetMinor, agent.currency),
+                })
+              : t('agents.budgetLine', { budget: formatMoney(agent.budgetMinor, agent.currency) })}
+        </span>
+        {actionable && <AgentRowActions agent={agent} access={access} />}
       </span>
-    </Link>
+    </div>
   );
 }
 

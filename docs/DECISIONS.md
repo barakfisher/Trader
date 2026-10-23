@@ -297,3 +297,4 @@ while this file is out of date.
 | 284 | A chosen model that leaves the list falls back to the tested model, and says so everywhere |
 | 285 | The "tested" mark is a constant in code: `TESTED_MODELS`, Flash-Lite only |
 | 286 | Telegram hears about a fallback once, when it starts |
+| 287 | M10 PR 7 is the table and the agent rows; the rebalance table (D253) is deferred |

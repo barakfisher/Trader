@@ -20,6 +20,7 @@ import { useTranslation } from '../i18n/index.ts';
 import { hasStaleQuotes, pricesAsOf } from '../lib/portfolioView.ts';
 import { formatAge, formatClockTime, formatExactTime } from '../lib/relativeTime.ts';
 import { scopeSummary, summarySources } from '../lib/combinedHoldings.ts';
+import { holdingsSortFrom, holdingsSortSearch, type HoldingsSort } from '../lib/holdingsSort.ts';
 import { ALL_SCOPE, holdingsScopeFrom, holdingsSearchValue, inScope, type HoldingsScope } from '../lib/holdingsScope.ts';
 import { useAgentsQuery } from '../queries/agents.ts';
 import { useConsolidatedQuery, usePortfolioQuery } from '../queries/portfolio.ts';
@@ -55,13 +56,17 @@ export const DashboardPage = observer(function DashboardPage() {
   const combinedView = hasSimulated && scope.kind !== 'real';
   const consolidated = useConsolidatedQuery(combinedView);
   const sources = consolidated.data ? summarySources(consolidated.data, scope) : [];
-  const setScope = (next: HoldingsScope) =>
+  // The holdings' order (M10 decision 21), kept in the address beside the scope.
+  const sort = holdingsSortFrom(search);
+  const setView = (next: HoldingsScope, nextSort: HoldingsSort | null) =>
     void navigate({
       to: '/',
-      search: { holdings: holdingsSearchValue(next) },
+      search: { holdings: holdingsSearchValue(next), ...holdingsSortSearch(nextSort) },
       // A view of this page, not a place: Back leaves the page.
       replace: true,
     });
+  const setScope = (next: HoldingsScope) => setView(next, sort);
+  const setSort = (next: HoldingsSort | null) => setView(scope, next);
   const pricesFrom = pricesAsOf(portfolio.data);
   // A refresh keeps the current numbers on screen; only the first load spins.
   const refreshing = portfolio.isFetching && !portfolio.isPending;
@@ -167,10 +172,12 @@ export const DashboardPage = observer(function DashboardPage() {
                   data={consolidated.data}
                   scope={scope}
                   actions={scope.kind === 'all' ? <HoldingsActions /> : undefined}
+                  sort={sort}
+                  onSort={setSort}
                 />
               )
             ) : (
-              <HoldingsTable actions={<HoldingsActions />} />
+              <HoldingsTable actions={<HoldingsActions />} sort={sort} onSort={setSort} />
             )}
             {/* The charts stay the real portfolio's (D32): an allocation over
                 real and paper shares together is a figure nobody holds. */}

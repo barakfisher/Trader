@@ -230,6 +230,7 @@
       "value": "Value",
       "cost": "Cost",
       "pnl": "P&L",
+      "pnlPct": "P&L %",
       "weight": "Weight",
       "actions": "Actions"
     },
@@ -260,7 +261,14 @@
     },
     "setCost": "Set cost basis",
     "setCostFor": "Set the cost basis for {{symbol}}",
-    "noCostTitle": "No cost basis: its P&L cannot be measured, and it is left out of total cost and P&L."
+    "noCostTitle": "No cost basis: its P&L cannot be measured, and it is left out of total cost and P&L.",
+    "sort": {
+      "label": "Sort by",
+      "default": "Default order",
+      "by": "Sort by {{column}}",
+      "ascending": "Ascending. Tap to reverse.",
+      "descending": "Descending. Tap to reverse."
+    }
   },
   "import": {
     "title": "Import holdings",
@@ -880,7 +888,10 @@
     "historyLoading": "Loading past proposals…",
     "historyFailed": "Could not load past proposals.",
     "historyEmpty": "No proposal has been decided or has expired yet.",
-    "historyFull": "The {{count}} most recent. Older proposals are kept, and each one’s own page still opens from its link."
+    "historyFull": "The {{count}} most recent. Older proposals are kept, and each one’s own page still opens from its link.",
+    "agentFilter": "Only {{name}}'s proposals.",
+    "agentFilterUnknown": "Only one agent's proposals.",
+    "showAll": "Show every agent's"
   },
   "proposalPage": {
     "title": "Proposal",
@@ -1779,6 +1790,17 @@
         "sectors": "the sectors and industries",
         "blocked": "the blocked tickers"
       }
+    },
+    "row": {
+      "runScan": "Run a scan of {{name}} now",
+      "pause": "Pause {{name}}",
+      "resume": "Resume {{name}}",
+      "more": "More actions for {{name}}",
+      "pending_one": "{{count}} pending proposal",
+      "pending_other": "{{count}} pending proposals",
+      "open": "Open the agent's page",
+      "scanned": "Scan finished.",
+      "seeScan": "See what it decided"
     }
   },
   "consolidated": {

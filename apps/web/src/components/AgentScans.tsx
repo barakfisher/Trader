@@ -52,6 +52,23 @@ type RunRefusal = (typeof RUN_REFUSALS)[number];
 
 const isRunRefusal = (code: string): code is RunRefusal => (RUN_REFUSALS as readonly string[]).includes(code);
 
+/** Why *Run a scan now* would be refused before it is asked, or null: shared by the agent's page and its row (D252). */
+export function runBlocked(agent: AgentView): RunRefusal | null {
+  const spent = (agent.llmSpentTodayMicroUsd ?? 0) >= (agent.llmBudgetMicroUsd ?? 0);
+  if (agent.state !== 'active') return 'agent_not_active';
+  if (agent.waitingForBrief) return 'no_persona';
+  if (spent) return 'budget_spent';
+  return null;
+}
+
+/** A failed run in the reader's words: a known refusal from the catalogue, else the server's. */
+export function runErrorText(error: Error | null): string | null {
+  if (error === null) return null;
+  return error instanceof ApiRequestError && isRunRefusal(error.code)
+    ? t(`agents.scans.refusals.${error.code}`)
+    : agentErrorMessage(error, t('agents.saveFailed'));
+}
+
 /**
  * How an agent scans (D45, D46, D52, D65, D66), in two cards on two tabs: *Run
  * a scan now* with what it is expected to cost, above the scans it has run; and
@@ -83,21 +100,8 @@ function RunScan({ agent }: { agent: AgentView }) {
   const access = useModelAccess();
   const running = agent.runningScan;
   const soon = running ? null : minutesUntilSoonScan(agent.scheduling?.nextAt);
-  const spent = (agent.llmSpentTodayMicroUsd ?? 0) >= (agent.llmBudgetMicroUsd ?? 0);
-  const blocked: RunRefusal | null =
-    agent.state !== 'active'
-      ? 'agent_not_active'
-      : agent.waitingForBrief
-        ? 'no_persona'
-        : spent
-          ? 'budget_spent'
-          : null;
-  const refusal =
-    run.error instanceof ApiRequestError && isRunRefusal(run.error.code)
-      ? t(`agents.scans.refusals.${run.error.code}`)
-      : run.error
-        ? agentErrorMessage(run.error, t('agents.saveFailed'))
-        : null;
+  const blocked = runBlocked(agent);
+  const refusal = runErrorText(run.error);
   return (
     <div className="space-y-2">
       <OwnKeyNotice access={access} />

@@ -12,20 +12,45 @@ import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { useNarrowViewport } from '../lib/viewport.ts';
 import { usePortfolioQuery, useRemoveHolding, useUpdateHolding } from '../queries/portfolio.ts';
+import { sortHoldings, type SortFields } from '../lib/holdingsSort.ts';
+import { SortControl, SortableTh, useSortColumns, type SortProps } from './SortableHeader.tsx';
 import { Card, Delta } from './ui.tsx';
 
 export type UpdateHolding = ReturnType<typeof useUpdateHolding>;
 export type RemoveHolding = ReturnType<typeof useRemoveHolding>;
 
-/** `actions`: the card's own controls - Add holding, Targets, the "⋯" menu (UX5). */
-export function HoldingsTable({ actions }: { actions?: ReactNode } = {}) {
+/** A real holding's figures as the table sorts by them (M10 decision 21). */
+export function holdingSortFields(holding: HoldingView): SortFields {
+  return {
+    symbol: holding.instrument.symbol,
+    quantity: holding.quantity,
+    price: holding.quote ? { minor: holding.quote.priceMinor, currency: holding.quote.currency } : null,
+    day: holding.quote?.dayChangePct ?? null,
+    value: holding.valueMinor,
+    cost: holding.costBasisMinor === null ? null : holding.costMinor,
+    pnl: holding.pnlMinor,
+    pnlPct: holding.pnlPct,
+    weight: holding.weightPct,
+  };
+}
+
+/**
+ * `actions`: the card's own controls - Add holding, Targets, the "⋯" menu (UX5).
+ * `sort`: the order the address asks for (M10 decision 21); null is the server's.
+ */
+export function HoldingsTable({
+  actions,
+  sort = null,
+  onSort = () => {},
+}: { actions?: ReactNode } & Partial<SortProps> = {}) {
   const { data: portfolio } = usePortfolioQuery();
   const { t } = useTranslation();
   // Owned by the table, not each row, so a failure is reported once, under the
   // table, whichever row caused it - as it was before.
   const updateHolding = useUpdateHolding();
   const removeHolding = useRemoveHolding();
-  const holdings = portfolio?.holdings ?? [];
+  const holdings = sortHoldings(portfolio?.holdings ?? [], holdingSortFields, sort);
+  const columns = useSortColumns();
   const currency = baseCurrencyOf(portfolio);
   const failure =
     (updateHolding.error && errorMessage(updateHolding.error, t('holdings.updateFailed'))) ||
@@ -40,6 +65,7 @@ export function HoldingsTable({ actions }: { actions?: ReactNode } = {}) {
   if (narrow) {
     return (
       <Card title={t('holdings.title', { count: holdings.length })} action={actions}>
+        <SortControl sort={sort} onSort={onSort} columns={columns} />
         <ul className="divide-y divide-border-subtle/60">
           {holdings.map((holding) => (
             <li key={holding.id} className="py-3 first:pt-0 last:pb-0">
@@ -60,17 +86,19 @@ export function HoldingsTable({ actions }: { actions?: ReactNode } = {}) {
   return (
     <Card title={t('holdings.title', { count: holdings.length })} action={actions} className="overflow-hidden">
       <div className="-mx-4 overflow-x-auto px-4">
-        <table className="w-full min-w-[880px] text-sm">
+        <table className="w-full min-w-[960px] text-sm">
           <thead>
             <tr className="border-b border-border-subtle text-start text-xs uppercase tracking-wide text-text-muted">
-              <th className="pb-2 pe-3 font-medium">{t('holdings.columns.symbol')}</th>
-              <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.quantity')}</th>
-              <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.price')}</th>
-              <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.day')}</th>
-              <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.value')}</th>
-              <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.cost')}</th>
-              <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.pnl')}</th>
-              <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.weight')}</th>
+              {columns.map((column) => (
+                <SortableTh
+                  key={column.key}
+                  column={column.key}
+                  label={column.label}
+                  end={column.key !== 'symbol'}
+                  sort={sort}
+                  onSort={onSort}
+                />
+              ))}
               <th className="pb-2 text-end font-medium">{t('holdings.columns.actions')}</th>
             </tr>
           </thead>
@@ -273,13 +301,11 @@ function HoldingRow({
       </td>
       <td className="py-2 pe-3 text-end">
         <Delta value={holding.pnlMinor}>
-          {holding.pnlMinor === null
-            ? '—'
-            : t('holdings.pnl', {
-                money: formatMoney(holding.pnlMinor, baseCurrency),
-                percent: formatPercent(holding.pnlPct),
-              })}
+          {holding.pnlMinor === null ? '—' : formatMoney(holding.pnlMinor, baseCurrency)}
         </Delta>
+      </td>
+      <td className="py-2 pe-3 text-end">
+        <Delta value={holding.pnlPct}>{holding.pnlPct === null ? '—' : formatPercent(holding.pnlPct)}</Delta>
       </td>
       <td className="py-2 pe-3 text-end text-text-muted">
         {formatShare(holding.weightPct)}
