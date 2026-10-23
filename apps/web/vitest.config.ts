@@ -6,9 +6,11 @@ export default defineConfig({
     // `// @vitest-environment jsdom` line, so the fast majority stays fast.
     environment: 'node',
     include: ['test/**/*.test.ts', 'test/**/*.test.tsx'],
-    // The wait budget for findBy/waitFor, and why it is not one second.
-    setupFiles: ['test/waitBudget.ts'],
-    // Above several waits of that budget, so Testing Library reports first.
-    testTimeout: 30_000,
+    // Half the cores, not all but one: `pnpm -r test` runs this suite and the
+    // orchestrator's at once, and two suites each starting a worker per core
+    // starved the jsdom tests past Testing Library's one-second findBy budget.
+    maxWorkers: '50%',
+    // Vitest 2 defaults the minimum to the full count and refuses a lower maximum.
+    minWorkers: 1,
   },
 });
