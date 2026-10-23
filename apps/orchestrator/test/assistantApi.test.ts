@@ -121,7 +121,7 @@ describe('the assistant routes', () => {
     expect(body).not.toHaveProperty('costMicroUsd');
   });
 
-  it("names the user's own chosen model when the answer ran on a fallback (D283)", async () => {
+  it("names the user's own chosen model when the answer ran on a fallback (D284)", async () => {
     assistantMessage.mockResolvedValue({ ...REPLY, fallback_from: 'acme/retired-1' });
 
     const body = await (await send({ message: 'Hi' })).json();

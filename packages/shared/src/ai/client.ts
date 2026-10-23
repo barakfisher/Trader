@@ -429,7 +429,7 @@ export class AiClient {
     });
   }
 
-  /** The models a user on their own key may choose: OpenRouter's list, filtered (D282). */
+  /** The models a user on their own key may choose: OpenRouter's list, filtered (D283). */
   llmListed(requestId?: string): Promise<LlmListedModelsResponse> {
     return this.request<LlmListedModelsResponse>('/llm/listed', llmListedModelsResponseSchema, {
       method: 'GET',
@@ -437,7 +437,7 @@ export class AiClient {
     });
   }
 
-  /** What a user chose for each scope and agent, resolved against that list (D244, D283). */
+  /** What a user chose for each scope and agent, resolved against that list (D244, D284). */
   userLlmModels(userId: string, requestId?: string): Promise<UserLlmModelsResponse> {
     return this.request<UserLlmModelsResponse>(
       `/llm/users/${encodeURIComponent(userId)}/models`,

@@ -252,7 +252,7 @@ export function registerSettingsRoutes(app: Hono<AppEnv>): void {
   });
 
   // A user's own model for Ask and for explanations, from OpenRouter's list
-  // (D244, D282); each agent's is under `/agents/:id/model`. The admin chooses
+  // (D244, D283); each agent's is under `/agents/:id/model`. The admin chooses
   // on the Admin page, so this answers them with `admin: true` and no list, and
   // refuses their writes.
   app.get('/settings/llm-models', async (context) => {

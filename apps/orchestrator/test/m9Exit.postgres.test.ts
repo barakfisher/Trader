@@ -231,7 +231,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
        VALUES ($1, 'acme/explain-model', 'acme/retired-model') ON CONFLICT DO NOTHING`,
       [user.id],
     );
-    // A fallback the AI service recorded (D285), so its table is fingerprinted with a row.
+    // A fallback the AI service recorded (D286), so its table is fingerprinted with a row.
     const fallback = (
       await pool.query<{ id: string }>(
         `INSERT INTO model_fallbacks (user_id, agent_id, scope, saved_model, effective_model)

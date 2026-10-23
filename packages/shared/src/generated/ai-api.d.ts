@@ -598,7 +598,7 @@ export interface components {
             effective: string | null;
             /**
              * Fallback
-             * @description The saved model is no longer listed (D283).
+             * @description The saved model is no longer listed (D284).
              */
             fallback: boolean;
             /**
@@ -762,7 +762,7 @@ export interface components {
             cost_micro_usd: number;
             /**
              * Fallback From
-             * @description The model the user chose, when this answer ran on a fallback because OpenRouter no longer lists it (D283); null otherwise.
+             * @description The model the user chose, when this answer ran on a fallback because OpenRouter no longer lists it (D284); null otherwise.
              */
             fallback_from?: string | null;
             /** Message Id */
@@ -1216,7 +1216,7 @@ export interface components {
         };
         /**
          * LlmListedModel
-         * @description A model a user on their own key may choose, from OpenRouter's list (D244, D282).
+         * @description A model a user on their own key may choose, from OpenRouter's list (D244, D283).
          */
         LlmListedModel: {
             /**
@@ -1246,13 +1246,13 @@ export interface components {
             scan_estimate_micro_usd: number;
             /**
              * Tested
-             * @description The scans were tuned on it (D284).
+             * @description The scans were tuned on it (D285).
              */
             tested: boolean;
         };
         /**
          * LlmListedModelsResponse
-         * @description What a user's model pickers offer (D282).
+         * @description What a user's model pickers offer (D283).
          */
         LlmListedModelsResponse: {
             /**
@@ -1262,12 +1262,12 @@ export interface components {
             choosable: boolean;
             /**
              * Fallback Model
-             * @description The tested model a choice falls back to (D283).
+             * @description The tested model a choice falls back to (D284).
              */
             fallback_model: string;
             /**
              * Live
-             * @description False while OpenRouter's list has never been read: the Admin page's catalogue stands in, and a saved model is used as it is (D283).
+             * @description False while OpenRouter's list has never been read: the Admin page's catalogue stands in, and a saved model is used as it is (D284).
              */
             live: boolean;
             /** Models */
@@ -2331,7 +2331,7 @@ export interface components {
         };
         /**
          * UserLlmModelsResponse
-         * @description A user's models, resolved against OpenRouter's list (D244, D283).
+         * @description A user's models, resolved against OpenRouter's list (D244, D284).
          */
         UserLlmModelsResponse: {
             /**
@@ -2360,7 +2360,7 @@ export interface components {
             effective: string | null;
             /**
              * Fallback
-             * @description The saved model is no longer listed (D283).
+             * @description The saved model is no longer listed (D284).
              */
             fallback: boolean;
             /**

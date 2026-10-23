@@ -18,7 +18,7 @@ interface Saving {
   error: Error | null;
 }
 
-/** The tested models first, then by name: the scans were tuned on the first (D284). */
+/** The tested models first, then by name: the scans were tuned on the first (D285). */
 function ordered(models: ListedModelView[]): ListedModelView[] {
   return [...models].sort(
     (a, b) => Number(b.tested) - Number(a.tested) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id),
@@ -32,13 +32,13 @@ export function matching(models: ListedModelView[], search: string): ListedModel
 }
 
 /**
- * One model choice from OpenRouter's list (D244, D282): a search over the list,
+ * One model choice from OpenRouter's list (D244, D283): a search over the list,
  * a native select of what matches (it works the same with a finger), and for the
  * selection its price, its cost per scan where it would scan, and whether the
- * scans were tuned on it (D284). Nothing is saved until *Save*.
+ * scans were tuned on it (D285). Nothing is saved until *Save*.
  *
  * A saved model the list no longer has is said first, with the model used
- * meanwhile (D283), and stays selectable as it is so the select tells the truth.
+ * meanwhile (D284), and stays selectable as it is so the select tells the truth.
  * "Not chosen" runs on the tested model.
  */
 export function ModelPicker({

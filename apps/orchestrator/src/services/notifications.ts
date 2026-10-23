@@ -339,7 +339,7 @@ export async function sendDigest(
   const messages = messagesFor(settings.language);
   // A narration notice is not a finding, and counting it as one would tell the
   // user something moved in the market. It gets its own line, naming the state.
-  // A model's fallback notice (D285) is not a finding either, for the same reason.
+  // A model's fallback notice (D286) is not a finding either, for the same reason.
   const findings = pending.filter((entry) => entry.ref_kind !== 'narration' && entry.ref_kind !== 'model_fallback');
   const modelFallbacks = pending.filter((entry) => entry.ref_kind === 'model_fallback').length;
   const fallbackLine = modelFallbacks > 0 ? messages.modelFallback.digestLine(modelFallbacks) : null;

@@ -325,7 +325,7 @@ UPDATE agents SET instructions_check = '{"fingerprint": "f", "conflicts": [{"set
 UPDATE telegram_bindings SET assistant_conversation_id = '80000000-0000-0000-0000-000000000001'
  WHERE user_id = '00000000-0000-0000-0000-00000000000a';
 -- Model choice (0069, D244): a user's model for each scope, an agent's, and a
--- fallback in every scope, one of them announced (D285).
+-- fallback in every scope, one of them announced (D286).
 UPDATE user_settings SET llm_explain_model = 'anthropic/claude-haiku-4.5',
        llm_assistant_model = 'acme/retired-model'
  WHERE user_id = '00000000-0000-0000-0000-00000000000b';

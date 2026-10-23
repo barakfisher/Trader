@@ -49,7 +49,8 @@ export interface TradeCallback {
   language: string;
   callbackId: string;
   chatId: string;
-  message?: { message_id: number; text?: string };
+  /** `fromPending`: opened from `/pending`, so its redraws keep the way back (D282). */
+  message?: { message_id: number; text?: string; fromPending?: boolean };
   payload: CallbackPayload & { action: 'approve' | 'confirm' };
   now?: () => Date;
 }
@@ -226,12 +227,14 @@ export async function handleTradeCallback(input: TradeCallback): Promise<void> {
   const text = message.text ?? '';
   const edited =
     block === null
-      ? await telegram.setKeyboard(chatId, message.message_id, payload.proposalId, keyboard, input.language)
+      ? await telegram.setKeyboard(chatId, message.message_id, payload.proposalId, keyboard, input.language, {
+          backToPending: message.fromPending === true,
+        })
       : await telegram.editMessage(
           chatId,
           message.message_id,
           refused ? withRefusal(text, block, messages) : appendBlock(text, block),
-          { proposalId: payload.proposalId, keyboard, language: input.language },
+          { proposalId: payload.proposalId, keyboard, language: input.language, backToPending: message.fromPending === true },
         );
   if (!edited.delivered) {
     logger().warn({ chatId, messageId: message.message_id, err: edited.error }, 'telegram.edit_failed');

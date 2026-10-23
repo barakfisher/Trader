@@ -328,7 +328,7 @@ export async function runPortfolioScan(
           requestId,
         )
       : 'not_measured';
-  // A narration that ran on a fallback model is announced once (D285).
+  // A narration that ran on a fallback model is announced once (D286).
   await announceModelFallbacks(user.id, notifier);
 
   const result: ScanResult = {

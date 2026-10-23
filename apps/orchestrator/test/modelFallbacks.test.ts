@@ -1,6 +1,6 @@
 /**
  * A fallback is announced once, through the notification ledger, in the user's
- * language, naming the agent or the scope (D283, D285).
+ * language, naming the agent or the scope (D284, D286).
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';

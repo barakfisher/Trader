@@ -270,7 +270,7 @@ describe('the reply as plain text (D223)', () => {
     ]);
   });
 
-  it('marks an answer that ran on a fallback model, under it (D283)', () => {
+  it('marks an answer that ran on a fallback model, under it (D284)', () => {
     const text = plainAnswer(reply({ text: 'Chips slid.', fallback_from: 'acme/retired-1' }), MESSAGES.en, null);
 
     expect(text).toBe(`Chips slid.\n\n${MESSAGES.en.modelFallback.answerMark('acme/retired-1')}`);

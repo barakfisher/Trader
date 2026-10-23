@@ -77,7 +77,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         own_keys_usable=key_store.can_save and models_are_choosable(settings),
     )
     app.state.payer = payer
-    # OpenRouter's model list, for a user's own choice (D244, D282); its prices
+    # OpenRouter's model list, for a user's own choice (D244, D283); its prices
     # are written into the one price book every adapter charges from.
     prices = PriceBook(settings.llm_model_prices)
     app.state.listed_models = OpenRouterModels(settings.openrouter_base_url, prices)

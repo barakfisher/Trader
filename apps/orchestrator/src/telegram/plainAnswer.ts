@@ -61,7 +61,7 @@ export function flattenMarkdown(markdown: string, linkBase: string | null): stri
 export function plainAnswer(reply: AssistantReply, messages: Messages, linkBase: string | null): string {
   if (isNoReply(reply.outcome)) return messages.ask.noReply[reply.outcome];
   const answer = flattenMarkdown(reply.text, linkBase);
-  // D283: an answer that ran on a fallback says so, under it.
+  // D284: an answer that ran on a fallback says so, under it.
   const text = reply.fallback_from ? `${answer}\n\n${messages.modelFallback.answerMark(reply.fallback_from)}` : answer;
   const news = reply.sources
     .filter((source) => source.kind === 'news' && typeof source.url === 'string' && source.url !== '')

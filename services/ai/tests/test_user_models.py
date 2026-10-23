@@ -1,4 +1,4 @@
-"""A user's own model, its fallback, and the chain that applies it (D244, D282-D285)."""
+"""A user's own model, its fallback, and the chain that applies it (D244, D283-D286)."""
 
 from __future__ import annotations
 

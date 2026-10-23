@@ -1,6 +1,6 @@
 /**
  * Tell the user, once, that a model they chose is no longer offered and a
- * fallback is in use (D283, D285).
+ * fallback is in use (D284, D286).
  *
  * The AI service records the first call that fell back in `model_fallbacks`,
  * once per user, scope, agent and saved model. This announces each new row
@@ -28,7 +28,7 @@ import { messagesFor } from '../notify/messages.js';
 import { UI_LANGUAGES, type LocalizedTexts } from '@traders/shared';
 import { fanOut, settingsForNotification } from './notifications.js';
 
-/** Pushes past the default `high` floor: the user's model changed under them (D283). */
+/** Pushes past the default `high` floor: the user's model changed under them (D284). */
 export const MODEL_FALLBACK_SEVERITY = 'high';
 
 /** The notice for one fallback, in `language`. */

@@ -1,5 +1,5 @@
 """The models the Admin page offers, what each would cost, and the account's balance -
-and the models a user on their own key may choose, with what each user chose (D244, D282).
+and the models a user on their own key may choose, with what each user chose (D244, D283).
 
 Read-only: the orchestrator's admin route writes the choice (`llm_model_choices`)
 and audits it (decision 84); this service owns the catalogue, the prices and the

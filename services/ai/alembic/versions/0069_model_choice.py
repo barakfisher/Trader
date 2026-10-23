@@ -1,15 +1,15 @@
-"""Model choice: a model per agent, for Ask and for explanations, and fallbacks (D244, D282-D285).
+"""Model choice: a model per agent, for Ask and for explanations, and fallbacks (D244, D283-D286).
 
 `agents.model`, `user_settings.llm_explain_model` and
 `user_settings.llm_assistant_model` hold an OpenRouter model id a user who is
 not the admin chose (D244); NULL is "not chosen", which runs on the tested
-model (D282, D284). The admin keeps `llm_model_choices` (0041), and these
+model (D283, D285). The admin keeps `llm_model_choices` (0041), and these
 columns are never read for them. A saved id is kept even once OpenRouter stops
-listing it: the call falls back (D283), and the model returns by itself if it
+listing it: the call falls back (D284), and the model returns by itself if it
 is listed again.
 
 `model_fallbacks` records the first call that ran on a fallback, per user,
-scope, agent and saved model (D285). The orchestrator announces each row once
+scope, agent and saved model (D286). The orchestrator announces each row once
 through the notification ledger, and `notifications.ref_kind` gains
 `'model_fallback'` pointing at it. `agent_id` is the agent for the `agent`
 scope and the user's main portfolio (the primary agent) for the other two,

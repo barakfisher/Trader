@@ -111,7 +111,7 @@ class PriceBook(dict[str, ModelPrice]):
     """The prices every call is charged at, one dict shared by every adapter.
 
     Three layers, the later winning: the defaults above, the prices OpenRouter
-    lists (`openrouter_models.py`, D282 - the billing party's own figures, so
+    lists (`openrouter_models.py`, D283 - the billing party's own figures, so
     fresher than a table read in September), and `LLM_MODEL_PRICES`, which an
     operator sets precisely to overrule both. Rebuilt in place when the list is
     read again, so adapters built at startup see the new prices; the rebuild

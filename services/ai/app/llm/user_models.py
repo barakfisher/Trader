@@ -1,13 +1,13 @@
 """The model a user who is not the admin runs on, per agent, for Ask and for explanations (D244).
 
 A user on their own key (D245) chooses from OpenRouter's list
-(`openrouter_models.py`, D282): `agents.model` for an agent's scans and its
+(`openrouter_models.py`, D283): `agents.model` for an agent's scans and its
 instructions check, `user_settings.llm_assistant_model` for Ask, and
 `user_settings.llm_explain_model` for narration (migration 0069). Nothing chosen
-runs on the tested model (`catalogue.FALLBACK_MODEL`, D284) - never the admin's
+runs on the tested model (`catalogue.FALLBACK_MODEL`, D285) - never the admin's
 choice, which governs the admin alone.
 
-**A saved model OpenRouter no longer lists falls back** (D283): to the tested
+**A saved model OpenRouter no longer lists falls back** (D284): to the tested
 model, or, when that is not listed either, to the listed model with the highest
 output price at or below the tested model's, so a fallback never costs more. The
 saved value is kept, and the model returns by itself once listed again. While
@@ -16,7 +16,7 @@ gone, and a saved model is used as it is.
 
 The first call that falls back records a row in `model_fallbacks`, once per
 user, scope, agent and saved model; the orchestrator announces it on Telegram
-(D285).
+(D286).
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ class ModelResolution:
 
 
 def default_model(listed: ModelList) -> str:
-    """The tested model, or the dearest listed model no dearer than it (D283)."""
+    """The tested model, or the dearest listed model no dearer than it (D284)."""
     if not listed.live or listed.get(FALLBACK_MODEL) is not None:
         return FALLBACK_MODEL
     # The tested model is not listed, so its own price is the table's.
@@ -216,7 +216,7 @@ async def fallback_from(
 ) -> str | None:
     """The saved model a call for this user and scope fell back from, or None.
 
-    For marking an answer that already ran (D283); never raises, because the
+    For marking an answer that already ran (D284); never raises, because the
     mark is a courtesy beside an answer that was given.
     """
     if store is None or listed is None:

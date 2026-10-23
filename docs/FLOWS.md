@@ -117,6 +117,8 @@ connect privately, and everything else from a group is ignored.
 Since M11 A2 (D274-D277) an agent's view also offers Run scan now (behind a confirm naming its cost),
 Pause or Resume, and a schedule picker; those buttons are signed and expire after 15 minutes. A disabled user's chat
 reads as unbound (D278).
+Since M11 B (D282) `/pending` is a list whose buttons open each proposal in place with the alert's own
+signed buttons; deciding there goes through the alert's handler and keeps a way back to the list.
 
 ---
 

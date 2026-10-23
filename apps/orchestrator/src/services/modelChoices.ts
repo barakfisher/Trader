@@ -1,5 +1,5 @@
 /**
- * A user's own model choice (D244, D282-D283): OpenRouter's list as the AI
+ * A user's own model choice (D244, D283-D284): OpenRouter's list as the AI
  * service filtered it, what the user chose for Ask, for explanations and for
  * each agent, and the rule for what may be saved.
  *
@@ -73,7 +73,7 @@ export async function readModelChoices(ai: AiClient, userId: string, requestId?:
 /**
  * Why `model` may not be saved, or null when it may. Null (not chosen) always
  * may: it runs on the tested model. A model must be on the list as it is now;
- * one that has left it can stay saved (D283), but cannot be chosen anew.
+ * one that has left it can stay saved (D284), but cannot be chosen anew.
  */
 export function modelChoiceRefusal(listed: LlmListedModelsResponse, model: string | null): ApiProblem | null {
   if (!listed.choosable) {

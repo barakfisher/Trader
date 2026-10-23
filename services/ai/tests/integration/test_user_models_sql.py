@@ -1,4 +1,4 @@
-"""A user's saved models and fallbacks against the real schema (migration 0069, D244, D285)."""
+"""A user's saved models and fallbacks against the real schema (migration 0069, D244, D286)."""
 
 from __future__ import annotations
 

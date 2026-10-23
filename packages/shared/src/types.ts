@@ -1252,26 +1252,26 @@ export interface LlmModelChoiceInput {
   model: string;
 }
 
-// --- A user's own model choice (M10 PR 6, D244, D282-D285) -------------------
+// --- A user's own model choice (M10 PR 6, D244, D283-D286) -------------------
 
 /** The two scopes a user chooses beside each agent: Ask, and explanations (narration). */
 export const USER_LLM_SCOPES = ['assistant', 'explain'] as const;
 export type UserLlmScope = (typeof USER_LLM_SCOPES)[number];
 
-/** A model from OpenRouter's list, filtered (D282). Its id and name are data, not copy. */
+/** A model from OpenRouter's list, filtered (D283). Its id and name are data, not copy. */
 export interface ListedModelView {
   id: string;
   name: string;
   /** USD per million tokens, decimal strings. */
   promptUsdPerMtok: string;
   completionUsdPerMtok: string;
-  /** The scans were tuned on it (D284). */
+  /** The scans were tuned on it (D285). */
   tested: boolean;
   /** One agent scan at the installation's measured basis (D46), integer micro-USD. */
   scanEstimateMicroUsd: number;
 }
 
-/** What was chosen, what the next call runs on, and whether that is a fallback (D283). */
+/** What was chosen, what the next call runs on, and whether that is a fallback (D284). */
 export interface ModelResolutionView {
   saved: string | null;
   effective: string | null;
@@ -2252,7 +2252,7 @@ export interface AssistantReplyView {
   suggestions: string[];
   /**
    * The model the user chose for Ask, when this answer ran on a fallback because
-   * OpenRouter no longer lists it (D283); null otherwise. A model id: data, not copy.
+   * OpenRouter no longer lists it (D284); null otherwise. A model id: data, not copy.
    */
   fallbackFrom: string | null;
 }

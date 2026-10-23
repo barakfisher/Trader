@@ -1,5 +1,5 @@
 /**
- * A user's own model choice (D244, D282-D283): the list is the AI service's,
+ * A user's own model choice (D244, D283-D284): the list is the AI service's,
  * only a listed model (or none) may be saved, the admin is refused, and an
  * agent's model is the agent's owner's to set.
  */

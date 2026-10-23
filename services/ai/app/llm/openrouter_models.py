@@ -1,4 +1,4 @@
-"""The models a user may choose: OpenRouter's own list, filtered (D282).
+"""The models a user may choose: OpenRouter's own list, filtered (D283).
 
 `GET /api/v1/models` is public (no key) and lists every model with its price
 per token. A user on their own key chooses from it (D244), so the list is read
@@ -22,7 +22,7 @@ bills, not at the pessimistic unknown-model rate.
 `RETRY_AFTER_FAILURE_SECONDS`, so an outage costs one slow call in five minutes,
 not one per call. With no list read yet, the Admin page's catalogue stands in,
 priced by the table, and is marked `live = False`: callers then cannot tell a
-model is gone, and use a saved one as it is (D283).
+model is gone, and use a saved one as it is (D284).
 
 In memory per process rather than in Redis: the list is public and the same for
 everyone, so two pods an hour apart disagree at most about a model added or

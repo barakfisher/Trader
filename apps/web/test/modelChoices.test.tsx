@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * A user's own models (D244, D282-D284): the picker searches OpenRouter's list,
+ * A user's own models (D244, D283-D285): the picker searches OpenRouter's list,
  * puts the tested model first, says when a saved model has fallen back, and
  * saves only on *Save*; the Dashboard banner lists every fallback, for nobody
  * but a user on their own key.

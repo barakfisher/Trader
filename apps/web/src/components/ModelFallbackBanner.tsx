@@ -8,7 +8,7 @@ import { useStore } from '../stores/context.tsx';
 
 /**
  * Every model the user chose that OpenRouter no longer lists, and what runs
- * instead (D283), each with the way to choose again: Settings for Ask and
+ * instead (D284), each with the way to choose again: Settings for Ask and
  * explanations, the agent's page for an agent. Nothing for the admin, nothing
  * while the read is pending or failed, nothing when nothing fell back.
  */

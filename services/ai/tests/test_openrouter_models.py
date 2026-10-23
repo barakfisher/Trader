@@ -1,4 +1,4 @@
-"""OpenRouter's model list, filtered to what a user may choose, and its prices (D282)."""
+"""OpenRouter's model list, filtered to what a user may choose, and its prices (D283)."""
 
 from __future__ import annotations
 

@@ -21,7 +21,7 @@
             "title": "Effective"
           },
           "fallback": {
-            "description": "The saved model is no longer listed (D283).",
+            "description": "The saved model is no longer listed (D284).",
             "title": "Fallback",
             "type": "boolean"
           },
@@ -399,7 +399,7 @@
                 "type": "null"
               }
             ],
-            "description": "The model the user chose, when this answer ran on a fallback because OpenRouter no longer lists it (D283); null otherwise.",
+            "description": "The model the user chose, when this answer ran on a fallback because OpenRouter no longer lists it (D284); null otherwise.",
             "title": "Fallback From"
           },
           "message_id": {
@@ -1336,7 +1336,7 @@
         "type": "object"
       },
       "LlmListedModel": {
-        "description": "A model a user on their own key may choose, from OpenRouter's list (D244, D282).",
+        "description": "A model a user on their own key may choose, from OpenRouter's list (D244, D283).",
         "properties": {
           "completion_usd_per_mtok": {
             "description": "USD per million output tokens, a decimal.",
@@ -1364,7 +1364,7 @@
             "type": "integer"
           },
           "tested": {
-            "description": "The scans were tuned on it (D284).",
+            "description": "The scans were tuned on it (D285).",
             "title": "Tested",
             "type": "boolean"
           }
@@ -1381,7 +1381,7 @@
         "type": "object"
       },
       "LlmListedModelsResponse": {
-        "description": "What a user's model pickers offer (D282).",
+        "description": "What a user's model pickers offer (D283).",
         "properties": {
           "choosable": {
             "description": "False unless LLM_PROVIDER is openrouter: nothing can be chosen.",
@@ -1389,12 +1389,12 @@
             "type": "boolean"
           },
           "fallback_model": {
-            "description": "The tested model a choice falls back to (D283).",
+            "description": "The tested model a choice falls back to (D284).",
             "title": "Fallback Model",
             "type": "string"
           },
           "live": {
-            "description": "False while OpenRouter's list has never been read: the Admin page's catalogue stands in, and a saved model is used as it is (D283).",
+            "description": "False while OpenRouter's list has never been read: the Admin page's catalogue stands in, and a saved model is used as it is (D284).",
             "title": "Live",
             "type": "boolean"
           },
@@ -3435,7 +3435,7 @@
         "type": "object"
       },
       "UserLlmModelsResponse": {
-        "description": "A user's models, resolved against OpenRouter's list (D244, D283).",
+        "description": "A user's models, resolved against OpenRouter's list (D244, D284).",
         "properties": {
           "admin": {
             "description": "The admin's models are the Admin page's (D244).",
@@ -3491,7 +3491,7 @@
             "title": "Effective"
           },
           "fallback": {
-            "description": "The saved model is no longer listed (D283).",
+            "description": "The saved model is no longer listed (D284).",
             "title": "Fallback",
             "type": "boolean"
           },

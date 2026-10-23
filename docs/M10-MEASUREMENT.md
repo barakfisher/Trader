@@ -497,9 +497,9 @@ missing.
 
     *Built in PR 6 (2026-10-23): the premise "already fetched for the Admin page" was wrong - the
     Admin page offers five hand-picked models priced from a table. The user chose OpenRouter's
-    live list, filtered, with its own prices ([D282](DECISIONS.md)); a fallback when a chosen
-    model leaves it ([D283](DECISIONS.md)); the tested mark as a constant
-    ([D284](DECISIONS.md)); one Telegram message per fallback ([D285](DECISIONS.md)).*
+    live list, filtered, with its own prices ([D283](DECISIONS.md)); a fallback when a chosen
+    model leaves it ([D284](DECISIONS.md)); the tested mark as a constant
+    ([D285](DECISIONS.md)); one Telegram message per fallback ([D286](DECISIONS.md)).*
 
 17. **Installation keys on the Admin page.**
     - (a) The values stay in `.env`/Secrets. A *Keys* tab shows which keys are set, which

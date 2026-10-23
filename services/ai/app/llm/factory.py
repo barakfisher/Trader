@@ -75,7 +75,7 @@ def build_llm(
     so a refused call is recorded too.
 
     Given `users` and `listed`, a user who is not the admin runs on their own
-    choice from OpenRouter's list instead (D244, D282). `prices` is the one
+    choice from OpenRouter's list instead (D244, D283). `prices` is the one
     price book every adapter charges from; OpenRouter's list writes its prices
     into it (`openrouter_models.py`). Without one, the configured table is used.
     """

@@ -4276,7 +4276,22 @@ failure they prevent.
       OpenRouter counts against its limit - the projection reads optimistic); storing a daily
       reading per user (a migration and a table for a figure with gaps on days the app is not
       opened, and no projection for the first week).
-282. **A user chooses from OpenRouter's live model list, filtered; its prices price the call**
+282. **`/pending` opens a proposal in place with its alert's own signed buttons; a decision there
+    keeps the way back to the list** (2026-10-23; M11 B, the user's choice of B over A;
+    `telegram/menu.ts` `proposalScreen`, `updates.ts` `openedFromPending`). Measured first on
+    compose: 8 proposals in 30 days, all agent buys, at most 3 a day, open about 3 hours - so the
+    list is short and the deadlines are near. The list is a button per proposal; a tap redraws
+    the message as the proposal's alert reads (its words, what its scan checked, when it closes)
+    with `TelegramNotifier.proposalButtons` - the alert's own signed buttons - and ⬅️ Pending. A
+    tap on those buttons *is* an alert tap: the same handler, the same state machine
+    (`applyDecision`, the trade preview and fill, Re-check), so the two can never disagree. The
+    way back survives every redraw because the handler reads it off the tapped message's own
+    buttons (`reply_markup`) and passes `backToPending` to `setKeyboard`/`editMessage`; an alert
+    decided where it arrived gains none. A proposal decided, expired or gone since the list was
+    drawn redraws the list and says so. *Rejected:* A, one message per proposal (every
+    `/pending` and every Refresh would post them again - D270's one message per view); storing
+    where a message came from (a table for what the message already carries).
+283. **A user chooses from OpenRouter's live model list, filtered; its prices price the call**
     (the user, 2026-10-23; M10 PR 6, corrects D244's premise). **Measured:** the Admin page never
     fetched OpenRouter's list - it offers `catalogue.py`'s five hand-picked models, each priced by
     `pricing.py`'s table, and that table also prices every call and the own-key safety limit's
@@ -4296,8 +4311,8 @@ failure they prevent.
     *Rejected:* the fixed five-model list (not D244's list; nothing cheaper or newer without a
     code edit); the live list priced from the table (~365 models at $20/Mtok, so the safety limit
     trips early for no visible reason).
-283. **A chosen model that leaves the list falls back, cheaper, and says so everywhere** (the user,
-    2026-10-23). The next call runs on the tested model (Flash-Lite, D284); if that is not listed
+284. **A chosen model that leaves the list falls back to the tested model, and says so everywhere** (the user,
+    2026-10-23). The next call runs on the tested model (Flash-Lite, D285); if that is not listed
     either, on the listed model with the highest output price at or below Flash-Lite's table price
     - so a fallback never costs more than the tested model (it can cost more than a cheaper model
     the user had saved; the notice says only that it is the tested model). The saved choice is
@@ -4306,19 +4321,19 @@ failure they prevent.
     tested model, because at the $20/Mtok unknown rate a dearer model would be counted low against
     the safety limit (the security review's finding, 2026-10-23). The warning is shown on the agent's page, as a Dashboard banner, on
     Settings' model card and as a mark on an Ask answer that ran on a fallback; Telegram gets
-    one message (D285). **Accepted cost:** the chooser is outermost in the chain, so a call the
+    one message (D286). **Accepted cost:** the chooser is outermost in the chain, so a call the
     payer then refuses (no key) still records the fallback, and the notice says the scope now
     runs on the tested model although nothing ran. It is true of the next call that does run.
     *Rejected:* refusing until re-chosen (a scheduled agent stops overnight, quietly); calling the
     saved id anyway (a `provider_error` nobody can explain).
-284. **The "tested" mark is a constant in code: `TESTED_MODELS`, Flash-Lite only** (the user,
+285. **The "tested" mark is a constant in code: `TESTED_MODELS`, Flash-Lite only** (the user,
     2026-10-23). The mark claims the evidence validator and tool calls were tuned against the
     model (D75, D227); that changes only after a measurement, which ends in a code change and a
-    decision anyway. Its first entry is the fallback (D283). Sonnet 5.5's 15 scans (2 accepted,
+    decision anyway. Its first entry is the fallback (D284). Sonnet 5.5's 15 scans (2 accepted,
     2 refused) are too few to mark it. *Rejected:* data the admin edits (a migration, a route and
     a mark set without measuring); measured automatically from `llm_calls` (a threshold to tune
     and a mark that flickers).
-285. **Telegram hears about a fallback once, when it starts** (the user, 2026-10-23). The AI
+286. **Telegram hears about a fallback once, when it starts** (the user, 2026-10-23). The AI
     service records the first fallback per user, scope, agent and saved model in
     `model_fallbacks` (migration 0069); the orchestrator announces unannounced rows through
     `fanOut` (`ref_kind = 'model_fallback'`) right after the work that can fall back - a scan,

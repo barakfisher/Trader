@@ -5,7 +5,7 @@ import { query, queryOne } from '../pool.js';
 /**
  * A user's own model choice (D244, migration 0069): the model for Ask and for
  * explanations in `user_settings`, an agent's in `agents.model`, and the
- * fallbacks the AI service recorded for the Telegram notice (D285). The AI
+ * fallbacks the AI service recorded for the Telegram notice (D286). The AI
  * service reads the choices on every call; the orchestrator writes them after
  * checking them against OpenRouter's list.
  */

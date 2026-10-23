@@ -43,7 +43,7 @@ export function createFakeAi(options: FakeAiOptions = {}): AiClient {
     async checkMandate() {
       return { status: 'checked' as const, reason: null, conflicts: [] };
     },
-    /** OpenRouter's list as the AI service filters it (D282): the tested model only. */
+    /** OpenRouter's list as the AI service filters it (D283): the tested model only. */
     async llmListed() {
       return {
         choosable: true,

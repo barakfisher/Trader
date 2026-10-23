@@ -703,7 +703,7 @@ describe('a chat whose user reads Hebrew', () => {
       },
     ] as never);
     await post(messageUpdate('/pending'));
-    expect(sentCalls[0]?.body.text).toContain('\n• משקל \u2066VOO\u2069 נמוך\n');
+    expect(sentCalls[0]?.body.text).toContain('\n1. משקל \u2066VOO\u2069 נמוך\n');
   });
 
   it('names the alert floor in Hebrew', async () => {

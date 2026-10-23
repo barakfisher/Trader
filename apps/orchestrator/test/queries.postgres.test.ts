@@ -1999,7 +1999,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
-  describe("a user's own model choice and its fallbacks (0069, D244, D285)", () => {
+  describe("a user's own model choice and its fallbacks (0069, D244, D286)", () => {
     const MODEL = 'acme/model-1';
 
     it("saves and clears the models for Ask and explanations, each in its own column", async () => {

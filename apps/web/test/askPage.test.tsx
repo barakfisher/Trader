@@ -98,7 +98,7 @@ describe('a reply', () => {
     expect(post).toHaveBeenCalledWith('/assistant/messages', { message: 'How am I doing?' });
   });
 
-  it("says when an answer ran on a fallback because the chosen model is gone (D283)", async () => {
+  it("says when an answer ran on a fallback because the chosen model is gone (D284)", async () => {
     post.mockResolvedValueOnce(reply({ fallbackFrom: 'acme/retired-1' }));
     renderAsk();
     await ask('How did I do?');
