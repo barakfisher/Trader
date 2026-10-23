@@ -4343,6 +4343,27 @@ failure they prevent.
     mark. *Rejected:* Ask answers only (a scheduled agent's fallback reaches Telegram only if the
     user asks something); a line on every message (every path learns the resolution, and the
     repeated line teaches the user to skip it).
+287. **M10 PR 7 is the table and the agent rows; the rebalance table (D253) is deferred** (the user,
+    2026-10-23, asked where the table should live: "lets skip on the rebalance, for now I dont
+    think it is the best place to continue"). D253 stands as decided and unbuilt; no user had any
+    `target_weights` on compose (measured again 2026-10-23), so nobody loses a table they could
+    see. PR 7 builds M10 decision 21's assumptions and D252:
+    - **Sorting** (`lib/holdingsSort.ts`): any column of both holdings tables, in the browser, kept
+      in the address as `?sort=<column>&dir=asc|desc` beside `?holdings=`; a header click flips
+      the direction, a new column starts A-Z for symbols and largest-first for figures. A row
+      with no figure (unpriced, no cost basis) sorts **last in both directions**, ties by symbol.
+      Quantities compare as decimal strings, never floats; prices compare within their currency
+      (code first: two currencies are not one scale). No `sort` in the address keeps the
+      server's order. On a phone (cards, no headers) a *Sort by* select and a direction button.
+    - **P&L** is two columns, money and percent, each sortable. Phone cards keep both on one line
+      (the assumption "% stays, $ hides first" was about a table phones no longer get).
+    - **Agent rows (D252)**: Run scan and Pause/Resume icon buttons and "⋯" with *N pending
+      proposals* and *Open the agent's page*; the name is the link. The scan's refusal check is
+      shared with the agent's page (`AgentScans.tsx` `runBlocked`/`runErrorText`). *Pending
+      proposals* opens the inbox narrowed to that agent (`/insights?tab=proposals&agent=<id>`,
+      `ProposalsInbox.tsx` `agentFilterFrom`), with a way back to every agent's.
+    *Rejected:* building the rebalance table on the Dashboard or the Targets page now (the user
+    chose to stop there for now).
 ---
 
 ## Bugs that cost real time, and the lesson from each

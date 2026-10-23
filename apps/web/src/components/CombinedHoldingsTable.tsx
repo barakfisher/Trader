@@ -22,7 +22,9 @@ import {
   type RemoveHolding,
   type UpdateHolding,
 } from './HoldingsTable.tsx';
+import { sortHoldings, type SortFields, type SortKey } from '../lib/holdingsSort.ts';
 import { ApproveProposalButton } from './ProposalApproval.tsx';
+import { SortControl, SortableTh, useSortColumns, type SortProps } from './SortableHeader.tsx';
 import { Card, Delta } from './ui.tsx';
 
 /**
@@ -41,13 +43,22 @@ export function CombinedHoldingsTable({
   data,
   scope,
   actions,
+  sort = null,
+  onSort = () => {},
 }: {
   data: ConsolidatedHoldingsResponse;
   scope: HoldingsScope;
   actions?: ReactNode;
-}) {
+} & Partial<SortProps>) {
   const { t } = useTranslation();
-  const { rows, unheldPending } = combinedHoldings(data, scope);
+  const combined = combinedHoldings(data, scope);
+  const rows = sortHoldings(combined.rows, combinedSortFields, sort);
+  const unheldPending = combined.unheldPending;
+  const columns = useSortColumns();
+  const header = (key: SortKey) => {
+    const column = columns.find((candidate) => candidate.key === key)!;
+    return <SortableTh key={key} column={key} label={column.label} end={key !== 'symbol'} sort={sort} onSort={onSort} />;
+  };
   const realHoldings = new Map((usePortfolioQuery().data?.holdings ?? []).map((holding) => [holding.id, holding]));
   const updateHolding = useUpdateHolding();
   const removeHolding = useRemoveHolding();
@@ -66,6 +77,8 @@ export function CombinedHoldingsTable({
       {rows.length === 0 ? (
         <p className="text-sm text-text-muted">{t('consolidated.empty')}</p>
       ) : narrow ? (
+        <>
+        <SortControl sort={sort} onSort={onSort} columns={columns} />
         <ul className="divide-y divide-border-subtle/60">
           {rows.map((row) => (
             <li key={row.instrument.id} className="py-3 first:pt-0 last:pb-0">
@@ -73,20 +86,15 @@ export function CombinedHoldingsTable({
             </li>
           ))}
         </ul>
+        </>
       ) : (
         <div className="-mx-4 overflow-x-auto px-4">
-          <table className="w-full min-w-[1000px] text-sm">
+          <table className="w-full min-w-[1080px] text-sm">
             <thead>
               <tr className="border-b border-border-subtle text-start text-xs uppercase tracking-wide text-text-muted">
-                <th className="pb-2 pe-3 font-medium">{t('holdings.columns.symbol')}</th>
+                {header('symbol')}
                 <th className="pb-2 pe-3 font-medium">{t('combined.holders')}</th>
-                <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.quantity')}</th>
-                <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.price')}</th>
-                <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.day')}</th>
-                <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.value')}</th>
-                <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.cost')}</th>
-                <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.pnl')}</th>
-                <th className="pb-2 pe-3 text-end font-medium">{t('holdings.columns.weight')}</th>
+                {(['quantity', 'price', 'day', 'value', 'cost', 'pnl', 'pnlPct', 'weight'] as const).map(header)}
                 <th className="pb-2 text-end font-medium">{t('holdings.columns.actions')}</th>
               </tr>
             </thead>
@@ -102,6 +110,21 @@ export function CombinedHoldingsTable({
       <UnheldTrades trades={unheldPending} />
     </Card>
   );
+}
+
+/** A combined row's figures as the table sorts by them (M10 decision 21). */
+export function combinedSortFields(row: CombinedHolding): SortFields {
+  return {
+    symbol: row.instrument.symbol,
+    quantity: row.quantity,
+    price: row.quote ? { minor: row.quote.priceMinor, currency: row.quote.currency } : null,
+    day: row.quote?.dayChangePct ?? null,
+    value: row.valueMinor,
+    cost: row.costMinor,
+    pnl: row.pnlMinor,
+    pnlPct: row.pnlPct,
+    weight: row.weightPct,
+  };
 }
 
 interface RowProps {
@@ -157,7 +180,10 @@ function CombinedRow({ row, real, currency, updateHolding, removeHolding }: RowP
           <CostCell row={row} currency={currency} onSet={real?.costBasisMinor === null ? () => setEditing(true) : undefined} />
         </td>
         <td className="py-2 pe-3 text-end">
-          <PnlText row={row} currency={currency} />
+          <Delta value={row.pnlMinor}>{row.pnlMinor === null ? '—' : formatMoney(row.pnlMinor, currency)}</Delta>
+        </td>
+        <td className="py-2 pe-3 text-end">
+          <Delta value={row.pnlPct}>{row.pnlPct === null ? '—' : formatPercent(row.pnlPct)}</Delta>
         </td>
         <td className="py-2 pe-3 text-end text-text-muted">{formatShare(row.weightPct)}</td>
         <td className="py-2 text-end">
@@ -200,7 +226,7 @@ function CombinedRow({ row, real, currency, updateHolding, removeHolding }: RowP
       </tr>
       {editing && real && (
         <tr className="border-b border-border-subtle/50">
-          <td colSpan={10} className="pb-3">
+          <td colSpan={11} className="pb-3">
             <RealHoldingEditor holding={real} updateHolding={updateHolding} onDone={() => setEditing(false)} />
           </td>
         </tr>
