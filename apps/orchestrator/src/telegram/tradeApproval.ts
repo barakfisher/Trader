@@ -49,7 +49,7 @@ export interface TradeCallback {
   language: string;
   callbackId: string;
   chatId: string;
-  /** `fromPending`: opened from `/pending`, so its redraws keep the way back (D279). */
+  /** `fromPending`: opened from `/pending`, so its redraws keep the way back (D281). */
   message?: { message_id: number; text?: string; fromPending?: boolean };
   payload: CallbackPayload & { action: 'approve' | 'confirm' };
   now?: () => Date;

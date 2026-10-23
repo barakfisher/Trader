@@ -79,7 +79,7 @@ const proposals = await import('../src/services/proposals.js');
 const { ApiProblem } = await import('../src/http/errors.js');
 const { bpsAsPercent, withRefusal } = await import('../src/telegram/tradeApproval.js');
 const { messagesFor } = await import('../src/notify/messages.js');
-const { decodeMenuData, encodeMenuData } = await import('../src/telegram/menuData.js');
+const { decodeMenuData, encodeMenuData, MENU_PREFIX } = await import('../src/telegram/menuData.js');
 
 const ENV = {
   APP_ENV: 'test',
@@ -189,7 +189,7 @@ describe('the announcement', () => {
   });
 });
 
-describe('a trade opened from /pending (D279)', () => {
+describe('a trade opened from /pending (D281)', () => {
   const fromPending = { inline_keyboard: [[{ text: '⬅️ Pending', callback_data: encodeMenuData({ view: 'pending' }) }]] };
 
   it('keeps its way back to the list through the preview, and only there', async () => {
@@ -199,7 +199,22 @@ describe('a trade opened from /pending (D279)', () => {
 
     sentCalls = [];
     await tap('approve');
-    expect(keyboardOf(lastEdit()).map((button) => button.callback_data).some((data) => data?.startsWith('m:'))).toBe(false);
+    expect(keyboardOf(lastEdit()).map((button) => button.callback_data).some((data) => data?.startsWith(MENU_PREFIX))).toBe(false);
+  });
+
+  it('keeps it after the fill too', async () => {
+    vi.mocked(approval.confirmTradeApproval).mockResolvedValueOnce({
+      state: 'approved',
+      fill: {
+        id: 'f-1', symbol: 'NVDA', side: 'buy', quantity: '2', priceMinor: 23_930, notionalMinor: 47_860, feeMinor: 150,
+        currency: 'USD', priceSource: 'quote', quoteAsOf: null, quoteDelaySeconds: null, source: 'agent',
+        createdAt: '2026-10-07T15:00:00Z',
+      },
+      cashMinor: 951_990,
+      heldQuantity: '2',
+    } as never);
+    await tap('confirm', 23_928n, HEADLINE, fromPending);
+    expect(decodeMenuData(keyboardOf(lastEdit()).at(-1)!.callback_data!)).toEqual({ view: 'pending' });
   });
 });
 

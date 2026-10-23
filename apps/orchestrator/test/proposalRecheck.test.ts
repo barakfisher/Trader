@@ -312,6 +312,7 @@ describe('Re-check from Telegram (D217)', () => {
     ai = fakeAi(async () => SCAN),
     language = 'en',
     rateLimits = memoryRateLimits(),
+    fromPending = false,
   ) {
     const started = await startRecheckCallback({
       telegram: telegram as never,
@@ -322,7 +323,7 @@ describe('Re-check from Telegram (D217)', () => {
       language,
       callbackId: 'cb-1',
       chatId: '42',
-      message: { message_id: 7, text: 'Value proposes to buy 2 CCJ at 51.00' },
+      message: { message_id: 7, text: 'Value proposes to buy 2 CCJ at 51.00', fromPending },
       payload: { proposalId: PROPOSAL, action: 'recheck', nonce: 'n' },
       now: () => NOW,
     });
@@ -337,6 +338,13 @@ describe('Re-check from Telegram (D217)', () => {
     const [, , text, options] = telegram.editMessage.mock.calls[0]! as unknown as [string, number, string, { keyboard: string }];
     expect(text).toContain('Re-checked (15:00): no new proposal. The agent: Above where it was worth buying.');
     expect(options.keyboard).toBe('none');
+  });
+
+  it('opened from /pending, its outcome keeps the way back to the list (D281)', async () => {
+    const telegram = chat();
+    await tap(telegram, undefined, 'en', memoryRateLimits(), true);
+    const [, , , options] = telegram.editMessage.mock.calls[0]! as unknown as [string, number, string, { backToPending: boolean }];
+    expect(options.backToPending).toBe(true);
   });
 
   it("counts with the page's limit and, once it is spent, says when to try again and keeps the button (D257)", async () => {
@@ -381,6 +389,13 @@ describe('Re-check from Telegram (D217)', () => {
     expect(telegram.answerCallback).toHaveBeenCalledWith('cb-1', messagesFor('en').recheck.refusals.already_rechecked);
     expect(telegram.setKeyboard).toHaveBeenCalledWith('42', 7, PROPOSAL, 'none', 'en', { backToPending: false });
     expect(ai.recheckProposal).not.toHaveBeenCalled();
+  });
+
+  it('a refusal on a message opened from /pending keeps the way back (D281)', async () => {
+    latest = scanRow();
+    const telegram = chat();
+    await tap(telegram, undefined, 'en', memoryRateLimits(), true);
+    expect(telegram.setKeyboard).toHaveBeenCalledWith('42', 7, PROPOSAL, 'none', 'en', { backToPending: true });
   });
 
   it('answers a tap on a superseded proposal with why, and takes the button away (D218)', async () => {

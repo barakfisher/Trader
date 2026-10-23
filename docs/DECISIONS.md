@@ -291,3 +291,4 @@ while this file is out of date.
 | 278 | A disabled user's Telegram chat reads as unbound |
 | 279 | The monthly cap is retired from every screen and from enforcement; its column stays, unread |
 | 280 | A user nobody may pay for is told up front, where the work would start |
+| 281 | `/pending` opens a proposal in place with its alert's own signed buttons; a decision there keeps the way back to the list |

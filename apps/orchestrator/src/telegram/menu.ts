@@ -64,6 +64,13 @@ import { encodeMenuData, QUICK_MUTE_HOURS, type MenuTap, type MenuView } from '.
 /** How many open proposals `/pending` lists; the rest are in the app. */
 export const PENDING_LIST_LIMIT = 10;
 
+/**
+ * Rows read to fill the list: open ones past their deadline sort first and are
+ * dropped here before the sweep records them, so reading only the limit could
+ * leave live proposals out.
+ */
+export const PENDING_READ_LIMIT = 50;
+
 /** A problem or an error is shown up to this many characters: the chat is not the transcript. */
 export const LOG_TEXT_LIMIT = 300;
 
@@ -148,8 +155,20 @@ export function microUsd(micro: number, messages: Messages): string {
   return cents === 0 && micro > 0 ? `<${money(1, 'USD', messages)}` : money(cents, 'USD', messages);
 }
 
-function clip(text: string, limit = LOG_TEXT_LIMIT): string {
-  return text.length <= limit ? text : `${text.slice(0, limit - 1)}…`;
+/**
+ * At most `limit` characters, counted as the reader sees them: an emoji is one,
+ * and is never cut in half - a lone surrogate can make Telegram refuse the
+ * whole message.
+ */
+export function clip(text: string, limit = LOG_TEXT_LIMIT): string {
+  const characters = Array.from(text);
+  if (characters.length <= limit) return text;
+  const kept = characters.slice(0, limit - 1);
+  // A direction isolate opened before the cut is closed after it, so a Hebrew
+  // label cut inside an agent's name still reads in its own direction.
+  const open = kept.filter((c) => c === '\u2066' || c === '\u2067' || c === '\u2068').length;
+  const closed = kept.filter((c) => c === '\u2069').length;
+  return `${kept.join('')}${'\u2069'.repeat(Math.max(0, open - closed))}…`;
 }
 
 /**
@@ -229,15 +248,16 @@ async function statusScreen(reader: Reader): Promise<Screen> {
 /** A list button's label: long enough to tell proposals apart, short enough for a phone. */
 export const PENDING_BUTTON_CHARS = 40;
 
-/** Open proposals, live now: a stored `pending` past its deadline is not offered (D279). */
+/** Open proposals, live now: a stored `pending` past its deadline is not offered (D281). */
 async function liveProposals(reader: Reader) {
-  const open = await listProposals(reader.userId, { open: true, limit: PENDING_LIST_LIMIT });
+  const open = await listProposals(reader.userId, { open: true, limit: PENDING_READ_LIMIT });
   return open
     .map((row) => ({ row, state: effectiveState(factsOf(row), reader.now) }))
-    .filter(({ state }) => state === 'pending' || state === 'snoozed');
+    .filter(({ state }) => state === 'pending' || state === 'snoozed')
+    .slice(0, PENDING_LIST_LIMIT);
 }
 
-/** What is waiting, each a button that opens it in place (M11 B, D279). */
+/** What is waiting, each a button that opens it in place (M11 B, D281). */
 async function pendingScreen(reader: Reader, language: string): Promise<Screen> {
   const { messages } = reader;
   const live = await liveProposals(reader);
@@ -272,7 +292,7 @@ async function pendingScreen(reader: Reader, language: string): Promise<Screen> 
 
 /**
  * One open proposal, drawn as its alert is - its own words, what its scan
- * checked, when it closes - with the alert's own signed buttons (D279). A tap
+ * checked, when it closes - with the alert's own signed buttons (D281). A tap
  * on them is the alert's tap: the same handler, the same state machine.
  */
 async function proposalScreen(
@@ -290,7 +310,8 @@ async function proposalScreen(
   const text = observationTextIn(row, language);
   const lines = [text.headline];
   if (text.explanation) lines.push('', text.explanation);
-  if (row.scan_tool_calls !== null) lines.push('', messages.evidenceChecked(evidenceCheckedFrom(row.scan_tool_calls)));
+  // As the proposal's page has it: a trade from a scan says what the scan checked, even nothing.
+  if (row.scan_id !== null) lines.push('', messages.evidenceChecked(evidenceCheckedFrom(row.scan_tool_calls ?? [])));
   lines.push(
     '',
     state === 'snoozed' && row.snoozed_until !== null

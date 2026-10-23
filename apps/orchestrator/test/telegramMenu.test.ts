@@ -152,7 +152,7 @@ const { MAX_CALLBACK_DATA_BYTES, decodeCallbackData, encodeCallbackData, mintNon
 const { BOT_COMMANDS, MAX_COMMAND_DESCRIPTION_CHARS, registerBotCommands } = await import(
   '../src/telegram/commandMenu.js'
 );
-const { PENDING_LIST_LIMIT, microUsd, slotsOfSchedule } = await import('../src/telegram/menu.js');
+const { PENDING_READ_LIMIT, microUsd, slotsOfSchedule } = await import('../src/telegram/menu.js');
 const { scansPerDay } = await import('@traders/shared');
 const { scheduleOf } = await import('../src/services/scanSchedule.js');
 const { isolated } = await import('../src/notify/messages.js');
@@ -376,12 +376,12 @@ describe('commands send a view', () => {
     ] as never);
     await handleTelegramUpdate(deps(), command('/pending'));
 
-    expect(queries.listProposals).toHaveBeenCalledWith(USER, { open: true, limit: PENDING_LIST_LIMIT });
+    expect(queries.listProposals).toHaveBeenCalledWith(USER, { open: true, limit: PENDING_READ_LIMIT });
     const text = lastText();
     expect(text).toContain('1. VOO is above its target\n');
     expect(text).toContain(`2. ⏸ NVDA fell 7% (${MESSAGES.en.menu.pending.states.snoozed})`);
     expect(text).not.toContain('An expired one');
-    // Every button is a menu button: deciding happens on the proposal's own view (D279).
+    // Every button is a menu button: deciding happens on the proposal's own view (D281).
     expect(lastButtons().every((b) => b.callback_data !== undefined && decodeMenuData(b.callback_data) !== null)).toBe(true);
     expect(tapsOf(lastButtons())).toEqual([
       { view: 'proposal', proposalId: '11111111-0000-0000-0000-000000000001' },

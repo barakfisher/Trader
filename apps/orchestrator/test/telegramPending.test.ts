@@ -1,5 +1,5 @@
 /**
- * Deciding from `/pending` (M11 B, D279): the list opens a proposal in place,
+ * Deciding from `/pending` (M11 B, D281): the list opens a proposal in place,
  * drawn as its alert is, with the alert's own signed buttons - and a decision
  * made there is the alert's decision, through the same handler, keeping the
  * way back to the list.
@@ -45,6 +45,7 @@ function proposalRow(overrides: Record<string, unknown> = {}) {
 }
 
 let row: Record<string, unknown> | null = proposalRow();
+let language = 'en';
 
 vi.mock('../src/db/pool.js', () => ({
   queryOne: vi.fn(async () => null),
@@ -57,7 +58,7 @@ vi.mock('../src/db/pool.js', () => ({
 
 vi.mock('../src/db/queries.js', () => ({
   findTelegramBindingByChat: vi.fn(async () => ({ user_id: USER, chat_id: String(CHAT) })),
-  getOrCreateUserSettings: vi.fn(async () => ({ language: 'en', notify_severity: 'high', muted_until: null })),
+  getOrCreateUserSettings: vi.fn(async () => ({ language, notify_severity: 'high', muted_until: null })),
   getUser: vi.fn(async () => ({ id: USER, role: 'user', base_currency: 'USD', timezone: 'Asia/Jerusalem' })),
   // Scoped by user, as the SQL is: another user's proposal is not found.
   findProposal: vi.fn(async (userId: string, id: string) => (userId === USER && id === (row?.id ?? '') ? row : null)),
@@ -77,9 +78,9 @@ const { MESSAGES } = await import('../src/notify/messages.js');
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
 const { createFakeAi } = await import('./fakeAi.js');
 const { memoryRateLimits } = await import('../src/http/rateLimits.js');
-const { decodeMenuData, encodeMenuData } = await import('../src/telegram/menuData.js');
+const { decodeMenuData, encodeMenuData, MENU_PREFIX } = await import('../src/telegram/menuData.js');
 const { decodeCallbackData, encodeCallbackData, mintNonce } = await import('../src/telegram/callbackToken.js');
-const { PENDING_BUTTON_CHARS } = await import('../src/telegram/menu.js');
+const { PENDING_BUTTON_CHARS, PENDING_LIST_LIMIT, clip } = await import('../src/telegram/menu.js');
 
 const ENV = {
   APP_ENV: 'test',
@@ -137,6 +138,7 @@ async function tap(data: string, markup?: Button[][]) {
 beforeEach(() => {
   sent = [];
   row = proposalRow();
+  language = 'en';
 });
 
 afterEach(() => {
@@ -151,6 +153,31 @@ describe('the list', () => {
     expect(decodeMenuData(first!.callback_data!)).toEqual({ view: 'proposal', proposalId: TRADE });
     expect(first!.text.length).toBeLessThanOrEqual(PENDING_BUTTON_CHARS);
     expect(first!.text.startsWith('1. ')).toBe(true);
+  });
+});
+
+describe('the list, at its edges', () => {
+  it('stale rows past their deadline do not crowd out live ones', async () => {
+    const stale = Array.from({ length: PENDING_LIST_LIMIT }, (_, i) =>
+      proposalRow({ id: `22222222-0000-0000-0000-${String(i).padStart(12, '0')}`, expires_at: new Date(Date.now() - 60_000) }),
+    );
+    vi.mocked(queries.listProposals).mockResolvedValueOnce([...stale, proposalRow()] as never);
+    await handleTelegramUpdate(deps(), { message: { chat: { id: CHAT, type: 'private' }, text: '/pending' } });
+    const opened = buttonsOf(calls('sendMessage')[0]).map((b) => decodeMenuData(b.callback_data!));
+    expect(opened).toContainEqual({ view: 'proposal', proposalId: TRADE });
+  });
+
+  it('a label cut inside a direction isolate closes it', () => {
+    const cut = clip(`1. \u2068${'א'.repeat(PENDING_BUTTON_CHARS)}\u2069 מציע`, PENDING_BUTTON_CHARS);
+    const opened = (cut.match(/[\u2066-\u2068]/g) ?? []).length;
+    expect((cut.match(/\u2069/g) ?? []).length).toBe(opened);
+  });
+
+  it('a label is cut by characters: an emoji is never split', () => {
+    const text = `${'a'.repeat(PENDING_BUTTON_CHARS - 2)}📈📈📈`;
+    const cut = clip(text, PENDING_BUTTON_CHARS);
+    expect(Array.from(cut)).toHaveLength(PENDING_BUTTON_CHARS);
+    expect(cut).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
   });
 });
 
@@ -183,6 +210,8 @@ describe('a proposal opened from the list', () => {
       .map((d) => d!.action);
     expect(actions).toEqual(['approve', 'reject', 'snooze']);
     expect(String(lastEdit()?.text)).not.toContain('Checked:');
+    expect(String(lastEdit()?.text)).toMatch(/As of \d{2}:\d{2}/);
+    expect(decodeMenuData(buttonsOf(lastEdit()).at(-1)!.callback_data!)).toEqual({ view: 'pending' });
   });
 
   it('a snoozed one says until when, and that it can still be decided now', async () => {
@@ -200,6 +229,22 @@ describe('a proposal opened from the list', () => {
     await tap(encodeMenuData({ view: 'proposal', proposalId: TRADE }));
     expect(toast()).toBe(MESSAGES.en.menu.proposal.notOpen);
     expect(buttonsOf(lastEdit()).some((b) => b.callback_data && decodeCallbackData(b.callback_data, SIGNING_SECRET))).toBe(false);
+    // The list, drawn again: its Refresh and Menu.
+    const taps = buttonsOf(lastEdit()).map((b) => decodeMenuData(b.callback_data ?? ''));
+    expect(taps.slice(-2)).toEqual([{ view: 'pending' }, { view: 'help' }]);
+  });
+});
+
+describe('in Hebrew', () => {
+  it('the proposal in its Hebrew words, times isolated, the way back pointing the reader’s way', async () => {
+    language = 'he';
+    row = proposalRow({ localized: { he: { headline: 'הסוכן מציע לקנות', explanation: 'מומנטום ברווחים.' } } });
+    await tap(encodeMenuData({ view: 'proposal', proposalId: TRADE }));
+    const text = String(lastEdit()?.text);
+    expect(text).toContain('הסוכן מציע לקנות');
+    expect(text).toContain('מומנטום ברווחים.');
+    expect(text).toMatch(/פתוחה עד \u2068[^\u2069]*\u2069\./);
+    expect(buttonsOf(lastEdit()).at(-1)!.text).toBe(MESSAGES.he.menu.buttons.backToPending);
   });
 });
 
@@ -215,9 +260,16 @@ describe('deciding there is the alert’s decision', () => {
     expect(decodeMenuData(back.callback_data!)).toEqual({ view: 'pending' });
   });
 
+  it('a snooze there keeps the way back, as every redraw does', async () => {
+    vi.mocked(proposals.applyDecision).mockResolvedValueOnce({ outcome: 'applied', state: 'snoozed' } as never);
+    const snooze = encodeCallbackData({ proposalId: TRADE, action: 'snooze', nonce: mintNonce() }, SIGNING_SECRET);
+    await tap(snooze, [[{ text: 'Snooze', callback_data: 'x' }], [PENDING_BUTTON]]);
+    expect(decodeMenuData(buttonsOf(lastEdit()).at(-1)!.callback_data!)).toEqual({ view: 'pending' });
+  });
+
   it('an alert decided where it arrived gains no way back: it was never in the list', async () => {
     await tap(reject(), [[{ text: 'Reject', callback_data: 'x' }]]);
-    expect(buttonsOf(lastEdit()).some((b) => b.callback_data?.startsWith('m:'))).toBe(false);
+    expect(buttonsOf(lastEdit()).some((b) => b.callback_data?.startsWith(MENU_PREFIX))).toBe(false);
   });
 
   it('only the list’s own button marks a message as opened from it', () => {

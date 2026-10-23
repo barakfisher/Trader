@@ -4259,6 +4259,21 @@ failure they prevent.
       unseen); a Telegram message when a scheduled scan first skips (a new notification kind and
       dedupe key; PR 5's top-bar chip makes the state visible on every screen instead).
 
+281. **`/pending` opens a proposal in place with its alert's own signed buttons; a decision there
+    keeps the way back to the list** (2026-10-23; M11 B, the user's choice of B over A;
+    `telegram/menu.ts` `proposalScreen`, `updates.ts` `openedFromPending`). Measured first on
+    compose: 8 proposals in 30 days, all agent buys, at most 3 a day, open about 3 hours - so the
+    list is short and the deadlines are near. The list is a button per proposal; a tap redraws
+    the message as the proposal's alert reads (its words, what its scan checked, when it closes)
+    with `TelegramNotifier.proposalButtons` - the alert's own signed buttons - and ⬅️ Pending. A
+    tap on those buttons *is* an alert tap: the same handler, the same state machine
+    (`applyDecision`, the trade preview and fill, Re-check), so the two can never disagree. The
+    way back survives every redraw because the handler reads it off the tapped message's own
+    buttons (`reply_markup`) and passes `backToPending` to `setKeyboard`/`editMessage`; an alert
+    decided where it arrived gains none. A proposal decided, expired or gone since the list was
+    drawn redraws the list and says so. *Rejected:* A, one message per proposal (every
+    `/pending` and every Refresh would post them again - D270's one message per view); storing
+    where a message came from (a table for what the message already carries).
 ---
 
 ## Bugs that cost real time, and the lesson from each

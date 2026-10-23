@@ -316,7 +316,9 @@ views that edit one message in place instead of posting new ones. Three slices, 
   background), Pause/Resume (refused when the active-agent limit is full, D199), and a schedule
   picker (none or every 1-6 hours, pre-open and after-close). These buttons are signed and expire
   after 15 minutes. What the routes and the bot share moved into services (D276).
-- **B - deciding from `/pending`**: each open proposal with its own signed buttons.
+- **B - deciding from `/pending`** *(2026-10-23, D281)*: the list is a button per open proposal; a
+  tap opens it in place, drawn as its alert is, with the alert's own signed buttons and ⬅️ Pending.
+  Deciding there is the alert's decision, through the same handler. M11 is complete with B.
 
 Not in M11: placing orders (never), editing holdings from the chat, a shekel view of the portfolio
 (no exchange-rate source for it yet).
