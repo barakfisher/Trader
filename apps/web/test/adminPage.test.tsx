@@ -455,6 +455,27 @@ describe('the admin page', () => {
     expect(put).toHaveBeenCalledWith('/admin/settings', { assistantDailyBudgetMicroUsd: 1_250_000 });
   });
 
+  it('never shows a settings field empty while its value is stored', async () => {
+    // Every committed frame, recorded as it happens: a field filled one render after the form
+    // appeared was read as '' by whichever assertion ran in between.
+    const labels = [
+      'Requests that may wait at once',
+      "Most one user's questions may cost a day, in US dollars",
+      'Most simulated agents a user may have active at once',
+    ];
+    const frames: string[][] = [];
+    const observer = new MutationObserver(() => {
+      const fields = labels.map((label) => screen.queryByLabelText(label) as HTMLInputElement | null);
+      if (fields.some(Boolean)) frames.push(fields.map((field) => field?.value ?? 'absent'));
+    });
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+    renderAt('/admin', ADMIN);
+    await screen.findByLabelText(labels[0]!);
+    observer.disconnect();
+    expect(frames.length).toBeGreaterThan(0);
+    for (const frame of frames) expect(frame).toEqual(['5', '0.50', '3']);
+  });
+
   it('offers the assistant a model picker of its own, with no estimate until one is measured', async () => {
     renderAt('/admin', ADMIN);
     expect(await screen.findByLabelText('Assistant')).toBeTruthy();
