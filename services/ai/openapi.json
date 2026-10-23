@@ -1086,6 +1086,146 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "InstallationKeyLastError": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "message": {
+            "description": "Redacted: nothing credential-shaped is ever returned.",
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "message"
+        ],
+        "title": "InstallationKeyLastError",
+        "type": "object"
+      },
+      "InstallationKeyStatus": {
+        "description": "One provider key, as the Admin page's Keys tab shows it (D251, D288). Never its value.",
+        "properties": {
+          "is_set": {
+            "title": "Is Set",
+            "type": "boolean"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstallationKeyLastError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "description": "The variable it is set in, e.g. 'OPENROUTER_API_KEY'.",
+            "title": "Name",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "serves": {
+            "items": {
+              "enum": [
+                "llm",
+                "embeddings",
+                "market_data",
+                "news"
+              ],
+              "type": "string"
+            },
+            "title": "Serves",
+            "type": "array"
+          },
+          "testable": {
+            "title": "Testable",
+            "type": "boolean"
+          },
+          "unused": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_adapter",
+                  "not_chosen"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why nothing here uses it now; null when something does.",
+            "title": "Unused"
+          }
+        },
+        "required": [
+          "name",
+          "provider",
+          "is_set",
+          "serves",
+          "unused",
+          "testable",
+          "last_error"
+        ],
+        "title": "InstallationKeyStatus",
+        "type": "object"
+      },
+      "InstallationKeyTestResponse": {
+        "properties": {
+          "checked_at": {
+            "format": "date-time",
+            "title": "Checked At",
+            "type": "string"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What the provider said on a failure, redacted.",
+            "title": "Detail"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "detail",
+          "checked_at"
+        ],
+        "title": "InstallationKeyTestResponse",
+        "type": "object"
+      },
+      "InstallationKeysResponse": {
+        "properties": {
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationKeyStatus"
+            },
+            "title": "Keys",
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
+        ],
+        "title": "InstallationKeysResponse",
+        "type": "object"
+      },
       "Instrument": {
         "properties": {
           "asset_class": {
@@ -4170,6 +4310,113 @@
         "summary": "Healthz",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/installation/keys": {
+      "get": {
+        "operationId": "installation_keys_installation_keys_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationKeysResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Installation Keys",
+        "tags": [
+          "installation"
+        ]
+      }
+    },
+    "/installation/keys/{name}/test": {
+      "post": {
+        "operationId": "installation_key_test_installation_keys__name__test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationKeyTestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Installation Key Test",
+        "tags": [
+          "installation"
         ]
       }
     },

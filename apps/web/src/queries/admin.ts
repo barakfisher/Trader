@@ -9,6 +9,8 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type {
+  InstallationKeysView,
+  InstallationKeyTestView,
   AdminUsersResponse,
   OneTimePasswordResponse,
   AdminSignupsResponse,
@@ -206,4 +208,21 @@ export function useOneTimePassword() {
   return useAdminUserMutation((input: { userId: string }) =>
     api.post<OneTimePasswordResponse>(`/admin/users/${encodeURIComponent(input.userId)}/one-time-password`),
   );
+}
+
+/** The installation's provider keys: status, never values (D251, D288). */
+export function useAdminKeysQuery() {
+  return useQuery({
+    queryKey: queryKeys.adminKeys,
+    queryFn: () => api.get<InstallationKeysView>('/admin/keys'),
+  });
+}
+
+/** One free check call with a key. Audited by the server; the audit list gains its row. */
+export function useTestInstallationKey() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => api.post<InstallationKeyTestView>(`/admin/keys/${encodeURIComponent(name)}/test`, {}),
+    onSettled: () => client.invalidateQueries({ queryKey: queryKeys.adminAudit }),
+  });
 }

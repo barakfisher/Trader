@@ -298,3 +298,4 @@ while this file is out of date.
 | 285 | The "tested" mark is a constant in code: `TESTED_MODELS`, Flash-Lite only |
 | 286 | Telegram hears about a fallback once, when it starts |
 | 287 | M10 PR 7 is the table and the agent rows; the rebalance table (D253) is deferred |
+| 288 | The Keys tab lists the provider keys config reads, says which nothing uses, and tests only for free |

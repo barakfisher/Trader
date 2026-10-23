@@ -328,7 +328,7 @@ describe('the admin page', () => {
 
   it('sets how many requests may wait, 0 closing sign-up, and offers no cap', async () => {
     put.mockResolvedValue({ ...SETTINGS, maxPendingSignups: 0 });
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=settings', ADMIN);
     const max = (await screen.findByLabelText('Requests that may wait at once')) as HTMLInputElement;
     expect(max.value).toBe('5');
     expect(screen.queryByLabelText(/cap/i)).toBeNull();
@@ -350,20 +350,20 @@ describe('the admin page', () => {
   });
 
   it('shows every run to an admin', async () => {
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=operations', ADMIN);
     expect(await screen.findByText('backfill:k8s:2026-09-30')).toBeTruthy();
     expect(screen.getByText('12 s')).toBeTruthy();
   });
 
   it('names each difference in the universe and flags only what is unexplained', async () => {
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=operations', ADMIN);
     expect(await screen.findByText(/ETF holdings: 16,396 in the snapshot, 16,360 in the database/)).toBeTruthy();
     expect(screen.getByText('19: weight is not a fraction of the fund')).toBeTruthy();
     expect(screen.getByText('17 missing from the database, unexplained')).toBeTruthy();
   });
 
   it('shows a universe gap, counted, with why it is one', async () => {
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=operations', ADMIN);
     expect(await screen.findByText('TINY')).toBeTruthy();
     expect(screen.getByText(/below the size floor or listed since the snapshot/)).toBeTruthy();
     expect(screen.getByText(/3×/)).toBeTruthy();
@@ -371,18 +371,18 @@ describe('the admin page', () => {
   });
 
   it('counts on-demand profiles apart from the members', async () => {
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=operations', ADMIN);
     expect(await screen.findByText(/Also 2 profiled on demand for listings users named/)).toBeTruthy();
   });
 
   it('shows what administrators have done, and from where', async () => {
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=operations', ADMIN);
     expect(await screen.findByText('POST /admin/universe/rescreen')).toBeTruthy();
     expect(screen.getByText(/from 10\.0\.0\.7/)).toBeTruthy();
   });
 
   it('shows model calls per purpose, a free route as such, and what is not measured', async () => {
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=operations', ADMIN);
     expect(await screen.findByText('free route')).toBeTruthy();
     expect(screen.getByText('850 ms / 30.0 s')).toBeTruthy();
     expect(screen.getByText('1 answered, 1 provider error')).toBeTruthy();
@@ -392,7 +392,7 @@ describe('the admin page', () => {
   });
 
   it('shows each model choice with its cost, the total and the balance', async () => {
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=models', ADMIN);
     const explain = (await screen.findByLabelText('Narration and questions')) as HTMLSelectElement;
     const agents = screen.getByLabelText('Agents') as HTMLSelectElement;
     // What is in use stays selected. Agents may not use the free route, so nothing offered is in
@@ -421,7 +421,7 @@ describe('the admin page', () => {
 
   it('sets how many agents a user may have, within 1 and the ceiling (D72)', async () => {
     put.mockResolvedValue({ ...SETTINGS, maxAgentsPerUser: 5, updatedAt: '2026-10-08T10:00:00Z' });
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=settings', ADMIN);
     const field = (await screen.findByLabelText('Most simulated agents a user may have active at once')) as HTMLInputElement;
     expect(field.value).toBe('3');
     const form = within(field.closest('form')!);
@@ -439,7 +439,7 @@ describe('the admin page', () => {
 
   it("sets the assistant's daily limit in dollars and cents, sent as integer micro-USD", async () => {
     put.mockResolvedValue({ ...SETTINGS, assistantDailyBudgetMicroUsd: 1_250_000, updatedAt: '2026-10-12T10:00:00Z' });
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=settings', ADMIN);
     const field = (await screen.findByLabelText("Most one user's questions may cost a day, in US dollars")) as HTMLInputElement;
     expect(field.value).toBe('0.50');
     const form = within(field.closest('form')!);
@@ -469,7 +469,7 @@ describe('the admin page', () => {
       if (fields.some(Boolean)) frames.push(fields.map((field) => field?.value ?? 'absent'));
     });
     observer.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=settings', ADMIN);
     await screen.findByLabelText(labels[0]!);
     observer.disconnect();
     expect(frames.length).toBeGreaterThan(0);
@@ -477,14 +477,14 @@ describe('the admin page', () => {
   });
 
   it('offers the assistant a model picker of its own, with no estimate until one is measured', async () => {
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=models', ADMIN);
     expect(await screen.findByLabelText('Assistant')).toBeTruthy();
     expect(screen.getByText(/No estimate yet/)).toBeTruthy();
   });
 
   it('saves a choice for its scope only when it differs from the one in use', async () => {
     put.mockResolvedValue({ ...MODELS, choices: [{ scope: 'explain', chosen: 'anthropic/claude-haiku-4.5', effective: 'anthropic/claude-haiku-4.5' }, MODELS.choices[1]] });
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=models', ADMIN);
     const explain = (await screen.findByLabelText('Narration and questions')) as HTMLSelectElement;
     fireEvent.change(explain, { target: { value: 'anthropic/claude-haiku-4.5' } });
     const [explainSave] = screen.getAllByRole('button', { name: 'Use this model' });
@@ -501,12 +501,12 @@ describe('the admin page', () => {
         ? Promise.resolve({ ...MODELS, credits: { purchasedUsd: '0', usedUsd: '0.10290792', remainingUsd: '-0.10290792' } })
         : new Promise(() => {}),
     );
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=models', ADMIN);
     expect(await screen.findByText(/No credit left: paid models will fail/)).toBeTruthy();
   });
 
   it('counts explanations against calls and flags only a disagreement', async () => {
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=operations', ADMIN);
     const agreed = await screen.findByText(/written by the model: 1 stored, 1 call$/);
     expect(agreed.className).not.toContain('text-warn');
     const disagreed = screen.getByText(/provider error: 2 stored, 1 call - these should agree/);
@@ -516,7 +516,7 @@ describe('the admin page', () => {
 
   it('rescreens only once confirmed, then says where to follow the run', async () => {
     post.mockResolvedValue({ status: 'running', runId: 'r9', runKey: 'universe-rescreen:2026-10-01' });
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=operations', ADMIN);
     fireEvent.click(await screen.findByRole('button', { name: 'Rescreen universe' }));
     expect(post).not.toHaveBeenCalled();
     expect(screen.getByText(/rebuilds the universe from Yahoo/)).toBeTruthy();
@@ -532,7 +532,7 @@ describe('the admin page', () => {
       runKey: 'universe-rescreen:2026-10-01',
       reason: 'this run key was already claimed (ok)',
     });
-    renderAt('/admin', ADMIN);
+    renderAt('/admin?tab=operations', ADMIN);
     fireEvent.click(await screen.findByRole('button', { name: 'Rescreen universe' }));
     fireEvent.click(screen.getByRole('button', { name: 'Rescreen now' }));
     expect(await screen.findByText('Not started: this run key was already claimed (ok).')).toBeTruthy();
