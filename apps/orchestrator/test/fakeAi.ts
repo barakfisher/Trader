@@ -39,6 +39,10 @@ export function createFakeAi(options: FakeAiOptions = {}): AiClient {
   const missingFx = new Set(options.missingFx ?? []);
 
   const client = {
+    /** D254: a run that starts at once, unless a test replaces this. */
+    async startResearch() {
+      return { run_id: 'c0000000-0000-0000-0000-000000000001', agent_id: 'c0000000-0000-0000-0000-0000000000a1', holdings: 2 };
+    },
     /** D176: no conflicts, unless a test replaces this. */
     async checkMandate() {
       return { status: 'checked' as const, reason: null, conflicts: [] };

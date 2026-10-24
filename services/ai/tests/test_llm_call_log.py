@@ -29,7 +29,7 @@ from app.llm.factory import build_llm
 
 VERSIONS = Path(__file__).parents[1] / "alembic" / "versions"
 MIGRATION = VERSIONS / "0029_llm_calls.py"
-PURPOSE_MIGRATION = VERSIONS / "0059_mandate_check.py"
+PURPOSE_MIGRATION = VERSIONS / "0070_holding_research.py"
 SCOPE_MIGRATION = VERSIONS / "0052_assistant.py"
 
 

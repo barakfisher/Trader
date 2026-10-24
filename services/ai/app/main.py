@@ -44,6 +44,7 @@ from app.routers import (
     narration,
     news,
     own_keys,
+    research,
     topics,
     universe,
 )
@@ -150,3 +151,4 @@ app.include_router(llm.router)
 app.include_router(own_keys.router)
 app.include_router(agents.router)
 app.include_router(assistant.router)
+app.include_router(research.router)

@@ -67,6 +67,8 @@ export const RATE_LIMITS = {
   assistantQuestion: { points: 30, durationSeconds: HOUR },
   /** An agent's instructions checked against its mandate. */
   instructionsCheck: { points: 20, durationSeconds: HOUR },
+  /** Research on the main portfolio started now: a model call per holding (D254). */
+  researchRun: { points: 6, durationSeconds: HOUR },
   /** An expired proposal re-checked, on the page and in Telegram together. */
   proposalRecheck: { points: 20, durationSeconds: HOUR },
   /** A holding added or a file previewed: each resolves symbols against market data. */

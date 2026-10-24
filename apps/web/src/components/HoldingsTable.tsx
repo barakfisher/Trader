@@ -14,6 +14,7 @@ import { useNarrowViewport } from '../lib/viewport.ts';
 import { usePortfolioQuery, useRemoveHolding, useUpdateHolding } from '../queries/portfolio.ts';
 import { sortHoldings, type SortFields } from '../lib/holdingsSort.ts';
 import { SortControl, SortableTh, useSortColumns, type SortProps } from './SortableHeader.tsx';
+import { SentimentCell, useSentiments } from './SentimentBadge.tsx';
 import { Card, Delta } from './ui.tsx';
 
 export type UpdateHolding = ReturnType<typeof useUpdateHolding>;
@@ -52,6 +53,7 @@ export function HoldingsTable({
   const holdings = sortHoldings(portfolio?.holdings ?? [], holdingSortFields, sort);
   const columns = useSortColumns();
   const currency = baseCurrencyOf(portfolio);
+  const sentiments = useSentiments();
   const failure =
     (updateHolding.error && errorMessage(updateHolding.error, t('holdings.updateFailed'))) ||
     (removeHolding.error && errorMessage(removeHolding.error, t('holdings.removeFailed')));
@@ -99,6 +101,7 @@ export function HoldingsTable({
                   onSort={onSort}
                 />
               ))}
+              {sentiments.shown && <th className="pb-2 pe-3 font-medium">{t('research.column')}</th>}
               <th className="pb-2 text-end font-medium">{t('holdings.columns.actions')}</th>
             </tr>
           </thead>
@@ -203,6 +206,7 @@ function HoldingRow({
     save,
   } = useHoldingEditor(holding, updateHolding);
   const { t } = useTranslation();
+  const sentiments = useSentiments();
 
   return (
     <tr className="border-b border-border-subtle/50 last:border-0 hover:bg-surface-hover/40">
@@ -310,6 +314,11 @@ function HoldingRow({
       <td className="py-2 pe-3 text-end text-text-muted">
         {formatShare(holding.weightPct)}
       </td>
+      {sentiments.shown && (
+        <td className="py-2 pe-3">
+          <SentimentCell holding={sentiments.byInstrument.get(holding.instrument.id)} />
+        </td>
+      )}
 
       <td className="py-2 text-end">
         {confirmingDelete ? (
@@ -409,6 +418,7 @@ function HoldingCard({
   } = useHoldingEditor(holding, updateHolding);
   const symbol = holding.instrument.symbol;
   const { t } = useTranslation();
+  const sentiments = useSentiments();
 
   return (
     <div className="space-y-2">
@@ -434,6 +444,7 @@ function HoldingCard({
         </div>
       </div>
 
+      {sentiments.shown && <SentimentCell holding={sentiments.byInstrument.get(holding.instrument.id)} />}
       <p className="text-xs text-text-muted">
         {trimQuantity(holding.quantity)} ×{' '}
         {holding.quote

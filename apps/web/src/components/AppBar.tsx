@@ -9,6 +9,7 @@ import {
   LogOut,
   Menu,
   MessageCircleQuestion,
+  Microscope,
   Settings,
   ShieldCheck,
   Tags,
@@ -59,6 +60,7 @@ export const AppBar = observer(function AppBar() {
     { to: '/insights', label: t('nav.insights'), icon: Lightbulb, count: openCount, dot: hasUnread },
     { to: '/agents', label: t('nav.agents'), icon: Bot },
     { to: '/topics', label: t('nav.topics'), icon: Tags },
+    { to: '/research', label: t('nav.research'), icon: Microscope },
     { to: '/ask', label: t('nav.ask'), icon: MessageCircleQuestion },
     // Targets is on the holdings card (UX5): it is about those rows.
   ];
@@ -133,7 +135,7 @@ export const AppBar = observer(function AppBar() {
 });
 
 type Place = {
-  to: '/insights' | '/agents' | '/topics' | '/ask' | '/settings' | '/admin';
+  to: '/insights' | '/agents' | '/topics' | '/research' | '/ask' | '/settings' | '/admin';
   label: string;
   icon: typeof Bot;
   count?: number;

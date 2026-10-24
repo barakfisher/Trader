@@ -4364,6 +4364,68 @@ failure they prevent.
       `ProposalsInbox.tsx` `agentFilterFrom`), with a way back to every agent's.
     *Rejected:* building the rebalance table on the Dashboard or the Targets page now (the user
     chose to stop there for now).
+289. **One agent researches the main portfolio, assigned in `user_settings.research_agent_id`**
+    (the assistant's recommendation under the user's overnight grant of 2026-10-23; the user may revisit; M10 PR 9, D254's "one at a time"). A nullable column with a composite key to
+    `agents(user_id, id)`, so it can only name the user's own agent, `ON DELETE SET NULL
+    (research_agent_id)` so deleting the agent clears only the assignment. The route refuses the
+    primary and an archived agent; a paused one may stay assigned and its runs are refused
+    (`agent_not_active`) until it resumes. The research page (`/research`) holds the picker.
+    *Rejected:* a flag on `agents` (two agents could be flagged, and "which one does the column
+    show" needs a rule); a table of assignments (one row per user is a column).
+290. **Research runs daily after the US close, planned inside the 15-minute `agent_scans` ask,
+    and on demand; a run answers 202 and rates in the background** (the assistant's recommendation under the user's overnight grant of 2026-10-23; the user may revisit; D254's "on a
+    schedule or on demand"). The plan already reads the calendar, the active users and each
+    slot's attempts, and retries a failure an hour later inside the window (D69): research is
+    one more attempt on the same BullMQ queue (`SlotAttemptJob.kind = 'research'`,
+    `services/scheduledResearch.ts`), in the `post_close` window (close + 15 min to midnight New
+    York), as a `runs` row of kind `research` keyed `research:<agent>:<day>:<n>` (migration
+    0070 widens `runs_kind_check`). No CronJob, no new trigger kind, so the CronJob contract
+    is untouched; nothing runs where scheduled scans are off (D71). The AI service claims a
+    `research_runs` row (one running per user, partial unique index; a run left `running` 20
+    minutes is closed as `abandoned` by the next claim and read as failed), answers 202, and
+    rates holding by holding in an `asyncio` task; the page polls every 5 s while it runs.
+    *Rejected:* a run kind of its own with a CronJob (a second trigger reading the same calendar
+    and users, and a CHECK and a contract to widen for nothing the plan cannot do); following
+    the assigned agent's scan schedule (up to eight runs a day, a model call per holding each);
+    a synchronous request (a 30-holding run is minutes; the browser and the queue's worker
+    would hold a connection the whole time).
+291. **The server gathers each holding's evidence and the model is called once with it; the
+    rationale is English** (the assistant's recommendation under the user's overnight grant of 2026-10-23; the user may revisit; D254's "about one model call per holding"). Per holding the
+    run reads the agent tools' own sources directly - quote, 60-day history, the rule findings,
+    seven days of news with each article's `article_sentiment` score and their average, the
+    sector's other instruments' average sentiment this week, and the SPY benchmark's 20-day
+    change once per run - and asks for `{rating, rationale, findings}` in one `complete` call,
+    purpose `research` (0070), scope `agent`, so it runs on `agents.model` (D284) through the
+    whole provider chain and the payer rule. The holding's quantity and cost are left out of
+    the evidence (guardrail 1). The rationale and findings are written in English and shown
+    `lang="en"`, like other server text (guideline 1). *Rejected:* the scan's tool loop (up to
+    twelve calls a holding, and a model that may skip the news); the user's language like a
+    thesis (D51) - the wording guard below is a whole-word list, and Hebrew attaches
+    prepositions and possessives to the word, so the guard could not be enforced there.
+292. **A rating is shown only if it passes the form, the wording guard and the evidence
+    validator; one retry; the agent's daily allowance pays** (the assistant's recommendation under the user's overnight grant of 2026-10-23; the user may revisit; D254's guardrails 1-2).
+    `app/research/rating.py` refuses any whole word of `FORBIDDEN_WORDS` (you, your, buy,
+    sell, hold/holds/holding(s), trim, accumulate, bought, sold, "target price", "price
+    target") and any figure `unsourced_figures` cannot find in the evidence; a refused answer
+    goes back once with its reasons (`RESEARCH_ATTEMPTS = 2`), then the holding is stored
+    `refused` with its problems and the previous rating stays on the Dashboard, the page
+    saying the latest attempt was refused. The call's verdict is `unsourced_figures` when a
+    figure failed, otherwise `malformed` (a wording failure is a broken form; `llm_calls`'
+    verdict CHECK is unchanged). Research calls join `AGENT_PURPOSES_SQL` / `AGENT_SPEND_PURPOSES`:
+    checked before every call, they spend the agent's daily allowance beside its scans (D45).
+    A refused key or a reached safety limit stops the run (D245, D250). *Rejected:* a softer
+    list (an instruction slipping through costs the guardrail; a strict one costs a retry);
+    a verdict value of its own (a CHECK to widen for one label).
+293. **The Sentiment column shows the assigned agent's latest rating, stale after seven days;
+    a run rates at most 50 holdings in 15 minutes; six manual runs an hour** (the assistant's recommendation under the user's overnight grant of 2026-10-23; the user may revisit).
+    `RESEARCH_STALE_DAYS = 7` (a daily run misses weekends and holidays; three days would mark
+    every Monday stale). The column appears in both holdings tables and the phone cards only
+    once an agent is assigned, shows the word on its colour (green, red, gray), the agent and
+    the date, and links to `/research#<symbol>`; it is not sortable (the sort keys are figures
+    and quantities). Ratings by a previously assigned agent are kept but not shown.
+    `RESEARCH_MAX_HOLDINGS = 50`, `RESEARCH_TIME_LIMIT = 900 s`, rate limit `researchRun` 6 an
+    hour (D257). *Rejected:* the latest rating of any agent (a reassignment would mix two
+    lenses in one column with nothing but the small name to tell them apart).
 ---
 
 ## Bugs that cost real time, and the lesson from each

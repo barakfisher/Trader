@@ -827,7 +827,8 @@
     "account": "Account",
     "label": "Main",
     "insights": "Insights",
-    "unread": "New findings"
+    "unread": "New findings",
+    "research": "Research"
   },
   "dashboard": {
     "title": "Portfolio",
@@ -1996,5 +1997,64 @@
       "chooseSettings": "Choose in Settings",
       "chooseAgent": "Choose on the agent's page"
     }
+  },
+  "research": {
+    "title": "Research",
+    "intro": "An agent you choose reads each holding's recent news, price history, sector and market trend, and rates the stock's outlook as Bullish, Bearish or Neutral, with its reasons.",
+    "notAdvice": "A rating describes a stock's outlook from the evidence the agent read. It says nothing about your position and is not a recommendation to buy, sell or keep anything. The reasons are written by a model in English; every figure in them was checked against the data it was given.",
+    "loadFailed": "The research could not be loaded.",
+    "agentTitle": "Research agent",
+    "agentLabel": "Agent researching your main portfolio",
+    "noAgent": "None",
+    "pausedAgent": "{{name}} (paused)",
+    "noAgents": "Create an agent on the Agents page first: research uses its model and its instructions as its lens.",
+    "assignFailed": "The agent could not be assigned.",
+    "schedule": "{{name}} researches every holding once each trading day after the US market closes, when this installation schedules agents' scans, and whenever you run it here.",
+    "cost_one": "About one model call per holding: {{count}} call a run.",
+    "cost_other": "About one model call per holding: {{count}} calls a run.",
+    "run": "Run research now",
+    "startFailed": "The research could not start.",
+    "running": "Researching {{holdings}} holdings…",
+    "lastRun": "Last run {{when}}: {{rated}} of {{holdings}} rated.",
+    "lastFailed": "The last run, {{when}}, failed after rating {{rated}} of {{holdings}}.",
+    "refusals": {
+      "no_research_agent": "Choose an agent to research your portfolio first.",
+      "agent_not_active": "Resume the agent to run research.",
+      "budget_spent": "The agent's model budget for today is spent. It resets at midnight UTC.",
+      "no_holdings": "Your main portfolio has no holdings to research.",
+      "research_running": "Research is already running.",
+      "no_model": "No model is configured. Choose one on the Admin page.",
+      "own_key_required": "Research runs on your own OpenRouter API key. Add one in Settings first.",
+      "own_key_failed": "OpenRouter refused your saved API key. Replace it in Settings first.",
+      "safety_limit_reached": "Your monthly safety limit on AI spending is reached. Raise it in Settings, or wait for the next month."
+    },
+    "stops": {
+      "budget_reached": "It stopped early: the agent's model budget for today was spent.",
+      "time_limit": "It stopped early: the run reached its time limit.",
+      "holdings_limit": "Only the first holdings were researched: a run has a limit.",
+      "own_key_required": "It stopped: there is no working API key of your own.",
+      "own_key_failed": "It stopped: OpenRouter refused your saved API key.",
+      "safety_limit_reached": "It stopped: your monthly safety limit was reached.",
+      "abandoned": "It was interrupted before it finished."
+    },
+    "ratings": {
+      "bullish": "Bullish",
+      "bearish": "Bearish",
+      "neutral": "Neutral"
+    },
+    "byOn": "{{agent}}, {{date}}",
+    "cellLabel": "{{rating}}, by {{agent}} on {{date}}. Open the research.",
+    "stale": "· stale",
+    "staleLong": "Stale: older than a week",
+    "notYet": "Not rated yet",
+    "noHoldings": "Your main portfolio has no holdings to research.",
+    "unassignedTitle": "No agent researches your portfolio",
+    "unassignedBody": "Choose one above, then run the research.",
+    "holdingsTitle": "Holdings ({{count}})",
+    "lastAttempt": {
+      "refused": "The latest attempt, {{date}}, was refused by the checks; the rating above is the one before it.",
+      "failed": "The latest attempt, {{date}}, failed; the rating above is the one before it."
+    },
+    "column": "Sentiment"
   }
 }

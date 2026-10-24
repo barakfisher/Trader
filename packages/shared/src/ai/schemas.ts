@@ -275,6 +275,12 @@ const llmCostEstimateSchema = z.object({
   monthly_micro_usd: z.number().int(),
 });
 
+export const researchRunStartedSchema = z.object({
+  run_id: z.string(),
+  agent_id: z.string(),
+  holdings: z.number().int(),
+});
+
 export const agentScanResponseSchema = z.object({
   scan_id: z.string(),
   outcome: z.enum([
@@ -527,6 +533,9 @@ export type _AssertMarketSessions = Expect<
 >;
 export type _AssertAgentScan = Expect<
   Equal<z.infer<typeof agentScanResponseSchema>, Schemas['AgentScanResponse']>
+>;
+export type _AssertResearchRunStarted = Expect<
+  Equal<z.infer<typeof researchRunStartedSchema>, Schemas['ResearchRunStarted']>
 >;
 export type _AssertMandateCheckResponse = Expect<
   Equal<z.infer<typeof mandateCheckResponseSchema>, Schemas['MandateCheckResponse']>

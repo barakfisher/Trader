@@ -90,6 +90,11 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "agent_scans holds re-checks",
         "DELETE FROM agent_scans WHERE trigger = 'refresh'",
     ),
+    # Research calls are the agent's spend records (D254); 0069 cannot name them.
+    "0070_holding_research": (
+        "llm_calls holds research calls",
+        "DELETE FROM llm_calls WHERE purpose = 'research'",
+    ),
     # A check's calls are spend records; relabelling them as scans would put
     # them in the scan averages, so 0059 refuses.
     "0059_mandate_check": (

@@ -952,6 +952,22 @@ class AgentScanRequest(BaseModel):
     trigger: Literal["manual", "schedule"] = "manual"
 
 
+class ResearchRunRequest(BaseModel):
+    """Run the assigned agent's research on the main portfolio (D254)."""
+
+    user_id: UUID
+    trigger: Literal["manual", "schedule"] = "manual"
+
+
+class ResearchRunStarted(BaseModel):
+    """A research run has started; it finishes in the background (D290)."""
+
+    run_id: UUID
+    agent_id: UUID
+    #: Holdings it will rate: the main portfolio's, up to the run's limit.
+    holdings: int
+
+
 class AgentRecheckRequest(BaseModel):
     """Re-check one of the agent's expired trade proposals (D212)."""
 

@@ -116,10 +116,10 @@ export const MANDATE_COLUMNS = [
 ] as const satisfies readonly (keyof MandateColumns)[];
 
 /**
- * The purposes an agent's daily model allowance pays for (D45, D177): its scans and
- * the checks of its instructions. `scan_budget.AGENT_PURPOSES_SQL` says the same.
+ * The purposes an agent's daily model allowance pays for (D45, D177, D254): its scans,
+ * the checks of its instructions and its research. `scan_budget.AGENT_PURPOSES_SQL` says the same.
  */
-export const AGENT_SPEND_PURPOSES = "('agent_scan', 'mandate_check')";
+export const AGENT_SPEND_PURPOSES = "('agent_scan', 'mandate_check', 'research')";
 
 /** Scans averaged for an estimate (D46): recent enough to follow a model change. */
 export const SCAN_COST_WINDOW = 10;

@@ -32,6 +32,7 @@ import {
   finishRun,
   getAgent,
   getOrCreateUserSettings,
+  listActiveResearchAssignments,
   listAgents,
   listSlotAttempts,
   type SlotAttemptRow,
@@ -43,6 +44,7 @@ import { dueSlots, scheduleOf, slotKey, type DueSlot, type ScanSlot, type Sessio
 import { readyToScan } from './agentReadiness.js';
 import { proposeFromScan } from './tradeProposals.js';
 import { announceModelFallbacks } from './modelFallbacks.js';
+import { planResearch, researchRunKey, runResearchAttempt } from './scheduledResearch.js';
 
 /** D69: one attempt and at most two retries per slot. */
 export const MAX_SLOT_ATTEMPTS = 3;
@@ -63,8 +65,10 @@ export type FailureCause =
   | 'scan_failed'
   | 'window_closed';
 
-/** What the queue carries for one attempt. */
+/** What the queue carries for one attempt: a scan's, or a day's research (D290). */
 export interface SlotAttemptJob {
+  /** Absent for a scan, which every job was before research shared the queue. */
+  kind?: 'research';
   userId: string;
   agentId: string;
   day: string;
@@ -79,7 +83,8 @@ export interface ScanQueue {
   add(jobId: string, job: SlotAttemptJob): Promise<void>;
 }
 
-export function attemptRunKey(job: Pick<SlotAttemptJob, 'agentId' | 'day' | 'slot' | 'attempt'>): string {
+export function attemptRunKey(job: Pick<SlotAttemptJob, 'kind' | 'agentId' | 'day' | 'slot' | 'attempt'>): string {
+  if (job.kind === 'research') return researchRunKey(job);
   return `${slotKey(job.agentId, job)}:${job.attempt}`;
 }
 
@@ -148,7 +153,8 @@ export async function planScheduledScans(input: {
   );
   const agents = perUser.reduce((sum, user) => sum + user.agents.length, 0);
   const result: PlanResult = { users: input.userIds.length, agents, due: 0, enqueued: 0 };
-  if (agents === 0) return result;
+  const researching = await listActiveResearchAssignments(input.userIds);
+  if (agents === 0 && researching.length === 0) return result;
 
   const t = input.now.getTime();
   const { sessions } = await input.ai.marketSessions(
@@ -179,6 +185,10 @@ export async function planScheduledScans(input: {
     }
     jobsPerUser.push(jobs);
   }
+  // A day's research is one more of the user's attempts, taken in turn with their scans.
+  const research = await planResearch({ assignments: researching, sessions: sessions as Session[], now: input.now, nextAttempt });
+  result.due += research.due;
+  perUser.forEach((user, index) => jobsPerUser[index]!.push(...(research.jobs.get(user.userId) ?? [])));
   for (const job of roundRobin(jobsPerUser)) {
     await input.queue.add(attemptRunKey(job), job);
     result.enqueued += 1;
@@ -224,6 +234,7 @@ export interface AttemptDeps {
  * a thrown job would only make the queue retry what the plan already decides.
  */
 export async function runSlotAttempt(job: SlotAttemptJob, deps: AttemptDeps): Promise<void> {
+  if (job.kind === 'research') return runResearchAttempt(job, deps);
   const now = (deps.now ?? (() => new Date()))();
   const runKey = attemptRunKey(job);
   const claim = await claimRun({ userId: job.userId, agentId: job.agentId, kind: 'agent_scan', runKey, trigger: 'schedule' });

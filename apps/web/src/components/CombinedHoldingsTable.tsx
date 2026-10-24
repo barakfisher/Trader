@@ -25,6 +25,7 @@ import {
 import { sortHoldings, type SortFields, type SortKey } from '../lib/holdingsSort.ts';
 import { ApproveProposalButton } from './ProposalApproval.tsx';
 import { SortControl, SortableTh, useSortColumns, type SortProps } from './SortableHeader.tsx';
+import { SentimentCell, useSentiments } from './SentimentBadge.tsx';
 import { Card, Delta } from './ui.tsx';
 
 /**
@@ -71,6 +72,7 @@ export function CombinedHoldingsTable({
     return position ? (realHoldings.get(position.holdingId) ?? null) : null;
   };
   const shared = { currency: data.currency, updateHolding, removeHolding };
+  const sentiments = useSentiments();
 
   return (
     <Card title={t('holdings.title', { count: rows.length })} action={actions} className="overflow-hidden">
@@ -95,6 +97,7 @@ export function CombinedHoldingsTable({
                 {header('symbol')}
                 <th className="pb-2 pe-3 font-medium">{t('combined.holders')}</th>
                 {(['quantity', 'price', 'day', 'value', 'cost', 'pnl', 'pnlPct', 'weight'] as const).map(header)}
+                {sentiments.shown && <th className="pb-2 pe-3 font-medium">{t('research.column')}</th>}
                 <th className="pb-2 text-end font-medium">{t('holdings.columns.actions')}</th>
               </tr>
             </thead>
@@ -138,6 +141,7 @@ interface RowProps {
 
 function CombinedRow({ row, real, currency, updateHolding, removeHolding }: RowProps) {
   const { t } = useTranslation();
+  const sentiments = useSentiments();
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const symbol = row.instrument.symbol;
@@ -186,6 +190,11 @@ function CombinedRow({ row, real, currency, updateHolding, removeHolding }: RowP
           <Delta value={row.pnlPct}>{row.pnlPct === null ? '—' : formatPercent(row.pnlPct)}</Delta>
         </td>
         <td className="py-2 pe-3 text-end text-text-muted">{formatShare(row.weightPct)}</td>
+        {sentiments.shown && (
+          <td className="py-2 pe-3">
+            <SentimentCell holding={sentiments.byInstrument.get(row.instrument.id)} />
+          </td>
+        )}
         <td className="py-2 text-end">
           <span className="flex flex-wrap items-center justify-end gap-2">
             {row.pending.map((trade) => (
@@ -226,7 +235,7 @@ function CombinedRow({ row, real, currency, updateHolding, removeHolding }: RowP
       </tr>
       {editing && real && (
         <tr className="border-b border-border-subtle/50">
-          <td colSpan={11} className="pb-3">
+          <td colSpan={12} className="pb-3">
             <RealHoldingEditor holding={real} updateHolding={updateHolding} onDone={() => setEditing(false)} />
           </td>
         </tr>
@@ -238,6 +247,7 @@ function CombinedRow({ row, real, currency, updateHolding, removeHolding }: RowP
 /** One instrument on a phone: what it is worth and how it has done, who holds it, then what can be done. */
 function CombinedCard({ row, real, currency, updateHolding, removeHolding }: RowProps) {
   const { t } = useTranslation();
+  const sentiments = useSentiments();
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const symbol = row.instrument.symbol;
@@ -259,6 +269,7 @@ function CombinedCard({ row, real, currency, updateHolding, removeHolding }: Row
         </div>
       </div>
       <Holders positions={row.positions} />
+      {sentiments.shown && <SentimentCell holding={sentiments.byInstrument.get(row.instrument.id)} />}
       <p className="text-xs text-text-muted">
         {trimQuantity(row.quantity)} ×{' '}
         {row.quote ? formatMoney(row.quote.priceMinor, row.quote.currency) : t('holdings.noPrice')}
