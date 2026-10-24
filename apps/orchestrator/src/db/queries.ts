@@ -47,3 +47,4 @@ export * from './queries/articles.js';
 export * from './queries/topicProposals.js';
 export * from './queries/adminUsers.js';
 export * from './queries/research.js';
+export * from './queries/sessions.js';

@@ -72,6 +72,7 @@ vi.mock('../src/db/queries.js', () => ({
   getAgent: vi.fn(async () => agent),
   latestRecheck: vi.fn(async () => latest),
   laterApprovedProposal: vi.fn(async () => later),
+  getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
   getUser: vi.fn(async () => USER),
   listProposalTransitions: vi.fn(async () => []),
   listProposalAttempts: vi.fn(async () => []),

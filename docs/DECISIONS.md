@@ -304,3 +304,7 @@ while this file is out of date.
 | 291 | The server gathers each holding's evidence and the model is called once with it; the rationale is English |
 | 292 | A rating is shown only if it passes the form, the wording guard and the evidence validator; one retry; the agent's daily allowance pays |
 | 293 | The Sentiment column shows the assigned agent's latest rating, stale after seven days; a run rates at most 50 holdings in 15 minutes; six manual runs an hour |
+| 294 | A device is named by `bowser`, read from the stored user agent when the list is asked for |
+| 295 | A session lasts a fixed `SESSION_TTL_HOURS` (7 days) from sign-in, never extended |
+| 296 | Settings offers *Sign out all other devices*; this device signs out from the menu |
+| 297 | How PR 12 builds D261 |

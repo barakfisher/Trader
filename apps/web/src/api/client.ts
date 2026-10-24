@@ -9,6 +9,7 @@
 import type { ApiError } from '@traders/shared';
 
 import { t } from '../i18n/index.ts';
+import { reportSessionEnded } from './sessionEnded.ts';
 
 // Relative: the API is served on the page's own origin, by nginx in the image
 // and by Vite's proxy in development (vite.config.ts), so the session cookie
@@ -29,6 +30,9 @@ export class ApiRequestError extends Error {
 
 /** The orchestrator's code for a request refused by a rate limit (`http/rateLimits.ts`). */
 export const RATE_LIMITED = 'rate_limited';
+
+/** The orchestrator's code for a request that needs a session and has none. */
+export const UNAUTHORIZED = 'unauthorized';
 
 /** `Retry-After` in whole minutes, at least one: what the sentence can say. */
 export function retryAfterMinutes(header: string | null): number {
@@ -56,6 +60,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!response.ok) {
     const error = (body ?? {}) as ApiError;
+    if (response.status === 401 && error.error === UNAUTHORIZED) reportSessionEnded();
     if (error.error === RATE_LIMITED) {
       // The one refusal said here rather than by each caller: any limited
       // route can answer it, and every caller shows `message` (D257).

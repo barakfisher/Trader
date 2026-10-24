@@ -38,6 +38,9 @@ export const INTERVALS_MS: Record<string, number> = {
   // a repeated sweep has nothing to collapse - it is already idempotent, since a
   // proposal already marked expired produces no transition.
   proposal_sweep: 15 * 60 * 1000,
+  // Hourly against a daily bucket, like backfill: a restart cannot skip a day's
+  // sweep, and an ask whose day is already swept writes nothing.
+  session_sweep: 60 * 60 * 1000,
   // Hourly against a daily bucket, like backfill and for the same reason: the
   // extras cost one HTTP request each, and a restart at the wrong moment cannot
   // swallow the day's digest - which, unlike a skipped scan, cannot be caught
@@ -68,6 +71,8 @@ const FIRST_RUN_DELAY_MS: Record<string, number> = {
   // After the portfolio scan, so the two do not load the same histories at once.
   topic_scan: 48_000,
   proposal_sweep: 55_000,
+  // Out of everyone's way: it reads nothing the others write.
+  session_sweep: 58_000,
   // After news collection, which it reads. On a fresh start the first
   // collection has usually finished by then; if not, the hourly retry of the
   // daily bucket is the catch-up.

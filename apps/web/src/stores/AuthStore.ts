@@ -3,6 +3,7 @@ import { makeAutoObservable, reaction, runInAction } from 'mobx';
 import type { SessionUser, UiLanguage } from '@traders/shared';
 
 import { ApiRequestError, api } from '../api/client.ts';
+import { onSessionEnded } from '../api/sessionEnded.ts';
 import { setDisplayTimeZone } from '../lib/relativeTime.ts';
 import { applyLanguage, signedOutLanguage, t } from '../i18n/index.ts';
 import type { RootStore } from './RootStore.ts';
@@ -13,9 +14,15 @@ export class AuthStore {
   initialised = false;
   submitting = false;
   error: string | null = null;
+  /**
+   * The session ended while the app was open - signed out from another device,
+   * disabled, or run out (D261) - so the sign-in page says why it is showing.
+   */
+  sessionEndedNotice = false;
 
   constructor(private readonly root: RootStore) {
     makeAutoObservable(this, {}, { autoBind: true });
+    onSessionEnded(this.sessionEnded);
     // Every time on screen is shown in the signed-in user's timezone. Followed
     // by reaction rather than set in `login` and `loadSession`, so however the
     // user changes - a sign-in, a reload, a sign-out - the zone follows it
@@ -68,6 +75,7 @@ export class AuthStore {
   async login(email: string, password: string): Promise<void> {
     this.submitting = true;
     this.error = null;
+    this.sessionEndedNotice = false;
     try {
       const user = await api.post<SessionUser>('/auth/login', { email, password });
       runInAction(() => {
@@ -116,29 +124,43 @@ export class AuthStore {
     try {
       await api.post('/auth/logout');
     } finally {
-      runInAction(() => {
-        this.user = null;
-        // Every cached server response is one account's. Cleared, not
-        // invalidated: an invalidated query would refetch - as nobody - and
-        // keep showing the previous account's numbers until it failed.
-        this.root.queryClient.clear();
-        this.root.observations.reset();
-        // Settings are one account's, so they leave with the session rather
-        // than waiting on screen for whoever signs in next.
-        this.root.proposals.reset();
-        this.root.settings.reset();
-        this.root.targets.reset();
-        this.root.topics.reset();
-        this.root.telegram.reset();
-        // The corpus is shared reference material rather than one account's, so
-        // dropping the cache costs a refetch and protects nothing. It is reset
-        // anyway so that signing out cannot leave a dialog open over the login
-        // screen, and so this list stays exhaustive rather than selective.
-        this.root.concepts.reset();
-        // Questions about one account's holdings are that account's.
-        this.root.ask.reset();
-      });
+      this.clearSession();
     }
+  }
+
+  /**
+   * A request was refused for want of a session while one was held (D261):
+   * this device was signed out from another, or the account was disabled. The
+   * app leaves exactly as a sign-out does, and the sign-in page says why.
+   */
+  sessionEnded(): void {
+    if (this.user === null) return;
+    this.clearSession();
+    this.sessionEndedNotice = true;
+  }
+
+  /** Everything one account's session left on screen goes with it. */
+  private clearSession(): void {
+    this.user = null;
+    // Every cached server response is one account's. Cleared, not
+    // invalidated: an invalidated query would refetch - as nobody - and
+    // keep showing the previous account's numbers until it failed.
+    this.root.queryClient.clear();
+    this.root.observations.reset();
+    // Settings are one account's, so they leave with the session rather
+    // than waiting on screen for whoever signs in next.
+    this.root.proposals.reset();
+    this.root.settings.reset();
+    this.root.targets.reset();
+    this.root.topics.reset();
+    this.root.telegram.reset();
+    // The corpus is shared reference material rather than one account's, so
+    // dropping the cache costs a refetch and protects nothing. It is reset
+    // anyway so that signing out cannot leave a dialog open over the login
+    // screen, and so this list stays exhaustive rather than selective.
+    this.root.concepts.reset();
+    // Questions about one account's holdings are that account's.
+    this.root.ask.reset();
   }
 }
 

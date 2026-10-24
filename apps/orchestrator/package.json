@@ -18,6 +18,7 @@
     "@hono/node-server": "^1.13.2",
     "@node-rs/argon2": "^2.2.2",
     "@traders/shared": "workspace:*",
+    "bowser": "2.14.1",
     "bullmq": "^6.3.11",
     "csv-parse": "^5.5.6",
     "hono": "^4.6.5",

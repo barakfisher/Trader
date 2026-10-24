@@ -1,12 +1,12 @@
 /**
- * Signing in, the session's checks against the user (D160) and changing one's
- * own password (D159, D162, D181). The database is mocked; the hashing is the
+ * Signing in and out, the session's checks against its row and the user (D160,
+ * D261) and changing one's own password (D159, D162, D181). The database is mocked; the hashing is the
  * real argon2id, because "the stored hash verifies" is the behaviour.
  */
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ACTIVE_SESSION, TEST_USER_ID, sessionCookie } from './session.js';
+import { ACTIVE_SESSION, TEST_SESSION_ID, TEST_USER_ID, sessionCookie } from './session.js';
 
 const PASSWORD = 'correct horse battery staple';
 
@@ -29,8 +29,11 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
+  getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
   getUser: vi.fn(),
   getUserCredentialsByEmail: vi.fn(),
+  createSession: vi.fn(),
+  deleteSession: vi.fn(async () => true),
   getPasswordHash: vi.fn(),
   recordSignIn: vi.fn(async () => undefined),
   changePassword: vi.fn(),
@@ -42,7 +45,8 @@ vi.mock('../src/db/queries.js', () => ({
 
 const { createApp } = await import('../src/http/app.js');
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
-const { SESSION_COOKIE, verifySessionToken } = await import('../src/http/auth.js');
+const { SESSION_COOKIE, sessionTokenHash, verifySessionToken } = await import('../src/http/auth.js');
+const { USER_AGENT_MAX_LENGTH } = await import('../src/http/sessions.js');
 const { hashPassword, PASSWORD_MIN_LENGTH } = await import('../src/http/password.js');
 const queries = await import('../src/db/queries.js');
 const { createFakeAi } = await import('./fakeAi.js');
@@ -58,6 +62,13 @@ const ENV = {
 } as unknown as NodeJS.ProcessEnv;
 
 const HEADERS = { origin: 'http://localhost:5173', 'content-type': 'application/json' };
+
+/** The row `createSession` makes; its expiry is what the cookie must carry. */
+const NEW_SESSION = {
+  id: '5e551000-0000-4000-8000-0000000000aa',
+  // Whole seconds, as a cookie's Expires is; within the 400 days a browser accepts.
+  expires_at: new Date(Math.floor(Date.now() / 1000) * 1000 + 7 * 24 * 3600 * 1000),
+};
 
 function buildApp() {
   resetConfigForTests();
@@ -103,11 +114,13 @@ describe('signing in', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(queries.createSession).mockResolvedValue(NEW_SESSION);
     vi.mocked(queries.getUser).mockResolvedValue(USER);
     vi.mocked(queries.getUserCredentialsByEmail).mockResolvedValue({
       id: USER.id,
       status: 'active',
       password_hash: passwordHash,
+      session_version: USER.session_version,
     });
     app = buildApp();
   });
@@ -121,13 +134,69 @@ describe('signing in', () => {
     expect(header).toContain('HttpOnly');
     expect(header).toContain('SameSite=Lax');
     const token = cookieOf(response).slice(`${SESSION_COOKIE}=`.length);
-    expect(verifySessionToken(token, 'test-session-secret-value')).toEqual({
-      userId: USER.id,
-      sessionVersion: USER.session_version,
-    });
+    const claim = verifySessionToken(token, 'test-session-secret-value');
+    expect(claim).toEqual({ secret: expect.any(String), userId: USER.id, sessionVersion: USER.session_version });
     expect(queries.getUserCredentialsByEmail).toHaveBeenCalledWith('Dana@Example.com');
     expect(queries.recordSignIn).toHaveBeenCalledWith(USER.id);
     expect((await session(app, cookieOf(response))).authenticated).toBe(true);
+  });
+
+  it("writes a session row holding only the hash of the cookie's secret, and expires with it (D261, D295)", async () => {
+    const response = await app.request('/auth/login', {
+      method: 'POST',
+      headers: { ...HEADERS, 'user-agent': 'Mozilla/5.0 (iPhone) Safari/604.1' },
+      body: JSON.stringify({ email: USER.email, password: PASSWORD }),
+    });
+    expect(response.status).toBe(200);
+    const claim = verifySessionToken(cookieOf(response).slice(`${SESSION_COOKIE}=`.length), 'test-session-secret-value')!;
+    const config = loadConfig(ENV);
+    expect(queries.createSession).toHaveBeenCalledWith({
+      userId: USER.id,
+      tokenHash: sessionTokenHash(claim.secret),
+      ttlHours: config.SESSION_TTL_HOURS,
+      userAgent: 'Mozilla/5.0 (iPhone) Safari/604.1',
+      ipAddress: null,
+    });
+    const created = vi.mocked(queries.createSession).mock.calls[0]![0];
+    expect(created.tokenHash.toString('base64url')).not.toContain(claim.secret);
+    expect(response.headers.get('set-cookie')).toContain(`Expires=${NEW_SESSION.expires_at.toUTCString()}`);
+  });
+
+  it('keeps a user agent no longer than the column allows', async () => {
+    await app.request('/auth/login', {
+      method: 'POST',
+      headers: { ...HEADERS, 'user-agent': 'x'.repeat(USER_AGENT_MAX_LENGTH * 2) },
+      body: JSON.stringify({ email: USER.email, password: PASSWORD }),
+    });
+    expect(vi.mocked(queries.createSession).mock.calls[0]![0].userAgent).toHaveLength(USER_AGENT_MAX_LENGTH);
+  });
+
+  it('gives each sign-in its own session', async () => {
+    const first = cookieOf(await login(app, USER.email, PASSWORD));
+    const second = cookieOf(await login(app, USER.email, PASSWORD));
+    expect(first).not.toBe(second);
+    const hashes = vi.mocked(queries.createSession).mock.calls.map(([session]) => session.tokenHash.toString('hex'));
+    expect(new Set(hashes).size).toBe(2);
+  });
+
+  it('opens no session when the password changed while it was being checked (D297)', async () => {
+    // Read before argon2 at version 1; the change committed meanwhile, so the user read after it is at 2.
+    vi.mocked(queries.getUser).mockResolvedValue({ ...USER, session_version: USER.session_version + 1 });
+    const response = await login(app, USER.email, PASSWORD);
+    expect(response.status).toBe(401);
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(queries.createSession).not.toHaveBeenCalled();
+  });
+
+  it("ends the session this browser already had when it signs in again", async () => {
+    const response = await app.request('/auth/login', {
+      method: 'POST',
+      headers: { ...HEADERS, cookie: sessionCookie() },
+      body: JSON.stringify({ email: USER.email, password: PASSWORD }),
+    });
+    expect(response.status).toBe(200);
+    expect(queries.deleteSession).toHaveBeenCalledWith(USER.id, TEST_SESSION_ID);
+    expect(queries.createSession).toHaveBeenCalledOnce();
   });
 
   it('marks the cookie Secure in production, and only there (D256)', async () => {
@@ -159,6 +228,7 @@ describe('signing in', () => {
       id: USER.id,
       status: 'active',
       password_hash: null,
+      session_version: USER.session_version,
     });
     expect((await login(app, USER.email, PASSWORD)).status).toBe(401);
   });
@@ -174,6 +244,7 @@ describe('signing in', () => {
         id: USER.id,
         status,
         password_hash: passwordHash,
+        session_version: USER.session_version,
       });
       const response = await login(app, USER.email, PASSWORD);
       expect(response.status).toBe(403);
@@ -188,6 +259,7 @@ describe('a session is checked against the user on every request (D160)', () => 
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(queries.createSession).mockResolvedValue(NEW_SESSION);
     app = buildApp();
   });
 
@@ -213,9 +285,56 @@ describe('a session is checked against the user on every request (D160)', () => 
     expect((await session(app, sessionCookie())).authenticated).toBe(false);
   });
 
-  it('reads no user for a request without a cookie', async () => {
+  it("ends once the session's row is gone - signed out, here or from another device (D261)", async () => {
+    vi.mocked(queries.getUser).mockResolvedValue(USER);
+    vi.mocked(queries.getSessionUser).mockResolvedValueOnce(null);
+    expect((await session(app, sessionCookie())).authenticated).toBe(false);
+  });
+
+  it("looks the session up by the hash of the cookie's secret, for the cookie's user", async () => {
+    vi.mocked(queries.getUser).mockResolvedValue(USER);
+    const { SESSION_TOUCH_INTERVAL_SECONDS } = await import('../src/http/sessions.js');
+    await session(app, sessionCookie(USER.id, 1, 'this-devices-secret'));
+    expect(queries.getSessionUser).toHaveBeenCalledWith(
+      USER.id,
+      sessionTokenHash('this-devices-secret'),
+      SESSION_TOUCH_INTERVAL_SECONDS,
+    );
+  });
+
+  it('reads no session for a request without a cookie', async () => {
     await app.request('/auth/session');
+    expect(queries.getSessionUser).not.toHaveBeenCalled();
     expect(queries.getUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('signing out (D261)', () => {
+  let app: App;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(queries.createSession).mockResolvedValue(NEW_SESSION);
+    vi.mocked(queries.getUser).mockResolvedValue(USER);
+    app = buildApp();
+  });
+
+  function logout(cookie?: string) {
+    return app.request('/auth/logout', { method: 'POST', headers: { ...HEADERS, ...(cookie ? { cookie } : {}) } });
+  }
+
+  it("deletes this device's session row and the browser's cookie", async () => {
+    const response = await logout(sessionCookie());
+    expect(response.status).toBe(200);
+    expect(queries.deleteSession).toHaveBeenCalledWith(USER.id, TEST_SESSION_ID);
+    expect(response.headers.get('set-cookie')).toMatch(new RegExp(`^${SESSION_COOKIE}=;`));
+  });
+
+  it('only deletes the cookie when there is no session to end', async () => {
+    const response = await logout();
+    expect(response.status).toBe(200);
+    expect(queries.deleteSession).not.toHaveBeenCalled();
+    expect(response.headers.get('set-cookie')).toMatch(new RegExp(`^${SESSION_COOKIE}=;`));
   });
 });
 
@@ -224,6 +343,7 @@ describe('the one-time password (D162)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(queries.createSession).mockResolvedValue(NEW_SESSION);
     vi.mocked(queries.getUser).mockResolvedValue({ ...USER, password_must_change: true });
     app = buildApp();
   });
@@ -247,6 +367,7 @@ describe('changing one\'s own password', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(queries.createSession).mockResolvedValue(NEW_SESSION);
     vi.mocked(queries.getUser).mockResolvedValue(USER);
     vi.mocked(queries.getPasswordHash).mockResolvedValue(passwordHash);
     vi.mocked(queries.changePassword).mockResolvedValue({
@@ -280,7 +401,7 @@ describe('changing one\'s own password', () => {
     expect(queries.changePassword).not.toHaveBeenCalled();
   });
 
-  it('stores an argon2id hash and reissues this session at the new version', async () => {
+  it('stores an argon2id hash and gives this device a new session at the new version', async () => {
     const response = await changePassword(app, sessionCookie(), PASSWORD, NEW_PASSWORD);
     expect(response.status).toBe(200);
 
@@ -292,6 +413,8 @@ describe('changing one\'s own password', () => {
     expect(verifySessionToken(token, 'test-session-secret-value')?.sessionVersion).toBe(
       USER.session_version + 1,
     );
+    // `changePassword` deleted every row in the same statement; this is the new one.
+    expect(queries.createSession).toHaveBeenCalledWith(expect.objectContaining({ userId: USER.id }));
   });
 });
 
@@ -309,6 +432,7 @@ describe('changing one\'s own email', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(queries.createSession).mockResolvedValue(NEW_SESSION);
     vi.mocked(queries.getUser).mockResolvedValue(USER);
     vi.mocked(queries.getPasswordHash).mockResolvedValue(passwordHash);
     vi.mocked(queries.changeEmail).mockResolvedValue({
@@ -384,6 +508,7 @@ describe("changing one's own time zone (D163)", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(queries.createSession).mockResolvedValue(NEW_SESSION);
     vi.mocked(queries.getUser).mockResolvedValue(USER);
     vi.mocked(queries.changeTimeZone).mockResolvedValue({ ...USER, timezone: 'Europe/London' });
     app = buildApp();

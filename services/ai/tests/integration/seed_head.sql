@@ -356,3 +356,12 @@ INSERT INTO llm_calls (user_id, agent_id, purpose, provider, model, outcome, lat
    'openrouter', 'm', 'ok', 900, 'p');
 INSERT INTO runs (id, user_id, agent_id, kind, run_key, status) VALUES
   ('20000000-0000-0000-0000-0000000000a7', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'research', 'research:seed:2026-10-23:1', 'ok');
+-- Sessions (0071, D261): a live one and an expired one the sweep would delete,
+-- and the sweep's own run.
+INSERT INTO user_sessions (user_id, token_hash, created_at, last_seen_at, expires_at, user_agent, ip_address) VALUES
+  ('00000000-0000-0000-0000-00000000000b', sha256('seed-session-live'), now(), now(), now() + interval '7 days',
+   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36', '203.0.113.7'),
+  ('00000000-0000-0000-0000-00000000000c', sha256('seed-session-expired'), '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z', '2026-10-08T00:00:00Z',
+   NULL, NULL);
+INSERT INTO runs (id, kind, run_key, status) VALUES
+  ('20000000-0000-0000-0000-0000000000a8', 'session_sweep', 'session_sweep:seed:2026-10-24', 'ok');

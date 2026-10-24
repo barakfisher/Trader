@@ -23,6 +23,7 @@
   "login": {
     "title": "Traders",
     "intro": "Portfolio copilot. Sign in with your email and password.",
+    "sessionEnded": "You were signed out on this device - from another device, or because the session ended. Sign in again to continue.",
     "email": "Email",
     "password": "Password",
     "signIn": "Sign in",
@@ -1061,6 +1062,25 @@
       "bounds": "Any amount from {{min}} to {{max}}. Leave it unset for no limit.",
       "failed": "The limit couldn't be saved."
     }
+  },
+  "devices": {
+    "title": "Signed-in devices",
+    "intro": "Where this account is signed in. Sign out any device you do not recognise, then change your password.",
+    "loading": "Loading devices…",
+    "loadFailed": "Could not load the signed-in devices.",
+    "browserOnOs": "{{browser}} on {{os}}",
+    "unknownBrowser": "Unknown browser",
+    "unknownOs": "unknown system",
+    "thisDevice": "This device",
+    "signedIn": "Signed in {{date}}",
+    "lastSeen": "last seen {{age}}",
+    "signOut": "Sign out",
+    "signingOut": "Signing out…",
+    "signOutFailed": "Could not sign that device out.",
+    "signOutOthers": "Sign out all other devices",
+    "noOthers": "No other device is signed in.",
+    "othersEnded_one": "Signed out {{count}} other device.",
+    "othersEnded_other": "Signed out {{count}} other devices."
   },
   "topicsPage": {
     "title": "Topics",

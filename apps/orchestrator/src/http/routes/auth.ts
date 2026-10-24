@@ -1,15 +1,16 @@
 /**
  * Sign-up, sign-in, sign-out, "who am I" and changing one's own password or
- * email (D156, D159, D160, D185).
+ * email (D156, D159, D160, D185, D261).
  *
- * Email and password, the password hashed with argon2id. A session is the
- * signed cookie of `http/auth.ts`, carrying the user's `session_version`, so a
- * password or email change - which bumps it - ends every other session the user holds
- * and reissues this one.
+ * Email and password, the password hashed with argon2id. A session is a row of
+ * `user_sessions` named by the signed cookie of `http/auth.ts`, so signing out
+ * deletes this device's row, and a password or email change - which deletes
+ * every row the user has - ends every other session and issues this device a
+ * new one.
  */
 
-import type { Context, Hono } from 'hono';
-import { deleteCookie, setCookie } from 'hono/cookie';
+import type { Hono } from 'hono';
+import { deleteCookie } from 'hono/cookie';
 import { z } from 'zod';
 
 import {
@@ -27,6 +28,7 @@ import {
   changePassword,
   changeTimeZone,
   createSignupRequest,
+  deleteSession,
   getOrCreateUserSettings,
   getPasswordHash,
   getUser,
@@ -36,7 +38,8 @@ import {
 } from '../../db/queries.js';
 import { announceSignupRequest } from '../../telegram/signupApproval.js';
 import type { AppEnv } from '../app.js';
-import { SESSION_COOKIE, createSessionToken } from '../auth.js';
+import { SESSION_COOKIE } from '../auth.js';
+import { issueSession } from '../sessions.js';
 import { ApiProblem, badRequest, conflict, unauthorized } from '../errors.js';
 import { emailKey, requestAddressKey } from '../rateLimits.js';
 import { PASSWORD_MAX_LENGTH, hashPassword, passwordMatches, passwordProblem } from '../password.js';
@@ -91,22 +94,6 @@ async function sessionUser(user: UserRow): Promise<SessionUser> {
   };
 }
 
-function issueSession(context: Context<AppEnv>, user: UserRow): void {
-  const config = context.get('config');
-  const token = createSessionToken(
-    { userId: user.id, sessionVersion: user.session_version },
-    config.SESSION_SECRET,
-    config.SESSION_TTL_HOURS,
-  );
-  setCookie(context, SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: 'Lax',
-    secure: config.isProduction,
-    path: '/',
-    maxAge: config.SESSION_TTL_HOURS * 3600,
-  });
-}
-
 export function registerAuthRoutes(app: Hono<AppEnv>): void {
   app.post('/auth/login', async (context) => {
     const parsed = loginSchema.safeParse(await context.req.json().catch(() => null));
@@ -143,10 +130,22 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
       throw new ApiProblem(403, 'account_not_active', `this account is ${credentials.status}`);
     }
     const user = await getUser(credentials.id);
-    if (!user) throw unauthorized('incorrect email or password');
+    // A password change, a one-time password or a disable that committed while
+    // argon2 ran moved the version: the password just checked is no longer the
+    // account's, so it opens no session (D297). Said as a wrong password, which
+    // it now is.
+    if (!user || user.session_version !== credentials.session_version) {
+      throw unauthorized('incorrect email or password');
+    }
+
+    // Signing in again on this browser ends the session it already had, so the
+    // old cookie - and any copy of it - does not outlive the new one.
+    const previousUser = context.get('userId');
+    const previousSession = context.get('sessionId');
+    if (previousUser && previousSession) await deleteSession(previousUser, previousSession);
 
     await recordSignIn(user.id);
-    issueSession(context, user);
+    await issueSession(context, user);
     return context.json(await sessionUser(user));
   });
 
@@ -198,7 +197,15 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     return context.json(body);
   });
 
-  app.post('/auth/logout', (context) => {
+  /**
+   * Sign this device out (D261): its session row is deleted, so the cookie -
+   * or any copy of it - names nothing from here on, and the browser's copy is
+   * deleted too. Signed out already, it only deletes the browser's copy.
+   */
+  app.post('/auth/logout', async (context) => {
+    const userId = context.get('userId');
+    const sessionId = context.get('sessionId');
+    if (userId && sessionId) await deleteSession(userId, sessionId);
     deleteCookie(context, SESSION_COOKIE, { path: '/' });
     return context.json({ ok: true });
   });
@@ -236,8 +243,8 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
 
     const updated = await changePassword(user.id, await hashPassword(newPassword));
     if (!updated) throw unauthorized();
-    // The bump ended this session too; the new cookie carries the new version.
-    issueSession(context, updated);
+    // The change ended every session, this one too; this device gets a new one.
+    await issueSession(context, updated);
     return context.json(await sessionUser(updated));
   });
 
@@ -267,7 +274,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     // Said only to someone who knows this account's password.
     if (updated === 'taken') throw conflict('email_taken', 'another account uses this address');
     if (!updated) throw unauthorized();
-    issueSession(context, updated);
+    await issueSession(context, updated);
     return context.json(await sessionUser(updated));
   });
 

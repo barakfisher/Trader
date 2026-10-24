@@ -947,6 +947,36 @@ export interface SessionUser {
 }
 
 /**
+ * One signed-in device in Settings' list (D261, D294). Browser and OS are read
+ * from the user agent by the server, in English (they are product names), and
+ * null where none was found. There is no place: that needs a GeoIP database
+ * (D261).
+ */
+export interface SessionDevice {
+  id: string;
+  browser: string | null;
+  os: string | null;
+  deviceType: 'desktop' | 'mobile' | 'tablet' | null;
+  signedInAt: string;
+  lastSeenAt: string;
+  /** Fixed at sign-in and never extended (D295). */
+  expiresAt: string;
+  ipAddress: string | null;
+  /** The session this request came in on: signed out from the menu, not from the list (D296). */
+  current: boolean;
+}
+
+/** `GET /account/sessions`: the user's unexpired sessions, most recently used first. */
+export interface SessionDeviceList {
+  sessions: SessionDevice[];
+}
+
+/** `POST /account/sessions/sign-out-others` (D296): how many sessions ended. */
+export interface SignOutOthersResponse {
+  ended: number;
+}
+
+/**
  * A request to join the installation (D156). The zone is the browser's
  * (D163) and the language the page was shown in, so the account's first
  * screen after approval is already in it.

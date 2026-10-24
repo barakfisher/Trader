@@ -53,6 +53,7 @@ vi.mock('../src/db/pool.js', () => ({
 
 vi.mock('../src/db/queries.js', () => ({
   primaryAgentId: vi.fn(async () => '90000000-0000-0000-0000-000000000001'),
+  getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
   getUser: vi.fn(async () => USER),
   // Proposal episodes (decision 92): none open, every claim succeeds.
   listOpenEpisodes: vi.fn(async () => []),
