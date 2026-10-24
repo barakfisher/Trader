@@ -2063,62 +2063,68 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         ),
       );
       const other = randomUUID();
-      await pool.query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 10000000)", [other]);
-      const othersPrimary = await queries.primaryAgentId(other);
+      try {
+        await pool.query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 10000000)", [other]);
+        const othersPrimary = await queries.primaryAgentId(other);
 
-      expect(await queries.setResearchAgent(USER, AGENT)).toBe(false);
-      expect(await queries.setResearchAgent(USER, archived!)).toBe(false);
-      expect(await queries.setResearchAgent(USER, othersPrimary)).toBe(false);
-      expect(await queries.setResearchAgent(USER, analyst!)).toBe(true);
-      expect(await queries.getResearchAgent(USER)).toEqual({ id: analyst, name: 'Research analyst', state: 'active' });
-      expect(await queries.listActiveResearchAssignments([USER, other])).toEqual([{ user_id: USER, agent_id: analyst }]);
+        expect(await queries.setResearchAgent(USER, AGENT)).toBe(false);
+        expect(await queries.setResearchAgent(USER, archived!)).toBe(false);
+        expect(await queries.setResearchAgent(USER, othersPrimary)).toBe(false);
+        expect(await queries.setResearchAgent(USER, analyst!)).toBe(true);
+        expect(await queries.getResearchAgent(USER)).toEqual({ id: analyst, name: 'Research analyst', state: 'active' });
+        expect(await queries.listActiveResearchAssignments([USER, other])).toEqual([{ user_id: USER, agent_id: analyst }]);
 
-      const instrument = (
-        await pool.query<{ id: string }>(
-          `INSERT INTO instruments (symbol, asset_class, name) VALUES ($1, 'equity', 'Research Corp') RETURNING id`,
-          [`R${mark}`.slice(0, 12).toUpperCase()],
-        )
-      ).rows[0]!.id;
-      await pool.query(`INSERT INTO holdings (user_id, agent_id, instrument_id, quantity) VALUES ($1, $2, $3, 2)`, [
-        USER,
-        AGENT,
-        instrument,
-      ]);
-      const run = (
-        await pool.query<{ id: string }>(
-          `INSERT INTO research_runs (user_id, agent_id, trigger, status, started_at, finished_at)
-           VALUES ($1, $2, 'manual', 'done', now() - interval '2 hours', now() - interval '1 hour') RETURNING id`,
-          [USER, analyst],
-        )
-      ).rows[0]!.id;
-      for (const [status, rating, age] of [
-        ['rated', 'bearish', '3 hours'],
-        ['rated', 'bullish', '2 hours'],
-        ['refused', null, '1 hour'],
-      ] as const) {
+        const instrument = (
+          await pool.query<{ id: string }>(
+            `INSERT INTO instruments (symbol, asset_class, name) VALUES ($1, 'equity', 'Research Corp') RETURNING id`,
+            [`R${mark}`.slice(0, 12).toUpperCase()],
+          )
+        ).rows[0]!.id;
+        await pool.query(`INSERT INTO holdings (user_id, agent_id, instrument_id, quantity) VALUES ($1, $2, $3, 2)`, [
+          USER,
+          AGENT,
+          instrument,
+        ]);
+        const run = (
+          await pool.query<{ id: string }>(
+            `INSERT INTO research_runs (user_id, agent_id, trigger, status, started_at, finished_at)
+             VALUES ($1, $2, 'manual', 'done', now() - interval '2 hours', now() - interval '1 hour') RETURNING id`,
+            [USER, analyst],
+          )
+        ).rows[0]!.id;
+        for (const [status, rating, age] of [
+          ['rated', 'bearish', '3 hours'],
+          ['rated', 'bullish', '2 hours'],
+          ['refused', null, '1 hour'],
+        ] as const) {
+          await pool.query(
+            `INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, status, rating, rationale, created_at)
+             VALUES ($1, $2, $3, $4, 'R', $5, $6, $7, now() - $8::interval)`,
+            [run, USER, analyst, instrument, status, rating, rating === null ? null : `${rating} reasons`, age],
+          );
+        }
+        const mine = (rows: Awaited<ReturnType<typeof queries.listResearchHoldings>>) => rows.find((row) => row.instrument_id === instrument);
+        const row = mine(await queries.listResearchHoldings(USER, analyst!));
+        expect(row).toMatchObject({ rating: 'bullish', rationale: 'bullish reasons', agent_name: 'Research analyst', last_status: 'refused' });
+        // Another agent's ratings are not this one's.
+        const none = mine(await queries.listResearchHoldings(USER, archived!));
+        expect(none).toMatchObject({ rating: null, last_status: null });
+
+        // A run left running past the abandonment age reads as failed.
         await pool.query(
-          `INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, status, rating, rationale, created_at)
-           VALUES ($1, $2, $3, $4, 'R', $5, $6, $7, now() - $8::interval)`,
-          [run, USER, analyst, instrument, status, rating, rating === null ? null : `${rating} reasons`, age],
+          `INSERT INTO research_runs (user_id, agent_id, trigger, status, started_at)
+           VALUES ($1, $2, 'schedule', 'running', now() - make_interval(mins => $3 + 1))`,
+          [USER, analyst, RESEARCH_ABANDONED_AFTER_MINUTES],
         );
+        expect(await queries.getLatestResearchRun(USER)).toMatchObject({ status: 'failed', error: 'abandoned' });
+
+        expect(await queries.setResearchAgent(USER, null)).toBe(true);
+        expect(await queries.getResearchAgent(USER)).toBeNull();
+      } finally {
+        // `agent_cash` does not cascade from `users`; the agents' own delete takes it.
+        await pool.query('DELETE FROM agents WHERE id = ANY($1::uuid[])', [[analyst, archived]]);
+        await pool.query('DELETE FROM users WHERE id = $1', [other]);
       }
-      const [row] = await queries.listResearchHoldings(USER, analyst!);
-      expect(row).toMatchObject({ rating: 'bullish', rationale: 'bullish reasons', agent_name: 'Research analyst', last_status: 'refused' });
-      // Another agent's ratings are not this one's.
-      const [none] = await queries.listResearchHoldings(USER, archived!);
-      expect(none).toMatchObject({ rating: null, last_status: null });
-
-      // A run left running past the abandonment age reads as failed.
-      await pool.query(
-        `INSERT INTO research_runs (user_id, agent_id, trigger, status, started_at)
-         VALUES ($1, $2, 'schedule', 'running', now() - make_interval(mins => $3 + 1))`,
-        [USER, analyst, RESEARCH_ABANDONED_AFTER_MINUTES],
-      );
-      expect(await queries.getLatestResearchRun(USER)).toMatchObject({ status: 'failed', error: 'abandoned' });
-
-      expect(await queries.setResearchAgent(USER, null)).toBe(true);
-      expect(await queries.getResearchAgent(USER)).toBeNull();
-      await pool.query('DELETE FROM users WHERE id = $1', [other]);
     });
   });
 });
