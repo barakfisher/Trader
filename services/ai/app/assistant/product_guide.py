@@ -26,6 +26,7 @@ PAGES = (
     "/agents",
     "/agents/<id>",
     "/topics",
+    "/research",
     "/settings",
     "/admin",
 )
@@ -49,6 +50,10 @@ SECTIONS = MappingProxyType(
             "(/agents/<id>) shows its holdings, its decisions and its scans, and is where its "
             "scan schedule and model budget are set. "
             "Topics (/topics): themes the user follows and the instruments chosen for each. "
+            "Research (/research): an agent the user assigns rates each real holding's "
+            "outlook Bullish, Bearish or Neutral from its news and market data, with the "
+            "reasons; the Portfolio's Sentiment column shows the latest. A rating is an "
+            "observation about the stock, not advice about the user's position. "
             "Proposals (/proposals): proposals to decide and their history; each has its own "
             "page (/proposals/<id>). "
             "Targets (/targets): the share of the portfolio the user means to hold in each "

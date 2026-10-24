@@ -236,6 +236,8 @@ describe('the one-time password (D162)', () => {
     expect(await refused.json()).toMatchObject({ error: 'password_change_required' });
     const admin = await app.request('/admin/runs', { headers: { cookie } });
     expect(admin.status).toBe(403);
+    // Research spends the model: it waits for the password like everything else (D254).
+    expect((await app.request('/research', { headers: { cookie } })).status).toBe(403);
   });
 });
 

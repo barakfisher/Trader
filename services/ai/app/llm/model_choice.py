@@ -48,6 +48,8 @@ SCOPE_FOR_PURPOSE: dict[Purpose, Scope] = {
     "agent_scan": "agent",
     # D177: an agent's own call, on the model chosen for agents.
     "mandate_check": "agent",
+    # D254: research is the assigned agent's own call, on its model.
+    "research": "agent",
     "assistant": "assistant",
 }
 

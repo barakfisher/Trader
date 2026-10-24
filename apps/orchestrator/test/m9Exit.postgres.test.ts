@@ -53,6 +53,7 @@ const NOT_A_USERS_WRITE = ['/internal', '/telegram/webhook'];
 const OMERS = {
   conversation: '<omer.conversation>',
   symbol: '<omer.symbol>',
+  agent: '<omer.agent>',
 } as const;
 
 const WRITE_BODIES: Record<string, unknown> = {
@@ -100,6 +101,8 @@ const WRITE_BODIES: Record<string, unknown> = {
   'DELETE /settings/llm-key': null,
   'PUT /settings/llm-safety-limit': { limitMicroUsd: 20_000_000 },
   'PUT /settings/llm-models/:scope': { model: 'google/gemini-3.5-flash-lite' },
+  'PUT /research/agent': { agentId: OMERS.agent },
+  'POST /research/runs': null,
   'POST /telegram/bind-token': null,
   'PUT /targets': {},
   'POST /topics': {},
@@ -111,7 +114,7 @@ const WRITE_BODIES: Record<string, unknown> = {
 };
 
 /** Writes with no id in the path that name one of Omer's in the body - so they, too, must answer "not found". */
-const NAMES_OMERS_ROW_IN_BODY = new Set(['POST /assistant/messages']);
+const NAMES_OMERS_ROW_IN_BODY = new Set(['POST /assistant/messages', 'PUT /research/agent']);
 
 interface SeededUser {
   id: string;
@@ -240,10 +243,24 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
         [user.id, agent],
       )
     ).rows[0]!.id;
+    // The agent assigned to research the main portfolio, a run and its rating (D254).
+    await pool.query(`UPDATE user_settings SET research_agent_id = $2 WHERE user_id = $1`, [user.id, agent]);
+    const research = (
+      await pool.query<{ id: string }>(
+        `INSERT INTO research_runs (user_id, agent_id, trigger, status, holdings, rated, finished_at)
+         VALUES ($1, $2, 'manual', 'done', 1, 1, now()) RETURNING id`,
+        [user.id, agent],
+      )
+    ).rows[0]!.id;
+    await pool.query(
+      `INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, status, rating, rationale)
+       VALUES ($1, $2, $3, $4, $5, 'rated', 'bullish', $6)`,
+      [research, user.id, agent, instrument, user.symbol, `${user.mark} rationale`],
+    );
     user.proposal = proposal;
     user.agent = agent;
     user.conversation = conversation;
-    user.ids.push(primary, agent, holding, topic, conversation, observation, proposal, fallback);
+    user.ids.push(primary, agent, holding, topic, conversation, observation, proposal, fallback, research);
   }
 
   beforeAll(async () => {
@@ -461,7 +478,8 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     if (body === null || body === undefined) return undefined;
     return JSON.stringify(body)
       .replaceAll(OMERS.conversation, omer.conversation)
-      .replaceAll(OMERS.symbol, omer.symbol);
+      .replaceAll(OMERS.symbol, omer.symbol)
+      .replaceAll(OMERS.agent, omer.agent);
   }
 
   it('describes every write a signed-in user can send, so a new one is not skipped (D266)', () => {

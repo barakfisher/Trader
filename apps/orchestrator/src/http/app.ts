@@ -47,6 +47,7 @@ import { registerProposalsRoutes } from './routes/proposals.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerTelegramRoutes } from '../telegram/webhook.js';
 import { registerTargetsRoutes } from './routes/targets.js';
+import { registerResearchRoutes } from './routes/research.js';
 import { registerInstructionsCheckRoutes } from './routes/instructionsCheck.js';
 import { registerTaxonomyRoutes } from './routes/taxonomy.js';
 import { registerTradesRoutes } from './routes/trades.js';
@@ -88,6 +89,8 @@ const PROTECTED_PREFIXES = [
   '/proposals',
   // The assistant's questions and the conversations they make (migration 0052).
   '/assistant',
+  // Research on the main portfolio (D254): its ratings and the paid run.
+  '/research',
   '/notifications',
   '/settings',
   // The user's own account: its reset (D162).
@@ -304,6 +307,7 @@ export function createApp(
   registerTopicsRoutes(app);
   registerTaxonomyRoutes(app);
   registerInstructionsCheckRoutes(app);
+  registerResearchRoutes(app);
   registerInternalRoutes(app);
   registerAdminRoutes(app);
   registerAdminKeysRoutes(app);

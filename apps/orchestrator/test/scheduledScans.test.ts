@@ -47,6 +47,7 @@ vi.mock('../src/db/queries.js', () => ({
   getAgent: vi.fn(async () => agentRow()),
   listActiveUserIds: vi.fn(async () => [USER]),
   listSlotAttempts: vi.fn(async () => attempts),
+  listActiveResearchAssignments: vi.fn(async () => []),
   claimRun: vi.fn(async () => ({ claimed: true, runId: 'run-1' })),
   finishRun: vi.fn(async () => undefined),
   getOrCreateUserSettings: vi.fn(async () => ({ language: 'en' })),
@@ -68,7 +69,11 @@ function fakeAi(scan: () => Promise<unknown> = async () => SCAN) {
   return {
     marketSessions: vi.fn(async () => ({ exchange: 'NMS', calendar: 'XNYS', sessions: [SESSION] })),
     scanAgent: vi.fn(scan),
-  } as never as import('@traders/shared/ai').AiClient & { scanAgent: ReturnType<typeof vi.fn> };
+    startResearch: vi.fn(async () => ({ run_id: 'research-run-1', agent_id: AGENT, holdings: 3 })),
+  } as never as import('@traders/shared/ai').AiClient & {
+    scanAgent: ReturnType<typeof vi.fn>;
+    startResearch: ReturnType<typeof vi.fn>;
+  };
 }
 
 const notifier = () => ({ channel: 'telegram', send: vi.fn(async () => ({ delivered: true })) });
@@ -246,6 +251,73 @@ describe('one attempt', () => {
     await runSlotAttempt(job, { ai, notifier: notifier(), now: () => new Date('2026-10-08T20:05:00Z') });
     expect(ai.scanAgent).not.toHaveBeenCalled();
     expect(queries.finishRun).toHaveBeenCalledWith('run-1', 'skipped', { reason: 'window_closed' });
+  });
+});
+
+describe('the daily research (D290)', () => {
+  // 2026-10-08, 21:00 UTC: 17:00 New York, inside the post-close window.
+  const AFTER_CLOSE = new Date('2026-10-08T21:00:00Z');
+  const RESEARCHER = '90000000-0000-0000-0000-0000000000b1';
+
+  it('queues one research attempt a day after the close, beside the scans', async () => {
+    vi.mocked(queries.listActiveResearchAssignments).mockResolvedValueOnce([{ user_id: USER, agent_id: RESEARCHER }]);
+    const queue = { add: vi.fn(async () => undefined) };
+    const result = await planScheduledScans({ userIds: [USER], ai: fakeAi(), queue, now: AFTER_CLOSE });
+    // The agent's pre-open slot is long past; the research's window is open.
+    expect(result).toEqual({ users: 1, agents: 1, due: 1, enqueued: 1 });
+    expect(queue.add).toHaveBeenCalledWith(`research:${RESEARCHER}:2026-10-08:1`, {
+      kind: 'research',
+      userId: USER,
+      agentId: RESEARCHER,
+      day: '2026-10-08',
+      slot: 'post_close',
+      attempt: 1,
+      until: '2026-10-09T04:00:00.000Z',
+    });
+    expect(queries.listSlotAttempts).toHaveBeenCalledWith(RESEARCHER, `research:${RESEARCHER}:2026-10-08`, 'research');
+  });
+
+  it('queues nothing before the close', async () => {
+    vi.mocked(queries.listActiveResearchAssignments).mockResolvedValueOnce([{ user_id: USER, agent_id: RESEARCHER }]);
+    vi.mocked(queries.listAgents).mockResolvedValueOnce([]);
+    const queue = { add: vi.fn(async () => undefined) };
+    expect(await planScheduledScans({ userIds: [USER], ai: fakeAi(), queue, now: NOW })).toMatchObject({ due: 0, enqueued: 0 });
+  });
+
+  const job = {
+    kind: 'research' as const,
+    userId: USER,
+    agentId: RESEARCHER,
+    day: '2026-10-08',
+    slot: 'post_close' as const,
+    attempt: 1,
+    until: '2026-10-09T04:00:00.000Z',
+  };
+
+  it('starts the run on the schedule trigger and records that it started', async () => {
+    const ai = fakeAi();
+    await runSlotAttempt(job, { ai, notifier: notifier() as never, now: () => AFTER_CLOSE });
+    expect(queries.claimRun).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'research', runKey: `research:${RESEARCHER}:2026-10-08:1`, agentId: RESEARCHER }),
+    );
+    expect(ai.startResearch).toHaveBeenCalledWith({ user_id: USER, trigger: 'schedule' });
+    expect(ai.scanAgent).not.toHaveBeenCalled();
+    expect(queries.finishRun).toHaveBeenCalledWith('run-1', 'ok', { researchRunId: 'research-run-1', holdings: 3 });
+  });
+
+  it("takes a refusal as the day's answer, and a fault as retryable", async () => {
+    for (const code of ['no_holdings', 'research_running', ...PAYER_REFUSALS]) {
+      vi.clearAllMocks();
+      const ai = fakeAi();
+      ai.startResearch.mockRejectedValueOnce(new AiServiceError(code, 409, { detail: { code, message: code } }));
+      await runSlotAttempt(job, { ai, notifier: notifier() as never, now: () => AFTER_CLOSE });
+      expect(queries.finishRun, code).toHaveBeenCalledWith('run-1', 'skipped', { reason: code });
+    }
+    vi.clearAllMocks();
+    const ai = fakeAi();
+    ai.startResearch.mockRejectedValueOnce(new AiServiceError('bad gateway', 502));
+    await runSlotAttempt(job, { ai, notifier: notifier() as never, now: () => AFTER_CLOSE });
+    expect(queries.finishRun).toHaveBeenCalledWith('run-1', 'failed', expect.objectContaining({ retryable: true }));
   });
 });
 

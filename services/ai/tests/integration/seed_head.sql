@@ -336,3 +336,23 @@ INSERT INTO model_fallbacks (id, user_id, agent_id, scope, saved_model, effectiv
   ('61000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'agent', 'acme/retired-model', 'google/gemini-3.5-flash-lite', NULL);
 INSERT INTO notifications (user_id, agent_id, channel, ref_kind, ref_id, route, reason, status, sent_at, dedupe_key) VALUES
   ('00000000-0000-0000-0000-00000000000b', '90000000-0000-0000-0000-00000000000b', 'telegram', 'model_fallback', '61000000-0000-0000-0000-000000000002', 'push', 'above_floor', 'sent', '2026-10-23T12:00:00Z', 'seed-n-model-fallback');
+-- Research (0070, D254): user a assigns its paused agent; one run per trigger and
+-- status, one rating per status and rating, a research call, and a research attempt.
+UPDATE user_settings SET research_agent_id = '90000000-0000-0000-0000-0000000000a1'
+ WHERE user_id = '00000000-0000-0000-0000-00000000000a';
+INSERT INTO research_runs (id, user_id, agent_id, trigger, status, holdings, rated, cost_micro_usd, error, finished_at) VALUES
+  ('62000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'manual', 'done', 3, 2, 3000, NULL, '2026-10-23T21:00:00Z'),
+  ('62000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', 'failed', 1, 0, 0, 'abandoned', '2026-10-23T22:00:00Z'),
+  ('62000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'schedule', 'running', 1, 0, 0, NULL, NULL);
+INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, status, rating, rationale, findings, problems, model) VALUES
+  ('62000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000001', 'EQTY', 'rated', 'bullish', 'Momentum is firm.', '["Steady news."]', '[]', 'm'),
+  ('62000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000002', 'FUND', 'rated', 'bearish', 'Flows are weak.', '[]', '[]', 'm'),
+  ('62000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000003', 'COIN-USD', 'refused', NULL, NULL, '[]', '["figures not in the evidence: 40"]', 'm'),
+  ('62000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000001', 'EQTY', 'failed', NULL, NULL, '[]', '["the model call failed: timeout"]', NULL);
+INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, status, rating, rationale) VALUES
+  ('62000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000006', 'MYST', 'rated', 'neutral', 'Mixed signals.');
+INSERT INTO llm_calls (user_id, agent_id, purpose, provider, model, outcome, latency_ms, prompt) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'research',
+   'openrouter', 'm', 'ok', 900, 'p');
+INSERT INTO runs (id, user_id, agent_id, kind, run_key, status) VALUES
+  ('20000000-0000-0000-0000-0000000000a7', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'research', 'research:seed:2026-10-23:1', 'ok');

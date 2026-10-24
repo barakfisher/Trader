@@ -18,6 +18,7 @@ import type { z } from 'zod';
 import type { components } from '../generated/ai-api.js';
 import {
   agentScanResponseSchema,
+  researchRunStartedSchema,
   mandateCheckResponseSchema,
   assistantReplySchema,
   conceptDocumentSchema,
@@ -77,6 +78,8 @@ export type OwnLlmKeyUsageState = components['schemas']['OwnLlmKeyUsageState'];
 export type AgentScanRequest = components['schemas']['AgentScanRequest'];
 export type AgentScanResponse = components['schemas']['AgentScanResponse'];
 export type AgentRecheckRequest = components['schemas']['AgentRecheckRequest'];
+export type ResearchRunRequest = components['schemas']['ResearchRunRequest'];
+export type ResearchRunStarted = components['schemas']['ResearchRunStarted'];
 export type MandateCheckResponse = components['schemas']['MandateCheckResponse'];
 export type MandateConflict = components['schemas']['MandateConflict'];
 export type AssistantMessageRequest = components['schemas']['AssistantMessageRequest'];
@@ -381,6 +384,19 @@ export class AiClient {
       agentScanResponseSchema,
       { method: 'POST', body: JSON.stringify(payload), requestId, timeoutMs: AGENT_SCAN_TIMEOUT_MS },
     );
+  }
+
+  /**
+   * Start the assigned agent's research on the main portfolio (D254): answered 202
+   * once the run is claimed; the ratings arrive in Postgres as it goes. Its
+   * refusals carry `{ detail: { code, message } }`.
+   */
+  startResearch(payload: ResearchRunRequest, requestId?: string): Promise<ResearchRunStarted> {
+    return this.request<ResearchRunStarted>('/research/runs', researchRunStartedSchema, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      requestId,
+    });
   }
 
   /**

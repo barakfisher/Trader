@@ -43,6 +43,7 @@ export const queryKeys = {
   ownLlmKey: ['settings', 'llm-key'] as const,
   keySpend: ['settings', 'llm-usage'] as const,
   modelChoices: ['settings', 'llm-models'] as const,
+  research: ['research'] as const,
   targets: ['targets'] as const,
   /** The universe's sectors, industries and ETF categories (D164). */
   taxonomy: ['universe', 'taxonomy'] as const,

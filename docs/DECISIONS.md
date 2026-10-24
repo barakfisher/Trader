@@ -299,3 +299,8 @@ while this file is out of date.
 | 286 | Telegram hears about a fallback once, when it starts |
 | 287 | M10 PR 7 is the table and the agent rows; the rebalance table (D253) is deferred |
 | 288 | The Keys tab lists the provider keys config reads, says which nothing uses, and tests only for free |
+| 289 | One agent researches the main portfolio, assigned in `user_settings.research_agent_id` |
+| 290 | Research runs daily after the US close, planned inside the 15-minute `agent_scans` ask, and on demand; a run answers 202 and rates in the background |
+| 291 | The server gathers each holding's evidence and the model is called once with it; the rationale is English |
+| 292 | A rating is shown only if it passes the form, the wording guard and the evidence validator; one retry; the agent's daily allowance pays |
+| 293 | The Sentiment column shows the assigned agent's latest rating, stale after seven days; a run rates at most 50 holdings in 15 minutes; six manual runs an hour |

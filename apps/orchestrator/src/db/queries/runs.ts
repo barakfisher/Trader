@@ -276,17 +276,21 @@ export interface SlotAttemptRow {
 
 /**
  * Every attempt at one agent's slot: the runs whose key starts with the slot's
- * key (`agent_scan:<agent>:<day>:<slot>:<n>`, migration 0048). Postgres is the
- * truth about a slot, not the queue: a restart or a lost Redis can neither
- * repeat an attempt nor forget one.
+ * key (`agent_scan:<agent>:<day>:<slot>:<n>`, migration 0048; a day's research,
+ * `research:<agent>:<day>:<n>`, 0070). Postgres is the truth about a slot, not
+ * the queue: a restart or a lost Redis can neither repeat an attempt nor forget one.
  */
-export function listSlotAttempts(agentId: string, slotKey: string): Promise<SlotAttemptRow[]> {
+export function listSlotAttempts(
+  agentId: string,
+  slotKey: string,
+  kind: 'agent_scan' | 'research' = 'agent_scan',
+): Promise<SlotAttemptRow[]> {
   return query<SlotAttemptRow>(
     `SELECT run_key, status, finished_at, stats
        FROM runs
       -- starts_with, not LIKE: '_' in the keys would be a wildcard there.
-      WHERE agent_id = $1 AND kind = 'agent_scan' AND starts_with(run_key, $2 || ':')
+      WHERE agent_id = $1 AND kind = $3 AND starts_with(run_key, $2 || ':')
       ORDER BY started_at`,
-    [agentId, slotKey],
+    [agentId, slotKey, kind],
   );
 }

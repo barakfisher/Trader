@@ -2,9 +2,10 @@
 
 Each agent has `llm_budget_micro_usd`, a daily allowance in integer micro-USD
 ($0.50 by default). Spent is the sum of its recorded calls since midnight UTC -
-its scans (`agent_scan`) and the checks of its instructions (`mandate_check`,
-D177) - `llm_calls` is already the ledger of every model call (decision 87), so
-an agent's spend is one indexed sum and no second counter can drift from it.
+its scans (`agent_scan`), the checks of its instructions (`mandate_check`,
+D177) and its research on the main portfolio (`research`, D254). `llm_calls`
+is already the ledger of every model call (decision 87), so an agent's spend
+is one indexed sum and no second counter can drift from it.
 
 Checked before every model call of a scan, not once per scan: a scan of twelve
 steps on a costly model can cross the line midway, and the check exists to stop
@@ -23,9 +24,9 @@ from datetime import UTC, datetime
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-#: The purposes an agent's daily allowance pays for (D45, D177), as SQL. The
+#: The purposes an agent's daily allowance pays for (D45, D177, D254), as SQL. The
 #: orchestrator's `AGENT_SPEND_PURPOSES` says the same.
-AGENT_PURPOSES_SQL = "('agent_scan', 'mandate_check')"
+AGENT_PURPOSES_SQL = "('agent_scan', 'mandate_check', 'research')"
 
 
 @dataclass(frozen=True)

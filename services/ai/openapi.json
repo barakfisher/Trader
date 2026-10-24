@@ -2880,6 +2880,56 @@
         "title": "RescreenResponse",
         "type": "object"
       },
+      "ResearchRunRequest": {
+        "description": "Run the assigned agent's research on the main portfolio (D254).",
+        "properties": {
+          "trigger": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "schedule"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id"
+        ],
+        "title": "ResearchRunRequest",
+        "type": "object"
+      },
+      "ResearchRunStarted": {
+        "description": "A research run has started; it finishes in the background (D290).",
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "title": "Agent Id",
+            "type": "string"
+          },
+          "holdings": {
+            "title": "Holdings",
+            "type": "integer"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "agent_id",
+          "holdings"
+        ],
+        "title": "ResearchRunStarted",
+        "type": "object"
+      },
       "ScanBenchmarkIn": {
         "description": "An index a holding's move can be set beside (decision 149).",
         "properties": {
@@ -5420,6 +5470,65 @@
         "summary": "Readyz",
         "tags": [
           "health"
+        ]
+      }
+    },
+    "/research/runs": {
+      "post": {
+        "operationId": "start_research_research_runs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResearchRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchRunStarted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Research",
+        "tags": [
+          "research"
         ]
       }
     },
