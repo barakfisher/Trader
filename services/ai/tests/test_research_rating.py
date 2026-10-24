@@ -81,6 +81,9 @@ def test_a_malformed_answer_says_why(raw: str, problem: str) -> None:
         "Time to trim.",
         "Funds kept accumulating.",
         "The price target rose.",
+        "Funds may s\u200bell.",
+        "Investors took profits.",
+        "Funds purchased shares.",
     ],
 )
 def test_the_wording_never_instructs(sentence: str) -> None:

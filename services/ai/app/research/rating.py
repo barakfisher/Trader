@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
@@ -59,6 +60,9 @@ FORBIDDEN_WORDS: tuple[str, ...] = (
     r"hold(?:s|ings?)?",
     r"trim(?:s|med|ming)?",
     r"accumulat(?:e|es|ed|ing|ion)",
+    r"purchas(?:e|es|ed|ing)",
+    r"(?:take|takes|took|taking) profits?",
+    r"reduce exposure",
     r"target price",
     r"price target",
 )
@@ -116,9 +120,18 @@ def parse_rating(raw: str) -> tuple[ParsedRating | None, list[str]]:
     return ParsedRating(rating=rating, rationale=rationale, findings=findings), []  # type: ignore[arg-type]
 
 
+def _normalized(text: str) -> str:
+    """`text` as it reads: compatibility forms folded (NFKC) and invisible format
+    characters (zero-width spaces, joiners, bidi marks) removed, so "s\u200bell"
+    is matched as the "sell" a reader sees."""
+    folded = unicodedata.normalize("NFKC", text)
+    return "".join(ch for ch in folded if unicodedata.category(ch) != "Cf")
+
+
 def forbidden_words(text: str) -> list[str]:
     """The forbidden words `text` uses, lower-cased, in order, each once."""
-    return list(dict.fromkeys(match.group(1).lower() for match in _FORBIDDEN.finditer(text)))
+    matches = _FORBIDDEN.finditer(_normalized(text))
+    return list(dict.fromkeys(match.group(1).lower() for match in matches))
 
 
 def rating_problems(parsed: ParsedRating, evidence: Mapping[str, object]) -> list[str]:

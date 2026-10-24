@@ -4405,15 +4405,20 @@ failure they prevent.
 292. **A rating is shown only if it passes the form, the wording guard and the evidence
     validator; one retry; the agent's daily allowance pays** (the assistant's recommendation under the user's overnight grant of 2026-10-23; the user may revisit; D254's guardrails 1-2).
     `app/research/rating.py` refuses any whole word of `FORBIDDEN_WORDS` (you, your, buy,
-    sell, hold/holds/holding(s), trim, accumulate, bought, sold, "target price", "price
-    target") and any figure `unsourced_figures` cannot find in the evidence; a refused answer
+    sell, hold/holds/holding(s), trim, accumulate, bought, sold, purchase, take profits,
+    "reduce exposure", "target price", "price target") and any figure `unsourced_figures` cannot find in the evidence; a refused answer
     goes back once with its reasons (`RESEARCH_ATTEMPTS = 2`), then the holding is stored
     `refused` with its problems and the previous rating stays on the Dashboard, the page
     saying the latest attempt was refused. The call's verdict is `unsourced_figures` when a
     figure failed, otherwise `malformed` (a wording failure is a broken form; `llm_calls`'
     verdict CHECK is unchanged). Research calls join `AGENT_PURPOSES_SQL` / `AGENT_SPEND_PURPOSES`:
     checked before every call, they spend the agent's daily allowance beside its scans (D45).
-    A refused key or a reached safety limit stops the run (D245, D250). *Rejected:* a softer
+    A refused key, a reached safety limit, the installation's daily ceiling or no model stops
+    the run (D245, D250). The guard folds text with NFKC and drops format characters first, so
+    a zero-width space inside "sell" does not slip through (the security review, 2026-10-24).
+    **Accepted:** a figure quoted from a news headline counts as sourced, so an injected title
+    can carry a number into a rationale; the guard still refuses instruction words around it.
+    *Rejected:* a softer
     list (an instruction slipping through costs the guardrail; a strict one costs a retry);
     a verdict value of its own (a CHECK to widen for one label).
 293. **The Sentiment column shows the assigned agent's latest rating, stale after seven days;

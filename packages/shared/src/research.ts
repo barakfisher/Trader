@@ -35,6 +35,7 @@ export const RESEARCH_STOPS = [
   'budget_reached',
   'time_limit',
   'holdings_limit',
+  'no_model',
   'own_key_required',
   'own_key_failed',
   'safety_limit_reached',

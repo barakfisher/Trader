@@ -2032,6 +2032,7 @@
       "budget_reached": "It stopped early: the agent's model budget for today was spent.",
       "time_limit": "It stopped early: the run reached its time limit.",
       "holdings_limit": "Only the first holdings were researched: a run has a limit.",
+      "no_model": "It stopped: no model could be called.",
       "own_key_required": "It stopped: there is no working API key of your own.",
       "own_key_failed": "It stopped: OpenRouter refused your saved API key.",
       "safety_limit_reached": "It stopped: your monthly safety limit was reached.",

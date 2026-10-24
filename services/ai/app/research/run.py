@@ -35,8 +35,10 @@ from app.agents.tools import ToolContext
 from app.core.logging import get_logger
 from app.llm.base import (
     Caller,
+    LLMBudgetExceededError,
     LLMError,
     LLMProvider,
+    LLMUnavailableError,
     MonthlyCapReachedError,
     OwnKeyFailedError,
     OwnKeyRequiredError,
@@ -72,6 +74,7 @@ RESEARCH_TIME_LIMIT = 900.0
 STOP_BUDGET = "budget_reached"
 STOP_TIME = "time_limit"
 STOP_HOLDINGS = "holdings_limit"
+STOP_NO_MODEL = "no_model"
 #: How a failed holding's problem begins: its call, or its sources.
 CALL_FAILED = "the model call failed"
 EVIDENCE_FAILED = "the evidence could not be read"
@@ -138,12 +141,18 @@ class _StopRun(Exception):
 
 
 def _payer_stop(error: LLMError) -> str | None:
+    """Why no further call of this run can succeed, or None for a passing fault."""
     if isinstance(error, OwnKeyRequiredError):
         return error.refusal
     if isinstance(error, OwnKeyFailedError):
         return "own_key_failed"
     if isinstance(error, MonthlyCapReachedError):
         return "safety_limit_reached"
+    # The installation's daily ceiling, or no model at all: every next call is refused too.
+    if isinstance(error, LLMBudgetExceededError):
+        return STOP_BUDGET
+    if isinstance(error, LLMUnavailableError):
+        return STOP_NO_MODEL
     return None
 
 

@@ -88,6 +88,8 @@ const PROTECTED_PREFIXES = [
   '/proposals',
   // The assistant's questions and the conversations they make (migration 0052).
   '/assistant',
+  // Research on the main portfolio (D254): its ratings and the paid run.
+  '/research',
   '/notifications',
   '/settings',
   // The user's own account: its reset (D162).

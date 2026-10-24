@@ -21,9 +21,21 @@ from app.agents.tools import scan_context
 from app.analysis.thresholds import AnalysisThresholds
 from app.corpus.hashed_embedder import HashedEmbedder
 from app.corpus.vector_store import PgVectorStore
-from app.llm.base import LLMCompletion, LLMTimeoutError, OwnKeyRequiredError, TokenUsage
+from app.llm.base import (
+    LLMCompletion,
+    LLMTimeoutError,
+    LLMUnavailableError,
+    OwnKeyRequiredError,
+    TokenUsage,
+)
 from app.research.rating import UNSOURCED_PREFIX, WORDING_PREFIX
-from app.research.run import CALL_FAILED, RESEARCH_ATTEMPTS, STOP_BUDGET, run_research
+from app.research.run import (
+    CALL_FAILED,
+    RESEARCH_ATTEMPTS,
+    STOP_BUDGET,
+    STOP_NO_MODEL,
+    run_research,
+)
 from app.research.store import (
     ABANDONED_AFTER,
     ResearchAlreadyRunningError,
@@ -229,6 +241,16 @@ async def test_a_refused_key_stops_the_run(loaded: Engine, agent: ScanAgent) -> 
     run, ratings = _rows(loaded, run_id)
     assert (run.status, run.rated, run.error) == ("done", 0, "own_key_required")
     assert ratings == []
+
+
+async def test_no_model_stops_the_run_at_its_first_call(loaded: Engine, agent: ScanAgent) -> None:
+    llm = ScriptedLLM(LLMUnavailableError("no model"))
+
+    run_id, _ = await _run(loaded, agent, llm)
+
+    run, ratings = _rows(loaded, run_id)
+    assert (run.status, run.error) == ("done", STOP_NO_MODEL)
+    assert ratings == [] and len(llm.prompts) == 1
 
 
 async def test_a_spent_allowance_stops_the_run_before_a_call(
