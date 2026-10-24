@@ -4364,6 +4364,37 @@ failure they prevent.
       `ProposalsInbox.tsx` `agentFilterFrom`), with a way back to every agent's.
     *Rejected:* building the rebalance table on the Dashboard or the Targets page now (the user
     chose to stop there for now).
+288. **The Keys tab lists the provider keys config reads, says which nothing uses, and tests only
+    for free** (the assistant's recommendation under the user's overnight grant, 2026-10-23; M10
+    PR 8, details of D251; the user may revisit).
+    - **Measured:** `config.py` reads `POLYGON`, `ALPHAVANTAGE`, `FINNHUB`, `COINGECKO`, `NEWSAPI`
+      and `ANTHROPIC` keys, but no adapter uses any of them (market data is fixture + yfinance,
+      news GDELT + Yahoo, Anthropic only through OpenRouter). They are listed as "set, but nothing
+      in this installation uses it" rather than hidden, so a set one is not mistaken for a working
+      provider and an unset one for a fault.
+    - **Rows:** the AI service's provider keys (`app/installation_keys.py`) plus the Telegram bot
+      token, which the orchestrator holds. Per row: set or not, what it serves under this
+      configuration (model calls, search embeddings, Telegram messages), why it is unused
+      (`no_adapter`, `not_chosen`), the last error a real call met, and *Test*.
+    - **Last error** comes from real use: the last installation-paid `llm_calls` row with
+      `provider_error` for OpenRouter/OpenAI, the last failed Telegram notification for the
+      token. Everything credential-shaped is masked first (`redact`, in both services), because a
+      channel's error can quote a URL with the token in it.
+    - **Test** is one free call: OpenRouter `GET /key`, OpenAI `GET /models`, Telegram `getMe`.
+      Keys with no adapter have no test. A test is a `POST` under `/admin`, so the gate audits it.
+    - **Tabs** (M10 decision 20's assumption): Users (sign-up requests, users), Models and keys
+      (model choices, keys), Operations (runs, gaps, universe, LLM calls, audit), Settings
+      (agent limit, assistant limit, sign-up). `?tab=` in the address; Users is the default.
+    - **From the security review (2026-10-24), no vulnerability; tightened:** the configured value
+      is masked word for word before the shapes (exact for any key format), the shapes add a bare
+      Telegram token, OpenAI's own masked echo and `?apikey=` in a URL, and an error is masked
+      before it is shortened. **The Telegram row counts only `HTTP ...` and `transport error ...`
+      failures:** on compose the only failed Telegram row was "this user has no Telegram chat
+      connected", which would have flagged a working token. Not done: a rate limit on *Test*
+      (admin-only, audited, one free call a press).
+    *Rejected:* hiding keys no adapter uses (an operator who set one would read its absence as a
+    bug); a test that spends quota (Polygon, Alpha Vantage, NewsAPI have no free check, and no
+    adapter to test anyway).
 289. **One agent researches the main portfolio, assigned in `user_settings.research_agent_id`**
     (the assistant's recommendation under the user's overnight grant of 2026-10-23; the user may revisit; M10 PR 9, D254's "one at a time"). A nullable column with a composite key to
     `agents(user_id, id)`, so it can only name the user's own agent, `ON DELETE SET NULL

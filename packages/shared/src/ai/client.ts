@@ -29,6 +29,8 @@ import {
   priceHistoryResponseSchema,
   instrumentResolutionSchema,
   marketCalendarStatusSchema,
+  installationKeyTestResponseSchema,
+  installationKeysResponseSchema,
   llmListedModelsResponseSchema,
   llmModelsResponseSchema,
   marketSessionsSchema,
@@ -68,6 +70,8 @@ export type MarketCalendarStatus = components['schemas']['MarketCalendarStatus']
 export type MarketSessions = components['schemas']['MarketSessions'];
 export type LlmModelsResponse = components['schemas']['LlmModelsResponse'];
 export type LlmListedModelsResponse = components['schemas']['LlmListedModelsResponse'];
+export type InstallationKeysResponse = components['schemas']['InstallationKeysResponse'];
+export type InstallationKeyTestResponse = components['schemas']['InstallationKeyTestResponse'];
 export type UserLlmModelsResponse = components['schemas']['UserLlmModelsResponse'];
 export type OwnLlmKeyState = components['schemas']['OwnLlmKeyState'];
 export type OwnLlmKeyUsageState = components['schemas']['OwnLlmKeyUsageState'];
@@ -443,6 +447,23 @@ export class AiClient {
       method: 'GET',
       requestId,
     });
+  }
+
+  /** The installation's provider keys: status, never values (D251, D288). */
+  installationKeys(requestId?: string): Promise<InstallationKeysResponse> {
+    return this.request<InstallationKeysResponse>('/installation/keys', installationKeysResponseSchema, {
+      method: 'GET',
+      requestId,
+    });
+  }
+
+  /** One free check call with a key (D251); 409 `key_not_testable` when it has none or is not set. */
+  testInstallationKey(name: string, requestId?: string): Promise<InstallationKeyTestResponse> {
+    return this.request<InstallationKeyTestResponse>(
+      `/installation/keys/${encodeURIComponent(name)}/test`,
+      installationKeyTestResponseSchema,
+      { method: 'POST', requestId },
+    );
   }
 
   /** The models a user on their own key may choose: OpenRouter's list, filtered (D283). */

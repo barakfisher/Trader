@@ -2127,4 +2127,21 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       }
     });
   });
+
+  describe("the Telegram token's last error, for the Keys tab (D288)", () => {
+    it("counts only what Telegram or the network said, never a user's missing chat", async () => {
+      const insert = (error: string, minutesAgo: number) =>
+        getPool().query(
+          `INSERT INTO notifications (user_id, agent_id, channel, ref_kind, ref_id, route, reason, status, error,
+                                      dedupe_key, created_at)
+           VALUES ($1, $2, 'telegram', 'observation', gen_random_uuid(), 'push', 'above_floor', 'failed', $3,
+                   gen_random_uuid()::text, now() - make_interval(mins => $4))`,
+          [USER, AGENT, error, minutesAgo],
+        );
+      await insert('HTTP 401: Unauthorized', 10);
+      await insert('this user has no Telegram chat connected', 1);
+      const last = await queries.lastTelegramFailure();
+      expect(last?.error).toBe('HTTP 401: Unauthorized');
+    });
+  });
 });

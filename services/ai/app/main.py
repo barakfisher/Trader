@@ -39,6 +39,7 @@ from app.routers import (
     assistant,
     concepts,
     health,
+    installation_keys,
     llm,
     market,
     narration,
@@ -149,6 +150,7 @@ app.include_router(news.router)
 app.include_router(universe.router)
 app.include_router(llm.router)
 app.include_router(own_keys.router)
+app.include_router(installation_keys.router)
 app.include_router(agents.router)
 app.include_router(assistant.router)
 app.include_router(research.router)

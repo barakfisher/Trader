@@ -26,6 +26,7 @@ import { auditEntry } from './adminAudit.js';
 import { forbidden, toErrorResponse, unauthorized, ApiProblem } from './errors.js';
 import { registerAccountRoutes } from './routes/account.js';
 import { registerAdminRoutes } from './routes/admin.js';
+import { registerAdminKeysRoutes } from './routes/adminKeys.js';
 import { registerAgentAccountRoutes } from './routes/agentAccount.js';
 import { registerAgentScanRoutes } from './routes/agentScans.js';
 import { registerAgentsRoutes } from './routes/agents.js';
@@ -309,6 +310,7 @@ export function createApp(
   registerResearchRoutes(app);
   registerInternalRoutes(app);
   registerAdminRoutes(app);
+  registerAdminKeysRoutes(app);
 
   return app;
 }

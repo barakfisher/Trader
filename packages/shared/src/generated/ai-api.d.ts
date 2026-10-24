@@ -212,6 +212,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/installation/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Installation Keys */
+        get: operations["installation_keys_installation_keys_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/installation/keys/{name}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Installation Key Test */
+        post: operations["installation_key_test_installation_keys__name__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/llm/listed": {
         parameters: {
             query?: never;
@@ -1109,6 +1143,64 @@ export interface components {
             status: "ok" | "degraded";
             /** Version */
             version: string;
+        };
+        /** InstallationKeyLastError */
+        InstallationKeyLastError: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * Message
+             * @description Redacted: nothing credential-shaped is ever returned.
+             */
+            message: string;
+        };
+        /**
+         * InstallationKeyStatus
+         * @description One provider key, as the Admin page's Keys tab shows it (D251, D288). Never its value.
+         */
+        InstallationKeyStatus: {
+            /** Is Set */
+            is_set: boolean;
+            last_error: components["schemas"]["InstallationKeyLastError"] | null;
+            /**
+             * Name
+             * @description The variable it is set in, e.g. 'OPENROUTER_API_KEY'.
+             */
+            name: string;
+            /** Provider */
+            provider: string;
+            /** Serves */
+            serves: ("llm" | "embeddings" | "market_data" | "news")[];
+            /** Testable */
+            testable: boolean;
+            /**
+             * Unused
+             * @description Why nothing here uses it now; null when something does.
+             */
+            unused: ("no_adapter" | "not_chosen") | null;
+        };
+        /** InstallationKeyTestResponse */
+        InstallationKeyTestResponse: {
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+            /**
+             * Detail
+             * @description What the provider said on a failure, redacted.
+             */
+            detail: string | null;
+            /** Ok */
+            ok: boolean;
+        };
+        /** InstallationKeysResponse */
+        InstallationKeysResponse: {
+            /** Keys */
+            keys: components["schemas"]["InstallationKeyStatus"][];
         };
         /** Instrument */
         Instrument: {
@@ -2780,6 +2872,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    installation_keys_installation_keys_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallationKeysResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    installation_key_test_installation_keys__name__test_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallationKeyTestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -412,6 +412,26 @@ export const assistantReplySchema = z.object({
   steps: z.number().int(),
 });
 
+export const installationKeysResponseSchema = z.object({
+  keys: z.array(
+    z.object({
+      name: z.string(),
+      provider: z.string(),
+      is_set: z.boolean(),
+      serves: z.array(z.enum(['llm', 'embeddings', 'market_data', 'news'])),
+      unused: z.enum(['no_adapter', 'not_chosen']).nullable(),
+      testable: z.boolean(),
+      last_error: z.object({ at: z.string(), message: z.string() }).nullable(),
+    }),
+  ),
+});
+
+export const installationKeyTestResponseSchema = z.object({
+  ok: z.boolean(),
+  detail: z.string().nullable(),
+  checked_at: z.string(),
+});
+
 export const llmListedModelsResponseSchema = z.object({
   choosable: z.boolean(),
   live: z.boolean(),
@@ -542,6 +562,12 @@ export type _AssertMandateCheckResponse = Expect<
 >;
 export type _AssertAssistantReply = Expect<
   Equal<z.infer<typeof assistantReplySchema>, Schemas['AssistantReply']>
+>;
+export type _AssertInstallationKeys = Expect<
+  Equal<z.infer<typeof installationKeysResponseSchema>, Schemas['InstallationKeysResponse']>
+>;
+export type _AssertInstallationKeyTest = Expect<
+  Equal<z.infer<typeof installationKeyTestResponseSchema>, Schemas['InstallationKeyTestResponse']>
 >;
 export type _AssertLlmListedModels = Expect<
   Equal<z.infer<typeof llmListedModelsResponseSchema>, Schemas['LlmListedModelsResponse']>

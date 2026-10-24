@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { observer } from 'mobx-react-lite';
+import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ShieldCheck } from 'lucide-react';
 
 import {
@@ -25,6 +26,7 @@ import type {
 import { errorMessage } from '../api/client.ts';
 import { formatNumber } from '../i18n/format.ts';
 import { t as translate, useTranslation } from '../i18n/index.ts';
+import { AdminKeysCard } from '../components/AdminKeysCard.tsx';
 import { Button, Card, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
 import {
   LLM_WINDOWS,
@@ -80,10 +82,27 @@ const STATUS_TONE: Record<string, string> = {
  * the server refuses every `/admin/*` request from one (decision 83), and this
  * page would show that refusal as an error rather than any data.
  */
+/**
+ * The page's four tabs (M10 decision 20): who uses the installation, which
+ * models and keys it runs on, what its scheduled work did, and its settings.
+ * The tab is in the address (`?tab=`), so a link opens it.
+ */
+export const ADMIN_TABS = ['users', 'models', 'operations', 'settings'] as const;
+export type AdminTab = (typeof ADMIN_TABS)[number];
+
+export function adminTabFrom(search: unknown): AdminTab {
+  const value = ((search ?? {}) as Record<string, unknown>).tab;
+  return (ADMIN_TABS as readonly unknown[]).includes(value) ? (value as AdminTab) : 'users';
+}
+
 export const AdminPage = observer(function AdminPage() {
   const { auth } = useStore();
   const { t } = useTranslation();
   const isAdmin = auth.user?.role === 'admin';
+  const navigate = useNavigate();
+  const tab = adminTabFrom(useSearch({ strict: false }));
+  const setTab = (next: AdminTab) =>
+    void navigate({ to: '/admin', search: { tab: next === 'users' ? undefined : next }, replace: true });
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 sm:p-6">
@@ -96,17 +115,50 @@ export const AdminPage = observer(function AdminPage() {
 
       {isAdmin ? (
         <>
-          <SignupRequestsCard />
-          <UsersCard />
-          <UniverseCard />
-          <GapsCard />
-          <ModelsCard />
-          <AgentLimitCard />
-          <AssistantLimitCard />
-          <SignupSettingsCard />
-          <LlmCard />
-          <RunsCard />
-          <AuditCard />
+          <div role="tablist" className="flex gap-2 overflow-x-auto border-b border-border-subtle">
+            {ADMIN_TABS.map((name) => (
+              <button
+                key={name}
+                role="tab"
+                type="button"
+                aria-selected={tab === name}
+                onClick={() => setTab(name)}
+                className={`-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm ${
+                  tab === name ? 'border-accent text-text-primary' : 'border-transparent text-text-muted'
+                }`}
+              >
+                {t(`admin.tabs.${name}`)}
+              </button>
+            ))}
+          </div>
+          {tab === 'users' && (
+            <>
+              <SignupRequestsCard />
+              <UsersCard />
+            </>
+          )}
+          {tab === 'models' && (
+            <>
+              <ModelsCard />
+              <AdminKeysCard />
+            </>
+          )}
+          {tab === 'operations' && (
+            <>
+              <RunsCard />
+              <GapsCard />
+              <UniverseCard />
+              <LlmCard />
+              <AuditCard />
+            </>
+          )}
+          {tab === 'settings' && (
+            <>
+              <AgentLimitCard />
+              <AssistantLimitCard />
+              <SignupSettingsCard />
+            </>
+          )}
         </>
       ) : (
         <EmptyState
@@ -826,7 +878,7 @@ function ScopePicker({
           value={value}
           disabled={!data.choosable || offered.length === 0}
           onChange={(event) => onChange(event.target.value)}
-          className="input w-auto"
+          className="input w-auto max-w-full min-w-0"
         >
           {value === '' && (
             <option value="" disabled>

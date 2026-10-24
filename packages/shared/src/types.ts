@@ -1252,6 +1252,37 @@ export interface LlmModelChoiceInput {
   model: string;
 }
 
+// --- The Admin page's Keys tab (D251, D288) ----------------------------------
+
+/** What a provider key serves here; `telegram` is the orchestrator's own. */
+export type InstallationKeyServes = 'llm' | 'embeddings' | 'market_data' | 'news' | 'telegram';
+
+/** One provider key: status, never its value. */
+export interface InstallationKeyView {
+  /** The variable it is set in, e.g. `OPENROUTER_API_KEY`. */
+  name: string;
+  provider: string;
+  isSet: boolean;
+  serves: InstallationKeyServes[];
+  /** Why nothing uses it now; null when something does. */
+  unused: 'no_adapter' | 'not_chosen' | null;
+  testable: boolean;
+  /** The last error a real call met, redacted; null when none is recorded. */
+  lastError: { at: string; message: string } | null;
+}
+
+/** `GET /admin/keys`. */
+export interface InstallationKeysView {
+  keys: InstallationKeyView[];
+}
+
+/** `POST /admin/keys/:name/test`. */
+export interface InstallationKeyTestView {
+  ok: boolean;
+  detail: string | null;
+  checkedAt: string;
+}
+
 // --- A user's own model choice (M10 PR 6, D244, D283-D286) -------------------
 
 /** The two scopes a user chooses beside each agent: Ask, and explanations (narration). */

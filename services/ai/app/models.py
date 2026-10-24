@@ -945,6 +945,35 @@ class UserLlmModelsResponse(BaseModel):
     agents: list[AgentLlmModel] = Field(description="Every agent that scans, oldest first.")
 
 
+class InstallationKeyLastError(BaseModel):
+    at: datetime
+    message: str = Field(description="Redacted: nothing credential-shaped is ever returned.")
+
+
+class InstallationKeyStatus(BaseModel):
+    """One provider key, as the Admin page's Keys tab shows it (D251, D288). Never its value."""
+
+    name: str = Field(description="The variable it is set in, e.g. 'OPENROUTER_API_KEY'.")
+    provider: str
+    is_set: bool
+    serves: list[Literal["llm", "embeddings", "market_data", "news"]]
+    unused: Literal["no_adapter", "not_chosen"] | None = Field(
+        description="Why nothing here uses it now; null when something does."
+    )
+    testable: bool
+    last_error: InstallationKeyLastError | None
+
+
+class InstallationKeysResponse(BaseModel):
+    keys: list[InstallationKeyStatus]
+
+
+class InstallationKeyTestResponse(BaseModel):
+    ok: bool
+    detail: str | None = Field(description="What the provider said on a failure, redacted.")
+    checked_at: datetime
+
+
 class AgentScanRequest(BaseModel):
     """Run one scan of a simulated agent now (Stage 4, D15)."""
 

@@ -65,6 +65,7 @@ const WRITE_BODIES: Record<string, unknown> = {
   'POST /admin/users/:userId/disable': null,
   'POST /admin/users/:userId/enable': null,
   'POST /admin/users/:userId/one-time-password': null,
+  'POST /admin/keys/:name/test': null,
   'PUT /admin/llm/models/:scope': { model: 'test/model' },
   'PUT /admin/settings': {},
   'POST /agents': {},
