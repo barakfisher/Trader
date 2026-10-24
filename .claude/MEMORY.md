@@ -4,7 +4,28 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-23 - **Handoff by count, five merges since #295: M10 PRs 3-5 are merged and
+Updated: 2026-10-24 - **Handoff by count, five merges since #302: M10 PRs 6-9 and M11 B are
+merged and live.**
+- **Merges since #302:**
+  - #304, M11 B: deciding from `/pending` (D282), another session's;
+  - #305, PR 6: model choice from OpenRouter's live list (D244, D283-D286; migration `0069`);
+  - #306, PR 7: sortable holdings tables, P&L in $ and %, agent row actions (D252, D287);
+  - #307, PR 8: the Admin page in four tabs and the Keys tab (D251, D288);
+  - #308, PR 9: research on the main portfolio and the Sentiment column (D254, D289-D293;
+    migration `0070`).
+- **Decisions reached 293** (next: **294**). D283-D293 were taken under the user's overnight
+  grant (2026-10-23 evening to 2026-10-24 07:00) as the assistant's recommendations; the user
+  may revisit any of them.
+- **Migrations:** `0070_holding_research` is head; next free is `0071`.
+- **Deployed:** compose and kind both run `5f79375` (#308) at `0070`, redeployed 2026-10-24
+  ~09:00 UTC after backups (`~/Backups/traders/*/traders-*-20261024T0855*Z.dump`). Both readyz
+  200.
+- **There is no standing grant.** The overnight grant ended at 07:00 2026-10-24; #307 and #308
+  were merged and redeployed on the user's own words afterwards. Ask before each PR, merge only
+  on "merge", redeploy only on "redeploy".
+- **Next:** "Next session: after M10 PR 9".
+
+Previous update, 2026-10-23 - **Handoff by count, five merges since #295: M10 PRs 3-5 are merged and
 live; M11 A1-A2 landed beside them from another session.**
 - **Merges since #295:**
   - #297 and #299, M11 A1-A2 (the Telegram menu and agent controls; D269-D278), another session's;
@@ -5747,6 +5768,85 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after M10 PR 9 (written 2026-10-24)
+
+**State:** M10 PRs 1-9 of D267's sixteen are merged and live, except PR 7's rebalance table
+(D253, deferred by the user, D287). **Every remaining M10 PR needs the user before it starts:**
+- **10, email** (verification and the sign-up modes; D258, D259, D243) and **11, password reset**
+  (D260): each needs a new package and an email provider. "Ask before adding a dependency"
+  stands under every grant.
+- **12, sessions** (D261): no new package is known to be needed. It is the only one that could
+  start on a plain "go".
+- **13, OAuth and linking** (D262, D263): a new package and an OAuth provider registration.
+- **14, deletion and export** (D264).
+- **15, legal pages and consent** (D265): the text is the user's, or a lawyer's. D254's residual
+  risk (are Bullish/Bearish ratings advice for strangers?) belongs to the same review.
+- **16, deployment to the rented host** (D255): the user's host and domain.
+
+**Decisions of PRs 6-9 that a later PR must not undo** (full text under each number):
+- **Model choice (D283-D286):** a non-admin user runs on their own pick from OpenRouter's live
+  list, priced by that list. A model that leaves the list falls back to `TESTED_MODELS[0]`
+  (Flash-Lite) and says so once on Telegram (`model_fallbacks`, 0069). *Rejected:* the fixed
+  five-model catalogue; refusing until the user chooses again.
+- **The Keys tab (D288):** status, never values; a *Test* is one free call; the last error is
+  masked before it is shown. *Rejected:* entering keys in the app (D251).
+- **Research (D289-D293):**
+  - One assigned agent per user (`user_settings.research_agent_id`, composite key).
+  - Daily after the close as an attempt in the existing `agent_scans` plan (runs kind
+    `research`, no CronJob), plus on demand; the run answers 202 and rates in the background.
+  - One call per holding over server-gathered evidence; the rationale in English.
+  - A whole-word wording guard plus the evidence validator, with one retry.
+  - Stale after 7 days.
+  - *Rejected:* the scan's tool loop (twelve calls a holding); the user's language (the guard
+    cannot be enforced on Hebrew, which attaches prepositions to words); a CronJob of its own.
+
+**Lessons from this stretch:**
+- **Decision numbers collide when two PRs decide at once, and the index test enforces the
+  order.** #308 took 289-293 while #307 held 288. `test_decision_index` refuses a gap, so #308
+  stayed red until #307 merged and `main` was merged in. Renumbering would have collided with
+  #307 instead. Take numbers after every open PR's, and merge in number order.
+- **The throwaway stack for a browser check:**
+  - `pgvector/pgvector:pg16` on 55491 and `redis:7-alpine` on 56391;
+  - `createdb traders_pr9`, then `scripts/migrate.py` with `APP_DB_PASSWORD=traders_app`;
+  - an admin made by `pnpm admin:password` with a generated password kept in the scratchpad;
+  - the AI service (`LLM_PROVIDER=null`, fixture providers), the orchestrator
+    (`SCHEDULER_ENABLED=false`) and vite (`API_PROXY_TARGET`) in `.claude/launch.json` on
+    8093/8094/5189 (the file is in `info/exclude`);
+  - **localhost, never 127.0.0.1**, which carries the user's real session;
+  - seed the rows to look at with `docker exec -i ... psql`.
+- **CI's integration and orchestrator suites share one database.** The Python suite runs first,
+  then `queries.postgres` as `traders_app` on what it left. A test that takes "the user's first
+  holding" or forgets to delete its agents passes locally and fails there. Find your own rows by
+  id, and clean up in `finally`: `agent_cash` does not cascade from `users`, so a simulated
+  agent left behind blocks the user's delete in `afterAll`.
+- **An integration test must leave no admin behind** (PR 8's lesson): the next suite's
+  admin-only assumptions break.
+- **macOS `sed` has no `\b`**: use Python for word-bounded edits.
+- **A Latin name beside a Hebrew date reorders on an RTL page.** "Analyst, 24 Oct" in Hebrew
+  needed FSI..PDI around each placeholder (`SentimentBadge.tsx` `byOn`). As with D281's ratio,
+  it was found only in the browser.
+- **The session gate's `PROTECTED_PREFIXES` is a list a new route must join.** `/research` was
+  missing, so a user who still had to change a one-time password could start paid runs. The
+  security review caught it. `/narration` and `/universe` may have the same gap (unverified).
+- **The local clock can be far from what you think.** The overnight session believed it was
+  just after midnight when it was 09:26; read `TZ=Asia/Jerusalem date` before acting on a
+  time-boxed grant.
+
+**Debt, as consequences:**
+- **Research has never met a real model.** How often Flash-Lite's ratings pass the wording
+  guard and the figure check is unmeasured. A low pass rate shows as "the latest attempt was
+  refused" on every holding. Measure on the first real runs (`research_ratings.status`,
+  `problems`) before tuning the prompt or the word list.
+- The scheduled research path is unit-tested only. Its first real run is the first trading day
+  after an assignment, where `ENABLE_SCHEDULED_SCANS=true`.
+- The account reset does not name the research tables. They go with the agents (cascade), and
+  `research_agent_id` is cleared, but a reset that keeps agents keeps their ratings.
+- The Sentiment column is not sortable.
+- Ask has no tool to read the research: "what does my agent think of CCJ" is not answered from
+  the ratings.
+- Telegram's new sentences (payer refusals, the fallback notice) and M11's menu still owe the
+  user's phone check.
 
 ### Next session: M10 PR 6 (written 2026-10-23)
 
