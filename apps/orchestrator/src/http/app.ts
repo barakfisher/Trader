@@ -19,12 +19,14 @@ import type { Notifier } from '../notify/notifier.js';
 
 import type { Config } from '../config.js';
 import { logger } from '../logger.js';
-import { SESSION_COOKIE, verifySessionToken } from './auth.js';
+import { SESSION_COOKIE, sessionTokenHash, verifySessionToken } from './auth.js';
+import { SESSION_TOUCH_INTERVAL_SECONDS } from './sessions.js';
 import { memoryRateLimits, type RateLimits } from './rateLimits.js';
-import { getUser, insertAdminAudit, type UserRow } from '../db/queries.js';
+import { getSessionUser, insertAdminAudit, type UserRow } from '../db/queries.js';
 import { auditEntry } from './adminAudit.js';
 import { forbidden, toErrorResponse, unauthorized, ApiProblem } from './errors.js';
 import { registerAccountRoutes } from './routes/account.js';
+import { registerAccountSessionRoutes } from './routes/accountSessions.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerAdminKeysRoutes } from './routes/adminKeys.js';
 import { registerAgentAccountRoutes } from './routes/agentAccount.js';
@@ -59,6 +61,8 @@ export interface AppEnv {
     userId?: string;
     /** The signed-in user, read once per request by the session middleware (D160). */
     user?: UserRow;
+    /** The session the request came in on (D261): signing out deletes it. */
+    sessionId?: string;
     config: Config;
     ai: AiClient;
     notifier: Notifier;
@@ -93,7 +97,7 @@ const PROTECTED_PREFIXES = [
   '/research',
   '/notifications',
   '/settings',
-  // The user's own account: its reset (D162).
+  // The user's own account: its reset (D162) and its signed-in devices (D261).
   '/account',
   // Named individually, not as '/telegram': POST /telegram/webhook is called by
   // Telegram and must stay unauthenticated - it proves itself with the secret
@@ -197,19 +201,26 @@ export function createApp(
 
   /**
    * Resolve the session for every request; individual routes decide if it is
-   * required. A valid cookie is not enough (D160): the user is read by primary
-   * key and the session holds only while they are `active` and their
-   * `session_version` is still the cookie's, so disabling a user or changing a
+   * required. A valid cookie is not enough (D160, D261): the session's row is
+   * read with its user in one lookup, and it holds only while the row exists
+   * and has not expired, the user is `active` and their `session_version` is
+   * still the cookie's. So signing out, disabling a user or changing a
    * password ends a session on its next request. A request without a cookie
    * costs no read.
    */
   app.use('*', async (context, next) => {
     const claim = verifySessionToken(getCookie(context, SESSION_COOKIE), config.SESSION_SECRET);
     if (claim) {
-      const user = await getUser(claim.userId);
-      if (user && user.status === 'active' && user.session_version === claim.sessionVersion) {
+      const found = await getSessionUser(
+        claim.userId,
+        sessionTokenHash(claim.secret),
+        SESSION_TOUCH_INTERVAL_SECONDS,
+      );
+      if (found && found.status === 'active' && found.session_version === claim.sessionVersion) {
+        const { session_id: sessionId, ...user } = found;
         context.set('userId', user.id);
         context.set('user', user);
+        context.set('sessionId', sessionId);
       }
     }
     return next();
@@ -288,6 +299,7 @@ export function createApp(
   registerHealthRoutes(app);
   registerAuthRoutes(app);
   registerAccountRoutes(app);
+  registerAccountSessionRoutes(app);
   registerPortfolioRoutes(app);
   registerHoldingsRoutes(app);
   registerAgentsRoutes(app);

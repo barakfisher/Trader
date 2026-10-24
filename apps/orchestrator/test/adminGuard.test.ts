@@ -30,6 +30,7 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
+  getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
   getUser: vi.fn(async () => ADMIN),
   // Read by the session (its language), at sign-in.
   getOrCreateUserSettings: vi.fn(async () => ({ language: 'en' })),

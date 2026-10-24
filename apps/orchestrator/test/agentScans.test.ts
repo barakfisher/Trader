@@ -52,6 +52,7 @@ vi.mock('../src/db/queries.js', () => ({
     id: 'i-intc', symbol: 'INTC', name: 'Intel', asset_class: 'equity', exchange: 'NMS', currency: 'USD', membership: 'screened',
   })),
   createTradeProposal: vi.fn(async () => ({ proposalId: 'p-trade', observationId: 'o-trade' })),
+  getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
   getUser: vi.fn(async () => USER),
   getOrCreateUserSettings: vi.fn(async () => ({
     notify_severity: 'high',

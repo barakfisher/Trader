@@ -28,6 +28,11 @@ export const LoginPage = observer(function LoginPage() {
           <SignupForm onBack={() => setJoining(false)} />
         ) : (
           <>
+            {auth.sessionEndedNotice && (
+              <p role="status" className="rounded-lg border border-border-subtle bg-surface-raised p-3 text-sm">
+                {t('login.sessionEnded')}
+              </p>
+            )}
             <p className="text-sm text-text-muted">{t('login.intro')}</p>
 
             <form

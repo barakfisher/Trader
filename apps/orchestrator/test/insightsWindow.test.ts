@@ -34,7 +34,9 @@ const queries = vi.hoisted(() => ({
   markInsightsSeen: vi.fn(async (_userId: string, upTo: Date): Promise<Date | null> => upTo),
 }));
 
-vi.mock('../src/db/queries.js', () => ({ getUser: vi.fn(async () => USER), ...queries }));
+vi.mock('../src/db/queries.js', () => ({
+  getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
+  getUser: vi.fn(async () => USER), ...queries }));
 
 const { INSIGHTS_DAYS, isWindowDay, shiftDay, windowDays } = await import(
   '../src/services/insightsWindow.js'

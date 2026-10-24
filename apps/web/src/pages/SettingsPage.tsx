@@ -5,6 +5,7 @@ import { AtSign, BellOff, KeyRound, Settings as SettingsIcon } from 'lucide-reac
 import { SAFETY_LIMIT_CEILING_MICRO_USD, type MonthlySpend } from '@traders/shared';
 
 import { AccountResetCard } from '../components/AccountResetCard.tsx';
+import { DevicesCard } from '../components/DevicesCard.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Drawer } from '../components/Drawer.tsx';
 import { EmailChange } from '../components/EmailChange.tsx';
@@ -301,6 +302,8 @@ export const SettingsPage = observer(function SettingsPage() {
           <UserModelsCard />
 
           <SignInCard />
+
+          <DevicesCard />
 
           <div className="flex flex-wrap items-center justify-end gap-3">
             {settings.blockingIssue && (

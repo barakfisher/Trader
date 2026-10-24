@@ -57,7 +57,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       const email = `${USER.slice(0, 8)}@Example.com`;
       await getPool().query('UPDATE users SET email = $2 WHERE id = $1', [USER, email]);
       const found = await queries.getUserCredentialsByEmail(email.toLowerCase());
-      expect(found).toEqual({ id: USER, status: 'active', password_hash: null });
+      expect(found).toEqual({ id: USER, status: 'active', password_hash: null, session_version: expect.any(Number) });
       expect(await queries.getUserCredentialsByEmail(`nobody-${USER}@example.com`)).toBeNull();
     });
 
@@ -2125,6 +2125,124 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         await pool.query('DELETE FROM agents WHERE id = ANY($1::uuid[])', [[analyst, archived]]);
         await pool.query('DELETE FROM users WHERE id = $1', [other]);
       }
+    });
+  });
+
+  describe('sessions (0071, D261)', async () => {
+    const { sessionTokenHash } = await import('../src/http/auth.js');
+    const TTL_HOURS = 1;
+    const TOUCH_SECONDS = 300;
+
+    /** A user of its own, so ending "every session" ends nothing of USER's. */
+    async function withUser<T>(fn: (userId: string) => Promise<T>): Promise<T> {
+      const userId = randomUUID();
+      await getPool().query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 0)", [userId]);
+      try {
+        return await fn(userId);
+      } finally {
+        await getPool().query('DELETE FROM users WHERE id = $1', [userId]);
+      }
+    }
+
+    async function signIn(userId: string, secret = randomUUID()): Promise<{ id: string; hash: Buffer }> {
+      const hash = sessionTokenHash(secret);
+      const created = await queries.createSession({ userId, tokenHash: hash, ttlHours: TTL_HOURS, userAgent: 'UA', ipAddress: '203.0.113.7' });
+      return { id: created.id, hash };
+    }
+
+    const sessionIds = async (userId: string) => (await queries.listSessions(userId)).map((row) => row.id).sort();
+
+    it("reads the session with its user, only by the right hash and the cookie's user", async () => {
+      await withUser(async (userId) => {
+        const session = await signIn(userId);
+        const found = await queries.getSessionUser(userId, session.hash, TOUCH_SECONDS);
+        expect(found).toMatchObject({ id: userId, status: 'active', session_id: session.id });
+        expect(await queries.getSessionUser(userId, sessionTokenHash('another secret'), TOUCH_SECONDS)).toBeNull();
+        expect(await queries.getSessionUser(USER, session.hash, TOUCH_SECONDS)).toBeNull();
+        const { rows } = await getPool().query('SELECT expires_at - created_at AS ttl FROM user_sessions WHERE id = $1', [session.id]);
+        expect(rows[0]!.ttl).toMatchObject({ hours: TTL_HOURS });
+      });
+    });
+
+    it('moves last seen only once the touch interval has passed', async () => {
+      await withUser(async (userId) => {
+        const session = await signIn(userId);
+        const lastSeen = async () =>
+          (await getPool().query('SELECT last_seen_at FROM user_sessions WHERE id = $1', [session.id])).rows[0]!.last_seen_at as Date;
+        const stale = new Date(Date.now() - (TOUCH_SECONDS + 60) * 1000);
+        await getPool().query('UPDATE user_sessions SET last_seen_at = $2 WHERE id = $1', [session.id, stale]);
+        await queries.getSessionUser(userId, session.hash, TOUCH_SECONDS);
+        const touched = await lastSeen();
+        expect(touched.getTime()).toBeGreaterThan(stale.getTime());
+        const recent = new Date(Date.now() - 60 * 1000);
+        await getPool().query('UPDATE user_sessions SET last_seen_at = $2 WHERE id = $1', [session.id, recent]);
+        await queries.getSessionUser(userId, session.hash, TOUCH_SECONDS);
+        expect((await lastSeen()).getTime()).toBe(recent.getTime());
+      });
+    });
+
+    it('refuses, lists and sweeps an expired session as gone', async () => {
+      await withUser(async (userId) => {
+        const live = await signIn(userId);
+        const expired = await signIn(userId);
+        await getPool().query(
+          "UPDATE user_sessions SET created_at = now() - interval '2 days', expires_at = now() - interval '1 second' WHERE id = $1",
+          [expired.id],
+        );
+        expect(await queries.getSessionUser(userId, expired.hash, TOUCH_SECONDS)).toBeNull();
+        expect(await sessionIds(userId)).toEqual([live.id]);
+        expect(await queries.deleteExpiredSessions()).toBeGreaterThanOrEqual(1);
+        const { rows } = await getPool().query('SELECT id FROM user_sessions WHERE user_id = $1', [userId]);
+        expect(rows.map((row) => row.id)).toEqual([live.id]);
+      });
+    });
+
+    it("ends one session, never another user's, and all but one on request", async () => {
+      await withUser(async (userId) => {
+        const [first, second, third] = [await signIn(userId), await signIn(userId), await signIn(userId)];
+        const others = await signIn(USER);
+        expect(await queries.deleteSession(userId, others.id)).toBe(false);
+        expect(await queries.deleteSession(userId, first.id)).toBe(true);
+        expect(await queries.getSessionUser(userId, first.hash, TOUCH_SECONDS)).toBeNull();
+        const expired = await signIn(userId);
+        await getPool().query(
+          "UPDATE user_sessions SET created_at = now() - interval '2 days', expires_at = now() - interval '1 second' WHERE id = $1",
+          [expired.id],
+        );
+        // Third and the expired one go; only third was live, so only third is counted.
+        expect(await queries.deleteOtherSessions(userId, second.id)).toBe(1);
+        expect(await sessionIds(userId)).toEqual([second.id]);
+        expect(await queries.getSessionUser(userId, third.hash, TOUCH_SECONDS)).toBeNull();
+        expect(await sessionIds(USER)).toContain(others.id);
+        await queries.deleteSession(USER, others.id);
+      });
+    });
+
+    it('ends every session in the same statement as a password, email, status or one-time password change', async () => {
+      await withUser(async (userId) => {
+        const changes: [string, () => Promise<unknown>][] = [
+          ['password', () => queries.changePassword(userId, '$argon2id$v=19$m=19456,t=2,p=1$x')],
+          ['email', () => queries.changeEmail(userId, `${userId}@example.com`)],
+          ['one-time password', () => queries.setOneTimePassword(userId, '$argon2id$v=19$m=19456,t=2,p=1$y')],
+          ['disable', () => queries.setUserStatus(userId, 'active', 'disabled')],
+        ];
+        for (const [name, change] of changes) {
+          await signIn(userId);
+          await signIn(userId);
+          await change();
+          const { rows } = await getPool().query('SELECT count(*)::int AS n FROM user_sessions WHERE user_id = $1', [userId]);
+          expect(rows[0]!.n, name).toBe(0);
+        }
+      });
+    });
+
+    it('ends nothing when the change does not apply', async () => {
+      await withUser(async (userId) => {
+        const session = await signIn(userId);
+        // Not disabled, so there is nothing to enable.
+        expect(await queries.setUserStatus(userId, 'disabled', 'active')).toBeNull();
+        expect(await sessionIds(userId)).toEqual([session.id]);
+      });
     });
   });
 

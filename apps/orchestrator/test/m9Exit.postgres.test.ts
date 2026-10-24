@@ -20,13 +20,18 @@
  * later is fingerprinted without editing this file either. Telegram is tried
  * the same way: a tap on the other user's proposal and a question, both from
  * this user's chat.
+ *
+ * Sessions are real rows (D261): each write is sent on a session of its own,
+ * because two of them - signing out and signing out the other devices - end
+ * the sessions they are sent on, which would turn every later write into a
+ * 401 that proves nothing.
  */
 
 import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { TEST_SESSION_SECRET, sessionCookie } from './session.js';
+import { TEST_SESSION_SECRET } from './session.js';
 import { memoryRateLimits } from '../src/http/rateLimits.js';
 
 const DATABASE_URL = process.env.TEST_DATABASE_URL ?? '';
@@ -58,6 +63,8 @@ const OMERS = {
 
 const WRITE_BODIES: Record<string, unknown> = {
   'POST /account/reset': {},
+  'DELETE /account/sessions/:id': null,
+  'POST /account/sessions/sign-out-others': null,
   'POST /admin/signups/:userId/approve': {},
   'POST /admin/signups/:userId/reject': null,
   'POST /admin/signups/:userId/restore': null,
@@ -148,6 +155,30 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
   const { createApp } = await import('../src/http/app.js');
   const { createFakeAi } = await import('./fakeAi.js');
   const { AiServiceError } = await import('@traders/shared/ai');
+  const { createSessionToken, newSessionSecret, sessionTokenHash, SESSION_COOKIE } = await import('../src/http/auth.js');
+  const { createSession } = await import('../src/db/queries.js');
+
+  /** A new signed-in session for `userId`: its row, and the cookie that names it (D261). */
+  async function signIn(userId: string): Promise<{ id: string; cookie: string }> {
+    const secret = newSessionSecret();
+    const session = await createSession({
+      userId,
+      tokenHash: sessionTokenHash(secret),
+      ttlHours: 1,
+      userAgent: 'm9Exit',
+      ipAddress: null,
+    });
+    const { rows } = await getPool().query<{ session_version: number }>('SELECT session_version FROM users WHERE id = $1', [userId]);
+    const token = createSessionToken(
+      { secret, userId, sessionVersion: rows[0]!.session_version },
+      TEST_SESSION_SECRET,
+      session.expires_at,
+    );
+    return { id: session.id, cookie: `${SESSION_COOKIE}=${token}` };
+  }
+
+  /** Dana's session for the reads, made in `beforeAll`. */
+  let danasCookie = '';
 
   const run = randomUUID().slice(0, 8);
   const dana = newUser(`DANA-${run}`);
@@ -257,10 +288,12 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
        VALUES ($1, $2, $3, $4, $5, 'rated', 'bullish', $6)`,
       [research, user.id, agent, instrument, user.symbol, `${user.mark} rationale`],
     );
+    // A signed-in device (D261): its id is one more of the user's to ask with.
+    const session = await signIn(user.id);
     user.proposal = proposal;
     user.agent = agent;
     user.conversation = conversation;
-    user.ids.push(primary, agent, holding, topic, conversation, observation, proposal, fallback, research);
+    user.ids.push(primary, agent, holding, topic, conversation, observation, proposal, fallback, research, session.id);
   }
 
   beforeAll(async () => {
@@ -273,6 +306,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
       `INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'disabled', 0)`,
       [disabled],
     );
+    danasCookie = (await signIn(dana.id)).cookie;
     resetConfigForTests();
     app = createApp(
       loadConfig({
@@ -368,7 +402,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
   }
 
   async function read(path: string): Promise<{ status: number; text: string }> {
-    const response = await app.request(path, { headers: { cookie: sessionCookie(dana.id) } });
+    const response = await app.request(path, { headers: { cookie: danasCookie } });
     return { status: response.status, text: await response.text() };
   }
 
@@ -435,8 +469,19 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
   });
 
   it("refuses a disabled user's session at once (D160, D239)", async () => {
-    const response = await app.request('/portfolio', { headers: { cookie: sessionCookie(disabled) } });
+    // A row the disable did not delete - as if it had been written directly -
+    // still opens nothing: the status is checked on every request.
+    const { cookie } = await signIn(disabled);
+    const response = await app.request('/portfolio', { headers: { cookie } });
     expect(response.status).toBe(401);
+  });
+
+  it("ends a session for good when it signs out - a copied cookie included (D261)", async () => {
+    const { cookie } = await signIn(dana.id);
+    expect((await app.request('/portfolio', { headers: { cookie } })).status).toBe(200);
+    const out = await app.request('/auth/logout', { method: 'POST', headers: { cookie, origin: 'http://localhost:5173' } });
+    expect(out.status).toBe(200);
+    expect((await app.request('/portfolio', { headers: { cookie } })).status).toBe(401);
   });
   /** Every route a signed-in user could send a write to, as `METHOD path`. */
   function userWrites(): string[] {
@@ -498,10 +543,11 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
       const expected = path.startsWith('/admin') ? 403 : path.includes(':') || NAMES_OMERS_ROW_IN_BODY.has(write) ? 404 : null;
       for (const concrete of withOmersIds(path)) {
         const body = bodyFor(write);
+        const { cookie } = await signIn(dana.id);
         const response = await app.request(concrete, {
           method,
           headers: {
-            cookie: sessionCookie(dana.id),
+            cookie,
             origin: 'http://localhost:5173',
             ...(body === undefined ? {} : { 'content-type': 'application/json' }),
           },

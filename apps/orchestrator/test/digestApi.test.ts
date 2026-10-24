@@ -35,7 +35,9 @@ const queries = vi.hoisted(() => ({
   countAlerts: vi.fn(async (): Promise<number> => 0),
 }));
 
-vi.mock('../src/db/queries.js', () => ({ getUser: vi.fn(async () => USER), ...queries }));
+vi.mock('../src/db/queries.js', () => ({
+  getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
+  getUser: vi.fn(async () => USER), ...queries }));
 
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
 const { createApp } = await import('../src/http/app.js');

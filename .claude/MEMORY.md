@@ -4483,6 +4483,74 @@ failure they prevent.
     `RESEARCH_MAX_HOLDINGS = 50`, `RESEARCH_TIME_LIMIT = 900 s`, rate limit `researchRun` 6 an
     hour (D257). *Rejected:* the latest rating of any agent (a reassignment would mix two
     lenses in one column with nothing but the small name to tell them apart).
+294. **A device is named by `bowser`, read from the stored user agent when the list is asked
+    for** (the user, 2026-10-24; M10 PR 12; the dependency was approved under convention 5).
+    - **Where:** the orchestrator only (`http/sessions.ts` `describeSession`), so nothing is
+      added to the browser bundle. The row keeps the raw user agent (cut to
+      `USER_AGENT_MAX_LENGTH`), so a better reading later needs no migration.
+    - **What it says:** browser, OS and a desktop/mobile/tablet type, in English - they are
+      product names. None found is null, and the web says "unknown" in the user's language.
+    - **Rejected:**
+      - hand-written regexes (we would own Edge reading as Chrome, iPadOS as a Mac, in-app
+        browsers - the cases that make a device list misleading);
+      - the raw string (every one starts "Mozilla/5.0");
+      - `ua-parser-js` (AGPL-3.0 since v2).
+295. **A session lasts a fixed `SESSION_TTL_HOURS` (7 days) from sign-in, never extended** (the
+    user, 2026-10-24; M10 PR 12). The row's `expires_at` is set once and the cookie carries the
+    same expiry.
+    - **Why:** PR 12 makes sessions endable; how long they live is a separate trade-off, and a
+      sliding expiry would let a stolen cookie that keeps being used live longer in the PR meant
+      to tighten things.
+    - **Rejected:**
+      - sliding: 7 days idle, 30 at most (a small follow-up on this table if weekly sign-in
+        annoys - no migration needed);
+      - sliding with no ceiling (a stolen cookie in use never expires).
+296. **Settings offers *Sign out all other devices*; this device signs out from the menu** (the
+    user, 2026-10-24; M10 PR 12; refines D261's "Sign out everywhere").
+    - This device's row is marked *This device* and has no button; `DELETE
+      /account/sessions/:id` refuses it (`current_session`).
+    - A password or email change ends every *other* session and gives this device a new one,
+      as before. Disable, the admin's one-time password and the bootstrap script end all.
+    - **Why:** the usual reason to press it - a device you do not recognise, a shared computer
+      left signed in - wants the others gone and you still signed in, to change the password
+      next.
+    - **Rejected:**
+      - literally everywhere (the obvious reaction to a stranger's session also signs you out);
+      - both buttons (two similar red buttons, and a choice for every user).
+297. **How PR 12 builds D261** (the scope the user agreed, 2026-10-24; migration `0071`).
+    - **The cookie** carries a random 256-bit secret (`sid`) beside `uid`, `ver` and `exp`,
+      signed with `SESSION_SECRET`. `user_sessions` keeps only its SHA-256, so a leaked database
+      or backup holds no usable session (as D260 does for tokens).
+    - **One lookup:** `getSessionUser` joins the session (by hash, the cookie's user, unexpired)
+      to `users`, and moves `last_seen_at` in the same statement at most every
+      `SESSION_TOUCH_INTERVAL_SECONDS` (5 minutes) rather than writing on every request.
+      `session_version` stays as D261's second check.
+    - **Ending every session is in the same statement as the change that ends it:** the
+      `UPDATE users` of a password, email, status or one-time password is wrapped in a CTE that
+      deletes the user's rows (`endingSessions` in `users.ts`). A path cannot change one without
+      the other.
+    - **The routes are under `/account`** (`/account/sessions`, `DELETE /account/sessions/:id`,
+      `POST /account/sessions/sign-out-others`), so the session gate covers them with the
+      one-time-password refusal; under `/auth` each would have to remember both.
+    - **`session_sweep`**, an installation run kind, deletes expired rows daily (hourly asks,
+      a CronJob in kind), which bounds how long the address and user agent outlive a session.
+    - **A 401 `unauthorized` while signed in takes the web back to sign-in** with "You were
+      signed out on this device" (`api/sessionEnded.ts`). Before it, a session ended elsewhere
+      left every panel failing until a reload; the disable has had that gap since M9.
+    - **Sign-in closes two gaps the security review found:** the credentials read carries
+      `session_version`, and a sign-in whose argon2 check overlapped a password change, a
+      one-time password or a disable (the version moved) is refused - otherwise the old password
+      could open a session after the change that should have ended it. And signing in again on
+      a browser deletes the session that browser already had.
+    - **Not done, as consequences:** nothing caps how many sessions one account holds (only
+      failed sign-ins are rate-limited, so anyone with the password can add rows until they
+      expire); the cookie has no `__Host-` prefix (worth adding once `Secure` is on in
+      production, D256).
+    - **Deploy cost:** every cookie made before 0071 has no `sid` and is refused once - everyone
+      signs in again. Accepted with three accounts rather than converting old cookies.
+    - **Tests:** the unit suites mock `getSessionUser` through their own `getUser`
+      (`test/session.ts` `mockedSessionUser`); the exit test (D266) signs in for real, a new
+      session per write, because sign-out and sign-out-others end the session they are sent on.
 ---
 
 ## Bugs that cost real time, and the lesson from each

@@ -20,6 +20,25 @@ export interface UserRow {
 const USER_COLUMNS =
   'id, email, base_currency, timezone, role, status, session_version, password_must_change';
 
+/** `USER_COLUMNS` for a query that names `users` by `alias`. */
+export function qualifiedUserColumns(alias: string): string {
+  return USER_COLUMNS.split(', ')
+    .map((column) => `${alias}.${column}`)
+    .join(', ');
+}
+
+/**
+ * Wraps an `UPDATE users ... RETURNING` so the same statement deletes every
+ * session of each user it updated (D261): a credential or status change and
+ * the end of the sessions it should end cannot come apart. A caller that keeps
+ * its device signed in issues a new session afterwards.
+ */
+function endingSessions(update: string): string {
+  return `WITH updated AS (${update}),
+     ended AS (DELETE FROM user_sessions WHERE user_id IN (SELECT id FROM updated))
+     SELECT * FROM updated`;
+}
+
 /**
  * The users scheduled work runs for (D161): active ones, oldest first, so the
  * round-robin's order is stable from one ask to the next. Pending, rejected and
@@ -40,12 +59,14 @@ export interface UserCredentialsRow {
   id: string;
   status: UserStatus;
   password_hash: string | null;
+  /** Read with the hash, so a sign-in can tell that the password changed while it was checked (D297). */
+  session_version: number;
 }
 
 /** Email is unique regardless of case (0058's `users_email_lower_key`), so this is one row or none. */
 export function getUserCredentialsByEmail(email: string): Promise<UserCredentialsRow | null> {
   return queryOne<UserCredentialsRow>(
-    'SELECT id, status, password_hash FROM users WHERE lower(email) = lower($1)',
+    'SELECT id, status, password_hash, session_version FROM users WHERE lower(email) = lower($1)',
     [email],
   );
 }
@@ -64,17 +85,17 @@ export async function recordSignIn(userId: string): Promise<void> {
 
 /**
  * A new password, which ends every session the user holds - this one included,
- * so the caller reissues its cookie with the returned version - and clears the
+ * so the caller issues a new session for this device - and clears the
  * one-time password's "must change".
  */
 export async function changePassword(userId: string, passwordHash: string): Promise<UserRow | null> {
   return queryOne<UserRow>(
-    `UPDATE users
+    endingSessions(`UPDATE users
         SET password_hash = $2,
             password_must_change = false,
             session_version = session_version + 1
       WHERE id = $1
-  RETURNING ${USER_COLUMNS}`,
+  RETURNING ${USER_COLUMNS}`),
     [userId, passwordHash],
   );
 }
@@ -94,7 +115,7 @@ const UNIQUE_VIOLATION = '23505';
 
 /**
  * A new sign-in address, which ends every session the user holds - this one
- * included, so the caller reissues its cookie - as a password change does
+ * included, so the caller issues a new session for this device - as a password change does
  * (D160). `'taken'` when another account already signs in with it: the unique
  * index on `lower(email)` decides, so two users racing for one address cannot
  * both win.
@@ -102,11 +123,11 @@ const UNIQUE_VIOLATION = '23505';
 export async function changeEmail(userId: string, email: string): Promise<UserRow | 'taken' | null> {
   try {
     return await queryOne<UserRow>(
-      `UPDATE users
+      endingSessions(`UPDATE users
           SET email = $2,
               session_version = session_version + 1
         WHERE id = $1
-    RETURNING ${USER_COLUMNS}`,
+    RETURNING ${USER_COLUMNS}`),
       [userId, email],
     );
   } catch (error) {
@@ -122,13 +143,13 @@ export async function changeEmail(userId: string, email: string): Promise<UserRo
  */
 export function setAdminCredentials(email: string, passwordHash: string): Promise<UserRow | null> {
   return queryOne<UserRow>(
-    `UPDATE users
+    endingSessions(`UPDATE users
         SET email = $1,
             password_hash = $2,
             password_must_change = false,
             session_version = session_version + 1
       WHERE role = 'admin'
-  RETURNING ${USER_COLUMNS}`,
+  RETURNING ${USER_COLUMNS}`),
     [email, passwordHash],
   );
 }

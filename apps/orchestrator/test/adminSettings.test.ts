@@ -32,6 +32,7 @@ let stored = 3;
 let budget = 500_000;
 
 vi.mock('../src/db/queries.js', () => ({
+  getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
   getUser: vi.fn(async () => ADMIN),
   insertAdminAudit: vi.fn(async () => undefined),
   getInstallationSettings: vi.fn(async () => ({

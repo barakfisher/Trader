@@ -18,6 +18,7 @@ import { z } from 'zod';
 
 import {
   claimRun,
+  deleteExpiredSessions,
   findInstrumentsBySymbols,
   finishRun,
   getUser,
@@ -79,6 +80,10 @@ const RUN_BUCKET_MINUTES: Record<string, number> = {
   // Fifteen minutes bounds how long a dead proposal can sit in the inbox
   // looking answerable - and `effectiveState` means it never actually is.
   proposal_sweep: 15,
+  // An expired session is already refused by the lookup (D261); the sweep only
+  // removes the row - and the address and user agent it keeps - so once a day
+  // bounds how long that personal data outlives the session.
+  session_sweep: 24 * 60,
   // One digest a day, which is what makes it a digest. A second one the same
   // day would split the day's deferred findings across two messages and defeat
   // the batching that is the entire point of deferring them.
@@ -128,6 +133,7 @@ const runSchema = z.object({
     'topic_discovery',
     'backfill',
     'proposal_sweep',
+    'session_sweep',
     'daily_digest',
     'instrument_metadata',
     'universe_rescreen',
@@ -248,6 +254,10 @@ async function runForInstallation(context: Context, request: RunRequest): Promis
       // A deadline is a deadline for everybody: one sweep expires every
       // account's proposals.
       return done(runId, 'ok', { expired: (await sweepExpiredProposals()).length });
+    }
+
+    if (kind === 'session_sweep') {
+      return done(runId, 'ok', { deleted: await deleteExpiredSessions() });
     }
 
     // news_collect. Held and topic instruments only - never the universe. The

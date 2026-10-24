@@ -66,6 +66,7 @@ vi.mock('../src/db/pool.js', () => ({
 
 vi.mock('../src/db/queries.js', () => ({
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
+  getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
   getUser: vi.fn(async () => USER),
   getAgent: vi.fn(async (_u: string, id: string) =>
     id === PRIMARY ? agentRow({ id: PRIMARY, is_primary: true, budget_minor: null }) : id === AGENT ? agentRow() : null,

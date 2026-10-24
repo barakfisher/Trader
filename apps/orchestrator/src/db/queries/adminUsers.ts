@@ -45,8 +45,8 @@ export function listUsersForAdmin(): Promise<AdminUserRow[]> {
 }
 
 /**
- * Disable or re-enable a user (D239). Disabling bumps `session_version`, which
- * ends every session they hold at once (D160); their data is untouched, and
+ * Disable or re-enable a user (D239). Disabling deletes their sessions and bumps
+ * `session_version`, which ends every session they hold at once (D160, D261); their data is untouched, and
  * scheduled work skips them while disabled (D161). Null when the user is not
  * in the `from` state, or is the admin.
  */
@@ -56,24 +56,31 @@ export function setUserStatus(
   to: 'active' | 'disabled',
 ): Promise<{ id: string } | null> {
   return queryOne<{ id: string }>(
-    `UPDATE users
-        SET status = $3, session_version = session_version + 1
-      WHERE id = $1 AND status = $2 AND role <> 'admin'
-  RETURNING id`,
+    `WITH updated AS (
+       UPDATE users
+          SET status = $3, session_version = session_version + 1
+        WHERE id = $1 AND status = $2 AND role <> 'admin'
+    RETURNING id
+     ), ended AS (DELETE FROM user_sessions WHERE user_id IN (SELECT id FROM updated))
+     SELECT id FROM updated`,
     [userId, from, to],
   );
 }
 
 /**
  * A one-time password (D162): the hash of one the app made, which must be
- * changed at the next sign-in; every session the user holds ends.
+ * changed at the next sign-in; every session the user holds ends (its rows are
+ * deleted in the same statement, D261).
  */
 export function setOneTimePassword(userId: string, passwordHash: string): Promise<{ id: string } | null> {
   return queryOne<{ id: string }>(
-    `UPDATE users
-        SET password_hash = $2, password_must_change = true, session_version = session_version + 1
-      WHERE id = $1 AND role <> 'admin' AND status IN ('active', 'disabled')
-  RETURNING id`,
+    `WITH updated AS (
+       UPDATE users
+          SET password_hash = $2, password_must_change = true, session_version = session_version + 1
+        WHERE id = $1 AND role <> 'admin' AND status IN ('active', 'disabled')
+    RETURNING id
+     ), ended AS (DELETE FROM user_sessions WHERE user_id IN (SELECT id FROM updated))
+     SELECT id FROM updated`,
     [userId, passwordHash],
   );
 }

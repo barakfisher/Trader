@@ -49,6 +49,7 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
+  getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
   getUser: vi.fn(async () => USER),
   getResearchAgent: vi.fn(async () => ({ id: AGENT, name: 'Analyst', state: 'active' })),
   getLatestResearchRun: vi.fn(async () => null),

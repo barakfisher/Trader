@@ -35,9 +35,11 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
+  getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
   getUser: vi.fn(),
   getUserCredentialsByEmail: vi.fn(),
   recordSignIn: vi.fn(async () => undefined),
+  createSession: vi.fn(async () => ({ id: '5e551000-0000-4000-8000-0000000000bb', expires_at: new Date(Date.now() + 3_600_000) })),
   getOrCreateUserSettings: vi.fn(async () => ({ language: 'en' })),
   createSignupRequest: vi.fn(async () => ({ outcome: 'created', userId: OTHER_USER_ID })),
   countPendingSignups: vi.fn(async () => 0),
@@ -191,7 +193,7 @@ describe('signing in: failures per account and per address', () => {
   beforeEach(() => {
     vi.mocked(queries.getUserCredentialsByEmail).mockImplementation(async (email: string) =>
       email.trim().toLowerCase() === 'dana@example.com'
-        ? ({ id: TEST_USER_ID, password_hash: passwordHash, status: 'active' } as never)
+        ? ({ id: TEST_USER_ID, password_hash: passwordHash, status: 'active', session_version: 1 } as never)
         : null,
     );
   });
