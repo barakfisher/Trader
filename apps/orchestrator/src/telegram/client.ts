@@ -444,6 +444,11 @@ export class TelegramNotifier implements Notifier {
     });
   }
 
+  /** Telegram's free `getMe`: whether the bot token is accepted (the Keys tab's Test, D251). */
+  async checkToken(): Promise<DeliveryResult> {
+    return this.call('getMe', {});
+  }
+
   /** "typing…" under the chat's name for a few seconds: a question is being answered. */
   async sendTyping(chatId: string): Promise<DeliveryResult> {
     return this.call('sendChatAction', { chat_id: chatId, action: 'typing' });

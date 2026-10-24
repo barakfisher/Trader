@@ -168,3 +168,20 @@ export function listLastDigestEntries(userId: string): Promise<DigestEntryRow[]>
     [userId],
   );
 }
+
+/**
+ * The last Telegram delivery that failed, across every user, for the Admin
+ * page's Keys tab (D251): when, and the channel's own words. No user, no chat,
+ * no message - only whether the bot token works.
+ */
+export function lastTelegramFailure(): Promise<{ at: Date; error: string | null } | null> {
+  return queryOne<{ at: Date; error: string | null }>(
+    `-- agent-blind: one bot serves every user and agent; this is about its token.
+     SELECT created_at AS at, error FROM notifications
+      WHERE channel = 'telegram' AND status = 'failed'
+        -- Only what Telegram or the network said: "this user has no chat
+        -- connected" is a user's setup, and says nothing about the token.
+        AND (error LIKE 'HTTP %' OR error LIKE 'transport error%')
+      ORDER BY created_at DESC LIMIT 1`,
+  );
+}

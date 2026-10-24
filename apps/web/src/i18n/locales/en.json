@@ -1302,6 +1302,41 @@
       "enable": "Enable",
       "spentInstallation": "{{spent}} this month on the installation's key",
       "spentOwnKey": "{{spent}} this month on their own key"
+    },
+    "tabs": {
+      "users": "Users",
+      "models": "Models and keys",
+      "operations": "Operations",
+      "settings": "Settings"
+    },
+    "keys": {
+      "title": "Provider keys",
+      "intro": "The installation's keys to outside providers, as this server reads them. Values are never shown; to change one, edit .env or the cluster's Secret and redeploy. The app's own secrets are not listed.",
+      "loading": "Loading keys…",
+      "failed": "The keys couldn't be read.",
+      "state": {
+        "inUse": "Set, in use",
+        "notSet": "Not set",
+        "no_adapter": "Set, but nothing in this installation uses it",
+        "not_chosen": "Set, but another provider is chosen",
+        "missing": "Not set"
+      },
+      "serves": "serves {{what}}",
+      "servesWhat": {
+        "llm": "model calls",
+        "embeddings": "search embeddings",
+        "market_data": "market data",
+        "news": "news",
+        "telegram": "Telegram messages"
+      },
+      "lastError": "Last error, {{age}}:",
+      "test": "Test",
+      "testing": "Testing…",
+      "testLabel": "Test the {{provider}} key",
+      "testOk": "The provider accepted the key.",
+      "testFailed": "The provider refused the key:",
+      "testError": "The test couldn't run.",
+      "needs": "needed for {{what}}: they cannot run"
     }
   },
   "languages": {
