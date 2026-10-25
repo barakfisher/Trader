@@ -118,6 +118,38 @@ export async function lockAgentCash(
   return rows[0] ? BigInt(rows[0].balance_minor) : null;
 }
 
+export interface AgentBookRow {
+  holdings_cost_minor: string;
+  symbol_cost_minor: string;
+  held_count: number;
+  holds_symbol: boolean;
+}
+
+/**
+ * What the mandate's size rules read (D171, D299): the agent's holdings at cost,
+ * `symbol`'s share of them, and how many instruments it holds. The scan's
+ * `trade_review.load_book` reads the same rows. Whole shares (D9) times a per-unit
+ * cost in minor units is already an integer; `round` only gives it that type.
+ */
+export async function getAgentBook(
+  userId: string,
+  agentId: string,
+  symbol: string,
+  client?: PoolClient,
+): Promise<AgentBookRow> {
+  const sql = `SELECT round(coalesce(sum(h.quantity * coalesce(h.cost_basis_minor, 0)), 0))::text AS holdings_cost_minor,
+            round(coalesce(sum(h.quantity * coalesce(h.cost_basis_minor, 0)) FILTER (WHERE i.symbol = $3), 0))::text
+              AS symbol_cost_minor,
+            count(*)::int AS held_count,
+            coalesce(bool_or(i.symbol = $3), false) AS holds_symbol
+       FROM holdings h JOIN instruments i ON i.id = h.instrument_id
+      WHERE h.user_id = $1 AND h.agent_id = $2 AND h.quantity > 0`;
+  const params = [userId, agentId, symbol];
+  // An aggregate without GROUP BY always answers one row.
+  if (client) return (await client.query<AgentBookRow>(sql, params)).rows[0]!;
+  return (await queryOne<AgentBookRow>(sql, params))!;
+}
+
 export interface LockedHolding {
   quantity: string;
   cost_basis_minor: string | null;

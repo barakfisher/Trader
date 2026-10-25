@@ -4,7 +4,11 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-25, night - **Not a handoff: the integration suite no longer sets `traders_app`'s
+Updated: 2026-10-25, late night - **Not a handoff: the approval preview warns of mandate limits a
+buy breaks (D299).** Decisions reach 299 (next: **300**); next free migration is still `0074`.
+The new Telegram sentences and the card's Hebrew owe a look on the phone and in the browser.
+
+Previous update, 2026-10-25, night - **Not a handoff: the integration suite no longer sets `traders_app`'s
 password** (a debt row; no decision, no migration).
 
 Previous update, 2026-10-25, evening - **Not a handoff: the give-up alert goes through the ledger (D298,
@@ -4607,6 +4611,32 @@ failure they prevent.
         the next slot runs either way - so it is not urgent in D70's sense;
       - the slot key as the referent: `ref_id` is a uuid, and the run that gave up already is
         one, and is the record the message points to.
+299. **The mandate's size rules are checked again at approval, and warn rather than refuse**
+    (the user chose (b) over (a), 2026-10-25; resolves the debt row; no migration).
+    - `services/mandateLimits.ts` repeats `mandate.size_problems` - max position, cash buffer, max
+      holdings; buys only (D165); capital is cash plus holdings at cost before the trade (D171);
+      exact integer comparisons - over the ledger as it stands at approval (`getAgentBook`), not
+      the scan's book with pending buys: at approval only filled trades are real.
+    - `TradeApprovalPreview.mandateBreaches` carries each breach: which limit, how far past it
+      (rounded **up** to the cent, so a breach never reads as $0.00), and the setting that would
+      allow it as a **whole percent** (rounded up for a position, down for a buffer; a holdings
+      limit one higher, capped at 100; null when no allowed value would do). Confirm still fills,
+      and logs `proposal.mandate_overridden` with the rules.
+    - **The web card offers the one-field change in place** ("Set Max position to 15%"), then
+      previews again; a change re-checks instructions in the user's own words exactly as the
+      settings form does (D176, `instructionsAreOwnWords`), or a stored conflict would silently
+      stop showing (its fingerprint no longer matches). **Telegram names the setting and the
+      value** to change in the app: a mandate edit has no callback action, and a signed button
+      that rewrites an agent's rules is more surface than a suggestion needs.
+    - **Why warn:** approving is the user's explicit act; the fill still refuses what cash cannot
+      cover, so nothing impossible is recorded.
+    - **Rejected:**
+      - (a) refusing the approval, the user's call: it makes the limit binding on the user, not
+        only on the agent;
+      - putting breaches in `TradePreview.warnings`: that list belongs to manual trades too, and
+        `PreviewSummary` renders every entry as the typed-price warning;
+      - a per-cent suggestion ("14.21%"): a limit a person reads and keeps is a round number,
+        and the next buy would break the exact one again.
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -5423,7 +5453,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 |---|---|---|
 | **The template creator's UI has not been seen in a browser** | `MandateFields.tsx`, `TaxonomyPicker.tsx`, `InstructionsCheck.tsx` | jsdom covers the behaviour; layout, Hebrew RTL and the picker's menu are unseen. The UX4 rehearsal method (below, "Running a branch's orchestrator against a copy of the live DB") does it without touching the dev database |
 | **No real model has run `mandate_check`** | `app/agents/mandate_check.py` | Tested with scripted answers only. A model that paraphrases instead of copying quotes has every conflict dropped - safe, but it then looks like it never finds one. Read the first real `llm_calls` rows with `purpose = 'mandate_check'` |
-| **Mandate limits are not re-checked at approval** | `services/tradeApproval.ts`, `fills.ts` | The scan checks a buy against capital at cost; a proposal approved later, after another approval moved cash, can land past a limit. The fill still refuses what cash cannot cover. Approving is the user's explicit act |
+| ~~Mandate limits are not re-checked at approval~~ | — | **Resolved** (2026-10-25, D299): the approval preview warns of each size rule a buy breaks, how far, and the setting that would allow it; Confirm still fills |
 | **The instructions are still `persona` underneath** | `agents.persona`, `AgentView.persona`, wire code `no_persona` | Relabelled in the UI only ("Additional instructions", D170/D174); renaming the column and the code is churn with no behaviour, left on purpose |
 | **Narration's and the agents' figure checks still read a timestamp's digits as sources, and refuse U+2011 hyphens** | `app/narration/evidence_validator.py`; the assistant fixed it in `app/assistant/reply.py` only | A small whole number (a day, hour or minute) written by a model passes whenever its evidence carries a timestamp that contains it; "7‑day" with a non-breaking hyphen is refused. Moving `_without_dates` and the dash normalisation into the validator fixes both for everyone - and changes narration's behaviour, so measure its rejection rate before and after |
 | ~~A key with "pct" in it is read as a ratio, so the mandate's own percentages cannot be quoted~~ | — | **Resolved** (2026-10-24, the mandate limit keys renamed to `max_position_percent_of_capital` and `min_cash_percent_of_capital`): found 2026-10-21 (D235), a thesis writing "my 25% cash buffer" was refused as unsourced, because the validator offers 2500% for a `pct` key. Briefings stored before the rename keep the old key names |
@@ -5903,9 +5933,9 @@ M10 is unchanged, and every item needs the user before it starts (see "after M10
 - ~~The integration suite changes the cluster-wide `traders_app` password~~ - resolved
   2026-10-25: the suite takes the role at connection start instead of logging in as it.
 - ~~The give-up alert ignores quiet hours, mute and dedupe~~ - resolved 2026-10-25 (D298, 0073).
-- Larger: the owner's password reaching every container; mandate limits not re-checked at
-  approval; the validator reading timestamp digits (measure narration's rejection rate first);
-  Redis warming from `quotes`. All four are rows in the debt table.
+- Larger: the owner's password reaching every container; the validator reading timestamp digits
+  (measure narration's rejection rate first); Redis warming from `quotes`. All three are rows in
+  the debt table. ~~Mandate limits not re-checked at approval~~ - resolved 2026-10-25 (D299).
 
 **Lessons from this stretch:**
 - **Two sessions fixed the same debts at once.** #312 and #315 made the same rename an hour

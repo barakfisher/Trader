@@ -309,3 +309,4 @@ while this file is out of date.
 | 296 | Settings offers *Sign out all other devices*; this device signs out from the menu |
 | 297 | How PR 12 builds D261 |
 | 298 | A scheduled scan's give-up alert goes through the ledger |
+| 299 | The mandate's size rules are checked again at approval, and warn rather than refuse |

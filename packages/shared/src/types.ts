@@ -1804,7 +1804,45 @@ export interface TradeApprovalPreview {
   /** The most the live price may be from the agent's for a preview at all. */
   maxDistanceBps: number;
   trade: TradePreview;
+  /** The agent's limits this buy would break (D299): a warning, never a refusal. */
+  mandateBreaches: MandateBreach[];
 }
+
+/**
+ * A size rule of the agent's mandate an approval would break (D299), with how far
+ * and the setting that would allow it. Capital is cash plus holdings at cost before
+ * the trade (D171). A suggestion is a whole percent, or null when no allowed value
+ * would do.
+ */
+export type MandateBreach =
+  | {
+      rule: 'max_position';
+      limitBps: number;
+      capitalMinor: number;
+      /** The position at cost after the buy, and its share of capital, rounded up. */
+      positionAfterMinor: number;
+      positionAfterBps: number;
+      /** How far past the limit, rounded up to the cent. */
+      overByMinor: number;
+      suggestedBps: number | null;
+    }
+  | {
+      rule: 'cash_buffer';
+      limitBps: number;
+      capitalMinor: number;
+      /** Cash after the buy and its fee, and its share of capital, rounded down. */
+      cashAfterMinor: number;
+      cashAfterBps: number;
+      /** How far under the minimum, rounded up to the cent. */
+      shortByMinor: number;
+      suggestedBps: number;
+    }
+  | {
+      rule: 'max_holdings';
+      limit: number;
+      heldCount: number;
+      suggestedLimit: number | null;
+    };
 
 /** *Confirm*: the fill, written in the approval's transaction. */
 export interface TradeApprovalResult {

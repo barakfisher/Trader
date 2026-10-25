@@ -1054,6 +1054,21 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           quantity: '3.000000000000000000',
           cost_basis_minor: '20000',
         });
+        // D299: what the mandate's size rules read, by symbol.
+        const symbol = (await client.query('SELECT symbol FROM instruments WHERE id = $1', [instrument])).rows[0]
+          .symbol as string;
+        expect(await queries.getAgentBook(USER, simulated, symbol, client)).toEqual({
+          holdings_cost_minor: '60000',
+          symbol_cost_minor: '60000',
+          held_count: 1,
+          holds_symbol: true,
+        });
+        expect(await queries.getAgentBook(USER, simulated, 'NOT-HELD', client)).toEqual({
+          holdings_cost_minor: '60000',
+          symbol_cost_minor: '0',
+          held_count: 1,
+          holds_symbol: false,
+        });
         expect(await queries.findFillByKey(USER, simulated, 'pg-key', client)).toMatchObject({
           side: 'buy',
           price_minor: '20000',
@@ -1069,6 +1084,12 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           openedAt: '2026-10-05',
         });
         expect(await queries.lockAgentHolding(client, USER, simulated, instrument)).toBeNull();
+        expect(await queries.getAgentBook(USER, simulated, symbol, client)).toEqual({
+          holdings_cost_minor: '0',
+          symbol_cost_minor: '0',
+          held_count: 0,
+          holds_symbol: false,
+        });
       } finally {
         await client.query('ROLLBACK');
         client.release();

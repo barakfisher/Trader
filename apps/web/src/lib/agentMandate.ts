@@ -235,6 +235,16 @@ function list(items: string[]): string {
 }
 
 /**
+ * D176: whether a change to this agent's settings needs its instructions checked
+ * again - they are the user's own words, not the description of the stored
+ * settings the template creator wrote. The settings form asks the same of its draft.
+ */
+export function instructionsAreOwnWords(agent: { persona: string | null; mandate: AgentMandate | null }): boolean {
+  const persona = (agent.persona ?? '').trim();
+  return persona !== '' && persona !== describeMandate(draftFromMandate(agent.mandate));
+}
+
+/**
  * The instructions written from the settings (D174): words, never figures, in
  * the user's language. '' when nothing is set that words could describe.
  */
