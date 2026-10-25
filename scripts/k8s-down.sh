@@ -6,8 +6,8 @@
 # the cluster's data too - which is why it backs the database up to this Mac
 # first (scripts/db-backup.sh) and deletes nothing if that backup fails. It does
 # not touch the compose stack, its database, or
-# infra/k8s/overlays/kind/secrets.env - which the next k8s-up.sh reuses, so a
-# recreated cluster gets the same secrets.
+# infra/k8s/overlays/kind/secrets.env and owner.env - which the next k8s-up.sh
+# reuses, so a recreated cluster gets the same secrets.
 #
 # Usage:
 #   bash scripts/k8s-down.sh                # backs up, then asks first

@@ -7,8 +7,9 @@
 #   2. Builds the production images for this checkout (scripts/build-images.sh)
 #      and copies them into the cluster - kind's node is a separate container
 #      with its own image store, and cannot see the images on your Mac.
-#   3. Writes infra/k8s/overlays/kind/secrets.env on first run: fresh random
-#      secrets; the admin's sign-in password is set after the rollout and
+#   3. Writes infra/k8s/overlays/kind/secrets.env, and owner.env with the
+#      database owner's password (read by Postgres and migrate alone; D300), on
+#      first run: fresh random secrets; the admin's sign-in password is set after the rollout and
 #      printed once (replace it with: bash scripts/admin-password.sh kind <email>).
 #      The cluster needs no .env. Kept after that - the database password in
 #      particular is fixed when Postgres first creates its data directory - and
@@ -91,31 +92,73 @@ for image in ai-service orchestrator web; do
 done
 
 # --- 3. secrets --------------------------------------------------------------
+# Two files, two Secrets (D300): secrets.env -> `traders-secrets`, which every
+# pod loads, and owner.env -> `traders-owner`, the database owner's password,
+# which only Postgres and the migrate Job read.
+#
 # A missing file next to a cluster that already has a database must not be
 # regenerated: Postgres keeps the password it was created with, and a new one
-# would lock every service out. Recover the file from the Secret the running
-# Postgres reads instead (independent task 13; the commands are
+# would lock the migrations out. Each file is recovered from the Secret the
+# running cluster reads it from instead (independent task 13; the commands are
 # docs/RUNBOOK.md section 1's). A worktree, a fresh clone or a deleted file all
-# arrive here.
-if [ ! -f "$SECRETS_FILE" ]; then
-  secret_name="$(kc get statefulset postgres -o \
-    jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POSTGRES_PASSWORD")].valueFrom.secretKeyRef.name}' \
-    2> /dev/null || true)"
-  if [ -n "$secret_name" ] && kc get secret "$secret_name" > /dev/null 2>&1; then
-    say "Recovering $(basename "$SECRETS_FILE") from the cluster's Secret $secret_name"
-    (
-      umask 077
-      kc get secret "$secret_name" -o json | python3 -c '
+# arrive here. A cluster from before the split keeps every key in
+# `traders-secrets`; recovered, its owner lines are moved below like any older file's.
+
+# recover_secret <file> <Secret name>: the Secret's keys as an env file, mode 600.
+recover_secret() {
+  say "Recovering $(basename "$1") from the cluster's Secret $2"
+  (
+    umask 077
+    kc get secret "$2" -o json | python3 -c '
 import base64, json, sys
 for key, value in sorted(json.load(sys.stdin)["data"].items()):
     print(f"{key}={base64.b64decode(value).decode()}")
-' > "$SECRETS_FILE.new"
+' > "$1.new"
+  )
+  mv "$1.new" "$1"
+}
+
+has_database() { kc get pvc data-postgres-0 > /dev/null 2>&1; }
+
+OWNER_FILE="$K8S/overlays/kind/owner.env"
+
+if [ ! -f "$SECRETS_FILE" ]; then
+  # The Secret the orchestrator loads whole: `traders-secrets`, by its hashed name.
+  app_secret="$(kc get deployment orchestrator -o \
+    jsonpath='{.spec.template.spec.containers[0].envFrom[*].secretRef.name}' 2> /dev/null || true)"
+  if [ -n "$app_secret" ] && kc get secret "$app_secret" > /dev/null 2>&1; then
+    recover_secret "$SECRETS_FILE" "$app_secret"
+    grep -q '^SESSION_SECRET=' "$SECRETS_FILE" \
+      || fail "Secret $app_secret has no SESSION_SECRET - see docs/RUNBOOK.md section 1"
+  elif has_database; then
+    fail "the cluster has a database (data-postgres-0) but no Secret to recover its keys from; new secrets would lock the services out. See docs/RUNBOOK.md section 1, or start over: bash scripts/k8s-down.sh"
+  fi
+fi
+
+if [ ! -f "$OWNER_FILE" ] && ! grep -qs '^POSTGRES_PASSWORD=' "$SECRETS_FILE"; then
+  # The Secret Postgres reads its password from: `traders-owner`, or before the
+  # split `traders-secrets` - only the owner's keys are kept either way.
+  owner_secret="$(kc get statefulset postgres -o \
+    jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="POSTGRES_PASSWORD")].valueFrom.secretKeyRef.name}' \
+    2> /dev/null || true)"
+  if [ -n "$owner_secret" ] && kc get secret "$owner_secret" > /dev/null 2>&1; then
+    recover_secret "$OWNER_FILE" "$owner_secret"
+    owner_keys="$(grep -E "$OWNER_SECRET_KEYS" "$OWNER_FILE" || true)"
+    printf '%s\n' "$owner_keys" > "$OWNER_FILE"
+    if ! grep -q '^POSTGRES_PASSWORD=' "$OWNER_FILE"; then
+      rm -f "$OWNER_FILE"
+      fail "Secret $owner_secret has no POSTGRES_PASSWORD - not writing $(basename "$OWNER_FILE"); see docs/RUNBOOK.md section 1"
+    fi
+  elif has_database; then
+    fail "the cluster has a database (data-postgres-0) but no Secret to recover its owner's password from. See docs/RUNBOOK.md section 1, or start over: bash scripts/k8s-down.sh"
+  else
+    say "Generating $(basename "$OWNER_FILE") (git-ignored; kept from now on)"
+    db_password="$(openssl rand -hex 16)"
+    (
+      umask 077
+      printf 'POSTGRES_PASSWORD=%s\nMIGRATION_DATABASE_URL=postgresql://traders:%s@postgres:5432/traders\n' \
+        "$db_password" "$db_password" > "$OWNER_FILE"
     )
-    grep -q '^POSTGRES_PASSWORD=' "$SECRETS_FILE.new" \
-      || fail "Secret $secret_name has no POSTGRES_PASSWORD - not writing $(basename "$SECRETS_FILE"); see docs/RUNBOOK.md section 1"
-    mv "$SECRETS_FILE.new" "$SECRETS_FILE"
-  elif kc get pvc data-postgres-0 > /dev/null 2>&1; then
-    fail "the cluster has a database (data-postgres-0) but no Secret to recover its password from; new secrets would lock the services out. See docs/RUNBOOK.md section 1, or start over: bash scripts/k8s-down.sh"
   fi
 fi
 
@@ -126,31 +169,28 @@ if [ -f "$SECRETS_FILE" ]; then
   # password is untouched, so the running Postgres still accepts it.
   if ! grep -q '^APP_DB_PASSWORD=' "$SECRETS_FILE"; then
     say "Adding the app role to $(basename "$SECRETS_FILE")"
-    owner_password="$(grep '^POSTGRES_PASSWORD=' "$SECRETS_FILE" | cut -d= -f2-)"
     app_password="$(openssl rand -hex 16)"
     (
       umask 077
       grep -v '^DATABASE_URL=' "$SECRETS_FILE" > "$SECRETS_FILE.new"
       printf 'APP_DB_PASSWORD=%s\n' "$app_password" >> "$SECRETS_FILE.new"
       printf 'DATABASE_URL=postgresql://traders_app:%s@postgres:5432/traders\n' "$app_password" >> "$SECRETS_FILE.new"
-      printf 'MIGRATION_DATABASE_URL=postgresql://traders:%s@postgres:5432/traders\n' "$owner_password" >> "$SECRETS_FILE.new"
     )
     mv "$SECRETS_FILE.new" "$SECRETS_FILE"
   fi
+  # A file from before the owner's own Secret (D300): its owner lines move to owner.env.
+  split_owner_secret "$SECRETS_FILE" "$OWNER_FILE"
 else
   say "Generating $(basename "$SECRETS_FILE") (git-ignored; kept from now on)"
-  db_password="$(openssl rand -hex 16)"
   app_password="$(openssl rand -hex 16)"
-  umask 077
-  cat > "$SECRETS_FILE" << EOF
-SESSION_SECRET=$(openssl rand -hex 32)
-INTERNAL_API_KEY=$(openssl rand -hex 16)
-POSTGRES_PASSWORD=$db_password
-APP_DB_PASSWORD=$app_password
-DATABASE_URL=postgresql://traders_app:$app_password@postgres:5432/traders
-MIGRATION_DATABASE_URL=postgresql://traders:$db_password@postgres:5432/traders
-EOF
+  (
+    umask 077
+    printf 'SESSION_SECRET=%s\nINTERNAL_API_KEY=%s\nAPP_DB_PASSWORD=%s\nDATABASE_URL=postgresql://traders_app:%s@postgres:5432/traders\n' \
+      "$(openssl rand -hex 32)" "$(openssl rand -hex 16)" "$app_password" "$app_password" > "$SECRETS_FILE"
+  )
 fi
+# The URL migrate connects with, for a file that has only the password (D300).
+ensure_migration_url "$OWNER_FILE" traders traders
 
 # --- 4. apply ----------------------------------------------------------------
 # A per-deploy kustomization naming the image tag; git-ignored. It must sit

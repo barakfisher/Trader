@@ -2,6 +2,7 @@
 
 ```bash
 cp .env.example .env      # once, from the repository root
+cp .env.owner.example .env.owner   # the DB owner's password; only postgres and migrate load it (D300)
 pnpm up                   # docker compose up --build
 ```
 

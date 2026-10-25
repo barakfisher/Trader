@@ -20,6 +20,12 @@ secretGenerator:
     behavior: merge
     envs:
       - secrets.env
+  # The owner's password, from owner.env (git-ignored, written by k8s-up.sh): read
+  # by Postgres and the migrate Job alone, never by a pod that loads every key (D300).
+  - name: traders-owner
+    behavior: merge
+    envs:
+      - owner.env
 
 patches:
   - path: universe-descriptions.yaml

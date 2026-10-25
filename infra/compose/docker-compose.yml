@@ -14,6 +14,12 @@ x-env: &env
   env_file:
     - ../../.env
 
+# The database owner's password lives in .env.owner, apart from .env (D300):
+# only `postgres` and `migrate` load it. Every other service connects as
+# traders_app and never sees it. Nothing below interpolates it, so a compose
+# command run without the file fails to start rather than falling back to a
+# default password the database was not created with.
+
 services:
   postgres:
     # pgvector is part of the image so the RAG milestone needs no extra setup.
@@ -32,9 +38,10 @@ services:
       - log_min_duration_statement=200
       - -c
       - log_lock_waits=on
+    env_file:
+      - ../../.env.owner
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-traders}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-traders}
       POSTGRES_DB: ${POSTGRES_DB:-traders}
     ports:
       # Host ports are configurable: another project may already hold the default.
@@ -75,14 +82,16 @@ services:
   # The one service that connects as the owner (POSTGRES_USER, a superuser):
   # schema changes are Alembic's alone. Everything else connects as
   # traders_app, which can read and write rows and nothing more (migration
-  # 0033); migrate.py gives it APP_DB_PASSWORD after every upgrade.
+  # 0033); migrate.py gives it APP_DB_PASSWORD after every upgrade. It connects
+  # with .env.owner's MIGRATION_DATABASE_URL, which wins over .env's DATABASE_URL.
   migrate:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.ai
-    <<: *env
+    env_file:
+      - ../../.env
+      - ../../.env.owner
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-traders}:${POSTGRES_PASSWORD:-traders}@postgres:5432/${POSTGRES_DB:-traders}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:-traders_app}
     command: ['python', 'scripts/migrate.py']
     depends_on:

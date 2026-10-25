@@ -44,7 +44,8 @@ so `kubectl kustomize infra/k8s/.deploy` prints exactly what gets applied.
 |---|---|---|
 | Namespace `traders` | a named folder for objects | nothing collides with other apps; one command lists or removes everything |
 | ConfigMap `traders-config-<hash>` | settings injected as environment variables | the non-secret half of `.env`; the hash makes pods restart when a setting changes |
-| Secret `traders-secrets-<hash>` | the same, for secrets | session key, internal key, DB password - never in git or an image. Base64, not encryption |
+| Secret `traders-secrets-<hash>` | the same, for secrets | session key, internal key, the app role's DB password - never in git or an image. Base64, not encryption |
+| Secret `traders-owner-<hash>` | Postgres and the migrate Job only, by key | the database owner's password (D300) |
 | Service `postgres`, `redis` | a fixed name and address in front of changing pods | every connection string names the Service, never a pod |
 | StatefulSet `postgres`, `redis` | keeps one pod with a stable identity and its own disk | a database must get the *same* disk back after a restart |
 | PersistentVolumeClaim `data-postgres-0` | a request for a disk that outlives any pod | without it, deleting the pod deletes the data |
@@ -95,9 +96,12 @@ Service `ai-service` became `AI_SERVICE_PORT=tcp://10.96.x.x:8000`, which collid
 service's own `AI_SERVICE_PORT` setting and stopped it at startup.
 
 **Secrets.** `scripts/k8s-up.sh` writes `overlays/kind/secrets.env` on the first run: random
-session and internal keys, random passwords for the database owner (`POSTGRES_PASSWORD`, used by
-the `migrate` Job through `MIGRATION_DATABASE_URL`) and for `traders_app`, the role every other pod
-connects as (`APP_DB_PASSWORD`, `DATABASE_URL`; migration 0033). The admin's sign-in is not
+session and internal keys and the password for `traders_app`, the role every pod connects as
+(`APP_DB_PASSWORD`, `DATABASE_URL`; migration 0033). Beside it, `owner.env` holds the database
+owner's password (`POSTGRES_PASSWORD`, and `MIGRATION_DATABASE_URL` for the `migrate` Job) as the
+Secret `traders-owner`, which only Postgres and the `migrate` Job reference by key (D300): every
+pod loads `traders-secrets` whole, so the owner's password kept there reached all of them. A file
+from before the split has its owner lines moved across, values unchanged. The admin's sign-in is not
 a secret here: it is a hash in the database, set by `scripts/admin-password.sh` after the rollout.
 The cluster needs no `.env`. The owner password is never rewritten, because Postgres reads it
 only when it first creates its data directory - a new one would lock the migrations out of the

@@ -21,12 +21,38 @@ require_command() {
   command -v "$binary" > /dev/null 2>&1 || fail "'$binary' is not installed. ${hint}"
 }
 
+# shellcheck source=scripts/lib/owner-secret.sh
+source "$REPO_ROOT/scripts/lib/owner-secret.sh"
+
 # Create .env from the template on first run, with real generated secrets, so a
-# fresh clone never has to hand-edit a file before anything works.
+# fresh clone never has to hand-edit a file before anything works. Then the
+# owner's file beside it (D300).
 require_env_file() {
   local env_file="$REPO_ROOT/.env"
-  [ -f "$env_file" ] && return 0
+  if [ ! -f "$env_file" ]; then
+    create_env_file "$env_file"
+  fi
+  require_owner_env_file "$env_file" "$REPO_ROOT/.env.owner"
+}
 
+# `.env.owner`: the owner's password, which only the postgres and migrate
+# containers load (docker-compose.yml). A `.env` from before it keeps its value,
+# moved across; with neither, the template's - the value compose itself fell
+# back to before, so a database another checkout created still accepts it.
+require_owner_env_file() {
+  local env_file="$1" owner_file="$2" user database
+  if [ ! -f "$owner_file" ] && ! grep -q '^POSTGRES_PASSWORD=' "$env_file"; then
+    (umask 077 && cp "$REPO_ROOT/.env.owner.example" "$owner_file")
+    ok "Created $(basename "$owner_file") from the template."
+  fi
+  split_owner_secret "$env_file" "$owner_file"
+  user="$(grep -m 1 '^POSTGRES_USER=' "$env_file" | cut -d= -f2- || true)"
+  database="$(grep -m 1 '^POSTGRES_DB=' "$env_file" | cut -d= -f2- || true)"
+  ensure_migration_url "$owner_file" "${user:-traders}" "${database:-traders}"
+}
+
+create_env_file() {
+  local env_file="$1"
   say "No .env found - creating one from .env.example"
   cp "$REPO_ROOT/.env.example" "$env_file"
 
