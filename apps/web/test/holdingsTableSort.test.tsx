@@ -6,7 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 
 import type { HoldingView, PortfolioResponse, ResearchResponse, SentimentRating } from '@traders/shared';
 
@@ -48,26 +48,6 @@ const PORTFOLIO = {
   allocationByInstrument: [],
   allocationByAssetClass: [],
 } as unknown as PortfolioResponse;
-
-function rated(symbol: string, rating: SentimentRating | null) {
-  return {
-    instrumentId: `i-${symbol}`,
-    symbol,
-    name: `${symbol} Inc`,
-    latest:
-      rating === null
-        ? null
-        : { rating, rationale: 'r', findings: [], agentName: 'Analyst', ratedAt: '2026-10-24T21:00:00Z', stale: false },
-    lastAttempt: null,
-  };
-}
-
-/** Research with an agent assigned: BBB bearish, CCC bullish, AAA not rated yet. */
-const RESEARCH = {
-  agent: { id: 'agent-1', name: 'Analyst', state: 'active' },
-  run: null,
-  holdings: [rated('BBB', 'bearish'), rated('AAA', null), rated('CCC', 'bullish')],
-} as ResearchResponse;
 
 const symbolsInOrder = () =>
   screen.getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell')[0]!.textContent?.slice(0, 3));
@@ -115,24 +95,44 @@ describe('the real holdings table', () => {
     expect(cells).toContain('$20.00');
     expect(cells.some((text) => text?.includes('200'))).toBe(true);
   });
+});
 
-  it('sorts by sentiment once an agent researches the portfolio, an unrated holding last', async () => {
-    get.mockImplementation(async (path: string) =>
-      path === '/portfolio' ? PORTFOLIO : path === '/research' ? RESEARCH : new Promise(() => {}),
-    );
+function rated(symbol: string, rating: SentimentRating) {
+  return {
+    instrumentId: `i-${symbol}`,
+    symbol,
+    name: null,
+    latest: { rating, rationale: '', findings: [], agentName: 'Analyst', ratedAt: '2026-10-23T20:01:00Z', stale: false },
+    lastAttempt: null,
+  };
+}
+
+function withResearch(agent: ResearchResponse['agent']) {
+  const research = { agent, run: null, holdings: [rated('BBB', 'bearish'), rated('CCC', 'bullish')] } as unknown as ResearchResponse;
+  get.mockImplementation(async (path: string) =>
+    path === '/portfolio' ? PORTFOLIO : path === '/research' ? research : new Promise(() => {}),
+  );
+}
+
+describe('the Sentiment column', () => {
+  it('sorts Bullish first, an unrated holding last, and asks for it on a header click', async () => {
+    withResearch({ id: 'a1', name: 'Analyst', state: 'active' } as ResearchResponse['agent']);
     const onSort = vi.fn();
     renderPage(<HoldingsTable sort={{ key: 'sentiment', direction: 'desc' }} onSort={onSort} />);
-    await screen.findAllByText('Bullish');
+    const header = await screen.findByRole('columnheader', { name: /Sentiment/ });
+    expect(header.getAttribute('aria-sort')).toBe('descending');
     expect(symbolsInOrder()).toEqual(['CCC', 'BBB', 'AAA']);
-    const sentiment = screen.getByRole('columnheader', { name: /Sentiment/ });
-    expect(sentiment.getAttribute('aria-sort')).toBe('descending');
     fireEvent.click(screen.getByRole('button', { name: 'Sentiment' }));
     expect(onSort).toHaveBeenLastCalledWith({ key: 'sentiment', direction: 'asc' });
   });
 
-  it('offers no Sentiment column to sort by before an agent is assigned', async () => {
+  it('is not a column, or a sort choice, until an agent researches the portfolio', async () => {
+    withResearch(null);
     renderPage(<HoldingsTable />);
     await screen.findByText('BBB Inc');
-    expect(screen.queryByRole('button', { name: 'Sentiment' })).toBeNull();
+    // Settled, not merely not yet loaded: the research answer has arrived and says no agent.
+    await waitFor(() => expect(get.mock.calls.some(([path]) => path === '/research')).toBe(true));
+    await act(async () => {});
+    expect(screen.queryByRole('columnheader', { name: /Sentiment/ })).toBeNull();
   });
 });

@@ -17,9 +17,10 @@
  * currency: prices in two currencies are not one scale, so the currency code
  * orders first.
  *
- * Sentiment orders Bullish, Neutral, Bearish when descending; a holding with no
- * rating yet is a row with no figure. A stale rating sorts by its word, as the
- * cell still shows it beside its stale mark.
+ * Sentiment orders by the latest rating's word, Bullish above Neutral above
+ * Bearish (D254), so its first click shows Bullish first like any figure's. A
+ * holding no agent has rated sorts last, as a missing figure does; a stale
+ * rating sorts by its word, since the column still shows it, marked stale.
  */
 
 import type { SentimentRating } from '@traders/shared';
@@ -44,12 +45,16 @@ export interface SortFields {
   pnl: number | null;
   pnlPct: number | null;
   weight: number | null;
-  /** The research agent's latest rating (D254); null before its first. */
-  sentiment: SentimentRating | null;
+  /** `sentimentRank` of the latest rating. */
+  sentiment: number | null;
 }
 
-/** A rating's place on the sentiment scale: descending puts Bullish first. */
 const SENTIMENT_RANK: Record<SentimentRating, number> = { bearish: -1, neutral: 0, bullish: 1 };
+
+/** A rating's place in the Sentiment order; null when there is no rating. */
+export function sentimentRank(rating: SentimentRating | null | undefined): number | null {
+  return rating ? SENTIMENT_RANK[rating] : null;
+}
 
 function isSortKey(value: unknown): value is SortKey {
   return (SORT_KEYS as readonly unknown[]).includes(value);
@@ -115,9 +120,6 @@ function compareKnown(key: SortKey, a: SortFields, b: SortFields): number | null
     case 'price':
       if (a.price === null || b.price === null) return null;
       return a.price.currency.localeCompare(b.price.currency) || Math.sign(a.price.minor - b.price.minor);
-    case 'sentiment':
-      if (a.sentiment === null || b.sentiment === null) return null;
-      return Math.sign(SENTIMENT_RANK[a.sentiment] - SENTIMENT_RANK[b.sentiment]);
     default: {
       const x = a[key];
       const y = b[key];

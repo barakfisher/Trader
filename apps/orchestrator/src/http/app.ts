@@ -75,7 +75,10 @@ export interface AppEnv {
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
-/** Route prefixes that require a signed-in session. */
+/**
+ * Route prefixes that require a signed-in session. A new route joins this list
+ * or `sessionGate.test.ts`'s public list; that test fails for a route on neither.
+ */
 const PROTECTED_PREFIXES = [
   '/portfolio',
   '/holdings',
@@ -91,6 +94,10 @@ const PROTECTED_PREFIXES = [
   // Like '/concepts': the universe has no `user_id`, and is still the product.
   '/topics',
   '/proposals',
+  // The narration badge: which model wrote the latest explanations, per user.
+  '/narration',
+  // Like '/topics': no `user_id` (the agent template taxonomy), still the product.
+  '/universe',
   // The assistant's questions and the conversations they make (migration 0052).
   '/assistant',
   // Research on the main portfolio (D254): its ratings and the paid run.

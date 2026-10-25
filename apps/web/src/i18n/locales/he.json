@@ -238,7 +238,6 @@
       "pnl": "רווח/הפסד",
       "pnlPct": "רווח/הפסד %",
       "weight": "משקל",
-      "sentiment": "סנטימנט",
       "actions": "פעולות"
     },
     "quantityFor": "כמות עבור {{symbol}}",

@@ -105,6 +105,10 @@ def is_ratio_key(key: str) -> bool:
     ratio key (`thresholds_pct.high`) is a ratio too. Public because the prompt
     shows the model ratios as percentages by the same rule, and the two must not
     disagree about which figures are ratios.
+
+    The markers match anywhere in the key, so a whole percent must never sit under
+    one: name its key `..._percent` (`min_cash_percent_of_capital` holds "25"), or
+    "25%" is refused because the check offers 2500%.
     """
     return any(marker in key for marker in _RATIO_MARKERS)
 

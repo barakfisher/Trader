@@ -233,7 +233,6 @@
       "pnl": "P&L",
       "pnlPct": "P&L %",
       "weight": "Weight",
-      "sentiment": "Sentiment",
       "actions": "Actions"
     },
     "quantityFor": "Quantity for {{symbol}}",

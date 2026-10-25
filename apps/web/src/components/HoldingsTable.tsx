@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { AlertTriangle, Check, Clock, Pencil, Trash2, X } from 'lucide-react';
 
-import { minorToDecimalString, minorToNumber, type HoldingView, type SentimentRating } from '@traders/shared';
+import { minorToDecimalString, minorToNumber, type HoldingView, type ResearchHolding } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
 import { formatMoney, formatPercent, formatShare } from '../i18n/format.ts';
@@ -12,16 +12,16 @@ import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { useNarrowViewport } from '../lib/viewport.ts';
 import { usePortfolioQuery, useRemoveHolding, useUpdateHolding } from '../queries/portfolio.ts';
-import { sortHoldings, type SortFields } from '../lib/holdingsSort.ts';
-import { SortControl, SortableTh, alignsEnd, useSortColumns, type SortProps } from './SortableHeader.tsx';
+import { sentimentRank, sortHoldings, type SortFields } from '../lib/holdingsSort.ts';
+import { SortControl, SortableTh, useSortColumns, type SortProps } from './SortableHeader.tsx';
 import { SentimentCell, useSentiments } from './SentimentBadge.tsx';
 import { Card, Delta } from './ui.tsx';
 
 export type UpdateHolding = ReturnType<typeof useUpdateHolding>;
 export type RemoveHolding = ReturnType<typeof useRemoveHolding>;
 
-/** A real holding's figures as the table sorts by them (M10 decision 21), with its latest rating. */
-export function holdingSortFields(holding: HoldingView, sentiment: SentimentRating | null = null): SortFields {
+/** A real holding's figures as the table sorts by them (M10 decision 21), with its latest rating's. */
+export function holdingSortFields(holding: HoldingView, research?: ResearchHolding): SortFields {
   return {
     symbol: holding.instrument.symbol,
     quantity: holding.quantity,
@@ -32,7 +32,7 @@ export function holdingSortFields(holding: HoldingView, sentiment: SentimentRati
     pnl: holding.pnlMinor,
     pnlPct: holding.pnlPct,
     weight: holding.weightPct,
-    sentiment,
+    sentiment: sentimentRank(research?.latest?.rating),
   };
 }
 
@@ -54,7 +54,7 @@ export function HoldingsTable({
   const sentiments = useSentiments();
   const holdings = sortHoldings(
     portfolio?.holdings ?? [],
-    (holding) => holdingSortFields(holding, sentiments.ratingOf(holding.instrument.id)),
+    (holding) => holdingSortFields(holding, sentiments.byInstrument.get(holding.instrument.id)),
     sort,
   );
   const columns = useSortColumns(sentiments.shown);
@@ -101,7 +101,7 @@ export function HoldingsTable({
                   key={column.key}
                   column={column.key}
                   label={column.label}
-                  end={alignsEnd(column.key)}
+                  end={column.key !== 'symbol' && column.key !== 'sentiment'}
                   sort={sort}
                   onSort={onSort}
                 />

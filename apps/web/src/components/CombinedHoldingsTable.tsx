@@ -7,7 +7,7 @@ import type {
   ConsolidatedPendingTrade,
   ConsolidatedPosition,
   HoldingView,
-  SentimentRating,
+  ResearchHolding,
 } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
@@ -28,9 +28,9 @@ import {
   type RemoveHolding,
   type UpdateHolding,
 } from './HoldingsTable.tsx';
-import { sortHoldings, type SortFields, type SortKey } from '../lib/holdingsSort.ts';
+import { sentimentRank, sortHoldings, type SortFields, type SortKey } from '../lib/holdingsSort.ts';
 import { ApproveProposalButton } from './ProposalApproval.tsx';
-import { SortControl, SortableTh, alignsEnd, useSortColumns, type SortProps } from './SortableHeader.tsx';
+import { SortControl, SortableTh, useSortColumns, type SortProps } from './SortableHeader.tsx';
 import { SentimentCell, useSentiments } from './SentimentBadge.tsx';
 import { Card, Delta } from './ui.tsx';
 
@@ -58,18 +58,27 @@ export function CombinedHoldingsTable({
   actions?: ReactNode;
 } & Partial<SortProps>) {
   const { t } = useTranslation();
-  const combined = combinedHoldings(data, scope);
   const sentiments = useSentiments();
+  const combined = combinedHoldings(data, scope);
   const rows = sortHoldings(
     combined.rows,
-    (row) => combinedSortFields(row, sentiments.ratingOf(row.instrument.id)),
+    (row) => combinedSortFields(row, sentiments.byInstrument.get(row.instrument.id)),
     sort,
   );
   const unheldPending = combined.unheldPending;
   const columns = useSortColumns(sentiments.shown);
   const header = (key: SortKey) => {
     const column = columns.find((candidate) => candidate.key === key)!;
-    return <SortableTh key={key} column={key} label={column.label} end={alignsEnd(key)} sort={sort} onSort={onSort} />;
+    return (
+      <SortableTh
+        key={key}
+        column={key}
+        label={column.label}
+        end={key !== 'symbol' && key !== 'sentiment'}
+        sort={sort}
+        onSort={onSort}
+      />
+    );
   };
   const realHoldings = new Map((usePortfolioQuery().data?.holdings ?? []).map((holding) => [holding.id, holding]));
   const updateHolding = useUpdateHolding();
@@ -125,8 +134,8 @@ export function CombinedHoldingsTable({
   );
 }
 
-/** A combined row's figures as the table sorts by them (M10 decision 21), with its latest rating. */
-export function combinedSortFields(row: CombinedHolding, sentiment: SentimentRating | null = null): SortFields {
+/** A combined row's figures as the table sorts by them (M10 decision 21), with its latest rating's. */
+export function combinedSortFields(row: CombinedHolding, research?: ResearchHolding): SortFields {
   return {
     symbol: row.instrument.symbol,
     quantity: row.quantity,
@@ -137,7 +146,7 @@ export function combinedSortFields(row: CombinedHolding, sentiment: SentimentRat
     pnl: row.pnlMinor,
     pnlPct: row.pnlPct,
     weight: row.weightPct,
-    sentiment,
+    sentiment: sentimentRank(research?.latest?.rating),
   };
 }
 

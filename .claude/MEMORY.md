@@ -4,7 +4,23 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-24 - **Handoff by count, five merges since #302: M10 PRs 6-9 and M11 B are
+Updated: 2026-10-25 - **Not a handoff: three merges since #308, recorded with their deploy.**
+- **Merges since #308:**
+  - #310, M10 PR 12: sessions get a table (D261, D294-D297; migration `0071`), another session's;
+  - #312: the mandate's limit keys say `percent`, so a thesis can quote them (a debt row);
+  - #314: the holdings tables sort by Sentiment (a debt line).
+- **Decisions reached 297** (next: **298**). #312 and #314 took none.
+- **Migrations:** `0071_user_sessions` is head; next free is `0072`.
+- **Deployed:** compose runs `c792b05` (#314) at `0071`, redeployed 2026-10-25 after
+  `db-backup.sh --target all`; the smoke test passed through the snapshot checks and stopped at
+  the assistant step, which expected `no_model` from a stack that has a model (fixed in the PR
+  that records this). **kind is not confirmed** at `c792b05`: read its readyz before relying on it.
+- **The smoke test replaces every holding** in the database it targets (`mode: "replace"`; the
+  script's header says so). Compose holds only the demo portfolio, so it is safe there; never
+  point it at a database holding a real portfolio.
+- **Next:** unchanged - "Next session: after M10 PR 9" below.
+
+Previous update, 2026-10-24 - **Handoff by count, five merges since #302: M10 PRs 6-9 and M11 B are
 merged and live.**
 - **Merges since #302:**
   - #304, M11 B: deciding from `/pending` (D282), another session's;
@@ -3600,8 +3616,8 @@ failure they prevent.
     mandate checks (D171), so the prompt, the briefing and the limits agree. The amount is
     rounded down to the cent; the percent is to one place. **The key is `percent_of_capital`,
     not `..._pct_...`:** the validator reads any key with "pct" as a ratio, so "75%" would not
-    match "75" - which is why a thesis quoting the mandate's `min_cash_pct_of_capital` is refused
-    today (open, below). No buffer set is a buffer of zero. *Rejected:* the amount only (a person
+    match "75" - which is why a thesis quoting the mandate's `min_cash_pct_of_capital` was refused
+    until the mandate's keys were renamed `..._percent_of_capital` (2026-10-24). No buffer set is a buffer of zero. *Rejected:* the amount only (a person
     reads idle cash as a share, and the agent may not compute one).
 236. **A pass that does not quote its idle cash goes back once** (the user, 2026-10-21). When a
     scan trades nothing, the briefing has `cash_above_buffer`, and the thesis quotes neither its
@@ -5370,7 +5386,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | **Mandate limits are not re-checked at approval** | `services/tradeApproval.ts`, `fills.ts` | The scan checks a buy against capital at cost; a proposal approved later, after another approval moved cash, can land past a limit. The fill still refuses what cash cannot cover. Approving is the user's explicit act |
 | **The instructions are still `persona` underneath** | `agents.persona`, `AgentView.persona`, wire code `no_persona` | Relabelled in the UI only ("Additional instructions", D170/D174); renaming the column and the code is churn with no behaviour, left on purpose |
 | **Narration's and the agents' figure checks still read a timestamp's digits as sources, and refuse U+2011 hyphens** | `app/narration/evidence_validator.py`; the assistant fixed it in `app/assistant/reply.py` only | A small whole number (a day, hour or minute) written by a model passes whenever its evidence carries a timestamp that contains it; "7‑day" with a non-breaking hyphen is refused. Moving `_without_dates` and the dash normalisation into the validator fixes both for everyone - and changes narration's behaviour, so measure its rejection rate before and after |
-| **A key with "pct" in it is read as a ratio, so the mandate's own percentages cannot be quoted** | `mandate.mandate_brief` (`min_cash_pct_of_capital`, `max_position_pct_of_capital` hold "25"), `evidence_validator.is_ratio_key` | Found 2026-10-21 (D235): a thesis writing "my 25% cash buffer" is refused as unsourced, because the validator offers 2500% for a `pct` key, never 25%. D236 makes a pass talk about cash, so this will bite more. Renaming the two keys (`..._percent_of_capital`) fixes it; stored briefings keep the old names, read only by the UI's folded JSON |
+| ~~A key with "pct" in it is read as a ratio, so the mandate's own percentages cannot be quoted~~ | — | **Resolved** (2026-10-24, the mandate limit keys renamed to `max_position_percent_of_capital` and `min_cash_percent_of_capital`): found 2026-10-21 (D235), a thesis writing "my 25% cash buffer" was refused as unsourced, because the validator offers 2500% for a `pct` key. Briefings stored before the rename keep the old key names |
 | **Scheduled runs serve only `SINGLE_USER_ID`** | `scheduler.ts` (`triggerRun` names no user), `routes/internal.ts` falls back to it | Found 2026-10-21: the second user's agent George has never had a scheduled scan; `agent_scans` runs report `"agents": 3`, the admin's. Every scheduled kind - scans, news, digest - is the admin's only. The three-part fix is M9-MEASUREMENT.md's "Scheduling" item; proposed as its own session |
 | **A few cents above the buffer still asks for a justification** | `mandate.cash_above_buffer` (D235), `scan._quotes_idle` (D236) | As decided: any amount above the buffer is idle, so an agent left with $3 is sent back unless it quotes "3.00". Cheap and harmless, but reads oddly; a floor (cash that buys one share plus the fee) would need a decision |
 | **`purpose = 'ask'` outlives `/ask`** | `Purpose` in `app/llm/base.py`, `SCOPE_FOR_PURPOSE`, `llm_calls`' CHECK, `services/llmPanel.ts`, `spend_estimate.py` | Nothing emits it since PR 4; kept so stored rows still read. Retention (30 days) empties them; then drop it with a migration |
@@ -5896,7 +5912,9 @@ grant tests fail for the wrong reason.
   it was found only in the browser.
 - **The session gate's `PROTECTED_PREFIXES` is a list a new route must join.** `/research` was
   missing, so a user who still had to change a one-time password could start paid runs. The
-  security review caught it. `/narration` and `/universe` may have the same gap (unverified).
+  security review caught it. `/narration` and `/universe` had the same gap (fixed 2026-10-25);
+  `test/sessionGate.test.ts` now walks every route and fails for one that is neither gated nor
+  on its commented public list.
 - **The local clock can be far from what you think.** The overnight session believed it was
   just after midnight when it was 09:26; read `TZ=Asia/Jerusalem date` before acting on a
   time-boxed grant.
@@ -5911,8 +5929,9 @@ grant tests fail for the wrong reason.
 - ~~The account reset does not name the research tables~~ - resolved 2026-10-25 (0072): the
   `main_portfolio` group erases finished research runs and their ratings, backed up like the
   rest; a run still `running` keeps its row so its writes land.
-- ~~The Sentiment column is not sortable~~ - resolved 2026-10-25: `sentiment` is a sort key,
-  Bullish > Neutral > Bearish descending, an unrated holding last both ways (as an unpriced one).
+- ~~The Sentiment column is not sortable.~~ **Resolved** (2026-10-25): `?sort=sentiment` orders
+  Bullish, Neutral, Bearish; an unrated holding is last both ways, and a stale rating sorts by its
+  word. The column and its sort choice exist only while an agent researches the portfolio.
 - ~~Ask has no tool to read the research~~ - resolved 2026-10-25: `get_research`, and a line in
   the instructions mapping "what does my agent think of X" to it. **The paid assistant eval was
   not run for it** (the session had no key): run it (Flash-Lite, `--repeat 3`) before relying on

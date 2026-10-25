@@ -7,6 +7,7 @@ import {
   holdingsSortFrom,
   holdingsSortSearch,
   nextSort,
+  sentimentRank,
   sortHoldings,
   type SortFields,
 } from '../src/lib/holdingsSort.ts';
@@ -76,19 +77,6 @@ describe('sortHoldings', () => {
     expect(symbols(sortHoldings(rows, (r) => r, { key: 'value', direction: 'asc' }))).toEqual(['C', 'B', 'D', 'A']);
   });
 
-  it('orders sentiment Bullish, Neutral, Bearish, with an unrated holding last both ways', () => {
-    const rated = [
-      row('A', { sentiment: 'bearish' }),
-      row('B', { sentiment: null }),
-      row('C', { sentiment: 'bullish' }),
-      row('D', { sentiment: 'neutral' }),
-      row('E', { sentiment: 'bullish' }),
-    ];
-    expect(firstDirection('sentiment')).toBe('desc');
-    expect(symbols(sortHoldings(rated, (r) => r, { key: 'sentiment', direction: 'desc' }))).toEqual(['C', 'E', 'D', 'A', 'B']);
-    expect(symbols(sortHoldings(rated, (r) => r, { key: 'sentiment', direction: 'asc' }))).toEqual(['A', 'D', 'C', 'E', 'B']);
-  });
-
   it('compares quantities as decimals, not as text or floats', () => {
     const quantities = [row('A', { quantity: '10' }), row('B', { quantity: '9.5' }), row('C', { quantity: '0.000000000000000001' })];
     expect(symbols(sortHoldings(quantities, (r) => r, { key: 'quantity', direction: 'asc' }))).toEqual(['C', 'B', 'A']);
@@ -107,6 +95,19 @@ describe('sortHoldings', () => {
   it('sorts losses below gains on P&L', () => {
     const pnl = [row('A', { pnlPct: 4.2 }), row('B', { pnlPct: -12.5 }), row('C', { pnlPct: null }), row('D', { pnlPct: 0 })];
     expect(symbols(sortHoldings(pnl, (r) => r, { key: 'pnlPct', direction: 'desc' }))).toEqual(['A', 'D', 'B', 'C']);
+  });
+
+  it('orders Sentiment Bullish, Neutral, Bearish, with an unrated holding last both ways', () => {
+    const rated = [
+      row('A', { sentiment: sentimentRank('bearish') }),
+      row('B', { sentiment: sentimentRank(undefined) }),
+      row('C', { sentiment: sentimentRank('bullish') }),
+      row('D', { sentiment: sentimentRank('neutral') }),
+      row('E', { sentiment: sentimentRank('bullish') }),
+    ];
+    expect(firstDirection('sentiment')).toBe('desc');
+    expect(symbols(sortHoldings(rated, (r) => r, { key: 'sentiment', direction: 'desc' }))).toEqual(['C', 'E', 'D', 'A', 'B']);
+    expect(symbols(sortHoldings(rated, (r) => r, { key: 'sentiment', direction: 'asc' }))).toEqual(['A', 'D', 'C', 'E', 'B']);
   });
 });
 

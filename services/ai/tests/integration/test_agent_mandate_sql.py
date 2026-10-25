@@ -106,7 +106,7 @@ async def test_a_buy_over_the_limit_goes_back_once_and_a_fitting_one_is_a_trade(
     assert result.outcome == "trade", result.problems
     row = _stored(loaded, result.scan_id)
     assert row.answer["trades"][0]["quantity"] == "1"
-    assert row.briefing["mandate"]["max_position_pct_of_capital"] == "10"
+    assert row.briefing["mandate"]["max_position_percent_of_capital"] == "10"
     roles = [entry["role"] for entry in row.transcript]
     assert roles == ["assistant", "returned", "assistant"]
     assert "position limit" in row.transcript[1]["problems"][0]
