@@ -13,6 +13,7 @@ import { formatExactTime } from '../lib/relativeTime.ts';
 import { useConfirmTradeApproval, usePreviewTradeApproval } from '../queries/proposals.ts';
 import { useStore } from '../stores/context.tsx';
 import { EvidenceCheckedLine } from './EvidenceChecked.tsx';
+import { MandateBreachWarning } from './MandateBreachWarning.tsx';
 import { PreviewSummary } from './TradePanel.tsx';
 import { Button, Card, ErrorNote } from './ui.tsx';
 
@@ -27,7 +28,8 @@ import { Button, Card, ErrorNote } from './ui.tsx';
  * the agent's, and **Confirm** fills it, through the same path as a manual
  * trade. A refusal - the price too far from the agent's, the market closed, not
  * enough cash - is said against this card, and the proposal stays open to try
- * again or reject (D49). No snooze and no undo (D48).
+ * again or reject (D49). No snooze and no undo (D48). A buy past one of the
+ * agent's own limits is warned about above Confirm, never refused (D299).
  */
 export const TradeProposalCard = observer(function TradeProposalCard({
   proposal,
@@ -126,6 +128,16 @@ export const TradeProposalCard = observer(function TradeProposalCard({
               })}
             </p>
           </PreviewSummary>
+        )}
+        {shown !== null && shown.mandateBreaches.length > 0 && (
+          <MandateBreachWarning
+            breaches={shown.mandateBreaches}
+            agentId={proposal.agentId}
+            symbol={shown.trade.symbol}
+            currency={payload.currency}
+            disabled={busy}
+            onAdjusted={approve}
+          />
         )}
 
         {preview.error && (

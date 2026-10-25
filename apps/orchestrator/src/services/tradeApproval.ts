@@ -19,13 +19,19 @@
  * - **Approve and Reject only (D48).** Snooze and undo are refused for trade
  *   kinds in `applyDecision`, whatever a surface sends; reject goes through it
  *   unchanged.
+ * - **The mandate's size rules are checked again, and warn (D299).** Another
+ *   approval may have spent the cash the scan counted on; the preview carries
+ *   each limit the buy would break, and Confirm still fills - approving is the
+ *   user's explicit act - and logs the override.
  *
  * The idempotency key is the proposal's: a confirm repeated after a lost reply
  * meets the fill the first one wrote, and answers it.
  */
 
 import {
+  feeMinor,
   isTradeProposalKind,
+  notionalMinor,
   type TradeApprovalPreview,
   type TradeApprovalResult,
   type TradeProposalKind,
@@ -37,6 +43,7 @@ import {
   findFillByKey,
   findProposal,
   getAgent,
+  getAgentBook,
   getAgentCash,
   getAgentHoldingQuantity,
   recordProposalAttempt,
@@ -53,6 +60,7 @@ import {
   type TradeContext,
   type TradeRequest,
 } from './fills.js';
+import { mandateBreaches, type CheckedTrade } from './mandateLimits.js';
 import { factsOf } from './proposals.js';
 import { effectiveState } from './proposalState.js';
 
@@ -149,6 +157,23 @@ async function recordingRefusals<T>(
   }
 }
 
+/** The mandate's size rules over the agent's book as it stands (D299). */
+async function breachesOf(userId: string, trade: OpenTrade, checked: CheckedTrade, cashMinor: bigint) {
+  if (checked.side !== 'buy') return [];
+  const book = await getAgentBook(userId, trade.agent.id, trade.payload.symbol);
+  return mandateBreaches(
+    trade.agent,
+    {
+      cashMinor,
+      holdingsCostMinor: BigInt(book.holdings_cost_minor),
+      symbolCostMinor: BigInt(book.symbol_cost_minor),
+      heldCount: book.held_count,
+      holdsSymbol: book.holds_symbol,
+    },
+    checked,
+  );
+}
+
 /** *Approve*: the trade at the live price beside the agent's, or why not. Writes no ledger row. */
 export async function previewTradeApproval(
   userId: string,
@@ -175,14 +200,40 @@ export async function previewTradeApproval(
         },
       );
     }
+    const breaches = await breachesOf(
+      userId,
+      trade,
+      { side: trade.kind, notionalMinor: BigInt(preview.notionalMinor), feeMinor: BigInt(preview.feeMinor) },
+      BigInt(preview.cashMinor),
+    );
     return {
       proposalId: trade.row.id,
       agentPriceMinor: trade.payload.priceMinor,
       distanceBps: Number(distance),
       maxDistanceBps: Number(MAX_AGENT_DISTANCE_BPS),
       trade: preview,
+      mandateBreaches: breaches,
     };
   });
+}
+
+/**
+ * The limits a confirm at the shown price goes past, for the log (D299). Read
+ * before the fill, at the price the preview showed: the fill lands within
+ * ±50 bps of it, which is close enough to name which rule was overridden.
+ */
+async function overriddenRules(userId: string, trade: OpenTrade, shownPriceMinor: bigint) {
+  if (trade.kind !== 'buy') return [];
+  const cash = await getAgentCash(userId, trade.agent.id);
+  if (!cash) return [];
+  const quantity = trade.payload.quantity;
+  const breaches = await breachesOf(
+    userId,
+    trade,
+    { side: 'buy', notionalMinor: notionalMinor(quantity, shownPriceMinor), feeMinor: feeMinor(quantity) },
+    BigInt(cash.balance_minor),
+  );
+  return breaches.map((breach) => breach.rule);
 }
 
 /** A confirm repeated after the first one filled: the fill it wrote, and the state now. */
@@ -216,6 +267,7 @@ export async function confirmTradeApproval(
     if (replayed) return replayed;
   }
   assertOpen(trade, (context.now ?? (() => new Date()))());
+  const overridden = await overriddenRules(userId, trade, shownPriceMinor);
 
   const result = await recordingRefusals(userId, trade, surface, () =>
     executeFill(tradeRequest(userId, trade, shownPriceMinor), context, async (client) => {
@@ -241,5 +293,8 @@ export async function confirmTradeApproval(
     { proposalId: trade.row.id, surface, fillId: result.fill.id, created: result.created },
     'proposal.trade_approved',
   );
+  if (overridden.length > 0 && result.created) {
+    logger().info({ proposalId: trade.row.id, surface, rules: overridden }, 'proposal.mandate_overridden');
+  }
   return { state: 'approved', fill: result.fill, cashMinor: result.cashMinor, heldQuantity: result.heldQuantity };
 }

@@ -25,7 +25,7 @@
  * toast and a keyboard that matches the proposal's real state.
  */
 
-import { formatMoney } from '@traders/shared';
+import { formatMoney, type MandateBreach } from '@traders/shared';
 import type { AiClient } from '@traders/shared/ai';
 
 import { getUser } from '../db/queries.js';
@@ -33,6 +33,7 @@ import { ApiProblem } from '../http/errors.js';
 import { logger } from '../logger.js';
 import {
   messagesFor,
+  type MandateBreachFigures,
   type Messages,
   type TradeRefusalCode,
 } from '../notify/messages.js';
@@ -70,6 +71,48 @@ export function bpsAsPercent(bps: number, signed = true): string {
   const sign = bps < 0 ? '-' : signed ? '+' : '';
   const magnitude = Math.abs(Math.trunc(bps));
   return `${sign}${Math.floor(magnitude / 100)}.${String(magnitude % 100).padStart(2, '0')}%`;
+}
+
+/** Basis points as the share a person reads, in the user's locale: 1000 -> "10%", 1425 -> "14.25%". */
+export function bpsAsShare(bps: number, messages: Messages): string {
+  return new Intl.NumberFormat(messages.numberLocale, { style: 'percent', maximumFractionDigits: 2 }).format(
+    bps / 10_000,
+  );
+}
+
+/** A breach's figures in the user's language (D299). */
+export function breachFigures(breach: MandateBreach, symbol: string, messages: Messages): MandateBreachFigures {
+  const money = (minor: number) => formatMoney(minor, 'USD', { locale: messages.numberLocale });
+  const count = (n: number) => new Intl.NumberFormat(messages.numberLocale).format(n);
+  switch (breach.rule) {
+    case 'max_position':
+      return {
+        rule: breach.rule,
+        symbol,
+        limit: bpsAsShare(breach.limitBps, messages),
+        share: bpsAsShare(breach.positionAfterBps, messages),
+        position: money(breach.positionAfterMinor),
+        capital: money(breach.capitalMinor),
+        over: money(breach.overByMinor),
+        suggested: breach.suggestedBps === null ? null : bpsAsShare(breach.suggestedBps, messages),
+      };
+    case 'cash_buffer':
+      return {
+        rule: breach.rule,
+        limit: bpsAsShare(breach.limitBps, messages),
+        share: bpsAsShare(breach.cashAfterBps, messages),
+        cashAfter: money(breach.cashAfterMinor),
+        short: money(breach.shortByMinor),
+        suggested: bpsAsShare(breach.suggestedBps, messages),
+      };
+    case 'max_holdings':
+      return {
+        rule: breach.rule,
+        limit: count(breach.limit),
+        nth: count(breach.heldCount + 1),
+        suggested: breach.suggestedLimit === null ? null : count(breach.suggestedLimit),
+      };
+  }
 }
 
 function stamp(now: Date, timezone: string, messages: Messages): string {
@@ -168,6 +211,12 @@ export async function handleTradeCallback(input: TradeCallback): Promise<void> {
         cashAfter: money(trade.cashAfterMinor),
         band: bpsAsPercent(Number(DEFAULT_RANGE_BPS), false),
       });
+      if (preview.mandateBreaches.length > 0) {
+        const lines = preview.mandateBreaches.map((breach) =>
+          messages.trade.mandateBreach(breachFigures(breach, trade.symbol, messages)),
+        );
+        block = [block, ...lines, messages.trade.mandateOverride].join('\n');
+      }
       if (!confirmable(live)) block = `${block}\n${messages.trade.confirmInApp}`;
       keyboard = { confirmAt: live };
     } else {

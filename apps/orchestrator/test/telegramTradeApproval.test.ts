@@ -172,6 +172,7 @@ const PREVIEW = {
     currency: 'USD',
     warnings: [],
   },
+  mandateBreaches: [],
 };
 
 beforeEach(() => {
@@ -244,6 +245,50 @@ describe('Approve: the preview at the live price (D47)', () => {
     await tap('approve');
     expect(String(lastEdit().body.text)).toContain('במחיר העדכני');
     expect(keyboardOf(lastEdit()).map((button) => button.text)).toEqual(['אישור סופי', 'דחייה']);
+  });
+
+  it('names each limit the buy breaks, how far, and the setting to change, and still offers Confirm (D299)', async () => {
+    vi.mocked(approval.previewTradeApproval).mockResolvedValue({
+      ...PREVIEW,
+      mandateBreaches: [
+        {
+          rule: 'max_position',
+          limitBps: 1_000,
+          capitalMinor: 1_000_000,
+          positionAfterMinor: 142_000,
+          positionAfterBps: 1_420,
+          overByMinor: 42_000,
+          suggestedBps: 1_500,
+        },
+        {
+          rule: 'cash_buffer',
+          limitBps: 2_000,
+          capitalMinor: 1_000_000,
+          cashAfterMinor: 125_000,
+          cashAfterBps: 1_250,
+          shortByMinor: 75_000,
+          suggestedBps: 1_200,
+        },
+        { rule: 'max_holdings', limit: 5, heldCount: 5, suggestedLimit: 6 },
+      ],
+    } as never);
+    await tap('approve');
+    const text = String(lastEdit().body.text);
+    expect(text).toContain('NVDA would be 14.2% of capital ($1,420.00 of $10,000.00), $420.00 past its 10% limit.');
+    expect(text).toContain('set Max position to 15% in the agent');
+    expect(text).toContain('cash would fall to $1,250.00 (12.5% of capital), $750.00 below its 20% minimum.');
+    expect(text).toContain('set Cash buffer minimum to 12% in the agent');
+    expect(text).toContain('this would be instrument number 6, past its limit of 5.');
+    expect(text).toContain('set Max holdings to 6 in the agent');
+    expect(text).toContain('You can still Confirm');
+    expect(keyboardOf(lastEdit()).map((button) => button.text)).toEqual(['Confirm', 'Reject']);
+
+    language = 'he';
+    await tap('approve');
+    const hebrew = String(lastEdit().body.text);
+    expect(hebrew).toContain('חריגה מהפוזיציה המרבית של הסוכן');
+    expect(hebrew).toContain('כרית מזומן מינימלית');
+    expect(hebrew).toContain('עדיין אפשר לאשר');
   });
 
   it('offers no Confirm for a price no button can carry', async () => {

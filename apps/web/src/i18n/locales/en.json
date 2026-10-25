@@ -584,6 +584,21 @@
         "quoteTooOld": "The latest price is more than 30 minutes old. Try again in a moment.",
         "quoteUnavailable": "No price is available right now. Try again in a moment.",
         "priceMoved": "The price moved to {{price}} since the preview. Approve again to see the new figures."
+      },
+      "mandate": {
+        "title": "Outside the agent's limits",
+        "maxPosition": "Over the agent's max position: {{symbol}} would be {{share}} of capital ({{position}} of {{capital}}), {{over}} past its {{limit}} limit.",
+        "cashBuffer": "Under the agent's cash buffer: cash would fall to {{cashAfter}} ({{share}} of capital), {{short}} below its {{limit}} minimum.",
+        "maxHoldings": "Over the agent's max holdings: this would be instrument number {{nth}}, past its limit of {{limit}}.",
+        "set": {
+          "max_position": "Set Max position to {{value}}",
+          "cash_buffer": "Set Cash buffer minimum to {{value}}",
+          "max_holdings": "Set Max holdings to {{value}}"
+        },
+        "saving": "Saving…",
+        "saveFailed": "The setting could not be saved. Try again, or change it in the agent's settings.",
+        "override": "You can still confirm: approving overrides the agent's limit for this trade. To keep it for later trades, change the setting.",
+        "settings": "Agent settings"
       }
     }
   },

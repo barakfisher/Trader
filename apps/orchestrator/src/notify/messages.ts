@@ -105,6 +105,25 @@ export interface TradePreviewFigures {
   band: string;
 }
 
+/**
+ * A mandate limit an approval would break (D299), every figure formatted. A
+ * suggestion is the setting that would allow the trade, or null when none would.
+ */
+export type MandateBreachFigures =
+  | {
+      rule: 'max_position';
+      symbol: string;
+      /** The limit, the position's share after the buy, e.g. "10%", "14.2%". */
+      limit: string;
+      share: string;
+      position: string;
+      capital: string;
+      over: string;
+      suggested: string | null;
+    }
+  | { rule: 'cash_buffer'; limit: string; share: string; cashAfter: string; short: string; suggested: string | null }
+  | { rule: 'max_holdings'; limit: string; nth: string; suggested: string | null };
+
 export interface TradeFillFigures {
   side: 'buy' | 'sell';
   quantity: string;
@@ -360,6 +379,10 @@ export interface Messages {
     farFromAgent: (agentPrice: string, livePrice: string, distance: string) => string;
     /** A price too large for a signed button (`MAX_CALLBACK_PRICE_MINOR`). */
     confirmInApp: string;
+    /** D299: a limit the buy would break, and the setting that would allow it. */
+    mandateBreach: (breach: MandateBreachFigures) => string;
+    /** Under the breaches: Confirm still fills. */
+    mandateOverride: string;
   };
 
   /**
@@ -767,6 +790,32 @@ const en: Messages = {
     farFromAgent: (agentPrice, livePrice, distance) =>
       `The price is ${livePrice}, ${distance} from the agent's ${agentPrice} - more than 3%.`,
     confirmInApp: 'This price is too large for a Telegram button: confirm it in the app.',
+    mandateBreach: (b) => {
+      switch (b.rule) {
+        case 'max_position':
+          return [
+            `⚠️ Over the agent's max position: ${b.symbol} would be ${b.share} of capital (${b.position} of ${b.capital}), ${b.over} past its ${b.limit} limit.`,
+            b.suggested && `If that is intended, set Max position to ${b.suggested} in the agent's settings.`,
+          ]
+            .filter(Boolean)
+            .join(' ');
+        case 'cash_buffer':
+          return [
+            `⚠️ Under the agent's cash buffer: cash would fall to ${b.cashAfter} (${b.share} of capital), ${b.short} below its ${b.limit} minimum.`,
+            b.suggested && `If that is intended, set Cash buffer minimum to ${b.suggested} in the agent's settings.`,
+          ]
+            .filter(Boolean)
+            .join(' ');
+        case 'max_holdings':
+          return [
+            `⚠️ Over the agent's max holdings: this would be instrument number ${b.nth}, past its limit of ${b.limit}.`,
+            b.suggested && `If that is intended, set Max holdings to ${b.suggested} in the agent's settings.`,
+          ]
+            .filter(Boolean)
+            .join(' ');
+      }
+    },
+    mandateOverride: "You can still Confirm: approving overrides the agent's limit for this trade.",
   },
 
   ask: {
@@ -1282,6 +1331,32 @@ const he: Messages = {
     farFromAgent: (agentPrice, livePrice, distance) =>
       `המחיר ${ltr(livePrice)}, ${ltr(distance)} מהמחיר של הסוכן ${ltr(agentPrice)} - יותר מ־${ltr('3%')}.`,
     confirmInApp: 'המחיר גדול מדי לכפתור בטלגרם: אשרו אותו באפליקציה.',
+    mandateBreach: (b) => {
+      switch (b.rule) {
+        case 'max_position':
+          return [
+            `⚠️ חריגה מהפוזיציה המרבית של הסוכן: ${ltr(b.symbol)} תהיה ${ltr(b.share)} מההון (${ltr(b.position)} מתוך ${ltr(b.capital)}), ${ltr(b.over)} מעל המגבלה של ${ltr(b.limit)}.`,
+            b.suggested && `אם זו הכוונה, קבעו „פוזיציה מרבית” של ${ltr(b.suggested)} בהגדרות הסוכן.`,
+          ]
+            .filter(Boolean)
+            .join(' ');
+        case 'cash_buffer':
+          return [
+            `⚠️ ירידה מתחת לכרית המזומן של הסוכן: המזומן ירד ל־${ltr(b.cashAfter)} (${ltr(b.share)} מההון), ${ltr(b.short)} מתחת למינימום של ${ltr(b.limit)}.`,
+            b.suggested && `אם זו הכוונה, קבעו „כרית מזומן מינימלית” של ${ltr(b.suggested)} בהגדרות הסוכן.`,
+          ]
+            .filter(Boolean)
+            .join(' ');
+        case 'max_holdings':
+          return [
+            `⚠️ חריגה ממספר האחזקות המרבי של הסוכן: זה יהיה הנכס ה־${ltr(b.nth)}, מעבר למגבלה של ${ltr(b.limit)}.`,
+            b.suggested && `אם זו הכוונה, קבעו „מספר אחזקות מרבי” של ${ltr(b.suggested)} בהגדרות הסוכן.`,
+          ]
+            .filter(Boolean)
+            .join(' ');
+      }
+    },
+    mandateOverride: 'עדיין אפשר לאשר: האישור גובר על המגבלה של הסוכן בעסקה הזו.',
   },
 
   ask: {

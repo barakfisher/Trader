@@ -17,12 +17,13 @@ import type { Proposal, ProposalDetailResponse, ProposalRecheck } from '@traders
 
 const get = vi.fn();
 const post = vi.fn();
+const patch = vi.fn();
 
 vi.mock('../src/api/client.ts', async () => {
   const actual = await vi.importActual<typeof import('../src/api/client.ts')>(
     '../src/api/client.ts',
   );
-  return { ...actual, api: { get, post, put: vi.fn(), delete: vi.fn(), postForm: vi.fn() } };
+  return { ...actual, api: { get, post, patch, put: vi.fn(), delete: vi.fn(), postForm: vi.fn() } };
 });
 
 const { ApiRequestError } = await import('../src/api/client.ts');
@@ -233,6 +234,7 @@ describe("an agent's trade proposal", () => {
       currency: 'USD',
       warnings: [],
     },
+    mandateBreaches: [],
   };
 
   const serveTrade = (trade: Proposal) =>
@@ -310,6 +312,91 @@ describe("an agent's trade proposal", () => {
       expect(post).toHaveBeenCalledWith('/proposals/p-trade/confirm', { shownPriceMinor: 11_385 }),
     );
     expect(await screen.findByText('Bought 3 INTC at $113.85, fee $1.50.')).toBeTruthy();
+  });
+
+  it("warns of the agent's limits a buy breaks, offers the setting, and still confirms (D299)", async () => {
+    serve({
+      '/proposals/p-trade': { proposal: TRADE, transitions: [], attempts: [] },
+      '/proposals?state=open': { proposals: [] },
+      [`/proposals?state=approved&limit=${RECENT_APPROVALS}`]: { proposals: [] },
+      // The agent's own words are empty, so a settings change needs no instructions check (D176).
+      '/agents/agent-value': { id: 'agent-value', persona: null, mandate: null, runningScan: null, scheduling: null },
+    });
+    const breach = {
+      rule: 'max_position',
+      limitBps: 1_000,
+      capitalMinor: 1_000_000,
+      positionAfterMinor: 142_000,
+      positionAfterBps: 1_420,
+      overByMinor: 42_000,
+      suggestedBps: 1_500,
+    };
+    let previews = 0;
+    post.mockImplementation((path: string) =>
+      Promise.resolve(
+        path.endsWith('/preview') ? { ...PREVIEW, mandateBreaches: previews++ === 0 ? [breach] : [] } : {},
+      ),
+    );
+    patch.mockResolvedValue({});
+
+    renderAt('/proposals/p-trade');
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+
+    const warning = await screen.findByRole('alert', { name: "Outside the agent's limits" });
+    expect(warning.textContent).toContain(
+      "Over the agent's max position: INTC would be 14.2% of capital ($1,420.00 of $10,000.00), $420.00 past its 10% limit.",
+    );
+    expect(warning.textContent).toContain('approving overrides the agent');
+    expect(screen.getByRole('link', { name: 'Agent settings' }).getAttribute('href')).toBe(
+      '/agents/agent-value?tab=settings',
+    );
+    // A warning, never a refusal: Confirm is there beside it.
+    expect(screen.getByRole('button', { name: 'Confirm: pay $343.05' })).toBeTruthy();
+
+    const set = await screen.findByRole('button', { name: 'Set Max position to 15%' });
+    await waitFor(() => expect((set as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(set);
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith('/agents/agent-value', { mandate: { maxPositionBps: 1_500 } }),
+    );
+    // The preview is asked again, and the limit it now meets says nothing.
+    await waitFor(() => expect(screen.queryByRole('alert', { name: "Outside the agent's limits" })).toBeNull());
+    expect(previews).toBe(2);
+    expect(post.mock.calls.some(([path]) => String(path).includes('instructions-check'))).toBe(false);
+  });
+
+  it('checks instructions in the user\'s own words again after the setting changes (D176)', async () => {
+    serve({
+      '/proposals/p-trade': { proposal: TRADE, transitions: [], attempts: [] },
+      '/proposals?state=open': { proposals: [] },
+      [`/proposals?state=approved&limit=${RECENT_APPROVALS}`]: { proposals: [] },
+      '/agents/agent-value': {
+        id: 'agent-value',
+        persona: 'Hold no more than five names.',
+        mandate: null,
+        runningScan: null,
+        scheduling: null,
+      },
+    });
+    post.mockImplementation((path: string) =>
+      Promise.resolve(
+        path.endsWith('/preview')
+          ? { ...PREVIEW, mandateBreaches: [{ rule: 'max_holdings', limit: 5, heldCount: 5, suggestedLimit: 6 }] }
+          : {},
+      ),
+    );
+    patch.mockResolvedValue({});
+
+    renderAt('/proposals/p-trade');
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    expect((await screen.findByRole('alert', { name: "Outside the agent's limits" })).textContent).toContain(
+      "Over the agent's max holdings: this would be instrument number 6, past its limit of 5.",
+    );
+    const set = screen.getByRole('button', { name: 'Set Max holdings to 6' });
+    await waitFor(() => expect((set as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(set);
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/agents/agent-value/instructions-check'));
+    expect(patch).toHaveBeenCalledWith('/agents/agent-value', { mandate: { maxHoldings: 6 } });
   });
 
   it("says why an approval was refused, and the page lists each refused try", async () => {

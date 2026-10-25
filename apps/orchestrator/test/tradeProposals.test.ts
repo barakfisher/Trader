@@ -9,6 +9,8 @@
  * `queries.postgres.test.ts` and `test_migrations.py`.
  */
 
+import { feeMinor } from '@traders/shared';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ACTIVE_SESSION } from './session.js';
 
@@ -32,6 +34,9 @@ function agentRow(overrides: Record<string, unknown> = {}) {
     created_at: new Date('2026-10-05T10:00:00Z'),
     holdings_count: 0,
     cash_minor: '100000',
+    max_position_bps: null,
+    cash_buffer_bps: null,
+    max_holdings: null,
     ...overrides,
   };
 }
@@ -73,6 +78,8 @@ let settingsRow: Record<string, unknown> = {
 };
 
 const ledger = { cash: 100_000n, fills: [] as Record<string, unknown>[], applied: true };
+const EMPTY_BOOK = { holdings_cost_minor: '0', symbol_cost_minor: '0', held_count: 0, holds_symbol: false };
+let book = EMPTY_BOOK;
 let proposal = proposalRow();
 
 vi.mock('../src/db/pool.js', () => ({
@@ -97,6 +104,7 @@ vi.mock('../src/db/queries.js', () => ({
   getAgentCash: vi.fn(async () => ({ balance_minor: ledger.cash.toString(), currency: 'USD', updated_at: NOW })),
   lockAgentCash: vi.fn(async () => ledger.cash),
   getAgentHoldingQuantity: vi.fn(async () => null),
+  getAgentBook: vi.fn(async () => book),
   lockAgentHolding: vi.fn(async () => null),
   setAgentHolding: vi.fn(async () => undefined),
   findFillByKey: vi.fn(async (_u: string, _a: string, key: string) =>
@@ -205,6 +213,7 @@ beforeEach(() => {
   ledger.fills.length = 0;
   ledger.applied = true;
   proposal = proposalRow();
+  book = EMPTY_BOOK;
 });
 
 describe('the expiry (D4)', () => {
@@ -485,6 +494,60 @@ describe('confirm: the fill and the approval together', () => {
     const again = await approval.confirmTradeApproval(USER.id, PROPOSAL, BigInt(AGENT_PRICE), 'web', context());
     expect(again).toMatchObject({ state: 'approved', fill: { id: 'fill-1' } });
     expect(queries.insertFill).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the mandate at approval (D299)', () => {
+  // 3 AAPL at 200.00 against $1,000.00 of cash and nothing held: 60% of capital.
+  const cashAfter = 100_000 - 60_000 - Number(feeMinor('3'));
+  const strict = { max_position_bps: 2_500, cash_buffer_bps: 5_000, max_holdings: 2 };
+
+  it('names every limit the buy breaks, how far, and the setting that would allow it', async () => {
+    vi.mocked(queries.getAgent).mockResolvedValueOnce(agentRow(strict) as never);
+    book = { ...EMPTY_BOOK, held_count: 2 };
+    const preview = await approval.previewTradeApproval(USER.id, PROPOSAL, 'web', context());
+    expect(preview.mandateBreaches).toEqual([
+      {
+        rule: 'max_position',
+        limitBps: 2_500,
+        capitalMinor: 100_000,
+        positionAfterMinor: 60_000,
+        positionAfterBps: 6_000,
+        overByMinor: 35_000,
+        suggestedBps: 6_000,
+      },
+      {
+        rule: 'cash_buffer',
+        limitBps: 5_000,
+        capitalMinor: 100_000,
+        cashAfterMinor: cashAfter,
+        cashAfterBps: Math.floor(cashAfter / 10),
+        shortByMinor: 50_000 - cashAfter,
+        suggestedBps: Math.floor(cashAfter / 1_000) * 100,
+      },
+      { rule: 'max_holdings', limit: 2, heldCount: 2, suggestedLimit: 3 },
+    ]);
+    expect(queries.getAgentBook).toHaveBeenCalledWith(USER.id, AGENT, 'AAPL');
+    expect(queries.recordProposalAttempt).not.toHaveBeenCalled();
+  });
+
+  it('warns and never refuses: Confirm still fills past a limit', async () => {
+    vi.mocked(queries.getAgent).mockResolvedValueOnce(agentRow(strict) as never);
+    const result = await approval.confirmTradeApproval(USER.id, PROPOSAL, BigInt(AGENT_PRICE), 'web', context());
+    expect(result.state).toBe('approved');
+    expect(queries.insertFill).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks no limit on a sell, and none an agent without limits has', async () => {
+    vi.mocked(queries.getAgent).mockResolvedValueOnce(agentRow(strict) as never);
+    proposal = proposalRow({ kind: 'sell' });
+    vi.mocked(queries.getAgentHoldingQuantity).mockResolvedValueOnce('5.000000000000000000');
+    expect((await approval.previewTradeApproval(USER.id, PROPOSAL, 'web', context())).mandateBreaches).toEqual([]);
+    expect(queries.getAgentBook).not.toHaveBeenCalled();
+
+    vi.mocked(queries.getAgent).mockResolvedValueOnce(agentRow() as never);
+    proposal = proposalRow();
+    expect((await approval.previewTradeApproval(USER.id, PROPOSAL, 'web', context())).mandateBreaches).toEqual([]);
   });
 });
 
