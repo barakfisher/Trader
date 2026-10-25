@@ -140,8 +140,9 @@ SECTIONS = MappingProxyType(
             "cannot trade, approve, or change a setting. It does not say whether to buy or "
             "sell. It declines questions outside markets, investing, the account and the app. "
             "It can replay any recorded agent scan step by step - what the agent read, each "
-            "tool it called, and what it decided - and report when the universe was last "
-            "screened and whether a symbol is in it. "
+            "tool it called, and what it decided - read each real holding's latest research "
+            "rating with its reasons, and report when the universe was last screened and "
+            "whether a symbol is in it. "
             "It remembers the current conversation, not earlier ones."
         ),
     }

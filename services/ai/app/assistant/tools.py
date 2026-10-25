@@ -36,6 +36,7 @@ from app.agents.tools import TOOLS_BY_NAME as AGENT_TOOLS
 from app.agents.tools import Tool, ToolContext, _object, _stored_closes, find_listing, money
 from app.assistant.product_guide import SECTIONS
 from app.llm.base import ToolSpec
+from app.research.store import ABANDONED_AFTER
 
 #: The agents' tools the assistant shares, in the order it is offered them.
 SHARED = (
@@ -59,6 +60,9 @@ PROPOSAL_STATES = ("pending", "approved", "rejected", "snoozed", "expired")
 BASE_CURRENCY = "USD"
 #: Calendar days searched back from the month's start for each holding's last close.
 MONTH_START_CLOSE_DAYS = 10
+#: A rating older than this many days is stale; `RESEARCH_STALE_DAYS` in
+#: `packages/shared/src/research.ts` is the same number (D293).
+RESEARCH_STALE_DAYS = 7
 
 
 def _pct(numerator: Decimal, denominator: Decimal) -> str | None:
@@ -1144,6 +1148,138 @@ async def get_universe_info(context: ToolContext, arguments: Mapping[str, Any]) 
     return answer
 
 
+# -- get_research --------------------------------------------------------------
+
+
+async def get_research(context: ToolContext, arguments: Mapping[str, Any]) -> dict[str, Any]:
+    """Research on the real portfolio (D254) as its page shows it: the assigned agent,
+    its latest run, and each real holding's latest rating by that agent."""
+    symbol = arguments.get("symbol")
+    symbol = symbol.strip().upper() if isinstance(symbol, str) and symbol.strip() else None
+    with context.engine.connect() as connection:
+        agent = connection.execute(
+            text(
+                """
+                SELECT a.id::text AS id, a.name, a.state
+                  FROM user_settings s
+                  JOIN agents a ON a.user_id = s.user_id AND a.id = s.research_agent_id
+                 WHERE s.user_id = CAST(:user AS uuid)
+                """
+            ),
+            {"user": context.user_id},
+        ).one_or_none()
+        run = connection.execute(
+            text(
+                """
+                SELECT trigger, status, holdings, rated, error, started_at, finished_at
+                  FROM research_runs
+                 WHERE user_id = CAST(:user AS uuid)
+                 ORDER BY started_at DESC
+                 LIMIT 1
+                """
+            ),
+            {"user": context.user_id},
+        ).one_or_none()
+        # The latest rated row and the latest attempt of any outcome, per real holding,
+        # as the orchestrator's `listResearchHoldings` reads them.
+        holdings = connection.execute(
+            text(
+                """
+                SELECT i.symbol, i.name, rated.rating, rated.rationale, rated.findings,
+                       rated.created_at AS rated_at, latest.status AS last_status,
+                       latest.created_at AS last_at
+                  FROM holdings h
+                  JOIN agents p ON p.id = h.agent_id AND p.user_id = h.user_id AND p.is_primary
+                  JOIN instruments i ON i.id = h.instrument_id
+                  LEFT JOIN LATERAL (
+                    SELECT r.rating, r.rationale, r.findings, r.created_at
+                      FROM research_ratings r
+                     WHERE r.user_id = h.user_id AND r.agent_id = CAST(:agent AS uuid)
+                       AND r.instrument_id = h.instrument_id AND r.status = 'rated'
+                     ORDER BY r.created_at DESC
+                     LIMIT 1
+                  ) rated ON true
+                  LEFT JOIN LATERAL (
+                    SELECT r.status, r.created_at
+                      FROM research_ratings r
+                     WHERE r.user_id = h.user_id AND r.agent_id = CAST(:agent AS uuid)
+                       AND r.instrument_id = h.instrument_id
+                     ORDER BY r.created_at DESC
+                     LIMIT 1
+                  ) latest ON true
+                 WHERE h.user_id = CAST(:user AS uuid)
+                   AND (CAST(:symbol AS text) IS NULL OR i.symbol = :symbol)
+                 ORDER BY i.symbol
+                 LIMIT :limit
+                """
+            ),
+            {
+                "user": context.user_id,
+                "agent": agent.id if agent else None,
+                "symbol": symbol,
+                "limit": MAX_ROWS,
+            },
+        ).all()
+    stale_before = context.now - timedelta(days=RESEARCH_STALE_DAYS)
+    abandoned = (
+        run is not None
+        and run.status == "running"
+        and run.started_at < context.now - ABANDONED_AFTER
+    )
+    answer: dict[str, Any] = {
+        "agent": {"name": agent.name, "state": agent.state} if agent else None,
+        "latest_run": (
+            {
+                "trigger": run.trigger,
+                "status": "failed" if abandoned else run.status,
+                "holdings": run.holdings,
+                "rated": run.rated,
+                "stopped_because": "abandoned" if abandoned else run.error,
+                "started_at": run.started_at.isoformat(),
+                "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+            }
+            if run
+            else None
+        ),
+        "holdings": [
+            {
+                "symbol": row.symbol,
+                "name": row.name,
+                "latest": (
+                    {
+                        "rating": row.rating,
+                        "rationale": row.rationale,
+                        "findings": row.findings,
+                        "rated_at": row.rated_at.isoformat(),
+                        "stale": row.rated_at < stale_before,
+                    }
+                    if row.rating
+                    else None
+                ),
+                # A newer attempt that did not rate: the page says so beside the rating.
+                "last_attempt": (
+                    {"status": row.last_status, "at": row.last_at.isoformat()}
+                    if row.last_status in ("refused", "failed")
+                    and (row.rated_at is None or row.last_at > row.rated_at)
+                    else None
+                ),
+            }
+            for row in holdings
+        ],
+        "link": "/research",
+        "note": (
+            "a rating describes the stock's outlook from the evidence the agent read; it says "
+            f"nothing about the user's position and is no recommendation. Older than "
+            f"{RESEARCH_STALE_DAYS} days is stale. The rationale is model-written, in English"
+        ),
+    }
+    if agent is None:
+        answer["note"] = "no agent researches the real portfolio; one is assigned on /research"
+    elif symbol and not holdings:
+        answer["note"] = f"{symbol} is not held in the real portfolio, so it is not researched"
+    return answer
+
+
 # -- the set -------------------------------------------------------------------
 
 _TEXT = {"type": "string"}
@@ -1213,6 +1349,16 @@ OWN_TOOLS: tuple[Tool, ...] = (
             _object({"topic": _TEXT}, []),
         ),
         get_topics,
+    ),
+    Tool(
+        ToolSpec(
+            "get_research",
+            "Research on the real portfolio: which agent the user assigned to it, its latest "
+            "run, and each real holding's latest Bullish, Bearish or Neutral rating with the "
+            "agent's reasons, its date and whether it is stale. Give a symbol for one holding.",
+            _object({"symbol": _TEXT}, []),
+        ),
+        get_research,
     ),
     Tool(
         ToolSpec(

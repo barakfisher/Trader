@@ -2,7 +2,13 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Check, Clock, Pencil, Trash2 } from 'lucide-react';
 
-import type { ConsolidatedHoldingsResponse, ConsolidatedPendingTrade, ConsolidatedPosition, HoldingView } from '@traders/shared';
+import type {
+  ConsolidatedHoldingsResponse,
+  ConsolidatedPendingTrade,
+  ConsolidatedPosition,
+  HoldingView,
+  SentimentRating,
+} from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
 import { formatMoney, formatPercent, formatShare } from '../i18n/format.ts';
@@ -24,7 +30,7 @@ import {
 } from './HoldingsTable.tsx';
 import { sortHoldings, type SortFields, type SortKey } from '../lib/holdingsSort.ts';
 import { ApproveProposalButton } from './ProposalApproval.tsx';
-import { SortControl, SortableTh, useSortColumns, type SortProps } from './SortableHeader.tsx';
+import { SortControl, SortableTh, alignsEnd, useSortColumns, type SortProps } from './SortableHeader.tsx';
 import { SentimentCell, useSentiments } from './SentimentBadge.tsx';
 import { Card, Delta } from './ui.tsx';
 
@@ -53,12 +59,17 @@ export function CombinedHoldingsTable({
 } & Partial<SortProps>) {
   const { t } = useTranslation();
   const combined = combinedHoldings(data, scope);
-  const rows = sortHoldings(combined.rows, combinedSortFields, sort);
+  const sentiments = useSentiments();
+  const rows = sortHoldings(
+    combined.rows,
+    (row) => combinedSortFields(row, sentiments.ratingOf(row.instrument.id)),
+    sort,
+  );
   const unheldPending = combined.unheldPending;
-  const columns = useSortColumns();
+  const columns = useSortColumns(sentiments.shown);
   const header = (key: SortKey) => {
     const column = columns.find((candidate) => candidate.key === key)!;
-    return <SortableTh key={key} column={key} label={column.label} end={key !== 'symbol'} sort={sort} onSort={onSort} />;
+    return <SortableTh key={key} column={key} label={column.label} end={alignsEnd(key)} sort={sort} onSort={onSort} />;
   };
   const realHoldings = new Map((usePortfolioQuery().data?.holdings ?? []).map((holding) => [holding.id, holding]));
   const updateHolding = useUpdateHolding();
@@ -72,7 +83,6 @@ export function CombinedHoldingsTable({
     return position ? (realHoldings.get(position.holdingId) ?? null) : null;
   };
   const shared = { currency: data.currency, updateHolding, removeHolding };
-  const sentiments = useSentiments();
 
   return (
     <Card title={t('holdings.title', { count: rows.length })} action={actions} className="overflow-hidden">
@@ -97,7 +107,7 @@ export function CombinedHoldingsTable({
                 {header('symbol')}
                 <th className="pb-2 pe-3 font-medium">{t('combined.holders')}</th>
                 {(['quantity', 'price', 'day', 'value', 'cost', 'pnl', 'pnlPct', 'weight'] as const).map(header)}
-                {sentiments.shown && <th className="pb-2 pe-3 font-medium">{t('research.column')}</th>}
+                {sentiments.shown && header('sentiment')}
                 <th className="pb-2 text-end font-medium">{t('holdings.columns.actions')}</th>
               </tr>
             </thead>
@@ -115,8 +125,8 @@ export function CombinedHoldingsTable({
   );
 }
 
-/** A combined row's figures as the table sorts by them (M10 decision 21). */
-export function combinedSortFields(row: CombinedHolding): SortFields {
+/** A combined row's figures as the table sorts by them (M10 decision 21), with its latest rating. */
+export function combinedSortFields(row: CombinedHolding, sentiment: SentimentRating | null = null): SortFields {
   return {
     symbol: row.instrument.symbol,
     quantity: row.quantity,
@@ -127,6 +137,7 @@ export function combinedSortFields(row: CombinedHolding): SortFields {
     pnl: row.pnlMinor,
     pnlPct: row.pnlPct,
     weight: row.weightPct,
+    sentiment,
   };
 }
 

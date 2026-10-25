@@ -6,11 +6,12 @@ import re
 from pathlib import Path
 
 from app.assistant.product_guide import PAGES, SECTIONS
-from app.assistant.tools import RESCREEN_DUE_DAYS, TOOLS_BY_NAME
+from app.assistant.tools import RESCREEN_DUE_DAYS, RESEARCH_STALE_DAYS, TOOLS_BY_NAME
 
 ROOT = Path(__file__).resolve().parents[3]
 RESCREEN = ROOT / "apps" / "orchestrator" / "src" / "services" / "universeRescreen.ts"
 ROUTER = ROOT / "apps" / "web" / "src" / "router.tsx"
+RESEARCH = ROOT / "packages" / "shared" / "src" / "research.ts"
 
 
 def test_the_rescreen_cadence_is_the_orchestrators() -> None:
@@ -20,6 +21,14 @@ def test_the_rescreen_cadence_is_the_orchestrators() -> None:
 
     assert match, "RESCREEN_DUE_DAYS not found in universeRescreen.ts"
     assert int(match.group(1)) == RESCREEN_DUE_DAYS
+
+
+def test_a_stale_rating_is_stale_on_the_page_and_in_an_answer_alike() -> None:
+    """`get_research` marks a rating stale at the age the research page does (D293)."""
+    match = re.search(r"export const RESEARCH_STALE_DAYS = (\d+);", RESEARCH.read_text())
+
+    assert match, "RESEARCH_STALE_DAYS not found in packages/shared/src/research.ts"
+    assert int(match.group(1)) == RESEARCH_STALE_DAYS
 
 
 def test_every_tool_is_described_for_the_model() -> None:

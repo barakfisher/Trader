@@ -1,4 +1,4 @@
-"""Reset account, by group, against a real Postgres (migration 0045, task 18).
+"""Reset account, by group, against a real Postgres (migrations 0045 and 0072, task 18).
 
 Each group alone and all three together, on an account holding a row of every
 kind a group erases - and another user's identical account, which no reset may
@@ -36,6 +36,8 @@ ERASES = {
         "intents",
         "notifications",
         "narration_transitions",
+        "research_runs",
+        "research_ratings",
     },
     "agents_trading": {
         "holdings",
@@ -70,6 +72,10 @@ TABLE_FILTERS = {
     "agent_scans": "user_id = :u",
     "topics": "user_id = :u",
     "topic_instruments": "user_id = :u",
+    # A run still going is kept, with its ratings (0072); see its own test.
+    "research_runs": "user_id = :u AND status <> 'running'",
+    "research_ratings": "run_id IN (SELECT id FROM research_runs "
+    "WHERE user_id = :u AND status <> 'running')",
 }
 
 
@@ -127,6 +133,12 @@ def _account(connection: Connection) -> dict[str, str]:
         "'pending', 'n-main:' || :k FROM observations WHERE dedupe_key = 'main:' || :k",
         "INSERT INTO narration_transitions (user_id, from_state, to_state) "
         "VALUES (:u, 'narrating', 'unavailable')",
+        # Research on it (0070): a finished run and its rating.
+        "INSERT INTO research_runs (user_id, agent_id, trigger, status, holdings, rated, "
+        "finished_at) VALUES (:u, :p, 'manual', 'done', 1, 1, now())",
+        "INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, status, "
+        "rating, rationale) SELECT id, :u, :p, :i, 'RSET', 'rated', 'bullish', 'Up.' "
+        "FROM research_runs WHERE user_id = :u",
         # A simulated agent's book: a scan, its approved buy and the fill.
         "INSERT INTO agent_scans (id, user_id, agent_id, trigger, finished_at, outcome, steps, "
         "cost_micro_usd, model, briefing, transcript) VALUES (gen_random_uuid(), :u, :a, "
@@ -320,6 +332,40 @@ def test_the_backup_holds_every_erased_row_and_the_cash_it_took(connection: Conn
             "budget_minor": BUDGET + 5000,
         }
     ]
+
+
+def test_a_research_run_still_going_keeps_its_row_and_ratings(connection: Connection) -> None:
+    account = _account(connection)
+    params = {"u": account["user"], "p": account["primary"], "i": INSTRUMENT}
+    running = str(
+        _one(
+            connection,
+            "INSERT INTO research_runs (user_id, agent_id, trigger) "
+            "VALUES (CAST(:u AS uuid), CAST(:p AS uuid), 'schedule') RETURNING id",
+            **params,
+        )
+    )
+    connection.execute(
+        text(
+            "INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, "
+            "status, rating, rationale) VALUES (CAST(:r AS uuid), CAST(:u AS uuid), "
+            "CAST(:p AS uuid), :i, 'RSET', 'rated', 'neutral', 'Flat.')"
+        ),
+        {**params, "r": running},
+    )
+
+    _, counts = _reset(connection, account["user"], ["main_portfolio"])
+
+    assert (counts["research_runs"], counts["research_ratings"]) == (1, 1)
+    left = connection.execute(
+        text(
+            "SELECT r.id::text AS id, count(g.id) AS ratings FROM research_runs r "
+            "LEFT JOIN research_ratings g ON g.run_id = r.id "
+            "WHERE r.user_id = CAST(:u AS uuid) GROUP BY r.id"
+        ),
+        {"u": account["user"]},
+    ).all()
+    assert [(row.id, row.ratings) for row in left] == [(running, 1)]
 
 
 def test_the_flag_is_down_once_the_reset_is_done(connection: Connection) -> None:

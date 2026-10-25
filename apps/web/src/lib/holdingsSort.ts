@@ -16,9 +16,15 @@
  * digit by digit, never through a float. A price is compared within its
  * currency: prices in two currencies are not one scale, so the currency code
  * orders first.
+ *
+ * Sentiment orders Bullish, Neutral, Bearish when descending; a holding with no
+ * rating yet is a row with no figure. A stale rating sorts by its word, as the
+ * cell still shows it beside its stale mark.
  */
 
-export const SORT_KEYS = ['symbol', 'quantity', 'price', 'day', 'value', 'cost', 'pnl', 'pnlPct', 'weight'] as const;
+import type { SentimentRating } from '@traders/shared';
+
+export const SORT_KEYS = ['symbol', 'quantity', 'price', 'day', 'value', 'cost', 'pnl', 'pnlPct', 'weight', 'sentiment'] as const;
 export type SortKey = (typeof SORT_KEYS)[number];
 export type SortDirection = 'asc' | 'desc';
 
@@ -38,7 +44,12 @@ export interface SortFields {
   pnl: number | null;
   pnlPct: number | null;
   weight: number | null;
+  /** The research agent's latest rating (D254); null before its first. */
+  sentiment: SentimentRating | null;
 }
+
+/** A rating's place on the sentiment scale: descending puts Bullish first. */
+const SENTIMENT_RANK: Record<SentimentRating, number> = { bearish: -1, neutral: 0, bullish: 1 };
 
 function isSortKey(value: unknown): value is SortKey {
   return (SORT_KEYS as readonly unknown[]).includes(value);
@@ -104,6 +115,9 @@ function compareKnown(key: SortKey, a: SortFields, b: SortFields): number | null
     case 'price':
       if (a.price === null || b.price === null) return null;
       return a.price.currency.localeCompare(b.price.currency) || Math.sign(a.price.minor - b.price.minor);
+    case 'sentiment':
+      if (a.sentiment === null || b.sentiment === null) return null;
+      return Math.sign(SENTIMENT_RANK[a.sentiment] - SENTIMENT_RANK[b.sentiment]);
     default: {
       const x = a[key];
       const y = b[key];

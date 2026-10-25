@@ -251,6 +251,7 @@ _PAGES = {
     "get_agents": "Agents",
     "get_observations": "Insights",
     "get_topics": "Topics",
+    "get_research": "Research",
 }
 _DATA = {
     "get_quote": "Delayed quotes",

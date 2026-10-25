@@ -74,10 +74,17 @@ export function SentimentCell({ holding }: { holding: ResearchHolding | undefine
  * the column belongs on them at all - only once an agent researches the
  * portfolio, so a user who never assigned one sees no empty column.
  */
-export function useSentiments(): { shown: boolean; byInstrument: Map<string, ResearchHolding> } {
+export function useSentiments(): {
+  shown: boolean;
+  byInstrument: Map<string, ResearchHolding>;
+  /** An instrument's latest rating, for sorting by it; null before its first. */
+  ratingOf: (instrumentId: string) => SentimentRating | null;
+} {
   const research = useResearchQuery().data;
+  const byInstrument = new Map((research?.holdings ?? []).map((holding) => [holding.instrumentId, holding]));
   return {
     shown: research?.agent != null,
-    byInstrument: new Map((research?.holdings ?? []).map((holding) => [holding.instrumentId, holding])),
+    byInstrument,
+    ratingOf: (instrumentId) => byInstrument.get(instrumentId)?.latest?.rating ?? null,
   };
 }

@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { AlertTriangle, Check, Clock, Pencil, Trash2, X } from 'lucide-react';
 
-import { minorToDecimalString, minorToNumber, type HoldingView } from '@traders/shared';
+import { minorToDecimalString, minorToNumber, type HoldingView, type SentimentRating } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
 import { formatMoney, formatPercent, formatShare } from '../i18n/format.ts';
@@ -13,15 +13,15 @@ import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { useNarrowViewport } from '../lib/viewport.ts';
 import { usePortfolioQuery, useRemoveHolding, useUpdateHolding } from '../queries/portfolio.ts';
 import { sortHoldings, type SortFields } from '../lib/holdingsSort.ts';
-import { SortControl, SortableTh, useSortColumns, type SortProps } from './SortableHeader.tsx';
+import { SortControl, SortableTh, alignsEnd, useSortColumns, type SortProps } from './SortableHeader.tsx';
 import { SentimentCell, useSentiments } from './SentimentBadge.tsx';
 import { Card, Delta } from './ui.tsx';
 
 export type UpdateHolding = ReturnType<typeof useUpdateHolding>;
 export type RemoveHolding = ReturnType<typeof useRemoveHolding>;
 
-/** A real holding's figures as the table sorts by them (M10 decision 21). */
-export function holdingSortFields(holding: HoldingView): SortFields {
+/** A real holding's figures as the table sorts by them (M10 decision 21), with its latest rating. */
+export function holdingSortFields(holding: HoldingView, sentiment: SentimentRating | null = null): SortFields {
   return {
     symbol: holding.instrument.symbol,
     quantity: holding.quantity,
@@ -32,6 +32,7 @@ export function holdingSortFields(holding: HoldingView): SortFields {
     pnl: holding.pnlMinor,
     pnlPct: holding.pnlPct,
     weight: holding.weightPct,
+    sentiment,
   };
 }
 
@@ -50,10 +51,14 @@ export function HoldingsTable({
   // table, whichever row caused it - as it was before.
   const updateHolding = useUpdateHolding();
   const removeHolding = useRemoveHolding();
-  const holdings = sortHoldings(portfolio?.holdings ?? [], holdingSortFields, sort);
-  const columns = useSortColumns();
-  const currency = baseCurrencyOf(portfolio);
   const sentiments = useSentiments();
+  const holdings = sortHoldings(
+    portfolio?.holdings ?? [],
+    (holding) => holdingSortFields(holding, sentiments.ratingOf(holding.instrument.id)),
+    sort,
+  );
+  const columns = useSortColumns(sentiments.shown);
+  const currency = baseCurrencyOf(portfolio);
   const failure =
     (updateHolding.error && errorMessage(updateHolding.error, t('holdings.updateFailed'))) ||
     (removeHolding.error && errorMessage(removeHolding.error, t('holdings.removeFailed')));
@@ -96,12 +101,11 @@ export function HoldingsTable({
                   key={column.key}
                   column={column.key}
                   label={column.label}
-                  end={column.key !== 'symbol'}
+                  end={alignsEnd(column.key)}
                   sort={sort}
                   onSort={onSort}
                 />
               ))}
-              {sentiments.shown && <th className="pb-2 pe-3 font-medium">{t('research.column')}</th>}
               <th className="pb-2 text-end font-medium">{t('holdings.columns.actions')}</th>
             </tr>
           </thead>

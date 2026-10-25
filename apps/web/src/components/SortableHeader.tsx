@@ -89,8 +89,20 @@ export function SortControl({ sort, onSort, columns }: SortProps & { columns: { 
   );
 }
 
-/** Every sortable column with its header's words, for the phone's control. */
-export function useSortColumns(): { key: SortKey; label: string }[] {
+/**
+ * Every sortable column with its header's words, for the headers and the phone's
+ * control. Sentiment is a column only once an agent researches the portfolio
+ * (`useSentiments().shown`), so it is offered only then.
+ */
+export function useSortColumns(withSentiment: boolean): { key: SortKey; label: string }[] {
   const { t } = useTranslation();
-  return SORT_KEYS.map((key) => ({ key, label: t(`holdings.columns.${key}`) }));
+  return SORT_KEYS.filter((key) => withSentiment || key !== 'sentiment').map((key) => ({
+    key,
+    label: t(`holdings.columns.${key}`),
+  }));
+}
+
+/** Figures align to the end; the symbol and the sentiment word to the start. */
+export function alignsEnd(key: SortKey): boolean {
+  return key !== 'symbol' && key !== 'sentiment';
 }

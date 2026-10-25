@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 
-import type { HoldingView, PortfolioResponse } from '@traders/shared';
+import type { HoldingView, PortfolioResponse, ResearchResponse, SentimentRating } from '@traders/shared';
 
 const get = vi.fn();
 
@@ -48,6 +48,26 @@ const PORTFOLIO = {
   allocationByInstrument: [],
   allocationByAssetClass: [],
 } as unknown as PortfolioResponse;
+
+function rated(symbol: string, rating: SentimentRating | null) {
+  return {
+    instrumentId: `i-${symbol}`,
+    symbol,
+    name: `${symbol} Inc`,
+    latest:
+      rating === null
+        ? null
+        : { rating, rationale: 'r', findings: [], agentName: 'Analyst', ratedAt: '2026-10-24T21:00:00Z', stale: false },
+    lastAttempt: null,
+  };
+}
+
+/** Research with an agent assigned: BBB bearish, CCC bullish, AAA not rated yet. */
+const RESEARCH = {
+  agent: { id: 'agent-1', name: 'Analyst', state: 'active' },
+  run: null,
+  holdings: [rated('BBB', 'bearish'), rated('AAA', null), rated('CCC', 'bullish')],
+} as ResearchResponse;
 
 const symbolsInOrder = () =>
   screen.getAllByRole('row').slice(1).map((row) => within(row).getAllByRole('cell')[0]!.textContent?.slice(0, 3));
@@ -94,5 +114,25 @@ describe('the real holdings table', () => {
     const cells = within(bbb).getAllByRole('cell').map((cell) => cell.textContent);
     expect(cells).toContain('$20.00');
     expect(cells.some((text) => text?.includes('200'))).toBe(true);
+  });
+
+  it('sorts by sentiment once an agent researches the portfolio, an unrated holding last', async () => {
+    get.mockImplementation(async (path: string) =>
+      path === '/portfolio' ? PORTFOLIO : path === '/research' ? RESEARCH : new Promise(() => {}),
+    );
+    const onSort = vi.fn();
+    renderPage(<HoldingsTable sort={{ key: 'sentiment', direction: 'desc' }} onSort={onSort} />);
+    await screen.findAllByText('Bullish');
+    expect(symbolsInOrder()).toEqual(['CCC', 'BBB', 'AAA']);
+    const sentiment = screen.getByRole('columnheader', { name: /Sentiment/ });
+    expect(sentiment.getAttribute('aria-sort')).toBe('descending');
+    fireEvent.click(screen.getByRole('button', { name: 'Sentiment' }));
+    expect(onSort).toHaveBeenLastCalledWith({ key: 'sentiment', direction: 'asc' });
+  });
+
+  it('offers no Sentiment column to sort by before an agent is assigned', async () => {
+    renderPage(<HoldingsTable />);
+    await screen.findByText('BBB Inc');
+    expect(screen.queryByRole('button', { name: 'Sentiment' })).toBeNull();
   });
 });

@@ -5908,11 +5908,15 @@ grant tests fail for the wrong reason.
   `problems`) before tuning the prompt or the word list.
 - The scheduled research path is unit-tested only. Its first real run is the first trading day
   after an assignment, where `ENABLE_SCHEDULED_SCANS=true`.
-- The account reset does not name the research tables. They go with the agents (cascade), and
-  `research_agent_id` is cleared, but a reset that keeps agents keeps their ratings.
-- The Sentiment column is not sortable.
-- Ask has no tool to read the research: "what does my agent think of CCJ" is not answered from
-  the ratings.
+- ~~The account reset does not name the research tables~~ - resolved 2026-10-25 (0072): the
+  `main_portfolio` group erases finished research runs and their ratings, backed up like the
+  rest; a run still `running` keeps its row so its writes land.
+- ~~The Sentiment column is not sortable~~ - resolved 2026-10-25: `sentiment` is a sort key,
+  Bullish > Neutral > Bearish descending, an unrated holding last both ways (as an unpriced one).
+- ~~Ask has no tool to read the research~~ - resolved 2026-10-25: `get_research`, and a line in
+  the instructions mapping "what does my agent think of X" to it. **The paid assistant eval was
+  not run for it** (the session had no key): run it (Flash-Lite, `--repeat 3`) before relying on
+  the change, as the debt row "The assistant eval runs only by hand" asks.
 - Telegram's new sentences (payer refusals, the fallback notice) and M11's menu still owe the
   user's phone check.
 

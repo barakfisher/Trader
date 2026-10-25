@@ -22,6 +22,7 @@ function row(symbol: string, overrides: Partial<SortFields> = {}): SortFields {
     pnl: 0,
     pnlPct: 0,
     weight: 10,
+    sentiment: null,
     ...overrides,
   };
 }
@@ -73,6 +74,19 @@ describe('sortHoldings', () => {
   it('puts a row with no figure last in both directions, ties by symbol', () => {
     expect(symbols(sortHoldings(rows, (r) => r, { key: 'value', direction: 'desc' }))).toEqual(['B', 'D', 'C', 'A']);
     expect(symbols(sortHoldings(rows, (r) => r, { key: 'value', direction: 'asc' }))).toEqual(['C', 'B', 'D', 'A']);
+  });
+
+  it('orders sentiment Bullish, Neutral, Bearish, with an unrated holding last both ways', () => {
+    const rated = [
+      row('A', { sentiment: 'bearish' }),
+      row('B', { sentiment: null }),
+      row('C', { sentiment: 'bullish' }),
+      row('D', { sentiment: 'neutral' }),
+      row('E', { sentiment: 'bullish' }),
+    ];
+    expect(firstDirection('sentiment')).toBe('desc');
+    expect(symbols(sortHoldings(rated, (r) => r, { key: 'sentiment', direction: 'desc' }))).toEqual(['C', 'E', 'D', 'A', 'B']);
+    expect(symbols(sortHoldings(rated, (r) => r, { key: 'sentiment', direction: 'asc' }))).toEqual(['A', 'D', 'C', 'E', 'B']);
   });
 
   it('compares quantities as decimals, not as text or floats', () => {

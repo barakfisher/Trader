@@ -25,11 +25,13 @@ from app.analysis.thresholds import AnalysisThresholds
 from app.assistant.budget import assistant_budget, start_of_local_day
 from app.assistant.service import NO_REPLY_TEXT, STEP_LIMIT, ask
 from app.assistant.tools import (
+    RESEARCH_STALE_DAYS,
     TOOLS_BY_NAME,
     get_agents,
     get_observations,
     get_portfolio,
     get_proposals,
+    get_research,
     get_topics,
     get_universe_info,
     primary_agent_id,
@@ -488,6 +490,89 @@ async def test_get_observations_and_get_topics_read_the_users_rows(
     assert topics["topics"][0]["instruments"][0]["reason"] == "The company mines uranium."
 
 
+def _research(engine: Engine, account: dict[str, Any], rated_days_ago: int) -> None:
+    """Assign the account's agent to research, with a finished run that rated the held
+    instrument Bullish `rated_days_ago` days ago and a later attempt that was refused."""
+    rated_at = NOW - timedelta(days=rated_days_ago)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO user_settings (user_id, research_agent_id) "
+                "VALUES (CAST(:u AS uuid), CAST(:a AS uuid)) ON CONFLICT (user_id) "
+                "DO UPDATE SET research_agent_id = EXCLUDED.research_agent_id"
+            ),
+            {"u": account["user"], "a": account["agent"]},
+        )
+        run = connection.execute(
+            text(
+                "INSERT INTO research_runs (user_id, agent_id, trigger, status, holdings, rated, "
+                "started_at, finished_at) VALUES (CAST(:u AS uuid), CAST(:a AS uuid), 'manual', "
+                "'done', 2, 1, :at, :at) RETURNING id::text"
+            ),
+            {"u": account["user"], "a": account["agent"], "at": rated_at},
+        ).scalar_one()
+        for status, rating, rationale, at in (
+            ("rated", "bullish", "Orders rose for a third quarter.", rated_at),
+            ("refused", None, None, rated_at + timedelta(minutes=1)),
+        ):
+            connection.execute(
+                text(
+                    "INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, "
+                    "symbol, status, rating, rationale, findings, created_at) VALUES "
+                    "(CAST(:r AS uuid), CAST(:u AS uuid), CAST(:a AS uuid), CAST(:i AS uuid), "
+                    ":s, :status, :rating, :rationale, CAST(:f AS jsonb), :at)"
+                ),
+                {
+                    "r": run,
+                    "u": account["user"],
+                    "a": account["agent"],
+                    "i": _instrument(engine, account["held"]),
+                    "s": account["held"],
+                    "status": status,
+                    "rating": rating,
+                    "rationale": rationale,
+                    "f": json.dumps(["Backlog up"] if rating else []),
+                    "at": at,
+                },
+            )
+
+
+async def test_get_research_reads_the_assigned_agents_latest_rating(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    context = _context(loaded, account)
+    assert (await get_research(context, {}))["agent"] is None
+
+    _research(loaded, account, rated_days_ago=1)
+    research = await get_research(context, {})
+    one = await get_research(context, {"symbol": account["held"].lower()})
+    unheld = await get_research(context, {"symbol": "ZZZQX"})
+
+    assert research["agent"] == {"name": "Momentum", "state": "active"}
+    assert research["latest_run"]["rated"] == 1
+    by_symbol = {row["symbol"]: row for row in research["holdings"]}
+    held = by_symbol[account["held"]]
+    assert held["latest"]["rating"] == "bullish"
+    assert held["latest"]["rationale"] == "Orders rose for a third quarter."
+    assert held["latest"]["stale"] is False
+    assert held["last_attempt"]["status"] == "refused"
+    # Held but never rated: listed, with nothing invented for it (guideline 7).
+    assert by_symbol[account["unpriced"]]["latest"] is None
+    assert [row["symbol"] for row in one["holdings"]] == [account["held"]]
+    assert unheld["holdings"] == [] and "not held" in unheld["note"]
+    assert research["link"] == "/research"
+
+
+async def test_get_research_marks_a_rating_stale_past_the_age(
+    loaded: Engine, account: dict[str, Any]
+) -> None:
+    _research(loaded, account, rated_days_ago=RESEARCH_STALE_DAYS + 1)
+
+    research = await get_research(_context(loaded, account), {"symbol": account["held"]})
+
+    assert research["holdings"][0]["latest"]["stale"] is True
+
+
 async def test_another_users_rows_are_never_read(loaded: Engine, account: dict[str, Any]) -> None:
     with loaded.begin() as connection:
         stranger = connection.execute(
@@ -503,6 +588,7 @@ async def test_another_users_rows_are_never_read(loaded: Engine, account: dict[s
     assert (await get_observations(context, {}))["observations"] == []
     assert (await get_topics(context, {}))["topics"] == []
     assert (await get_portfolio(context, {}))["holdings"] == []
+    assert (await get_research(context, {}))["holdings"] == []
 
 
 def test_no_tool_can_write_what_a_user_decides() -> None:
