@@ -139,10 +139,12 @@ def mandate_brief(mandate: Mandate) -> dict[str, Any] | None:
     ("within my 10% cap") quotes evidence the validator can find.
     """
     brief: dict[str, Any] = {}
+    # Named "percent", not "pct": the figure check reads a "pct" key as a ratio and
+    # would offer 2500% for the value 25 (D235 found this; see evidence_validator).
     if mandate.max_position_bps is not None:
-        brief["max_position_pct_of_capital"] = percent(mandate.max_position_bps)
+        brief["max_position_percent_of_capital"] = percent(mandate.max_position_bps)
     if mandate.cash_buffer_bps is not None:
-        brief["min_cash_pct_of_capital"] = percent(mandate.cash_buffer_bps)
+        brief["min_cash_percent_of_capital"] = percent(mandate.cash_buffer_bps)
     if mandate.max_holdings is not None:
         brief["max_holdings"] = mandate.max_holdings
     if not mandate.allow_etfs:

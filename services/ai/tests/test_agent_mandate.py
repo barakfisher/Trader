@@ -28,6 +28,7 @@ from app.agents.mandate import (
     universe_problems,
 )
 from app.core.fees import fee_minor
+from app.narration.evidence_validator import unsourced_figures
 
 URANIUM_MINER = _Profile("equity", "Energy", "Uranium", None, LARGE_CAP_FLOOR_MINOR, "USD")
 GOLD_MINERS_ETF = _Profile("etf", None, None, "Equity Precious Metals", None, None)
@@ -147,11 +148,18 @@ def test_the_briefing_states_limits_as_percentages_of_capital() -> None:
         Mandate(max_position_bps=1250, cash_buffer_bps=500, allow_etfs=False, sectors=("Energy",))
     )
     assert brief == {
-        "max_position_pct_of_capital": "12.5",
-        "min_cash_pct_of_capital": "5",
+        "max_position_percent_of_capital": "12.5",
+        "min_cash_percent_of_capital": "5",
         "etfs_allowed": False,
         "sectors": ["Energy"],
     }
+
+
+def test_a_thesis_can_quote_the_briefings_limits() -> None:
+    # The limits are whole percents; under a key the figure check reads as a ratio,
+    # "25" would be offered as 2500% and "my 25% cash buffer" refused (D235).
+    brief = mandate_brief(Mandate(max_position_bps=1250, cash_buffer_bps=2500))
+    assert unsourced_figures("Keeps my 25% cash buffer, within my 12.5% cap.", brief) == []
 
 
 # -- idle cash (D235) -------------------------------------------------------------------
