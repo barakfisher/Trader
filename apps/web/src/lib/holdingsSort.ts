@@ -16,9 +16,16 @@
  * digit by digit, never through a float. A price is compared within its
  * currency: prices in two currencies are not one scale, so the currency code
  * orders first.
+ *
+ * Sentiment orders by the latest rating's word, Bullish above Neutral above
+ * Bearish (D254), so its first click shows Bullish first like any figure's. A
+ * holding no agent has rated sorts last, as a missing figure does; a stale
+ * rating sorts by its word, since the column still shows it, marked stale.
  */
 
-export const SORT_KEYS = ['symbol', 'quantity', 'price', 'day', 'value', 'cost', 'pnl', 'pnlPct', 'weight'] as const;
+import type { SentimentRating } from '@traders/shared';
+
+export const SORT_KEYS = ['symbol', 'quantity', 'price', 'day', 'value', 'cost', 'pnl', 'pnlPct', 'weight', 'sentiment'] as const;
 export type SortKey = (typeof SORT_KEYS)[number];
 export type SortDirection = 'asc' | 'desc';
 
@@ -38,6 +45,15 @@ export interface SortFields {
   pnl: number | null;
   pnlPct: number | null;
   weight: number | null;
+  /** `sentimentRank` of the latest rating. */
+  sentiment: number | null;
+}
+
+const SENTIMENT_RANK: Record<SentimentRating, number> = { bearish: -1, neutral: 0, bullish: 1 };
+
+/** A rating's place in the Sentiment order; null when there is no rating. */
+export function sentimentRank(rating: SentimentRating | null | undefined): number | null {
+  return rating ? SENTIMENT_RANK[rating] : null;
 }
 
 function isSortKey(value: unknown): value is SortKey {

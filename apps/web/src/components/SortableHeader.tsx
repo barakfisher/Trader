@@ -89,8 +89,15 @@ export function SortControl({ sort, onSort, columns }: SortProps & { columns: { 
   );
 }
 
-/** Every sortable column with its header's words, for the phone's control. */
-export function useSortColumns(): { key: SortKey; label: string }[] {
+/**
+ * Every sortable column with its header's words, for the phone's control.
+ * Sentiment is one only when the table shows it: once an agent researches the
+ * portfolio (`useSentiments().shown`).
+ */
+export function useSortColumns(withSentiment = false): { key: SortKey; label: string }[] {
   const { t } = useTranslation();
-  return SORT_KEYS.map((key) => ({ key, label: t(`holdings.columns.${key}`) }));
+  return SORT_KEYS.filter((key) => withSentiment || key !== 'sentiment').map((key) => ({
+    key,
+    label: key === 'sentiment' ? t('research.column') : t(`holdings.columns.${key}`),
+  }));
 }
