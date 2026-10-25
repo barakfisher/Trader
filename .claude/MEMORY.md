@@ -4,7 +4,24 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-25, after midnight - **Not a handoff: the database owner's password has a file of
+Updated: 2026-10-26 - **Handoff by count: five merges since #317** (#318-#321, and this PR).
+- **Merges since #317:**
+  - #318: the scheduled scan's give-up alert goes through `fanOut` (D298, migration `0073`);
+  - #319: the integration suite acts as `traders_app` by `SET ROLE` instead of setting its
+    password (a debt row; no decision);
+  - #320: the approval preview warns of the mandate limits a buy breaks and offers the setting
+    (D299);
+  - #321: the database owner's password has a file and a Secret of its own (D300).
+- **Decisions reach 300** (next: **301**). **Migrations:** `0073` is head; next free is `0074`.
+- **Deployed:** not by this session (it cannot reach the user's machine). `main` at #321 applies
+  `0072` and `0073`. **Deploy with `bash scripts/dev-docker.sh`, not a plain `docker compose up`:**
+  its first run moves `POSTGRES_PASSWORD` from `.env` to `.env.owner`; compose without that file
+  stops with "env file .env.owner not found" and changes nothing.
+- **Owed by the user:** the deploy; a look at D299's Hebrew warning in the browser and on Telegram;
+  the paid assistant eval over `get_research`; the earlier Telegram phone check.
+- **Next:** "Next session: after the debt sweep" below.
+
+Previous update, 2026-10-25, after midnight - **Not a handoff: the database owner's password has a file of
 its own (D300).** Decisions reach 300 (next: **301**); next free migration is still `0074`. The
 first `dev-docker.sh` (or `k8s-up.sh`) after pulling moves the password from `.env` to
 `.env.owner` (from `secrets.env` to `owner.env`) by itself; a plain `docker compose up` before that
@@ -5958,6 +5975,51 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after the debt sweep (written 2026-10-26)
+
+**State:** every debt item a session could do without the user is done except one of low value.
+#319 (the test role), #320 (D299, mandate limits at approval) and #321 (D300, the owner's
+password) cleared three of the five items "after the research follow-ups" listed. What remains:
+- **Redis warming from `quotes`** (debt row): needs nothing from the user, buys little - it only
+  spares the first price fetches after a Redis restart.
+- **The validator reading timestamp digits** (debt row): measure first. Ask the user to run, on
+  the live database, how often narration's model text is refused and for what (`llm_calls` with
+  `purpose = 'narration'`, by verdict and problem) before changing `evidence_validator.py`, since
+  the fix changes narration's behaviour for everyone.
+- **M10 PRs 10, 11, 13, 14, 15, 16**, each needing the user first (see "after M10 PR 9" below):
+  an email provider and a package (10, 11), an OAuth registration (13), the deletion and export
+  scope (14), legal text (15), the host and domain (16). PR 14 needs no new package, only
+  D264's scope confirmed - but D264 also emails the deletion notice (D258), so either PR 10 comes
+  first or the email step is split out with the user's agreement. None starts on a plain "go".
+
+**Lessons from this stretch:**
+- **A compose file that interpolates a secret with a default (`${X:-traders}`) fails open.**
+  Moving the value out of `.env` would have left every `compose` call made with `.env` alone
+  (admin-password.sh, CI, `pnpm up`) rebuilding `migrate` with the default. Load secrets through
+  `env_file` instead: a missing file is a clear refusal. Check with `docker compose config`,
+  which needs no daemon.
+- **`kustomize build` runs in the cloud container** with the release binary fetched through the
+  proxy (`github.com/kubernetes-sigs/kustomize/releases`, v5.4.3, into the scratchpad); with
+  throwaway `secrets.env`/`owner.env` it proves which workloads reference a hashed Secret.
+- **Shell upgrade logic is testable without a cluster:** source the libraries into a temporary
+  `REPO_ROOT`, stub `kc` as a shell function answering by argument pattern, and `eval` the script's
+  step between its section markers. Seven `k8s-up.sh` cases ran this way.
+- **`vi.mocked(f).mockResolvedValue` outlives `vi.clearAllMocks()`.** It replaced the agent for
+  every later test in the file; use `mockResolvedValueOnce` per call the code makes.
+- **A test that hard-codes a fee broke on the first run** ($1.50 assumed, $7.50 real): derive from
+  `feeMinor()`, as CLAUDE.md's first convention says.
+- **`SET ROLE` at connection start (`options=-c role=...`) gives a test a role's exact privileges
+  with no password and nothing server-wide** (#319) - prefer it to creating roles in tests.
+
+**Debt, as consequences:**
+- D299's Hebrew sentences were written by the model and not seen rendered; Latin tickers and
+  dollar figures sit in parentheses in RTL text, the same unchecked pattern as `farFromQuote`.
+- D299 checks size rules only. A buy of a symbol the mandate has since blocked, or outside its
+  universe, is not warned at approval (the scan refused it when it proposed it).
+- D300's compose `.env.owner` defaults to `traders` on a fresh clone (shared volume across
+  worktrees; recorded under D300) - an installation that wants a strong owner password changes
+  it as RUNBOOK section 1 says.
 
 ### Next session: after the research follow-ups (written 2026-10-25)
 
