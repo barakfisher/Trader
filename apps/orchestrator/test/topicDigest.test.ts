@@ -265,6 +265,23 @@ describe('sendDigest', () => {
     expect(message.body).not.toContain('uranium moved');
   });
 
+  it('names a held give-up on a line of its own, never as a finding (D298)', async () => {
+    db.topics = [];
+    db.pending = [
+      { id: 'n1', reason: 'quiet_hours', ref_kind: 'run', ref_id: 'r1' },
+      { id: 'n2', reason: 'muted', ref_kind: 'run', ref_id: 'r2' },
+    ];
+    const channel = notifier();
+
+    const result = await sendDigest(USER as never, channel as never, NOW);
+
+    const [message] = channel.send.mock.calls[0]! as unknown as [{ title: string; body: string }];
+    expect(message.title).toBe('Daily digest: 2 scans did not run');
+    expect(message.body).toBe("2 scheduled scans did not run; each agent's Decisions tab says why");
+    expect(result).toMatchObject({ entries: 2, delivered: true });
+    expect(db.settled.map((entry) => entry.id)).toEqual(['n1', 'n2']);
+  });
+
   it('sends a digest that holds only a narration change', async () => {
     db.topics = [];
     db.pending = [{ id: 'n1', reason: 'below_floor', ref_kind: 'narration', ref_id: 'tr1' }];

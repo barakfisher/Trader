@@ -114,8 +114,9 @@ function everySentence(messages: Messages): string[] {
     messages.menu.log.trade('sell', '0.5', 'VOO') + messages.menu.log.refused('cash buffer'),
     messages.menu.log.cost('$0.04', 'google/gemini-2.5-flash'),
     messages.menu.log.cost('$0.04', null),
-    digest.title(1, 1, true, 0),
-    digest.title(3, 2, false, 1),
+    digest.title(1, 1, true, 0, 0),
+    digest.title(3, 2, false, 1, 1),
+    digest.title(0, 0, false, 0, 2),
     ...[
       messages.modelFallback.where.assistant,
       messages.modelFallback.where.explain,
@@ -127,6 +128,8 @@ function everySentence(messages: Messages): string[] {
     messages.modelFallback.answerMark('acme/retired-1'),
     messages.modelFallback.digestLine(1),
     messages.modelFallback.digestLine(2),
+    messages.scheduledScans.digestLine(1),
+    messages.scheduledScans.digestLine(2),
     digest.reasonLine(2, digest.reasons.quiet_hours),
     digest.noUnusualMove('uranium'),
     digest.notMeasured('nuclear', '1 of 4 instruments priced'),
@@ -147,7 +150,7 @@ describe('the Hebrew', () => {
   });
 
   it('says one of a thing in words, as the web catalogue does', () => {
-    expect(MESSAGES.he.digest.title(1, 1, false, 0)).toBe('סיכום יומי: ממצא אחד, נושא אחד');
+    expect(MESSAGES.he.digest.title(1, 1, false, 0, 0)).toBe('סיכום יומי: ממצא אחד, נושא אחד');
   });
 });
 

@@ -308,3 +308,4 @@ while this file is out of date.
 | 295 | A session lasts a fixed `SESSION_TTL_HOURS` (7 days) from sign-in, never extended |
 | 296 | Settings offers *Sign out all other devices*; this device signs out from the menu |
 | 297 | How PR 12 builds D261 |
+| 298 | A scheduled scan's give-up alert goes through the ledger |

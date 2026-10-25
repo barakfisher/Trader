@@ -31,6 +31,14 @@ function agentRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
+const SETTINGS = {
+  language: 'en',
+  notify_severity: 'high',
+  quiet_hours_start: null,
+  quiet_hours_end: null,
+  muted_until: null,
+};
+
 let attempts: { run_key: string; status: string; finished_at: Date | null; stats: Record<string, unknown> }[] = [];
 
 vi.mock('../src/db/pool.js', () => ({
@@ -50,9 +58,12 @@ vi.mock('../src/db/queries.js', () => ({
   listActiveResearchAssignments: vi.fn(async () => []),
   claimRun: vi.fn(async () => ({ claimed: true, runId: 'run-1' })),
   finishRun: vi.fn(async () => undefined),
-  getOrCreateUserSettings: vi.fn(async () => ({ language: 'en' })),
+  getOrCreateUserSettings: vi.fn(async () => SETTINGS),
   getUser: vi.fn(async () => ({ id: USER, email: null, base_currency: 'USD', timezone: 'Asia/Jerusalem' })),
   primaryAgentId: vi.fn(async () => 'primary'),
+  // The give-up alert's ledger (D298): every claim wins unless a test says otherwise.
+  claimNotification: vi.fn(async () => ({ id: 'n-1' })),
+  settleNotification: vi.fn(async () => undefined),
 }));
 
 vi.mock('../src/services/tradeProposals.js', () => ({
@@ -213,6 +224,66 @@ describe('one attempt', () => {
         body: expect.stringContaining('the model provider is rate-limiting requests'),
       }),
     );
+  });
+
+  it('records the give-up in the ledger against the run that gave up (D298)', async () => {
+    const ai = fakeAi(async () => {
+      throw new AiServiceError('AI service 502', 502);
+    });
+    await runSlotAttempt({ ...job, attempt: MAX_SLOT_ATTEMPTS }, { ai, notifier: notifier(), now: () => NOW });
+    expect(queries.claimNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: AGENT,
+        channel: 'telegram',
+        refKind: 'run',
+        refId: 'run-1',
+        route: 'push',
+        dedupeKey: 'telegram:run:run-1',
+      }),
+    );
+    expect(queries.settleNotification).toHaveBeenCalledWith('n-1', 'sent');
+  });
+
+  it('holds the give-up for the digest during quiet hours (D298)', async () => {
+    // 13:10 UTC is 16:10 in Jerusalem, inside a 15:00-17:00 window.
+    vi.mocked(queries.getOrCreateUserSettings).mockResolvedValueOnce({
+      ...SETTINGS,
+      quiet_hours_start: '15:00',
+      quiet_hours_end: '17:00',
+    } as never);
+    const channel = notifier();
+    const ai = fakeAi(async () => {
+      throw new AiServiceError('AI service 502', 502);
+    });
+    await runSlotAttempt({ ...job, attempt: MAX_SLOT_ATTEMPTS }, { ai, notifier: channel, now: () => NOW });
+    expect(channel.send).not.toHaveBeenCalled();
+    expect(queries.claimNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: 'digest', refKind: 'run', reason: 'quiet_hours' }),
+    );
+  });
+
+  it('holds the give-up for the digest while the user is muted (D298)', async () => {
+    vi.mocked(queries.getOrCreateUserSettings).mockResolvedValueOnce({
+      ...SETTINGS,
+      muted_until: new Date(NOW.getTime() + RETRY_AFTER_MS),
+    } as never);
+    const channel = notifier();
+    const ai = fakeAi(async () => {
+      throw new AiServiceError('AI service 502', 502);
+    });
+    await runSlotAttempt({ ...job, attempt: MAX_SLOT_ATTEMPTS }, { ai, notifier: channel, now: () => NOW });
+    expect(channel.send).not.toHaveBeenCalled();
+    expect(queries.claimNotification).toHaveBeenCalledWith(expect.objectContaining({ channel: 'digest', reason: 'muted' }));
+  });
+
+  it('sends nothing for a give-up the ledger already holds (D298)', async () => {
+    vi.mocked(queries.claimNotification).mockResolvedValueOnce(null);
+    const channel = notifier();
+    const ai = fakeAi(async () => {
+      throw new AiServiceError('AI service 502', 502);
+    });
+    await runSlotAttempt({ ...job, attempt: MAX_SLOT_ATTEMPTS }, { ai, notifier: channel, now: () => NOW });
+    expect(channel.send).not.toHaveBeenCalled();
   });
 
   it('gives up at once when no retry can land inside the window', async () => {
