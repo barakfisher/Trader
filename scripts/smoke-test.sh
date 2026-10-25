@@ -20,6 +20,12 @@
 # the requests claim (default: the compose web app's). Against the kind cluster:
 #   ADMIN_EMAIL=... ADMIN_PASSWORD=... SMOKE_ENV_FILE=infra/k8s/overlays/kind/secrets.env \
 #   SMOKE_ORIGIN=http://traders.localhost bash scripts/smoke-test.sh http://127.0.0.1:8089
+#
+# SMOKE_ASSISTANT says what the assistant question may answer. Unset, either
+# `no_model` or a reply of the model's (`answer`, `decline`, `clarify`): a local
+# stack usually has a model chosen, and one that answers is wired correctly.
+# `no_model` requires exactly that outcome; CI sets it, because CI runs no model
+# and an answer there would mean one was reachable.
 set -euo pipefail
 
 BASE_URL="${1:-http://localhost:8080}"
@@ -134,22 +140,33 @@ status=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE_URL/internal/runs
 #
 # The extractive `/ask` this block used to call was removed with assistant PR 4;
 # `/ask` is now the assistant, which has no path without a model (decided
-# 2026-10-07). CI runs no model, so what is reachable here is the wiring: a
-# question goes browser -> orchestrator -> AI service, is stored, and comes back
-# as the `no_model` outcome - a 200 that says what is missing, never an error.
-# What a real model answers is the assistant eval's job
-# (services/ai/scripts/run_assistant_eval.py), which is keyed and paid.
+# 2026-10-07). What is checked here is the wiring: a question goes browser ->
+# orchestrator -> AI service, is stored, and comes back as a 200. With no model
+# (CI) that is the `no_model` outcome, which says what is missing, never an
+# error; with a model chosen (a local stack, usually) it is the model's reply.
+# Any other outcome - `failed`, a budget or cap reached, an own-key refusal - is
+# a stack that cannot answer, and fails. What a real model answers is the
+# assistant eval's job (services/ai/scripts/run_assistant_eval.py), which is
+# keyed and paid.
 
-say "a question reaches the assistant and says it needs a model"
+say "a question reaches the assistant and is answered, or says it needs a model"
 curl -fsS -b "$COOKIE_JAR" -X POST "$BASE_URL/assistant/messages" \
   -H 'content-type: application/json' -H "origin: $ORIGIN" \
   -d '{"message":"what is a drawdown"}' \
-  | python3 -c '
-import json, sys
+  | SMOKE_ASSISTANT="${SMOKE_ASSISTANT:-}" python3 -c '
+import json, os, sys
 body = json.load(sys.stdin)
-assert body["outcome"] == "no_model", f"expected no_model without a model, got {body}"
-assert body["conversationId"], "the question must be stored even with no reply"
-print("  " + body["text"][:100])
+outcome = body["outcome"]
+if os.environ["SMOKE_ASSISTANT"] == "no_model":
+    assert outcome == "no_model", f"expected no_model (SMOKE_ASSISTANT=no_model), got {body}"
+else:
+    replied = ("answer", "decline", "clarify")
+    names = ", ".join(replied)
+    assert outcome == "no_model" or outcome in replied, (
+        f"expected no_model or a reply ({names}), got {outcome}: {body}"
+    )
+assert body["conversationId"], "the question must be stored, with a reply or without"
+print(f"  {outcome}: " + (body.get("text") or "")[:100])
 '
 
 say "a concept chip resolves to its document"

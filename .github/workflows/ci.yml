@@ -183,6 +183,8 @@ jobs:
         env:
           ADMIN_EMAIL: admin@ci.test
           ADMIN_PASSWORD: ci-admin-password
+          # CI runs no model: the assistant must say so, not answer.
+          SMOKE_ASSISTANT: no_model
       # Query statistics (migration 0050, DB3): the server was started with the
       # library preloaded, the extension exists, and the report reads it - after
       # the smoke test, so there are statements to report.
