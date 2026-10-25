@@ -5896,7 +5896,9 @@ grant tests fail for the wrong reason.
   it was found only in the browser.
 - **The session gate's `PROTECTED_PREFIXES` is a list a new route must join.** `/research` was
   missing, so a user who still had to change a one-time password could start paid runs. The
-  security review caught it. `/narration` and `/universe` may have the same gap (unverified).
+  security review caught it. `/narration` and `/universe` had the same gap (fixed 2026-10-25);
+  `test/sessionGate.test.ts` now walks every route and fails for one that is neither gated nor
+  on its commented public list.
 - **The local clock can be far from what you think.** The overnight session believed it was
   just after midnight when it was 09:26; read `TZ=Asia/Jerusalem date` before acting on a
   time-boxed grant.
