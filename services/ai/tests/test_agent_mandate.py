@@ -147,8 +147,8 @@ def test_the_briefing_states_limits_as_percentages_of_capital() -> None:
         Mandate(max_position_bps=1250, cash_buffer_bps=500, allow_etfs=False, sectors=("Energy",))
     )
     assert brief == {
-        "max_position_pct_of_capital": "12.5",
-        "min_cash_pct_of_capital": "5",
+        "max_position_percent_of_capital": "12.5",
+        "min_cash_percent_of_capital": "5",
         "etfs_allowed": False,
         "sectors": ["Energy"],
     }
