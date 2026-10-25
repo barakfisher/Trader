@@ -310,3 +310,4 @@ while this file is out of date.
 | 297 | How PR 12 builds D261 |
 | 298 | A scheduled scan's give-up alert goes through the ledger |
 | 299 | The mandate's size rules are checked again at approval, and warn rather than refuse |
+| 300 | The database owner's password has a file and a Secret of its own |

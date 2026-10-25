@@ -4,7 +4,13 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-25, late night - **Not a handoff: the approval preview warns of mandate limits a
+Updated: 2026-10-25, after midnight - **Not a handoff: the database owner's password has a file of
+its own (D300).** Decisions reach 300 (next: **301**); next free migration is still `0074`. The
+first `dev-docker.sh` (or `k8s-up.sh`) after pulling moves the password from `.env` to
+`.env.owner` (from `secrets.env` to `owner.env`) by itself; a plain `docker compose up` before that
+stops with "env file .env.owner not found". Merges since handoff #317: #318, #319, #320.
+
+Previous update, 2026-10-25, late night - **Not a handoff: the approval preview warns of mandate limits a
 buy breaks (D299).** Decisions reach 299 (next: **300**); next free migration is still `0074`.
 The new Telegram sentences and the card's Hebrew owe a look on the phone and in the browser.
 
@@ -4637,6 +4643,36 @@ failure they prevent.
         `PreviewSummary` renders every entry as the typed-price warning;
       - a per-cent suggestion ("14.21%"): a limit a person reads and keeps is a round number,
         and the next buy would break the exact one again.
+300. **The database owner's password has a file and a Secret of its own** (the user took the
+    recommended debt item, 2026-10-25; resolves the debt row; no migration).
+    - Compose: `.env.owner` (git-ignored; template `.env.owner.example`) holds `POSTGRES_PASSWORD`
+      and `MIGRATION_DATABASE_URL`, and only `postgres` and `migrate` list it in `env_file`.
+      Kind: `overlays/kind/owner.env` -> Secret `traders-owner`, referenced by key from the
+      Postgres StatefulSet and the `migrate` Job alone. `migrate.py` prefers
+      `MIGRATION_DATABASE_URL` to `DATABASE_URL` (`use_owner_url`), the same in both stacks.
+    - **Compose never interpolates the owner's password.** The old file had
+      `${POSTGRES_PASSWORD:-traders}`: with the password moved out of `.env`, any compose command
+      run with `--env-file .env` alone (admin-password.sh, CI, `pnpm up`) would have rebuilt
+      `migrate` with "traders" and locked it out. Through `env_file`, a missing `.env.owner`
+      stops compose with "env file not found" instead.
+    - **Upgrades are in place and never generate over a value**
+      (`scripts/lib/owner-secret.sh`): the start scripts and `k8s-up.sh` move the owner's lines
+      out of an older `.env` / `secrets.env`, values unchanged, and refuse when both files hold
+      different values. `k8s-up.sh` recovers each missing file from the Secret the running
+      cluster reads it from: `secrets.env` from the orchestrator's `envFrom`, `owner.env` from
+      Postgres's `secretKeyRef`. A cluster from before the split has everything in
+      `traders-secrets`, and its recovered file is split like any older one.
+    - **Deliberate asymmetry:** a fresh compose `.env.owner` gets the template's `traders`, not a
+      random password, while kind generates one. Compose's project name is fixed (`traders`), so
+      every worktree shares one Postgres volume, created with whatever the first checkout had -
+      until now the old default `traders`. A random value per checkout would lock a worktree out.
+      Postgres is bound to 127.0.0.1. Kind's `owner.env` is recovered from the cluster instead.
+    - **Why:** code running in any service (an injected dependency, a template bug) could read the
+      one credential that can change the schema. Task 9 (D93) had already closed the SQL path.
+    - **Rejected:**
+      - blanking `POSTGRES_PASSWORD` in each service's `environment`: a denylist, so the next
+        owner-level key added to `.env` would leak again;
+      - listing every service's variables instead of `env_file`: dozens of keys that drift.
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -5492,7 +5528,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | **Model cost reads $0 on this installation** | `.env` `LLM_MODEL` (a `:free` OpenRouter route) | Every recorded call is priced 0 because the configured route is free - true, and the panel (#126, decision 88) says "free route" rather than $0. "Free" is read from the `:free` suffix alone: a free route OpenRouter names differently would show as "$0", a price. The cost column has not yet been seen non-zero on real data |
 | **A low-confidence topic cannot be produced in the kind cluster** | fixture embedder, `app/ask/relevance.judge` | Keyless by decision 79: on a non-semantic embedder the judge abstains, so every topic is `weak`, never `none`. Show that event on compose |
 | ~~The app connects to Postgres as a superuser that owns every table~~ | — | **Resolved** by decision 93 (independent task 9, migration 0033): the services connect as `traders_app`; the owner runs migrations only. What remains is the next row |
-| **The owner's password still reaches every container** | compose `env_file`, kind `traders-secrets` | Compose loads `.env` into every service, and every kind pod reads the one Secret, so `POSTGRES_PASSWORD` (and in kind `MIGRATION_DATABASE_URL`) is in each service's environment even though no service uses it. Task 9 closed the SQL-injection path (a query runs as `traders_app`); code execution inside a service could still read the owner's password. Fix: a second Secret (and a second env file) that only Postgres and `migrate` mount - it changes the shape of `secrets.env` and `.env`, which is why it was not folded into task 9 |
+| ~~The owner's password still reaches every container~~ | — | **Resolved** (2026-10-25, D300): `.env.owner` for compose and the `traders-owner` Secret for kind, read by Postgres and migrate alone; older files are split in place by the start scripts and `k8s-up.sh` |
 | ~~The integration suite changes a cluster-wide role's password~~ | — | **Resolved** (2026-10-25): one `as_app` fixture in `tests/integration/conftest.py` replaces the four per-file copies that set `traders_app`'s password. It logs in as the owner and starts each session in the role (`options=-c role=traders_app`), so its privileges are exactly `traders_app`'s and `current_user` still reads `traders_app`; nothing server-wide changes. *Rejected:* a per-run role `IN ROLE traders_app` - it creates a cluster-wide object every run, a crashed run leaves it behind, and `current_user` stops naming the role. It relies on the owner being a superuser, which `test_the_trigger_tests_below_run_as_the_owner` already asserts. CI's orchestrator step still logs in as `traders_app` with `migrate.py`'s password, on CI's own server, as a service does |
 | **Telegram's inbound delivery is unproven** | deployment | Still true after M7, deliberately: the cluster runs with Telegram off (decision 79). **The user decided (2026-09-30) to prove the webhook in a real cloud deployment with HTTPS**, not through a tunnel from the laptop; `setWebhook` on the real bot stops the compose stack's polling, so it waits for that deployment. Everything else was exercised against a real bot, but `setWebhook` needs a public HTTPS URL. The handler has only ever been driven by replaying genuine payloads at it locally. **The first real deployment is the first real test of that leg** — check `getWebhookInfo` for `last_error_message` immediately after |
 | ~~`queries.ts` conflicts on every parallel PR~~ | — | **Resolved** (independent task 15, decided by the user 2026-10-01): 21 modules under `src/db/queries/`, one per concept, and `queries.ts` is an index of `export *` lines, so no call site and no `vi.mock('../src/db/queries.js')` changed. A pure move, checked as one: every non-blank, non-import line of the old file appears in the new ones exactly as often (bar `export` prefixes and the section banners the file names replaced). One private helper, `LIVE_TOPIC`, is exported now because topics and topic proposals share it. CLAUDE.md's rule reads "all SQL lives under `src/db/queries/`". **A new module needs its `export *` line in the index** - typecheck catches a caller of a function that is not re-exported, but not a module nobody calls yet |
@@ -5933,9 +5969,10 @@ M10 is unchanged, and every item needs the user before it starts (see "after M10
 - ~~The integration suite changes the cluster-wide `traders_app` password~~ - resolved
   2026-10-25: the suite takes the role at connection start instead of logging in as it.
 - ~~The give-up alert ignores quiet hours, mute and dedupe~~ - resolved 2026-10-25 (D298, 0073).
-- Larger: the owner's password reaching every container; the validator reading timestamp digits
-  (measure narration's rejection rate first); Redis warming from `quotes`. All three are rows in
-  the debt table. ~~Mandate limits not re-checked at approval~~ - resolved 2026-10-25 (D299).
+- Larger: the validator reading timestamp digits (measure narration's rejection rate first);
+  Redis warming from `quotes`. Both are rows in the debt table. ~~Mandate limits not re-checked at
+  approval~~ - resolved 2026-10-25 (D299). ~~The owner's password reaching every container~~ -
+  resolved 2026-10-25 (D300).
 
 **Lessons from this stretch:**
 - **Two sessions fixed the same debts at once.** #312 and #315 made the same rename an hour

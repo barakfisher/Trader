@@ -43,6 +43,9 @@ configMapGenerator:
 # `traders-secrets` while the Secret was called `traders-secrets-<hash>`.
 secretGenerator:
   - name: traders-secrets
+  # The database owner's password, apart from the Secret every pod loads (D300):
+  # only Postgres and the migrate Job reference it, by key.
+  - name: traders-owner
 
 # Every pod gets `enableServiceLinks: false`, set here once rather than in each
 # file. By default Kubernetes injects variables for every Service in the

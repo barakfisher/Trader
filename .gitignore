@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!.env.owner.example
 
 # Node
 node_modules/
@@ -36,6 +37,7 @@ data/universe/*.local.jsonl
 
 # Kubernetes: per-machine secrets and the per-deploy kustomization (scripts/k8s-up.sh)
 infra/k8s/overlays/*/secrets.env
+infra/k8s/overlays/*/owner.env
 infra/k8s/.deploy/
 
 # Assistant eval reports: conversations with a real model, kept locally (scripts/run_assistant_eval.py)

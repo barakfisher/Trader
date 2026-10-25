@@ -34,12 +34,13 @@ is replaced.
 | `TELEGRAM_BOT_TOKEN` | orchestrator | revoke the old one in @BotFather first if it leaked; the bot then answers only to the new one |
 | provider keys (`OPENROUTER_API_KEY`, ...) | AI service | the next call uses the new key; nothing else changes |
 | `LLM_KEY_ENCRYPTION_KEYS` | AI service | encrypts users' own OpenRouter keys (D208). **Put the new key first and keep the old one after it**, restart, run `cd services/ai && .venv/bin/python scripts/reencrypt_llm_keys.py` (in a container: `python scripts/reencrypt_llm_keys.py`), then drop the old key and restart. Dropping it first leaves saved keys unreadable: their owners go back under the cap until they save their key again |
-| `POSTGRES_PASSWORD` | Postgres, both services | **see below - editing the file alone locks the services out** |
+| `POSTGRES_PASSWORD`, `MIGRATION_DATABASE_URL` | Postgres and migrate only - `.env.owner` (compose), `owner.env` (cluster; D300) | **see below - editing the file alone locks migrate out** |
 
-**Compose:** edit `.env`, then `bash scripts/dev-docker.sh`. Compose recreates the containers
-whose environment changed.
+**Compose:** edit `.env` (the owner's password: `.env.owner`), then `bash scripts/dev-docker.sh`.
+Compose recreates the containers whose environment changed.
 
-**Cluster:** edit `infra/k8s/overlays/kind/secrets.env` (non-secret settings: `base/config.env`),
+**Cluster:** edit `infra/k8s/overlays/kind/secrets.env` (the owner's password: `owner.env` beside
+it; non-secret settings: `base/config.env`),
 then `bash scripts/k8s-up.sh`. The cluster has no Telegram and no provider keys by design (it is
 keyless); add a key to `secrets.env` and its setting to `config.env` if you want one.
 
@@ -65,14 +66,24 @@ database first, then everywhere else:
 ALTER ROLE traders WITH PASSWORD '<new password>';
 ```
 
-then put the same value in `POSTGRES_PASSWORD` - and, for the cluster, in `MIGRATION_DATABASE_URL`
-(`postgresql://traders:<new password>@postgres:5432/traders`) - and restart. Use passwords without
-URL-special characters (`openssl rand -hex 16` is safe).
+then put the same value in `POSTGRES_PASSWORD` and in `MIGRATION_DATABASE_URL`
+(`postgresql://traders:<new password>@postgres:5432/traders`) - in `.env.owner` for compose, in
+`owner.env` for the cluster - and restart. Use passwords without URL-special characters
+(`openssl rand -hex 16` is safe).
 
-If `secrets.env` is ever lost while the cluster's database still exists, `k8s-up.sh` recovers it
-from the Secret the running Postgres reads before it would generate anything, and refuses outright
-when a database exists with no Secret to recover from. By hand, the same thing is (every value is
-in the Secret):
+**Why the owner has a file of its own (D300):** compose loads `.env` into every service and every
+pod loads `traders-secrets`, so a password kept there reached all of them, though only Postgres and
+migrate use it. `.env.owner` and the `traders-owner` Secret are read by those two alone. The start
+scripts and `k8s-up.sh` move the lines out of a file written before the split, values unchanged,
+and refuse when the two files disagree: delete the stale line once you know which value the
+database was created with.
+
+If `secrets.env` or `owner.env` is ever lost while the cluster's database still exists,
+`k8s-up.sh` recovers each from the Secret the running cluster reads it from - `secrets.env` from
+the orchestrator's, `owner.env` from Postgres's - before it would generate anything, and refuses
+outright when a database exists with no Secret to recover from. By hand, the same thing is (for
+`owner.env`, the Secret named by the Postgres StatefulSet's `POSTGRES_PASSWORD`, keeping only
+`POSTGRES_PASSWORD` and `MIGRATION_DATABASE_URL`):
 
 ```bash
 # the Secret the running orchestrator reads (older hashed copies may linger beside it)

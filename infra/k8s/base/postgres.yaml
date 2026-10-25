@@ -71,7 +71,7 @@ spec:
                 configMapKeyRef: { name: traders-config, key: POSTGRES_DB }
             - name: POSTGRES_PASSWORD
               valueFrom:
-                secretKeyRef: { name: traders-secrets, key: POSTGRES_PASSWORD }
+                secretKeyRef: { name: traders-owner, key: POSTGRES_PASSWORD }
             # A subdirectory of the mounted disk: initdb refuses a directory
             # that is not empty, and some provisioners put lost+found at the root.
             - name: PGDATA

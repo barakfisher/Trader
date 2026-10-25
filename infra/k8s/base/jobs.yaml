@@ -57,10 +57,11 @@ spec:
             - configMapRef: { name: traders-config }
             - secretRef: { name: traders-secrets }
           env:
-            # Wins over the secret's DATABASE_URL, which names traders_app.
-            - name: DATABASE_URL
+            # The owner's URL, from the one Secret only this Job and Postgres
+            # read (D300); migrate.py prefers it to DATABASE_URL, which names traders_app.
+            - name: MIGRATION_DATABASE_URL
               valueFrom:
-                secretKeyRef: { name: traders-secrets, key: MIGRATION_DATABASE_URL }
+                secretKeyRef: { name: traders-owner, key: MIGRATION_DATABASE_URL }
           resources:
             requests: { cpu: 100m, memory: 128Mi }
             limits: { memory: 512Mi }
