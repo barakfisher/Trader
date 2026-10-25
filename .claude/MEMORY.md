@@ -4,7 +4,10 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-25, evening - **Not a handoff: the give-up alert goes through the ledger (D298,
+Updated: 2026-10-25, night - **Not a handoff: the integration suite no longer sets `traders_app`'s
+password** (a debt row; no decision, no migration).
+
+Previous update, 2026-10-25, evening - **Not a handoff: the give-up alert goes through the ledger (D298,
 migration `0073`).** Decisions reach 298 (next: **299**); next free migration is `0074`. Deploying
 it applies `0072` and `0073`.
 
@@ -5460,7 +5463,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | **A low-confidence topic cannot be produced in the kind cluster** | fixture embedder, `app/ask/relevance.judge` | Keyless by decision 79: on a non-semantic embedder the judge abstains, so every topic is `weak`, never `none`. Show that event on compose |
 | ~~The app connects to Postgres as a superuser that owns every table~~ | — | **Resolved** by decision 93 (independent task 9, migration 0033): the services connect as `traders_app`; the owner runs migrations only. What remains is the next row |
 | **The owner's password still reaches every container** | compose `env_file`, kind `traders-secrets` | Compose loads `.env` into every service, and every kind pod reads the one Secret, so `POSTGRES_PASSWORD` (and in kind `MIGRATION_DATABASE_URL`) is in each service's environment even though no service uses it. Task 9 closed the SQL-injection path (a query runs as `traders_app`); code execution inside a service could still read the owner's password. Fix: a second Secret (and a second env file) that only Postgres and `migrate` mount - it changes the shape of `secrets.env` and `.env`, which is why it was not folded into task 9 |
-| **The integration suite changes a cluster-wide role's password** | `tests/integration/test_admin_audit_sql.py` | `as_app` sets `traders_app`'s password to a test value, and a role belongs to the whole Postgres server. Harmless in CI (its own server); against a server that also hosts a running stack, the services lose their login until `migrate` runs. A fix: create a per-run role for the test (`traders_app_test_<random>`, granted like `traders_app`) instead of borrowing the real one |
+| ~~The integration suite changes a cluster-wide role's password~~ | — | **Resolved** (2026-10-25): one `as_app` fixture in `tests/integration/conftest.py` replaces the four per-file copies that set `traders_app`'s password. It logs in as the owner and starts each session in the role (`options=-c role=traders_app`), so its privileges are exactly `traders_app`'s and `current_user` still reads `traders_app`; nothing server-wide changes. *Rejected:* a per-run role `IN ROLE traders_app` - it creates a cluster-wide object every run, a crashed run leaves it behind, and `current_user` stops naming the role. It relies on the owner being a superuser, which `test_the_trigger_tests_below_run_as_the_owner` already asserts. CI's orchestrator step still logs in as `traders_app` with `migrate.py`'s password, on CI's own server, as a service does |
 | **Telegram's inbound delivery is unproven** | deployment | Still true after M7, deliberately: the cluster runs with Telegram off (decision 79). **The user decided (2026-09-30) to prove the webhook in a real cloud deployment with HTTPS**, not through a tunnel from the laptop; `setWebhook` on the real bot stops the compose stack's polling, so it waits for that deployment. Everything else was exercised against a real bot, but `setWebhook` needs a public HTTPS URL. The handler has only ever been driven by replaying genuine payloads at it locally. **The first real deployment is the first real test of that leg** — check `getWebhookInfo` for `last_error_message` immediately after |
 | ~~`queries.ts` conflicts on every parallel PR~~ | — | **Resolved** (independent task 15, decided by the user 2026-10-01): 21 modules under `src/db/queries/`, one per concept, and `queries.ts` is an index of `export *` lines, so no call site and no `vi.mock('../src/db/queries.js')` changed. A pure move, checked as one: every non-blank, non-import line of the old file appears in the new ones exactly as often (bar `export` prefixes and the section banners the file names replaced). One private helper, `LIVE_TOPIC`, is exported now because topics and topic proposals share it. CLAUDE.md's rule reads "all SQL lives under `src/db/queries/`". **A new module needs its `export *` line in the index** - typecheck catches a caller of a function that is not re-exported, but not a module nobody calls yet |
 | ~~Migration 0008 hard-codes a table Mastra owns~~ | — | **Resolved 2026-10-05**: Mastra retired (D11), schema dropped in 0039; `test/mastraSchemaOwnership.test.ts` went with it |
@@ -5897,8 +5900,8 @@ grant tests fail for the wrong reason.
 M10 is unchanged, and every item needs the user before it starts (see "after M10 PR 9" below).
 
 **Small debt the user can pick from, none of it started, each its own PR:**
-- **The integration suite changes the cluster-wide `traders_app` password** (debt table). A
-  per-run role would let the suite run against a server that also hosts a stack.
+- ~~The integration suite changes the cluster-wide `traders_app` password~~ - resolved
+  2026-10-25: the suite takes the role at connection start instead of logging in as it.
 - ~~The give-up alert ignores quiet hours, mute and dedupe~~ - resolved 2026-10-25 (D298, 0073).
 - Larger: the owner's password reaching every container; mandate limits not re-checked at
   approval; the validator reading timestamp digits (measure narration's rejection rate first);

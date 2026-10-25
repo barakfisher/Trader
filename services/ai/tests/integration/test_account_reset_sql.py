@@ -13,13 +13,11 @@ from collections.abc import Iterator
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
-from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import DBAPIError
 
 INSTRUMENT = "10000000-0000-0000-0000-0000000000e1"
-APP_PASSWORD = "traders_app_test"
 BUDGET = 100_000
 RESET_GROUPS = ("main_portfolio", "agents_trading", "followed_topics")
 
@@ -401,19 +399,6 @@ def test_a_new_agent_at_zero_is_still_refused(connection: Connection) -> None:
         )
     savepoint.rollback()
     assert "cash_movements_sign" in str(refusal.value.orig)
-
-
-@pytest.fixture(scope="module")
-def as_app(migrated: Engine, database_url: str) -> Iterator[Engine]:
-    """An engine logged in as `traders_app`, as every service is."""
-    with migrated.begin() as connection:
-        connection.execute(text(f"ALTER ROLE traders_app WITH LOGIN PASSWORD '{APP_PASSWORD}'"))
-    url = make_url(database_url).set(
-        drivername="postgresql+psycopg", username="traders_app", password=APP_PASSWORD
-    )
-    engine = create_engine(url, future=True)
-    yield engine
-    engine.dispose()
 
 
 def test_the_app_role_resets_through_the_function_and_cannot_erase_the_ledger_itself(
