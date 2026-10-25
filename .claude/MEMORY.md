@@ -4,7 +4,11 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-25, later - **Handoff by count: six merges since #309.**
+Updated: 2026-10-25, evening - **Not a handoff: the give-up alert goes through the ledger (D298,
+migration `0073`).** Decisions reach 298 (next: **299**); next free migration is `0074`. Deploying
+it applies `0072` and `0073`.
+
+Previous update, 2026-10-25, later - **Handoff by count: six merges since #309.**
 - **Merges since the last update:**
   - #316: the smoke test accepts the assistant's reply when a model is chosen; the `c792b05`
     deploy recorded (another session's);
@@ -4584,6 +4588,22 @@ failure they prevent.
     - **Tests:** the unit suites mock `getSessionUser` through their own `getUser`
       (`test/session.ts` `mockedSessionUser`); the exit test (D266) signs in for real, a new
       session per write, because sign-out and sign-out-others end the session they are sent on.
+298. **A scheduled scan's give-up alert goes through the ledger** (the user chose the debt item,
+    2026-10-25; migration `0073`; refines D74).
+    - `reportGaveUp` calls `fanOut` with `refKind: 'run'` and the id of the attempt's run, at
+      `GAVE_UP_SEVERITY` (`high`). Quiet hours and a mute hold it for the digest; the dedupe key
+      is `telegram:run:<run id>`, so a repeated report of one run sends nothing.
+    - **The digest names it on a line of its own** ("2 scheduled scans did not run"), never as a
+      finding, as D286 does for a model fallback: a scan that did not happen is not something the
+      market did.
+    - **Why:** the alert was the one push that bypassed the policy. A slot giving up at 03:00
+      woke the user at 03:00 for something nothing could be done about until morning, and a mute
+      did not silence it.
+    - **Rejected:**
+      - pushing it through quiet hours like an urgent sell (D70): nothing is lost by waiting -
+        the next slot runs either way - so it is not urgent in D70's sense;
+      - the slot key as the referent: `ref_id` is a uuid, and the run that gave up already is
+        one, and is the record the message points to.
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -5417,7 +5437,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | ~~The lexicon sentiment scorer misreads market headlines~~ | — | **Resolved** (2026-10-08): the cause was tense - headlines say "Sinks", "Plummets", "Rises"; v1 listed mostly past tenses. `lexicon-v2` adds the present tenses (not "up/down/higher/lower", which name no price) and `scripts/rescore_sentiment.py` scores stored articles beside their v1 rows. Measured on a copy of the live database: articles matching no word 84.2% -> 80.1% (27,678 articles; the rest mostly name no price at all); 92 changed sign, nearly all one-sided -> balanced. Run the script once after any future `LEXICON_MODEL_NAME` bump, or the topic page keeps reporting the old lexicon (it reports the scorer that read the most articles) |
 | ~~The Admin page shows a model as chosen when none is~~ | — | **Resolved** (2026-10-08): when the model in use is not offered for a scope (agents on the free route, or a chosen model since withdrawn) the picker selects a disabled "Not chosen – using <model>" entry, Save stays off, and the total counts nothing for that scope. When the model in use *is* offered (narration on the free route) it is selected, as before |
 | ~~Approving a trade from Telegram is refused~~ | — | **Resolved by #186 (D62)**: Approve previews, Confirm fills at the signed price |
-| **The give-up alert ignores quiet hours, mute and dedupe** | `scheduledScans.ts` (`reportGaveUp`) | Sent through `notifier.send`, not `fanOut`, so a slot that gives up at 03:00 messages at 03:00 and a muted user still hears it; it is once per slot only because it runs on the last attempt. Route it through the fan-out with a `refKind` for runs (a CHECK change) if it ever annoys |
+| ~~The give-up alert ignores quiet hours, mute and dedupe~~ | — | **Resolved** (2026-10-25, D298, 0073): through `fanOut` with `refKind: 'run'`; held for the digest during quiet hours and a mute, once per run |
 | ~~Scheduled scans run for `SINGLE_USER_ID` only~~ | — | **Resolved by M9's completion (D238)**: every active user's due slots, enqueued round-robin. Was: | The ask plans one user's agents, as every run kind does. Multi-user means iterating users here, and per-user fairness on the queue needs BullMQ Pro's groups (D73) |
 | **The plan needs the AI service's calendar** | `planScheduledScans` | With the AI service down the ask fails (recorded "AI service unreachable", HTTP 500 - a failed CronJob in kind) and the next ask, 15 minutes later, catches up; a slot's window is hours, so nothing is lost unless the outage outlasts it |
 | **Agents' answers are refused for formatted figures** | evidence validator (`app/agents/answer.py`, `narration` checker) | The first scheduled scan (2026-10-08) wrote "1,923" - refused as unsourced. Measure how often real scans are refused and for what before changing anything; a computed figure (shares x price) is rightly refused, a re-formatted one may not be |
@@ -5879,8 +5899,7 @@ M10 is unchanged, and every item needs the user before it starts (see "after M10
 **Small debt the user can pick from, none of it started, each its own PR:**
 - **The integration suite changes the cluster-wide `traders_app` password** (debt table). A
   per-run role would let the suite run against a server that also hosts a stack.
-- **The give-up alert ignores quiet hours, mute and dedupe** (debt table). Routing it through
-  `fanOut` needs a `refKind` for runs, which means a CHECK change.
+- ~~The give-up alert ignores quiet hours, mute and dedupe~~ - resolved 2026-10-25 (D298, 0073).
 - Larger: the owner's password reaching every container; mandate limits not re-checked at
   approval; the validator reading timestamp digits (measure narration's rejection rate first);
   Redis warming from `quotes`. All four are rows in the debt table.

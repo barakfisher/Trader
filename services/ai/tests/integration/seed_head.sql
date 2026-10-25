@@ -336,6 +336,9 @@ INSERT INTO model_fallbacks (id, user_id, agent_id, scope, saved_model, effectiv
   ('61000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'agent', 'acme/retired-model', 'google/gemini-3.5-flash-lite', NULL);
 INSERT INTO notifications (user_id, agent_id, channel, ref_kind, ref_id, route, reason, status, sent_at, dedupe_key) VALUES
   ('00000000-0000-0000-0000-00000000000b', '90000000-0000-0000-0000-00000000000b', 'telegram', 'model_fallback', '61000000-0000-0000-0000-000000000002', 'push', 'above_floor', 'sent', '2026-10-23T12:00:00Z', 'seed-n-model-fallback');
+-- A scheduled scan that gave up (0073, D298), held for the digest: the failed attempt above.
+INSERT INTO notifications (user_id, agent_id, channel, ref_kind, ref_id, route, reason, status, sent_at, dedupe_key) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', 'digest', 'run', '20000000-0000-0000-0000-000000000098', 'digest', 'quiet_hours', 'pending', NULL, 'seed-n-run');
 -- Research (0070, D254): user a assigns its paused agent; one run per trigger and
 -- status, one rating per status and rating, a research call, and a research attempt.
 UPDATE user_settings SET research_agent_id = '90000000-0000-0000-0000-0000000000a1'

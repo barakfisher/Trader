@@ -422,6 +422,8 @@ export interface Messages {
     slot: (slot: ScanSlot) => string;
     causes: Record<FailureCause, string>;
     gaveUp: (agent: string, slot: string, day: string, cause: string) => NoticeText;
+    /** The digest's line for the notices held for it (D298). */
+    digestLine: (count: number) => string;
   };
 
   narration: Record<RecordedNarrationState, NoticeText>;
@@ -443,7 +445,13 @@ export interface Messages {
   };
 
   digest: {
-    title: (findings: number, topics: number, narrationChanged: boolean, modelFallbacks: number) => string;
+    title: (
+      findings: number,
+      topics: number,
+      narrationChanged: boolean,
+      modelFallbacks: number,
+      scansGaveUp: number,
+    ) => string;
     reasons: Record<DigestReason, string>;
     reasonLine: (count: number, reason: string) => string;
     topicsHeading: string;
@@ -862,6 +870,10 @@ const en: Messages = {
       headline: `⚠️ ${agent}'s ${slot} scan (${day}) did not run`,
       explanation: `It stopped trying because ${cause}. Nothing was proposed; the next scheduled scan runs as usual. Details are on the agent's Decisions tab.`,
     }),
+    digestLine: (count) =>
+      count === 1
+        ? "A scheduled scan did not run; the agent's Decisions tab says why"
+        : `${count} scheduled scans did not run; each agent's Decisions tab says why`,
   },
 
   narration: {
@@ -915,12 +927,13 @@ const en: Messages = {
   },
 
   digest: {
-    title: (findings, topics, narrationChanged, modelFallbacks) => {
+    title: (findings, topics, narrationChanged, modelFallbacks, scansGaveUp) => {
       const parts: string[] = [];
       if (findings > 0) parts.push(`${findings} finding${findings === 1 ? '' : 's'}`);
       if (topics > 0) parts.push(`${topics} topic${topics === 1 ? '' : 's'}`);
       if (narrationChanged) parts.push('explanations changed');
       if (modelFallbacks > 0) parts.push('a model fell back');
+      if (scansGaveUp > 0) parts.push(scansGaveUp === 1 ? 'a scan did not run' : `${scansGaveUp} scans did not run`);
       return `Daily digest: ${parts.join(', ')}`;
     },
     reasons: {
@@ -1374,6 +1387,10 @@ const he: Messages = {
       headline: `⚠️ הסריקה של ${isolated(agent)} (${slot}, ${ltr(day)}) לא רצה`,
       explanation: `היא הפסיקה לנסות כי ${cause}. שום דבר לא הוצע; הסריקה המתוזמנת הבאה תרוץ כרגיל. הפרטים בלשונית ההחלטות של הסוכן.`,
     }),
+    digestLine: (count) =>
+      count === 1
+        ? 'סריקה מתוזמנת לא רצה; הסיבה בלשונית ההחלטות של הסוכן'
+        : `${ltr(count)} סריקות מתוזמנות לא רצו; הסיבה בלשונית ההחלטות של כל סוכן`,
   },
 
   narration: {
@@ -1425,12 +1442,13 @@ const he: Messages = {
   },
 
   digest: {
-    title: (findings, topics, narrationChanged, modelFallbacks) => {
+    title: (findings, topics, narrationChanged, modelFallbacks, scansGaveUp) => {
       const parts: string[] = [];
       if (findings > 0) parts.push(hebrewCount(findings, 'ממצא אחד', 'ממצאים'));
       if (topics > 0) parts.push(hebrewCount(topics, 'נושא אחד', 'נושאים'));
       if (narrationChanged) parts.push('ההסברים השתנו');
       if (modelFallbacks > 0) parts.push('מודל הוחלף בחלופי');
+      if (scansGaveUp > 0) parts.push(scansGaveUp === 1 ? 'סריקה לא רצה' : `${ltr(scansGaveUp)} סריקות לא רצו`);
       return `סיכום יומי: ${parts.join(', ')}`;
     },
     reasons: {

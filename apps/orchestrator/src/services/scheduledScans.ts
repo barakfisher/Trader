@@ -24,7 +24,7 @@
  * "skipped" with the reason. *Run a scan now* is the route's, not this.
  */
 
-import { PAYER_REFUSALS } from '@traders/shared';
+import { PAYER_REFUSALS, UI_LANGUAGES, type LocalizedTexts } from '@traders/shared';
 import { AiServiceError, type AiClient } from '@traders/shared/ai';
 
 import {
@@ -32,14 +32,16 @@ import {
   finishRun,
   getAgent,
   getOrCreateUserSettings,
+  getUser,
   listActiveResearchAssignments,
   listAgents,
   listSlotAttempts,
   type SlotAttemptRow,
 } from '../db/queries.js';
 import { logger } from '../logger.js';
-import { messagesFor } from '../notify/messages.js';
+import { messagesFor, type NoticeText } from '../notify/messages.js';
 import type { Notifier } from '../notify/notifier.js';
+import { fanOut, settingsForNotification } from './notifications.js';
 import { dueSlots, scheduleOf, slotKey, type DueSlot, type ScanSlot, type Session } from './scanSchedule.js';
 import { readyToScan } from './agentReadiness.js';
 import { proposeFromScan } from './tradeProposals.js';
@@ -244,7 +246,7 @@ export async function runSlotAttempt(job: SlotAttemptJob, deps: AttemptDeps): Pr
   if (now.getTime() >= Date.parse(job.until)) {
     // Queued in time, reached too late: the window belongs to the next scan.
     await finishRun(runId, 'skipped', { reason: 'window_closed' });
-    if (job.attempt > 1) await reportGaveUp(job, 'window_closed', deps.notifier);
+    if (job.attempt > 1) await reportGaveUp(runId, job, 'window_closed', deps.notifier, now);
     return;
   }
   const agent = await getAgent(job.userId, job.agentId);
@@ -297,35 +299,68 @@ async function finish(
   await finishRun(runId, 'failed', stats);
   const nextTry = now.getTime() + RETRY_AFTER_MS;
   const last = !stats.retryable || job.attempt >= MAX_SLOT_ATTEMPTS || nextTry >= Date.parse(job.until);
-  if (last) await reportGaveUp(job, stats.cause, notifier);
+  if (last) await reportGaveUp(runId, job, stats.cause, notifier, now);
+}
+
+/** Pushes past the default `high` floor: a scan the user scheduled did not happen (D74). */
+export const GAVE_UP_SEVERITY = 'high';
+
+/** The give-up notice in `language`. */
+function gaveUpNotice(job: SlotAttemptJob, agentName: string, cause: FailureCause, language: string): NoticeText {
+  const messages = messagesFor(language);
+  return messages.scheduledScans.gaveUp(
+    agentName,
+    messages.scheduledScans.slot(job.slot),
+    job.day,
+    messages.scheduledScans.causes[cause],
+  );
 }
 
 /**
  * D74: one message when a slot gives up, naming the agent, the slot and why.
  * A retry that later succeeds sends nothing, because this runs only on the
  * last attempt. The failed run on the Admin page's runs list is the record.
+ *
+ * It goes through `fanOut` against the run that gave up (D298), so quiet hours
+ * and a mute hold it for the digest, where it is a line of its own rather than
+ * a finding, and the ledger's dedupe key makes it once per run.
  */
-async function reportGaveUp(job: SlotAttemptJob, cause: FailureCause, notifier: Notifier): Promise<void> {
+async function reportGaveUp(
+  runId: string,
+  job: SlotAttemptJob,
+  cause: FailureCause,
+  notifier: Notifier,
+  now: Date,
+): Promise<void> {
   try {
-    const [agent, settings] = await Promise.all([
+    const [agent, settings, user] = await Promise.all([
       getAgent(job.userId, job.agentId),
       getOrCreateUserSettings(job.userId),
+      getUser(job.userId),
     ]);
-    const messages = messagesFor(settings.language);
-    const text = messages.scheduledScans.gaveUp(
-      agent?.name ?? job.agentId,
-      messages.scheduledScans.slot(job.slot),
-      job.day,
-      messages.scheduledScans.causes[cause],
+    if (user === null) return;
+    const agentName = agent?.name ?? job.agentId;
+    const localized: LocalizedTexts = {};
+    for (const language of UI_LANGUAGES) {
+      if (language !== 'en') localized[language] = gaveUpNotice(job, agentName, cause, language);
+    }
+    const result = await fanOut(
+      job.userId,
+      job.agentId,
+      [
+        {
+          refKind: 'run',
+          refId: runId,
+          severity: GAVE_UP_SEVERITY,
+          ...gaveUpNotice(job, agentName, cause, 'en'),
+          localized,
+        },
+      ],
+      settingsForNotification(settings, user.timezone),
+      notifier,
+      now,
     );
-    const delivery = await notifier.send({
-      userId: job.userId,
-      title: text.headline,
-      body: text.explanation,
-      severity: 'high',
-      language: settings.language,
-    });
-    logger().warn({ ...job, cause, delivered: delivery.delivered }, 'scheduled_scan.gave_up');
+    logger().warn({ ...job, runId, cause, pushed: result.pushed, deferred: result.deferred }, 'scheduled_scan.gave_up');
   } catch (error) {
     logger().error({ err: error, ...job }, 'scheduled_scan.report_failed');
   }
