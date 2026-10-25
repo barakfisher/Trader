@@ -590,10 +590,30 @@
         "maxPosition": "Over the agent's max position: {{symbol}} would be {{share}} of capital ({{position}} of {{capital}}), {{over}} past its {{limit}} limit.",
         "cashBuffer": "Under the agent's cash buffer: cash would fall to {{cashAfter}} ({{share}} of capital), {{short}} below its {{limit}} minimum.",
         "maxHoldings": "Over the agent's max holdings: this would be instrument number {{nth}}, past its limit of {{limit}}.",
+        "blocked": "{{symbol}} is on the agent's blocked list.",
+        "etf": "{{symbol}} is an ETF, and the agent's settings do not allow ETFs.",
+        "marketCap": "{{symbol}} is a {{band}} company; the agent buys only {{allowed}} companies.",
+        "selection": "{{symbol}} ({{place}}) is outside the agent's sectors and industries.",
+        "etfCategory": "ETF category {{category}}",
+        "unclassified": "unclassified",
+        "unchecked": {
+          "profile": "{{symbol}} has no profile, so the agent's universe cannot be checked for it.",
+          "market_cap": "{{symbol}} has no stored market cap, so the agent's company size cannot be checked for it."
+        },
+        "caps": {
+          "mega": "mega-cap",
+          "large": "large-cap",
+          "mid": "mid-cap",
+          "small": "small-cap"
+        },
         "set": {
           "max_position": "Set Max position to {{value}}",
           "cash_buffer": "Set Cash buffer minimum to {{value}}",
-          "max_holdings": "Set Max holdings to {{value}}"
+          "max_holdings": "Set Max holdings to {{value}}",
+          "blocked": "Unblock {{symbol}}",
+          "etf": "Allow ETFs",
+          "market_cap": "Add {{band}} to Company size",
+          "selection": "Add {{name}} to Sectors & industries"
         },
         "saving": "Saving…",
         "saveFailed": "The setting could not be saved. Try again, or change it in the agent's settings.",

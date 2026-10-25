@@ -378,6 +378,66 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe("the mandate's universe at approval (D301)", () => {
+    it('reads an instrument with its profile and what the taxonomy lists, and null for no instrument', async () => {
+      const tag = randomUUID().slice(0, 6).toUpperCase();
+      const [equity, etf, bare] = [`UE${tag}`, `UF${tag}`, `UB${tag}`];
+      const industry = `test-industry-${tag}`;
+      const category = `test-category-${tag}`;
+      const { rows } = await getPool().query<{ id: string; symbol: string }>(
+        `INSERT INTO instruments (symbol, asset_class)
+         VALUES ($1, 'equity'), ($2, 'etf'), ($3, 'equity') RETURNING id, symbol`,
+        [equity, etf, bare],
+      );
+      const id = (symbol: string) => rows.find((row) => row.symbol === symbol)!.id;
+      try {
+        await getPool().query(
+          `INSERT INTO instrument_profiles (instrument_id, description, matching_text, source, license,
+                                            content_hash, size_as_of, membership, sector, industry,
+                                            category, market_cap_minor, size_currency)
+           VALUES ($1, 'd', 'd', 'test', 'test', 'h', now(), 'on_demand', 'Technology', $3, NULL,
+                   1500000000000, 'USD'),
+                  ($2, 'd', 'd', 'test', 'test', 'h', now(), 'on_demand', NULL, NULL, $4, NULL, NULL)`,
+          [id(equity), id(etf), industry, category],
+        );
+        await getPool().query(
+          `INSERT INTO universe_taxonomy (kind, name, sector, instruments)
+           VALUES ('industry', $1, 'Technology', 1), ('etf_category', $2, 'Technology', 1)`,
+          [industry, category],
+        );
+        expect(await queries.getUniverseProfile(equity)).toEqual({
+          asset_class: 'equity',
+          sector: 'Technology',
+          industry,
+          category: null,
+          market_cap_minor: '1500000000000',
+          size_currency: 'USD',
+          category_sector: null,
+          industry_listed: true,
+          category_listed: false,
+        });
+        expect(await queries.getUniverseProfile(etf)).toMatchObject({
+          asset_class: 'etf',
+          category,
+          category_sector: 'Technology',
+          industry_listed: false,
+          category_listed: true,
+        });
+        // An instrument with no profile is read with nothing known about it, as the scan reads it.
+        expect(await queries.getUniverseProfile(bare)).toMatchObject({
+          asset_class: 'equity',
+          sector: null,
+          market_cap_minor: null,
+          industry_listed: false,
+        });
+        expect(await queries.getUniverseProfile(`NO${tag}`)).toBeNull();
+      } finally {
+        await getPool().query('DELETE FROM universe_taxonomy WHERE name = ANY($1)', [[industry, category]]);
+        await getPool().query('DELETE FROM instruments WHERE symbol = ANY($1)', [[equity, etf, bare]]);
+      }
+    });
+  });
+
   describe('claiming a rescreen', () => {
     const keys: string[] = [];
     const key = (label: string) => {

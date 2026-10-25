@@ -6,7 +6,16 @@
 import { describe, expect, it } from 'vitest';
 
 import { MAX_HOLDINGS_LIMIT } from '../src/http/agentMandate.js';
-import { mandateBreaches, type MandateBook, type MandateLimits } from '../src/services/mandateLimits.js';
+import type { UniverseProfileRow } from '../src/db/queries.js';
+import {
+  LARGE_CAP_FLOOR_MINOR,
+  MID_CAP_FLOOR_MINOR,
+  mandateBreaches,
+  universeBreaches,
+  type MandateBook,
+  type MandateLimits,
+  type UniverseRules,
+} from '../src/services/mandateLimits.js';
 
 const NO_LIMITS: MandateLimits = { max_position_bps: null, cash_buffer_bps: null, max_holdings: null };
 
@@ -101,5 +110,118 @@ describe('what is never checked (D165)', () => {
     const strict = { max_position_bps: 1, cash_buffer_bps: 9_999, max_holdings: 1 };
     expect(mandateBreaches(strict, BOOK, { side: 'sell', notionalMinor: 500_000n, feeMinor: 0n })).toEqual([]);
     expect(mandateBreaches(NO_LIMITS, BOOK, buy(599_000n, 1_000n))).toEqual([]);
+  });
+});
+
+const ANYWHERE: UniverseRules = {
+  allow_etfs: true,
+  market_caps: [],
+  sectors: [],
+  industries: [],
+  etf_categories: [],
+  blocked_symbols: [],
+};
+
+/** A large-cap equity in Technology / Software - Infrastructure, both listed in the taxonomy. */
+const EQUITY: UniverseProfileRow = {
+  asset_class: 'equity',
+  sector: 'Technology',
+  industry: 'Software - Infrastructure',
+  category: null,
+  market_cap_minor: LARGE_CAP_FLOOR_MINOR.toString(),
+  size_currency: 'USD',
+  category_sector: null,
+  industry_listed: true,
+  category_listed: false,
+};
+
+const ETF: UniverseProfileRow = {
+  asset_class: 'etf',
+  sector: null,
+  industry: null,
+  category: 'Technology',
+  market_cap_minor: null,
+  size_currency: null,
+  category_sector: 'Technology',
+  industry_listed: false,
+  category_listed: true,
+};
+
+describe('the universe rules (D301)', () => {
+  it('answers with the blocked list alone, as the scan does', () => {
+    const rules = { ...ANYWHERE, blocked_symbols: ['MSFT'], allow_etfs: false, sectors: ['Energy'] };
+    expect(universeBreaches(rules, 'MSFT', EQUITY, 'buy')).toEqual([{ rule: 'blocked' }]);
+    expect(universeBreaches(rules, 'MSFT', null, 'buy')).toEqual([{ rule: 'blocked' }]);
+  });
+
+  it('says it cannot check a symbol with no instrument', () => {
+    expect(universeBreaches(ANYWHERE, 'NEW', null, 'buy')).toEqual([{ rule: 'unchecked', missing: 'profile' }]);
+  });
+
+  it('warns of an ETF when ETFs are not allowed, and never of an equity', () => {
+    const rules = { ...ANYWHERE, allow_etfs: false };
+    expect(universeBreaches(rules, 'XLK', ETF, 'buy')).toEqual([{ rule: 'etf' }]);
+    expect(universeBreaches(rules, 'MSFT', EQUITY, 'buy')).toEqual([]);
+  });
+
+  it('places an equity in its band at the floor, and checks size for equities only', () => {
+    expect(universeBreaches({ ...ANYWHERE, market_caps: ['large', 'mega'] }, 'MSFT', EQUITY, 'buy')).toEqual([]);
+    const justUnder = { ...EQUITY, market_cap_minor: (LARGE_CAP_FLOOR_MINOR - 1n).toString() };
+    expect(universeBreaches({ ...ANYWHERE, market_caps: ['large'] }, 'MSFT', justUnder, 'buy')).toEqual([
+      { rule: 'market_cap', band: 'mid', allowed: ['large'] },
+    ]);
+    const small = { ...EQUITY, market_cap_minor: (MID_CAP_FLOOR_MINOR - 1n).toString() };
+    expect(universeBreaches({ ...ANYWHERE, market_caps: ['mid'] }, 'MSFT', small, 'buy')).toEqual([
+      { rule: 'market_cap', band: 'small', allowed: ['mid'] },
+    ]);
+    expect(universeBreaches({ ...ANYWHERE, market_caps: ['mid'] }, 'XLK', ETF, 'buy')).toEqual([]);
+  });
+
+  it('cannot place an equity with no USD market cap', () => {
+    const rules = { ...ANYWHERE, market_caps: ['large'] };
+    for (const profile of [{ ...EQUITY, market_cap_minor: null }, { ...EQUITY, size_currency: 'EUR' }]) {
+      expect(universeBreaches(rules, 'MSFT', profile, 'buy')).toEqual([{ rule: 'unchecked', missing: 'market_cap' }]);
+    }
+  });
+
+  it('accepts an equity by its sector or its industry, and suggests the industry when it is outside', () => {
+    expect(universeBreaches({ ...ANYWHERE, sectors: ['Technology'] }, 'MSFT', EQUITY, 'buy')).toEqual([]);
+    expect(universeBreaches({ ...ANYWHERE, industries: ['Software - Infrastructure'] }, 'MSFT', EQUITY, 'buy')).toEqual(
+      [],
+    );
+    expect(universeBreaches({ ...ANYWHERE, sectors: ['Energy'] }, 'MSFT', EQUITY, 'buy')).toEqual([
+      {
+        rule: 'selection',
+        assetClass: 'equity',
+        sector: 'Technology',
+        industry: 'Software - Infrastructure',
+        category: null,
+        suggested: { field: 'industries', name: 'Software - Infrastructure' },
+      },
+    ]);
+  });
+
+  it('accepts an ETF by its category or the sector its category holds, and suggests the category', () => {
+    expect(universeBreaches({ ...ANYWHERE, etf_categories: ['Technology'] }, 'XLK', ETF, 'buy')).toEqual([]);
+    expect(universeBreaches({ ...ANYWHERE, sectors: ['Technology'] }, 'XLK', ETF, 'buy')).toEqual([]);
+    expect(universeBreaches({ ...ANYWHERE, sectors: ['Energy'] }, 'XLK', ETF, 'buy')).toMatchObject([
+      { rule: 'selection', assetClass: 'etf', suggested: { field: 'etfCategories', name: 'Technology' } },
+    ]);
+  });
+
+  it('suggests nothing the taxonomy does not list, since the settings would refuse it', () => {
+    const unlisted = { ...EQUITY, industry_listed: false };
+    expect(universeBreaches({ ...ANYWHERE, sectors: ['Energy'] }, 'MSFT', unlisted, 'buy')).toMatchObject([
+      { rule: 'selection', suggested: null },
+    ]);
+    const unclassified = { ...ETF, category: null, category_sector: null, category_listed: false };
+    expect(universeBreaches({ ...ANYWHERE, sectors: ['Technology'] }, 'XLK', unclassified, 'buy')).toMatchObject([
+      { rule: 'selection', category: null, suggested: null },
+    ]);
+  });
+
+  it('checks nothing on a sell', () => {
+    const rules = { ...ANYWHERE, blocked_symbols: ['MSFT'] };
+    expect(universeBreaches(rules, 'MSFT', EQUITY, 'sell')).toEqual([]);
   });
 });

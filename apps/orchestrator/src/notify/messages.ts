@@ -45,6 +45,7 @@ import { slotClock, type ScanSlot } from '../services/scanSchedule.js';
 import type { NarrationState } from '../services/narrationHealth.js';
 import type { RefusalReason } from '../services/proposalState.js';
 import type { MarketBenchmarkSymbol } from '../services/marketBenchmarks.js';
+import type { MarketCap } from '@traders/shared';
 
 /** LEFT-TO-RIGHT ISOLATE ... POP: a figure, kept left to right in a Hebrew line. */
 export function ltr(text: string | number): string {
@@ -54,6 +55,18 @@ export function ltr(text: string | number): string {
 /** FIRST-STRONG ISOLATE ... POP: text whose direction is its own, such as a label. */
 export function isolated(text: string): string {
   return `\u2068${text}\u2069`;
+}
+
+/** The company-size bands as a sentence names them (D301). */
+const EN_CAPS: Record<MarketCap, string> = { mega: 'mega-cap', large: 'large-cap', mid: 'mid-cap', small: 'small-cap' };
+const HE_CAPS: Record<MarketCap, string> = { mega: 'ענק', large: 'גדול', mid: 'בינוני', small: 'קטן' };
+
+function enList(items: string[]): string {
+  return new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(items);
+}
+
+function heList(items: string[]): string {
+  return new Intl.ListFormat('he', { style: 'long', type: 'conjunction' }).format(items);
 }
 
 /** Why a re-check could not start, by the AI service's code (D212); `other` for the rest. */
@@ -106,8 +119,9 @@ export interface TradePreviewFigures {
 }
 
 /**
- * A mandate limit an approval would break (D299), every figure formatted. A
+ * A mandate rule an approval would break (D299, D301), every figure formatted. A
  * suggestion is the setting that would allow the trade, or null when none would.
+ * Taxonomy names are the universe's English data, kept as they are.
  */
 export type MandateBreachFigures =
   | {
@@ -122,7 +136,21 @@ export type MandateBreachFigures =
       suggested: string | null;
     }
   | { rule: 'cash_buffer'; limit: string; share: string; cashAfter: string; short: string; suggested: string | null }
-  | { rule: 'max_holdings'; limit: string; nth: string; suggested: string | null };
+  | { rule: 'max_holdings'; limit: string; nth: string; suggested: string | null }
+  | { rule: 'blocked'; symbol: string }
+  | { rule: 'etf'; symbol: string }
+  | { rule: 'market_cap'; symbol: string; band: MarketCap; allowed: MarketCap[] }
+  | {
+      rule: 'selection';
+      symbol: string;
+      etf: boolean;
+      sector: string | null;
+      industry: string | null;
+      category: string | null;
+      /** The industry or ETF category to add. */
+      suggested: string | null;
+    }
+  | { rule: 'unchecked'; symbol: string; missing: 'profile' | 'market_cap' };
 
 export interface TradeFillFigures {
   side: 'buy' | 'sell';
@@ -813,6 +841,27 @@ const en: Messages = {
           ]
             .filter(Boolean)
             .join(' ');
+        case 'blocked':
+          return `⚠️ ${b.symbol} is on the agent's blocked list. If that is intended, remove it from Blocked tickers in the agent's settings.`;
+        case 'etf':
+          return `⚠️ ${b.symbol} is an ETF, and the agent's settings do not allow ETFs. If that is intended, turn on Allow ETFs in the agent's settings.`;
+        case 'market_cap':
+          return `⚠️ ${b.symbol} is a ${EN_CAPS[b.band]} company; the agent buys only ${enList(b.allowed.map((band) => EN_CAPS[band]))} companies. If that is intended, add ${EN_CAPS[b.band]} to Company size in the agent's settings.`;
+        case 'selection': {
+          const place = b.etf
+            ? `ETF category ${b.category ?? 'unclassified'}`
+            : `${b.sector ?? 'unclassified'} / ${b.industry ?? 'unclassified'}`;
+          return [
+            `⚠️ ${b.symbol} (${place}) is outside the agent's sectors and industries.`,
+            b.suggested && `If that is intended, add ${b.suggested} to Sectors & industries in the agent's settings.`,
+          ]
+            .filter(Boolean)
+            .join(' ');
+        }
+        case 'unchecked':
+          return b.missing === 'profile'
+            ? `⚠️ ${b.symbol} has no profile, so the agent's universe cannot be checked for it.`
+            : `⚠️ ${b.symbol} has no stored market cap, so the agent's company size cannot be checked for it.`;
       }
     },
     mandateOverride: "You can still Confirm: approving overrides the agent's limit for this trade.",
@@ -1354,6 +1403,27 @@ const he: Messages = {
           ]
             .filter(Boolean)
             .join(' ');
+        case 'blocked':
+          return `⚠️ ${ltr(b.symbol)} נמצא ברשימת החסומים של הסוכן. אם זו הכוונה, הסירו אותו מ„סימולים חסומים” בהגדרות הסוכן.`;
+        case 'etf':
+          return `⚠️ ${ltr(b.symbol)} היא קרן סל, וההגדרות של הסוכן אינן מתירות קרנות סל. אם זו הכוונה, סמנו „לאפשר קרנות סל” בהגדרות הסוכן.`;
+        case 'market_cap':
+          return `⚠️ ${ltr(b.symbol)} היא חברה בגודל ${HE_CAPS[b.band]}; הסוכן קונה רק חברות בגודל ${heList(b.allowed.map((band) => HE_CAPS[band]))}. אם זו הכוונה, הוסיפו „${HE_CAPS[b.band]}” ל„גודל החברה” בהגדרות הסוכן.`;
+        case 'selection': {
+          const place = b.etf
+            ? `קטגוריית קרנות סל ${ltr(b.category ?? 'unclassified')}`
+            : ltr(`${b.sector ?? 'unclassified'} / ${b.industry ?? 'unclassified'}`);
+          return [
+            `⚠️ ${ltr(b.symbol)} (${place}) נמצא מחוץ לסקטורים ולענפים של הסוכן.`,
+            b.suggested && `אם זו הכוונה, הוסיפו את ${ltr(b.suggested)} ל„סקטורים וענפים” בהגדרות הסוכן.`,
+          ]
+            .filter(Boolean)
+            .join(' ');
+        }
+        case 'unchecked':
+          return b.missing === 'profile'
+            ? `⚠️ ל־${ltr(b.symbol)} אין פרופיל, ולכן אי אפשר לבדוק אותו מול היקום של הסוכן.`
+            : `⚠️ ל־${ltr(b.symbol)} אין שווי שוק שמור, ולכן אי אפשר לבדוק אותו מול גודל החברה שהסוכן הגדיר.`;
       }
     },
     mandateOverride: 'עדיין אפשר לאשר: האישור גובר על המגבלה של הסוכן בעסקה הזו.',

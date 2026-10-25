@@ -19,10 +19,11 @@
  * - **Approve and Reject only (D48).** Snooze and undo are refused for trade
  *   kinds in `applyDecision`, whatever a surface sends; reject goes through it
  *   unchanged.
- * - **The mandate's size rules are checked again, and warn (D299).** Another
- *   approval may have spent the cash the scan counted on; the preview carries
- *   each limit the buy would break, and Confirm still fills - approving is the
- *   user's explicit act - and logs the override.
+ * - **The mandate's rules are checked again, and warn (D299, D301).** Another
+ *   approval may have spent the cash the scan counted on, or the user may have
+ *   blocked the symbol since; the preview carries each rule the buy would break,
+ *   and Confirm still fills - approving is the user's explicit act - and logs
+ *   the override.
  *
  * The idempotency key is the proposal's: a confirm repeated after a lost reply
  * meets the fill the first one wrote, and answers it.
@@ -46,6 +47,7 @@ import {
   getAgentBook,
   getAgentCash,
   getAgentHoldingQuantity,
+  getUniverseProfile,
   recordProposalAttempt,
   type AgentRow,
   type ProposalRow,
@@ -60,7 +62,7 @@ import {
   type TradeContext,
   type TradeRequest,
 } from './fills.js';
-import { mandateBreaches, type CheckedTrade } from './mandateLimits.js';
+import { mandateBreaches, universeBreaches, type CheckedTrade } from './mandateLimits.js';
 import { factsOf } from './proposals.js';
 import { effectiveState } from './proposalState.js';
 
@@ -157,21 +159,28 @@ async function recordingRefusals<T>(
   }
 }
 
-/** The mandate's size rules over the agent's book as it stands (D299). */
+/** The mandate's universe (D301) and size (D299) rules over the agent's book as it stands. */
 async function breachesOf(userId: string, trade: OpenTrade, checked: CheckedTrade, cashMinor: bigint) {
   if (checked.side !== 'buy') return [];
-  const book = await getAgentBook(userId, trade.agent.id, trade.payload.symbol);
-  return mandateBreaches(
-    trade.agent,
-    {
-      cashMinor,
-      holdingsCostMinor: BigInt(book.holdings_cost_minor),
-      symbolCostMinor: BigInt(book.symbol_cost_minor),
-      heldCount: book.held_count,
-      holdsSymbol: book.holds_symbol,
-    },
-    checked,
-  );
+  const symbol = trade.payload.symbol;
+  const [profile, book] = await Promise.all([
+    getUniverseProfile(symbol),
+    getAgentBook(userId, trade.agent.id, symbol),
+  ]);
+  return [
+    ...universeBreaches(trade.agent, symbol, profile, checked.side),
+    ...mandateBreaches(
+      trade.agent,
+      {
+        cashMinor,
+        holdingsCostMinor: BigInt(book.holdings_cost_minor),
+        symbolCostMinor: BigInt(book.symbol_cost_minor),
+        heldCount: book.held_count,
+        holdsSymbol: book.holds_symbol,
+      },
+      checked,
+    ),
+  ];
 }
 
 /** *Approve*: the trade at the live price beside the agent's, or why not. Writes no ledger row. */

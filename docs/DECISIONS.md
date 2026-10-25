@@ -311,3 +311,4 @@ while this file is out of date.
 | 298 | A scheduled scan's give-up alert goes through the ledger |
 | 299 | The mandate's size rules are checked again at approval, and warn rather than refuse |
 | 300 | The database owner's password has a file and a Secret of its own |
+| 301 | The mandate's universe rules are checked again at approval too, and warn the same way |

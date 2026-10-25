@@ -4,7 +4,12 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-26 - **Handoff by count: five merges since #317** (#318-#321, and this PR).
+Updated: 2026-10-26, later - **Not a handoff: the universe rules warn at approval too (D301).**
+Decisions reach 301 (next: **302**); next free migration is still `0074`. The new Telegram and
+card sentences (en, he) owe the same look on the phone and in the browser as D299's. Merges since
+handoff #322: none before this PR.
+
+Previous update, 2026-10-26 - **Handoff by count: five merges since #317** (#318-#321, and this PR).
 - **Merges since #317:**
   - #318: the scheduled scan's give-up alert goes through `fanOut` (D298, migration `0073`);
   - #319: the integration suite acts as `traders_app` by `SET ROLE` instead of setting its
@@ -4690,6 +4695,31 @@ failure they prevent.
       - blanking `POSTGRES_PASSWORD` in each service's `environment`: a denylist, so the next
         owner-level key added to `.env` would leak again;
       - listing every service's variables instead of `env_file`: dozens of keys that drift.
+301. **The mandate's universe rules are checked again at approval too, and warn the same way**
+    (the user took the D299 follow-up, 2026-10-25; resolves its debt line; no migration).
+    - `mandateLimits.universeBreaches` repeats `mandate.universe_problems` over the agent's rules
+      as they stand at approval: the blocked list (which alone answers when it applies), the ETF
+      switch, the market-cap bands for equities, and the sector/industry/ETF-category selection;
+      buys only (D165). An instrument with no row, or an equity with no USD market cap when sizes
+      are set, is `unchecked` - the scan refuses those, so the approval says it could not tell.
+      `getUniverseProfile` reads what `mandate._profile` reads, plus the ETF category's sector and
+      whether the taxonomy lists the industry/category, from `universe_taxonomy`.
+    - **The cap floors are duplicated** in `mandateLimits.ts`; `test_mandate_limits_contract.py`
+      holds them equal to `mandate.py`'s. A category's sector comes from `universe_taxonomy`,
+      which the loader rebuilds from `ETF_CATEGORY_SECTORS`: between a change to that dict and
+      the next rebuild the two can differ, and the approval's answer is the stale one.
+    - **The web card offers the narrowest change:** unblock the symbol, allow ETFs, add the
+      band, or add the instrument's own industry (an ETF's own category) - never its whole
+      sector, which would widen the agent far past the one trade. A name the taxonomy does not
+      list is not offered, because the settings would refuse it. A list field is sent whole,
+      built on the agent's mandate as the card read it. Telegram names the same change.
+    - **Why:** the scan checked these when it proposed, but a proposal lives for hours and the
+      user may block the symbol or narrow the universe meanwhile; approving would then buy what
+      the agent's rules now forbid, with nothing said. Warn, not refuse, for D299's reason.
+    - **Rejected:**
+      - asking the AI service to run `universe_problems` at preview: a network hop in the
+        approval path for five comparisons, and the size rules already live in the orchestrator;
+      - suggesting the sector for an equity: it is one click that silently admits a whole sector.
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -6015,8 +6045,8 @@ password) cleared three of the five items "after the research follow-ups" listed
 **Debt, as consequences:**
 - D299's Hebrew sentences were written by the model and not seen rendered; Latin tickers and
   dollar figures sit in parentheses in RTL text, the same unchecked pattern as `farFromQuote`.
-- D299 checks size rules only. A buy of a symbol the mandate has since blocked, or outside its
-  universe, is not warned at approval (the scan refused it when it proposed it).
+- ~~D299 checks size rules only~~ - resolved 2026-10-25 (D301): the universe rules warn at
+  approval too.
 - D300's compose `.env.owner` defaults to `traders` on a fresh clone (shared volume across
   worktrees; recorded under D300) - an installation that wants a strong owner password changes
   it as RUNBOOK section 1 says.

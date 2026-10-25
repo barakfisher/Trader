@@ -80,7 +80,7 @@ export function bpsAsShare(bps: number, messages: Messages): string {
   );
 }
 
-/** A breach's figures in the user's language (D299). */
+/** A breach's figures in the user's language (D299, D301). */
 export function breachFigures(breach: MandateBreach, symbol: string, messages: Messages): MandateBreachFigures {
   const money = (minor: number) => formatMoney(minor, 'USD', { locale: messages.numberLocale });
   const count = (n: number) => new Intl.NumberFormat(messages.numberLocale).format(n);
@@ -112,6 +112,23 @@ export function breachFigures(breach: MandateBreach, symbol: string, messages: M
         nth: count(breach.heldCount + 1),
         suggested: breach.suggestedLimit === null ? null : count(breach.suggestedLimit),
       };
+    case 'blocked':
+    case 'etf':
+      return { rule: breach.rule, symbol };
+    case 'market_cap':
+      return { rule: breach.rule, symbol, band: breach.band, allowed: breach.allowed };
+    case 'selection':
+      return {
+        rule: breach.rule,
+        symbol,
+        etf: breach.assetClass === 'etf',
+        sector: breach.sector,
+        industry: breach.industry,
+        category: breach.category,
+        suggested: breach.suggested?.name ?? null,
+      };
+    case 'unchecked':
+      return { rule: breach.rule, symbol, missing: breach.missing };
   }
 }
 

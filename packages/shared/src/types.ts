@@ -1804,15 +1804,15 @@ export interface TradeApprovalPreview {
   /** The most the live price may be from the agent's for a preview at all. */
   maxDistanceBps: number;
   trade: TradePreview;
-  /** The agent's limits this buy would break (D299): a warning, never a refusal. */
+  /** The agent's limits this buy would break (D299, D301): a warning, never a refusal. */
   mandateBreaches: MandateBreach[];
 }
 
 /**
- * A size rule of the agent's mandate an approval would break (D299), with how far
- * and the setting that would allow it. Capital is cash plus holdings at cost before
- * the trade (D171). A suggestion is a whole percent, or null when no allowed value
- * would do.
+ * A rule of the agent's mandate an approval would break: a size rule (D299), with
+ * how far and the setting that would allow it, or a universe rule (D301). Capital
+ * is cash plus holdings at cost before the trade (D171). A size suggestion is a
+ * whole percent, or null when no allowed value would do.
  */
 export type MandateBreach =
   | {
@@ -1842,7 +1842,29 @@ export type MandateBreach =
       limit: number;
       heldCount: number;
       suggestedLimit: number | null;
-    };
+    }
+  /** The universe rules (D301): the symbol was blocked, or the universe narrowed, after the scan proposed it. */
+  | { rule: 'blocked' }
+  | { rule: 'etf' }
+  | {
+      rule: 'market_cap';
+      band: MarketCap;
+      allowed: MarketCap[];
+    }
+  | {
+      rule: 'selection';
+      assetClass: 'equity' | 'etf';
+      sector: string | null;
+      industry: string | null;
+      category: string | null;
+      /**
+       * The narrowest name that would allow it - the instrument's industry, or an
+       * ETF's category - when the taxonomy lists it; null when none can be chosen.
+       */
+      suggested: { field: 'industries' | 'etfCategories'; name: string } | null;
+    }
+  /** The rule could not be decided: no instrument row, or an equity with no USD market cap. */
+  | { rule: 'unchecked'; missing: 'profile' | 'market_cap' };
 
 /** *Confirm*: the fill, written in the approval's transaction. */
 export interface TradeApprovalResult {

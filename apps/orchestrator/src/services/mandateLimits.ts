@@ -1,5 +1,6 @@
 /**
- * The mandate's size rules, checked again when a buy is approved (D299).
+ * The mandate's rules, checked again when a buy is approved: size (D299) and
+ * universe (D301).
  *
  * The scan checks a buy against the agent's position, cash-buffer and holdings
  * limits before it proposes it (`services/ai/app/agents/mandate.py`,
@@ -16,17 +17,41 @@
  * act (the user, 2026-10-25). Each one says how far past the limit the trade
  * goes and suggests the setting that would allow it, as a whole percent, so
  * an intended override can be made the agent's rule.
+ *
+ * The universe rules (D301) repeat `mandate.universe_problems` the same way: a
+ * symbol blocked, or a universe narrowed, after the scan proposed the buy. The
+ * blocked list alone answers when it applies, as the scan's does.
  */
 
-import type { MandateBreach, TradeSide } from '@traders/shared';
+import type { MandateBreach, MarketCap, TradeSide } from '@traders/shared';
 
-import type { AgentRow } from '../db/queries.js';
+import type { AgentRow, UniverseProfileRow } from '../db/queries.js';
 import { MAX_HOLDINGS_LIMIT } from '../http/agentMandate.js';
 
 const BPS = 10_000n;
 const PERCENT = 100n;
 
 export type MandateLimits = Pick<AgentRow, 'max_position_bps' | 'cash_buffer_bps' | 'max_holdings'>;
+
+export type UniverseRules = Pick<
+  AgentRow,
+  'allow_etfs' | 'market_caps' | 'sectors' | 'industries' | 'etf_categories' | 'blocked_symbols'
+>;
+
+/**
+ * The equity market-cap bands' floors in USD minor units (D172), as
+ * `mandate.py` has them; `test_mandate_limits_contract.py` holds them equal.
+ */
+export const MEGA_CAP_FLOOR_MINOR = 200_000_000_000n * 100n;
+export const LARGE_CAP_FLOOR_MINOR = 10_000_000_000n * 100n;
+export const MID_CAP_FLOOR_MINOR = 2_000_000_000n * 100n;
+
+export function capBand(marketCapMinor: bigint): MarketCap {
+  if (marketCapMinor >= MEGA_CAP_FLOOR_MINOR) return 'mega';
+  if (marketCapMinor >= LARGE_CAP_FLOOR_MINOR) return 'large';
+  if (marketCapMinor >= MID_CAP_FLOOR_MINOR) return 'mid';
+  return 'small';
+}
 
 /** The agent's book before the trade (`getAgentBook`), in minor units. */
 export interface MandateBook {
@@ -101,5 +126,63 @@ export function mandateBreaches(limits: MandateLimits, book: MandateBook, trade:
     });
   }
 
+  return breaches;
+}
+
+function inSelection(rules: UniverseRules, profile: UniverseProfileRow): boolean {
+  if (profile.asset_class === 'etf') {
+    if (profile.category === null) return false;
+    return (
+      rules.etf_categories.includes(profile.category) ||
+      (profile.category_sector !== null && rules.sectors.includes(profile.category_sector))
+    );
+  }
+  return (
+    (profile.sector !== null && rules.sectors.includes(profile.sector)) ||
+    (profile.industry !== null && rules.industries.includes(profile.industry))
+  );
+}
+
+/** The universe rules a buy of `symbol` would break; empty when it breaks none, and always for a sell. */
+export function universeBreaches(
+  rules: UniverseRules,
+  symbol: string,
+  profile: UniverseProfileRow | null,
+  side: TradeSide,
+): MandateBreach[] {
+  if (side !== 'buy') return [];
+  if (rules.blocked_symbols.includes(symbol)) return [{ rule: 'blocked' }];
+  if (profile === null) return [{ rule: 'unchecked', missing: 'profile' }];
+  const isEtf = profile.asset_class === 'etf';
+  const breaches: MandateBreach[] = [];
+  if (isEtf && !rules.allow_etfs) breaches.push({ rule: 'etf' });
+  if (!isEtf && rules.market_caps.length > 0) {
+    if (profile.market_cap_minor === null || (profile.size_currency ?? '').toUpperCase() !== 'USD') {
+      breaches.push({ rule: 'unchecked', missing: 'market_cap' });
+    } else {
+      const band = capBand(BigInt(profile.market_cap_minor));
+      if (!rules.market_caps.includes(band)) {
+        breaches.push({ rule: 'market_cap', band, allowed: rules.market_caps as MarketCap[] });
+      }
+    }
+  }
+  const selects = rules.sectors.length > 0 || rules.industries.length > 0 || rules.etf_categories.length > 0;
+  if (selects && !inSelection(rules, profile)) {
+    const suggested = isEtf
+      ? profile.category !== null && profile.category_listed
+        ? { field: 'etfCategories' as const, name: profile.category }
+        : null
+      : profile.industry !== null && profile.industry_listed
+        ? { field: 'industries' as const, name: profile.industry }
+        : null;
+    breaches.push({
+      rule: 'selection',
+      assetClass: isEtf ? 'etf' : 'equity',
+      sector: profile.sector,
+      industry: profile.industry,
+      category: profile.category,
+      suggested,
+    });
+  }
   return breaches;
 }
