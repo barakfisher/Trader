@@ -4,7 +4,23 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-24 - **Handoff by count, five merges since #302: M10 PRs 6-9 and M11 B are
+Updated: 2026-10-25 - **Not a handoff: three merges since #308, recorded with their deploy.**
+- **Merges since #308:**
+  - #310, M10 PR 12: sessions get a table (D261, D294-D297; migration `0071`), another session's;
+  - #312: the mandate's limit keys say `percent`, so a thesis can quote them (a debt row);
+  - #314: the holdings tables sort by Sentiment (a debt line).
+- **Decisions reached 297** (next: **298**). #312 and #314 took none.
+- **Migrations:** `0071_user_sessions` is head; next free is `0072`.
+- **Deployed:** compose runs `c792b05` (#314) at `0071`, redeployed 2026-10-25 after
+  `db-backup.sh --target all`; the smoke test passed through the snapshot checks and stopped at
+  the assistant step, which expected `no_model` from a stack that has a model (fixed in the PR
+  that records this). **kind is not confirmed** at `c792b05`: read its readyz before relying on it.
+- **The smoke test replaces every holding** in the database it targets (`mode: "replace"`; the
+  script's header says so). Compose holds only the demo portfolio, so it is safe there; never
+  point it at a database holding a real portfolio.
+- **Next:** unchanged - "Next session: after M10 PR 9" below.
+
+Previous update, 2026-10-24 - **Handoff by count, five merges since #302: M10 PRs 6-9 and M11 B are
 merged and live.**
 - **Merges since #302:**
   - #304, M11 B: deciding from `/pending` (D282), another session's;
