@@ -5910,7 +5910,9 @@ grant tests fail for the wrong reason.
   after an assignment, where `ENABLE_SCHEDULED_SCANS=true`.
 - The account reset does not name the research tables. They go with the agents (cascade), and
   `research_agent_id` is cleared, but a reset that keeps agents keeps their ratings.
-- The Sentiment column is not sortable.
+- ~~The Sentiment column is not sortable.~~ **Resolved** (2026-10-25): `?sort=sentiment` orders
+  Bullish, Neutral, Bearish; an unrated holding is last both ways, and a stale rating sorts by its
+  word. The column and its sort choice exist only while an agent researches the portfolio.
 - Ask has no tool to read the research: "what does my agent think of CCJ" is not answered from
   the ratings.
 - Telegram's new sentences (payer refusals, the fallback notice) and M11's menu still owe the

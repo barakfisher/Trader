@@ -7,6 +7,7 @@ import {
   holdingsSortFrom,
   holdingsSortSearch,
   nextSort,
+  sentimentRank,
   sortHoldings,
   type SortFields,
 } from '../src/lib/holdingsSort.ts';
@@ -22,6 +23,7 @@ function row(symbol: string, overrides: Partial<SortFields> = {}): SortFields {
     pnl: 0,
     pnlPct: 0,
     weight: 10,
+    sentiment: null,
     ...overrides,
   };
 }
@@ -93,6 +95,19 @@ describe('sortHoldings', () => {
   it('sorts losses below gains on P&L', () => {
     const pnl = [row('A', { pnlPct: 4.2 }), row('B', { pnlPct: -12.5 }), row('C', { pnlPct: null }), row('D', { pnlPct: 0 })];
     expect(symbols(sortHoldings(pnl, (r) => r, { key: 'pnlPct', direction: 'desc' }))).toEqual(['A', 'D', 'B', 'C']);
+  });
+
+  it('orders Sentiment Bullish, Neutral, Bearish, with an unrated holding last both ways', () => {
+    const rated = [
+      row('A', { sentiment: sentimentRank('bearish') }),
+      row('B', { sentiment: sentimentRank(undefined) }),
+      row('C', { sentiment: sentimentRank('bullish') }),
+      row('D', { sentiment: sentimentRank('neutral') }),
+      row('E', { sentiment: sentimentRank('bullish') }),
+    ];
+    expect(firstDirection('sentiment')).toBe('desc');
+    expect(symbols(sortHoldings(rated, (r) => r, { key: 'sentiment', direction: 'desc' }))).toEqual(['C', 'E', 'D', 'A', 'B']);
+    expect(symbols(sortHoldings(rated, (r) => r, { key: 'sentiment', direction: 'asc' }))).toEqual(['A', 'D', 'C', 'E', 'B']);
   });
 });
 
