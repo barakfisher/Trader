@@ -4,7 +4,24 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-25 - **Not a handoff: three merges since #308, recorded with their deploy.**
+Updated: 2026-10-25, later - **Handoff by count: six merges since #309.**
+- **Merges since the last update:**
+  - #316: the smoke test accepts the assistant's reply when a model is chosen; the `c792b05`
+    deploy recorded (another session's);
+  - #311: the session gate covers `/narration` and `/universe`, and `sessionGate.test.ts`
+    walks every route;
+  - #313: a `main_portfolio` reset erases finished research (migration `0072`), and the
+    assistant's `get_research` tool.
+  - #315 was **closed, not merged**: it duplicated #312.
+- **Decisions reached 297** (next: **298**). #311 and #313 took none.
+- **Migrations:** `0072_reset_research` is head; next free is `0073`.
+- **Deployed:** still `c792b05` at `0071` on compose (kind unconfirmed, as below). **`main`
+  (`7ab3257`) is not deployed**; deploying it applies `0072`. Ask the user first.
+- **Owed by the user:** the paid assistant eval over `get_research` and its instruction lines
+  (Flash-Lite, `--repeat 3`). #313 was merged on the user's word before it ran.
+- **Next:** "Next session: after the research follow-ups" below.
+
+Previous update, 2026-10-25 - **Not a handoff: three merges since #308, recorded with their deploy.**
 - **Merges since #308:**
   - #310, M10 PR 12: sessions get a table (D261, D294-D297; migration `0071`), another session's;
   - #312: the mandate's limit keys say `percent`, so a thesis can quote them (a debt row);
@@ -5852,6 +5869,43 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after the research follow-ups (written 2026-10-25)
+
+**State:** the PR 9 handoff's three research debts and the mandate-key debt are resolved (#312,
+#313, #314). The session gate's route list is enforced by a test (#311). What D267 has left of
+M10 is unchanged, and every item needs the user before it starts (see "after M10 PR 9" below).
+
+**Small debt the user can pick from, none of it started, each its own PR:**
+- **The integration suite changes the cluster-wide `traders_app` password** (debt table). A
+  per-run role would let the suite run against a server that also hosts a stack.
+- **The give-up alert ignores quiet hours, mute and dedupe** (debt table). Routing it through
+  `fanOut` needs a `refKind` for runs, which means a CHECK change.
+- Larger: the owner's password reaching every container; mandate limits not re-checked at
+  approval; the validator reading timestamp digits (measure narration's rejection rate first);
+  Redis warming from `quotes`. All four are rows in the debt table.
+
+**Lessons from this stretch:**
+- **Two sessions fixed the same debts at once.** #312 and #315 made the same rename an hour
+  apart; #314 and #313 both made Sentiment sortable. A debt list in a handoff is visible to
+  every session, so a debt is not claimed by being read. Before starting one, list open PRs and
+  read `git log origin/main` since the handoff; after merging `main` into a branch, keep whole
+  whichever copy merged first rather than blending the two.
+- **The cloud container can run the Postgres integration suite without Docker:**
+  `apt-get install postgresql-16-pgvector`, then `initdb -U traders --auth=trust` and `pg_ctl`
+  as the `postgres` user, with the data directory under `/var/lib/postgresql` (the scratchpad's
+  parent folders are not readable by `postgres`). It stops when the container is recycled;
+  start it again from the same directory after removing `postmaster.pid`.
+- **GitHub's GraphQL is refused from these sessions,** so `gh pr create` and `gh pr list` fail:
+  use `gh api repos/barakfisher/Trader/pulls` (REST) to create, update and merge.
+- **A shallow clone tracks `main` only,** so git (and the stop hook) report a pushed branch as
+  unpushed. Add the branch's refspec to `remote.origin.fetch`, fetch, then `--set-upstream-to`.
+
+**Debt, as consequences:**
+- `get_research` has met only a scripted model. Whether a real one picks it for "what does my
+  agent think of X" is the eval's question.
+- A reset during a research run keeps that run's ratings for holdings the reset removed. They
+  show nowhere (the page lists holdings), and the next run replaces them.
 
 ### Next session: after M10 PR 9 (written 2026-10-24)
 
