@@ -161,8 +161,9 @@ if os.environ["SMOKE_ASSISTANT"] == "no_model":
     assert outcome == "no_model", f"expected no_model (SMOKE_ASSISTANT=no_model), got {body}"
 else:
     replied = ("answer", "decline", "clarify")
+    names = ", ".join(replied)
     assert outcome == "no_model" or outcome in replied, (
-        f"expected no_model or a reply ({', '.join(replied)}), got {outcome}: {body}"
+        f"expected no_model or a reply ({names}), got {outcome}: {body}"
     )
 assert body["conversationId"], "the question must be stored, with a reply or without"
 print(f"  {outcome}: " + (body.get("text") or "")[:100])
