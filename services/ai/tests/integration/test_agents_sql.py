@@ -14,18 +14,14 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
-from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import DBAPIError
 
 #: The single user migration 0001 creates.
 SEED_USER = "00000000-0000-0000-0000-000000000001"
 OTHER_USER = "00000000-0000-0000-0000-0000000000f1"
 INSTRUMENT = "10000000-0000-0000-0000-0000000000f1"
-
-#: A test password for the app role in a disposable database.
-APP_PASSWORD = "traders_app_test"
 
 
 def _refused(connection: Connection, statement: str, **params: object) -> str:
@@ -197,19 +193,6 @@ def test_installation_run_keys_stay_unique_among_themselves(connection: Connecti
     connection.execute(text(insert))
     refusal = _refused(connection, insert)
     assert "run_key" in refusal
-
-
-@pytest.fixture(scope="module")
-def as_app(migrated: Engine, database_url: str) -> Iterator[Engine]:
-    """An engine logged in as `traders_app`, as every service is."""
-    with migrated.begin() as connection:
-        connection.execute(text(f"ALTER ROLE traders_app WITH LOGIN PASSWORD '{APP_PASSWORD}'"))
-    url = make_url(database_url).set(
-        drivername="postgresql+psycopg", username="traders_app", password=APP_PASSWORD
-    )
-    engine = create_engine(url, future=True)
-    yield engine
-    engine.dispose()
 
 
 def test_the_app_role_reads_and_writes_agents(as_app: Engine) -> None:

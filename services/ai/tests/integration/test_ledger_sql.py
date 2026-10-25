@@ -14,14 +14,12 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
-from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import DBAPIError
 
 SEED_USER = "00000000-0000-0000-0000-000000000001"
 INSTRUMENT = "10000000-0000-0000-0000-0000000000c1"
-APP_PASSWORD = "traders_app_test"
 BUDGET = 100_000
 
 
@@ -259,19 +257,6 @@ def test_the_real_portfolio_has_no_ledger(connection: Connection) -> None:
         _fill(connection, primary)
     savepoint.rollback()
     assert "primary agent is passive" in str(refusal.value.orig)
-
-
-@pytest.fixture(scope="module")
-def as_app(migrated: Engine, database_url: str) -> Iterator[Engine]:
-    """An engine logged in as `traders_app`, as every service is."""
-    with migrated.begin() as connection:
-        connection.execute(text(f"ALTER ROLE traders_app WITH LOGIN PASSWORD '{APP_PASSWORD}'"))
-    url = make_url(database_url).set(
-        drivername="postgresql+psycopg", username="traders_app", password=APP_PASSWORD
-    )
-    engine = create_engine(url, future=True)
-    yield engine
-    engine.dispose()
 
 
 def test_the_app_role_trades_through_the_triggers_and_writes_nothing_else(

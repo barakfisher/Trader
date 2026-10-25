@@ -9,18 +9,12 @@ defence that remains for a role grants cannot bind.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
-from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import DBAPIError
 
 SEED_ADMIN = "00000000-0000-0000-0000-000000000001"
-
-#: A test password for the app role in a disposable database.
-APP_PASSWORD = "traders_app_test"
 
 
 def _insert(connection: Connection) -> int:
@@ -41,23 +35,6 @@ def _refused(connection: Connection, statement: str, **params: object) -> str:
         connection.execute(text(statement), params)
     savepoint.rollback()
     return str(refusal.value.orig)
-
-
-@pytest.fixture(scope="module")
-def as_app(migrated: Engine, database_url: str) -> Iterator[Engine]:
-    """An engine logged in as `traders_app`, as every service is.
-
-    The password is set here the way `scripts/migrate.py` sets it, since the
-    migration creates the role without one.
-    """
-    with migrated.begin() as connection:
-        connection.execute(text(f"ALTER ROLE traders_app WITH LOGIN PASSWORD '{APP_PASSWORD}'"))
-    url = make_url(database_url).set(
-        drivername="postgresql+psycopg", username="traders_app", password=APP_PASSWORD
-    )
-    engine = create_engine(url, future=True)
-    yield engine
-    engine.dispose()
 
 
 def test_the_app_role_is_not_a_superuser(as_app: Engine) -> None:

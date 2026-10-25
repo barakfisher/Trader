@@ -134,3 +134,21 @@ def migrated(engine: Engine, database_url: str) -> Engine:
     result = alembic(database_url, "upgrade", "head")
     assert result.returncode == 0, result.stderr
     return engine
+
+
+@pytest.fixture(scope="module")
+def as_app(migrated: Engine, database_url: str) -> Iterator[Engine]:
+    """An engine acting as `traders_app`, the role every service connects as.
+
+    It logs in as the owner and starts each session in the role (`SET ROLE` at
+    connection start), so it holds `traders_app`'s privileges and nothing more,
+    and `current_user` reads `traders_app`. It does not log in as the role: that
+    would need a password, and a role belongs to the whole Postgres server, so
+    setting one here would lock a stack on the same server out until `migrate`
+    ran again. The owner may take the role because it is a superuser, which the
+    owner-only tests assert.
+    """
+    url = make_url(database_url).set(drivername="postgresql+psycopg")
+    engine = create_engine(url, future=True, connect_args={"options": "-c role=traders_app"})
+    yield engine
+    engine.dispose()
