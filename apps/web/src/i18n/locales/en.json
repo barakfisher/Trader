@@ -1955,7 +1955,7 @@
     "group": {
       "main_portfolio": {
         "label": "Main portfolio",
-        "erases": "Holdings, target weights, daily values, findings, proposals and their history, and the notifications about them."
+        "erases": "Holdings, target weights, daily values, research ratings, findings, proposals and their history, and the notifications about them."
       },
       "agents_trading": {
         "label": "Agents' trading",
