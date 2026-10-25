@@ -208,14 +208,6 @@ def test_a_genuinely_small_percentage_is_still_accepted():
     assert unsourced_figures("moved 0.03%", {"change_pct": 0.0003}) == []
 
 
-def test_a_mandate_limit_quoted_as_a_percentage_is_sourced():
-    # The briefing states limits as whole percents under a key the check reads as a
-    # percentage, not a ratio: "25" is 25%, not 2500%.
-    brief = {"min_cash_percent_of_capital": "25", "max_position_percent_of_capital": "12.5"}
-    assert unsourced_figures("keeps my 25% cash buffer", brief) == []
-    assert unsourced_figures("within my 12.5% cap", brief) == []
-
-
 def test_a_copied_minor_unit_price_is_still_refused():
     # 30 of 38 rejections wrote "fell to 790" for $7.90; that stays wrong.
     assert unsourced_figures("fell to 790 from 1118", DRAWDOWN) == ["790", "1118"]

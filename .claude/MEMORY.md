@@ -3600,8 +3600,8 @@ failure they prevent.
     mandate checks (D171), so the prompt, the briefing and the limits agree. The amount is
     rounded down to the cent; the percent is to one place. **The key is `percent_of_capital`,
     not `..._pct_...`:** the validator reads any key with "pct" as a ratio, so "75%" would not
-    match "75" - which is why a thesis quoting the mandate's `min_cash_pct_of_capital` is refused
-    today (open, below). No buffer set is a buffer of zero. *Rejected:* the amount only (a person
+    match "75" - which is why a thesis quoting the mandate's `min_cash_pct_of_capital` was refused
+    until the mandate's keys were renamed `..._percent_of_capital` (2026-10-24). No buffer set is a buffer of zero. *Rejected:* the amount only (a person
     reads idle cash as a share, and the agent may not compute one).
 236. **A pass that does not quote its idle cash goes back once** (the user, 2026-10-21). When a
     scan trades nothing, the briefing has `cash_above_buffer`, and the thesis quotes neither its
