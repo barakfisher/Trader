@@ -140,9 +140,9 @@ def mandate_brief(mandate: Mandate) -> dict[str, Any] | None:
     """
     brief: dict[str, Any] = {}
     if mandate.max_position_bps is not None:
-        brief["max_position_pct_of_capital"] = percent(mandate.max_position_bps)
+        brief["max_position_percent_of_capital"] = percent(mandate.max_position_bps)
     if mandate.cash_buffer_bps is not None:
-        brief["min_cash_pct_of_capital"] = percent(mandate.cash_buffer_bps)
+        brief["min_cash_percent_of_capital"] = percent(mandate.cash_buffer_bps)
     if mandate.max_holdings is not None:
         brief["max_holdings"] = mandate.max_holdings
     if not mandate.allow_etfs:

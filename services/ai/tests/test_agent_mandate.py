@@ -28,6 +28,7 @@ from app.agents.mandate import (
     universe_problems,
 )
 from app.core.fees import fee_minor
+from app.narration.evidence_validator import unsourced_figures
 
 URANIUM_MINER = _Profile("equity", "Energy", "Uranium", None, LARGE_CAP_FLOOR_MINOR, "USD")
 GOLD_MINERS_ETF = _Profile("etf", None, None, "Equity Precious Metals", None, None)
@@ -147,11 +148,23 @@ def test_the_briefing_states_limits_as_percentages_of_capital() -> None:
         Mandate(max_position_bps=1250, cash_buffer_bps=500, allow_etfs=False, sectors=("Energy",))
     )
     assert brief == {
-        "max_position_pct_of_capital": "12.5",
-        "min_cash_pct_of_capital": "5",
+        "max_position_percent_of_capital": "12.5",
+        "min_cash_percent_of_capital": "5",
         "etfs_allowed": False,
         "sectors": ["Energy"],
     }
+
+
+def test_a_thesis_may_quote_the_mandates_own_limits() -> None:
+    """Found 2026-10-21 (D235): under a key with "pct" in it, the figure check read
+    "25" as a ratio and offered only 2500%, so "my 25% cash buffer" was refused as
+    unsourced. The limits are percents already, and their keys say "percent"."""
+    evidence = {"mandate": mandate_brief(Mandate(max_position_bps=1_000, cash_buffer_bps=2_500))}
+    thesis = "Within my 10% position cap, and keeping my 25% cash buffer."
+
+    assert unsourced_figures(thesis, evidence) == []
+    # Still a check: a limit the mandate does not set is refused.
+    assert unsourced_figures("Keeping my 30% cash buffer.", evidence) == ["30"]
 
 
 # -- idle cash (D235) -------------------------------------------------------------------
