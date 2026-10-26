@@ -4,6 +4,7 @@ import { AtSign, LineChart, LockKeyhole } from 'lucide-react';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { PasswordInput } from '../components/PasswordInput.tsx';
+import { OAuthButtons, OAuthOutcomeNotice, useOAuthOutcome } from '../components/OAuthSignIn.tsx';
 import { ResetRequestForm } from '../components/ResetRequestForm.tsx';
 import { SignupForm } from '../components/SignupForm.tsx';
 import { Button, ErrorNote } from '../components/ui.tsx';
@@ -19,6 +20,7 @@ export const LoginPage = observer(function LoginPage() {
   const [password, setPassword] = useState('');
   const [joining, setJoining] = useState(false);
   const [forgotten, setForgotten] = useState(false);
+  const oauthOutcome = useOAuthOutcome();
 
   return (
     <main className="flex min-h-full items-center justify-center p-6">
@@ -33,6 +35,7 @@ export const LoginPage = observer(function LoginPage() {
           <ResetRequestForm onBack={() => setForgotten(false)} />
         ) : (
           <>
+            <OAuthOutcomeNotice outcome={oauthOutcome} />
             {auth.sessionEndedNotice && (
               <p role="status" className="rounded-lg border border-border-subtle bg-surface-raised p-3 text-sm">
                 {t('login.sessionEnded')}
@@ -93,6 +96,7 @@ export const LoginPage = observer(function LoginPage() {
                 {t('login.forgotten')}
               </button>
             </form>
+            <OAuthButtons />
             <button
               type="button"
               onClick={() => setJoining(true)}

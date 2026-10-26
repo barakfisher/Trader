@@ -94,6 +94,8 @@ const WRITE_BODIES: Record<string, unknown> = {
   // A link is its own authority: a token nobody issued is "invalid" and changes nothing.
   'POST /auth/verify': { token: 'not-a-token-anyone-issued' },
   'POST /auth/verify/resend': {},
+  // Unlinks only the signed-in user's own provider, never another's (D263).
+  'DELETE /auth/identities/:provider': null,
   'POST /auth/reset/request': {},
   'POST /auth/reset': { token: 'not-a-token-anyone-issued', newPassword: 'a new password here' },
   'POST /auth/timezone': { timezone: 'Europe/London' },
@@ -303,6 +305,11 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
       `INSERT INTO auth_tokens (user_id, purpose, token_hash, email, expires_at)
        VALUES ($1, 'verify_new_email', sha256($2::bytea), $3, now() + interval '1 day')`,
       [user.id, `${user.mark}-token`, `${user.mark.toLowerCase()}-new@example.com`],
+    );
+    // A linked Google account (0075, D262): unlinking another user's is a write to refuse.
+    await pool.query(
+      `INSERT INTO user_identities (user_id, provider, subject, email) VALUES ($1, 'google', $2, $3)`,
+      [user.id, `${user.mark}-google-sub`, `${user.mark.toLowerCase()}@example.com`],
     );
     user.proposal = proposal;
     user.agent = agent;

@@ -536,7 +536,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           expect(await queries.useResetToken(hash, 'another hash')).toEqual({ outcome: 'used' });
         });
 
-        it('never mails or resets the admin, and unbinds Telegram on a reset (D313)', async () => {
+        it('never mails or resets the admin, and unbinds Telegram and providers on a reset (D313, D315)', async () => {
           const userId = await activeAccount('reset-admin');
           await getPool().query("UPDATE users SET role = 'admin' WHERE id = $1", [userId]);
           expect(await queries.getResetRecipient(email('reset-admin'))).toBeNull();
@@ -545,9 +545,15 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           await getPool().query("UPDATE users SET role = 'user' WHERE id = $1", [userId]);
 
           await getPool().query('INSERT INTO telegram_bindings (user_id, chat_id) VALUES ($1, $2)', [userId, 990000000 + Math.floor(Math.random() * 1_000_000)]);
+          // And a provider linked from a stolen session goes too (D315).
+          await queries.linkIdentity({ userId, provider: 'github', subject: `sub-${randomUUID()}`, email: null });
           expect((await queries.useResetToken(await resetLink(userId, email('reset-admin')), 'new')).outcome).toBe('reset');
-          const { rows } = await getPool().query('SELECT count(*)::int AS n FROM telegram_bindings WHERE user_id = $1', [userId]);
-          expect(rows[0].n).toBe(0);
+          const { rows } = await getPool().query(
+            `SELECT (SELECT count(*)::int FROM telegram_bindings WHERE user_id = $1) AS bindings,
+                    (SELECT count(*)::int FROM user_identities WHERE user_id = $1) AS identities`,
+            [userId],
+          );
+          expect(rows[0]).toEqual({ bindings: 0, identities: 0 });
         });
 
         it('refuses an expired link, a verification link, and an account no longer active or at that address', async () => {
@@ -563,6 +569,76 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           expect(await queries.useResetToken(moved, 'x')).toEqual({ outcome: 'invalid' });
           const { rows } = await getPool().query('SELECT password_hash FROM users WHERE id = $1', [userId]);
           expect(rows[0].password_hash).toBe('hash');
+        });
+      });
+
+      describe('provider identities (0075, D262, D263, D314)', () => {
+        const sub = () => `sub-${randomUUID()}`;
+
+        it('opens a verified account with no password, linked to the identity, by the rules', async () => {
+          const subject = sub();
+          const created = await queries.createOAuthAccount(
+            { email: email('oauth-new'), provider: 'google', subject, timezone: 'Europe/London', language: 'he' },
+            RULES,
+          );
+          expect(created).toMatchObject({ outcome: 'activated' });
+          const userId = (created as { userId: string }).userId;
+          expect(await status(userId)).toEqual({ status: 'active', verified: true, approved_automatically: true });
+          const { rows } = await getPool().query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+          expect(rows[0].password_hash).toBeNull();
+          expect(await queries.getIdentityUser('google', subject)).toEqual({ user_id: userId, status: 'active' });
+          expect(
+            await queries.createOAuthAccount(
+              { email: email('oauth-new'), provider: 'github', subject: sub(), timezone: 'UTC', language: 'en' },
+              RULES,
+            ),
+          ).toEqual({ outcome: 'exists' });
+        });
+
+        it('leaves nothing behind when sign-up is closed', async () => {
+          await signupSettings('closed');
+          const subject = sub();
+          expect(
+            await queries.createOAuthAccount({ email: email('oauth-closed'), provider: 'google', subject, timezone: 'UTC', language: 'en' }, RULES),
+          ).toEqual({ outcome: 'signup_full' });
+          expect(await queries.getAccountByEmail(email('oauth-closed'))).toBeNull();
+          expect(await queries.getIdentityUser('google', subject)).toBeNull();
+        });
+
+        it("claims an unverified request at the vouched address and drops the first sign-up's password", async () => {
+          const created = (await ask(email('oauth-claim'))) as { userId: string };
+          const pending = await link(created.userId, email('oauth-claim'));
+          const subject = sub();
+          expect(await queries.claimUnverifiedRequest({ userId: created.userId, provider: 'google', subject, email: email('oauth-claim') }, RULES)).toBe(
+            'activated',
+          );
+          const { rows } = await getPool().query('SELECT password_hash FROM users WHERE id = $1', [created.userId]);
+          expect(rows[0].password_hash).toBeNull();
+          // Its old link is gone: the first sign-up's password can never verify it now.
+          expect(await queries.useVerificationToken(pending, RULES, PROOF)).toEqual({ outcome: 'invalid' });
+          expect(await queries.getIdentityUser('google', subject)).toMatchObject({ user_id: created.userId });
+        });
+
+        it('links one identity to one account, and one of each provider to an account', async () => {
+          const first = (await ask(email('oauth-a'))) as { userId: string };
+          const second = (await ask(email('oauth-b'))) as { userId: string };
+          const subject = sub();
+          expect(await queries.linkIdentity({ userId: first.userId, provider: 'github', subject, email: null })).toBe('linked');
+          expect(await queries.linkIdentity({ userId: second.userId, provider: 'github', subject, email: null })).toBe('taken');
+          expect(await queries.linkIdentity({ userId: first.userId, provider: 'github', subject: sub(), email: null })).toBe('already_linked');
+        });
+
+        it("refuses to unlink an account's only way in, and unlinks when a password or another provider remains", async () => {
+          const created = await queries.createOAuthAccount(
+            { email: email('oauth-only'), provider: 'google', subject: sub(), timezone: 'UTC', language: 'en' },
+            RULES,
+          );
+          const userId = (created as { userId: string }).userId;
+          expect(await queries.unlinkIdentity(userId, 'google')).toBe('last_method');
+          expect(await queries.unlinkIdentity(userId, 'github')).toBe('not_linked');
+          await queries.linkIdentity({ userId, provider: 'github', subject: sub(), email: null });
+          expect(await queries.unlinkIdentity(userId, 'google')).toBe('unlinked');
+          expect((await queries.listIdentities(userId)).map((row) => row.provider)).toEqual(['github']);
         });
       });
 

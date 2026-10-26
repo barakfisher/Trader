@@ -4962,6 +4962,71 @@ failure they prevent.
     - **Rejected:** the admin resettable like anyone (a compromised mailbox becomes a
       compromised installation); unbinding on every password change (a routine change would
       cost a re-bind each time); keeping the binding (only the notice mail would reveal it).
+314. **How PR 13 builds OAuth (D262, D263)** (assumptions stated to the user, 2026-10-26; M10 PR 13;
+    migration `0075_user_identities`).
+    - **Providers are configuration:** `GOOGLE_CLIENT_ID/SECRET`, `GITHUB_CLIENT_ID/SECRET`; a
+      provider with either missing is not offered, so nothing changes until the user registers
+      the apps (`.env.example` says how). Behind `OAuthProvider` (`src/oauth/providers.ts`,
+      guideline 6); tests inject a fake through `createApp`'s last argument - no network.
+    - **The redirect URI is `<origin>/api/auth/oauth/<provider>/callback`**, where origin is the
+      page's own and must be in `ALLOWED_ORIGINS` - the browser is sent back there too, so
+      nothing else chooses either. Every origin that should offer a provider is registered in
+      its console. Whether a `*.ts.net` name is accepted there is still unchecked
+      (M10-MEASUREMENT).
+    - **The state cookie** (`traders_oauth`, `src/oauth/stateCookie.ts`): `state`, PKCE's
+      verifier, origin, intent, and the browser's zone and language for a new account, HMAC-signed
+      with the session secret, HttpOnly, SameSite=Lax (the provider returns with a top-level
+      GET), 10 minutes, spent on the callback. A callback this browser did not start, or for
+      another provider, signs nobody in. GitHub's OAuth apps take no PKCE; `state` binds them.
+    - **Who an identity is, in order:** linked already (signs in if active); asked from
+      Settings (links to that session's account, which must still be the one that asked);
+      an account at an address the provider vouches for (linked automatically and mailed,
+      D263); none (a new account with no password, verified, admitted by `admitVerified` - the
+      same step a verification link uses, so the modes and limits hold). An address the
+      provider does not vouch for links and opens nothing.
+    - **Assumption 1 - an unverified request at the vouched address is claimed:** its password
+      is dropped, its sign-up link deleted, the identity linked, and it is admitted. Otherwise
+      D309's stranger, who signed up first with your address, would be the one your Google
+      sign-in completes.
+    - **Assumption 2 - the admin is never linked automatically** (D313's reasoning): the
+      callback answers `link_from_settings`; the admin signs in with the password and links
+      from Settings.
+    - **Unlink is refused for the last way in** (no password and no other provider). An
+      OAuth-only account can set a password through the reset link (D312) - it is active and
+      verified.
+    - **Not tested live:** no provider app exists yet; the flows are proven against the fake.
+      The first real sign-in on the public host (PR 16) is the check that remains.
+315. **Google links an existing account automatically only where it is the mailbox's authority;
+    a reset drops linked providers** (the user chose the first, 2026-10-26; the rest closes the
+    PR 13 security review; M10 PR 13).
+    - **Authority (the user's choice):** Google's `email_verified` is authoritative only for a
+      `@gmail.com` address or a Workspace domain (`hd`); elsewhere it may be a check from years
+      ago on an address that has since changed hands. Automatic linking to an *existing*
+      account (and claiming a request, D314) needs `OAuthIdentity.authoritative`; otherwise
+      `link_from_settings`. New accounts keep `emailVerified`. GitHub gives no such signal: its
+      verified primary address keeps D263's rule.
+      *Rejected:* trusting `email_verified` everywhere (D263 as written); no automatic linking
+      at all (a second, empty account for whoever signs in with Google first).
+    - **A reset, and the admin's recovery on the host, delete `user_identities`** - D313's
+      reasoning for Telegram: a stolen session could link the thief's GitHub, and it outlived
+      the reset. The owner links again from Settings.
+    - **A one-time password's session cannot link or unlink** (`password_change_required`, as
+      every other `/auth/*` write; D162): a link it planted would outlast the new password.
+    - **No automatic link where no mail can announce it** (D263's accepted risk rests on the
+      notice): `link_from_settings` instead. New accounts through a provider stay possible
+      without SMTP - the provider proves the address.
+    - **Hardening:** Google's ID token is checked for `iss` and `aud` (OIDC Core 3.1.3.7, items
+      2-3); the state cookie is `__Host-traders_oauth` in production; unlinking locks the
+      account row (two unlinks at once left no way in); a new account through a provider
+      spends `signupPerAddress`; `already_linked` on the automatic path reads as
+      `link_from_settings`.
+    - **Accepted:** `/start` is a GET, so a third-party page can start a link of whatever
+      provider account the victim's browser is signed in to; the notice mail announces it,
+      and the link intent needs the victim's session anyway. A POST start is the fix if it
+      matters.
+    - **For M10 PR 14 (deletion):** `signIn` in `routes/oauth.ts` answers `not_active` for every
+      status but `active`; D264's pending-deletion marker must be handled there as on password
+      sign-in.
 ---
 
 ## Bugs that cost real time, and the lesson from each
