@@ -380,3 +380,7 @@ INSERT INTO auth_tokens (user_id, purpose, token_hash, email, created_at, expire
   ('00000000-0000-0000-0000-00000000000b', 'verify_new_email', sha256('seed-token-new-email'), 'new-b@example.test', now() - interval '2 hours', now() - interval '1 hour', NULL),
   ('00000000-0000-0000-0000-00000000000c', 'reset_password', sha256('seed-token-reset'), 'c@example.test', now() - interval '1 hour', now() + interval '1 hour', now());
 UPDATE installation_settings SET signup_mode = 'closed', max_pending_signups = 5;
+-- OAuth identities (0075, D262): one per provider, so the CHECK's every value is seeded.
+INSERT INTO user_identities (user_id, provider, subject, email) VALUES
+  ('00000000-0000-0000-0000-00000000000b', 'google', 'seed-google-sub-b', 'b@example.test'),
+  ('00000000-0000-0000-0000-00000000000c', 'github', '1000001', 'c@example.test');
