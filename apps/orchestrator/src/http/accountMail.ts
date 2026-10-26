@@ -120,11 +120,14 @@ export async function sendAccountClosed(
  * cannot quietly undo a deletion the owner believes has happened. Not awaited
  * by the sign-in, and never fails it.
  */
-export async function announceAccountRestored(sender: EmailSender | null, user: { id: string; email: string | null }): Promise<void> {
+export function announceAccountRestored(sender: EmailSender | null, user: { id: string; email: string | null }): void {
   if (sender === null || user.email === null) return;
   const to = user.email;
-  const language = mailLanguage((await getOrCreateUserSettings(user.id)).language);
-  sendInBackground(user.id, 'account_restored', () => sender.send(emailMessages.accountRestored(to, language)));
+  // The settings read is in the background too: the sign-in has already succeeded.
+  sendInBackground(user.id, 'account_restored', async () => {
+    const language = mailLanguage((await getOrCreateUserSettings(user.id)).language);
+    await sender.send(emailMessages.accountRestored(to, language));
+  });
 }
 
 /**

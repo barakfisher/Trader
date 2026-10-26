@@ -284,11 +284,11 @@ async function signIn(context: Context<AppEnv>, userId: string): Promise<OAuthOu
   if (user.status === 'pending') return 'pending';
   // Signing in during the grace period cancels a deletion (D264), as with a
   // password - a closed account only, never one the admin disabled.
-  const reopened = user.status === 'closed' ? await reopenClosedAccount(user.id) : null;
+  const reopened = user.status === 'closed' ? await reopenClosedAccount(user.id, user.session_version) : null;
   if (user.status !== 'active' && reopened === null) return 'not_active';
   await issueSession(context, reopened ?? user);
   await recordSignIn(user.id);
-  if (reopened !== null) await announceAccountRestored(context.get('email'), reopened);
+  if (reopened !== null) announceAccountRestored(context.get('email'), reopened);
   return reopened ? 'restored' : 'signed_in';
 }
 

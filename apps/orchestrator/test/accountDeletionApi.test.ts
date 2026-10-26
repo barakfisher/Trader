@@ -258,7 +258,7 @@ describe('signing in during the grace period (D264)', () => {
     const response = await login(app);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ id: USER.id, deletionCancelled: true });
-    expect(queries.reopenClosedAccount).toHaveBeenCalledWith(USER.id);
+    expect(queries.reopenClosedAccount).toHaveBeenCalledWith(USER.id, USER.session_version);
     expect(response.headers.get('set-cookie')).toContain(`${SESSION_COOKIE}=`);
     // Mailed, so a sign-in by someone else that undid the deletion is seen.
     await mail.settled();

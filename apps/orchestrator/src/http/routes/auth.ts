@@ -191,7 +191,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     // A closed account still in its grace period is reopened by signing in
     // (D264) - only `closed`, never `disabled`: the admin's decision is not the
     // user's to undo. `reopenClosedAccount` checks both in its statement.
-    const reopened = credentials.status === 'closed' ? await reopenClosedAccount(credentials.id) : null;
+    const reopened = credentials.status === 'closed' ? await reopenClosedAccount(credentials.id, credentials.session_version) : null;
     if (credentials.status !== 'active' && reopened === null) {
       throw new ApiProblem(403, 'account_not_active', `this account is ${credentials.status}`);
     }
@@ -212,7 +212,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
 
     await recordSignIn(user.id);
     await issueSession(context, user);
-    if (reopened !== null) await announceAccountRestored(context.get('email'), reopened);
+    if (reopened !== null) announceAccountRestored(context.get('email'), reopened);
     const body: LoginResponse = { ...(await sessionUser(user)), deletionCancelled: reopened !== null };
     return context.json(body);
   });

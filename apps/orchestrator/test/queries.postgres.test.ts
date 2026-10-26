@@ -2879,18 +2879,21 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     it('reopens a closed account before its date, and never a disabled one or one past it', async () => {
       await withUser(async (userId) => {
         await queries.closeAccount(userId, ACCOUNT_DELETION_GRACE_DAYS);
-        expect(await queries.reopenClosedAccount(userId)).toMatchObject({ id: userId, status: 'active' });
+        const version = async () => (await queries.getUser(userId))!.session_version;
+        // A password that changed since it was checked reopens nothing (D297).
+        expect(await queries.reopenClosedAccount(userId, (await version()) - 1)).toBeNull();
+        expect(await queries.reopenClosedAccount(userId, await version())).toMatchObject({ id: userId, status: 'active' });
         const { rows } = await getPool().query('SELECT deletion_due_at FROM users WHERE id = $1', [userId]);
         expect(rows[0]!.deletion_due_at).toBeNull();
 
         await getPool().query("UPDATE users SET status = 'disabled' WHERE id = $1", [userId]);
-        expect(await queries.reopenClosedAccount(userId)).toBeNull();
+        expect(await queries.reopenClosedAccount(userId, await version())).toBeNull();
         expect(await statusOf(userId)).toBe('disabled');
 
         await getPool().query("UPDATE users SET status = 'active' WHERE id = $1", [userId]);
         await queries.closeAccount(userId, ACCOUNT_DELETION_GRACE_DAYS);
         await backdate(userId, '1 minute');
-        expect(await queries.reopenClosedAccount(userId)).toBeNull();
+        expect(await queries.reopenClosedAccount(userId, await version())).toBeNull();
         expect(await statusOf(userId)).toBe('closed');
       });
     });

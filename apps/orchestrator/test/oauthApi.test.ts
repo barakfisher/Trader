@@ -161,7 +161,7 @@ describe('coming back from the provider (D262, D263, D314)', () => {
     vi.mocked(queries.getUser).mockResolvedValue({ ...ACTIVE_SESSION, id: ACCOUNT, status: 'closed' } as never);
     vi.mocked(queries.reopenClosedAccount).mockResolvedValue({ ...ACTIVE_SESSION, id: ACCOUNT } as never);
     const response = await roundTrip(buildApp());
-    expect(queries.reopenClosedAccount).toHaveBeenCalledWith(ACCOUNT);
+    expect(queries.reopenClosedAccount).toHaveBeenCalledWith(ACCOUNT, ACTIVE_SESSION.session_version);
     expect(landedOn(response).searchParams.get('oauth')).toBe('restored');
     expect(response.headers.get('set-cookie')).toContain('traders_session=');
   });

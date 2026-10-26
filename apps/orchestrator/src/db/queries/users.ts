@@ -101,14 +101,17 @@ export function closeAccount(userId: string, graceDays: number): Promise<ClosedA
  * Signing in during the grace period cancels the deletion (D264). Only a
  * `closed` account still before its date: never a `disabled` one - otherwise
  * any user the admin disabled could undo it by signing in - and never one the
- * erase may already be taking. Null when there is nothing to reopen.
+ * erase may already be taking, nor one whose password changed since the
+ * caller checked it. Null when there is nothing to reopen.
  */
-export function reopenClosedAccount(userId: string): Promise<UserRow | null> {
+export function reopenClosedAccount(userId: string, sessionVersion: number): Promise<UserRow | null> {
+  // The version read with the password (D297): a reset that committed while
+  // it was checked leaves the account closed rather than reopened by the old one.
   return queryOne<UserRow>(
     `UPDATE users SET status = 'active', deletion_due_at = NULL
-      WHERE id = $1 AND status = 'closed' AND deletion_due_at > now()
+      WHERE id = $1 AND status = 'closed' AND deletion_due_at > now() AND session_version = $2
   RETURNING ${USER_COLUMNS}`,
-    [userId],
+    [userId, sessionVersion],
   );
 }
 
