@@ -4551,6 +4551,75 @@ failure they prevent.
     - **Tests:** the unit suites mock `getSessionUser` through their own `getUser`
       (`test/session.ts` `mockedSessionUser`); the exit test (D266) signs in for real, a new
       session per write, because sign-out and sign-out-others end the session they are sent on.
+298. **Signing up with an address that already has an account mails its owner** (the user,
+    2026-10-24; M10 PR 10; refines D185 now that signup sends mail).
+    - The screen says "check your email" whatever the address. A new address gets its link; a
+      request still waiting for its link gets a fresh one (a retry); any other existing account
+      or request gets "Someone tried to sign up with your address - if it was you, sign in".
+    - Every send is in the background, so SMTP's time does not tell the cases apart.
+    - **Why:** the only option where both cases look the same on screen *and* by mail - a mail
+      arrives either way - while the real owner learns what happened.
+    - **Rejected:**
+      - send nothing (someone who forgot their account waits for a mail that never comes, and
+        a probe leaves no trace);
+      - send the verification mail anyway (reads like a second account was opened).
+299. **How PR 10 builds D259** (the scope the user agreed, 2026-10-24; migration `0072`).
+    - **An unverified request is invisible to the admin and to the waiting limit:** only
+      verified pending requests are listed, counted, approved or announced on Telegram, so
+      addresses nobody opens cannot fill the queue or close signup. The rate limits bound how
+      fast they arrive, and `auth_sweep` deletes them after `UNVERIFIED_SIGNUP_DAYS` (7).
+    - **`auth_sweep` takes over from 0071's `session_sweep`:** one daily run deletes expired
+      sessions, links past `AUTH_TOKEN_RETENTION_DAYS` and stale unverified sign-ups.
+      `session_sweep` stays in `runs_kind_check` - kinds are append-only
+      (`test_run_kinds_contract.py`), so its past rows stay describable - and nothing sends it.
+      `k8s-up.sh` deletes the old `run-session-sweep` CronJob because `apply` does not prune.
+    - **A link opens `/verify#token=...`:** the token rides in the fragment, which no browser
+      sends to a server, so it stays out of access logs and `Referer`. The page posts it once
+      and clears it from the address bar.
+    - **A link proves the mailbox and signs nobody in.** The one exception: confirming a new
+      address on the device already signed in to that account gives it a new session, as a
+      change did before D259; every other session ends.
+    - **Links point at the request's own `Origin`**, already checked against `ALLOWED_ORIGINS`,
+      so a mail links back to compose, kind, the phone's Tailscale name or the public host.
+    - **No SMTP configured means signup is closed** (no address could be proven); the Admin
+      page says so and does not offer *automatic*.
+    - **An address change** stores `pending_email`, mails the new address its link and the
+      current one a notice. "Taken" is said at once to someone who knows the password; the
+      unique index still decides when the link is opened.
+    - **The existing accounts** (`active` or `disabled`) were marked verified by 0072.
+    - **Tests:** a recording sender (`test/recordingEmailSender.ts`) - no test sends mail. The
+      migration round trip cannot seed every `signup_mode` on a one-row table, so
+      `test_migrations.py` exempts that column by name and seeds `closed`, the one value 0072's
+      downgrade has to keep.
+300. **Automatic signup has a daily limit, default 20; past it a verified sign-up waits for the
+    admin** (the user, 2026-10-24; M10 PR 10; fills in D243's ceiling).
+    - `installation_settings.daily_new_accounts_limit` (0 to `DAILY_NEW_ACCOUNTS_CEILING`,
+      500), counted in the installation's clock over accounts with `approved_automatically`.
+      The settings row is locked while a verification counts, so two cannot take the last
+      place.
+    - **Rejected:**
+      - closing signup for the day (a person arriving on a busy day leaves);
+      - no ceiling (a bot farm with real mailboxes walks in at full speed).
+301. **A new verification link is asked for from sign-in, with the password** (the user,
+    2026-10-24; M10 PR 10).
+    - The right password to an unverified request gets `email_unverified` and *Send the link
+      again* (`POST /auth/verify/resend`, the same email and password, counted against the
+      sign-in failures, plus `verificationResendPerAccount`). A wrong password gets the usual
+      "incorrect" - D187's rule.
+    - **Rejected:**
+      - a resend form taking only an email (a second public form that mails any typed
+        address);
+      - no resend (signing up again reads as "exists" and mails the owner).
+302. **Mailpit catches all mail in compose and kind; it is never part of a public deployment**
+    (the user, 2026-10-24; M10 PR 10).
+    - Compose: the `mailpit` service, inbox at `http://127.0.0.1:8025`; the orchestrator's
+      `SMTP_HOST` defaults to it unless `.env` names a real server.
+    - Kind: in the overlay, never the base; inbox at `http://traders.localhost/mailpit/` and
+      `/mailpit/` on the Tailscale host, so a link can be opened on the phone.
+    - **Why:** it exercises the same `nodemailer` -> SMTP path the real provider will, so a
+      misconfigured sender is found on the laptop.
+    - **Rejected:** compose only (kind's flow cannot be clicked through on the phone); log only
+      (the SMTP path is first exercised on the day the app goes public).
 ---
 
 ## Bugs that cost real time, and the lesson from each

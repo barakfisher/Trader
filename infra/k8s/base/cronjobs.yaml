@@ -337,11 +337,11 @@ spec:
                 requests: { cpu: 10m, memory: 16Mi }
                 limits: { memory: 64Mi }
 ---
-# Expired sessions (D261): their rows, and the address and user agent they keep.
+# Expired sessions and links, and unverified sign-ups past their window (D261, D299).
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: run-session-sweep
+  name: run-auth-sweep
 spec:
   schedule: '4 * * * *'
   concurrencyPolicy: Forbid
@@ -356,7 +356,7 @@ spec:
         metadata:
           labels:
             app: run-trigger
-            run-kind: session-sweep
+            run-kind: auth-sweep
         spec:
           restartPolicy: Never
           containers:
@@ -365,7 +365,7 @@ spec:
               command: ['sh', '-c', 'curl -sS --fail-with-body --max-time 360 -X POST http://orchestrator:8080/internal/runs -H "content-type: application/json" -H "x-internal-key: $INTERNAL_API_KEY" -d "{\"kind\":\"$RUN_KIND\",\"trigger\":\"cronjob\"${RUN_FOR:+,\"for\":\"$RUN_FOR\"}}"']
               env:
                 - name: RUN_KIND
-                  value: session_sweep
+                  value: auth_sweep
                 - name: INTERNAL_API_KEY
                   valueFrom:
                     secretKeyRef: { name: traders-secrets, key: INTERNAL_API_KEY }

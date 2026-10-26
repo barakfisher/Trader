@@ -1,6 +1,6 @@
 import { makeAutoObservable, reaction, runInAction } from 'mobx';
 
-import type { SessionUser, UiLanguage } from '@traders/shared';
+import type { ResendVerificationInput, SessionUser, UiLanguage } from '@traders/shared';
 
 import { ApiRequestError, api } from '../api/client.ts';
 import { onSessionEnded } from '../api/sessionEnded.ts';
@@ -14,6 +14,12 @@ export class AuthStore {
   initialised = false;
   submitting = false;
   error: string | null = null;
+  /**
+   * The last sign-in was refused because the address was never confirmed
+   * (D301): the page offers to send the link again with the same email and
+   * password.
+   */
+  unverified = false;
   /**
    * The session ended while the app was open - signed out from another device,
    * disabled, or run out (D261) - so the sign-in page says why it is showing.
@@ -75,6 +81,7 @@ export class AuthStore {
   async login(email: string, password: string): Promise<void> {
     this.submitting = true;
     this.error = null;
+    this.unverified = false;
     this.sessionEndedNotice = false;
     try {
       const user = await api.post<SessionUser>('/auth/login', { email, password });
@@ -83,7 +90,8 @@ export class AuthStore {
       });
     } catch (error) {
       runInAction(() => {
-        this.error = loginErrorMessage(error);
+        this.unverified = error instanceof ApiRequestError && error.code === EMAIL_UNVERIFIED;
+        this.error = this.unverified ? null : loginErrorMessage(error);
       });
     } finally {
       runInAction(() => {
@@ -104,7 +112,10 @@ export class AuthStore {
     });
   }
 
-  /** A new sign-in address: the server reissues this session, as for a password change. */
+  /**
+   * Ask for a new sign-in address (D259): the server stores it as pending and
+   * mails it a link; the returned user still signs in with the current one.
+   */
   async changeEmail(email: string, currentPassword: string): Promise<void> {
     const user = await api.post<SessionUser>('/auth/email', { email, currentPassword });
     runInAction(() => {
@@ -118,6 +129,11 @@ export class AuthStore {
     runInAction(() => {
       this.user = user;
     });
+  }
+
+  /** A new confirmation link for an unverified sign-up (D301); throws for the page to say why not. */
+  async resendVerification(email: string, password: string): Promise<void> {
+    await api.post('/auth/verify/resend', { email, password } satisfies ResendVerificationInput);
   }
 
   async logout(): Promise<void> {
@@ -163,6 +179,9 @@ export class AuthStore {
     this.root.ask.reset();
   }
 }
+
+/** The server's code for a sign-in to an address never confirmed (D301). */
+export const EMAIL_UNVERIFIED = 'email_unverified';
 
 /** The server's refusal as a sentence in the user's language, by its code. */
 function loginErrorMessage(error: unknown): string {

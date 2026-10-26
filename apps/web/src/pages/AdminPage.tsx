@@ -5,8 +5,11 @@ import { ShieldCheck } from 'lucide-react';
 
 import {
   ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD,
+  DAILY_NEW_ACCOUNTS_CEILING,
   MAX_AGENTS_PER_USER_CEILING,
   MAX_PENDING_SIGNUPS_CEILING,
+  SIGNUP_MODES,
+  type SignupMode,
   type AdminUserView,
   type SignupRequestView,
 } from '@traders/shared';
@@ -627,49 +630,92 @@ function RejectedSignup({ request }: { request: SignupRequestView }) {
 }
 
 /**
- * The sign-up setting (D156): how many requests may wait at once - 0 closes
- * sign-up. It changes no request already waiting. The monthly cap an approval
- * offered is retired (D279): users run on their own key only (D245).
+ * How strangers get in (D243): the mode - *automatic* once the address is
+ * verified, *approval* by the admin after verification, or *closed* - the
+ * daily limit on automatic accounts, beyond which a verified sign-up waits for
+ * the admin (D300), and how many verified requests may wait at once (D156).
+ * Without outbound mail no address can be verified, so nobody can sign up
+ * whatever the mode, and *automatic* is not offered (D259). Users run on their
+ * own key only (D245).
  */
 function SignupSettingsCard() {
   const { t } = useTranslation();
   const settings = useAdminSettingsQuery();
   const update = useUpdateAdminSettings();
+  const storedMode: SignupMode = settings.data?.signupMode ?? 'approval';
+  const [mode, setMode] = useDraft(storedMode);
+  const storedDaily = settings.data ? String(settings.data.dailyNewAccountsLimit) : '';
+  const [daily, setDaily] = useDraft(storedDaily);
   const storedMax = settings.data ? String(settings.data.maxPendingSignups) : '';
   const [max, setMax] = useDraft(storedMax);
+  const dailyValid = /^\d+$/.test(daily) && Number(daily) <= DAILY_NEW_ACCOUNTS_CEILING;
   const maxValid = /^\d+$/.test(max) && Number(max) <= MAX_PENDING_SIGNUPS_CEILING;
-  const unchanged = max === storedMax;
+  const unchanged = mode === storedMode && daily === storedDaily && max === storedMax;
+  const emailConfigured = settings.data?.emailConfigured ?? false;
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (maxValid) update.mutate({ maxPendingSignups: Number(max) });
+    if (dailyValid && maxValid) {
+      update.mutate({ signupMode: mode as SignupMode, dailyNewAccountsLimit: Number(daily), maxPendingSignups: Number(max) });
+    }
   };
+  const field = (label: string, value: string, set: (next: string) => void, valid: boolean) => (
+    <label className="flex flex-col gap-1">
+      <span className="text-text-muted">{label}</span>
+      <input
+        value={value}
+        onChange={(event) => set(event.target.value)}
+        inputMode="numeric"
+        dir="ltr"
+        aria-invalid={!valid}
+        className="w-24 rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
+      />
+    </label>
+  );
   return (
     <Card title={t('admin.signupSettings.title')}>
       {settings.isPending && <Spinner label={t('admin.signupSettings.title')} />}
       {settings.error && <ErrorNote message={errorMessage(settings.error, t('admin.signupSettings.title'))} />}
       {settings.data && (
-        <form onSubmit={submit} className="flex flex-wrap items-end gap-3 text-sm">
-          <label className="flex flex-col gap-1">
-            <span className="text-text-muted">{t('admin.signupSettings.max')}</span>
-            <input
-              value={max}
-              onChange={(event) => setMax(event.target.value)}
-              inputMode="numeric"
-              dir="ltr"
-              aria-invalid={!maxValid}
-              className="w-24 rounded-md border border-border-subtle bg-surface px-3 py-2 text-start"
-            />
-          </label>
-          <Button type="submit" disabled={!maxValid || unchanged || update.isPending}>
-            {t('admin.signupSettings.save')}
-          </Button>
-          {update.isSuccess && unchanged && (
-            <span role="status" className="text-xs text-text-muted">
-              {t('admin.signupSettings.saved')}
-            </span>
+        <form onSubmit={submit} className="space-y-3 text-sm">
+          {!emailConfigured && (
+            <p role="status" className="rounded-lg border border-loss/40 bg-loss/10 px-3 py-2 text-loss">
+              {t('admin.signupSettings.noEmail')}
+            </p>
           )}
-          <p className="basis-full text-xs text-text-muted">
-            {t('admin.signupSettings.hint', { max: MAX_PENDING_SIGNUPS_CEILING })}
+          <fieldset className="space-y-2">
+            <legend className="mb-1 text-text-muted">{t('admin.signupSettings.mode')}</legend>
+            {SIGNUP_MODES.map((option) => (
+              <label key={option} className="flex items-start gap-2">
+                <input
+                  type="radio"
+                  name="signup-mode"
+                  value={option}
+                  checked={mode === option}
+                  disabled={option === 'automatic' && !emailConfigured}
+                  onChange={() => setMode(option)}
+                  className="mt-1"
+                />
+                <span>
+                  <span className="font-medium">{t(`admin.signupSettings.modes.${option}.label`)}</span>
+                  <span className="block text-xs text-text-muted">{t(`admin.signupSettings.modes.${option}.hint`)}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+          <div className="flex flex-wrap items-end gap-3">
+            {field(t('admin.signupSettings.daily'), daily, setDaily, dailyValid)}
+            {field(t('admin.signupSettings.max'), max, setMax, maxValid)}
+            <Button type="submit" disabled={!dailyValid || !maxValid || unchanged || update.isPending}>
+              {t('admin.signupSettings.save')}
+            </Button>
+            {update.isSuccess && unchanged && (
+              <span role="status" className="text-xs text-text-muted">
+                {t('admin.signupSettings.saved')}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-text-muted">
+            {t('admin.signupSettings.hint', { daily: DAILY_NEW_ACCOUNTS_CEILING, max: MAX_PENDING_SIGNUPS_CEILING })}
           </p>
           {update.error && <ErrorNote message={errorMessage(update.error, t('admin.signupSettings.title'))} />}
         </form>

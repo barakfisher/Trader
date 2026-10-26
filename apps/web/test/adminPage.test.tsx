@@ -10,6 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { createMemoryHistory } from '@tanstack/react-router';
 
+import { DAILY_NEW_ACCOUNTS_CEILING } from '@traders/shared';
+
 const get = vi.fn();
 const post = vi.fn();
 const put = vi.fn();
@@ -159,6 +161,9 @@ const SETTINGS = {
   maxAgentsPerUser: 3,
   assistantDailyBudgetMicroUsd: 500_000,
   maxPendingSignups: 5,
+  signupMode: 'approval' as const,
+  dailyNewAccountsLimit: 20,
+  emailConfigured: true,
   updatedAt: '2026-10-08T09:00:00Z',
 };
 
@@ -326,10 +331,10 @@ describe('the admin page', () => {
     expect(post).toHaveBeenCalledWith('/admin/signups/u-omer/restore', undefined);
   });
 
-  it('sets how many requests may wait, 0 closing sign-up, and offers no cap', async () => {
+  it('sets how many confirmed requests may wait, and offers no cap', async () => {
     put.mockResolvedValue({ ...SETTINGS, maxPendingSignups: 0 });
     renderAt('/admin?tab=settings', ADMIN);
-    const max = (await screen.findByLabelText('Requests that may wait at once')) as HTMLInputElement;
+    const max = (await screen.findByLabelText('Confirmed requests that may wait')) as HTMLInputElement;
     expect(max.value).toBe('5');
     expect(screen.queryByLabelText(/cap/i)).toBeNull();
     const save = within(max.closest('form')!).getByRole('button', { name: 'Save' }) as HTMLButtonElement;
@@ -339,7 +344,40 @@ describe('the admin page', () => {
     await act(async () => {
       fireEvent.click(save);
     });
-    expect(put).toHaveBeenCalledWith('/admin/settings', { maxPendingSignups: 0 });
+    expect(put).toHaveBeenCalledWith('/admin/settings', {
+      signupMode: 'approval',
+      dailyNewAccountsLimit: 20,
+      maxPendingSignups: 0,
+    });
+  });
+
+  it('switches sign-up to automatic with a daily limit, within its ceiling (D243, D300)', async () => {
+    put.mockResolvedValue({ ...SETTINGS, signupMode: 'automatic', dailyNewAccountsLimit: 40 });
+    renderAt('/admin?tab=settings', ADMIN);
+    fireEvent.click(await screen.findByRole('radio', { name: /Automatic/ }));
+    const daily = screen.getByLabelText('New accounts a day (automatic)') as HTMLInputElement;
+    const save = within(daily.closest('form')!).getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    fireEvent.change(daily, { target: { value: String(DAILY_NEW_ACCOUNTS_CEILING + 1) } });
+    expect(save.disabled).toBe(true);
+    fireEvent.change(daily, { target: { value: '40' } });
+    await act(async () => {
+      fireEvent.click(save);
+    });
+    expect(put).toHaveBeenCalledWith('/admin/settings', {
+      signupMode: 'automatic',
+      dailyNewAccountsLimit: 40,
+      maxPendingSignups: 5,
+    });
+  });
+
+  it('says nobody can sign up without outbound mail, and does not offer automatic (D259)', async () => {
+    const defaultGet = get.getMockImplementation()!;
+    get.mockImplementation((path: string) =>
+      path === '/admin/settings' ? Promise.resolve({ ...SETTINGS, emailConfigured: false }) : defaultGet(path),
+    );
+    renderAt('/admin?tab=settings', ADMIN);
+    expect(await screen.findByText(/cannot send email/)).toBeTruthy();
+    expect((screen.getByRole('radio', { name: /Automatic/ }) as HTMLInputElement).disabled).toBe(true);
   });
 
   it('is not linked for anyone else', async () => {
@@ -459,7 +497,7 @@ describe('the admin page', () => {
     // Every committed frame, recorded as it happens: a field filled one render after the form
     // appeared was read as '' by whichever assertion ran in between.
     const labels = [
-      'Requests that may wait at once',
+      'Confirmed requests that may wait',
       "Most one user's questions may cost a day, in US dollars",
       'Most simulated agents a user may have active at once',
     ];

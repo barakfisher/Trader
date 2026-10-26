@@ -91,6 +91,9 @@ const WRITE_BODIES: Record<string, unknown> = {
   'POST /auth/logout': null,
   'POST /auth/password': { currentPassword: 'not the password', newPassword: 'a new password here' },
   'POST /auth/signup': {},
+  // A link is its own authority: a token nobody issued is "invalid" and changes nothing.
+  'POST /auth/verify': { token: 'not-a-token-anyone-issued' },
+  'POST /auth/verify/resend': {},
   'POST /auth/timezone': { timezone: 'Europe/London' },
   'POST /holdings': {},
   'PATCH /holdings/:id': { notes: 'changed' },
@@ -290,6 +293,13 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     );
     // A signed-in device (D261): its id is one more of the user's to ask with.
     const session = await signIn(user.id);
+    // An address change waiting for its link, and the link (D259, D260).
+    await pool.query('UPDATE users SET pending_email = $2 WHERE id = $1', [user.id, `${user.mark.toLowerCase()}-new@example.com`]);
+    await pool.query(
+      `INSERT INTO auth_tokens (user_id, purpose, token_hash, email, expires_at)
+       VALUES ($1, 'verify_new_email', sha256($2::bytea), $3, now() + interval '1 day')`,
+      [user.id, `${user.mark}-token`, `${user.mark.toLowerCase()}-new@example.com`],
+    );
     user.proposal = proposal;
     user.agent = agent;
     user.conversation = conversation;

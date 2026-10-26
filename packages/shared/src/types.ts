@@ -389,13 +389,32 @@ export const LLM_CAP_CEILING_MICRO_USD = 1_000_000_000;
 /** The most waiting sign-up requests the setting may allow at once: 0058's CHECK. */
 export const MAX_PENDING_SIGNUPS_CEILING = 50;
 
-/** The installation's settings on the Admin page (migrations 0047, 0052, 0058). */
+/**
+ * How strangers get in (D243, migration 0072): `automatic` once the email is
+ * verified, under the daily limit; `approval` by the admin, after verification;
+ * `closed`. 0072's CHECK enumerates the same.
+ */
+export const SIGNUP_MODES = ['automatic', 'approval', 'closed'] as const;
+export type SignupMode = (typeof SIGNUP_MODES)[number];
+
+/** The most new accounts *automatic* may let in a day: 0072's CHECK (D300). */
+export const DAILY_NEW_ACCOUNTS_CEILING = 500;
+
+/** The installation's settings on the Admin page (migrations 0047, 0052, 0058, 0072). */
 export interface AdminSettingsResponse {
   maxAgentsPerUser: number;
   /** What one user's questions to the assistant may spend a day, integer micro-USD. */
   assistantDailyBudgetMicroUsd: number;
-  /** Waiting sign-up requests allowed at once (D156); 0 closes sign-up. */
+  /** Verified sign-up requests allowed to wait for the admin at once (D156, D259); 0 closes approval. */
   maxPendingSignups: number;
+  signupMode: SignupMode;
+  /** New accounts *automatic* lets in a day; beyond it they wait for the admin (D300). */
+  dailyNewAccountsLimit: number;
+  /**
+   * Whether this installation can send mail at all (D258). Without it no
+   * address can be verified, so nobody can sign up, whatever the mode.
+   */
+  emailConfigured: boolean;
   updatedAt: string;
 }
 
@@ -404,6 +423,8 @@ export interface AdminSettingsInput {
   maxAgentsPerUser?: number;
   assistantDailyBudgetMicroUsd?: number;
   maxPendingSignups?: number;
+  signupMode?: SignupMode;
+  dailyNewAccountsLimit?: number;
 }
 
 /** One sign-up request on the Admin page (D188). Never a user's finances (D162). */
@@ -944,6 +965,8 @@ export interface SessionUser {
    * password change, and the server refuses everything else until it is done.
    */
   mustChangePassword: boolean;
+  /** An address change waiting for its link (D259); the sign-in address is still `email`. */
+  pendingEmail: string | null;
 }
 
 /**
@@ -990,11 +1013,44 @@ export interface SignupInput {
 
 /**
  * The one answer signup gives (D185): `received` whether the email was new,
- * already waiting, rejected or an account - only the admin learns which -
- * and `closed` while the installation's limit on waiting requests is reached.
+ * already waiting, rejected or an account - a mail reaches the address either
+ * way (D298) - and `closed` while sign-up is closed, which says nothing about
+ * any account.
  */
 export interface SignupResponse {
   outcome: 'received' | 'closed';
+}
+
+/** `POST /auth/verify`: a link from an email, by its token (D259, D260). */
+export interface VerifyEmailInput {
+  token: string;
+}
+
+/**
+ * What a verification link did. `activated`: *automatic* let the account in.
+ * `awaiting_approval`: verified, and waiting for the admin (approval mode, or
+ * past the daily limit). `email_changed`: a new address confirmed.
+ * `email_taken`: another account took that address meanwhile. `expired`,
+ * `used` and `invalid` change nothing.
+ */
+export interface VerifyEmailResponse {
+  outcome:
+    | 'activated'
+    | 'awaiting_approval'
+    | 'email_changed'
+    | 'email_taken'
+    | 'expired'
+    | 'used'
+    | 'invalid';
+}
+
+/**
+ * `POST /auth/verify/resend` (D301): the same email and password as a sign-in.
+ * Only the right password to an unverified request sends a new link.
+ */
+export interface ResendVerificationInput {
+  email: string;
+  password: string;
 }
 
 // --- Admin (M8) --------------------------------------------------------------

@@ -6,6 +6,7 @@ import { Disclaimer } from '../components/Disclaimer.tsx';
 import { PasswordInput } from '../components/PasswordInput.tsx';
 import { SignupForm } from '../components/SignupForm.tsx';
 import { Button, ErrorNote } from '../components/ui.tsx';
+import { ApiRequestError, RATE_LIMITED } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { useStore } from '../stores/context.tsx';
 
@@ -71,6 +72,7 @@ export const LoginPage = observer(function LoginPage() {
               </label>
 
               {auth.error && <ErrorNote message={auth.error} />}
+              {auth.unverified && <UnverifiedNotice email={email.trim()} password={password} />}
 
               <Button
                 type="submit"
@@ -96,3 +98,46 @@ export const LoginPage = observer(function LoginPage() {
     </main>
   );
 });
+
+/**
+ * A sign-up whose address was never confirmed (D301): only someone who typed
+ * the right password sees this, and only they can ask for a new link - with
+ * the same email and password, so the form to send mail is never open to an
+ * address someone merely types.
+ */
+function UnverifiedNotice({ email, password }: { email: string; password: string }) {
+  const { auth } = useStore();
+  const { t } = useTranslation();
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle');
+  const [failure, setFailure] = useState<string | null>(null);
+
+  async function resend(): Promise<void> {
+    setState('sending');
+    try {
+      await auth.resendVerification(email, password);
+      setState('sent');
+    } catch (caught) {
+      setFailure(caught instanceof ApiRequestError && caught.code === RATE_LIMITED ? caught.message : null);
+      setState('failed');
+    }
+  }
+
+  return (
+    <div role="status" className="space-y-2 rounded-lg border border-border-subtle bg-surface p-3 text-sm">
+      <p>
+        {t('login.unverified')}{' '}
+        <bdi dir="ltr" className="font-medium">
+          {email}
+        </bdi>
+      </p>
+      {state === 'sent' ? (
+        <p className="text-text-muted">{t('login.resent')}</p>
+      ) : (
+        <Button variant="secondary" disabled={state === 'sending'} onClick={() => void resend()}>
+          {state === 'sending' ? t('login.resending') : t('login.resend')}
+        </Button>
+      )}
+      {state === 'failed' && <ErrorNote message={failure ?? t('login.resendFailed')} />}
+    </div>
+  );
+}

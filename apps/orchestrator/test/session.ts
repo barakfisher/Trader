@@ -27,6 +27,7 @@ export const ACTIVE_SESSION = {
   status: 'active',
   session_version: 1,
   password_must_change: false,
+  pending_email: null,
 } as const;
 
 /** How long a minted cookie claims to live; the mocked row decides the rest. */

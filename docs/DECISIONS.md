@@ -308,3 +308,8 @@ while this file is out of date.
 | 295 | A session lasts a fixed `SESSION_TTL_HOURS` (7 days) from sign-in, never extended |
 | 296 | Settings offers *Sign out all other devices*; this device signs out from the menu |
 | 297 | How PR 12 builds D261 |
+| 298 | Signing up with an address that already has an account mails its owner |
+| 299 | How PR 10 builds D259 |
+| 300 | Automatic signup has a daily limit, default 20; past it a verified sign-up waits for the admin |
+| 301 | A new verification link is asked for from sign-in, with the password |
+| 302 | Mailpit catches all mail in compose and kind; it is never part of a public deployment |

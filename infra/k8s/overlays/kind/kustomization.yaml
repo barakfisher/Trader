@@ -7,6 +7,17 @@ kind: Kustomization
 
 resources:
   - ../../base
+  # This machine's mail catcher (D302); a public overlay points SMTP at a real provider instead.
+  - mailpit.yaml
+
+# Mail goes to Mailpit (D258, D302).
+configMapGenerator:
+  - name: traders-config
+    behavior: merge
+    literals:
+      - SMTP_HOST=mailpit
+      - SMTP_PORT=1025
+      - EMAIL_FROM=Traders <no-reply@traders.localhost>
 
 # The Secret, from secrets.env beside this file. scripts/k8s-up.sh writes that
 # file on first run with freshly generated values and never rewrites it; it is
@@ -23,3 +34,18 @@ secretGenerator:
 
 patches:
   - path: universe-descriptions.yaml
+  # Mailpit's inbox under /mailpit/ on the app's own host.
+  - target:
+      kind: Ingress
+      name: traders
+    patch: |-
+      - op: add
+        path: /spec/rules/0/http/paths/-
+        value:
+          path: /mailpit
+          pathType: Prefix
+          backend:
+            service:
+              name: mailpit
+              port:
+                name: http

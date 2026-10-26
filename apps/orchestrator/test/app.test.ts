@@ -193,8 +193,11 @@ describe('API', () => {
       '/auth/login',
       '/auth/logout',
       '/auth/session',
-      // Asking to join is done signed out, by definition (D156).
+      // Asking to join is done signed out, by definition (D156), and so are
+      // opening its link and asking for a new one (D259, D301).
       '/auth/signup',
+      '/auth/verify',
+      '/auth/verify/resend',
       // Telegram calls it; it proves itself with the secret header instead.
       '/telegram/webhook',
     ]);

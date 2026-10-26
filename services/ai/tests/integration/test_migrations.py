@@ -131,6 +131,14 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
     ),
 }
 
+#: Columns of a one-row table (`installation_settings`, `CHECK (id)`): the row
+#: holds one value at a time, so no seed can carry every value down the chain.
+#: The seed sets the value the downgrade has to handle - `closed`, which 0072's
+#: downgrade keeps closed - and the others are the default or set by the admin.
+SINGLE_ROW_COLUMNS: frozenset[tuple[str, str]] = frozenset(
+    {("installation_settings", "signup_mode")}
+)
+
 #: `col = ANY (ARRAY['a'::text, 'b'::text])` as `pg_get_constraintdef` prints it.
 _ENUMERATION = re.compile(r"\(?(\w+)\)? = ANY \(ARRAY\[([^\]]*)\]")
 _VALUE = re.compile(r"'([^']*)'")
@@ -169,6 +177,8 @@ def test_the_seed_covers_every_enumerated_value(migrated: Engine) -> None:
     missing = []
     with migrated.connect() as connection:
         for table, column, value in sorted(enumerated):
+            if (table, column) in SINGLE_ROW_COLUMNS:
+                continue
             present = connection.execute(
                 text(f'SELECT EXISTS (SELECT 1 FROM "{table}" WHERE "{column}" = :value)'),
                 {"value": value},

@@ -15,10 +15,12 @@ export interface UserRow {
   session_version: number;
   /** The admin's one-time password (D162): nothing but a password change until it is changed. */
   password_must_change: boolean;
+  /** An address change waiting for its link (D259); `email` stays the sign-in address until then. */
+  pending_email: string | null;
 }
 
 const USER_COLUMNS =
-  'id, email, base_currency, timezone, role, status, session_version, password_must_change';
+  'id, email, base_currency, timezone, role, status, session_version, password_must_change, pending_email';
 
 /** `USER_COLUMNS` for a query that names `users` by `alias`. */
 export function qualifiedUserColumns(alias: string): string {
@@ -61,12 +63,17 @@ export interface UserCredentialsRow {
   password_hash: string | null;
   /** Read with the hash, so a sign-in can tell that the password changed while it was checked (D297). */
   session_version: number;
+  /** The address the link went to, for "confirm your email first" (D301). */
+  email: string | null;
+  /** A pending request whose address was never proven is waiting for its link, not for the admin (D259). */
+  email_verified: boolean;
 }
 
 /** Email is unique regardless of case (0058's `users_email_lower_key`), so this is one row or none. */
 export function getUserCredentialsByEmail(email: string): Promise<UserCredentialsRow | null> {
   return queryOne<UserCredentialsRow>(
-    'SELECT id, status, password_hash, session_version FROM users WHERE lower(email) = lower($1)',
+    `SELECT id, status, password_hash, session_version, email, email_verified_at IS NOT NULL AS email_verified
+       FROM users WHERE lower(email) = lower($1)`,
     [email],
   );
 }
@@ -111,29 +118,18 @@ export function changeTimeZone(userId: string, timezone: string): Promise<UserRo
   );
 }
 
-const UNIQUE_VIOLATION = '23505';
-
 /**
- * A new sign-in address, which ends every session the user holds - this one
- * included, so the caller issues a new session for this device - as a password change does
- * (D160). `'taken'` when another account already signs in with it: the unique
- * index on `lower(email)` decides, so two users racing for one address cannot
- * both win.
+ * Whether another account signs in with `email` (any case). Asked when a
+ * change is requested, so a person who knows their own password hears "taken"
+ * at once rather than after opening a link; the unique index on `lower(email)`
+ * still decides when the link is opened (`useVerificationToken`).
  */
-export async function changeEmail(userId: string, email: string): Promise<UserRow | 'taken' | null> {
-  try {
-    return await queryOne<UserRow>(
-      endingSessions(`UPDATE users
-          SET email = $2,
-              session_version = session_version + 1
-        WHERE id = $1
-    RETURNING ${USER_COLUMNS}`),
-      [userId, email],
-    );
-  } catch (error) {
-    if ((error as { code?: string }).code === UNIQUE_VIOLATION) return 'taken';
-    throw error;
-  }
+export async function emailInUse(email: string, exceptUserId: string): Promise<boolean> {
+  const row = await queryOne<{ taken: boolean }>(
+    'SELECT EXISTS (SELECT 1 FROM users WHERE lower(email) = lower($1) AND id <> $2) AS taken',
+    [email, exceptUserId],
+  );
+  return row?.taken ?? false;
 }
 
 /**

@@ -57,7 +57,14 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       const email = `${USER.slice(0, 8)}@Example.com`;
       await getPool().query('UPDATE users SET email = $2 WHERE id = $1', [USER, email]);
       const found = await queries.getUserCredentialsByEmail(email.toLowerCase());
-      expect(found).toEqual({ id: USER, status: 'active', password_hash: null, session_version: expect.any(Number) });
+      expect(found).toEqual({
+        id: USER,
+        status: 'active',
+        password_hash: null,
+        session_version: expect.any(Number),
+        email,
+        email_verified: false,
+      });
       expect(await queries.getUserCredentialsByEmail(`nobody-${USER}@example.com`)).toBeNull();
     });
 
@@ -175,54 +182,83 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
-  describe('sign-up requests (0058, D156, D185, D188)', () => {
+  describe('sign-up requests (0058, 0072, D156, D185, D188, D259)', () => {
     const tag = USER.slice(0, 8);
     const email = (name: string) => `${name}-${tag}@example.com`;
-    let savedLimit = 5;
+    let saved = { max_pending_signups: 5, signup_mode: 'approval', daily_new_accounts_limit: 20 };
 
     beforeAll(async () => {
-      const { rows } = await getPool().query('SELECT max_pending_signups FROM installation_settings');
-      savedLimit = rows[0].max_pending_signups;
-      // Room for this block's requests whatever else waits in the database.
-      await getPool().query('UPDATE installation_settings SET max_pending_signups = 50');
+      const { rows } = await getPool().query(
+        'SELECT max_pending_signups, signup_mode, daily_new_accounts_limit FROM installation_settings',
+      );
+      saved = rows[0];
+      // Approval, with room for this block's requests whatever else waits in the database.
+      await getPool().query("UPDATE installation_settings SET max_pending_signups = 50, signup_mode = 'approval'");
     });
 
     afterAll(async () => {
-      await getPool().query('UPDATE installation_settings SET max_pending_signups = $1', [savedLimit]);
+      await getPool().query(
+        'UPDATE installation_settings SET max_pending_signups = $1, signup_mode = $2, daily_new_accounts_limit = $3',
+        [saved.max_pending_signups, saved.signup_mode, saved.daily_new_accounts_limit],
+      );
       await getPool().query(`DELETE FROM users WHERE email LIKE $1`, [`%-${tag}@example.com`]);
     });
 
     const ask = (address: string) =>
       queries.createSignupRequest({ email: address, passwordHash: 'hash', timezone: 'Europe/London', language: 'he' });
+    const verified = (userId: string) => getPool().query('UPDATE users SET email_verified_at = now() WHERE id = $1', [userId]);
 
-    it('writes a pending user with no agent and no cap, its settings in the language asked in', async () => {
+    it('writes an unverified pending user with no agent and no cap, its settings in the language asked in', async () => {
       const created = await ask(email('noa'));
       expect(created.outcome).toBe('created');
       const userId = (created as { userId: string }).userId;
       const { rows } = await getPool().query(
-        `SELECT u.status, u.llm_cap_micro_usd, u.timezone, s.language,
+        `SELECT u.status, u.llm_cap_micro_usd, u.timezone, s.language, u.email_verified_at,
                 (SELECT count(*)::int FROM agents a WHERE a.user_id = u.id) AS agents
            FROM users u JOIN user_settings s ON s.user_id = u.id WHERE u.id = $1`,
         [userId],
       );
-      expect(rows[0]).toEqual({ status: 'pending', llm_cap_micro_usd: null, timezone: 'Europe/London', language: 'he', agents: 0 });
+      expect(rows[0]).toEqual({
+        status: 'pending',
+        llm_cap_micro_usd: null,
+        timezone: 'Europe/London',
+        language: 'he',
+        email_verified_at: null,
+        agents: 0,
+      });
     });
 
-    it('writes nothing for an email that already asked, whatever its case', async () => {
-      expect(await ask(email('NOA').replace('NOA', 'Noa'))).toEqual({ outcome: 'exists' });
+    it('writes nothing for an email that already asked, whatever its case, and says what it is (D298)', async () => {
+      const existing = await ask(email('NOA').replace('NOA', 'Noa'));
+      expect(existing).toMatchObject({ outcome: 'exists', status: 'pending', verified: false, language: 'he' });
     });
 
-    it('is closed at the limit, and open again below it', async () => {
-      const { rows } = await getPool().query(`SELECT count(*)::int AS n FROM users WHERE status = 'pending'`);
+    it('keeps an unverified request from the admin, and from the waiting limit (D259)', async () => {
+      const created = (await ask(email('hidden'))) as { userId: string };
+      const before = await queries.countPendingSignups();
+      expect((await queries.listSignupRequests()).pending.map((row) => row.user_id)).not.toContain(created.userId);
+      expect(await queries.approveSignup(created.userId, 0, USER)).toMatchObject({ applied: false, status: 'pending' });
+      await verified(created.userId);
+      expect(await queries.countPendingSignups()).toBe(before + 1);
+      expect((await queries.listSignupRequests()).pending.map((row) => row.user_id)).toContain(created.userId);
+    });
+
+    it('is closed at the limit of verified requests, open below it, and closed outright when the mode says so', async () => {
+      const { rows } = await getPool().query(
+        `SELECT count(*)::int AS n FROM users WHERE status = 'pending' AND email_verified_at IS NOT NULL`,
+      );
       await getPool().query('UPDATE installation_settings SET max_pending_signups = $1', [rows[0].n]);
       expect(await ask(email('late'))).toEqual({ outcome: 'closed' });
       await getPool().query('UPDATE installation_settings SET max_pending_signups = $1', [rows[0].n + 1]);
       expect((await ask(email('late'))).outcome).toBe('created');
-      await getPool().query('UPDATE installation_settings SET max_pending_signups = 50');
+      await getPool().query("UPDATE installation_settings SET max_pending_signups = 50, signup_mode = 'closed'");
+      expect(await ask(email('closed'))).toEqual({ outcome: 'closed' });
+      await getPool().query("UPDATE installation_settings SET signup_mode = 'approval'");
     });
 
-    it('approves once: the cap and approver set, the primary agent seeded; a second decision changes nothing', async () => {
+    it('approves a verified request once: the cap and approver set, the primary agent seeded; a second decision changes nothing', async () => {
       const created = (await ask(email('dana'))) as { userId: string };
+      await verified(created.userId);
       expect(await queries.approveSignup(created.userId, 20_000_000, USER)).toMatchObject({ applied: true, status: 'active' });
       const { rows } = await getPool().query(
         `SELECT u.llm_cap_micro_usd::int AS cap, u.approved_by, u.approved_at IS NOT NULL AS approved,
@@ -237,6 +273,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
     it('rejects, lists the rejection, and undoes it back to waiting', async () => {
       const created = (await ask(email('omer'))) as { userId: string };
+      await verified(created.userId);
       expect(await queries.rejectSignup(created.userId)).toMatchObject({ applied: true, status: 'rejected' });
       expect((await queries.listSignupRequests()).rejected.map((row) => row.user_id)).toContain(created.userId);
       expect(await queries.restoreSignup(created.userId)).toMatchObject({ applied: true, status: 'pending' });
@@ -245,6 +282,112 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
     it('never decides an admin, and answers an unknown id as gone', async () => {
       expect(await queries.approveSignup(randomUUID(), 0, USER)).toEqual({ applied: false, status: 'gone', email: null });
+    });
+
+    describe('verification links (0072, D259, D260, D300)', async () => {
+      const { linkTokenHash, newLinkToken } = await import('../src/http/linkTokens.js');
+      const RULES = { mode: 'automatic' as const, dailyLimit: 1_000, defaultCapMicroUsd: 10_000_000, timezone: 'Asia/Jerusalem' };
+
+      async function link(userId: string, address: string, purpose: 'verify_email' | 'verify_new_email' = 'verify_email') {
+        const token = newLinkToken();
+        await queries.issueAuthToken({ userId, purpose, email: address, tokenHash: linkTokenHash(token), ttlHours: 1 });
+        return linkTokenHash(token);
+      }
+      const status = async (userId: string) =>
+        (await getPool().query('SELECT status, email_verified_at IS NOT NULL AS verified, approved_automatically FROM users WHERE id = $1', [userId])).rows[0];
+
+      it('lets a verified sign-up in under *automatic*, once; the second click is "used"', async () => {
+        const created = (await ask(email('auto'))) as { userId: string };
+        const hash = await link(created.userId, email('auto'));
+        expect(await queries.useVerificationToken(hash, RULES)).toEqual({ outcome: 'activated', userId: created.userId });
+        expect(await status(created.userId)).toEqual({ status: 'active', verified: true, approved_automatically: true });
+        expect(await queries.useVerificationToken(hash, RULES)).toEqual({ outcome: 'used' });
+      });
+
+      it('keeps a verified sign-up for the admin under approval, and past the daily limit', async () => {
+        const approval = (await ask(email('appr'))) as { userId: string };
+        expect(await queries.useVerificationToken(await link(approval.userId, email('appr')), { ...RULES, mode: 'approval' })).toEqual({
+          outcome: 'awaiting_approval',
+          userId: approval.userId,
+        });
+        expect(await status(approval.userId)).toMatchObject({ status: 'pending', verified: true });
+
+        const over = (await ask(email('over'))) as { userId: string };
+        expect(await queries.useVerificationToken(await link(over.userId, email('over')), { ...RULES, dailyLimit: 0 })).toEqual({
+          outcome: 'awaiting_approval',
+          userId: over.userId,
+        });
+        expect(await status(over.userId)).toMatchObject({ status: 'pending', verified: true, approved_automatically: false });
+      });
+
+      it('says expired for an old link and invalid for an unknown one, changing nothing', async () => {
+        const created = (await ask(email('slow'))) as { userId: string };
+        const hash = await link(created.userId, email('slow'));
+        await getPool().query(
+          "UPDATE auth_tokens SET created_at = now() - interval '2 days', expires_at = now() - interval '1 second' WHERE token_hash = $1",
+          [hash],
+        );
+        expect(await queries.useVerificationToken(hash, RULES)).toEqual({ outcome: 'expired' });
+        expect(await queries.useVerificationToken(linkTokenHash('never issued'), RULES)).toEqual({ outcome: 'invalid' });
+        expect(await status(created.userId)).toMatchObject({ status: 'pending', verified: false });
+      });
+
+      it("cancels a request's earlier link when a new one is sent (D260)", async () => {
+        const created = (await ask(email('twice'))) as { userId: string };
+        const first = await link(created.userId, email('twice'));
+        const second = await link(created.userId, email('twice'));
+        expect(await queries.useVerificationToken(first, RULES)).toEqual({ outcome: 'invalid' });
+        expect((await queries.useVerificationToken(second, RULES)).outcome).toBe('activated');
+      });
+
+      it('never treats a reset link as a verification link', async () => {
+        const created = (await ask(email('reset'))) as { userId: string };
+        const token = newLinkToken();
+        await queries.issueAuthToken({
+          userId: created.userId,
+          purpose: 'reset_password',
+          email: email('reset'),
+          tokenHash: linkTokenHash(token),
+          ttlHours: 1,
+        });
+        expect(await queries.useVerificationToken(linkTokenHash(token), RULES)).toEqual({ outcome: 'invalid' });
+        expect(await status(created.userId)).toMatchObject({ verified: false });
+      });
+
+      it('confirms a pending new address: the sign-in address changes and every session ends', async () => {
+        const created = (await ask(email('mover'))) as { userId: string };
+        await queries.useVerificationToken(await link(created.userId, email('mover')), RULES);
+        await queries.createSession({ userId: created.userId, tokenHash: linkTokenHash(newLinkToken()), ttlHours: 1, userAgent: null, ipAddress: null });
+        await queries.setPendingEmail(created.userId, email('moved'));
+        const result = await queries.useVerificationToken(await link(created.userId, email('moved'), 'verify_new_email'), RULES);
+        expect(result).toEqual({ outcome: 'email_changed', userId: created.userId });
+        const { rows } = await getPool().query(
+          `SELECT email, pending_email, (SELECT count(*)::int FROM user_sessions WHERE user_id = $1) AS sessions FROM users WHERE id = $1`,
+          [created.userId],
+        );
+        expect(rows[0]).toEqual({ email: email('moved'), pending_email: null, sessions: 0 });
+      });
+
+      it('refuses a new address another account took meanwhile, and forgets the change', async () => {
+        const created = (await ask(email('late-mover'))) as { userId: string };
+        await queries.setPendingEmail(created.userId, email('noa'));
+        const result = await queries.useVerificationToken(await link(created.userId, email('noa'), 'verify_new_email'), RULES);
+        expect(result).toEqual({ outcome: 'email_taken' });
+        const { rows } = await getPool().query('SELECT pending_email FROM users WHERE id = $1', [created.userId]);
+        expect(rows[0].pending_email).toBeNull();
+      });
+
+      it('sweeps unverified sign-ups past their window, never a verified request or an account (D299)', async () => {
+        const stale = (await ask(email('stale'))) as { userId: string };
+        const waiting = (await ask(email('waiting'))) as { userId: string };
+        await verified(waiting.userId);
+        await getPool().query("UPDATE users SET created_at = now() - interval '30 days' WHERE id = ANY($1::uuid[])", [
+          [stale.userId, waiting.userId],
+        ]);
+        expect(await queries.deleteStaleUnverifiedSignups(7)).toBeGreaterThanOrEqual(1);
+        const { rows } = await getPool().query('SELECT id FROM users WHERE id = ANY($1::uuid[])', [[stale.userId, waiting.userId]]);
+        expect(rows.map((row) => row.id)).toEqual([waiting.userId]);
+      });
     });
   });
 
@@ -2218,11 +2361,10 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       });
     });
 
-    it('ends every session in the same statement as a password, email, status or one-time password change', async () => {
+    it('ends every session in the same statement as a password, status or one-time password change', async () => {
       await withUser(async (userId) => {
         const changes: [string, () => Promise<unknown>][] = [
           ['password', () => queries.changePassword(userId, '$argon2id$v=19$m=19456,t=2,p=1$x')],
-          ['email', () => queries.changeEmail(userId, `${userId}@example.com`)],
           ['one-time password', () => queries.setOneTimePassword(userId, '$argon2id$v=19$m=19456,t=2,p=1$y')],
           ['disable', () => queries.setUserStatus(userId, 'active', 'disabled')],
         ];

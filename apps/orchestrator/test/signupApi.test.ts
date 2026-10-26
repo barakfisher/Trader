@@ -1,6 +1,8 @@
 /**
- * Asking to join and the admin's decision on the Admin page (D156, D185-D188).
- * The database and the Telegram announcement are mocked; the hashing is real.
+ * Asking to join, proving the address, a new link from sign-in, and the
+ * admin's decision on the Admin page (D156, D185-D188, D243, D259, D298-D301).
+ * The database and the Telegram announcement are mocked; the hashing is real,
+ * and mail is recorded rather than sent (D258).
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -39,6 +41,10 @@ vi.mock('../src/db/queries.js', () => ({
   getInstallationSettings: vi.fn(async () => ({ default_llm_cap_micro_usd: 10_000_000 })),
   getOrCreateUserSettings: vi.fn(async () => ({ language: 'en' })),
   insertAdminAudit: vi.fn(async () => undefined),
+  issueAuthToken: vi.fn(async () => undefined),
+  useVerificationToken: vi.fn(),
+  getUserCredentialsByEmail: vi.fn(),
+  createSession: vi.fn(async () => ({ id: '5e551000-0000-4000-8000-0000000000cc', expires_at: new Date(Date.now() + 3_600_000) })),
 }));
 
 vi.mock('../src/telegram/signupApproval.js', () => ({ announceSignupRequest: vi.fn(async () => undefined) }));
@@ -49,6 +55,9 @@ const { passwordMatches } = await import('../src/http/password.js');
 const { announceSignupRequest } = await import('../src/telegram/signupApproval.js');
 const queries = await import('../src/db/queries.js');
 const { createFakeAi } = await import('./fakeAi.js');
+const { memoryRateLimits } = await import('../src/http/rateLimits.js');
+const { linkTokenHash, VERIFY_TOKEN_TTL_HOURS } = await import('../src/http/linkTokens.js');
+const { RecordingEmailSender } = await import('./recordingEmailSender.js');
 
 const ENV = {
   APP_ENV: 'test',
@@ -62,9 +71,13 @@ const ENV = {
 
 const HEADERS = { origin: 'http://localhost:5173', 'content-type': 'application/json' };
 
-function buildApp() {
+let mail = new RecordingEmailSender();
+
+/** The app with a recording sender; `withEmail: false` is an installation with no SMTP configured. */
+function buildApp({ withEmail = true } = {}) {
   resetConfigForTests();
-  return createApp(loadConfig(ENV), createFakeAi());
+  mail = new RecordingEmailSender();
+  return createApp(loadConfig(ENV), createFakeAi(), undefined, null, memoryRateLimits(), withEmail ? mail : null);
 }
 
 type App = ReturnType<typeof buildApp>;
@@ -75,7 +88,7 @@ function signup(app: App, body: unknown = REQUEST) {
   return app.request('/auth/signup', { method: 'POST', headers: HEADERS, body: JSON.stringify(body) });
 }
 
-describe('asking to join (D156, D185)', () => {
+describe('asking to join (D156, D185, D259, D298)', () => {
   let app: App;
 
   beforeEach(() => {
@@ -83,7 +96,7 @@ describe('asking to join (D156, D185)', () => {
     app = buildApp();
   });
 
-  it('writes a pending request with a real hash, and announces only a new one', async () => {
+  it("writes an unverified request with a real hash and mails its link - the admin hears nothing yet", async () => {
     vi.mocked(queries.createSignupRequest).mockResolvedValue({ outcome: 'created', userId: REQUESTER });
     const response = await signup(app);
     expect(response.status).toBe(200);
@@ -92,22 +105,73 @@ describe('asking to join (D156, D185)', () => {
     const input = vi.mocked(queries.createSignupRequest).mock.calls[0]![0];
     expect(input).toMatchObject({ email: 'noa@example.com', timezone: 'Europe/London', language: 'he' });
     expect(await passwordMatches(PASSWORD, input.passwordHash)).toBe(true);
-    expect(announceSignupRequest).toHaveBeenCalledWith(expect.anything(), REQUESTER);
-  });
-
-  it('answers an email that already asked, or has an account, exactly as a new one - and tells nobody', async () => {
-    vi.mocked(queries.createSignupRequest).mockResolvedValue({ outcome: 'exists' });
-    const response = await signup(app);
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ outcome: 'received' });
+    await mail.settled();
+    expect(mail.sent.map((sent) => sent.to)).toEqual(['noa@example.com']);
+    const token = mail.tokenSentTo('noa@example.com')!;
+    expect(mail.sent[0]!.text).toContain(`http://localhost:5173/verify#token=${token}`);
+    expect(mail.sent[0]!.html).toContain('dir="rtl"');
+    expect(queries.issueAuthToken).toHaveBeenCalledWith({
+      userId: REQUESTER,
+      purpose: 'verify_email',
+      email: 'noa@example.com',
+      tokenHash: linkTokenHash(token),
+      ttlHours: VERIFY_TOKEN_TTL_HOURS,
+    });
     expect(announceSignupRequest).not.toHaveBeenCalled();
   });
 
-  it('says sign-up is closed while the limit on waiting requests is reached', async () => {
+  it('answers an existing account exactly as a new address, and tells the owner by mail (D298)', async () => {
+    vi.mocked(queries.createSignupRequest).mockResolvedValue({
+      outcome: 'exists',
+      userId: REQUESTER,
+      status: 'active',
+      verified: true,
+      language: 'en',
+    });
+    const response = await signup(app);
+    expect(await response.json()).toEqual({ outcome: 'received' });
+    await mail.settled();
+    expect(mail.sent).toHaveLength(1);
+    expect(mail.sent[0]).toMatchObject({ to: 'noa@example.com', subject: 'Someone tried to sign up to Traders with your address' });
+    expect(mail.sent[0]!.text).not.toContain('#token=');
+    expect(queries.issueAuthToken).not.toHaveBeenCalled();
+    expect(announceSignupRequest).not.toHaveBeenCalled();
+  });
+
+  it('sends a request still waiting for its link a fresh one, as a retry', async () => {
+    vi.mocked(queries.createSignupRequest).mockResolvedValue({
+      outcome: 'exists',
+      userId: REQUESTER,
+      status: 'pending',
+      verified: false,
+      language: 'he',
+    });
+    await signup(app);
+    await mail.settled();
+    expect(mail.tokenSentTo('noa@example.com')).not.toBeNull();
+    expect(queries.issueAuthToken).toHaveBeenCalledWith(expect.objectContaining({ userId: REQUESTER, purpose: 'verify_email' }));
+  });
+
+  it('still answers received when the mail cannot be sent, and says nothing about why', async () => {
+    vi.mocked(queries.createSignupRequest).mockResolvedValue({ outcome: 'created', userId: REQUESTER });
+    mail.failWith = new Error('SMTP refused');
+    const response = await signup(app);
+    expect(await response.json()).toEqual({ outcome: 'received' });
+  });
+
+  it('says sign-up is closed while it is closed, mailing nobody', async () => {
     vi.mocked(queries.createSignupRequest).mockResolvedValue({ outcome: 'closed' });
     const response = await signup(app);
     expect(await response.json()).toEqual({ outcome: 'closed' });
-    expect(announceSignupRequest).not.toHaveBeenCalled();
+    await mail.settled();
+    expect(mail.sent).toEqual([]);
+  });
+
+  it('is closed where no mail can be sent: no address could ever be proven (D259)', async () => {
+    const closed = buildApp({ withEmail: false });
+    const response = await signup(closed);
+    expect(await response.json()).toEqual({ outcome: 'closed' });
+    expect(queries.createSignupRequest).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -120,6 +184,129 @@ describe('asking to join (D156, D185)', () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: code });
     expect(queries.createSignupRequest).not.toHaveBeenCalled();
+  });
+});
+
+describe('opening a verification link (D259, D260)', () => {
+  let app: App;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(queries.getInstallationSettings).mockResolvedValue({
+      default_llm_cap_micro_usd: 10_000_000,
+      signup_mode: 'automatic',
+      daily_new_accounts_limit: 20,
+    } as never);
+    app = buildApp();
+  });
+
+  const verify = (body: unknown) =>
+    app.request('/auth/verify', { method: 'POST', headers: HEADERS, body: JSON.stringify(body) });
+
+  it("hands the token's hash and the installation's rules to the database, and says what happened", async () => {
+    vi.mocked(queries.useVerificationToken).mockResolvedValue({ outcome: 'activated', userId: REQUESTER });
+    const response = await verify({ token: 'the-token' });
+    expect(await response.json()).toEqual({ outcome: 'activated' });
+    expect(queries.useVerificationToken).toHaveBeenCalledWith(linkTokenHash('the-token'), {
+      mode: 'automatic',
+      dailyLimit: 20,
+      defaultCapMicroUsd: 10_000_000,
+      timezone: loadConfig(ENV).APP_TIMEZONE,
+    });
+    expect(announceSignupRequest).not.toHaveBeenCalled();
+    // A link proves the mailbox; it is not the password, so it opens no session.
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('announces a request to the admin only once its address is proven and it waits for them', async () => {
+    vi.mocked(queries.useVerificationToken).mockResolvedValue({ outcome: 'awaiting_approval', userId: REQUESTER });
+    const response = await verify({ token: 'the-token' });
+    expect(await response.json()).toEqual({ outcome: 'awaiting_approval' });
+    expect(announceSignupRequest).toHaveBeenCalledWith(expect.anything(), REQUESTER);
+  });
+
+  it('gives this device a new session when it confirms its own new address - and no other device', async () => {
+    vi.mocked(queries.useVerificationToken).mockResolvedValue({ outcome: 'email_changed', userId: TEST_USER_ID });
+    vi.mocked(queries.getUser).mockResolvedValue({ ...ADMIN, role: 'user' } as never);
+    const here = await app.request('/auth/verify', {
+      method: 'POST',
+      headers: { ...HEADERS, cookie: sessionCookie() },
+      body: JSON.stringify({ token: 'the-token' }),
+    });
+    expect(await here.json()).toEqual({ outcome: 'email_changed' });
+    expect(here.headers.get('set-cookie')).toContain('traders_session=');
+
+    vi.mocked(queries.useVerificationToken).mockResolvedValue({ outcome: 'email_changed', userId: REQUESTER });
+    const elsewhere = await verify({ token: 'the-token' });
+    expect(elsewhere.headers.get('set-cookie')).toBeNull();
+  });
+
+  it.each(['expired', 'used', 'invalid'] as const)('passes %s through, changing nothing else', async (outcome) => {
+    vi.mocked(queries.useVerificationToken).mockResolvedValue({ outcome });
+    expect(await (await verify({ token: 'the-token' })).json()).toEqual({ outcome });
+    expect(announceSignupRequest).not.toHaveBeenCalled();
+  });
+
+  it('calls a malformed request an invalid link, without asking the database', async () => {
+    expect(await (await verify({})).json()).toEqual({ outcome: 'invalid' });
+    expect(queries.useVerificationToken).not.toHaveBeenCalled();
+  });
+});
+
+describe('a new link, asked from sign-in (D301)', () => {
+  let app: App;
+  let passwordHash: string;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const { hashPassword } = await import('../src/http/password.js');
+    passwordHash = await hashPassword(PASSWORD);
+    app = buildApp();
+  });
+
+  const resend = (password = PASSWORD) =>
+    app.request('/auth/verify/resend', {
+      method: 'POST',
+      headers: HEADERS,
+      body: JSON.stringify({ email: 'noa@example.com', password }),
+    });
+
+  const unverified = () => ({
+    id: REQUESTER,
+    status: 'pending' as const,
+    password_hash: passwordHash,
+    session_version: 1,
+    email: 'noa@example.com',
+    email_verified: false,
+  });
+
+  it('mails a new link to an unverified request whose password is right', async () => {
+    vi.mocked(queries.getUserCredentialsByEmail).mockResolvedValue(unverified());
+    const response = await resend();
+    expect(response.status).toBe(200);
+    expect(mail.tokenSentTo('noa@example.com')).not.toBeNull();
+  });
+
+  it('answers a wrong password as a sign-in would, mailing nothing', async () => {
+    vi.mocked(queries.getUserCredentialsByEmail).mockResolvedValue(unverified());
+    const response = await resend('not the password at all');
+    expect(response.status).toBe(401);
+    expect(mail.sent).toEqual([]);
+  });
+
+  it('sends nothing to an account that is not waiting for a link', async () => {
+    vi.mocked(queries.getUserCredentialsByEmail).mockResolvedValue({ ...unverified(), status: 'active', email_verified: true });
+    const response = await resend();
+    expect(response.status).toBe(409);
+    expect(mail.sent).toEqual([]);
+  });
+
+  it('stops after a few links an hour', async () => {
+    vi.mocked(queries.getUserCredentialsByEmail).mockResolvedValue(unverified());
+    const { RATE_LIMITS } = await import('../src/http/rateLimits.js');
+    for (let i = 0; i < RATE_LIMITS.verificationResendPerAccount.points; i += 1) expect((await resend()).status).toBe(200);
+    expect((await resend()).status).toBe(429);
+    expect(mail.sent).toHaveLength(RATE_LIMITS.verificationResendPerAccount.points);
   });
 });
 

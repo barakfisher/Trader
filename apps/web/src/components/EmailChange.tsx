@@ -37,6 +37,8 @@ export const EmailChange = observer(function EmailChange() {
         return t('email.errors.tooLong', { max: EMAIL_MAX_LENGTH });
       case 'email_unchanged':
         return t('email.errors.unchanged');
+      case 'email_unavailable':
+        return t('email.errors.unavailable');
       case 'email_taken':
         return t('email.errors.taken');
       default:

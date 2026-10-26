@@ -7,7 +7,11 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD, MAX_AGENTS_PER_USER_CEILING } from '@traders/shared';
+import {
+  ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD,
+  DAILY_NEW_ACCOUNTS_CEILING,
+  MAX_AGENTS_PER_USER_CEILING,
+} from '@traders/shared';
 import { ACTIVE_SESSION, sessionCookie } from './session.js';
 
 const ADMIN = {
@@ -30,6 +34,7 @@ vi.mock('../src/db/pool.js', () => ({
 
 let stored = 3;
 let budget = 500_000;
+let mode = 'approval';
 
 vi.mock('../src/db/queries.js', () => ({
   getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
@@ -38,8 +43,15 @@ vi.mock('../src/db/queries.js', () => ({
   getInstallationSettings: vi.fn(async () => ({
     max_agents_per_user: stored,
     assistant_daily_budget_micro_usd: budget,
+    max_pending_signups: 5,
+    signup_mode: mode,
+    daily_new_accounts_limit: 20,
     updated_at: new Date('2026-10-08T09:00:00Z'),
   })),
+  setSignupMode: vi.fn(async (next: string) => {
+    mode = next;
+  }),
+  setDailyNewAccountsLimit: vi.fn(async () => undefined),
   setMaxAgentsPerUser: vi.fn(async (max: number) => {
     stored = max;
   }),
@@ -74,6 +86,7 @@ describe('the installation settings (D72)', () => {
     vi.mocked(queries.getUser).mockResolvedValue(ADMIN as never);
     stored = 3;
     budget = 500_000;
+    mode = 'approval';
     resetConfigForTests();
     app = createApp(loadConfig(ENV), createFakeAi());
     cookie = sessionCookie();
@@ -87,8 +100,34 @@ describe('the installation settings (D72)', () => {
     expect(await response.json()).toEqual({
       maxAgentsPerUser: 3,
       assistantDailyBudgetMicroUsd: 500_000,
+      maxPendingSignups: 5,
+      signupMode: 'approval',
+      dailyNewAccountsLimit: 20,
+      emailConfigured: false,
       updatedAt: '2026-10-08T09:00:00.000Z',
     });
+  });
+
+  it('changes the signup mode and the daily limit, within its ceiling (D243, D300)', async () => {
+    resetConfigForTests();
+    app = createApp(loadConfig({ ...ENV, SMTP_HOST: 'mailpit', EMAIL_FROM: 'Traders <no-reply@example.test>' }), createFakeAi());
+    const response = await put({ signupMode: 'automatic', dailyNewAccountsLimit: 40 });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ signupMode: 'automatic', emailConfigured: true });
+    expect(queries.setSignupMode).toHaveBeenCalledWith('automatic', ADMIN.id);
+    expect(queries.setDailyNewAccountsLimit).toHaveBeenCalledWith(40, ADMIN.id);
+    for (const value of [-1, DAILY_NEW_ACCOUNTS_CEILING + 1, 1.5]) {
+      expect((await put({ dailyNewAccountsLimit: value })).status, String(value)).toBe(400);
+    }
+    expect((await put({ signupMode: 'invite_only' })).status).toBe(400);
+  });
+
+  it('refuses *automatic* where no mail can be sent: nobody could prove an address (D259)', async () => {
+    const response = await put({ signupMode: 'automatic' });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ error: 'email_unavailable' });
+    expect(queries.setSignupMode).not.toHaveBeenCalled();
+    expect((await put({ signupMode: 'closed' })).status).toBe(200);
   });
 
   it('changes it, names the admin who did, and audits the request', async () => {

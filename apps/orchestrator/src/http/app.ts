@@ -21,6 +21,7 @@ import type { Config } from '../config.js';
 import { logger } from '../logger.js';
 import { SESSION_COOKIE, sessionTokenHash, verifySessionToken } from './auth.js';
 import { SESSION_TOUCH_INTERVAL_SECONDS } from './sessions.js';
+import { buildEmailSender, type EmailSender } from '../email/sender.js';
 import { memoryRateLimits, type RateLimits } from './rateLimits.js';
 import { getSessionUser, insertAdminAudit, type UserRow } from '../db/queries.js';
 import { auditEntry } from './adminAudit.js';
@@ -70,6 +71,8 @@ export interface AppEnv {
     scanQueue: ScanQueue | null;
     /** How often a caller may do what costs money or shared quota (D257). */
     rateLimits: RateLimits;
+    /** Outbound mail (D258); null where none can be sent, which closes sign-up. */
+    email: EmailSender | null;
   };
 }
 
@@ -130,7 +133,8 @@ export function isAdminPath(path: string): boolean {
  * without a bot token, and defaults to whatever the configuration describes -
  * which, with no token set, is a channel that declines with the reason.
  * `rateLimits` counts in memory unless given Redis's (`server.ts` does), so a
- * test never needs a Redis.
+ * test never needs a Redis. `email` is the configured sender; a test passes a
+ * recording one, so no test sends mail (D258).
  */
 export function createApp(
   config: Config,
@@ -138,6 +142,7 @@ export function createApp(
   notifier: Notifier = buildNotifier(config),
   scanQueue: ScanQueue | null = null,
   rateLimits: RateLimits = memoryRateLimits(),
+  email: EmailSender | null = buildEmailSender(config),
 ): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
@@ -149,6 +154,7 @@ export function createApp(
     context.set('notifier', notifier);
     context.set('scanQueue', scanQueue);
     context.set('rateLimits', rateLimits);
+    context.set('email', email);
     context.header('x-request-id', requestId);
     const startedAt = Date.now();
     await next();
