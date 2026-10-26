@@ -254,12 +254,24 @@ patches:
                     name: web
                     port:
                       name: http
+              # Mailpit's inbox (D307), so a verification link can be opened on the phone.
+              - path: /mailpit
+                pathType: Prefix
+                backend:
+                  service:
+                    name: mailpit
+                    port:
+                      name: http
 EOF
 fi
 
 say "Applying manifests for $IMAGE_TAG"
 # A Job cannot be edited after creation, and each deploy should run them again.
 kc delete job migrate corpus universe --ignore-not-found --wait=true > /dev/null 2>&1 || true
+# `apply` does not prune, so a CronJob renamed in cronjobs.yaml would keep
+# firing under its old name with a kind the orchestrator now refuses. Listed
+# here when a CronJob is renamed: run-session-sweep became run-auth-sweep (0074).
+kc delete cronjob run-session-sweep --ignore-not-found > /dev/null 2>&1 || true
 kubectl --context "$CONTEXT" apply -k "$DEPLOY_DIR"
 
 # --- 5. wait -----------------------------------------------------------------

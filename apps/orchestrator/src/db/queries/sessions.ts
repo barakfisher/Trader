@@ -127,7 +127,7 @@ export async function deleteOtherSessions(userId: string, keepSessionId: string)
   return row?.ended ?? 0;
 }
 
-/** The installation's sweep (`session_sweep`): every expired row, whoever's; how many. */
+/** The installation's sweep (`auth_sweep`): every expired row, whoever's; how many. */
 export async function deleteExpiredSessions(): Promise<number> {
   const row = await queryOne<{ deleted: number }>(
     `WITH gone AS (

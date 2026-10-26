@@ -1,0 +1,51 @@
+# A mail catcher for this machine's cluster (D307): the orchestrator's SMTP
+# points here, so every message - verification links included - lands in
+# Mailpit's inbox and nowhere else. Read it at http://traders.localhost/mailpit/
+# or, on the phone, https://<tailnet name>/mailpit/ (scripts/k8s-up.sh adds the
+# path to the Tailscale host).
+#
+# Here in the kind overlay, never in the base: a public deployment (PR 16)
+# points SMTP at the real provider and must not carry an inbox of every mail
+# the app sent. Nothing is kept across restarts - an in-memory inbox is enough
+# for clicking a link.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mailpit
+  template:
+    metadata:
+      labels:
+        app: mailpit
+    spec:
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:v1.31.6
+          env:
+            # Served under a path, so it can share the app's hosts.
+            - name: MP_WEBROOT
+              value: /mailpit/
+          ports:
+            - { name: http, containerPort: 8025 }
+            - { name: smtp, containerPort: 1025 }
+          # Ready once it accepts mail: what the orchestrator needs of it.
+          readinessProbe:
+            tcpSocket: { port: smtp }
+          resources:
+            requests: { cpu: 10m, memory: 24Mi }
+            limits: { memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit
+spec:
+  selector:
+    app: mailpit
+  ports:
+    - { name: http, port: 8025, targetPort: http }
+    - { name: smtp, port: 1025, targetPort: smtp }

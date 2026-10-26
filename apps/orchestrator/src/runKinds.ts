@@ -24,8 +24,8 @@ export const INSTALLATION_KINDS: ReadonlySet<string> = new Set([
   'news_collect',
   'instrument_metadata',
   'proposal_sweep',
-  // Deletes expired sessions, whoever's (D261).
-  'session_sweep',
+  // Deletes expired sessions and links and unverified sign-ups past their window, whoever's (D261, D304).
+  'auth_sweep',
   'agent_scans',
   RESCREEN_KIND,
 ]);

@@ -50,6 +50,7 @@ const USER: SessionUser = {
   role: 'user',
   language: 'en',
   mustChangePassword: false,
+  pendingEmail: null,
 };
 
 function type(label: string, value: string) {
@@ -129,8 +130,8 @@ describe('asking to join (D156, D185, D187)', () => {
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     expect(screen.getByText(zone)).toBeTruthy();
     fill(' noa@example.com ', 'a long enough passphrase');
-    expect(await screen.findByText('Request received')).toBeTruthy();
-    expect(screen.getByText(/You can sign in once they approve/)).toBeTruthy();
+    expect(await screen.findByText('Check your email')).toBeTruthy();
+    expect(screen.getByText(/Open its link to confirm the address/)).toBeTruthy();
     expect(post).toHaveBeenCalledWith('/auth/signup', {
       email: 'noa@example.com',
       password: 'a long enough passphrase',
@@ -201,22 +202,23 @@ describe('changing the email', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('sends the normalised address and the password, and shows the new one', async () => {
-    post.mockResolvedValue({ ...USER, email: 'dana.levi@example.com' });
+  it('sends the normalised address and the password, and keeps the current one until the link is opened (D259)', async () => {
+    post.mockResolvedValue({ ...USER, pendingEmail: 'dana.levi@example.com' });
     const { root } = renderSignedIn();
     fill('  Dana.Levi@Example.com ', 'current password');
-    expect(await screen.findByText(/Email changed/)).toBeTruthy();
+    expect(await screen.findByText(/Check the new address/)).toBeTruthy();
     expect(post).toHaveBeenCalledWith('/auth/email', {
       email: 'dana.levi@example.com',
       currentPassword: 'current password',
     });
-    expect(root.auth.user?.email).toBe('dana.levi@example.com');
-    expect(screen.getByText('dana.levi@example.com')).toBeTruthy();
+    expect(root.auth.user?.email).toBe('dana@example.com');
+    expect(root.auth.user?.pendingEmail).toBe('dana.levi@example.com');
   });
 
   it.each([
     ['incorrect_password', 403, 'The current password is not right.'],
     ['email_taken', 409, 'Another account already uses this address.'],
+    ['email_unavailable', 503, 'This installation cannot send email, so the address cannot be changed.'],
   ])('says %s in the reader\'s words', async (code, status, sentence) => {
     post.mockRejectedValue(new ApiRequestError('refused', status, code));
     renderSignedIn();

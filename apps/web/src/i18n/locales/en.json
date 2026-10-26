@@ -34,24 +34,63 @@
       "notActive": "This account is not active. Ask the installation's admin.",
       "pending": "Your request is waiting for the admin's approval."
     },
-    "askToJoin": "New here? Ask to join"
+    "askToJoin": "New here? Ask to join",
+    "unverified": "Confirm your email first: open the link we sent to",
+    "resend": "Send the link again",
+    "resending": "Sending…",
+    "resent": "Sent. Check your inbox, and the spam folder.",
+    "resendFailed": "Could not send the link. Try again in a few minutes."
   },
   "signup": {
     "title": "Ask to join",
-    "intro": "The installation's admin approves every new account.",
+    "intro": "Confirm your email to finish. Depending on this installation, you get in at once or the admin approves you.",
     "repeat": "Password, again",
     "timezone": "Time zone, from this browser:",
     "submit": "Ask to join",
     "submitting": "Sending…",
-    "receivedTitle": "Request received",
-    "received": "The admin will review it. You can sign in once they approve - try again later, or ask them.",
+    "receivedTitle": "Check your email",
+    "received": "We sent a message to the address you entered. Open its link to confirm the address - it works for 24 hours. Nothing arrived? Check your spam folder, or sign in to send the link again.",
     "closedTitle": "Sign-up is closed right now",
-    "closed": "Too many requests are already waiting. Ask the installation's admin.",
+    "closed": "New accounts are not being accepted right now. Ask the installation's admin.",
     "backToSignIn": "Back to sign in",
     "errors": {
       "mismatch": "The two passwords are different.",
       "timezoneInvalid": "This browser's time zone ({{zone}}) is not one the app knows.",
       "failed": "Could not send the request."
+    }
+  },
+  "verify": {
+    "checking": "Checking the link…",
+    "failed": "Could not check the link. Check your connection and try again.",
+    "toSignIn": "Go to sign in",
+    "continue": "Continue",
+    "activated": {
+      "title": "Email confirmed",
+      "body": "Your account is ready. Sign in with your email and password."
+    },
+    "awaiting_approval": {
+      "title": "Email confirmed",
+      "body": "Your request is with the installation's admin. You can sign in once they approve it."
+    },
+    "email_changed": {
+      "title": "New address confirmed",
+      "body": "Sign in with your new address from now on. Every other device was signed out."
+    },
+    "email_taken": {
+      "title": "Address already in use",
+      "body": "Another account started using this address after you asked. Your sign-in address has not changed."
+    },
+    "expired": {
+      "title": "This link has expired",
+      "body": "Links work for 24 hours. Sign in with your email and password to get a new one."
+    },
+    "used": {
+      "title": "This link was already used",
+      "body": "Nothing more to do here. Sign in with your email and password."
+    },
+    "invalid": {
+      "title": "This link does not work",
+      "body": "It may be incomplete, or a newer link replaced it. Sign in to get a new one."
     }
   },
   "password": {
@@ -83,17 +122,19 @@
     "none": "no email yet",
     "new": "New email",
     "password": "Current password",
-    "note": "Nothing is sent to the new address: check it before saving. Every other device you are signed in on is signed out.",
+    "note": "We send a link to the new address. Until you open it, you keep signing in with the current one; opening it signs out every other device.",
     "save": "Change email",
     "saving": "Changing…",
-    "changed": "Email changed. Sign in with the new address from now on.",
+    "changed": "Check the new address: we sent it a link. Until you open it, you sign in with the current address.",
+    "pending": "Waiting for confirmation:",
     "errors": {
       "incorrect": "The current password is not right.",
       "invalid": "That is not an email address.",
       "tooLong": "An email address can have at most {{max}} characters.",
       "unchanged": "That is already your email.",
       "taken": "Another account already uses this address.",
-      "failed": "Could not change the email."
+      "failed": "Could not change the email.",
+      "unavailable": "This installation cannot send email, so the address cannot be changed."
     }
   },
   "api": {
@@ -1328,10 +1369,27 @@
     },
     "signupSettings": {
       "title": "Sign-up",
-      "max": "Requests that may wait at once",
+      "noEmail": "This installation cannot send email (SMTP_HOST and EMAIL_FROM are not set), so no address can be confirmed and nobody can sign up.",
+      "mode": "Who can get in",
+      "modes": {
+        "automatic": {
+          "label": "Automatic",
+          "hint": "Anyone who confirms their email gets in, up to the daily limit; beyond it they wait for you."
+        },
+        "approval": {
+          "label": "Approval",
+          "hint": "You approve each request, once its email is confirmed."
+        },
+        "closed": {
+          "label": "Closed",
+          "hint": "No new requests."
+        }
+      },
+      "daily": "New accounts a day (automatic)",
+      "max": "Confirmed requests that may wait",
       "save": "Save",
       "saved": "Saved",
-      "hint": "Up to {{max}} requests may wait; 0 closes sign-up. Approved users run on their own OpenRouter key."
+      "hint": "Up to {{daily}} new accounts a day and {{max}} waiting requests. Approved users run on their own OpenRouter key."
     },
     "users": {
       "title": "Users",
