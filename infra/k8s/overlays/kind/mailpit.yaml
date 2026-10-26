@@ -1,0 +1,48 @@
+# A mail catcher for this machine's cluster (D307): the orchestrator's SMTP
+# points here, so every message - verification links included - lands in
+# Mailpit's inbox and nowhere else. Read it at http://mailpit.localhost, on
+# this Mac only (D311): a host of its own, so it never shares the app's origin
+# or cookie, and never on the Tailscale name, where every device on the tailnet
+# could read reset links.
+#
+# Here in the kind overlay, never in the base: a public deployment (PR 16)
+# points SMTP at the real provider and must not carry an inbox of every mail
+# the app sent. Nothing is kept across restarts - an in-memory inbox is enough
+# for clicking a link.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mailpit
+  template:
+    metadata:
+      labels:
+        app: mailpit
+    spec:
+      containers:
+        - name: mailpit
+          image: axllent/mailpit:v1.31.6
+          ports:
+            - { name: http, containerPort: 8025 }
+            - { name: smtp, containerPort: 1025 }
+          # Ready once it accepts mail: what the orchestrator needs of it.
+          readinessProbe:
+            tcpSocket: { port: smtp }
+          resources:
+            requests: { cpu: 10m, memory: 24Mi }
+            limits: { memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit
+spec:
+  selector:
+    app: mailpit
+  ports:
+    - { name: http, port: 8025, targetPort: http }
+    - { name: smtp, port: 1025, targetPort: smtp }

@@ -101,6 +101,8 @@ wait_for_http "http://127.0.0.1:${WEB_HOST_PORT:-5173}/" 60 "web"
 echo
 "${COMPOSE[@]}" ps --format 'table {{.Service}}\t{{.Status}}\t{{.Ports}}'
 print_urls
+# Every mail the app sends lands in Mailpit (D307) unless .env names a real server.
+printf '%s  Mail        %shttp://127.0.0.1:%s (verification links)\n\n' "$C_BOLD" "$C_RESET" "${MAILPIT_HOST_PORT:-8025}"
 warn_if_backup_stale compose
 say "Stop with: bash scripts/dev-docker.sh --stop"
 

@@ -1,3 +1,5 @@
+import type { SignupMode } from '@traders/shared';
+
 import { query, queryOne } from '../pool.js';
 
 /**
@@ -12,8 +14,12 @@ export interface InstallationSettingsRow {
   /** Migration 0058: the cap an approval offers (D157). Under 1e9 by its CHECK. */
   /** The retired monthly cap (D279): written at approval to satisfy its CHECK, read by nothing. */
   default_llm_cap_micro_usd: number;
-  /** Migration 0058: waiting sign-up requests allowed at once (D156); 0 closes sign-up. */
+  /** Migration 0058: verified sign-up requests allowed to wait at once (D156, D259); 0 closes approval. */
   max_pending_signups: number;
+  /** Migration 0074: how strangers get in (D243). */
+  signup_mode: SignupMode;
+  /** Migration 0074: new accounts *automatic* lets in a day, in the installation's clock (D305). */
+  daily_new_accounts_limit: number;
   updated_at: Date;
 }
 
@@ -21,7 +27,7 @@ export async function getInstallationSettings(): Promise<InstallationSettingsRow
   const row = await queryOne<InstallationSettingsRow>(
     `SELECT max_agents_per_user, assistant_daily_budget_micro_usd::int AS assistant_daily_budget_micro_usd,
             default_llm_cap_micro_usd::int AS default_llm_cap_micro_usd, max_pending_signups,
-            updated_at
+            signup_mode, daily_new_accounts_limit, updated_at
        FROM installation_settings`,
   );
   if (row === null) throw new Error('installation_settings has no row: is the schema at 0047?');
@@ -49,5 +55,21 @@ export async function setMaxPendingSignups(max: number, adminUserId: string): Pr
   await query(
     `UPDATE installation_settings SET max_pending_signups = $1, updated_by = $2, updated_at = now()`,
     [max, adminUserId],
+  );
+}
+
+/** How strangers get in (D243); the caller refuses *automatic* where no mail can be sent. */
+export async function setSignupMode(mode: SignupMode, adminUserId: string): Promise<void> {
+  await query(
+    `UPDATE installation_settings SET signup_mode = $1, updated_by = $2, updated_at = now()`,
+    [mode, adminUserId],
+  );
+}
+
+/** How many new accounts *automatic* lets in a day (D305); a lower limit removes none. */
+export async function setDailyNewAccountsLimit(limit: number, adminUserId: string): Promise<void> {
+  await query(
+    `UPDATE installation_settings SET daily_new_accounts_limit = $1, updated_by = $2, updated_at = now()`,
+    [limit, adminUserId],
   );
 }

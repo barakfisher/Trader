@@ -131,6 +131,33 @@ const schema = z.object({
   WEB_BASE_URL: optionalSetting(),
 
   /**
+   * Outbound mail (D258): an SMTP server and the address mail comes from. The
+   * provider is configuration - changing it changes these, never code. Unset
+   * `SMTP_HOST` or `EMAIL_FROM` means no mail can be sent, so no address can be
+   * verified and nobody can sign up (D259); the Admin page says so. Compose and
+   * kind point at Mailpit, which keeps every message on this machine (D307).
+   */
+  SMTP_HOST: optionalSetting(),
+  SMTP_PORT: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.coerce.number().int().min(1).max(65535).default(587),
+  ),
+  /** Both or neither; a local catcher needs none. */
+  SMTP_USER: optionalSetting(),
+  SMTP_PASSWORD: optionalSetting(),
+  /**
+   * TLS from the first byte (port 465). Otherwise the connection is upgraded
+   * with STARTTLS when the server offers it, and a server that does not is
+   * accepted only because Mailpit on this machine does not.
+   */
+  SMTP_SECURE: z.preprocess(
+    (value) => (value === '' || value === undefined ? undefined : value === 'true'),
+    z.boolean().default(false),
+  ),
+  /** The From line, e.g. `Traders <no-reply@example.com>`, on the domain with SPF and DKIM (D258). */
+  EMAIL_FROM: optionalSetting(),
+
+  /**
    * How taps and commands reach this service. `polling` pulls them with
    * `getUpdates` and is the default, because the webhook needs a public HTTPS
    * URL that no installation has until M7's ingress. `webhook` once one is
@@ -179,6 +206,8 @@ const schema = z.object({
 export type Config = z.infer<typeof schema> & {
   allowedOrigins: string[];
   isProduction: boolean;
+  /** `SMTP_HOST` and `EMAIL_FROM` are both set (D258): mail can be sent. */
+  emailConfigured: boolean;
 };
 
 let cached: Config | null = null;
@@ -198,6 +227,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       .map((origin) => origin.trim())
       .filter(Boolean),
     isProduction: parsed.data.APP_ENV === 'production',
+    emailConfigured: parsed.data.SMTP_HOST !== undefined && parsed.data.EMAIL_FROM !== undefined,
   };
   return cached;
 }

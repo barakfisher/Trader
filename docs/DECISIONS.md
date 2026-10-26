@@ -313,3 +313,12 @@ while this file is out of date.
 | 300 | The database owner's password has a file and a Secret of its own |
 | 301 | The mandate's universe rules are checked again at approval too, and warn the same way |
 | 302 | An account holds at most four sessions; signing in past that ends the oldest |
+| 303 | Signing up with an address that already has an account mails its owner |
+| 304 | How PR 10 builds D259 |
+| 305 | Automatic signup has a daily limit, default 20; past it a verified sign-up waits for the admin |
+| 306 | A new verification link is asked for from sign-in, with the password |
+| 307 | Mailpit catches all mail in compose and kind; it is never part of a public deployment |
+| 308 | The public host sends mail through Resend, over SMTP |
+| 309 | A sign-up's link is opened with the sign-up's password; signing up again on an unverified request replaces it |
+| 310 | An address change's link needs the account's password too, and the second review's other findings |
+| 311 | Kind's Mailpit is served at `mailpit.localhost`, this Mac only |

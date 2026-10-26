@@ -59,8 +59,12 @@ export const RATE_LIMITS = {
   loginFailuresPerAddress: { points: 50, durationSeconds: HOUR },
   /** Requests to join from one address. */
   signupPerAddress: { points: 5, durationSeconds: HOUR },
-  /** Requests to join with one email: each new one messages the admin. */
+  /** Requests to join with one email: each sends that address a mail (D303). */
   signupPerEmail: { points: 3, durationSeconds: HOUR },
+  /** New verification links for one account, asked from sign-in (D306): each is a mail. */
+  verificationResendPerAccount: { points: 3, durationSeconds: HOUR },
+  /** Address changes asked for by one user: each mails the new address and the old (D259). */
+  emailChangePerUser: { points: 5, durationSeconds: HOUR },
   /** *Run a scan now*: three active agents, each a few times an hour. */
   agentScan: { points: 10, durationSeconds: HOUR },
   /** Questions to the assistant, on the Ask page and in Telegram together. */
@@ -84,7 +88,11 @@ export type RateLimitScope = keyof typeof RATE_LIMITS;
 /** The scopes keyed per signed-in user. */
 export type UserRateLimitScope = Exclude<
   RateLimitScope,
-  'loginFailuresPerAccount' | 'loginFailuresPerAddress' | 'signupPerAddress' | 'signupPerEmail'
+  | 'loginFailuresPerAccount'
+  | 'loginFailuresPerAddress'
+  | 'signupPerAddress'
+  | 'signupPerEmail'
+  | 'verificationResendPerAccount'
 >;
 
 /** Redis keys start with this, then the scope: `rate:agentScan:user:<id>`. */

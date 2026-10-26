@@ -13,19 +13,30 @@ import type { UserStatus } from './users.js';
  */
 
 export type SignupCreation =
+  /** A new request, unverified: its link goes to the address (D259). */
   | { outcome: 'created'; userId: string }
-  /** The email is already a request or an account: nothing written, nobody told (D185). */
-  | { outcome: 'exists' }
-  /** The installation's limit on waiting requests is reached (D156). */
+  /**
+   * The email is already a request or an account: nothing written. The address
+   * is told by mail either way (D303) - a new link if it is a request still
+   * waiting for one, otherwise "someone tried to sign up".
+   */
+  | { outcome: 'exists'; userId: string; status: UserStatus; verified: boolean; language: string }
+  /** Sign-up is closed, or approval's limit on verified waiting requests is reached (D156, D243). */
   | { outcome: 'closed' };
 
 /**
- * Write a request, with its settings row in the request's language, in one
- * statement. The limit is read in the same statement, so a request cannot slip
- * in after the count; two submitted in the same instant can still both pass it,
- * which overshoots a household-sized limit by one and costs one extra message.
- * `ON CONFLICT` on `lower(email)` makes "one request per email" the unique
- * index's decision, not a SELECT's.
+ * Write a request, unverified, with its settings row in the request's
+ * language, in one statement. Sign-up is open unless the mode is `closed`, or
+ * it is `approval` with the limit on *verified* waiting requests reached:
+ * unverified requests do not count (D259), so addresses nobody opens cannot
+ * fill the admin's queue - the rate limits bound how fast they arrive, and the
+ * sweep removes them. `ON CONFLICT` on `lower(email)` makes "one request per
+ * email" the unique index's decision, not a SELECT's.
+ *
+ * A request still waiting for its link takes the new password and zone, and
+ * its 7 days before the sweep start again with its new link (D309): whoever signed up first chose the password, and the link checks it,
+ * so the address's owner signing up again is what the link then expects. A
+ * verified request or an account is never touched.
  */
 export async function createSignupRequest(input: {
   email: string;
@@ -33,26 +44,57 @@ export async function createSignupRequest(input: {
   timezone: string;
   language: string;
 }): Promise<SignupCreation> {
-  const row = await queryOne<{ open: boolean; user_id: string | null }>(
+  const row = await queryOne<{
+    open: boolean;
+    user_id: string | null;
+    existing_id: string | null;
+    existing_status: UserStatus | null;
+    existing_verified: boolean | null;
+    existing_language: string | null;
+  }>(
     `WITH limits AS (
-       SELECT s.max_pending_signups > (SELECT count(*) FROM users WHERE status = 'pending') AS open
+       SELECT s.signup_mode <> 'closed'
+              AND (s.signup_mode = 'automatic'
+                   OR s.max_pending_signups > (SELECT count(*) FROM users
+                                                WHERE status = 'pending' AND email_verified_at IS NOT NULL)) AS open
          FROM installation_settings s
      ), inserted AS (
        INSERT INTO users (email, password_hash, timezone, status)
        SELECT $1, $2, $3, 'pending' FROM limits WHERE open
-       ON CONFLICT ((lower(email))) DO NOTHING
-       RETURNING id
+       ON CONFLICT ((lower(email))) DO UPDATE
+          SET password_hash = EXCLUDED.password_hash, timezone = EXCLUDED.timezone, created_at = now()
+        WHERE users.status = 'pending' AND users.email_verified_at IS NULL
+       -- xmax is 0 only on a row this statement inserted, not one it updated.
+       RETURNING id, xmax = 0 AS created
      ), settings AS (
        INSERT INTO user_settings (user_id, language)
-       SELECT id, $4 FROM inserted
+       SELECT id, $4 FROM inserted WHERE created
        RETURNING user_id
+     ), existing AS (
+       SELECT u.id, u.status, u.email_verified_at IS NOT NULL AS verified, coalesce(us.language, 'en') AS language
+         FROM users u LEFT JOIN user_settings us ON us.user_id = u.id
+        WHERE lower(u.email) = lower($1)
      )
      SELECT coalesce((SELECT open FROM limits), false) AS open,
-            (SELECT user_id FROM settings) AS user_id`,
+            (SELECT user_id FROM settings) AS user_id,
+            (SELECT id FROM existing) AS existing_id,
+            (SELECT status FROM existing) AS existing_status,
+            (SELECT verified FROM existing) AS existing_verified,
+            (SELECT language FROM existing) AS existing_language`,
     [input.email, input.passwordHash, input.timezone, input.language],
   );
   if (!row?.open) return { outcome: 'closed' };
-  return row.user_id === null ? { outcome: 'exists' } : { outcome: 'created', userId: row.user_id };
+  if (row.user_id !== null) return { outcome: 'created', userId: row.user_id };
+  // The statement's snapshot sees the existing row; a row inserted by a racing
+  // request is invisible to it, and that request mails the address itself.
+  if (row.existing_id === null) return { outcome: 'closed' };
+  return {
+    outcome: 'exists',
+    userId: row.existing_id,
+    status: row.existing_status!,
+    verified: row.existing_verified ?? false,
+    language: row.existing_language ?? 'en',
+  };
 }
 
 export interface SignupRequestRow {
@@ -68,7 +110,7 @@ const REQUEST_COLUMNS = 'id AS user_id, email, timezone, status, created_at';
 /** How many rejected requests the Admin page lists; older ones stay in the table. */
 export const REJECTED_SIGNUPS_LIMIT = 50;
 
-/** Waiting requests oldest first - the order they asked in - then recent rejections. */
+/** Verified waiting requests oldest first - the order they asked in - then recent rejections (D259). */
 export async function listSignupRequests(): Promise<{
   pending: SignupRequestRow[];
   rejected: SignupRequestRow[];
@@ -76,7 +118,8 @@ export async function listSignupRequests(): Promise<{
   const [pending, rejected] = await Promise.all([
     query<SignupRequestRow>(
       `SELECT ${REQUEST_COLUMNS} FROM users
-        WHERE status = 'pending' AND role = 'user' ORDER BY created_at, id`,
+        WHERE status = 'pending' AND role = 'user' AND email_verified_at IS NOT NULL
+        ORDER BY created_at, id`,
     ),
     query<SignupRequestRow>(
       `SELECT ${REQUEST_COLUMNS} FROM users
@@ -87,10 +130,11 @@ export async function listSignupRequests(): Promise<{
   return { pending, rejected };
 }
 
-/** The count on the Admin link (D188). */
+/** The count on the Admin link (D188): verified requests only - the admin never sees an unverified one (D259). */
 export function countPendingSignups(): Promise<number> {
   return queryOne<{ count: number }>(
-    `SELECT count(*)::int AS count FROM users WHERE status = 'pending' AND role = 'user'`,
+    `SELECT count(*)::int AS count FROM users
+      WHERE status = 'pending' AND role = 'user' AND email_verified_at IS NOT NULL`,
   ).then((row) => row?.count ?? 0);
 }
 
@@ -137,7 +181,7 @@ export async function approveSignup(
   const row = await queryOne<{ email: string | null }>(
     `UPDATE users
         SET status = 'active', llm_cap_micro_usd = $2, approved_at = now(), approved_by = $3
-      WHERE id = $1 AND status = 'pending' AND role = 'user'
+      WHERE id = $1 AND status = 'pending' AND role = 'user' AND email_verified_at IS NOT NULL
   RETURNING email`,
     [userId, llmCapMicroUsd, adminUserId],
   );

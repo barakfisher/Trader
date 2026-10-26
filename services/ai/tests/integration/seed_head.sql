@@ -367,4 +367,16 @@ INSERT INTO user_sessions (user_id, token_hash, created_at, last_seen_at, expire
   ('00000000-0000-0000-0000-00000000000c', sha256('seed-session-expired'), '2026-10-01T00:00:00Z', '2026-10-01T00:00:00Z', '2026-10-08T00:00:00Z',
    NULL, NULL);
 INSERT INTO runs (id, kind, run_key, status) VALUES
-  ('20000000-0000-0000-0000-0000000000a8', 'session_sweep', 'session_sweep:seed:2026-10-24', 'ok');
+  ('20000000-0000-0000-0000-0000000000a8', 'session_sweep', 'session_sweep:seed:2026-10-24', 'ok'),
+  ('20000000-0000-0000-0000-0000000000a9', 'auth_sweep', 'auth_sweep:seed:2026-10-25', 'ok');
+-- Email verification (0074, D259, D260): a link of every purpose - one used,
+-- one expired - an unverified request, a change waiting for its link, and an
+-- installation that is closed with a non-zero waiting limit, which 0074's
+-- downgrade must keep closed.
+UPDATE users SET pending_email = 'new-b@example.test' WHERE id = '00000000-0000-0000-0000-00000000000b';
+UPDATE users SET approved_automatically = true WHERE id = '00000000-0000-0000-0000-00000000000c';
+INSERT INTO auth_tokens (user_id, purpose, token_hash, email, created_at, expires_at, used_at) VALUES
+  ('00000000-0000-0000-0000-00000000000d', 'verify_email', sha256('seed-token-verify'), 'pending@example.test', now(), now() + interval '1 day', NULL),
+  ('00000000-0000-0000-0000-00000000000b', 'verify_new_email', sha256('seed-token-new-email'), 'new-b@example.test', now() - interval '2 hours', now() - interval '1 hour', NULL),
+  ('00000000-0000-0000-0000-00000000000c', 'reset_password', sha256('seed-token-reset'), 'c@example.test', now() - interval '1 hour', now() + interval '1 hour', now());
+UPDATE installation_settings SET signup_mode = 'closed', max_pending_signups = 5;

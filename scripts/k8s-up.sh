@@ -260,6 +260,10 @@ fi
 say "Applying manifests for $IMAGE_TAG"
 # A Job cannot be edited after creation, and each deploy should run them again.
 kc delete job migrate corpus universe --ignore-not-found --wait=true > /dev/null 2>&1 || true
+# `apply` does not prune, so a CronJob renamed in cronjobs.yaml would keep
+# firing under its old name with a kind the orchestrator now refuses. Listed
+# here when a CronJob is renamed: run-session-sweep became run-auth-sweep (0074).
+kc delete cronjob run-session-sweep --ignore-not-found > /dev/null 2>&1 || true
 kubectl --context "$CONTEXT" apply -k "$DEPLOY_DIR"
 
 # --- 5. wait -----------------------------------------------------------------
@@ -315,6 +319,7 @@ say "Cluster state"
 kc get pods
 echo
 ok "Traders is running in the cluster: http://traders.localhost"
+echo "     mail it sent (Mailpit, this Mac only): http://mailpit.localhost"
 if [ -n "$TAILNET_HOST" ] && [ "$TAILNET_HOST" != "none" ]; then
   echo "     on your phone (Tailscale): https://$TAILNET_HOST"
   # `serve` is set once and kept across restarts; say so if it never was.

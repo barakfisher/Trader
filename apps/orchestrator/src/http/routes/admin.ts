@@ -28,6 +28,8 @@ import {
   ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD,
   MAX_AGENTS_PER_USER_CEILING,
   MAX_PENDING_SIGNUPS_CEILING,
+  SIGNUP_MODES,
+  DAILY_NEW_ACCOUNTS_CEILING,
   type RescreenStartResponse,
   type UniverseGapsResponse,
 } from '@traders/shared';
@@ -52,6 +54,8 @@ import {
   setAssistantDailyBudget,
   setMaxAgentsPerUser,
   setMaxPendingSignups,
+  setSignupMode,
+  setDailyNewAccountsLimit,
   getLatestUniverseLoad,
   groupLlmCalls,
   listAdminAudit,
@@ -94,16 +98,21 @@ const settingsSchema = z
       .max(ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD)
       .optional(),
     maxPendingSignups: z.number().int().min(0).max(MAX_PENDING_SIGNUPS_CEILING).optional(),
+    signupMode: z.enum(SIGNUP_MODES).optional(),
+    dailyNewAccountsLimit: z.number().int().min(0).max(DAILY_NEW_ACCOUNTS_CEILING).optional(),
   })
   .strict()
   .refine((input) => Object.keys(input).length > 0, { message: 'name at least one setting' });
 
-async function adminSettings(): Promise<AdminSettingsResponse> {
+async function adminSettings(emailConfigured: boolean): Promise<AdminSettingsResponse> {
   const row = await getInstallationSettings();
   return {
     maxAgentsPerUser: row.max_agents_per_user,
     assistantDailyBudgetMicroUsd: row.assistant_daily_budget_micro_usd,
     maxPendingSignups: row.max_pending_signups,
+    signupMode: row.signup_mode,
+    dailyNewAccountsLimit: row.daily_new_accounts_limit,
+    emailConfigured,
     updatedAt: row.updated_at.toISOString(),
   };
 }
@@ -380,7 +389,9 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
   );
 
   /** The installation's settings (D72). */
-  app.get('/admin/settings', async (context) => context.json(await adminSettings()));
+  app.get('/admin/settings', async (context) =>
+    context.json(await adminSettings(context.get('config').emailConfigured)),
+  );
 
   /**
    * Change them. Audited by the gate before this runs (decision 84). A lower
@@ -393,7 +404,8 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
         'invalid_body',
         `expected { maxAgentsPerUser?: 1-${MAX_AGENTS_PER_USER_CEILING}, ` +
           `assistantDailyBudgetMicroUsd?: 0-${ASSISTANT_DAILY_BUDGET_CEILING_MICRO_USD}, ` +
-          `maxPendingSignups?: 0-${MAX_PENDING_SIGNUPS_CEILING} }`,
+          `maxPendingSignups?: 0-${MAX_PENDING_SIGNUPS_CEILING}, signupMode?: ${SIGNUP_MODES.join(' | ')}, ` +
+          `dailyNewAccountsLimit?: 0-${DAILY_NEW_ACCOUNTS_CEILING} }`,
         parsed.error.issues,
       );
     }
@@ -403,7 +415,17 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
       await setAssistantDailyBudget(parsed.data.assistantDailyBudgetMicroUsd, admin);
     }
     if (parsed.data.maxPendingSignups !== undefined) await setMaxPendingSignups(parsed.data.maxPendingSignups, admin);
-    return context.json(await adminSettings());
+    if (parsed.data.signupMode !== undefined) {
+      // *Automatic* lets people in by their verified address: with no mail, nobody could ever arrive (D259).
+      if (parsed.data.signupMode === 'automatic' && !context.get('config').emailConfigured) {
+        throw unprocessable('email_unavailable', 'automatic sign-up needs outbound mail (SMTP_HOST and EMAIL_FROM)');
+      }
+      await setSignupMode(parsed.data.signupMode, admin);
+    }
+    if (parsed.data.dailyNewAccountsLimit !== undefined) {
+      await setDailyNewAccountsLimit(parsed.data.dailyNewAccountsLimit, admin);
+    }
+    return context.json(await adminSettings(context.get('config').emailConfigured));
   });
 
   /**

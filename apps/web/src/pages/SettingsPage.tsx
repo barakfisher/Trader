@@ -373,6 +373,14 @@ const SignInCard = observer(function SignInCard() {
           <span className="text-text-muted">{t('email.none')}</span>
         )}
       </p>
+      {auth.user?.pendingEmail && (
+        <p className="mb-3 text-sm text-text-muted">
+          {t('email.pending')}{' '}
+          <bdi dir="ltr" className="font-medium text-text-primary">
+            {auth.user.pendingEmail}
+          </bdi>
+        </p>
+      )}
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" onClick={() => setOpen('email')}>
           <span className="flex items-center gap-1">

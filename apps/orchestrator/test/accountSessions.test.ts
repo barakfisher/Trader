@@ -39,6 +39,8 @@ vi.mock('../src/db/queries.js', () => ({
   deleteSession: vi.fn(),
   deleteOtherSessions: vi.fn(),
   deleteExpiredSessions: vi.fn(),
+  deleteExpiredAuthTokens: vi.fn(),
+  deleteStaleUnverifiedSignups: vi.fn(),
   claimRun: vi.fn(async () => ({ claimed: true, runId: 'run-1' })),
   finishRun: vi.fn(async () => undefined),
   insertAdminAudit: vi.fn(),
@@ -48,6 +50,7 @@ const { createApp } = await import('../src/http/app.js');
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
 const { describeSession } = await import('../src/http/sessions.js');
 const { INSTALLATION_KINDS } = await import('../src/runKinds.js');
+const { AUTH_TOKEN_RETENTION_DAYS, UNVERIFIED_SIGNUP_DAYS } = await import('../src/http/linkTokens.js');
 const queries = await import('../src/db/queries.js');
 const { createFakeAi } = await import('./fakeAi.js');
 
@@ -232,22 +235,26 @@ describe('signing out every other device (D296)', () => {
   });
 });
 
-describe('the session sweep (D261)', () => {
+describe('the auth sweep (D261, D304)', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("is the installation's run, for nobody", () => {
-    expect(INSTALLATION_KINDS.has('session_sweep')).toBe(true);
+    expect(INSTALLATION_KINDS.has('auth_sweep')).toBe(true);
   });
 
-  it('deletes expired sessions and records how many', async () => {
+  it('deletes expired sessions and links and stale unverified sign-ups, and records how many of each', async () => {
     vi.mocked(queries.deleteExpiredSessions).mockResolvedValue(3);
+    vi.mocked(queries.deleteExpiredAuthTokens).mockResolvedValue(2);
+    vi.mocked(queries.deleteStaleUnverifiedSignups).mockResolvedValue(1);
     const response = await buildApp().request('/internal/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
-      body: JSON.stringify({ kind: 'session_sweep', trigger: 'test' }),
+      body: JSON.stringify({ kind: 'auth_sweep', trigger: 'test' }),
     });
     expect(response.status).toBe(200);
-    expect(queries.claimRun).toHaveBeenCalledWith(expect.objectContaining({ kind: 'session_sweep', userId: null }));
-    expect(queries.finishRun).toHaveBeenCalledWith('run-1', 'ok', { deleted: 3 });
+    expect(queries.claimRun).toHaveBeenCalledWith(expect.objectContaining({ kind: 'auth_sweep', userId: null }));
+    expect(queries.finishRun).toHaveBeenCalledWith('run-1', 'ok', { sessions: 3, tokens: 2, unverifiedSignups: 1 });
+    expect(queries.deleteExpiredAuthTokens).toHaveBeenCalledWith(AUTH_TOKEN_RETENTION_DAYS);
+    expect(queries.deleteStaleUnverifiedSignups).toHaveBeenCalledWith(UNVERIFIED_SIGNUP_DAYS);
   });
 });

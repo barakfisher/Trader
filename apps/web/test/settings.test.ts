@@ -227,6 +227,7 @@ describe('SettingsStore', () => {
       role: 'user',
       language: 'en',
       mustChangePassword: false,
+      pendingEmail: null,
     };
     root.settings.setLanguage('he');
     expect(root.settings.isDirty).toBe(true);

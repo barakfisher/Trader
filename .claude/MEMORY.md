@@ -4762,6 +4762,161 @@ failure they prevent.
         out for up to seven days;
       - no cap: the rows and the device list stay unbounded for whoever holds the password;
       - ten (the first suggestion): the user chose four.
+303. **Signing up with an address that already has an account mails its owner** (the user,
+    2026-10-24; M10 PR 10; refines D185 now that signup sends mail).
+    - The screen says "check your email" whatever the address. A new address gets its link; a
+      request still waiting for its link gets a fresh one (a retry); any other existing account
+      or request gets "Someone tried to sign up with your address - if it was you, sign in".
+    - Every send is in the background, so SMTP's time does not tell the cases apart.
+    - **Why:** the only option where both cases look the same on screen *and* by mail - a mail
+      arrives either way - while the real owner learns what happened.
+    - **Rejected:**
+      - send nothing (someone who forgot their account waits for a mail that never comes, and
+        a probe leaves no trace);
+      - send the verification mail anyway (reads like a second account was opened).
+304. **How PR 10 builds D259** (the scope the user agreed, 2026-10-24; migration `0074`).
+    - **An unverified request is invisible to the admin and to the waiting limit:** only
+      verified pending requests are listed, counted, approved or announced on Telegram, so
+      addresses nobody opens cannot fill the queue or close signup. The rate limits bound how
+      fast they arrive, and `auth_sweep` deletes them after `UNVERIFIED_SIGNUP_DAYS` (7).
+    - **`auth_sweep` takes over from 0071's `session_sweep`:** one daily run deletes expired
+      sessions, links past `AUTH_TOKEN_RETENTION_DAYS` and stale unverified sign-ups.
+      `session_sweep` stays in `runs_kind_check` - kinds are append-only
+      (`test_run_kinds_contract.py`), so its past rows stay describable - and nothing sends it.
+      `k8s-up.sh` deletes the old `run-session-sweep` CronJob because `apply` does not prune.
+    - **A link opens `/verify#token=...`:** the token rides in the fragment, which no browser
+      sends to a server, so it stays out of access logs and `Referer`. The page clears it from
+      the address bar at once and posts it **only when the person presses Confirm** - a mail
+      scanner that opens links and runs their scripts must not confirm an address (D309).
+    - **A link proves the mailbox and signs nobody in.** The one exception: confirming a new
+      address on the device already signed in to that account gives it a new session, as a
+      change did before D259; every other session ends.
+    - **Links point at the request's own `Origin`**, already checked against `ALLOWED_ORIGINS`,
+      so a mail links back to compose, kind, the phone's Tailscale name or the public host.
+    - **No SMTP configured means signup is closed** (no address could be proven); the Admin
+      page says so and does not offer *automatic*.
+    - **An address change** stores `pending_email`, mails the new address its link and the
+      current one a notice. "Taken" is said at once to someone who knows the password; the
+      unique index still decides when the link is opened.
+    - **The existing accounts** (`active` or `disabled`) were marked verified by 0074.
+    - **Tests:** a recording sender (`test/recordingEmailSender.ts`) - no test sends mail. The
+      migration round trip cannot seed every `signup_mode` on a one-row table, so
+      `test_migrations.py` exempts that column by name and seeds `closed`, the one value 0074's
+      downgrade has to keep.
+305. **Automatic signup has a daily limit, default 20; past it a verified sign-up waits for the
+    admin** (the user, 2026-10-24; M10 PR 10; fills in D243's ceiling).
+    - `installation_settings.daily_new_accounts_limit` (0 to `DAILY_NEW_ACCOUNTS_CEILING`,
+      500), counted in the installation's clock over accounts with `approved_automatically`.
+      The settings row is locked while a verification counts, so two cannot take the last
+      place.
+    - **Rejected:**
+      - closing signup for the day (a person arriving on a busy day leaves);
+      - no ceiling (a bot farm with real mailboxes walks in at full speed).
+306. **A new verification link is asked for from sign-in, with the password** (the user,
+    2026-10-24; M10 PR 10).
+    - The right password to an unverified request gets `email_unverified` and *Send the link
+      again* (`POST /auth/verify/resend`, the same email and password, counted against the
+      sign-in failures, plus `verificationResendPerAccount`). A wrong password gets the usual
+      "incorrect" - D187's rule.
+    - **Rejected:**
+      - a resend form taking only an email (a second public form that mails any typed
+        address);
+      - no resend (signing up again reads as "exists" and mails the owner).
+307. **Mailpit catches all mail in compose and kind; it is never part of a public deployment**
+    (the user, 2026-10-24; M10 PR 10).
+    - Compose: the `mailpit` service, inbox at `http://127.0.0.1:8025`; the orchestrator's
+      `SMTP_HOST` defaults to it unless `.env` names a real server.
+    - Kind: in the overlay, never the base; inbox at `http://mailpit.localhost`, this Mac only
+      (D311 replaced `/mailpit/` on the app's hosts and the Tailscale name).
+    - **Why:** it exercises the same `nodemailer` -> SMTP path the real provider will, so a
+      misconfigured sender is found on the laptop.
+    - **Rejected:** compose only (kind's flow cannot be clicked through on the phone); log only
+      (the SMTP path is first exercised on the day the app goes public).
+308. **The public host sends mail through Resend, over SMTP** (the user, 2026-10-26; M10 PR 10;
+    fills in D258's "provider chosen at deployment").
+    - Settings only: `smtp.resend.com`, port 465 with `SMTP_SECURE=true`, user `resend`, an API
+      key with sending access only as the password (`.env.example` lists them). Still
+      `nodemailer`, no SDK, so D258's reason stands: another provider is another five settings.
+    - **Before the first real mail (M10 PR 16):** verify the domain in Resend and publish the
+      SPF and DKIM records it shows, or mail lands in spam (D255).
+    - **Why:** made for transactional mail from an app, a free tier that covers a small
+      installation, and guided DNS setup.
+    - **Rejected:**
+      - Postmark: the best inbox placement, but a much smaller free tier;
+      - Amazon SES: cheapest at volume, but a sandbox until AWS approves production access, and
+        an AWS account with IAM credentials to run;
+      - deciding at PR 16: possible, since nothing in PR 10's code depends on it, but the user
+        chose now.
+309. **A sign-up's link is opened with the sign-up's password; signing up again on an unverified
+    request replaces it** (the user, 2026-10-26; M10 PR 10; closes the security review's
+    pre-hijacking finding).
+    - **The attack:** someone signs up with another person's address and their own password.
+      The owner later signs up, is mailed a fresh link (D303's retry), opens it - and the
+      account is verified with the stranger's password, which the stranger then signs in with.
+    - **The fix, in three parts:**
+      - signing up again on a request still waiting for its link replaces its password and zone
+        (`createSignupRequest`'s `ON CONFLICT ... DO UPDATE ... WHERE` unverified pending); a
+        verified request or an account is never touched;
+      - the link's page asks for that password (`#token=...&for=signup` tells the form; the
+        server decides from the link's own row). The route checks it with argon2, counted
+        against the same sign-in failures as `/auth/login`, and the query compares the hash
+        again inside its transaction, so a re-signup between check and update is refused;
+      - a wrong or missing password answers `wrong_password` and leaves the link unused. A used
+        or expired link asks for nothing and says which it is.
+    - An address change's link (`verify_new_email`) needs no password: it was asked for from a
+      signed-in session, and its page has only Confirm.
+    - **The same PR closes the review's three other findings:**
+      - **the email rule refuses address lists** (`packages/shared/src/email.ts`): one plain
+        address - RFC 5322 atext, a dotted domain - because `nodemailer` reads `a@x.com,b@y.com`,
+        `Name <a@x.com>` and quoted forms as someone other than the address checked;
+      - **approval's waiting limit is checked again when a link verifies** (unverified requests
+        are not counted at sign-up, D304, so many could verify past it), and *closed* refuses
+        too: `signup_full`, the link left unused until it expires;
+      - **`/verify` posts only on Confirm** (D304's bullet above).
+    - **Rejected:**
+      - each link carrying the password it was asked with: a narrow race remains - a stranger's
+        re-signup between the owner's sign-up and click mails the owner a link with the
+        stranger's password;
+      - the latest sign-up's password winning with no check at the link: a stranger re-signing
+        after the owner wins outright.
+    - **Accepted (second review, L1):** a stranger who keeps signing up again with an address
+      keeps replacing the request's password, so the owner's link answers `wrong_password` until
+      the stranger stops; `signupPerEmail` (3 an hour) bounds it, and the stranger never gets in.
+310. **An address change's link needs the account's password too, and the second review's other
+    findings** (the user, 2026-10-26; M10 PR 10).
+    - **The attack it closes:** a stranger asks to move *their* account to your address; you are
+      mailed "Confirm your new sign-in address" and press Confirm. Your address now signs in to
+      their account, and resetting "your" password later puts you inside it. With the password
+      asked, the unsolicited link does nothing.
+    - **It also closes M1:** a change asked for by someone who knew the password stayed
+      confirmable for 24 hours after the owner changed it. The link is opened with the
+      account's *current* password, compared inside the transaction, so a password change ends
+      it. An account no longer `active` cannot finish a change either.
+    - **M2:** `/auth/email` spends `emailChangePerUser` before anything is checked, because
+      "taken" is an answer about other accounts; and a wrong current password, there or on
+      `/auth/password`, counts against `loginFailuresPerAccount` - a stolen session must not be a
+      way to guess the password without a limit.
+    - **The signup rules are read inside the lock** (`installation_settings ... FOR UPDATE` in
+      `useVerificationToken`), so an admin closing sign-up while a link opens is obeyed.
+    - **Past automatic's daily limit, a sign-up joins the admin's queue under the queue's
+      limit** (it was unbounded), and is `signup_full` beyond it.
+    - **Hardening:** a mail failure logs only `code`, `responseCode` and `command`
+      (`mailFailure`): `nodemailer`'s errors name the recipient. With SMTP credentials on a
+      port without implicit TLS, STARTTLS is required, not tried. A re-signup restarts the
+      request's 7 days before the sweep, with its new link.
+    - **Left for M10 PR 16 (deployment):** links are built from the request's `Origin`, which
+      must be in `ALLOWED_ORIGINS`; production's list must hold the public host alone, or links
+      must come from a configured base URL.
+    - **Rejected:** a signed-in session of the account instead of the password (asking from the
+      laptop and opening the mail on the phone would need a sign-in first).
+311. **Kind's Mailpit is served at `mailpit.localhost`, this Mac only** (the user, 2026-10-26;
+    M10 PR 10; replaces D307's `/mailpit/` paths).
+    - Its own host: never the app's origin, so Mailpit never receives the app's session cookie
+      and a flaw in its UI cannot act as the app. Never on the Tailscale name, which routes to
+      the app alone: every device on the tailnet could have read reset links.
+    - **Cost:** a link in kind's Mailpit is opened on this Mac, not the phone.
+    - **Rejected:** keeping `/mailpit/` on Tailscale (fine only while the tailnet holds nobody
+      else's devices); no Mailpit on kind (the email flows could not be tried there).
 ---
 
 ## Bugs that cost real time, and the lesson from each

@@ -18,7 +18,9 @@ import { z } from 'zod';
 
 import {
   claimRun,
+  deleteExpiredAuthTokens,
   deleteExpiredSessions,
+  deleteStaleUnverifiedSignups,
   findInstrumentsBySymbols,
   finishRun,
   getUser,
@@ -30,6 +32,7 @@ import {
   type UserRow,
 } from '../../db/queries.js';
 import { backfillInstrumentNames } from '../../services/instrumentMetadata.js';
+import { AUTH_TOKEN_RETENTION_DAYS, UNVERIFIED_SIGNUP_DAYS } from '../linkTokens.js';
 import { runPortfolioScan } from '../../services/portfolioScan.js';
 import { marketRetentionDays, runTopicDiscovery } from '../../services/topicDiscovery.js';
 import { HISTORY_BACKFILL_DAYS, runTopicScan } from '../../services/topicScan.js';
@@ -81,10 +84,10 @@ const RUN_BUCKET_MINUTES: Record<string, number> = {
   // Fifteen minutes bounds how long a dead proposal can sit in the inbox
   // looking answerable - and `effectiveState` means it never actually is.
   proposal_sweep: 15,
-  // An expired session is already refused by the lookup (D261); the sweep only
-  // removes the row - and the address and user agent it keeps - so once a day
-  // bounds how long that personal data outlives the session.
-  session_sweep: 24 * 60,
+  // An expired session or link is already refused by its lookup (D261, D260);
+  // the sweep only removes the rows - and the addresses and user agents they
+  // keep - so once a day bounds how long that personal data outlives them.
+  auth_sweep: 24 * 60,
   // One digest a day, which is what makes it a digest. A second one the same
   // day would split the day's deferred findings across two messages and defeat
   // the batching that is the entire point of deferring them.
@@ -134,7 +137,7 @@ const runSchema = z.object({
     'topic_discovery',
     'backfill',
     'proposal_sweep',
-    'session_sweep',
+    'auth_sweep',
     'daily_digest',
     'instrument_metadata',
     'universe_rescreen',
@@ -257,8 +260,12 @@ async function runForInstallation(context: Context, request: RunRequest): Promis
       return done(runId, 'ok', { expired: (await sweepExpiredProposals()).length });
     }
 
-    if (kind === 'session_sweep') {
-      return done(runId, 'ok', { deleted: await deleteExpiredSessions() });
+    if (kind === 'auth_sweep') {
+      return done(runId, 'ok', {
+        sessions: await deleteExpiredSessions(),
+        tokens: await deleteExpiredAuthTokens(AUTH_TOKEN_RETENTION_DAYS),
+        unverifiedSignups: await deleteStaleUnverifiedSignups(UNVERIFIED_SIGNUP_DAYS),
+      });
     }
 
     // news_collect. Held and topic instruments only - never the universe. The
