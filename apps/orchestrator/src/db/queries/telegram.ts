@@ -105,19 +105,23 @@ export function findTelegramBindingByChat(chatId: string, legalVersion: string |
 }
 
 /**
- * The chat a push to `userId` goes to: none while the user has not accepted
- * the current legal version (D320) - nothing is sent about an account that has
- * not agreed to the terms it would be sent under. The admin is never held.
+ * The chat a push to `userId` goes to, with whether it may be sent to now:
+ * only while the account is active - a closed or disabled account is sent
+ * nothing, as its chat is not answered - and has accepted the current legal
+ * version (D320); the admin is never held for the latter. Null when no chat
+ * is connected.
  */
-export async function findTelegramPushChat(userId: string, legalVersion: string | null): Promise<string | null> {
-  const row = await queryOne<{ chat_id: string }>(
-    `SELECT b.chat_id::text AS chat_id
+export function findTelegramPushChat(
+  userId: string,
+  legalVersion: string | null,
+): Promise<{ chat_id: string; active: boolean; legal_accepted: boolean } | null> {
+  return queryOne(
+    `SELECT b.chat_id::text AS chat_id, u.status = 'active' AS active, ${legalAccepted('$2')} AS legal_accepted
        FROM telegram_bindings b
        JOIN users u ON u.id = b.user_id
-      WHERE b.user_id = $1 AND ${legalAccepted('$2')}`,
+      WHERE b.user_id = $1`,
     [userId, legalVersion],
   );
-  return row?.chat_id ?? null;
 }
 
 /** Disconnect a chat. `/stop` - the user's own off switch. */

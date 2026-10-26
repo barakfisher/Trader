@@ -162,6 +162,7 @@ const bound = () =>
     chat_id: String(CHAT),
     username: 'someone',
     bound_at: new Date(),
+    legal_accepted: true,
   } as never);
 
 beforeEach(() => {

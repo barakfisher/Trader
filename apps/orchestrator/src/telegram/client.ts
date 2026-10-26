@@ -85,8 +85,12 @@ export interface TelegramClientOptions {
   botToken: string;
   /** Signs `callback_data`. Distinct from the bot token: see `webhook.ts`. */
   callbackSecret: string;
-  /** Resolves the chat a user's alerts go to. Null when they never connected one. */
-  resolveChatId: (userId: string) => Promise<string | null>;
+  /**
+   * Resolves the chat a user's alerts go to. Null when they never connected
+   * one; `held` when they did but must not be sent to now, with the reason the
+   * row records (D320).
+   */
+  resolveChatId: (userId: string) => Promise<string | null | { held: string }>;
   fetchImpl?: FetchLike;
   timeoutMs?: number;
   /**
@@ -154,6 +158,7 @@ export class TelegramNotifier implements Notifier {
       // down" do not read the same in the notification log.
       return { delivered: false, error: 'this user has no Telegram chat connected' };
     }
+    if (typeof chatId !== 'string') return { delivered: false, error: chatId.held };
 
     const text = clampMessage(
       notification.body ? `${notification.title}\n\n${notification.body}` : notification.title,

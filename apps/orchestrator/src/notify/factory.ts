@@ -66,6 +66,13 @@ export function buildNotifier(config: Config): Notifier {
     // Looked up per send rather than cached: a user can connect, disconnect and
     // reconnect a chat between two scans, and a cached id would keep alerting a
     // chat the user deliberately detached.
-    resolveChatId: (userId) => findTelegramPushChat(userId, LEGAL_VERSION),
+    resolveChatId: async (userId) => {
+      const found = await findTelegramPushChat(userId, LEGAL_VERSION);
+      if (found === null) return null;
+      // Connected, but not to be sent to now - said as such on the row (D320).
+      if (!found.active) return { held: 'the account is not active' };
+      if (!found.legal_accepted) return { held: 'the account has not accepted the current privacy policy and terms' };
+      return found.chat_id;
+    },
   });
 }

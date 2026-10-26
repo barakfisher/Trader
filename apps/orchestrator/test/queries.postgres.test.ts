@@ -3118,17 +3118,20 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       await getPool().query('INSERT INTO telegram_bindings (user_id, chat_id) VALUES ($1, $2)', [user, chat]);
       try {
         expect(await queries.findTelegramBindingByChat(chat, null)).toMatchObject({ user_id: user, legal_accepted: true });
-        expect(await queries.findTelegramPushChat(user, null)).toBe(chat);
+        expect(await queries.findTelegramPushChat(user, null)).toEqual({ chat_id: chat, active: true, legal_accepted: true });
         expect(await queries.findTelegramBindingByChat(chat, VERSION)).toMatchObject({ legal_accepted: false });
-        expect(await queries.findTelegramPushChat(user, VERSION)).toBeNull();
+        expect(await queries.findTelegramPushChat(user, VERSION)).toMatchObject({ legal_accepted: false });
         await queries.recordLegalAcceptance(user, VERSION);
         expect(await queries.findTelegramBindingByChat(chat, VERSION)).toMatchObject({ legal_accepted: true });
-        expect(await queries.findTelegramPushChat(user, VERSION)).toBe(chat);
+        expect(await queries.findTelegramPushChat(user, VERSION)).toMatchObject({ legal_accepted: true });
         await getPool().query("UPDATE users SET role = 'admin' WHERE id = $1", [user]);
-        expect(await queries.findTelegramPushChat(user, '2027-01-01')).toBe(chat);
+        expect(await queries.findTelegramPushChat(user, '2027-01-01')).toMatchObject({ legal_accepted: true });
+        // A closed account is sent nothing, its chat kept (D264, D320).
+        await getPool().query("UPDATE users SET status = 'disabled' WHERE id = $1", [user]);
+        expect(await queries.findTelegramPushChat(user, null)).toMatchObject({ chat_id: chat, active: false });
       } finally {
         await getPool().query('DELETE FROM telegram_bindings WHERE user_id = $1', [user]);
-        await getPool().query("UPDATE users SET role = 'user' WHERE id = $1", [user]);
+        await getPool().query("UPDATE users SET role = 'user', status = 'active' WHERE id = $1", [user]);
       }
     });
   });

@@ -68,7 +68,7 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
-  findTelegramBindingByChat: vi.fn(async () => ({ user_id: USER, chat_id: String(CHAT) })),
+  findTelegramBindingByChat: vi.fn(async () => ({ user_id: USER, chat_id: String(CHAT), legal_accepted: true })),
   getOrCreateUserSettings: vi.fn(async () => ({ language: 'en', notify_severity: 'high', muted_until: null })),
   getUser: vi.fn(async () => ({ id: USER, role, base_currency: 'USD', timezone: 'Asia/Jerusalem' })),
   // Scoped by user, as the SQL is: another user's agent is not found.
@@ -268,6 +268,16 @@ describe('the agent’s view offers the controls its state allows', () => {
     agent = agentRow({ running_scan: { trigger: 'schedule', started_at: new Date().toISOString() } });
     await tap(encodeMenuData({ view: 'agent', agentId: AGENT }));
     expect(buttonsOf(lastEdit()).map((b) => b.text)).not.toContain(MESSAGES.en.menu.buttons.runScan);
+  });
+});
+
+describe('an account that has not accepted the current terms (D320)', () => {
+  it('runs nothing from a signed agent button', async () => {
+    vi.mocked(queries.findTelegramBindingByChat).mockResolvedValueOnce({ user_id: USER, chat_id: String(CHAT), legal_accepted: false } as never);
+    await tap(action({ agentId: AGENT, action: 'run' }));
+    expect(toast()).toBe(MESSAGES.en.legalAcceptanceRequiredShort);
+    expect(scanAgent).not.toHaveBeenCalled();
+    expect(calls('editMessageText')).toHaveLength(0);
   });
 });
 

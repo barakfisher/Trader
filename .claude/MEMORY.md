@@ -5216,9 +5216,16 @@ failure they prevent.
       Accepting refuses a stale version the same way (`409 legal_version_stale`).
     - **Telegram, from the follow-up PR:** a chat whose user has not accepted gets one sentence
       (accept in the app first) for every message and tap, `/stop` excepted - declining must not
-      trap anyone in a bot. Pushes resolve no chat for such a user (`findTelegramPushChat`), so
-      nothing is sent about an account under terms it has not agreed to. Both read the
-      acceptance in the binding's own query; the admin is never held.
+      trap anyone in a bot. Pushes to such a user are held (`findTelegramPushChat`), so nothing
+      is sent about an account under terms it has not agreed to; the notification row records
+      why, not "no chat connected", and a held alert is not re-sent after acceptance (its dedupe
+      key is spent) - the digest's entries stay pending and arrive with the next one. Pushes to
+      a closed or disabled account are held the same way (they were sent before, unlike its
+      chat's messages). Both read the acceptance in the binding's own query; the gate fails
+      closed (`legal_accepted !== true`); the admin is never held.
+    - **Left open (the second security review's questions):** the daily digest is still built
+      for an unaccepted account and only held at send; an admin with a one-time password
+      (D162) is not held in Telegram, as before.
     - **Rejected:** a content hash as the version (every typo fix would ask everyone again);
       columns on `users` (one version only, no history); the version in each file's front
       matter (four places to agree, and a parser for them).

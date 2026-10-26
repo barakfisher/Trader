@@ -123,7 +123,7 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
-  findTelegramBindingByChat: vi.fn(async () => ({ user_id: USER, chat_id: String(CHAT) })),
+  findTelegramBindingByChat: vi.fn(async () => ({ user_id: USER, chat_id: String(CHAT), legal_accepted: true })),
   findTelegramBindingByUser: vi.fn(async () => null),
   redeemTelegramBindToken: vi.fn(async () => ({ bound: true })),
   deleteTelegramBinding: vi.fn(async () => true),
@@ -605,7 +605,7 @@ describe('whose data a tap reads', () => {
     for (const data of [encodeMenuData({ view: 'portfolio' }), encodeMenuData({ view: 'mute', hours: 4 })]) {
       await tapAndSettle(tap(data, 111));
     }
-    vi.mocked(queries.findTelegramBindingByChat).mockResolvedValue({ user_id: USER, chat_id: String(CHAT) } as never);
+    vi.mocked(queries.findTelegramBindingByChat).mockResolvedValue({ user_id: USER, chat_id: String(CHAT), legal_accepted: true } as never);
     expect(queries.listHoldings).not.toHaveBeenCalled();
     expect(queries.muteUntil).not.toHaveBeenCalled();
     expect(calls('editMessageText')).toHaveLength(0);
@@ -804,5 +804,26 @@ describe('the / command list', () => {
     for (const name of BOT_COMMANDS.filter((c) => c !== 'help')) {
       expect(MESSAGES[language].menu.help).toContain(`/${name}`);
     }
+  });
+});
+
+describe('a push to a chat that is held (D320)', () => {
+  it('is not sent, and says why rather than "no chat connected"', async () => {
+    const held = 'the account has not accepted the current privacy policy and terms';
+    const notifier = new TelegramNotifier({
+      botToken: 'bot-token',
+      callbackSecret: SIGNING_SECRET,
+      resolveChatId: async () => ({ held }),
+      webBaseUrl: null,
+      fetchImpl: async (url, init) => {
+        sent.push({ method: url.split('/').pop() as string, body: JSON.parse(String(init?.body ?? '{}')) });
+        return new Response('{"ok":true}', { status: 200 });
+      },
+    });
+    expect(await notifier.send({ userId: USER, title: 'An alert', body: 'Something happened' } as never)).toEqual({
+      delivered: false,
+      error: held,
+    });
+    expect(sent).toHaveLength(0);
   });
 });

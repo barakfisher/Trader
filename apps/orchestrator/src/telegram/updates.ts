@@ -351,7 +351,7 @@ async function handleMessage(
 
   // Not served until the account accepts the current terms (D320); /stop still
   // disconnects - declining must never trap anyone in a bot they cannot leave.
-  if (binding.legal_accepted === false && command !== '/stop') {
+  if (binding.legal_accepted !== true && command !== '/stop') {
     const { language } = await getOrCreateUserSettings(binding.user_id);
     await telegram?.sendText(chatId, messagesFor(language).legalAcceptanceRequired);
     return;
@@ -522,7 +522,7 @@ async function handleCallback(
   const signup = decodeSignupData(callback.data, config.TELEGRAM_SIGNING_SECRET);
   const payload = signup === null ? decodeCallbackData(callback.data, config.TELEGRAM_SIGNING_SECRET) : null;
   const binding = await findTelegramBindingByChat(chatId, LEGAL_VERSION);
-  if (binding?.legal_accepted === false) {
+  if (binding !== null && binding.legal_accepted !== true) {
     await telegram?.answerCallback(callback.id, await legalRefusal(binding.user_id));
     return;
   }
@@ -739,7 +739,7 @@ async function handleMenuCallback(
     await telegram.answerCallback(callback.id, messagesFor('en').buttonInvalid);
     return;
   }
-  if (binding.legal_accepted === false) {
+  if (binding.legal_accepted !== true) {
     await telegram.answerCallback(callback.id, messagesFor(language).legalAcceptanceRequiredShort);
     return;
   }
@@ -775,7 +775,7 @@ async function handleAgentCallback(
     await telegram.answerCallback(callback.id, messagesFor('en').buttonInvalid);
     return;
   }
-  if (binding.legal_accepted === false) {
+  if (binding.legal_accepted !== true) {
     await telegram.answerCallback(callback.id, await legalRefusal(binding.user_id));
     return;
   }
