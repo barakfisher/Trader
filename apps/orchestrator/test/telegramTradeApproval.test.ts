@@ -291,6 +291,39 @@ describe('Approve: the preview at the live price (D47)', () => {
     expect(hebrew).toContain('עדיין אפשר לאשר');
   });
 
+  it('names each universe rule the buy breaks and the setting to change (D301)', async () => {
+    const breaches = [
+      { rule: 'blocked' },
+      { rule: 'market_cap', band: 'mid', allowed: ['large', 'mega'] },
+      {
+        rule: 'selection',
+        assetClass: 'equity',
+        sector: 'Technology',
+        industry: 'Semiconductors',
+        category: null,
+        suggested: { field: 'industries', name: 'Semiconductors' },
+      },
+    ];
+    vi.mocked(approval.previewTradeApproval)
+      .mockResolvedValueOnce({ ...PREVIEW, mandateBreaches: breaches } as never)
+      .mockResolvedValueOnce({ ...PREVIEW, mandateBreaches: breaches } as never);
+    await tap('approve');
+    const text = String(lastEdit().body.text);
+    expect(text).toContain("NVDA is on the agent's blocked list. If that is intended, remove it from Blocked tickers");
+    expect(text).toContain('NVDA is a mid-cap company; the agent buys only large-cap and mega-cap companies.');
+    expect(text).toContain('NVDA (Technology / Semiconductors) is outside the agent');
+    expect(text).toContain('add Semiconductors to Sectors & industries');
+    expect(keyboardOf(lastEdit()).map((button) => button.text)).toEqual(['Confirm', 'Reject']);
+
+    language = 'he';
+    await tap('approve');
+    const hebrew = String(lastEdit().body.text);
+    expect(hebrew).toContain('נמצא ברשימת החסומים של הסוכן');
+    expect(hebrew).toContain('בגודל בינוני');
+    expect(hebrew).toContain('גדול ו');
+    expect(hebrew).toContain('נמצא מחוץ לסקטורים ולענפים של הסוכן');
+  });
+
   it('offers no Confirm for a price no button can carry', async () => {
     vi.mocked(approval.previewTradeApproval).mockResolvedValueOnce({
       ...PREVIEW,

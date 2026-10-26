@@ -100,6 +100,42 @@ export async function setInstrumentName(instrumentId: string, name: string): Pro
   return rows.length > 0;
 }
 
+export interface UniverseProfileRow {
+  asset_class: string;
+  sector: string | null;
+  industry: string | null;
+  category: string | null;
+  market_cap_minor: string | null;
+  size_currency: string | null;
+  /** The equity sector an ETF category holds (D164), when it holds one. */
+  category_sector: string | null;
+  /** Whether the taxonomy lists the industry / category, so a mandate may name it. */
+  industry_listed: boolean;
+  category_listed: boolean;
+}
+
+/**
+ * What the mandate's universe rules read about `symbol` (D301), as the scan's
+ * `mandate._profile` reads it: the instrument with its profile, or null when
+ * there is no instrument. Installation data: no `user_id`.
+ */
+export function getUniverseProfile(symbol: string): Promise<UniverseProfileRow | null> {
+  return queryOne<UniverseProfileRow>(
+    `SELECT i.asset_class, p.sector, p.industry, p.category,
+            p.market_cap_minor::text AS market_cap_minor, p.size_currency,
+            (SELECT t.sector FROM universe_taxonomy t
+              WHERE t.kind = 'etf_category' AND t.name = p.category) AS category_sector,
+            EXISTS (SELECT 1 FROM universe_taxonomy t
+                     WHERE t.kind = 'industry' AND t.name = p.industry) AS industry_listed,
+            EXISTS (SELECT 1 FROM universe_taxonomy t
+                     WHERE t.kind = 'etf_category' AND t.name = p.category) AS category_listed
+       FROM instruments i
+       LEFT JOIN instrument_profiles p ON p.instrument_id = i.id
+      WHERE i.symbol = $1`,
+    [symbol],
+  );
+}
+
 export interface TradableInstrumentRow extends InstrumentRow {
   /** `instrument_profiles.membership`, or null when the universe does not hold it. */
   membership: 'screened' | 'on_demand' | 'dropped' | null;

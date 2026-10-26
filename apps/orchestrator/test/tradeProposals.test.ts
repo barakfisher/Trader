@@ -37,6 +37,12 @@ function agentRow(overrides: Record<string, unknown> = {}) {
     max_position_bps: null,
     cash_buffer_bps: null,
     max_holdings: null,
+    allow_etfs: true,
+    market_caps: [],
+    sectors: [],
+    industries: [],
+    etf_categories: [],
+    blocked_symbols: [],
     ...overrides,
   };
 }
@@ -78,6 +84,19 @@ let settingsRow: Record<string, unknown> = {
 };
 
 const ledger = { cash: 100_000n, fills: [] as Record<string, unknown>[], applied: true };
+/** A mega-cap in Technology / Consumer Electronics, as the universe holds AAPL. */
+const AAPL_PROFILE = {
+  asset_class: 'equity',
+  sector: 'Technology',
+  industry: 'Consumer Electronics',
+  category: null,
+  market_cap_minor: '300000000000000',
+  size_currency: 'USD',
+  category_sector: null,
+  industry_listed: true,
+  category_listed: false,
+};
+
 const EMPTY_BOOK = { holdings_cost_minor: '0', symbol_cost_minor: '0', held_count: 0, holds_symbol: false };
 let book = EMPTY_BOOK;
 let proposal = proposalRow();
@@ -105,6 +124,7 @@ vi.mock('../src/db/queries.js', () => ({
   lockAgentCash: vi.fn(async () => ledger.cash),
   getAgentHoldingQuantity: vi.fn(async () => null),
   getAgentBook: vi.fn(async () => book),
+  getUniverseProfile: vi.fn(async () => AAPL_PROFILE),
   lockAgentHolding: vi.fn(async () => null),
   setAgentHolding: vi.fn(async () => undefined),
   findFillByKey: vi.fn(async (_u: string, _a: string, key: string) =>
@@ -548,6 +568,37 @@ describe('the mandate at approval (D299)', () => {
     vi.mocked(queries.getAgent).mockResolvedValueOnce(agentRow() as never);
     proposal = proposalRow();
     expect((await approval.previewTradeApproval(USER.id, PROPOSAL, 'web', context())).mandateBreaches).toEqual([]);
+  });
+});
+
+describe('the universe at approval (D301)', () => {
+  it('warns of a symbol blocked since the scan proposed it, and still fills', async () => {
+    const blocked = agentRow({ blocked_symbols: ['AAPL'] }) as never;
+    // Once per call: a lasting mock would outlive clearAllMocks into later tests.
+    vi.mocked(queries.getAgent).mockResolvedValueOnce(blocked).mockResolvedValueOnce(blocked);
+    const preview = await approval.previewTradeApproval(USER.id, PROPOSAL, 'web', context());
+    expect(preview.mandateBreaches).toEqual([{ rule: 'blocked' }]);
+    expect(queries.getUniverseProfile).toHaveBeenCalledWith('AAPL');
+
+    const result = await approval.confirmTradeApproval(USER.id, PROPOSAL, BigInt(AGENT_PRICE), 'web', context());
+    expect(result.state).toBe('approved');
+  });
+
+  it('warns of a universe narrowed since, beside the size rules', async () => {
+    vi.mocked(queries.getAgent).mockResolvedValueOnce(
+      agentRow({ market_caps: ['mid'], sectors: ['Energy'], max_holdings: 1 }) as never,
+    );
+    book = { ...EMPTY_BOOK, held_count: 1 };
+    const preview = await approval.previewTradeApproval(USER.id, PROPOSAL, 'web', context());
+    expect(preview.mandateBreaches.map((breach) => breach.rule)).toEqual(['market_cap', 'selection', 'max_holdings']);
+  });
+
+  it('checks no universe rule on a sell', async () => {
+    vi.mocked(queries.getAgent).mockResolvedValueOnce(agentRow({ blocked_symbols: ['AAPL'] }) as never);
+    proposal = proposalRow({ kind: 'sell' });
+    vi.mocked(queries.getAgentHoldingQuantity).mockResolvedValueOnce('5.000000000000000000');
+    expect((await approval.previewTradeApproval(USER.id, PROPOSAL, 'web', context())).mandateBreaches).toEqual([]);
+    expect(queries.getUniverseProfile).not.toHaveBeenCalled();
   });
 });
 

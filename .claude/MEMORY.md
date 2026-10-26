@@ -4,7 +4,19 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-26 - **Handoff by count: five merges since #317** (#318-#321, and this PR).
+Updated: 2026-10-26, later - **Handoff on the user's word, after D301** (this PR; the user asked
+for a handoff with it).
+- **Merges since #322:** this PR only - the universe rules warn at approval (D301).
+- **Decisions reach 301** (next: **302**). **Migrations:** `0073` is head; next free is `0074`.
+- **Deployed:** not by this session (it cannot reach the user's machine). `main` after this PR
+  applies `0072` and `0073` if the user has not deployed #321 yet. Deploy with
+  `bash scripts/dev-docker.sh` (first run moves the owner's password into `.env.owner`).
+- **Owed by the user:** the deploy; a look at D299's and D301's Hebrew on the card and on
+  Telegram; the paid assistant eval over `get_research`; the earlier Telegram phone check.
+- **The user ruled out M10 work for now** (2026-10-26): do not propose PRs 10-16 as the next item.
+- **Next:** "Next session: after D301" below.
+
+Previous update, 2026-10-26 - **Handoff by count: five merges since #317** (#318-#321, and this PR).
 - **Merges since #317:**
   - #318: the scheduled scan's give-up alert goes through `fanOut` (D298, migration `0073`);
   - #319: the integration suite acts as `traders_app` by `SET ROLE` instead of setting its
@@ -4690,6 +4702,31 @@ failure they prevent.
       - blanking `POSTGRES_PASSWORD` in each service's `environment`: a denylist, so the next
         owner-level key added to `.env` would leak again;
       - listing every service's variables instead of `env_file`: dozens of keys that drift.
+301. **The mandate's universe rules are checked again at approval too, and warn the same way**
+    (the user took the D299 follow-up, 2026-10-25; resolves its debt line; no migration).
+    - `mandateLimits.universeBreaches` repeats `mandate.universe_problems` over the agent's rules
+      as they stand at approval: the blocked list (which alone answers when it applies), the ETF
+      switch, the market-cap bands for equities, and the sector/industry/ETF-category selection;
+      buys only (D165). An instrument with no row, or an equity with no USD market cap when sizes
+      are set, is `unchecked` - the scan refuses those, so the approval says it could not tell.
+      `getUniverseProfile` reads what `mandate._profile` reads, plus the ETF category's sector and
+      whether the taxonomy lists the industry/category, from `universe_taxonomy`.
+    - **The cap floors are duplicated** in `mandateLimits.ts`; `test_mandate_limits_contract.py`
+      holds them equal to `mandate.py`'s. A category's sector comes from `universe_taxonomy`,
+      which the loader rebuilds from `ETF_CATEGORY_SECTORS`: between a change to that dict and
+      the next rebuild the two can differ, and the approval's answer is the stale one.
+    - **The web card offers the narrowest change:** unblock the symbol, allow ETFs, add the
+      band, or add the instrument's own industry (an ETF's own category) - never its whole
+      sector, which would widen the agent far past the one trade. A name the taxonomy does not
+      list is not offered, because the settings would refuse it. A list field is sent whole,
+      built on the agent's mandate as the card read it. Telegram names the same change.
+    - **Why:** the scan checked these when it proposed, but a proposal lives for hours and the
+      user may block the symbol or narrow the universe meanwhile; approving would then buy what
+      the agent's rules now forbid, with nothing said. Warn, not refuse, for D299's reason.
+    - **Rejected:**
+      - asking the AI service to run `universe_problems` at preview: a network hop in the
+        approval path for five comparisons, and the size rules already live in the orchestrator;
+      - suggesting the sector for an equity: it is one click that silently admits a whole sector.
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -5976,6 +6013,40 @@ grant tests fail for the wrong reason.
 
 ## Where to go next
 
+### Next session: after D301 (written 2026-10-26)
+
+**State:** the D299 follow-up is done (D301). The user declined M10 work for now, so what a
+session can take without the user's input is small:
+- **Redis warming from `quotes`** (debt row): self-contained, low value.
+- **Stale debt rows:** "Scheduled runs serve only `SINGLE_USER_ID`" reads as open but the setting
+  no longer exists in the orchestrator (removed in M9; D238 covers scans). Check news and digest
+  per user before striking it; there may be others like it.
+- **Needs a number from the user first:** the validator reading timestamp digits (narration's
+  `llm_calls` by verdict and problem), and dates with the month spelled out (how often answers do
+  it). Give the user the query and wait.
+- **A flaky orchestrator test:** `telegramMenu.test.ts` "/status offers the quick mutes" fails
+  whenever now + 1h crosses midnight in Asia/Jerusalem (the reply then names a date). Pin the
+  clock in the test.
+
+**Lessons from this stretch:**
+- **The cloud container runs the Postgres suite with no Docker** (as "after the research
+  follow-ups" says), but `apt-get install postgresql-16-pgvector` needs an `apt-get update` first
+  in a fresh container. `initdb -U traders --auth=trust` under `/var/lib/postgresql`, `pg_ctl -o
+  '-p 55432 -k /tmp'`, `createdb traders_ci`, `scripts/migrate.py` with `APP_DB_PASSWORD`, then
+  the suite with `TEST_DATABASE_URL=postgresql://traders_app:traders_app@localhost:55432/traders_ci`.
+- **The Python venv needs 3.12** (`pyproject` says `<3.13`; the container's python3 is 3.13):
+  `uv venv -p 3.12 .venv && uv pip install -p .venv -e '.[dev]'`.
+- **Typing a helper's `t` parameter as `ReturnType<typeof useTranslation>['t']` overflows tsc**
+  ("excessively deep"). Helpers outside the component use the module-level `t` from `i18n/index.ts`.
+- **Prettier is not enforced in CI**, and several files on `main` are not prettier-clean; do not
+  reformat whole files in a feature PR.
+
+**Debt, as consequences:**
+- D301's Hebrew sentences (card and Telegram) were written by the model and not seen rendered;
+  taxonomy names are English data inside LTR isolates.
+- D301 reads an ETF category's sector from `universe_taxonomy`; until the loader rebuilds it after
+  a change to `ETF_CATEGORY_SECTORS`, the approval and the scan can disagree about one ETF.
+
 ### Next session: after the debt sweep (written 2026-10-26)
 
 **State:** every debt item a session could do without the user is done except one of low value.
@@ -6015,8 +6086,8 @@ password) cleared three of the five items "after the research follow-ups" listed
 **Debt, as consequences:**
 - D299's Hebrew sentences were written by the model and not seen rendered; Latin tickers and
   dollar figures sit in parentheses in RTL text, the same unchecked pattern as `farFromQuote`.
-- D299 checks size rules only. A buy of a symbol the mandate has since blocked, or outside its
-  universe, is not warned at approval (the scan refused it when it proposed it).
+- ~~D299 checks size rules only~~ - resolved 2026-10-25 (D301): the universe rules warn at
+  approval too.
 - D300's compose `.env.owner` defaults to `traders` on a fresh clone (shared volume across
   worktrees; recorded under D300) - an installation that wants a strong owner password changes
   it as RUNBOOK section 1 says.

@@ -365,6 +365,66 @@ describe("an agent's trade proposal", () => {
     expect(post.mock.calls.some(([path]) => String(path).includes('instructions-check'))).toBe(false);
   });
 
+  it('warns of a symbol blocked or a universe narrowed since the scan, and offers the narrowest change (D301)', async () => {
+    const mandate = {
+      riskLevel: null, horizon: null, thesisStyle: null, maxPositionBps: null, cashBufferBps: null,
+      maxHoldings: null, allowEtfs: true, marketCaps: ['large'], sectors: ['Energy'], industries: [],
+      etfCategories: [], blockedSymbols: ['TSLA', 'INTC'],
+    };
+    serve({
+      '/proposals/p-trade': { proposal: TRADE, transitions: [], attempts: [] },
+      '/proposals?state=open': { proposals: [] },
+      [`/proposals?state=approved&limit=${RECENT_APPROVALS}`]: { proposals: [] },
+      '/agents/agent-value': { id: 'agent-value', persona: null, mandate, runningScan: null, scheduling: null },
+    });
+    const breaches = [
+      { rule: 'blocked' },
+      { rule: 'market_cap', band: 'mid', allowed: ['large'] },
+      {
+        rule: 'selection', assetClass: 'equity', sector: 'Technology', industry: 'Semiconductors', category: null,
+        suggested: { field: 'industries', name: 'Semiconductors' },
+      },
+      { rule: 'unchecked', missing: 'market_cap' },
+    ];
+    post.mockImplementation((path: string) =>
+      Promise.resolve(path.endsWith('/preview') ? { ...PREVIEW, mandateBreaches: breaches } : {}),
+    );
+    patch.mockResolvedValue({});
+
+    renderAt('/proposals/p-trade');
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    // Symbols and taxonomy names sit in left-to-right isolates; read the sentences without them.
+    const text = (await screen.findByRole('alert', { name: "Outside the agent's limits" })).textContent!.replace(
+      /[\u2066-\u2069]/g,
+      '',
+    );
+    expect(text).toContain("INTC is on the agent's blocked list.");
+    expect(text).toContain('INTC is a mid-cap company; the agent buys only large-cap companies.');
+    expect(text).toContain("INTC (Technology / Semiconductors) is outside the agent's sectors and industries.");
+    expect(text).toContain("INTC has no stored market cap, so the agent's company size cannot be checked for it.");
+    expect(screen.getByRole('button', { name: 'Confirm: pay $343.05' })).toBeTruthy();
+
+    const unblock = await screen.findByRole('button', { name: /^Unblock .?INTC.?$/ });
+    await waitFor(() => expect((unblock as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(unblock);
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith('/agents/agent-value', { mandate: { blockedSymbols: ['TSLA'] } }),
+    );
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Add mid-cap to Company size' }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Add mid-cap to Company size' }));
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith('/agents/agent-value', { mandate: { marketCaps: ['large', 'mid'] } }),
+    );
+    const add = screen.getByRole('button', { name: /^Add .?Semiconductors.? to Sectors & industries$/ });
+    await waitFor(() => expect((add as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(add);
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith('/agents/agent-value', { mandate: { industries: ['Semiconductors'] } }),
+    );
+    // A rule that could not be decided offers no setting.
+    expect(screen.getAllByRole('button').filter((button) => /^(Unblock|Add|Allow|Set)/.test(button.textContent ?? ''))).toHaveLength(3);
+  });
+
   it('checks instructions in the user\'s own words again after the setting changes (D176)', async () => {
     serve({
       '/proposals/p-trade': { proposal: TRADE, transitions: [], attempts: [] },
