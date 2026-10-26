@@ -1048,6 +1048,36 @@ export interface VerifyEmailResponse {
     | 'signup_full';
 }
 
+/** The providers someone can sign in with (D262); the migration's CHECK lists the same. */
+export const OAUTH_PROVIDERS = ['google', 'github'] as const;
+export type OAuthProviderName = (typeof OAUTH_PROVIDERS)[number];
+
+/**
+ * Where a sign-in through Google or GitHub ended (D262, D263, D314): the
+ * callback sends the browser back with `?oauth=<outcome>`, and the page says
+ * what it means.
+ */
+export const OAUTH_OUTCOMES = [
+  'signed_in',
+  'pending',
+  'closed',
+  'unverified_email',
+  'not_active',
+  'link_from_settings',
+  'linked',
+  'already_linked',
+  'taken',
+  'failed',
+] as const;
+export type OAuthOutcome = (typeof OAUTH_OUTCOMES)[number];
+
+/** `GET /auth/identities`: the providers linked to this account (D263). */
+export interface LinkedIdentity {
+  provider: OAuthProviderName;
+  email: string | null;
+  linkedAt: string;
+}
+
 /** `POST /auth/reset` (D260, D312): what a reset link did. */
 export interface ResetPasswordResponse {
   outcome: 'reset' | 'expired' | 'used' | 'invalid';

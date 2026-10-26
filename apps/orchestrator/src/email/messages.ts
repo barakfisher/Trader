@@ -34,6 +34,8 @@ interface EmailCatalogue {
   resetPassword(link: string, minutes: number): Draft;
   /** After the password changed, by reset or from Settings (D312). */
   passwordChanged(signInLink: string): Draft;
+  /** A Google or GitHub account was linked, by hand or automatically (D263). */
+  identityLinked(provider: string, signInLink: string): Draft;
 }
 
 const isolate = (text: string) => `⁨${text}⁩`;
@@ -90,6 +92,14 @@ const CATALOGUE: Record<UiLanguage, EmailCatalogue> = {
         { link: signInLink },
       ],
     }),
+    identityLinked: (provider, signInLink) => ({
+      subject: `${provider} was linked to your Traders account`,
+      blocks: [
+        `Your Traders account can now be signed in to with ${provider}.`,
+        `If this was not you, sign in, unlink ${provider} in Settings, and change your password:`,
+        { link: signInLink },
+      ],
+    }),
   },
   he: {
     verifyEmail: (link, hours) => ({
@@ -139,6 +149,14 @@ const CATALOGUE: Record<UiLanguage, EmailCatalogue> = {
       blocks: [
         'הסיסמה של חשבון ה-Traders שלכם שונתה הרגע, וכל המכשירים נותקו.',
         'אם זה הייתם אתם, אין צורך לעשות דבר. אם לא, אפסו את הסיסמה מדף ההתחברות עכשיו:',
+        { link: signInLink },
+      ],
+    }),
+    identityLinked: (provider, signInLink) => ({
+      subject: `${provider} קושר לחשבון ה-Traders שלכם`,
+      blocks: [
+        `מעכשיו אפשר להתחבר לחשבון ה-Traders שלכם עם ${provider}.`,
+        `אם זה לא הייתם אתם, התחברו, נתקו את ${provider} בהגדרות והחליפו את הסיסמה:`,
         { link: signInLink },
       ],
     }),
@@ -192,4 +210,6 @@ export const emailMessages = {
     render(to, language, CATALOGUE[language].resetPassword(link, minutes)),
   passwordChanged: (to: string, language: UiLanguage, signInLink: string) =>
     render(to, language, CATALOGUE[language].passwordChanged(signInLink)),
+  identityLinked: (to: string, language: UiLanguage, provider: string, signInLink: string) =>
+    render(to, language, CATALOGUE[language].identityLinked(provider, signInLink)),
 };

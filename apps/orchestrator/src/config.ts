@@ -158,6 +158,20 @@ const schema = z.object({
   EMAIL_FROM: optionalSetting(),
 
   /**
+   * Sign-in through Google and GitHub (D262): an OAuth app registered in each
+   * provider's console, on the user's domain, at deployment. A provider is
+   * offered only with both of its settings; with neither, sign-in is by
+   * password alone. Each redirect URI to register is
+   * `<origin>/api/auth/oauth/<provider>/callback`, for every origin in
+   * `ALLOWED_ORIGINS` that should offer it. Secrets: `.env` / Kubernetes
+   * Secrets only (guideline 9).
+   */
+  GOOGLE_CLIENT_ID: optionalSetting(),
+  GOOGLE_CLIENT_SECRET: optionalSetting(),
+  GITHUB_CLIENT_ID: optionalSetting(),
+  GITHUB_CLIENT_SECRET: optionalSetting(),
+
+  /**
    * How taps and commands reach this service. `polling` pulls them with
    * `getUpdates` and is the default, because the webhook needs a public HTTPS
    * URL that no installation has until M7's ingress. `webhook` once one is

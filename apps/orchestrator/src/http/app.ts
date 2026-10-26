@@ -6,6 +6,7 @@
  * session resolution and the single error shape.
  */
 
+import type { OAuthProviderName } from '@traders/shared';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { getCookie } from 'hono/cookie';
@@ -34,6 +35,8 @@ import { registerAgentAccountRoutes } from './routes/agentAccount.js';
 import { registerAgentScanRoutes } from './routes/agentScans.js';
 import { registerAgentsRoutes } from './routes/agents.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerOAuthRoutes } from './routes/oauth.js';
+import { buildOAuthProviders, type OAuthProvider } from '../oauth/providers.js';
 import { registerAssistantRoutes } from './routes/assistant.js';
 import { registerConceptsRoutes } from './routes/concepts.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -150,6 +153,8 @@ export function createApp(
   scanQueue: ScanQueue | null = null,
   rateLimits: RateLimits = memoryRateLimits(),
   email: EmailSender | null = buildEmailSender(config),
+  /** Sign-in providers with an app configured (D262); tests pass a fake. */
+  oauthProviders: Map<OAuthProviderName, OAuthProvider> = buildOAuthProviders(config),
 ): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
@@ -311,6 +316,7 @@ export function createApp(
 
   registerHealthRoutes(app);
   registerAuthRoutes(app);
+  registerOAuthRoutes(app, oauthProviders);
   registerAccountRoutes(app);
   registerAccountSessionRoutes(app);
   registerPortfolioRoutes(app);

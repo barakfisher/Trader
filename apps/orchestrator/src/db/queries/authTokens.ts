@@ -9,6 +9,8 @@
 
 import type { SignupMode } from '@traders/shared';
 
+import type { PoolClient } from 'pg';
+
 import { query, queryOne, transaction } from '../pool.js';
 
 export type AuthTokenPurpose = 'verify_email' | 'verify_new_email' | 'reset_password';
@@ -137,46 +139,10 @@ export async function useVerificationToken(
         // The mailbox alone is not enough: whoever signed up first with this
         // address chose the password, and it may not be the mailbox's owner (D309).
         if (proof === null || user.password_hash !== proof.passwordHash) return { outcome: 'wrong_password' };
-        // The settings are read under their row's lock, so two verifications
-        // cannot both take the last place of the day or of the queue, and a
-        // mode the admin just changed is the one obeyed.
-        const settings = (
-          await client.query<{ signup_mode: SignupMode; max_pending_signups: number; daily_new_accounts_limit: number }>(
-            'SELECT signup_mode, max_pending_signups, daily_new_accounts_limit FROM installation_settings FOR UPDATE',
-          )
-        ).rows[0];
-        if (!settings || settings.signup_mode === 'closed') return { outcome: 'signup_full' };
-        if (settings.signup_mode === 'automatic') {
-          const today = await client.query<{ count: number }>(
-            `SELECT count(*)::int AS count FROM users
-              WHERE approved_automatically
-                AND approved_at >= date_trunc('day', now() AT TIME ZONE $1) AT TIME ZONE $1`,
-            [rules.timezone],
-          );
-          if ((today.rows[0]?.count ?? 0) < settings.daily_new_accounts_limit) {
-            await client.query(
-              `UPDATE users
-                  SET status = 'active', email_verified_at = now(), llm_cap_micro_usd = $2, approved_at = now(),
-                      approved_automatically = true
-                WHERE id = $1`,
-              [token.user_id, rules.defaultCapMicroUsd],
-            );
-            await markUsed();
-            return { outcome: 'activated', userId: token.user_id };
-          }
-        }
-        // Waiting for the admin - under approval, or past automatic's daily
-        // limit (D305). Unverified requests are not counted at sign-up (D304),
-        // so many can be waiting for their links at once; the queue's limit
-        // holds here, where one joins it.
-        const waiting = await client.query<{ count: number }>(
-          `SELECT count(*)::int AS count FROM users
-            WHERE status = 'pending' AND role = 'user' AND email_verified_at IS NOT NULL`,
-        );
-        if ((waiting.rows[0]?.count ?? 0) >= settings.max_pending_signups) return { outcome: 'signup_full' };
-        await client.query('UPDATE users SET email_verified_at = now() WHERE id = $1', [token.user_id]);
+        const admitted = await admitVerified(client, token.user_id, rules);
+        if (admitted === 'signup_full') return { outcome: 'signup_full' };
         await markUsed();
-        return { outcome: 'awaiting_approval', userId: token.user_id };
+        return { outcome: admitted, userId: token.user_id };
       }
 
       // verify_new_email: only the change still waiting, for this address, of an active account.
@@ -249,6 +215,58 @@ export async function deleteStaleUnverifiedSignups(days: number): Promise<number
     [days],
   );
   return row?.deleted ?? 0;
+}
+
+/**
+ * Let a request whose address is proven in, by the installation's rules
+ * (D243, D305, D310): read under the settings row's lock, so two cannot both
+ * take the last place of the day or of the queue, and a mode the admin just
+ * changed is obeyed. *automatic* below its daily limit makes the account
+ * active; otherwise it waits for the admin, if the queue has room. Used by a
+ * verification link and by a sign-up through Google or GitHub (D263), whose
+ * address the provider vouched for. The caller's transaction holds the user.
+ */
+export async function admitVerified(
+  client: PoolClient,
+  userId: string,
+  rules: AdmissionRules,
+): Promise<'activated' | 'awaiting_approval' | 'signup_full'> {
+  const settings = (
+    await client.query<{ signup_mode: SignupMode; max_pending_signups: number; daily_new_accounts_limit: number }>(
+      'SELECT signup_mode, max_pending_signups, daily_new_accounts_limit FROM installation_settings FOR UPDATE',
+    )
+  ).rows[0];
+  if (!settings || settings.signup_mode === 'closed') return 'signup_full';
+  if (settings.signup_mode === 'automatic') {
+    const today = await client.query<{ count: number }>(
+      `SELECT count(*)::int AS count FROM users
+        WHERE approved_automatically
+          AND approved_at >= date_trunc('day', now() AT TIME ZONE $1) AT TIME ZONE $1`,
+      [rules.timezone],
+    );
+    if ((today.rows[0]?.count ?? 0) < settings.daily_new_accounts_limit) {
+      await client.query(
+        `UPDATE users
+            SET status = 'active', email_verified_at = coalesce(email_verified_at, now()), llm_cap_micro_usd = $2,
+                approved_at = now(), approved_automatically = true
+          WHERE id = $1`,
+        [userId, rules.defaultCapMicroUsd],
+      );
+      return 'activated';
+    }
+  }
+  // Waiting for the admin - under approval, or past automatic's daily limit
+  // (D305). Unverified requests are not counted at sign-up (D304), so many can
+  // be waiting for their links at once; the queue's limit holds here, where
+  // one joins it. This request is not counted against itself.
+  const waiting = await client.query<{ count: number }>(
+    `SELECT count(*)::int AS count FROM users
+      WHERE status = 'pending' AND role = 'user' AND email_verified_at IS NOT NULL AND id <> $1`,
+    [userId],
+  );
+  if ((waiting.rows[0]?.count ?? 0) >= settings.max_pending_signups) return 'signup_full';
+  await client.query('UPDATE users SET email_verified_at = coalesce(email_verified_at, now()) WHERE id = $1', [userId]);
+  return 'awaiting_approval';
 }
 
 /**

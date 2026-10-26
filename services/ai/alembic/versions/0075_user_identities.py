@@ -20,7 +20,7 @@ down_revision = "0074_email_verification"
 branch_labels = None
 depends_on = None
 
-#: `apps/orchestrator/src/auth/oauth.ts` `OAUTH_PROVIDERS`.
+#: `packages/shared` `OAUTH_PROVIDERS`.
 PROVIDERS = ("google", "github")
 
 
