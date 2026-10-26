@@ -141,7 +141,8 @@ export async function handleSignupCallback(callback: SignupCallback): Promise<vo
     // A *Custom budget* button from before D279: there is no amount to choose now.
     const request = await getSignupRequest(payload.userId);
     if (request?.status !== 'pending') {
-      await healed({ status: request?.status ?? 'gone' });
+      // A request approved and since closed (D264) reads as approved.
+      await healed({ status: request?.status === 'closed' ? 'active' : (request?.status ?? 'gone') });
       return;
     }
     await telegram?.answerCallback(callback.callbackId, messages.signup.already.pending);

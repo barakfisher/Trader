@@ -28,6 +28,7 @@ import { getSessionUser, insertAdminAudit, type UserRow } from '../db/queries.js
 import { auditEntry } from './adminAudit.js';
 import { forbidden, toErrorResponse, unauthorized, ApiProblem } from './errors.js';
 import { registerAccountRoutes } from './routes/account.js';
+import { registerAccountDeletionRoutes } from './routes/accountDeletion.js';
 import { registerAccountSessionRoutes } from './routes/accountSessions.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerAdminKeysRoutes } from './routes/adminKeys.js';
@@ -110,7 +111,7 @@ const PROTECTED_PREFIXES = [
   '/research',
   '/notifications',
   '/settings',
-  // The user's own account: its reset (D162) and its signed-in devices (D261).
+  // The user's own account: its reset (D162), its signed-in devices (D261), its export and deletion (D264).
   '/account',
   // Named individually, not as '/telegram': POST /telegram/webhook is called by
   // Telegram and must stay unauthenticated - it proves itself with the secret
@@ -318,6 +319,7 @@ export function createApp(
   registerAuthRoutes(app);
   registerOAuthRoutes(app, oauthProviders);
   registerAccountRoutes(app);
+  registerAccountDeletionRoutes(app);
   registerAccountSessionRoutes(app);
   registerPortfolioRoutes(app);
   registerHoldingsRoutes(app);

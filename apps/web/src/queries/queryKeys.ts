@@ -42,6 +42,7 @@ export const queryKeys = {
   sessions: ['account', 'sessions'] as const,
   oauthProviders: ['oauth-providers'] as const,
   identities: ['identities'] as const,
+  accountDeletion: ['account-deletion'] as const,
   monthlySpend: ['settings', 'llm-spend'] as const,
   /** The user's own OpenRouter key, as its last four and its state (D206). */
   ownLlmKey: ['settings', 'llm-key'] as const,

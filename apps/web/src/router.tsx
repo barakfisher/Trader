@@ -20,6 +20,7 @@ import {
   type RouterHistory,
 } from '@tanstack/react-router';
 
+import { DeletionCancelledBanner } from './components/DeletionCancelledBanner.tsx';
 import { SpendReminder } from './components/SpendIndicator.tsx';
 import { AppBar } from './components/AppBar.tsx';
 import { ConceptDialog } from './components/ConceptDialog.tsx';
@@ -46,6 +47,8 @@ const rootRoute = createRootRoute({
       <AppBar />
       {/* D246: from five days before the key runs out, once a day until dismissed. */}
       <SpendReminder />
+      {/* D264: this sign-in cancelled the account's deletion. */}
+      <DeletionCancelledBanner />
       <Outlet />
       {/* Mounted beside the routes rather than inside the feed: it is an
           overlay, and a concept opened from one view must not be unmounted by

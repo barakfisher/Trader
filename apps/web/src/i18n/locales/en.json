@@ -2272,7 +2272,37 @@
       "linked": "Linked. You can now sign in with it.",
       "already_linked": "That provider is already linked to this account.",
       "taken": "That provider account is already linked to another Traders account.",
-      "failed": "Signing in with the provider did not work. Try again, or sign in with your password."
+      "failed": "Signing in with the provider did not work. Try again, or sign in with your password.",
+      "restored": "Signed in. Signing in cancelled your account's deletion, and full access is back."
     }
+  },
+  "accountDeletion": {
+    "dataTitle": "Your data",
+    "exportIntro": "Download everything this account holds as one JSON file: your settings, holdings, agents and their ledgers, scans, proposals, observations, topics and conversations. Your model key, sessions and password are never in it.",
+    "exportButton": "Download my data",
+    "exporting": "Preparing the file…",
+    "exportFailed": "The file did not download. Try again.",
+    "title": "Delete account",
+    "intro_one": "The account closes at once - signed out everywhere, nothing runs for it - and is permanently deleted {{count}} day later. Until then, signing in cancels the deletion.",
+    "intro_other": "The account closes at once - signed out everywhere, nothing runs for it - and is permanently deleted {{count}} days later. Until then, signing in cancels the deletion.",
+    "erases": "Deleted for good: your settings, holdings, agents and their ledgers, scans, proposals, observations, topics, conversations, model key and Telegram link. Market data shared with other users stays. The installation's backups keep a deleted account for up to 56 days.",
+    "exportFirst": "Want a copy? Download your data first.",
+    "adminNotAllowed": "The installation's admin account cannot be deleted from Settings.",
+    "confirmLabel": "Type {{word}} to confirm",
+    "passwordLabel": "Your password",
+    "signInAgain_one": "This account signs in with Google or GitHub, so confirm by signing in again: sign out, sign in, and delete within {{count}} minute.",
+    "signInAgain_other": "This account signs in with Google or GitHub, so confirm by signing in again: sign out, sign in, and delete within {{count}} minutes.",
+    "signedInRecently": "You signed in a moment ago, which confirms it is you.",
+    "submit": "Delete my account",
+    "deleting": "Closing the account…",
+    "failed": "The account was not closed.",
+    "incorrectPassword": "That is not this account's password.",
+    "loadFailed": "Could not check how to confirm a deletion.",
+    "closedTitle": "Your account is closed",
+    "closedBody": "It is disabled now and will be permanently deleted on {{date}}.",
+    "closedRestore": "Signing in before then restores it, with everything in it.",
+    "closedEmail": "An email with this date is on its way to your address.",
+    "closedSignIn": "Go to sign in",
+    "cancelledBanner": "Signing in cancelled your account's deletion. Full access is back."
   }
 }

@@ -1059,6 +1059,8 @@ export type OAuthProviderName = (typeof OAUTH_PROVIDERS)[number];
  */
 export const OAUTH_OUTCOMES = [
   'signed_in',
+  // Signed in, and the sign-in cancelled the account's pending deletion (D264).
+  'restored',
   'pending',
   'closed',
   'unverified_email',
@@ -1477,6 +1479,44 @@ export interface AccountResetResponse {
   groups: AccountResetGroup[];
   /** Rows erased, per table. */
   erased: Record<string, number>;
+}
+
+/** Typed to confirm deleting the account (D264); like the reset's word, the same in every language. */
+export const ACCOUNT_DELETION_CONFIRMATION = 'DELETE';
+
+/** Days between asking to delete the account and its erase; signing in before then cancels it (D264). */
+export const ACCOUNT_DELETION_GRACE_DAYS = 7;
+
+/**
+ * `GET /account/deletion`: how this account confirms a deletion (D264). With a
+ * password, the password; an account that only signs in through Google or
+ * GitHub signs in again, and `recentSignIn` says whether this session is
+ * recent enough to count.
+ */
+export interface AccountDeletionCheck {
+  confirmWith: 'password' | 'recent_sign_in';
+  recentSignIn: boolean;
+  /** Minutes a sign-in counts as recent. */
+  recentSignInMinutes: number;
+  /** False for the admin, who runs the installation and cannot delete it from Settings. */
+  allowed: boolean;
+  graceDays: number;
+}
+
+/** `POST /account/deletion`. `password` is required when the account has one. */
+export interface AccountDeletionInput {
+  confirm: string;
+  password?: string;
+}
+
+/** The account is closed and every session ended; it is erased on `deletionDueAt` unless signed in to first. */
+export interface AccountDeletionResponse {
+  deletionDueAt: string;
+}
+
+/** `POST /auth/login`: the user, and whether this sign-in cancelled a pending deletion (D264). */
+export interface LoginResponse extends SessionUser {
+  deletionCancelled: boolean;
 }
 
 export interface ApiError {

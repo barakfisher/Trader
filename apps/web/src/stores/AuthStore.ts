@@ -1,6 +1,13 @@
 import { makeAutoObservable, reaction, runInAction } from 'mobx';
 
-import type { ResendVerificationInput, SessionUser, UiLanguage } from '@traders/shared';
+import type {
+  AccountDeletionInput,
+  AccountDeletionResponse,
+  LoginResponse,
+  ResendVerificationInput,
+  SessionUser,
+  UiLanguage,
+} from '@traders/shared';
 
 import { ApiRequestError, api } from '../api/client.ts';
 import { onSessionEnded } from '../api/sessionEnded.ts';
@@ -25,6 +32,14 @@ export class AuthStore {
    * disabled, or run out (D261) - so the sign-in page says why it is showing.
    */
   sessionEndedNotice = false;
+  /**
+   * The account was just closed at the user's request (D264): when it will be
+   * erased, in the account's own zone and language - signed out, the display
+   * zone is UTC and the language the browser's - for the screen that says so in place of the sign-in page.
+   */
+  closed: { deletionDueAt: string; timeZone: string; language: UiLanguage } | null = null;
+  /** This sign-in reopened an account waiting to be deleted (D264): the app says so once. */
+  deletionCancelled = false;
 
   constructor(private readonly root: RootStore) {
     makeAutoObservable(this, {}, { autoBind: true });
@@ -43,7 +58,8 @@ export class AuthStore {
     // out - the sign-in page - the account's setting is unknown, so the
     // browser's language stands in for it.
     reaction(
-      () => this.user?.language ?? signedOutLanguage(),
+      // The closed screen (D264) is still the account's, so in its language.
+      () => this.user?.language ?? this.closed?.language ?? signedOutLanguage(),
       (language) => applyLanguage(language),
       { fireImmediately: true },
     );
@@ -83,10 +99,12 @@ export class AuthStore {
     this.error = null;
     this.unverified = false;
     this.sessionEndedNotice = false;
+    this.closed = null;
     try {
-      const user = await api.post<SessionUser>('/auth/login', { email, password });
+      const { deletionCancelled, ...user } = await api.post<LoginResponse>('/auth/login', { email, password });
       runInAction(() => {
         this.user = user;
+        this.deletionCancelled = deletionCancelled;
       });
     } catch (error) {
       runInAction(() => {
@@ -136,6 +154,36 @@ export class AuthStore {
     await api.post('/auth/verify/resend', { email, password } satisfies ResendVerificationInput);
   }
 
+  /**
+   * Close this account (D264). The server ends every session, this one too, so
+   * the app leaves as a sign-out does and the closed screen says when the
+   * account goes. Throws for the card to show.
+   */
+  async deleteAccount(input: AccountDeletionInput): Promise<void> {
+    const { deletionDueAt } = await api.post<AccountDeletionResponse>('/account/deletion', input);
+    runInAction(() => {
+      const timeZone = this.user?.timezone ?? 'UTC';
+      const language = this.user?.language ?? signedOutLanguage();
+      // Set before the session clears, so the page never draws in another language between.
+      this.closed = { deletionDueAt, timeZone, language };
+      this.clearSession();
+    });
+  }
+
+  /** The closed screen gives way to the sign-in page. */
+  leaveClosedScreen(): void {
+    this.closed = null;
+  }
+
+  /** A sign-in through Google or GitHub came back having cancelled a deletion (`?oauth=restored`). */
+  noteDeletionCancelled(): void {
+    this.deletionCancelled = true;
+  }
+
+  dismissDeletionCancelled(): void {
+    this.deletionCancelled = false;
+  }
+
   async logout(): Promise<void> {
     try {
       await api.post('/auth/logout');
@@ -158,6 +206,7 @@ export class AuthStore {
   /** Everything one account's session left on screen goes with it. */
   private clearSession(): void {
     this.user = null;
+    this.deletionCancelled = false;
     // Every cached server response is one account's. Cleared, not
     // invalidated: an invalidated query would refetch - as nobody - and
     // keep showing the previous account's numbers until it failed.

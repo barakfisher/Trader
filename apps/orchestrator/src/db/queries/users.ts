@@ -1,7 +1,8 @@
 import { query, queryOne } from '../pool.js';
 
 export type UserRole = 'user' | 'admin';
-export type UserStatus = 'pending' | 'active' | 'rejected' | 'disabled';
+/** `closed`: the user asked to delete the account; it is erased on `deletion_due_at` (D264). */
+export type UserStatus = 'pending' | 'active' | 'rejected' | 'disabled' | 'closed';
 
 export interface UserRow {
   id: string;
@@ -67,6 +68,48 @@ export interface UserCredentialsRow {
   email: string | null;
   /** A pending request whose address was never proven is waiting for its link, not for the admin (D259). */
   email_verified: boolean;
+}
+
+/** A closed account (D264): when it will be erased, and where to say so. */
+export interface ClosedAccountRow {
+  id: string;
+  email: string | null;
+  timezone: string;
+  deletion_due_at: Date;
+}
+
+/**
+ * Close the account at the user's request (D264): `closed`, to be erased in
+ * `graceDays`, and every session ended in the same statement. Everything that
+ * runs for a user asks for `active`, so from here the account is signed in
+ * nowhere and nothing is scheduled for it. Never the admin, and only an
+ * account that is active now; null otherwise.
+ */
+export function closeAccount(userId: string, graceDays: number): Promise<ClosedAccountRow | null> {
+  return queryOne<ClosedAccountRow>(
+    endingSessions(`UPDATE users
+        SET status = 'closed',
+            deletion_due_at = now() + make_interval(days => $2),
+            session_version = session_version + 1
+      WHERE id = $1 AND status = 'active' AND role <> 'admin'
+  RETURNING id, email, timezone, deletion_due_at`),
+    [userId, graceDays],
+  );
+}
+
+/**
+ * Signing in during the grace period cancels the deletion (D264). Only a
+ * `closed` account still before its date: never a `disabled` one - otherwise
+ * any user the admin disabled could undo it by signing in - and never one the
+ * erase may already be taking. Null when there is nothing to reopen.
+ */
+export function reopenClosedAccount(userId: string): Promise<UserRow | null> {
+  return queryOne<UserRow>(
+    `UPDATE users SET status = 'active', deletion_due_at = NULL
+      WHERE id = $1 AND status = 'closed' AND deletion_due_at > now()
+  RETURNING ${USER_COLUMNS}`,
+    [userId],
+  );
 }
 
 /** Email is unique regardless of case (0058's `users_email_lower_key`), so this is one row or none. */

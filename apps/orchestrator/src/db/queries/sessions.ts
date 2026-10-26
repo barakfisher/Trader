@@ -102,6 +102,19 @@ export function listSessions(userId: string): Promise<SessionRow[]> {
   );
 }
 
+/**
+ * Whether this session of the user's began within `minutes` (D264): an account
+ * with no password confirms a deletion by having just signed in.
+ */
+export async function sessionSignedInWithin(userId: string, sessionId: string, minutes: number): Promise<boolean> {
+  const row = await queryOne<{ recent: boolean }>(
+    `SELECT created_at > now() - make_interval(mins => $3) AS recent
+       FROM user_sessions WHERE user_id = $1 AND id = $2`,
+    [userId, sessionId, minutes],
+  );
+  return row?.recent ?? false;
+}
+
 /** End one of the user's sessions; false when the user has no such session. */
 export async function deleteSession(userId: string, sessionId: string): Promise<boolean> {
   const rows = await query<{ id: string }>(

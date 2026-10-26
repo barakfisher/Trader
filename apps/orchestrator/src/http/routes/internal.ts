@@ -31,6 +31,7 @@ import {
   primaryAgentId,
   type UserRow,
 } from '../../db/queries.js';
+import { eraseDueAccounts } from '../../services/accountErase.js';
 import { backfillInstrumentNames } from '../../services/instrumentMetadata.js';
 import { AUTH_TOKEN_RETENTION_DAYS, UNVERIFIED_SIGNUP_DAYS } from '../linkTokens.js';
 import { runPortfolioScan } from '../../services/portfolioScan.js';
@@ -88,6 +89,9 @@ const RUN_BUCKET_MINUTES: Record<string, number> = {
   // the sweep only removes the rows - and the addresses and user agents they
   // keep - so once a day bounds how long that personal data outlives them.
   auth_sweep: 24 * 60,
+  // An account is erased within the hour after its deletion date (D264): the
+  // date the user was told is the day it goes, not the day after.
+  account_erase: 60,
   // One digest a day, which is what makes it a digest. A second one the same
   // day would split the day's deferred findings across two messages and defeat
   // the batching that is the entire point of deferring them.
@@ -138,6 +142,7 @@ const runSchema = z.object({
     'backfill',
     'proposal_sweep',
     'auth_sweep',
+    'account_erase',
     'daily_digest',
     'instrument_metadata',
     'universe_rescreen',
@@ -266,6 +271,11 @@ async function runForInstallation(context: Context, request: RunRequest): Promis
         tokens: await deleteExpiredAuthTokens(AUTH_TOKEN_RETENTION_DAYS),
         unverifiedSignups: await deleteStaleUnverifiedSignups(UNVERIFIED_SIGNUP_DAYS),
       });
+    }
+
+    if (kind === 'account_erase') {
+      const result = await eraseDueAccounts();
+      return done(runId, result.failed > 0 ? 'degraded' : 'ok', result);
     }
 
     // news_collect. Held and topic instruments only - never the universe. The

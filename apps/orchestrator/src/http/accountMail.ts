@@ -95,6 +95,26 @@ export async function sendEmailChangeNotice(sender: EmailSender, recipient: Reci
 }
 
 /**
+ * The deletion date as the person reads it: a long date and time in their
+ * language and their own zone (D163), so "deleted on" is their calendar's day.
+ */
+export function deletionDate(dueAt: Date, language: UiLanguage, timeZone: string): string {
+  return new Intl.DateTimeFormat(language, { dateStyle: 'long', timeStyle: 'short', timeZone }).format(dueAt);
+}
+
+/** The account was closed at the user's request (D264): when it will be erased, and that signing in cancels it. */
+export async function sendAccountClosed(
+  sender: EmailSender,
+  origin: string,
+  recipient: Omit<Recipient, 'userId'>,
+  dueAt: Date,
+  timeZone: string,
+): Promise<void> {
+  const date = deletionDate(dueAt, recipient.language, timeZone);
+  await sender.send(emailMessages.accountClosed(recipient.email, recipient.language, date, pageLink(origin, '/')));
+}
+
+/**
  * What of a mail failure may be logged: the SMTP code and command, never the
  * error itself - `nodemailer`'s errors carry the refused recipients and the
  * server's reply, both of which name the address.

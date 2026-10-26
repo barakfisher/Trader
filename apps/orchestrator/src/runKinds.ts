@@ -26,6 +26,8 @@ export const INSTALLATION_KINDS: ReadonlySet<string> = new Set([
   'proposal_sweep',
   // Deletes expired sessions and links and unverified sign-ups past their window, whoever's (D261, D304).
   'auth_sweep',
+  // Erases accounts past their deletion date, and old rejected requests in automatic signup (D264).
+  'account_erase',
   'agent_scans',
   RESCREEN_KIND,
 ]);

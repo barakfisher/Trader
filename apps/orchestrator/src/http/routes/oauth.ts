@@ -41,6 +41,7 @@ import {
   linkIdentity,
   listIdentities,
   recordSignIn,
+  reopenClosedAccount,
   unlinkIdentity,
 } from '../../db/queries.js';
 import { emailMessages } from '../../email/messages.js';
@@ -281,10 +282,13 @@ async function signIn(context: Context<AppEnv>, userId: string): Promise<OAuthOu
   const user = await getUser(userId);
   if (!user) return 'failed';
   if (user.status === 'pending') return 'pending';
-  if (user.status !== 'active') return 'not_active';
-  await issueSession(context, user);
+  // Signing in during the grace period cancels a deletion (D264), as with a
+  // password - a closed account only, never one the admin disabled.
+  const reopened = user.status === 'closed' ? await reopenClosedAccount(user.id) : null;
+  if (user.status !== 'active' && reopened === null) return 'not_active';
+  await issueSession(context, reopened ?? user);
   await recordSignIn(user.id);
-  return 'signed_in';
+  return reopened ? 'restored' : 'signed_in';
 }
 
 /** Every link is mailed to the account (D263), so a link its owner did not make is seen. */

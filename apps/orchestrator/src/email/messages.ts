@@ -36,6 +36,8 @@ interface EmailCatalogue {
   passwordChanged(signInLink: string): Draft;
   /** A Google or GitHub account was linked, by hand or automatically (D263). */
   identityLinked(provider: string, signInLink: string): Draft;
+  /** The account was closed at the user's request and will be erased on `date` (D264). */
+  accountClosed(date: string, signInLink: string): Draft;
 }
 
 const isolate = (text: string) => `⁨${text}⁩`;
@@ -100,6 +102,16 @@ const CATALOGUE: Record<UiLanguage, EmailCatalogue> = {
         { link: signInLink },
       ],
     }),
+    accountClosed: (date, signInLink) => ({
+      subject: 'Your Traders account will be deleted',
+      blocks: [
+        'You asked to delete your Traders account. It is closed now: it is signed out everywhere, and no scans, alerts or digests run for it.',
+        `On ${date} it will be permanently deleted, with everything in it - holdings, agents and their ledgers, proposals, observations and conversations.`,
+        'Changed your mind? Sign in before then and the deletion is cancelled:',
+        { link: signInLink },
+        'If you did not ask for this, sign in now to keep your account, then change your password.',
+      ],
+    }),
   },
   he: {
     verifyEmail: (link, hours) => ({
@@ -160,6 +172,16 @@ const CATALOGUE: Record<UiLanguage, EmailCatalogue> = {
         { link: signInLink },
       ],
     }),
+    accountClosed: (date, signInLink) => ({
+      subject: 'חשבון ה-Traders שלכם יימחק',
+      blocks: [
+        'ביקשתם למחוק את חשבון ה-Traders שלכם. החשבון סגור עכשיו: הוא מנותק מכל המכשירים, ולא רצות עבורו סריקות, התראות או סיכומים.',
+        `ב-${isolate(date)} הוא יימחק לצמיתות, עם כל מה שבו - אחזקות, סוכנים ויומני המסחר שלהם, הצעות, תצפיות ושיחות.`,
+        'שיניתם את דעתכם? התחברו לפני כן והמחיקה תבוטל:',
+        { link: signInLink },
+        'אם לא ביקשתם זאת, התחברו עכשיו כדי לשמור על החשבון, ואז החליפו את הסיסמה.',
+      ],
+    }),
   },
 };
 
@@ -212,4 +234,6 @@ export const emailMessages = {
     render(to, language, CATALOGUE[language].passwordChanged(signInLink)),
   identityLinked: (to: string, language: UiLanguage, provider: string, signInLink: string) =>
     render(to, language, CATALOGUE[language].identityLinked(provider, signInLink)),
+  accountClosed: (to: string, language: UiLanguage, date: string, signInLink: string) =>
+    render(to, language, CATALOGUE[language].accountClosed(date, signInLink)),
 };

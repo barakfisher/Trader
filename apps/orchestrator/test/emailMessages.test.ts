@@ -18,6 +18,7 @@ describe('the email catalogue', () => {
     emailMessages.signupExists('a@example.com', language, 'https://traders.example/'),
     emailMessages.verifyNewEmail('a@example.com', language, LINK, 24),
     emailMessages.emailChangeRequested('a@example.com', language, 'new@example.com'),
+    emailMessages.accountClosed('a@example.com', language, '2 November 2026 at 12:00', 'https://traders.example/'),
   ];
 
   it.each(UI_LANGUAGES)('writes every kind in %s, addressed, with a subject, text and HTML', (language) => {
@@ -46,6 +47,15 @@ describe('the email catalogue', () => {
     expect(exists!.text).not.toContain('#token=');
     expect(notice!.text).not.toContain('#token=');
     expect(notice!.text).toContain('new@example.com');
+  });
+
+  it('says when a closed account goes and how to keep it, in each language (D264)', () => {
+    for (const language of UI_LANGUAGES) {
+      const closed = kinds(language)[4]!;
+      expect(closed.text).toContain('2 November 2026 at 12:00');
+      expect(closed.text).toContain('https://traders.example/');
+      expect(closed.text).not.toContain('#token=');
+    }
   });
 
   it('escapes what it quotes, so an address cannot write markup into the HTML', () => {
