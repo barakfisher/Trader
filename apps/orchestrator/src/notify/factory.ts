@@ -20,8 +20,10 @@
  * itself, so it does not need to stop the boot.
  */
 
+import { LEGAL_VERSION } from '@traders/shared';
+
 import type { Config } from '../config.js';
-import { findTelegramBindingByUser } from '../db/queries.js';
+import { findTelegramPushChat } from '../db/queries.js';
 import { logger } from '../logger.js';
 import { TelegramNotifier, proposalLinkBase } from '../telegram/client.js';
 import { NullNotifier, type Notifier } from './notifier.js';
@@ -64,6 +66,6 @@ export function buildNotifier(config: Config): Notifier {
     // Looked up per send rather than cached: a user can connect, disconnect and
     // reconnect a chat between two scans, and a cached id would keep alerting a
     // chat the user deliberately detached.
-    resolveChatId: async (userId) => (await findTelegramBindingByUser(userId))?.chat_id ?? null,
+    resolveChatId: (userId) => findTelegramPushChat(userId, LEGAL_VERSION),
   });
 }

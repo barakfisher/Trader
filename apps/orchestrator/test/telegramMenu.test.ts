@@ -12,6 +12,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { LEGAL_VERSION } from '@traders/shared';
+
 const USER = '00000000-0000-0000-0000-000000000001';
 const PRIMARY = '90000000-0000-0000-0000-000000000001';
 const AGENT = '90000000-0000-0000-0000-0000000000a1';
@@ -615,6 +617,42 @@ describe('whose data a tap reads', () => {
     expect(queries.muteUntil).not.toHaveBeenCalled();
     expect(calls('editMessageText')).toHaveLength(0);
     expect(toast()).toBe(MESSAGES.en.buttonInvalid);
+  });
+});
+
+describe('an account that has not accepted the current terms (D320)', () => {
+  const unaccepted = { user_id: USER, chat_id: String(CHAT), legal_accepted: false };
+
+  it('is told to accept in the app, and its message is neither a command nor a question', async () => {
+    for (const text of ['/portfolio', 'What do I hold?', '/mute 2h']) {
+      vi.mocked(queries.findTelegramBindingByChat).mockResolvedValueOnce(unaccepted as never);
+      await handleTelegramUpdate(deps(), command(text));
+      expect(lastText(), text).toBe(MESSAGES.en.legalAcceptanceRequired);
+    }
+    expect(queries.listHoldings).not.toHaveBeenCalled();
+    expect(queries.muteUntil).not.toHaveBeenCalled();
+    expect(calls('editMessageText')).toHaveLength(0);
+  });
+
+  it('can still disconnect with /stop', async () => {
+    vi.mocked(queries.findTelegramBindingByChat).mockResolvedValueOnce(unaccepted as never);
+    await handleTelegramUpdate(deps(), command('/stop'));
+    expect(queries.deleteTelegramBinding).toHaveBeenCalledWith(USER);
+    expect(lastText()).toBe(MESSAGES.en.disconnected);
+  });
+
+  it('has its taps answered with the same, in its language, and nothing read', async () => {
+    settings = { ...settings, language: 'he' };
+    vi.mocked(queries.findTelegramBindingByChat).mockResolvedValueOnce(unaccepted as never);
+    await tapAndSettle(tap(encodeMenuData({ view: 'portfolio' })));
+    expect(toast()).toBe(MESSAGES.he.legalAcceptanceRequiredShort);
+    expect(queries.listHoldings).not.toHaveBeenCalled();
+    expect(calls('editMessageText')).toHaveLength(0);
+  });
+
+  it('asks the binding with the build’s version', async () => {
+    await handleTelegramUpdate(deps(), command('/help'));
+    expect(queries.findTelegramBindingByChat).toHaveBeenCalledWith(String(CHAT), LEGAL_VERSION);
   });
 });
 

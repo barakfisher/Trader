@@ -3106,5 +3106,30 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       // A newer version asks again (D265).
       expect(await read('2026-12-01')).toBe(false);
     });
+
+    it('serves a Telegram chat, and pushes to it, only once its user accepted - the admin always (D320)', async () => {
+      const user = (
+        await getPool().query<{ id: string }>(
+          `INSERT INTO users (email, status, llm_cap_micro_usd) VALUES ($1, 'active', 0) RETURNING id`,
+          [`telegram-${tag}@legal.example.com`],
+        )
+      ).rows[0]!.id;
+      const chat = String(Math.floor(Math.random() * 1e12));
+      await getPool().query('INSERT INTO telegram_bindings (user_id, chat_id) VALUES ($1, $2)', [user, chat]);
+      try {
+        expect(await queries.findTelegramBindingByChat(chat, null)).toMatchObject({ user_id: user, legal_accepted: true });
+        expect(await queries.findTelegramPushChat(user, null)).toBe(chat);
+        expect(await queries.findTelegramBindingByChat(chat, VERSION)).toMatchObject({ legal_accepted: false });
+        expect(await queries.findTelegramPushChat(user, VERSION)).toBeNull();
+        await queries.recordLegalAcceptance(user, VERSION);
+        expect(await queries.findTelegramBindingByChat(chat, VERSION)).toMatchObject({ legal_accepted: true });
+        expect(await queries.findTelegramPushChat(user, VERSION)).toBe(chat);
+        await getPool().query("UPDATE users SET role = 'admin' WHERE id = $1", [user]);
+        expect(await queries.findTelegramPushChat(user, '2027-01-01')).toBe(chat);
+      } finally {
+        await getPool().query('DELETE FROM telegram_bindings WHERE user_id = $1', [user]);
+        await getPool().query("UPDATE users SET role = 'user' WHERE id = $1", [user]);
+      }
+    });
   });
 });

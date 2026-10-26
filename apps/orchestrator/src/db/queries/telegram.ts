@@ -7,6 +7,18 @@ export interface TelegramBindingRow {
   bound_at: Date;
 }
 
+/** A chat's binding as the webhook reads it: with whether its user may be served. */
+export interface TelegramChatBindingRow extends TelegramBindingRow {
+  /** The user accepted `legalVersion`, is the admin, or there is no version yet (D265, D320). */
+  legal_accepted: boolean;
+}
+
+/** Whether `u` accepted the legal version `$n` - true for the admin and while there is none (D320). */
+function legalAccepted(param: string): string {
+  return `(${param}::text IS NULL OR u.role = 'admin'
+           OR EXISTS (SELECT 1 FROM legal_acceptances la WHERE la.user_id = u.id AND la.version = ${param}))`;
+}
+
 /**
  * Redeem a bind token and bind the chat, or report why not - atomically.
  *
@@ -70,7 +82,8 @@ export function findTelegramBindingByUser(userId: string): Promise<TelegramBindi
 }
 
 /**
- * The user a chat speaks for, if any.
+ * The user a chat speaks for, if any, and whether they accepted `legalVersion`
+ * - a chat whose user has not is answered with one sentence, not served (D320).
  *
  * The webhook's authorisation check. An unbound chat resolves to null and is
  * ignored in silence (FLOWS.md F4) - answering it would confirm the bot exists
@@ -81,14 +94,30 @@ export function findTelegramBindingByUser(userId: string): Promise<TelegramBindi
  * question, decision, scan or change - until they are enabled again. The
  * binding itself is kept, so enabling them needs no new link.
  */
-export function findTelegramBindingByChat(chatId: string): Promise<TelegramBindingRow | null> {
-  return queryOne<TelegramBindingRow>(
-    `SELECT b.user_id, b.chat_id::text AS chat_id, b.username, b.bound_at
+export function findTelegramBindingByChat(chatId: string, legalVersion: string | null): Promise<TelegramChatBindingRow | null> {
+  return queryOne<TelegramChatBindingRow>(
+    `SELECT b.user_id, b.chat_id::text AS chat_id, b.username, b.bound_at, ${legalAccepted('$2')} AS legal_accepted
        FROM telegram_bindings b
        JOIN users u ON u.id = b.user_id AND u.status = 'active'
       WHERE b.chat_id = $1`,
-    [chatId],
+    [chatId, legalVersion],
   );
+}
+
+/**
+ * The chat a push to `userId` goes to: none while the user has not accepted
+ * the current legal version (D320) - nothing is sent about an account that has
+ * not agreed to the terms it would be sent under. The admin is never held.
+ */
+export async function findTelegramPushChat(userId: string, legalVersion: string | null): Promise<string | null> {
+  const row = await queryOne<{ chat_id: string }>(
+    `SELECT b.chat_id::text AS chat_id
+       FROM telegram_bindings b
+       JOIN users u ON u.id = b.user_id
+      WHERE b.user_id = $1 AND ${legalAccepted('$2')}`,
+    [userId, legalVersion],
+  );
+  return row?.chat_id ?? null;
 }
 
 /** Disconnect a chat. `/stop` - the user's own off switch. */

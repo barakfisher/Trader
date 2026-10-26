@@ -735,7 +735,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     ).rows[0]!.id;
     await pool.query(`INSERT INTO telegram_bindings (user_id, chat_id) VALUES ($1, $2)`, [disabled, chatId]);
     try {
-      expect(await findTelegramBindingByChat(String(chatId))).toBeNull();
+      expect(await findTelegramBindingByChat(String(chatId), null)).toBeNull();
 
       resetConfigForTests();
       const secret = 'telegram-signing-secret-for-tests';
