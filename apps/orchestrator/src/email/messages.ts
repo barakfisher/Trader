@@ -30,9 +30,9 @@ interface EmailCatalogue {
   verifyNewEmail(link: string, hours: number): Draft;
   /** To the current address, when a change to another one is asked for (D259). */
   emailChangeRequested(newEmail: string): Draft;
-  /** A reset link, to an active account's address (D260, D310). */
+  /** A reset link, to an active account's address (D260, D312). */
   resetPassword(link: string, minutes: number): Draft;
-  /** After the password changed, by reset or from Settings (D310). */
+  /** After the password changed, by reset or from Settings (D312). */
   passwordChanged(signInLink: string): Draft;
 }
 

@@ -1,5 +1,5 @@
 /**
- * A forgotten password (D260, D310): asking for a reset link, opening it, and
+ * A forgotten password (D260, D312): asking for a reset link, opening it, and
  * the notice every password change sends. The database is mocked; the hashing
  * is real, and mail is recorded rather than sent (D258).
  */
@@ -66,7 +66,7 @@ type App = ReturnType<typeof buildApp>;
 const post = (app: App, path: string, body: unknown, headers: Record<string, string> = HEADERS) =>
   app.request(path, { method: 'POST', headers, body: JSON.stringify(body) });
 
-describe('asking for a reset link (D260, D310)', () => {
+describe('asking for a reset link (D260, D312)', () => {
   let app: App;
 
   beforeEach(() => {
@@ -121,7 +121,7 @@ describe('asking for a reset link (D260, D310)', () => {
   });
 });
 
-describe('opening a reset link (D260, D310)', () => {
+describe('opening a reset link (D260, D312)', () => {
   let app: App;
 
   beforeEach(() => {
@@ -161,7 +161,7 @@ describe('opening a reset link (D260, D310)', () => {
   });
 });
 
-describe('a password changed from Settings (D310)', () => {
+describe('a password changed from Settings (D312)', () => {
   it("mails the account's address that its password changed", async () => {
     vi.clearAllMocks();
     const app = buildApp();

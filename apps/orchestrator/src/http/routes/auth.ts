@@ -372,7 +372,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
   });
 
   /**
-   * Ask for a reset link (D260, D310). The answer is the same whatever the
+   * Ask for a reset link (D260, D312). The answer is the same whatever the
    * address - an account, a request, a stranger's typo - so the form says
    * nothing about who has an account (D185). Only an active account with a
    * proven address is mailed, in the background, so SMTP's time does not tell
@@ -401,7 +401,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
 
   /**
    * Choose a new password from a reset link (D260). It ends every session and
-   * signs nobody in (D310): the person signs in with the new password, as
+   * signs nobody in (D312): the person signs in with the new password, as
    * after any link. A password the rule refuses leaves the link unused.
    */
   app.post('/auth/reset', async (context) => {

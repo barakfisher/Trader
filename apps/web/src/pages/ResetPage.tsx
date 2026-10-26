@@ -25,7 +25,7 @@ function tokenFromAddress(): string | null {
 }
 
 /**
- * Choose a new password from a mailed link (D260, D310). The token leaves the
+ * Choose a new password from a mailed link (D260, D312). The token leaves the
  * address bar at once and is sent only with the new password, so a mail
  * scanner opening the link changes nothing. Success signs nobody in: every
  * session has ended, and the person signs in with the new password.

@@ -251,7 +251,7 @@ export async function deleteStaleUnverifiedSignups(days: number): Promise<number
   return row?.deleted ?? 0;
 }
 
-/** Who a reset mail goes to: an active account with a proven address, or nobody (D310). */
+/** Who a reset mail goes to: an active account with a proven address, or nobody (D312). */
 export function getResetRecipient(email: string): Promise<{ id: string; email: string; language: string } | null> {
   return queryOne<{ id: string; email: string; language: string }>(
     `SELECT u.id, u.email, coalesce(us.language, 'en') AS language

@@ -8,7 +8,7 @@ import { useTranslation } from '../i18n/index.ts';
 import { Button, ErrorNote } from './ui.tsx';
 
 /**
- * Ask for a reset link (D260, D310). The answer is the same whatever the
+ * Ask for a reset link (D260, D312). The answer is the same whatever the
  * address (D185), so the page says "if an account uses it" rather than
  * "sent": it cannot know, and must not say.
  */

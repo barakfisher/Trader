@@ -4917,6 +4917,30 @@ failure they prevent.
     - **Cost:** a link in kind's Mailpit is opened on this Mac, not the phone.
     - **Rejected:** keeping `/mailpit/` on Tailscale (fine only while the tailnet holds nobody
       else's devices); no Mailpit on kind (the email flows could not be tried there).
+312. **How PR 11 builds D260's reset** (assumptions stated to the user, 2026-10-26; M10 PR 11; no
+    migration - `auth_tokens` already enumerates `reset_password`).
+    - **Who is mailed:** only an `active` account with a proven address
+      (`getResetRecipient`). An unknown address, a request, a disabled account: no mail. The
+      answer is `{ sent: true }` in every case (D185), and the mail goes in the background so
+      SMTP's time says nothing either. The page says "if an account uses that address".
+    - **The link** (`/reset#token=`, 30 minutes, `RESET_TOKEN_TTL_MINUTES`) works once; a new
+      request cancels the earlier link. `issueAuthToken` takes minutes now, so the half hour
+      and verification's day share one column.
+    - **Opening it signs nobody in:** the password is replaced, `password_must_change` cleared,
+      `session_version` bumped and every session row deleted in one transaction, and the
+      browser's cookie is deleted; the person signs in with the new password, as after any
+      link (D304). Only an account still `active` at the address the link went to.
+    - **Every password change mails a notice** ("your password was changed", with a link to the
+      sign-in page), by reset or from Settings: a change the owner did not make is seen.
+    - **A reset ends a pending address change too,** without extra code: D310's link needs the
+      account's current password.
+    - **Rate limits:** `resetRequestPerAddress` 5 an hour, `resetRequestPerEmail` 3 an hour,
+      spent before any lookup.
+    - **Rejected:**
+      - signing in on a successful reset (a mailbox is not a password, D304);
+      - mailing an unknown address "no account here" (it tells a prober the address is free,
+        and mails strangers on demand);
+      - a notice only on reset (a password changed from a stolen session is the case it is for).
 ---
 
 ## Bugs that cost real time, and the lesson from each

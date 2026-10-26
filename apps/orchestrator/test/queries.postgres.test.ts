@@ -478,7 +478,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         expect(rows[0].pending_email).toBeNull();
       });
 
-      describe('reset links (D260, D310)', () => {
+      describe('reset links (D260, D312)', () => {
         async function resetLink(userId: string, address: string) {
           const token = newLinkToken();
           await queries.issueAuthToken({ userId, purpose: 'reset_password', email: address, tokenHash: linkTokenHash(token), ttlMinutes: 30 });

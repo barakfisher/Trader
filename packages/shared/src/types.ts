@@ -1048,7 +1048,7 @@ export interface VerifyEmailResponse {
     | 'signup_full';
 }
 
-/** `POST /auth/reset` (D260, D310): what a reset link did. */
+/** `POST /auth/reset` (D260, D312): what a reset link did. */
 export interface ResetPasswordResponse {
   outcome: 'reset' | 'expired' | 'used' | 'invalid';
 }

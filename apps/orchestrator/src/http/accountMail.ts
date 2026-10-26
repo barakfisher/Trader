@@ -65,7 +65,7 @@ export async function sendVerificationLink(
   await sender.send(compose(recipient.email, recipient.language, link, VERIFY_TOKEN_TTL_HOURS));
 }
 
-/** A new reset link (D260, D310), cancelling the account's earlier one; it works for half an hour. */
+/** A new reset link (D260, D312), cancelling the account's earlier one; it works for half an hour. */
 export async function sendResetLink(sender: EmailSender, origin: string, recipient: Recipient): Promise<void> {
   const token = newLinkToken();
   await issueAuthToken({
@@ -79,7 +79,7 @@ export async function sendResetLink(sender: EmailSender, origin: string, recipie
   await sender.send(emailMessages.resetPassword(recipient.email, recipient.language, link, RESET_TOKEN_TTL_MINUTES));
 }
 
-/** After any password change, by reset or from Settings (D310): a change the owner did not make is seen. */
+/** After any password change, by reset or from Settings (D312): a change the owner did not make is seen. */
 export async function sendPasswordChanged(sender: EmailSender, origin: string, recipient: Omit<Recipient, 'userId'>): Promise<void> {
   await sender.send(emailMessages.passwordChanged(recipient.email, recipient.language, pageLink(origin, '/')));
 }
