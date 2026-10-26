@@ -26,7 +26,7 @@ import { buildEmailSender, type EmailSender } from '../email/sender.js';
 import { memoryRateLimits, type RateLimits } from './rateLimits.js';
 import { getSessionUser, insertAdminAudit, type UserRow } from '../db/queries.js';
 import { auditEntry } from './adminAudit.js';
-import { LEGAL_GATE_EXEMPT_PATHS, legalAcceptanceRequired } from './legal.js';
+import { exemptFromLegalGate, legalAcceptanceRequired } from './legal.js';
 import { forbidden, toErrorResponse, unauthorized, ApiProblem } from './errors.js';
 import { registerAccountRoutes } from './routes/account.js';
 import { registerAccountDeletionRoutes } from './routes/accountDeletion.js';
@@ -290,11 +290,11 @@ export function createApp(
     if (user.password_must_change) {
       throw new ApiProblem(403, 'password_change_required', 'set a new password first');
     }
-    // A legal version this user has not accepted (D265): nothing until they
-    // do, but taking their data and leaving - someone who declines the new
-    // terms must not lose either. The admin runs the installation whose terms
-    // these are, so is never asked.
-    if (legalAcceptanceRequired(user, context.get('legalAccepted')) && !LEGAL_GATE_EXEMPT_PATHS.has(path)) {
+    // A legal version this user has not accepted (D265, D320): nothing until
+    // they do, but taking their data, leaving, and ending their sessions
+    // (`legal.ts`). The admin runs the installation whose terms these are, so
+    // is never asked.
+    if (legalAcceptanceRequired(user, context.get('legalAccepted')) && !exemptFromLegalGate(path)) {
       throw new ApiProblem(403, LEGAL_ACCEPTANCE_REQUIRED, 'accept the current privacy policy and terms first');
     }
     return next();

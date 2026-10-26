@@ -46,7 +46,7 @@ import { dueSlots, scheduleOf, slotKey, type DueSlot, type ScanSlot, type Sessio
 import { readyToScan } from './agentReadiness.js';
 import { proposeFromScan } from './tradeProposals.js';
 import { announceModelFallbacks } from './modelFallbacks.js';
-import { USER_NOT_ACTIVE, planResearch, researchRunKey, runResearchAttempt } from './scheduledResearch.js';
+import { accountHold, planResearch, researchRunKey, runResearchAttempt } from './scheduledResearch.js';
 
 /** D69: one attempt and at most two retries per slot. */
 export const MAX_SLOT_ATTEMPTS = 3;
@@ -254,9 +254,11 @@ export async function runSlotAttempt(job: SlotAttemptJob, deps: AttemptDeps): Pr
     await finishRun(runId, 'skipped', { reason: 'agent_not_scannable' });
     return;
   }
-  // An account closed (D264) or disabled (D239) after the slot was queued runs nothing more (D316).
-  if ((await getUser(job.userId))?.status !== 'active') {
-    await finishRun(runId, 'skipped', { reason: USER_NOT_ACTIVE });
+  // An account closed (D264) or disabled (D239) after the slot was queued runs
+  // nothing more (D316), nor one that has not accepted the current terms (D320).
+  const hold = await accountHold(job.userId);
+  if (hold !== null) {
+    await finishRun(runId, 'skipped', { reason: hold });
     return;
   }
 

@@ -5160,8 +5160,9 @@ failure they prevent.
     - **How:** with `APP_ENV=production` and no legal version (`LEGAL_VERSION === null`), the
       Admin page refuses *automatic* and *approval* (`legal_text_pending`) and says why, and
       sign-up - by password, by a new Google/GitHub account, or by a provider claiming an
-      unverified request - answers `closed` whatever the stored mode. Both, so a mode set before
-      the gate existed cannot leak past it.
+      unverified request - answers `closed` whatever the stored mode; a sign-up's verification
+      link answers `signup_full` and stays unused (the security review found that path open).
+      All of them, so a mode or a request from before the gate cannot leak past it.
     - **Why production:** it is the signal for "strangers reach this" (D256: only the
       production build faces the internet). compose and kind run `development` for the
       household and keep their modes (kind is in *approval*).
@@ -5175,8 +5176,12 @@ failure they prevent.
     export and deletion** (the user, 2026-10-26; M10 PR 15).
     - **How:** the session middleware reads, in the same query as the session, whether the user
       holds a row for the current version. The session gate then answers
-      `403 legal_acceptance_required` on every protected route but `/account/export` and
-      `/account/deletion`; `/auth/*` (accepting, signing out) is outside the gate already. The
+      `403 legal_acceptance_required` on every protected route but `/account/export`,
+      `/account/deletion` and `/account/sessions/*` (declining must never leave a stolen session
+      out of reach - the security review's point); `/auth/*` (accepting, signing out, a
+      password change) is outside the gate already. Scheduled scans and research skip such an
+      account as `legal_not_accepted` (`accountHold`), so nothing is done with its data nor its
+      budget spent until it accepts. The
       web shows only the acceptance screen (both documents in new tabs, Accept, a "do not
       accept" section with the export and deletion cards, Sign out), and an API refusal
       mid-session reloads the session so the screen appears.
@@ -6028,6 +6033,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 
 | Item | Where | Impact |
 |---|---|---|
+| **Consent records go with an erased account** | `0077` cascade, D317's erase | Once an account is erased there is no record of what it agreed to. Whether consent must outlive the account (and for how long) is a legal retention question for the user or a lawyer, raised by the PR 15 security review; keeping it would need the erase to keep an anonymised row |
 | **Telegram ignores the legal acceptance** | `telegram/*`, D320 | An account that has not accepted the current version (D265) is refused by the web and the API, but Telegram's alerts, digest and Ask carry on until it does. Only matters once a version exists; the fix is the same check before Telegram answers a user |
 | **The template creator's UI has not been seen in a browser** | `MandateFields.tsx`, `TaxonomyPicker.tsx`, `InstructionsCheck.tsx` | jsdom covers the behaviour; layout, Hebrew RTL and the picker's menu are unseen. The UX4 rehearsal method (below, "Running a branch's orchestrator against a copy of the live DB") does it without touching the dev database |
 | **No real model has run `mandate_check`** | `app/agents/mandate_check.py` | Tested with scripted answers only. A model that paraphrases instead of copying quotes has every conflict dropped - safe, but it then looks like it never finds one. Read the first real `llm_calls` rows with `purpose = 'mandate_check'` |

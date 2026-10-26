@@ -63,6 +63,9 @@ vi.mock('../src/db/queries.js', () => ({
   sessionSignedInWithin: vi.fn(async () => false),
   exportAccount: vi.fn(async () => '{"format":"traders-export-1"}'),
   getPortfolio: vi.fn(async () => []),
+  listSessions: vi.fn(async () => []),
+  peekVerificationToken: vi.fn(async () => ({ purpose: 'verify_email', open: true, accountEmail: 'noa@example.com', passwordHash: null })),
+  useVerificationToken: vi.fn(async () => ({ outcome: 'activated', userId: TEST_USER_ID })),
 }));
 
 const { createApp } = await import('../src/http/app.js');
@@ -150,6 +153,16 @@ describe('a production installation with no text keeps sign-up closed', () => {
     expect(queries.createSignupRequest).not.toHaveBeenCalled();
   });
 
+  it("leaves a sign-up's link unused, so a request made before the gate cannot join through it", async () => {
+    const response = await buildApp({ legalVersion: null, production: true }).request('/auth/verify', {
+      method: 'POST',
+      headers: HEADERS,
+      body: JSON.stringify({ token: 'the-token', password: PASSWORD }),
+    });
+    expect(await response.json()).toEqual({ outcome: 'signup_full' });
+    expect(queries.useVerificationToken).not.toHaveBeenCalled();
+  });
+
   it('refuses to open the mode, allows closing it, and says why on the Admin page', async () => {
     user.role = 'admin';
     const app = buildApp({ legalVersion: null, production: true });
@@ -187,6 +200,18 @@ describe('a user who has not accepted the current version', () => {
     expect(exported.status).toBe(200);
     const deletion = await signedIn(app, '/account/deletion');
     expect(deletion.status).toBe(200);
+  });
+
+  it('can still see and end its signed-in devices', async () => {
+    const response = await signedIn(buildApp(), '/account/sessions');
+    expect(response.status).toBe(200);
+  });
+
+  it('is refused at a near miss of an open path, never let through', async () => {
+    const app = buildApp();
+    for (const path of ['/account/export/', '/Account/export', '/account/sessionsX']) {
+      expect((await signedIn(app, path)).status, path).not.toBe(200);
+    }
   });
 
   it('is told which version, in the session', async () => {

@@ -13,6 +13,7 @@ import {
   LEGAL_DOCUMENTS,
   LEGAL_TEXT_PENDING_MARKER,
   LEGAL_VERSION,
+  LEGAL_VERSION_PATTERN,
   UI_LANGUAGES,
   writtenLanguage,
   type SessionUser,
@@ -88,6 +89,12 @@ describe('the text this build ships', () => {
   );
 });
 
+it('names a real publication date as its version, once there is one', () => {
+  if (LEGAL_VERSION === null) return;
+  expect(LEGAL_VERSION).toMatch(LEGAL_VERSION_PATTERN);
+  expect(new Date(`${LEGAL_VERSION}T00:00:00Z`).toISOString().slice(0, 10)).toBe(LEGAL_VERSION);
+});
+
 describe('the pages, signed out (D265)', () => {
   it('opens the privacy policy before any sign-in, with the terms a link away', async () => {
     openAt('/privacy');
@@ -137,7 +144,10 @@ describe('an account that has not accepted the current version', () => {
   it('sees nothing but the acceptance, with both documents to read', async () => {
     openAt('/', USER);
     expect(screen.getByText('Before you continue')).toBeTruthy();
-    expect(screen.getByText(new RegExp(`version ${VERSION}`))).toBeTruthy();
+    // The date read whole, left to right, whatever the sentence around it.
+    const version = screen.getByText(VERSION);
+    expect(version.tagName).toBe('BDI');
+    expect(version.getAttribute('dir')).toBe('ltr');
     for (const name of ['Privacy policy', 'Terms of use']) {
       expect(screen.getByRole('link', { name }).getAttribute('target')).toBe('_blank');
     }

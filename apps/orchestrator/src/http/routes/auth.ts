@@ -371,6 +371,13 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     const tokenHash = linkTokenHash(parsed.data.token);
     let proof: { passwordHash: string } | null = null;
     const peek = await peekVerificationToken(tokenHash);
+    // A sign-up's link joins: held with the rest of sign-up until the legal
+    // text exists (D265, D319). The link is not used, so it works once the
+    // gate opens, while it lasts.
+    if (peek?.purpose === 'verify_email' && signupHeldForLegalText(context)) {
+      const held: VerifyEmailResponse = { outcome: 'signup_full' };
+      return context.json(held);
+    }
     if (peek !== null && peek.purpose !== 'reset_password' && peek.open) {
       const limits = context.get('rateLimits');
       const account = emailKey(normaliseEmail(peek.accountEmail ?? ''));

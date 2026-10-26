@@ -12,10 +12,17 @@ import type { AppEnv } from './app.js';
 /**
  * What a user who has not accepted the current legal version may still do:
  * export their data and delete the account - someone who declines new terms
- * must lose neither. `/auth/*` (signing out, accepting) is outside the
- * session gate already.
+ * must lose neither - and see and end their signed-in devices, so declining
+ * never leaves a stolen session out of reach. `/auth/*` (signing out,
+ * accepting) is outside the session gate already.
  */
-export const LEGAL_GATE_EXEMPT_PATHS: ReadonlySet<string> = new Set(['/account/export', '/account/deletion']);
+const LEGAL_GATE_EXEMPT_PATHS: ReadonlySet<string> = new Set(['/account/export', '/account/deletion']);
+const LEGAL_GATE_EXEMPT_PREFIX = '/account/sessions';
+
+/** Whether `path` stays open to a user who has not accepted the current version. */
+export function exemptFromLegalGate(path: string): boolean {
+  return LEGAL_GATE_EXEMPT_PATHS.has(path) || path === LEGAL_GATE_EXEMPT_PREFIX || path.startsWith(`${LEGAL_GATE_EXEMPT_PREFIX}/`);
+}
 
 /**
  * The user must accept the current legal version before anything else.
