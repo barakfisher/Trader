@@ -71,9 +71,7 @@ def test_a_version_is_a_publication_date(migrated: Engine, version: str) -> None
 def test_the_rows_go_with_the_user(migrated: Engine) -> None:
     with migrated.connect() as connection, connection.begin() as transaction:
         user = connection.execute(
-            text(
-                "INSERT INTO users (status, llm_cap_micro_usd) VALUES ('pending', 0) RETURNING id"
-            )
+            text("INSERT INTO users (status, llm_cap_micro_usd) VALUES ('pending', 0) RETURNING id")
         ).scalar_one()
         connection.execute(
             text("INSERT INTO legal_acceptances (user_id, version) VALUES (:u, :v)"),
