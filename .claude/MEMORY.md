@@ -4826,8 +4826,8 @@ failure they prevent.
     (the user, 2026-10-24; M10 PR 10).
     - Compose: the `mailpit` service, inbox at `http://127.0.0.1:8025`; the orchestrator's
       `SMTP_HOST` defaults to it unless `.env` names a real server.
-    - Kind: in the overlay, never the base; inbox at `http://traders.localhost/mailpit/` and
-      `/mailpit/` on the Tailscale host, so a link can be opened on the phone.
+    - Kind: in the overlay, never the base; inbox at `http://mailpit.localhost`, this Mac only
+      (D311 replaced `/mailpit/` on the app's hosts and the Tailscale name).
     - **Why:** it exercises the same `nodemailer` -> SMTP path the real provider will, so a
       misconfigured sender is found on the laptop.
     - **Rejected:** compose only (kind's flow cannot be clicked through on the phone); log only

@@ -254,14 +254,6 @@ patches:
                     name: web
                     port:
                       name: http
-              # Mailpit's inbox (D307), so a verification link can be opened on the phone.
-              - path: /mailpit
-                pathType: Prefix
-                backend:
-                  service:
-                    name: mailpit
-                    port:
-                      name: http
 EOF
 fi
 
@@ -327,6 +319,7 @@ say "Cluster state"
 kc get pods
 echo
 ok "Traders is running in the cluster: http://traders.localhost"
+echo "     mail it sent (Mailpit, this Mac only): http://mailpit.localhost"
 if [ -n "$TAILNET_HOST" ] && [ "$TAILNET_HOST" != "none" ]; then
   echo "     on your phone (Tailscale): https://$TAILNET_HOST"
   # `serve` is set once and kept across restarts; say so if it never was.

@@ -100,6 +100,20 @@ function requestOrigin(context: Context<AppEnv>): string {
   return context.req.header('origin')!;
 }
 
+/**
+ * The current password asked for in Settings, counted as a sign-in is (D257,
+ * D310): a session left open, or stolen, must not be a way to guess the
+ * password without a limit. The account's failures are keyed by its address.
+ */
+async function currentPasswordMatches(context: Context<AppEnv>, user: UserRow, password: string): Promise<boolean> {
+  const limits = context.get('rateLimits');
+  const account = user.email ? emailKey(normaliseEmail(user.email)) : userKey(user.id);
+  await limits.refuseIfSpent('loginFailuresPerAccount', account);
+  if (await passwordMatches(password, await getPasswordHash(user.id))) return true;
+  await limits.record('loginFailuresPerAccount', account);
+  return false;
+}
+
 const emailChangeSchema = z.object({
   email: z.string().max(1000),
   currentPassword: submittedPassword,
@@ -293,10 +307,11 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
    * is signed in here, this device gets a new session, as a change did before
    * D259; every other session has ended.
    *
-   * A sign-up's link needs the sign-up's password too (D309): whoever signs up
-   * first with an address chooses the password, so the mailbox alone would let
-   * its owner verify a stranger's account. A wrong one counts as a failed
-   * sign-in for that address and leaves the link unused.
+   * Every link needs the account's password too (D309, D310): whoever signs up
+   * first with an address chooses the password, and whoever asks to move an
+   * account to an address is that account's owner, not the mailbox's - so the
+   * mailbox alone would let its owner confirm a stranger's account. A wrong
+   * one counts as a failed sign-in for the account and leaves the link unused.
    */
   app.post('/auth/verify', async (context) => {
     const parsed = verifySchema.safeParse(await context.req.json().catch(() => null));
@@ -308,9 +323,9 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     const tokenHash = linkTokenHash(parsed.data.token);
     let proof: { passwordHash: string } | null = null;
     const peek = await peekVerificationToken(tokenHash);
-    if (peek?.purpose === 'verify_email' && peek.open) {
+    if (peek !== null && peek.purpose !== 'reset_password' && peek.open) {
       const limits = context.get('rateLimits');
-      const account = emailKey(normaliseEmail(peek.email));
+      const account = emailKey(normaliseEmail(peek.accountEmail ?? ''));
       const address = requestAddressKey(context, config.TRUSTED_PROXY_HOPS);
       await limits.refuseIfSpent('loginFailuresPerAccount', account);
       await limits.refuseIfSpent('loginFailuresPerAddress', address);
@@ -329,13 +344,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     const settings = await getInstallationSettings();
     const result = await useVerificationToken(
       tokenHash,
-      {
-        mode: settings.signup_mode,
-        dailyLimit: settings.daily_new_accounts_limit,
-        defaultCapMicroUsd: settings.default_llm_cap_micro_usd,
-        timezone: config.APP_TIMEZONE,
-        maxPendingSignups: settings.max_pending_signups,
-      },
+      { defaultCapMicroUsd: settings.default_llm_cap_micro_usd, timezone: config.APP_TIMEZONE },
       proof,
     );
     if (result.outcome === 'awaiting_approval') {
@@ -388,7 +397,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     }
     const { currentPassword, newPassword } = parsed.data;
 
-    if (!(await passwordMatches(currentPassword, await getPasswordHash(user.id)))) {
+    if (!(await currentPasswordMatches(context, user, currentPassword))) {
       throw new ApiProblem(403, 'incorrect_password', 'the current password is incorrect');
     }
     const problem = passwordProblem(newPassword);
@@ -420,8 +429,11 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     const parsed = emailChangeSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) throw badRequest('invalid_body', 'expected { email: string, currentPassword: string }');
     const email = normaliseEmail(parsed.data.email);
+    // Counted before anything is checked (D310): "taken" is an answer about
+    // other accounts, so each try costs one of a few an hour.
+    await context.get('rateLimits').consume('emailChangePerUser', userKey(user.id));
 
-    if (!(await passwordMatches(parsed.data.currentPassword, await getPasswordHash(user.id)))) {
+    if (!(await currentPasswordMatches(context, user, parsed.data.currentPassword))) {
       throw new ApiProblem(403, 'incorrect_password', 'the current password is incorrect');
     }
     const problem = emailProblem(email);
@@ -431,7 +443,6 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     if (await emailInUse(email, user.id)) throw conflict('email_taken', 'another account uses this address');
     const sender = context.get('email');
     if (sender === null) throw new ApiProblem(503, 'email_unavailable', 'this installation cannot send mail');
-    await context.get('rateLimits').consume('emailChangePerUser', userKey(user.id));
 
     await setPendingEmail(user.id, email);
     const language = mailLanguage((await getOrCreateUserSettings(user.id)).language);

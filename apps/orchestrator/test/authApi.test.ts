@@ -51,7 +51,7 @@ const { SESSION_COOKIE, sessionTokenHash, verifySessionToken } = await import('.
 const { SESSIONS_PER_USER_MAX, USER_AGENT_MAX_LENGTH } = await import('../src/http/sessions.js');
 const { EMAIL_UNVERIFIED } = await import('../src/http/routes/auth.js');
 const { RecordingEmailSender } = await import('./recordingEmailSender.js');
-const { memoryRateLimits } = await import('../src/http/rateLimits.js');
+const { memoryRateLimits, RATE_LIMITS } = await import('../src/http/rateLimits.js');
 const { linkTokenHash } = await import('../src/http/linkTokens.js');
 const { hashPassword, PASSWORD_MIN_LENGTH } = await import('../src/http/password.js');
 const queries = await import('../src/db/queries.js');
@@ -541,6 +541,35 @@ describe("changing one's own email (D259)", () => {
     });
     expect(response.status).toBe(503);
     expect(queries.setPendingEmail).not.toHaveBeenCalled();
+  });
+
+  // "Taken" is an answer about other accounts: each ask costs one of a few an
+  // hour, the right password or not, so it cannot list who has an account (D310).
+  it('counts every ask before anything is checked, so "taken" cannot be probed', async () => {
+    vi.mocked(queries.emailInUse).mockResolvedValue(true);
+    for (let ask = 0; ask < RATE_LIMITS.emailChangePerUser.points; ask += 1) {
+      expect((await changeEmail(sessionCookie(), `probe${ask}@example.com`, PASSWORD)).status).toBe(409);
+    }
+    expect((await changeEmail(sessionCookie(), 'one-more@example.com', PASSWORD)).status).toBe(429);
+    vi.mocked(queries.emailInUse).mockResolvedValue(false);
+  });
+
+  it('counts a wrong current password as a failed sign-in for the account', async () => {
+    const tries = RATE_LIMITS.loginFailuresPerAccount.points;
+    for (let attempt = 0; attempt < tries; attempt += 1) {
+      const response = await app.request('/auth/password', {
+        method: 'POST',
+        headers: { ...HEADERS, cookie: sessionCookie() },
+        body: JSON.stringify({ currentPassword: `guess ${attempt} is long enough`, newPassword: 'a new passphrase here' }),
+      });
+      expect(response.status).toBe(403);
+    }
+    const spent = await app.request('/auth/password', {
+      method: 'POST',
+      headers: { ...HEADERS, cookie: sessionCookie() },
+      body: JSON.stringify({ currentPassword: PASSWORD, newPassword: 'a new passphrase here' }),
+    });
+    expect(spent.status).toBe(429);
   });
 });
 

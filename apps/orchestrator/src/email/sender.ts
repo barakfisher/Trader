@@ -40,7 +40,11 @@ export class SmtpEmailSender implements EmailSender {
       host: options.host,
       port: options.port,
       secure: options.secure,
-      ...(options.user && options.password ? { auth: { user: options.user, pass: options.password } } : {}),
+      // With credentials, never send them in the clear: on a port without
+      // implicit TLS, STARTTLS is required rather than tried (D310).
+      ...(options.user && options.password
+        ? { auth: { user: options.user, pass: options.password }, requireTLS: !options.secure }
+        : {}),
       connectionTimeout: SMTP_TIMEOUT_MS,
       greetingTimeout: SMTP_TIMEOUT_MS,
       socketTimeout: SMTP_TIMEOUT_MS,

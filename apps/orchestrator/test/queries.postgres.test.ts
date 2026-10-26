@@ -14,7 +14,7 @@
 
 import { randomUUID } from 'node:crypto';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MAX_AGENTS_PER_USER_CEILING, RESEARCH_ABANDONED_AFTER_MINUTES } from '@traders/shared';
 
 const DATABASE_URL = process.env.TEST_DATABASE_URL ?? '';
@@ -287,13 +287,26 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
     describe('verification links (0074, D259, D260, D305)', async () => {
       const { linkTokenHash, newLinkToken } = await import('../src/http/linkTokens.js');
-      const RULES = {
-        mode: 'automatic' as const,
-        dailyLimit: 1_000,
-        defaultCapMicroUsd: 10_000_000,
-        timezone: 'Asia/Jerusalem',
-        maxPendingSignups: 1_000,
-      };
+      const RULES = { defaultCapMicroUsd: 10_000_000, timezone: 'Asia/Jerusalem' };
+      /** The installation's sign-up settings, read by opening a link under their lock (D310). */
+      const { DAILY_NEW_ACCOUNTS_CEILING, MAX_PENDING_SIGNUPS_CEILING } = await import('@traders/shared');
+      const signupSettings = (
+        mode: 'automatic' | 'approval' | 'closed',
+        daily = DAILY_NEW_ACCOUNTS_CEILING,
+        maxPending = MAX_PENDING_SIGNUPS_CEILING,
+      ) =>
+        getPool().query(
+          'UPDATE installation_settings SET signup_mode = $1, daily_new_accounts_limit = $2, max_pending_signups = $3',
+          [mode, daily, maxPending],
+        );
+      let saved: { signup_mode: string; daily_new_accounts_limit: number; max_pending_signups: number };
+      beforeAll(async () => {
+        saved = (
+          await getPool().query('SELECT signup_mode, daily_new_accounts_limit, max_pending_signups FROM installation_settings')
+        ).rows[0];
+      });
+      beforeEach(() => signupSettings('automatic'));
+      afterAll(() => signupSettings(saved.signup_mode as 'approval', saved.daily_new_accounts_limit, saved.max_pending_signups));
       /** What `ask` signs up with: a sign-up's link is opened with its password (D309). */
       const PROOF = { passwordHash: 'hash' };
 
@@ -315,14 +328,16 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
       it('keeps a verified sign-up for the admin under approval, and past the daily limit', async () => {
         const approval = (await ask(email('appr'))) as { userId: string };
-        expect(await queries.useVerificationToken(await link(approval.userId, email('appr')), { ...RULES, mode: 'approval' }, PROOF)).toEqual({
+        await signupSettings('approval');
+        expect(await queries.useVerificationToken(await link(approval.userId, email('appr')), RULES, PROOF)).toEqual({
           outcome: 'awaiting_approval',
           userId: approval.userId,
         });
         expect(await status(approval.userId)).toMatchObject({ status: 'pending', verified: true });
 
         const over = (await ask(email('over'))) as { userId: string };
-        expect(await queries.useVerificationToken(await link(over.userId, email('over')), { ...RULES, dailyLimit: 0 }, PROOF)).toEqual({
+        await signupSettings('automatic', 0);
+        expect(await queries.useVerificationToken(await link(over.userId, email('over')), RULES, PROOF)).toEqual({
           outcome: 'awaiting_approval',
           userId: over.userId,
         });
@@ -369,11 +384,16 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         const { rows } = await getPool().query(
           `SELECT count(*)::int AS n FROM users WHERE status = 'pending' AND role = 'user' AND email_verified_at IS NOT NULL`,
         );
-        const full = { ...RULES, mode: 'approval' as const, maxPendingSignups: rows[0].n };
-        expect(await queries.useVerificationToken(hash, full, PROOF)).toEqual({ outcome: 'signup_full' });
-        expect(await queries.useVerificationToken(hash, { ...RULES, mode: 'closed' }, PROOF)).toEqual({ outcome: 'signup_full' });
+        await signupSettings('approval', DAILY_NEW_ACCOUNTS_CEILING, rows[0].n);
+        expect(await queries.useVerificationToken(hash, RULES, PROOF)).toEqual({ outcome: 'signup_full' });
+        // Past automatic's daily limit a sign-up joins the same queue, under the same limit.
+        await signupSettings('automatic', 0, rows[0].n);
+        expect(await queries.useVerificationToken(hash, RULES, PROOF)).toEqual({ outcome: 'signup_full' });
+        await signupSettings('closed');
+        expect(await queries.useVerificationToken(hash, RULES, PROOF)).toEqual({ outcome: 'signup_full' });
         expect(await status(created.userId)).toMatchObject({ status: 'pending', verified: false });
-        expect(await queries.useVerificationToken(hash, { ...full, maxPendingSignups: rows[0].n + 1 }, PROOF)).toEqual({
+        await signupSettings('approval', DAILY_NEW_ACCOUNTS_CEILING, rows[0].n + 1);
+        expect(await queries.useVerificationToken(hash, RULES, PROOF)).toEqual({
           outcome: 'awaiting_approval',
           userId: created.userId,
         });
@@ -434,8 +454,23 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         expect(rows[0]).toEqual({ email: email('moved'), pending_email: null, sessions: 0 });
       });
 
+      it("refuses an address change without the account's password, or for an account no longer active (D310)", async () => {
+        const created = (await ask(email('changer'))) as { userId: string };
+        await queries.useVerificationToken(await link(created.userId, email('changer')), RULES, PROOF);
+        await queries.setPendingEmail(created.userId, email('changed'));
+        const hash = await link(created.userId, email('changed'), 'verify_new_email');
+        expect(await queries.useVerificationToken(hash, RULES, null)).toEqual({ outcome: 'wrong_password' });
+        // A password changed since the change was asked for: the old one no longer opens it.
+        expect(await queries.useVerificationToken(hash, RULES, { passwordHash: 'an older hash' })).toEqual({ outcome: 'wrong_password' });
+        await getPool().query("UPDATE users SET status = 'disabled' WHERE id = $1", [created.userId]);
+        expect(await queries.useVerificationToken(hash, RULES, PROOF)).toEqual({ outcome: 'invalid' });
+        const { rows } = await getPool().query('SELECT email FROM users WHERE id = $1', [created.userId]);
+        expect(rows[0].email).toBe(email('changer'));
+      });
+
       it('refuses a new address another account took meanwhile, and forgets the change', async () => {
         const created = (await ask(email('late-mover'))) as { userId: string };
+        await queries.useVerificationToken(await link(created.userId, email('late-mover')), RULES, PROOF);
         await queries.setPendingEmail(created.userId, email('noa'));
         const result = await queries.useVerificationToken(await link(created.userId, email('noa'), 'verify_new_email'), RULES, PROOF);
         expect(result).toEqual({ outcome: 'email_taken' });

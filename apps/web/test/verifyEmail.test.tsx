@@ -41,10 +41,11 @@ afterEach(async () => {
 });
 
 describe('the page a verification link opens', () => {
-  /** An address change's link: no password, only Confirm. */
+  /** An address change's link: the account's password too (D310), then Confirm. */
   async function confirmAddressLink() {
     openLink('#token=the-token');
-    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
+    fireEvent.change(await screen.findByLabelText(/Password/), { target: { value: 'a long enough passphrase' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
   }
 
   /** A sign-up's link (D309): the password, then Confirm. */
@@ -68,7 +69,7 @@ describe('the page a verification link opens', () => {
     await confirmAddressLink();
     expect(await screen.findByText(title)).toBeTruthy();
     expect(screen.getByText(body)).toBeTruthy();
-    expect(post).toHaveBeenCalledWith('/auth/verify', { token: 'the-token' });
+    expect(post).toHaveBeenCalledWith('/auth/verify', { token: 'the-token', password: 'a long enough passphrase' });
   });
 
   // A mail scanner that opens the link and runs its scripts must not confirm anything.
@@ -79,6 +80,7 @@ describe('the page a verification link opens', () => {
     expect(window.location.hash).toBe('');
     expect(window.location.pathname).toBe('/verify');
     expect(post).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText(/Password/), { target: { value: 'a long enough passphrase' } });
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     await screen.findByText('New address confirmed');
     expect(post).toHaveBeenCalledTimes(1);
@@ -98,7 +100,7 @@ describe('the page a verification link opens', () => {
   it('keeps the form after a wrong password, says so, and confirms with the right one', async () => {
     post.mockResolvedValueOnce({ outcome: 'wrong_password' }).mockResolvedValueOnce({ outcome: 'activated' });
     await confirmSignupLink('not the password');
-    expect(await screen.findByText(/not the password this sign-up was made with/)).toBeTruthy();
+    expect(await screen.findByText(/not this account's password/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText(/Password/), { target: { value: 'a long enough passphrase' } });
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     expect(await screen.findByText('Email confirmed')).toBeTruthy();
@@ -123,7 +125,7 @@ describe('the page a verification link opens', () => {
     expect(await screen.findByText(/Could not check the link/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     expect(await screen.findByText('Email confirmed')).toBeTruthy();
-    expect(post).toHaveBeenLastCalledWith('/auth/verify', { token: 'the-token' });
+    expect(post).toHaveBeenLastCalledWith('/auth/verify', { token: 'the-token', password: 'a long enough passphrase' });
   });
 
   it('is in Hebrew in Hebrew', async () => {

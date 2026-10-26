@@ -27,8 +27,9 @@ function linkFromAddress(): { token: string | null; signup: boolean } {
 /**
  * Opens a link from an email. Nothing is sent until the person presses
  * Confirm: a mail scanner that opens links and runs their scripts must not
- * confirm an address on its own. A sign-up's link also asks for the sign-up's
- * password (D309), because the mailbox alone does not prove who chose it.
+ * confirm an address on its own. Every link also asks for the account's
+ * password (D309, D310), because the mailbox alone does not prove whose
+ * account it is; `for=signup` only picks the sentence above the field.
  *
  * It signs nobody in (D259), so every outcome ends on the sign-in page, or the
  * app for a new address confirmed on the device already signed in. The token
@@ -65,10 +66,7 @@ export const VerifyPage = observer(function VerifyPage() {
     setFailed(false);
     setWrongPassword(false);
     try {
-      const body = await api.post<VerifyEmailResponse>('/auth/verify', {
-        token: link.token,
-        ...(link.signup ? { password } : {}),
-      });
+      const body = await api.post<VerifyEmailResponse>('/auth/verify', { token: link.token, password });
       if (body.outcome === 'wrong_password') setWrongPassword(true);
       else setOutcome(body.outcome);
     } catch {
@@ -103,18 +101,16 @@ export const VerifyPage = observer(function VerifyPage() {
             <p className="text-sm text-text-muted">
               {t(link.signup ? 'verify.confirmSignup.body' : 'verify.confirmAddress.body')}
             </p>
-            {link.signup && (
-              <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wide text-text-muted">{t('login.password')}</span>
-                <div className="flex items-center gap-2">
-                  <LockKeyhole className="size-4 text-text-muted" aria-hidden />
-                  <PasswordInput value={password} onChange={setPassword} autoComplete="current-password" />
-                </div>
-              </label>
-            )}
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wide text-text-muted">{t('login.password')}</span>
+              <div className="flex items-center gap-2">
+                <LockKeyhole className="size-4 text-text-muted" aria-hidden />
+                <PasswordInput value={password} onChange={setPassword} autoComplete="current-password" />
+              </div>
+            </label>
             {wrongPassword && <ErrorNote message={t('verify.wrongPassword')} />}
             {failed && <ErrorNote message={t('verify.failed')} />}
-            <Button type="submit" className="w-full" disabled={sending || (link.signup && password.length === 0)}>
+            <Button type="submit" className="w-full" disabled={sending || password.length === 0}>
               {sending ? t('verify.checking') : t('verify.confirm')}
             </Button>
           </form>

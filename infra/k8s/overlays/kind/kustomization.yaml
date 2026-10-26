@@ -40,18 +40,23 @@ secretGenerator:
 
 patches:
   - path: universe-descriptions.yaml
-  # Mailpit's inbox under /mailpit/ on the app's own host.
+  # Mailpit's inbox on a host of its own, mailpit.localhost (D311): never the
+  # app's origin, so it never receives the app's cookie, and never the Tailscale
+  # name, which k8s-up.sh routes to the app alone.
   - target:
       kind: Ingress
       name: traders
     patch: |-
       - op: add
-        path: /spec/rules/0/http/paths/-
+        path: /spec/rules/-
         value:
-          path: /mailpit
-          pathType: Prefix
-          backend:
-            service:
-              name: mailpit
-              port:
-                name: http
+          host: mailpit.localhost
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: mailpit
+                    port:
+                      name: http

@@ -1,8 +1,9 @@
 # A mail catcher for this machine's cluster (D307): the orchestrator's SMTP
 # points here, so every message - verification links included - lands in
-# Mailpit's inbox and nowhere else. Read it at http://traders.localhost/mailpit/
-# or, on the phone, https://<tailnet name>/mailpit/ (scripts/k8s-up.sh adds the
-# path to the Tailscale host).
+# Mailpit's inbox and nowhere else. Read it at http://mailpit.localhost, on
+# this Mac only (D311): a host of its own, so it never shares the app's origin
+# or cookie, and never on the Tailscale name, where every device on the tailnet
+# could read reset links.
 #
 # Here in the kind overlay, never in the base: a public deployment (PR 16)
 # points SMTP at the real provider and must not carry an inbox of every mail
@@ -25,10 +26,6 @@ spec:
       containers:
         - name: mailpit
           image: axllent/mailpit:v1.31.6
-          env:
-            # Served under a path, so it can share the app's hosts.
-            - name: MP_WEBROOT
-              value: /mailpit/
           ports:
             - { name: http, containerPort: 8025 }
             - { name: smtp, containerPort: 1025 }

@@ -65,9 +65,20 @@ export async function sendEmailChangeNotice(sender: EmailSender, recipient: Reci
   await sender.send(emailMessages.emailChangeRequested(recipient.email, recipient.language, newEmail));
 }
 
+/**
+ * What of a mail failure may be logged: the SMTP code and command, never the
+ * error itself - `nodemailer`'s errors carry the refused recipients and the
+ * server's reply, both of which name the address.
+ */
+export function mailFailure(error: unknown): { code?: unknown; responseCode?: unknown; command?: unknown } {
+  if (typeof error !== 'object' || error === null) return {};
+  const { code, responseCode, command } = error as Record<string, unknown>;
+  return { code, responseCode, command };
+}
+
 /** Run a mail without waiting for it; a failure is logged with the user and what failed, never the address. */
 export function sendInBackground(userId: string, what: string, send: () => Promise<void>): void {
   void send().catch((error: unknown) => {
-    logger().error({ err: error, userId, mail: what }, 'mail not sent');
+    logger().error({ failure: mailFailure(error), userId, mail: what }, 'mail not sent');
   });
 }
