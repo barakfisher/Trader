@@ -318,3 +318,4 @@ while this file is out of date.
 | 305 | Automatic signup has a daily limit, default 20; past it a verified sign-up waits for the admin |
 | 306 | A new verification link is asked for from sign-in, with the password |
 | 307 | Mailpit catches all mail in compose and kind; it is never part of a public deployment |
+| 308 | The public host sends mail through Resend, over SMTP |

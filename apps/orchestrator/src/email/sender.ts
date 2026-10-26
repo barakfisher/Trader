@@ -4,8 +4,8 @@
  *
  * The one implementation is SMTP through `nodemailer`. Compose and kind point
  * it at Mailpit, which catches every message on this machine (D307); the public
- * host points it at the provider chosen at deployment, from a domain with SPF
- * and DKIM records.
+ * host points it at Resend's SMTP server (D308), from a domain with SPF and DKIM
+ * records. Changing provider is settings, never this file.
  */
 
 import nodemailer, { type Mail } from 'nodemailer';

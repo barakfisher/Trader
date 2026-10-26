@@ -4831,6 +4831,21 @@ failure they prevent.
       misconfigured sender is found on the laptop.
     - **Rejected:** compose only (kind's flow cannot be clicked through on the phone); log only
       (the SMTP path is first exercised on the day the app goes public).
+308. **The public host sends mail through Resend, over SMTP** (the user, 2026-10-26; M10 PR 10;
+    fills in D258's "provider chosen at deployment").
+    - Settings only: `smtp.resend.com`, port 465 with `SMTP_SECURE=true`, user `resend`, an API
+      key with sending access only as the password (`.env.example` lists them). Still
+      `nodemailer`, no SDK, so D258's reason stands: another provider is another five settings.
+    - **Before the first real mail (M10 PR 16):** verify the domain in Resend and publish the
+      SPF and DKIM records it shows, or mail lands in spam (D255).
+    - **Why:** made for transactional mail from an app, a free tier that covers a small
+      installation, and guided DNS setup.
+    - **Rejected:**
+      - Postmark: the best inbox placement, but a much smaller free tier;
+      - Amazon SES: cheapest at volume, but a sandbox until AWS approves production access, and
+        an AWS account with IAM credentials to run;
+      - deciding at PR 16: possible, since nothing in PR 10's code depends on it, but the user
+        chose now.
 ---
 
 ## Bugs that cost real time, and the lesson from each
