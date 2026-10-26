@@ -2252,5 +2252,27 @@
         "body": "It may be incomplete, or a newer link replaced it. Ask for a new one from the sign-in page."
       }
     }
+  },
+  "oauth": {
+    "or": "or",
+    "continueWith": "Continue with {{provider}}",
+    "methods": "Sign in with",
+    "link": "Link",
+    "unlink": "Unlink",
+    "loading": "Loading sign-in methods…",
+    "loadFailed": "Could not load the sign-in methods.",
+    "unlinkFailed": "Could not unlink. An account needs a password or another linked provider to sign in.",
+    "outcomes": {
+      "signed_in": "Signed in.",
+      "pending": "Your request is with the installation's admin. You can sign in once they approve it.",
+      "closed": "Sign-up is not taking new accounts right now.",
+      "unverified_email": "That account's email is not verified with the provider, so it cannot sign you in here. Verify it there, or sign in with your password.",
+      "not_active": "This account is not active. Ask the installation's admin.",
+      "link_from_settings": "This address belongs to the admin account. Sign in with the password, then link the provider in Settings.",
+      "linked": "Linked. You can now sign in with it.",
+      "already_linked": "That provider is already linked to this account.",
+      "taken": "That provider account is already linked to another Traders account.",
+      "failed": "Signing in with the provider did not work. Try again, or sign in with your password."
+    }
   }
 }

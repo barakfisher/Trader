@@ -40,6 +40,8 @@ export const queryKeys = {
   settings: ['settings'] as const,
   /** The signed-in devices (D261): the account's, not a setting, so not under `settings`. */
   sessions: ['account', 'sessions'] as const,
+  oauthProviders: ['oauth-providers'] as const,
+  identities: ['identities'] as const,
   monthlySpend: ['settings', 'llm-spend'] as const,
   /** The user's own OpenRouter key, as its last four and its state (D206). */
   ownLlmKey: ['settings', 'llm-key'] as const,

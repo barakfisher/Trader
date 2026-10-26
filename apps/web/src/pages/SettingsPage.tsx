@@ -9,6 +9,7 @@ import { DevicesCard } from '../components/DevicesCard.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { Drawer } from '../components/Drawer.tsx';
 import { EmailChange } from '../components/EmailChange.tsx';
+import { LinkedProviders, OAuthOutcomeNotice, useOAuthOutcome } from '../components/OAuthSignIn.tsx';
 import { OwnLlmKeyForm } from '../components/OwnLlmKeyForm.tsx';
 import { KeySpendDetails } from '../components/SpendIndicator.tsx';
 import { UserModelsCard } from '../components/ModelChoiceCards.tsx';
@@ -361,8 +362,14 @@ const SignInCard = observer(function SignInCard() {
   const { t } = useTranslation();
   const [open, setOpen] = useState<'email' | 'password' | null>(null);
   const close = () => setOpen(null);
+  const oauthOutcome = useOAuthOutcome();
   return (
     <Card title={t('settings.signIn')}>
+      {oauthOutcome !== null && (
+        <div className="mb-3">
+          <OAuthOutcomeNotice outcome={oauthOutcome} />
+        </div>
+      )}
       <p className="mb-3 text-sm">
         <span className="text-text-muted">{t('email.current')} </span>
         {auth.user?.email ? (
@@ -395,6 +402,7 @@ const SignInCard = observer(function SignInCard() {
           </span>
         </Button>
       </div>
+      <LinkedProviders />
       {open === 'email' && (
         <Drawer title={t('email.save')} closeLabel={t('common.close')} onClose={close}>
           <EmailChange />

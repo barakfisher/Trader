@@ -14,7 +14,9 @@ import { reportSessionEnded } from './sessionEnded.ts';
 // Relative: the API is served on the page's own origin, by nginx in the image
 // and by Vite's proxy in development (vite.config.ts), so the session cookie
 // always belongs to the address the page was opened at.
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '');
+/** Where the API is served; a navigation that leaves for a provider (D262) is built on it too. */
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '/api').replace(/\/$/, '');
+const BASE_URL = API_BASE_URL;
 
 export class ApiRequestError extends Error {
   constructor(
