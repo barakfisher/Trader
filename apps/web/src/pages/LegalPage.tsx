@@ -27,6 +27,9 @@ const components: Components = {
   p: ({ children }) => <p className="leading-relaxed">{children}</p>,
   ul: ({ children }) => <ul className="list-disc space-y-1 ps-5">{children}</ul>,
   ol: ({ children }) => <ol className="list-decimal space-y-1 ps-5">{children}</ol>,
+  // A draft's "To write" notes (D265), and any quotation the published text uses.
+  blockquote: ({ children }) => <blockquote className="border-s-2 border-accent ps-3 text-text-muted">{children}</blockquote>,
+  strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
   a: ({ href, children }) => (
     <a href={href} className="text-accent hover:underline">
       {children}
