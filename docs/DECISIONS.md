@@ -320,3 +320,5 @@ while this file is out of date.
 | 307 | Mailpit catches all mail in compose and kind; it is never part of a public deployment |
 | 308 | The public host sends mail through Resend, over SMTP |
 | 309 | A sign-up's link is opened with the sign-up's password; signing up again on an unverified request replaces it |
+| 310 | An address change's link needs the account's password too, and the second review's other findings |
+| 311 | Kind's Mailpit is served at `mailpit.localhost`, this Mac only |

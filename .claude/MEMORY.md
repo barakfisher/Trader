@@ -4879,6 +4879,44 @@ failure they prevent.
         stranger's password;
       - the latest sign-up's password winning with no check at the link: a stranger re-signing
         after the owner wins outright.
+    - **Accepted (second review, L1):** a stranger who keeps signing up again with an address
+      keeps replacing the request's password, so the owner's link answers `wrong_password` until
+      the stranger stops; `signupPerEmail` (3 an hour) bounds it, and the stranger never gets in.
+310. **An address change's link needs the account's password too, and the second review's other
+    findings** (the user, 2026-10-26; M10 PR 10).
+    - **The attack it closes:** a stranger asks to move *their* account to your address; you are
+      mailed "Confirm your new sign-in address" and press Confirm. Your address now signs in to
+      their account, and resetting "your" password later puts you inside it. With the password
+      asked, the unsolicited link does nothing.
+    - **It also closes M1:** a change asked for by someone who knew the password stayed
+      confirmable for 24 hours after the owner changed it. The link is opened with the
+      account's *current* password, compared inside the transaction, so a password change ends
+      it. An account no longer `active` cannot finish a change either.
+    - **M2:** `/auth/email` spends `emailChangePerUser` before anything is checked, because
+      "taken" is an answer about other accounts; and a wrong current password, there or on
+      `/auth/password`, counts against `loginFailuresPerAccount` - a stolen session must not be a
+      way to guess the password without a limit.
+    - **The signup rules are read inside the lock** (`installation_settings ... FOR UPDATE` in
+      `useVerificationToken`), so an admin closing sign-up while a link opens is obeyed.
+    - **Past automatic's daily limit, a sign-up joins the admin's queue under the queue's
+      limit** (it was unbounded), and is `signup_full` beyond it.
+    - **Hardening:** a mail failure logs only `code`, `responseCode` and `command`
+      (`mailFailure`): `nodemailer`'s errors name the recipient. With SMTP credentials on a
+      port without implicit TLS, STARTTLS is required, not tried. A re-signup restarts the
+      request's 7 days before the sweep, with its new link.
+    - **Left for M10 PR 16 (deployment):** links are built from the request's `Origin`, which
+      must be in `ALLOWED_ORIGINS`; production's list must hold the public host alone, or links
+      must come from a configured base URL.
+    - **Rejected:** a signed-in session of the account instead of the password (asking from the
+      laptop and opening the mail on the phone would need a sign-in first).
+311. **Kind's Mailpit is served at `mailpit.localhost`, this Mac only** (the user, 2026-10-26;
+    M10 PR 10; replaces D307's `/mailpit/` paths).
+    - Its own host: never the app's origin, so Mailpit never receives the app's session cookie
+      and a flaw in its UI cannot act as the app. Never on the Tailscale name, which routes to
+      the app alone: every device on the tailnet could have read reset links.
+    - **Cost:** a link in kind's Mailpit is opened on this Mac, not the phone.
+    - **Rejected:** keeping `/mailpit/` on Tailscale (fine only while the tailnet holds nobody
+      else's devices); no Mailpit on kind (the email flows could not be tried there).
 ---
 
 ## Bugs that cost real time, and the lesson from each
