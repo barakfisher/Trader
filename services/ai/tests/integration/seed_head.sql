@@ -384,3 +384,11 @@ UPDATE installation_settings SET signup_mode = 'closed', max_pending_signups = 5
 INSERT INTO user_identities (user_id, provider, subject, email) VALUES
   ('00000000-0000-0000-0000-00000000000b', 'google', 'seed-google-sub-b', 'b@example.test'),
   ('00000000-0000-0000-0000-00000000000c', 'github', '1000001', 'c@example.test');
+-- Account deletion (0076, D264): an account closed and waiting for its erase,
+-- which 0076's downgrade makes disabled, and the erase's own run.
+INSERT INTO users (id, role, email, status, llm_cap_micro_usd) VALUES
+  ('00000000-0000-0000-0000-000000000010', 'user', 'closed@example.test', 'active', 0);
+UPDATE users SET status = 'closed', deletion_due_at = now() + interval '7 days'
+ WHERE id = '00000000-0000-0000-0000-000000000010';
+INSERT INTO runs (id, kind, run_key, status) VALUES
+  ('20000000-0000-0000-0000-0000000000aa', 'account_erase', 'account_erase:seed:2026-10-26:10', 'ok');

@@ -5027,6 +5027,87 @@ failure they prevent.
     - **For M10 PR 14 (deletion):** `signIn` in `routes/oauth.ts` answers `not_active` for every
       status but `active`; D264's pending-deletion marker must be handled there as on password
       sign-in.
+316. **How PR 14 builds D264's deletion** (assumptions stated to the user, 2026-10-26; M10 PR 14;
+    migration `0076`).
+    - **The marker is a status, `closed`, plus `users.deletion_due_at`** (a CHECK ties them).
+      Every query that runs for a user already asks for `status = 'active'` - the session
+      middleware, the scheduler's fan-out, Telegram, the per-user run route - so a closed
+      account is signed in nowhere and runs nothing without one edit to them.
+      *Rejected:* a date column on an `active` account (some fifteen `status = 'active'` reads
+      would each need `AND deletion_due_at IS NULL`, and the one that is missed keeps running
+      for a deleted account); D239's `disabled` (D264: sign-in must never undo the admin).
+    - **Sign-in reopens only `closed` before its date**, in one statement
+      (`reopenClosedAccount`), on the password path and in `oauth.ts`'s `signIn` (outcome
+      `restored`). Past the date the account is refused as not active: the erase may be
+      taking it.
+    - **Confirming:** the typed word `DELETE` (as the reset's `RESET`) and the password,
+      counted against `loginFailuresPerAccount`; an account with no password confirms by a
+      session made within `RECENT_SIGN_IN_MINUTES` (10) - D264's "signing in again".
+    - **The admin cannot delete their account** (403, and the card says so): the installation
+      needs one, and `erase_account` refuses the admin whoever calls it.
+    - **The erase is hourly** (`account_erase`, an hourly bucket), so an account goes within the
+      hour after the date it was told, not a day later.
+    - **Copy and dates:** the screen and the email give the date and time in the account's own
+      zone and language; the closed screen keeps the account's language after its session has
+      ended (it fell back to the browser's until the browser check caught it).
+    - **Downgrading 0076 makes a closed account `disabled`** - no way in, nothing the older code
+      would erase - rather than reopening it.
+    - **A closed account can still reset its password before its date** (the reset leaves it
+      closed; the sign-in after reopens it): otherwise a thief who changed the password and then
+      closed the account left the owner no way back. **A sign-in that reopens mails the
+      account** ("will not be deleted"), so a quiet undo by someone else is seen.
+    - **Accepted (security review):** an account with no password confirms by a sign-in within
+      10 minutes, and a stolen session can meet that by linking the thief's provider and
+      signing in with it. The link is mailed (D263), the account is only closed, and a reset
+      during the grace period removes linked providers (D315). The export needs a session, not
+      a fresh sign-in: it is rate-limited and sent `no-store`.
+    - **Debt:** a scan already on the queue when the account closes still runs (`runSlotAttempt`
+      checks the agent, not the user) - at most one, within the quarter hour; the same is true
+      of a disable (D239). A user-status check there closes both.
+317. **The erase is a function the app may call but cannot reproduce** (M10 PR 14; migration
+    `0076`).
+    - **`erase_account(user)`**, `SECURITY DEFINER`, owned by the migration role, granted to
+      `traders_app`: the app role cannot delete history (fills, movements, scans, attempts),
+      and the function erases only a closed account past its date or a rejected request.
+    - **The seven keys with no delete rule keep it; the function settles them.** It deletes
+      movements, fills, intents, attempts, proposals, scans, cash and conversations in an order
+      their keys accept, then the user; everything else cascades. `admin_audit.admin_user_id`
+      is nullable with no rule, and the function clears it (a demoted admin may be erased).
+    - **Why not cascades (the security review's blocker):** a cascade runs with the table
+      owner's rights, and the app role may still `DELETE FROM users` (unverified sign-ups). The
+      first version made the six history keys cascade, so the app role - or SQL injection
+      through it - could erase any active user's scans, attempts and, with the flag any role can
+      set, fills and movements, never asking the function. NO ACTION keeps that `DELETE`
+      refused; `test_the_app_role_cannot_erase_history_around_the_function` pins it.
+    - **`admin_audit` keeps its rows with the user's id replaced by `erased`** in `action` and
+      `detail`, in any case; the append-only guard allows that update only while the function
+      sets `traders.account_erase` (the app role holds no UPDATE there, so the flag gives it
+      nothing).
+    - **`account_resets` backups go with the user** (they already cascaded).
+    - *Rejected:* granting the app role DELETE on history (the append-only ledger, D22/D23, would
+      be one bug away from editable); erasing table by table in TypeScript (the app role cannot).
+    - **Lesson, caught by the test:** `IF NOT (a OR b)` with no row found is `IF NULL`, which
+      plpgsql treats as false - the first version erased the admin. The guard is
+      `coalesce(..., false)`.
+318. **The export is an allow-list Postgres renders, sent as text** (M10 PR 14).
+    - **Contents:** account (email, currency, zone, dates, cap), settings, agents, agent scans,
+      holdings and target weights (with symbols), ledgers (cash, movements, fills), proposals
+      and their transitions, observations, topics and their instruments, conversations with
+      their messages. Never the model key, sessions, links, bind codes or password hash.
+    - **Listed table by table, never by walking `user_id` columns:** a future table holding a
+      secret must not reach a downloaded file because it has a `user_id`.
+    - **Built as JSON by Postgres and never parsed in Node:** `numeric` quantities leave as
+      decimal strings (guideline 4) and money as the integers stored. The web saves the bytes
+      as they came.
+    - **Limited by `dataExportPerUser`** (5 an hour): each export reads every row the account
+      holds.
+    - **Not in it, deliberately for now:** `llm_calls` prompts and completions (personal data,
+      pruned after 32 days, D204), notifications, research ratings. A privacy page (D265) that
+      promises a complete export must add them first.
+    - **Rejected requests** get `users.rejected_at` (0076; existing ones count from the
+      deploy), and the erase run removes those older than `REJECTED_SIGNUP_RETENTION_DAYS` (90)
+      only while signup is *automatic* - in *approval* mode the rejection is the admin's record
+      (D156).
 ---
 
 ## Bugs that cost real time, and the lesson from each

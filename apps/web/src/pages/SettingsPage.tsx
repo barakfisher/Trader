@@ -4,6 +4,8 @@ import { AtSign, BellOff, KeyRound, Settings as SettingsIcon } from 'lucide-reac
 
 import { SAFETY_LIMIT_CEILING_MICRO_USD, type MonthlySpend } from '@traders/shared';
 
+import { AccountDeletionCard } from '../components/AccountDeletionCard.tsx';
+import { AccountExportCard } from '../components/AccountExportCard.tsx';
 import { AccountResetCard } from '../components/AccountResetCard.tsx';
 import { DevicesCard } from '../components/DevicesCard.tsx';
 import { Disclaimer } from '../components/Disclaimer.tsx';
@@ -325,6 +327,10 @@ export const SettingsPage = observer(function SettingsPage() {
 
           {/* Last, below the save bar: it acts at once and erases, so it is never part of "Save changes". */}
           <AccountResetCard />
+
+          {/* D264: take the data out, then leave - in that order on the page. */}
+          <AccountExportCard />
+          <AccountDeletionCard />
         </>
       )}
 

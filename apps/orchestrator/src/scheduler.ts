@@ -41,6 +41,9 @@ export const INTERVALS_MS: Record<string, number> = {
   // Hourly against a daily bucket, like backfill: a restart cannot skip a day's
   // sweep, and an ask whose day is already swept writes nothing.
   auth_sweep: 60 * 60 * 1000,
+  // Hourly against an hourly bucket (D264): an account goes within the hour
+  // after its date, and an hour with nothing due reads one partial index.
+  account_erase: 60 * 60 * 1000,
   // Hourly against a daily bucket, like backfill and for the same reason: the
   // extras cost one HTTP request each, and a restart at the wrong moment cannot
   // swallow the day's digest - which, unlike a skipped scan, cannot be caught
@@ -73,6 +76,8 @@ const FIRST_RUN_DELAY_MS: Record<string, number> = {
   proposal_sweep: 55_000,
   // Out of everyone's way: it reads nothing the others write.
   auth_sweep: 58_000,
+  // Out of everyone's way too; nothing waits on it.
+  account_erase: 59_000,
   // After news collection, which it reads. On a fresh start the first
   // collection has usually finished by then; if not, the hourly retry of the
   // daily bucket is the catch-up.

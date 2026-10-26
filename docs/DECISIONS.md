@@ -326,3 +326,6 @@ while this file is out of date.
 | 313 | The admin is never reset by email, and a reset unbinds Telegram |
 | 314 | How PR 13 builds OAuth (D262, D263) |
 | 315 | Google links an existing account automatically only where it is the mailbox's authority; a reset drops linked providers |
+| 316 | How PR 14 builds D264's deletion |
+| 317 | The erase is a function the app may call but cannot reproduce |
+| 318 | The export is an allow-list Postgres renders, sent as text |

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { RouterProvider } from '@tanstack/react-router';
 
+import { AccountClosedPage } from './pages/AccountClosedPage.tsx';
 import { LoginPage } from './pages/LoginPage.tsx';
 import { PasswordRequiredPage } from './pages/PasswordRequiredPage.tsx';
 import { RESET_PATH, ResetPage } from './pages/ResetPage.tsx';
@@ -35,6 +36,8 @@ export const App = observer(function App({
     );
   }
 
+  // Just closed at the user's request (D264): when it goes, and how to undo it.
+  if (!auth.isAuthenticated && auth.closed !== null) return <AccountClosedPage />;
   // The address is left as it is, so signing in lands on the view that was asked for.
   if (!auth.isAuthenticated) return <LoginPage />;
   // The admin's one-time password (D162): nothing else until it is changed.

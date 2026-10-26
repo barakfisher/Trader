@@ -27,6 +27,8 @@ export * from './queries/snapshots.js';
 export * from './queries/runs.js';
 export * from './queries/adminAudit.js';
 export * from './queries/accountResets.js';
+export * from './queries/accountErase.js';
+export * from './queries/accountExport.js';
 export * from './queries/opsEvents.js';
 export * from './queries/universe.js';
 export * from './queries/llmCalls.js';

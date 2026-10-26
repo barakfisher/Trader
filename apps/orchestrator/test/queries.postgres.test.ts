@@ -2811,4 +2811,215 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       expect(last?.error).toBe('HTTP 401: Unauthorized');
     });
   });
+  describe('account deletion and export (0076, D264)', async () => {
+    const { sessionTokenHash } = await import('../src/http/auth.js');
+    const { ACCOUNT_DELETION_GRACE_DAYS } = await import('@traders/shared');
+    const SECRET_HASH = '$argon2id$v=19$m=19456,t=2,p=1$never-exported';
+
+    /** A user of its own, with a password, a session and a model key; removed after, if still there. */
+    async function withUser<T>(fn: (userId: string, sessionId: string) => Promise<T>): Promise<T> {
+      const userId = randomUUID();
+      await getPool().query(
+        `INSERT INTO users (id, email, status, llm_cap_micro_usd, password_hash)
+         VALUES ($1, $2, 'active', 0, $3)`,
+        [userId, `${userId}@example.com`, SECRET_HASH],
+      );
+      const session = await queries.createSession({
+        userId,
+        tokenHash: sessionTokenHash(randomUUID()),
+        ttlHours: 1,
+        userAgent: 'UA',
+        ipAddress: null,
+        maxPerUser: SESSIONS_PER_USER_MAX,
+      });
+      try {
+        return await fn(userId, session.id);
+      } finally {
+        await getPool().query('DELETE FROM assistant_conversations WHERE user_id = $1', [userId]);
+        await getPool().query('DELETE FROM users WHERE id = $1', [userId]);
+      }
+    }
+
+    const statusOf = async (userId: string) =>
+      (await getPool().query<{ status: string }>('SELECT status FROM users WHERE id = $1', [userId])).rows[0]?.status;
+    const sessionCount = async (userId: string) =>
+      (await getPool().query<{ n: number }>('SELECT count(*)::int AS n FROM user_sessions WHERE user_id = $1', [userId]))
+        .rows[0]!.n;
+    const backdate = (userId: string, interval: string) =>
+      getPool().query(`UPDATE users SET deletion_due_at = now() - $2::interval WHERE id = $1`, [userId, interval]);
+
+    it('closes an active account for the grace period, ending every session in the same statement', async () => {
+      await withUser(async (userId) => {
+        const before = await queries.getUser(userId);
+        const closed = await queries.closeAccount(userId, ACCOUNT_DELETION_GRACE_DAYS);
+        expect(closed).toMatchObject({ id: userId, email: `${userId}@example.com` });
+        const { rows } = await getPool().query<{ days: number; version: number }>(
+          `SELECT round(extract(epoch FROM deletion_due_at - now()) / 86400)::int AS days, session_version AS version
+             FROM users WHERE id = $1`,
+          [userId],
+        );
+        expect(rows[0]).toEqual({ days: ACCOUNT_DELETION_GRACE_DAYS, version: before!.session_version + 1 });
+        expect(await statusOf(userId)).toBe('closed');
+        expect(await sessionCount(userId)).toBe(0);
+        // Nothing scheduled runs for it: the fan-out reads `active` only.
+        expect(await queries.listActiveUserIds()).not.toContain(userId);
+      });
+    });
+
+    it('closes neither a disabled account nor the admin', async () => {
+      await withUser(async (userId) => {
+        await getPool().query("UPDATE users SET status = 'disabled' WHERE id = $1", [userId]);
+        expect(await queries.closeAccount(userId, ACCOUNT_DELETION_GRACE_DAYS)).toBeNull();
+        await getPool().query("UPDATE users SET status = 'active', role = 'admin' WHERE id = $1", [userId]);
+        expect(await queries.closeAccount(userId, ACCOUNT_DELETION_GRACE_DAYS)).toBeNull();
+        expect(await statusOf(userId)).toBe('active');
+      });
+    });
+
+    it('reopens a closed account before its date, and never a disabled one or one past it', async () => {
+      await withUser(async (userId) => {
+        await queries.closeAccount(userId, ACCOUNT_DELETION_GRACE_DAYS);
+        const version = async () => (await queries.getUser(userId))!.session_version;
+        // A password that changed since it was checked reopens nothing (D297).
+        expect(await queries.reopenClosedAccount(userId, (await version()) - 1)).toBeNull();
+        expect(await queries.reopenClosedAccount(userId, await version())).toMatchObject({ id: userId, status: 'active' });
+        const { rows } = await getPool().query('SELECT deletion_due_at FROM users WHERE id = $1', [userId]);
+        expect(rows[0]!.deletion_due_at).toBeNull();
+
+        await getPool().query("UPDATE users SET status = 'disabled' WHERE id = $1", [userId]);
+        expect(await queries.reopenClosedAccount(userId, await version())).toBeNull();
+        expect(await statusOf(userId)).toBe('disabled');
+
+        await getPool().query("UPDATE users SET status = 'active' WHERE id = $1", [userId]);
+        await queries.closeAccount(userId, ACCOUNT_DELETION_GRACE_DAYS);
+        await backdate(userId, '1 minute');
+        expect(await queries.reopenClosedAccount(userId, await version())).toBeNull();
+        expect(await statusOf(userId)).toBe('closed');
+      });
+    });
+
+    it('lets a closed account reset its password during the grace period, and leaves it closed', async () => {
+      await withUser(async (userId) => {
+        const email = `${userId}@example.com`;
+        await getPool().query('UPDATE users SET email_verified_at = now() WHERE id = $1', [userId]);
+        await queries.closeAccount(userId, ACCOUNT_DELETION_GRACE_DAYS);
+        expect(await queries.getResetRecipient(email)).toMatchObject({ id: userId });
+
+        const token = Buffer.alloc(32, userId.slice(0, 1));
+        await getPool().query(
+          `INSERT INTO auth_tokens (user_id, purpose, token_hash, email, expires_at)
+           VALUES ($1, 'reset_password', $2, $3, now() + interval '30 minutes')`,
+          [userId, token, email],
+        );
+        expect(await queries.useResetToken(token, '$argon2id$v=19$m=19456,t=2,p=1$reset')).toMatchObject({ outcome: 'reset' });
+        expect(await statusOf(userId)).toBe('closed');
+
+        // Past its date there is nothing to reset: the erase may be taking it.
+        await backdate(userId, '1 minute');
+        expect(await queries.getResetRecipient(email)).toBeNull();
+      });
+    });
+
+    it('counts a sign-in as recent only within the minutes asked, and only for its own user', async () => {
+      await withUser(async (userId, sessionId) => {
+        expect(await queries.sessionSignedInWithin(userId, sessionId, 10)).toBe(true);
+        expect(await queries.sessionSignedInWithin(USER, sessionId, 10)).toBe(false);
+        await getPool().query("UPDATE user_sessions SET created_at = now() - interval '11 minutes' WHERE id = $1", [sessionId]);
+        expect(await queries.sessionSignedInWithin(userId, sessionId, 10)).toBe(false);
+      });
+    });
+
+    it('lists and erases an account past its date, with its history, as the app role', async () => {
+      await withUser(async (userId) => {
+        // An agent brings its ledger (cash, the opening deposit), one of the keys that had no delete rule.
+        await getPool().query(
+          `INSERT INTO agents (user_id, slug, name, persona, budget_minor) VALUES ($1, 'erase-me', 'E', 'p', 1000)`,
+          [userId],
+        );
+        await getPool().query(`INSERT INTO assistant_conversations (user_id, title) VALUES ($1, 'q')`, [userId]);
+        await queries.closeAccount(userId, ACCOUNT_DELETION_GRACE_DAYS);
+        expect(await queries.listAccountsDueForErase()).not.toContain(userId);
+        expect(await queries.eraseAccount(userId)).toBe(false);
+
+        await backdate(userId, '1 minute');
+        expect(await queries.listAccountsDueForErase()).toContain(userId);
+        expect(await queries.eraseAccount(userId)).toBe(true);
+        expect(await statusOf(userId)).toBeUndefined();
+        for (const table of ['agents', 'agent_cash', 'cash_movements', 'assistant_conversations']) {
+          const { rows } = await getPool().query(`SELECT count(*)::int AS n FROM ${table} WHERE user_id = $1`, [userId]);
+          expect(rows[0]!.n, table).toBe(0);
+        }
+      });
+    });
+
+    it('dates a rejection, lists a request rejected long enough ago, and forgets the date on restore', async () => {
+      const address = `rejected-${randomUUID()}@example.com`;
+      const created = await queries.createSignupRequest({ email: address, passwordHash: 'h', timezone: 'UTC', language: 'en' });
+      if (created.outcome !== 'created') throw new Error(`expected a new request, got ${created.outcome}`);
+      const userId = created.userId;
+      try {
+        await getPool().query('UPDATE users SET email_verified_at = now() WHERE id = $1', [userId]);
+        await queries.rejectSignup(userId);
+        expect(await queries.listRejectedSignupsOlderThan(90)).not.toContain(userId);
+        await getPool().query("UPDATE users SET rejected_at = now() - interval '91 days' WHERE id = $1", [userId]);
+        expect(await queries.listRejectedSignupsOlderThan(90)).toContain(userId);
+        await queries.restoreSignup(userId);
+        const { rows } = await getPool().query('SELECT rejected_at FROM users WHERE id = $1', [userId]);
+        expect(rows[0]!.rejected_at).toBeNull();
+      } finally {
+        await getPool().query('DELETE FROM users WHERE id = $1', [userId]);
+      }
+    });
+
+    it("exports the user's own rows, quantities exact, and never a secret", async () => {
+      await withUser(async (userId) => {
+        const primary = await queries.primaryAgentId(userId);
+        const symbol = `EXP${userId.slice(0, 6)}`.toUpperCase();
+        const instrument = (
+          await getPool().query<{ id: string }>(`INSERT INTO instruments (symbol, asset_class) VALUES ($1, 'equity') RETURNING id`, [symbol])
+        ).rows[0]!.id;
+        try {
+          await getPool().query(
+            `INSERT INTO holdings (user_id, agent_id, instrument_id, quantity, cost_basis_minor) VALUES ($1, $2, $3, '0.123456789012345678', 12345)`,
+            [userId, primary, instrument],
+          );
+          const conversation = (
+            await getPool().query<{ id: string }>(`INSERT INTO assistant_conversations (user_id, title) VALUES ($1, 'Q') RETURNING id`, [userId])
+          ).rows[0]!.id;
+          await getPool().query(
+            `INSERT INTO assistant_messages (conversation_id, user_id, role, content) VALUES ($1, $2, 'user', 'What do I hold?')`,
+            [conversation, userId],
+          );
+          await getPool().query(
+            `INSERT INTO user_llm_keys (user_id, ciphertext, last_four) VALUES ($1, 'never-exported-ciphertext', 'abcd')`,
+            [userId],
+          );
+
+          const text = await queries.exportAccount(userId);
+          // The exact digits, as a string: never through a float (guideline 4).
+          expect(text).toContain('"quantity": "0.123456789012345678"');
+          const document = JSON.parse(text) as Record<string, unknown> & {
+            account: { email: string };
+            holdings: { symbol: string; cost_basis_minor: number }[];
+            conversations: { messages: { content: string }[] }[];
+          };
+          expect(document.account.email).toBe(`${userId}@example.com`);
+          expect(document.holdings).toEqual([expect.objectContaining({ symbol, cost_basis_minor: 12345 })]);
+          expect(document.conversations[0]!.messages.map((message) => message.content)).toEqual(['What do I hold?']);
+          expect(Object.keys(document).sort()).toEqual(
+            [
+              'account', 'agentScans', 'agents', 'conversations', 'exportedAt', 'format', 'holdings', 'ledgers',
+              'observations', 'proposalTransitions', 'proposals', 'settings', 'targetWeights', 'topicInstruments', 'topics',
+            ].sort(),
+          );
+          for (const secret of [SECRET_HASH, 'never-exported-ciphertext', 'abcd', 'token_hash', 'session_version', USER]) {
+            expect(text, secret).not.toContain(secret);
+          }
+        } finally {
+          await getPool().query('DELETE FROM holdings WHERE user_id = $1', [userId]);
+          await getPool().query('DELETE FROM instruments WHERE id = $1', [instrument]);
+        }
+      });
+    });
+  });
 });

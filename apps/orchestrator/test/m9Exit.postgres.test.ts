@@ -63,6 +63,8 @@ const OMERS = {
 
 const WRITE_BODIES: Record<string, unknown> = {
   'POST /account/reset': {},
+  // No typed word: refused before anything is read. The route names no row - it closes only the caller's own account.
+  'POST /account/deletion': {},
   'DELETE /account/sessions/:id': null,
   'POST /account/sessions/sign-out-others': null,
   'POST /admin/signups/:userId/approve': {},
@@ -193,6 +195,8 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
   const dana = newUser(`DANA-${run}`);
   const omer = newUser(`OMER-${run}`);
   const disabled = randomUUID();
+  /** An account closed at its own request and waiting for its erase: the deletion marker (D264, D266). */
+  const closed = randomUUID();
   let app: ReturnType<typeof createApp>;
 
   async function seed(user: SeededUser): Promise<void> {
@@ -327,6 +331,14 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
       `INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'disabled', 0)`,
       [disabled],
     );
+    await getPool().query(
+      `INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 0)`,
+      [closed],
+    );
+    await getPool().query(
+      `UPDATE users SET status = 'closed', deletion_due_at = now() + interval '7 days' WHERE id = $1`,
+      [closed],
+    );
     danasCookie = (await signIn(dana.id)).cookie;
     resetConfigForTests();
     app = createApp(
@@ -385,7 +397,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
 
   afterAll(async () => {
     const pool = getPool();
-    const users = [dana.id, omer.id, disabled];
+    const users = [dana.id, omer.id, disabled, closed];
     // Not every table cascades from `users` (M9-MEASUREMENT §7): those that do
     // not go first, proposals before the scans they name.
     await pool.query('DELETE FROM proposals WHERE user_id = ANY($1::uuid[])', [users]);
@@ -495,6 +507,19 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     const { cookie } = await signIn(disabled);
     const response = await app.request('/portfolio', { headers: { cookie } });
     expect(response.status).toBe(401);
+  });
+
+  it("refuses a closed account's session at once, and runs nothing for it (D264)", async () => {
+    // As for a disabled user: a row the close did not delete still opens nothing.
+    const { cookie } = await signIn(closed);
+    expect((await app.request('/portfolio', { headers: { cookie } })).status).toBe(401);
+    const response = await app.request('/internal/runs', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+      body: JSON.stringify({ kind: 'daily_digest', for: 'every_active_user', trigger: 'test-closed' }),
+    });
+    const body = (await response.json()) as { results: { userId: string }[] };
+    expect(body.results.map((result) => result.userId)).not.toContain(closed);
   });
 
   it("ends a session for good when it signs out - a copied cookie included (D261)", async () => {

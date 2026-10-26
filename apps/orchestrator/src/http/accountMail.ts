@@ -12,7 +12,7 @@
 
 import { UI_LANGUAGES, type UiLanguage } from '@traders/shared';
 
-import { issueAuthToken } from '../db/queries.js';
+import { getOrCreateUserSettings, issueAuthToken } from '../db/queries.js';
 import { emailMessages } from '../email/messages.js';
 import type { EmailSender } from '../email/sender.js';
 import { logger } from '../logger.js';
@@ -92,6 +92,42 @@ export async function sendSignupExists(sender: EmailSender, origin: string, reci
 /** To the current address, when a change to `newEmail` is asked for (D259). */
 export async function sendEmailChangeNotice(sender: EmailSender, recipient: Recipient, newEmail: string): Promise<void> {
   await sender.send(emailMessages.emailChangeRequested(recipient.email, recipient.language, newEmail));
+}
+
+/**
+ * The deletion date as the person reads it: a long date and time in their
+ * language and their own zone (D163), so "deleted on" is their calendar's day.
+ */
+export function deletionDate(dueAt: Date, language: UiLanguage, timeZone: string): string {
+  return new Intl.DateTimeFormat(language, { dateStyle: 'long', timeStyle: 'short', timeZone }).format(dueAt);
+}
+
+/** The account was closed at the user's request (D264): when it will be erased, and that signing in cancels it. */
+export async function sendAccountClosed(
+  sender: EmailSender,
+  origin: string,
+  recipient: Omit<Recipient, 'userId'>,
+  dueAt: Date,
+  timeZone: string,
+): Promise<void> {
+  const date = deletionDate(dueAt, recipient.language, timeZone);
+  await sender.send(emailMessages.accountClosed(recipient.email, recipient.language, date, pageLink(origin, '/')));
+}
+
+/**
+ * A sign-in reopened a closed account (D264): mailed in the background, so a
+ * sign-in by someone who knows the password - or a provider they linked -
+ * cannot quietly undo a deletion the owner believes has happened. Not awaited
+ * by the sign-in, and never fails it.
+ */
+export function announceAccountRestored(sender: EmailSender | null, user: { id: string; email: string | null }): void {
+  if (sender === null || user.email === null) return;
+  const to = user.email;
+  // The settings read is in the background too: the sign-in has already succeeded.
+  sendInBackground(user.id, 'account_restored', async () => {
+    const language = mailLanguage((await getOrCreateUserSettings(user.id)).language);
+    await sender.send(emailMessages.accountRestored(to, language));
+  });
 }
 
 /**

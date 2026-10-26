@@ -270,6 +270,14 @@ export async function admitVerified(
 }
 
 /**
+ * A reset is open to an account in its deletion grace period too (D264): an
+ * owner who forgot the password, or whose password a thief changed before
+ * closing the account, must still be able to sign in and cancel. The account
+ * stays closed; the sign-in that follows reopens it.
+ */
+const RESETTABLE = `(u.status = 'active' OR (u.status = 'closed' AND u.deletion_due_at > now()))`;
+
+/**
  * Who a reset mail goes to: an active account with a proven address, or
  * nobody (D312). Never the admin: the installation's most valuable account
  * does not depend on one mailbox, and is reset on the host with
@@ -279,7 +287,7 @@ export function getResetRecipient(email: string): Promise<{ id: string; email: s
   return queryOne<{ id: string; email: string; language: string }>(
     `SELECT u.id, u.email, coalesce(us.language, 'en') AS language
        FROM users u LEFT JOIN user_settings us ON us.user_id = u.id
-      WHERE lower(u.email) = lower($1) AND u.status = 'active' AND u.email_verified_at IS NOT NULL
+      WHERE lower(u.email) = lower($1) AND ${RESETTABLE} AND u.email_verified_at IS NOT NULL
         AND u.role <> 'admin'`,
     [email],
   );
@@ -314,10 +322,10 @@ export async function useResetToken(tokenHash: Buffer, passwordHash: string | nu
     // A pending address change goes too: whoever asked for it may be who the
     // owner is resetting against, and its link could no longer be opened anyway (D310).
     const updated = await client.query<{ email: string }>(
-      `UPDATE users
+      `UPDATE users u
           SET password_hash = $2, password_must_change = false, session_version = session_version + 1,
               pending_email = NULL
-        WHERE id = $1 AND status = 'active' AND role <> 'admin' AND lower(email) = lower($3)
+        WHERE id = $1 AND ${RESETTABLE} AND role <> 'admin' AND lower(email) = lower($3)
         RETURNING email`,
       [token.user_id, passwordHash, token.email],
     );

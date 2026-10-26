@@ -153,19 +153,25 @@ export function getSignupRequest(userId: string): Promise<{
 }
 
 /** Where a request is after a decision was asked for; `gone` when there is no such user. */
-export type SignupDecision = { applied: boolean; status: UserStatus | 'gone'; email: string | null };
+export type SignupDecision = {
+  applied: boolean;
+  status: Exclude<UserStatus, 'closed'> | 'gone';
+  email: string | null;
+};
 
 async function decided(
   userId: string,
   applied: { email: string | null } | null,
-  status: UserStatus,
+  status: Exclude<UserStatus, 'closed'>,
 ): Promise<SignupDecision> {
   if (applied !== null) return { applied: true, status, email: applied.email };
   const now = await queryOne<{ status: UserStatus; email: string | null }>(
     `SELECT status, email FROM users WHERE id = $1 AND role = 'user'`,
     [userId],
   );
-  return { applied: false, status: now?.status ?? 'gone', email: now?.email ?? null };
+  // An account closed since (D264) was approved, as far as the request goes.
+  const current = now?.status === 'closed' ? 'active' : (now?.status ?? 'gone');
+  return { applied: false, status: current, email: now?.email ?? null };
 }
 
 /**
@@ -188,10 +194,13 @@ export async function approveSignup(
   return decided(userId, row, 'active');
 }
 
-/** Turn a waiting request down; kept, so the same email cannot ask again (D156). */
+/**
+ * Turn a waiting request down; kept, so the same email cannot ask again
+ * (D156) - in *automatic* signup for 90 days from `rejected_at` (D264).
+ */
 export async function rejectSignup(userId: string): Promise<SignupDecision> {
   const row = await queryOne<{ email: string | null }>(
-    `UPDATE users SET status = 'rejected'
+    `UPDATE users SET status = 'rejected', rejected_at = now()
       WHERE id = $1 AND status = 'pending' AND role = 'user'
   RETURNING email`,
     [userId],
@@ -205,7 +214,7 @@ export async function rejectSignup(userId: string): Promise<SignupDecision> {
  */
 export async function restoreSignup(userId: string): Promise<SignupDecision> {
   const row = await queryOne<{ email: string | null }>(
-    `UPDATE users SET status = 'pending'
+    `UPDATE users SET status = 'pending', rejected_at = NULL
       WHERE id = $1 AND status = 'rejected' AND role = 'user'
   RETURNING email`,
     [userId],

@@ -32,6 +32,7 @@ vi.mock('../src/db/queries.js', () => ({
   listIdentities: vi.fn(async () => []),
   unlinkIdentity: vi.fn(),
   recordSignIn: vi.fn(async () => undefined),
+  reopenClosedAccount: vi.fn(async () => null),
   createSession: vi.fn(async () => ({ id: '5e551000-0000-4000-8000-0000000000ee', expires_at: new Date(Date.now() + 3_600_000) })),
 }));
 
@@ -153,6 +154,25 @@ describe('coming back from the provider (D262, D263, D314)', () => {
     const response = await roundTrip(buildApp());
     expect(landedOn(response).searchParams.get('oauth')).toBe('signed_in');
     expect(response.headers.get('set-cookie')).toContain('traders_session=');
+  });
+
+  it('reopens a closed account a linked identity signs in to, and says the deletion was cancelled (D264)', async () => {
+    vi.mocked(queries.getIdentityUser).mockResolvedValue({ user_id: ACCOUNT, status: 'closed' });
+    vi.mocked(queries.getUser).mockResolvedValue({ ...ACTIVE_SESSION, id: ACCOUNT, status: 'closed' } as never);
+    vi.mocked(queries.reopenClosedAccount).mockResolvedValue({ ...ACTIVE_SESSION, id: ACCOUNT } as never);
+    const response = await roundTrip(buildApp());
+    expect(queries.reopenClosedAccount).toHaveBeenCalledWith(ACCOUNT, ACTIVE_SESSION.session_version);
+    expect(landedOn(response).searchParams.get('oauth')).toBe('restored');
+    expect(response.headers.get('set-cookie')).toContain('traders_session=');
+  });
+
+  it('never reopens an account the admin disabled, whatever identity signs in (D264)', async () => {
+    vi.mocked(queries.getIdentityUser).mockResolvedValue({ user_id: ACCOUNT, status: 'disabled' });
+    vi.mocked(queries.getUser).mockResolvedValue({ ...ACTIVE_SESSION, id: ACCOUNT, status: 'disabled' } as never);
+    const response = await roundTrip(buildApp());
+    expect(queries.reopenClosedAccount).not.toHaveBeenCalled();
+    expect(landedOn(response).searchParams.get('oauth')).toBe('not_active');
+    expect(queries.createSession).not.toHaveBeenCalled();
   });
 
   it("links an active account at the address the provider vouches for, mails it, and signs in", async () => {

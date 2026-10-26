@@ -73,6 +73,8 @@ export const RATE_LIMITS = {
   resetAttemptPerAddress: { points: 20, durationSeconds: HOUR },
   /** Address changes asked for by one user: each mails the new address and the old (D259). */
   emailChangePerUser: { points: 5, durationSeconds: HOUR },
+  /** Exports of one user's data: each reads every row the account holds (D264). */
+  dataExportPerUser: { points: 5, durationSeconds: HOUR },
   /** *Run a scan now*: three active agents, each a few times an hour. */
   agentScan: { points: 10, durationSeconds: HOUR },
   /** Questions to the assistant, on the Ask page and in Telegram together. */

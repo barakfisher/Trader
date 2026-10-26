@@ -20,6 +20,7 @@ import {
   normaliseEmail,
   timeZoneProblem,
   UI_LANGUAGES,
+  type LoginResponse,
   type SessionUser,
   type SignupResponse,
   type UiLanguage,
@@ -40,6 +41,7 @@ import {
   getUser,
   getUserCredentialsByEmail,
   recordSignIn,
+  reopenClosedAccount,
   setPendingEmail,
   peekVerificationToken,
   useResetToken,
@@ -47,6 +49,7 @@ import {
   type UserRow,
 } from '../../db/queries.js';
 import {
+  announceAccountRestored,
   mailLanguage,
   sendEmailChangeNotice,
   sendInBackground,
@@ -69,7 +72,7 @@ import { PASSWORD_MAX_LENGTH, hashPassword, passwordMatches, passwordProblem } f
  * above the rule's ceiling so an over-long one still gets the rule's message
  * rather than a shape error.
  */
-const submittedPassword = z.string().min(1).max(PASSWORD_MAX_LENGTH * 4);
+export const submittedPassword = z.string().min(1).max(PASSWORD_MAX_LENGTH * 4);
 
 const loginSchema = z.object({
   email: z.string().trim().min(1).max(320),
@@ -110,7 +113,7 @@ function requestOrigin(context: Context<AppEnv>): string {
  * D310): a session left open, or stolen, must not be a way to guess the
  * password without a limit. The account's failures are keyed by its address.
  */
-async function currentPasswordMatches(context: Context<AppEnv>, user: UserRow, password: string): Promise<boolean> {
+export async function currentPasswordMatches(context: Context<AppEnv>, user: UserRow, password: string): Promise<boolean> {
   const limits = context.get('rateLimits');
   const account = user.email ? emailKey(normaliseEmail(user.email)) : userKey(user.id);
   await limits.refuseIfSpent('loginFailuresPerAccount', account);
@@ -185,10 +188,14 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     if (credentials.status === 'pending') {
       throw new ApiProblem(403, 'account_pending', 'this account is waiting for the admin\'s approval');
     }
-    if (credentials.status !== 'active') {
+    // A closed account still in its grace period is reopened by signing in
+    // (D264) - only `closed`, never `disabled`: the admin's decision is not the
+    // user's to undo. `reopenClosedAccount` checks both in its statement.
+    const reopened = credentials.status === 'closed' ? await reopenClosedAccount(credentials.id, credentials.session_version) : null;
+    if (credentials.status !== 'active' && reopened === null) {
       throw new ApiProblem(403, 'account_not_active', `this account is ${credentials.status}`);
     }
-    const user = await getUser(credentials.id);
+    const user = reopened ?? (await getUser(credentials.id));
     // A password change, a one-time password or a disable that committed while
     // argon2 ran moved the version: the password just checked is no longer the
     // account's, so it opens no session (D297). Said as a wrong password, which
@@ -205,7 +212,9 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
 
     await recordSignIn(user.id);
     await issueSession(context, user);
-    return context.json(await sessionUser(user));
+    if (reopened !== null) announceAccountRestored(context.get('email'), reopened);
+    const body: LoginResponse = { ...(await sessionUser(user)), deletionCancelled: reopened !== null };
+    return context.json(body);
   });
 
   /**
