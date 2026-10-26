@@ -323,3 +323,4 @@ while this file is out of date.
 | 310 | An address change's link needs the account's password too, and the second review's other findings |
 | 311 | Kind's Mailpit is served at `mailpit.localhost`, this Mac only |
 | 312 | How PR 11 builds D260's reset |
+| 313 | The admin is never reset by email, and a reset unbinds Telegram |

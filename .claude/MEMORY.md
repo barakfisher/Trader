@@ -4941,6 +4941,27 @@ failure they prevent.
       - mailing an unknown address "no account here" (it tells a prober the address is free,
         and mails strangers on demand);
       - a notice only on reset (a password changed from a stolen session is the case it is for).
+    - **From the security review:** `/auth/reset` looks the link up (`peekVerificationToken`)
+      before hashing the new password, and spends `resetAttemptPerAddress` (20 an hour) first:
+      argon2 is the expensive part, and a made-up token cost it before. A reset also clears
+      `pending_email` and its unused `verify_new_email` links.
+    - **Accepted:** two reset requests in the same instant can each leave a live link (the
+      cancel-and-insert is one statement, not a lock); both go to the same mailbox.
+    - **Checked:** migration 0074 marked every existing account verified, which now lets its
+      mailbox reset it. On compose and kind every such address is the user's own (2026-10-26).
+313. **The admin is never reset by email, and a reset unbinds Telegram** (the user, 2026-10-26;
+    M10 PR 11, from the security review).
+    - **The admin:** `getResetRecipient` and `useResetToken` skip `role = 'admin'`. The form
+      answers the same, so nothing is revealed; a lost admin password is set on the host with
+      `bash scripts/admin-password.sh`, as before. The installation's most valuable account no
+      longer depends on one mailbox.
+    - **Telegram:** a reset deletes the user's `telegram_bindings` row in its transaction. A
+      chat bound by whoever held a stolen session would otherwise keep the assistant and
+      Approve/Reject after the owner reset. A password change from Settings keeps the binding:
+      the owner was signed in and proved the old password.
+    - **Rejected:** the admin resettable like anyone (a compromised mailbox becomes a
+      compromised installation); unbinding on every password change (a routine change would
+      cost a re-bind each time); keeping the binding (only the notice mail would reveal it).
 ---
 
 ## Bugs that cost real time, and the lesson from each

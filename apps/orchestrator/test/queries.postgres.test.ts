@@ -536,6 +536,20 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           expect(await queries.useResetToken(hash, 'another hash')).toEqual({ outcome: 'used' });
         });
 
+        it('never mails or resets the admin, and unbinds Telegram on a reset (D313)', async () => {
+          const userId = await activeAccount('reset-admin');
+          await getPool().query("UPDATE users SET role = 'admin' WHERE id = $1", [userId]);
+          expect(await queries.getResetRecipient(email('reset-admin'))).toBeNull();
+          const adminLink = await resetLink(userId, email('reset-admin'));
+          expect(await queries.useResetToken(adminLink, 'x')).toEqual({ outcome: 'invalid' });
+          await getPool().query("UPDATE users SET role = 'user' WHERE id = $1", [userId]);
+
+          await getPool().query('INSERT INTO telegram_bindings (user_id, chat_id) VALUES ($1, $2)', [userId, 990000000 + Math.floor(Math.random() * 1_000_000)]);
+          expect((await queries.useResetToken(await resetLink(userId, email('reset-admin')), 'new')).outcome).toBe('reset');
+          const { rows } = await getPool().query('SELECT count(*)::int AS n FROM telegram_bindings WHERE user_id = $1', [userId]);
+          expect(rows[0].n).toBe(0);
+        });
+
         it('refuses an expired link, a verification link, and an account no longer active or at that address', async () => {
           const userId = await activeAccount('reset-refused');
           const expired = await resetLink(userId, email('reset-refused'));

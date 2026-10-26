@@ -251,12 +251,18 @@ export async function deleteStaleUnverifiedSignups(days: number): Promise<number
   return row?.deleted ?? 0;
 }
 
-/** Who a reset mail goes to: an active account with a proven address, or nobody (D312). */
+/**
+ * Who a reset mail goes to: an active account with a proven address, or
+ * nobody (D312). Never the admin: the installation's most valuable account
+ * does not depend on one mailbox, and is reset on the host with
+ * `scripts/admin-password.sh` (D313).
+ */
 export function getResetRecipient(email: string): Promise<{ id: string; email: string; language: string } | null> {
   return queryOne<{ id: string; email: string; language: string }>(
     `SELECT u.id, u.email, coalesce(us.language, 'en') AS language
        FROM users u LEFT JOIN user_settings us ON us.user_id = u.id
-      WHERE lower(u.email) = lower($1) AND u.status = 'active' AND u.email_verified_at IS NOT NULL`,
+      WHERE lower(u.email) = lower($1) AND u.status = 'active' AND u.email_verified_at IS NOT NULL
+        AND u.role <> 'admin'`,
     [email],
   );
 }
@@ -293,7 +299,7 @@ export async function useResetToken(tokenHash: Buffer, passwordHash: string | nu
       `UPDATE users
           SET password_hash = $2, password_must_change = false, session_version = session_version + 1,
               pending_email = NULL
-        WHERE id = $1 AND status = 'active' AND lower(email) = lower($3)
+        WHERE id = $1 AND status = 'active' AND role <> 'admin' AND lower(email) = lower($3)
         RETURNING email`,
       [token.user_id, passwordHash, token.email],
     );
@@ -304,6 +310,10 @@ export async function useResetToken(tokenHash: Buffer, passwordHash: string | nu
       "DELETE FROM auth_tokens WHERE user_id = $1 AND purpose = 'verify_new_email' AND used_at IS NULL",
       [token.user_id],
     );
+    // A reset is what someone does when another may know the password: a chat
+    // that other bound must not keep the assistant and Approve (D313). The
+    // owner binds again from Settings.
+    await client.query('DELETE FROM telegram_bindings WHERE user_id = $1', [token.user_id]);
     return { outcome: 'reset', userId: token.user_id, email: changed.email };
   });
 }
