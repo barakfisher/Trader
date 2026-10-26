@@ -4,7 +4,36 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-26, afternoon - **Not a handoff: M10 resumed; its open issues closed (D302).**
+Updated: 2026-10-26, evening - **Handoff by count: five merges since #323** (#324-#328, and this PR).
+- **Merges since #323:**
+  - #324: sessions capped at four, the oldest signed out (D302); constant-time internal key;
+  - #325, M10 PR 10: email verification and the signup modes (D303-D311; migration `0074`) -
+    the WIP branch `m10-pr10-email` rebased, renumbered and finished after two security
+    reviews; Resend chosen as the provider (D308);
+  - #326: kind's Mailpit lands in the `traders` namespace (it was in `default`, so kind could
+    send no mail) and `k8s-up.sh` waits for it;
+  - #327, M10 PR 11: self-service password reset (D312, D313);
+  - #328, M10 PR 13: sign in with Google and GitHub (D314, D315; migration `0075`).
+- **Deployed:** compose and kind both run `1a68864` (#328) at `0075_user_identities`,
+  2026-10-26 ~16:55 UTC, after `db-backup.sh --target all` before every deploy of the day.
+  Both readyz 200; `mailpit.localhost` 200; `/auth/oauth/providers` is `[]` (no apps yet).
+- **Decisions reach 315** (next: **316**). **Migrations:** `0075` head; next free `0076`.
+- **M10 status:** PRs 1-13 merged except 14-16. **PR 14** (deletion and export, D264) was
+  offered to the user as a separate session card (not started when this was written - check
+  `gh pr list` and the branches before starting it). **PR 15** (legal pages, D265) needs the
+  user's text; **PR 16** (the public host) needs the user to rent it and own a domain.
+- **Owed by the user:**
+  - register the Google and GitHub OAuth apps (redirect URIs in `.env.example`) - until then
+    OAuth is proven only against the fake provider, and whether Google accepts a `*.ts.net`
+    redirect is unknown;
+  - compose's signup mode is **closed** (0074 carried its zero waiting limit over), so the
+    signup -> Mailpit -> verify flow was checked only up to the verify page with a made-up
+    link; opening signup is the admin's choice;
+  - the earlier checks: D299/D301's Hebrew on the card and Telegram, the paid assistant eval,
+    the Telegram phone check.
+- **Next:** "Next session: after M10 PR 13" below.
+
+Previous update, 2026-10-26, afternoon - **Not a handoff: M10 resumed; its open issues closed (D302).**
 - **Deployed:** compose and kind both run `e197e13` (#323) at `0073`, 2026-10-26 ~13:10 UTC,
   after `db-backup.sh --target all` (`traders-*-20261026T1306*Z.dump`/`T1307*Z`). Both readyz
   200, no errors in ten minutes of logs; each deploy moved the owner's password into its own
@@ -6312,6 +6341,43 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after M10 PR 13 (written 2026-10-26)
+
+**State:** M10 needs PRs 14, 15 and 16. The user granted (2026-10-26) "continue until M10 is
+done; merge, deploy, start sessions" - design questions still go to them one at a time, and
+the handoff rule still stops a session every five merges.
+- **PR 14, deletion and export (D264):** fully decided. A session card with a full brief was
+  offered; if nobody started it, build it here. Two things this session learned that the
+  brief did not know: `signIn` in `apps/orchestrator/src/http/routes/oauth.ts` must handle the
+  pending-deletion marker as password sign-in does (D315's last bullet); and an OAuth-only
+  account confirms deletion "by signing in again" (D264), which needs a fresh-sign-in check -
+  there is no password to ask for.
+- **PR 15, legal pages and consent (D265):** the app's part (the two pages from one Markdown
+  file per language, the consent record, the gate keeping public signup closed until the text
+  exists) can be built; the wording is the user's or a lawyer's. Ask before writing any text.
+- **PR 16, the public host (D255):** the user rents it and owns the domain; production
+  `ALLOWED_ORIGINS` must hold the public host alone (D310), the Resend domain needs SPF and
+  DKIM (D308), and the OAuth apps are registered then (D314).
+
+**Lessons from this stretch:**
+- **Never `git checkout -- <file>` to undo a mutation check on a file with uncommitted work.**
+  It restores the last commit and throws the work away; it happened once here and a backup
+  copy saved it. Commit first, then mutate, then `git checkout`.
+- **Kustomize's `namespace:` in a base reaches only the base's resources.** An overlay that
+  adds its own (kind's `mailpit.yaml`) needs `namespace:` too, or they land in `default` -
+  where nothing in `traders` can resolve them, and nothing fails. `k8s-up.sh` now waits for
+  every Deployment the overlay adds; do the same for the next one.
+- **Docker Desktop stopped mid-session** (probably memory, during image builds and the
+  Postgres suites): compose and kind went down with it and came back on `open -a Docker`;
+  `traders-agents-ci` (the integration database on 55434) has no restart policy and needs
+  `docker start`.
+- **Decision numbers must be contiguous** (`build_decision_index.py`), so parallel branches
+  number provisionally and renumber at rebase - only on the lines their own diff adds, because
+  the same files carry `main`'s numbers too (the script used here: diff `-U0` against the base,
+  rewrite only added line numbers).
+- **A turn that a background notification starts cannot start a session**, only propose one;
+  the user's own message is needed to start it.
 
 ### Next session: after D301 (written 2026-10-26)
 
