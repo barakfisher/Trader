@@ -20,10 +20,11 @@
  * outcome is whether the run started; the ratings' are the run's own row.
  */
 
-import { LEGAL_VERSION, PAYER_REFUSALS, RESEARCH_REFUSALS } from '@traders/shared';
+import { PAYER_REFUSALS, RESEARCH_REFUSALS } from '@traders/shared';
 import { AiServiceError, type AiClient } from '@traders/shared/ai';
 
-import { claimRun, finishRun, getUser, hasAcceptedLegalVersion, listSlotAttempts, type ResearchAssignmentRow } from '../db/queries.js';
+import { claimRun, finishRun, listSlotAttempts, type ResearchAssignmentRow } from '../db/queries.js';
+import { accountHold } from './accountHold.js';
 import { logger } from '../logger.js';
 import { dueSlots, type DueSlot, type Session } from './scanSchedule.js';
 import type { SlotAttemptJob } from './scheduledScans.js';
@@ -78,32 +79,6 @@ export async function planResearch(input: {
 const FINAL_REFUSALS = new Set<string>([...RESEARCH_REFUSALS, ...PAYER_REFUSALS]);
 
 /** One research attempt, on the worker. Never throws: the run records what happened. */
-/**
- * Why a queued attempt was skipped: its account was closed (D264) or disabled
- * (D239) after the slot was queued, so it runs nothing more (D316's debt).
- */
-export const USER_NOT_ACTIVE = 'user_not_active';
-
-/**
- * Why a queued attempt was skipped: the account has not accepted the current
- * privacy policy and terms (D320), so nothing is done with its data - nor its
- * budget spent - until it does.
- */
-export const LEGAL_NOT_ACCEPTED = 'legal_not_accepted';
-
-/**
- * Why a queued attempt for `userId` must not run, or null when it may: the
- * account's status, then its acceptance of `legalVersion` - which the admin,
- * whose installation's terms these are, is never asked for.
- */
-export async function accountHold(userId: string, legalVersion: string | null = LEGAL_VERSION): Promise<string | null> {
-  const user = await getUser(userId);
-  if (user?.status !== 'active') return USER_NOT_ACTIVE;
-  if (legalVersion !== null && user.role !== 'admin' && !(await hasAcceptedLegalVersion(userId, legalVersion))) {
-    return LEGAL_NOT_ACCEPTED;
-  }
-  return null;
-}
 
 export async function runResearchAttempt(job: SlotAttemptJob, deps: { ai: AiClient; now?: () => Date }): Promise<void> {
   const now = (deps.now ?? (() => new Date()))();

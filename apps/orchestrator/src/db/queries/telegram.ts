@@ -92,13 +92,15 @@ export function findTelegramBindingByUser(userId: string): Promise<TelegramBindi
  * Only an active user's chat speaks for them (D278): a disabled user is locked
  * out of the web at once (D239), and their bound chat reads as unbound - no
  * question, decision, scan or change - until they are enabled again. The
- * binding itself is kept, so enabling them needs no new link.
+ * binding itself is kept, so enabling them needs no new link. An account
+ * holding the admin's one-time password reads the same until it sets its own
+ * (D162: nothing but the password change).
  */
 export function findTelegramBindingByChat(chatId: string, legalVersion: string | null): Promise<TelegramChatBindingRow | null> {
   return queryOne<TelegramChatBindingRow>(
     `SELECT b.user_id, b.chat_id::text AS chat_id, b.username, b.bound_at, ${legalAccepted('$2')} AS legal_accepted
        FROM telegram_bindings b
-       JOIN users u ON u.id = b.user_id AND u.status = 'active'
+       JOIN users u ON u.id = b.user_id AND u.status = 'active' AND NOT u.password_must_change
       WHERE b.chat_id = $1`,
     [chatId, legalVersion],
   );
@@ -106,8 +108,8 @@ export function findTelegramBindingByChat(chatId: string, legalVersion: string |
 
 /**
  * The chat a push to `userId` goes to, with whether it may be sent to now:
- * only while the account is active - a closed or disabled account is sent
- * nothing, as its chat is not answered - and has accepted the current legal
+ * only while the account is active and holds no one-time password (D162) -
+ * such an account is sent nothing, as its chat is not answered - and has accepted the current legal
  * version (D320); the admin is never held for the latter. Null when no chat
  * is connected.
  */
@@ -116,7 +118,8 @@ export function findTelegramPushChat(
   legalVersion: string | null,
 ): Promise<{ chat_id: string; active: boolean; legal_accepted: boolean } | null> {
   return queryOne(
-    `SELECT b.chat_id::text AS chat_id, u.status = 'active' AS active, ${legalAccepted('$2')} AS legal_accepted
+    `SELECT b.chat_id::text AS chat_id, u.status = 'active' AND NOT u.password_must_change AS active,
+            ${legalAccepted('$2')} AS legal_accepted
        FROM telegram_bindings b
        JOIN users u ON u.id = b.user_id
       WHERE b.user_id = $1`,

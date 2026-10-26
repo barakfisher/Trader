@@ -73,7 +73,7 @@ vi.mock('../src/services/tradeProposals.js', () => ({
 
 const queries = await import('../src/db/queries.js');
 const scheduled = await import('../src/services/scheduledScans.js');
-const { LEGAL_NOT_ACCEPTED, USER_NOT_ACTIVE, accountHold } = await import('../src/services/scheduledResearch.js');
+const { LEGAL_NOT_ACCEPTED, USER_NOT_ACTIVE, accountHold } = await import('../src/services/accountHold.js');
 const { MAX_SLOT_ATTEMPTS, RETRY_AFTER_MS, nextAttempt, planScheduledScans, roundRobin, runSlotAttempt } = scheduled;
 
 const SCAN = { scan_id: 's-1', outcome: 'no_trade', steps: 2, cost_micro_usd: 30_000, model: 'm', answer: null, error: null };

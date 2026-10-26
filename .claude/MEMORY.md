@@ -5223,9 +5223,13 @@ failure they prevent.
       a closed or disabled account are held the same way (they were sent before, unlike its
       chat's messages). Both read the acceptance in the binding's own query; the gate fails
       closed (`legal_accepted !== true`); the admin is never held.
-    - **Left open (the second security review's questions):** the daily digest is still built
-      for an unaccepted account and only held at send; an admin with a one-time password
-      (D162) is not held in Telegram, as before.
+    - **The per-user runs too** (the next PR): `POST /internal/runs` skips a user's digest,
+      portfolio scan, topic scan and topic discovery as `legal_not_accepted` (`accountHold`,
+      now `services/accountHold.ts`, shared with the scheduled scans and research). The
+      snapshot still runs: it asks no model and sends nothing, and skipping it would leave a
+      hole in the value history the day the account accepts.
+    - **An account holding the admin's one-time password (D162)** reads as unbound in Telegram
+      and is pushed nothing, as a disabled one is (D278) - nothing but the password change.
     - **Rejected:** a content hash as the version (every typo fix would ask everyone again);
       columns on `users` (one version only, no history); the version in each file's front
       matter (four places to agree, and a parser for them).

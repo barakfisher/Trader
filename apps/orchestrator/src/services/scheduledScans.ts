@@ -43,10 +43,11 @@ import { messagesFor, type NoticeText } from '../notify/messages.js';
 import type { Notifier } from '../notify/notifier.js';
 import { fanOut, settingsForNotification } from './notifications.js';
 import { dueSlots, scheduleOf, slotKey, type DueSlot, type ScanSlot, type Session } from './scanSchedule.js';
+import { accountHold } from './accountHold.js';
 import { readyToScan } from './agentReadiness.js';
 import { proposeFromScan } from './tradeProposals.js';
 import { announceModelFallbacks } from './modelFallbacks.js';
-import { accountHold, planResearch, researchRunKey, runResearchAttempt } from './scheduledResearch.js';
+import { planResearch, researchRunKey, runResearchAttempt } from './scheduledResearch.js';
 
 /** D69: one attempt and at most two retries per slot. */
 export const MAX_SLOT_ATTEMPTS = 3;
