@@ -31,6 +31,7 @@ import {
   primaryAgentId,
   type UserRow,
 } from '../../db/queries.js';
+import { accountHold } from '../../services/accountHold.js';
 import { eraseDueAccounts } from '../../services/accountErase.js';
 import { backfillInstrumentNames } from '../../services/instrumentMetadata.js';
 import { AUTH_TOKEN_RETENTION_DAYS, UNVERIFIED_SIGNUP_DAYS } from '../linkTokens.js';
@@ -322,6 +323,14 @@ async function runForUser(
   };
 
   return claimAnd({ userId: user.id, agentId, kind, runKey, trigger: request.trigger ?? 'unknown' }, async (runId) => {
+    // An account that has not accepted the current terms has nothing done with
+    // its data (D320) - but its snapshot, which asks no model and sends nothing,
+    // is still taken, so its value history has no hole when it accepts.
+    if (kind !== 'snapshot') {
+      const hold = await accountHold(user.id, context.get('legalVersion'));
+      if (hold !== null) return done(runId, 'skipped', { reason: hold });
+    }
+
     if (kind === 'daily_digest') {
       const digest = await sendDigest(user, context.get('notifier'));
       // A digest with nothing in it is not a failure and not a success worth

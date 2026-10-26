@@ -70,7 +70,7 @@ export function buildNotifier(config: Config): Notifier {
       const found = await findTelegramPushChat(userId, LEGAL_VERSION);
       if (found === null) return null;
       // Connected, but not to be sent to now - said as such on the row (D320).
-      if (!found.active) return { held: 'the account is not active' };
+      if (!found.active) return { held: 'the account is not active, or must set a new password' };
       if (!found.legal_accepted) return { held: 'the account has not accepted the current privacy policy and terms' };
       return found.chat_id;
     },

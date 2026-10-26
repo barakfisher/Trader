@@ -3126,6 +3126,11 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         expect(await queries.findTelegramPushChat(user, VERSION)).toMatchObject({ legal_accepted: true });
         await getPool().query("UPDATE users SET role = 'admin' WHERE id = $1", [user]);
         expect(await queries.findTelegramPushChat(user, '2027-01-01')).toMatchObject({ legal_accepted: true });
+        // The admin's one-time password (D162): the chat is not answered, and nothing is pushed to it.
+        await getPool().query('UPDATE users SET password_must_change = true WHERE id = $1', [user]);
+        expect(await queries.findTelegramBindingByChat(chat, null)).toBeNull();
+        expect(await queries.findTelegramPushChat(user, null)).toMatchObject({ chat_id: chat, active: false });
+        await getPool().query('UPDATE users SET password_must_change = false WHERE id = $1', [user]);
         // A closed account is sent nothing, its chat kept (D264, D320).
         await getPool().query("UPDATE users SET status = 'disabled' WHERE id = $1", [user]);
         expect(await queries.findTelegramPushChat(user, null)).toMatchObject({ chat_id: chat, active: false });

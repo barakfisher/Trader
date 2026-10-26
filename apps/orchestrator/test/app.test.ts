@@ -62,6 +62,7 @@ vi.mock('../src/db/queries.js', () => ({
   upsertSnapshot: vi.fn(async () => undefined),
   claimRun: vi.fn(),
   finishRun: vi.fn(async () => undefined),
+  hasAcceptedLegalVersion: vi.fn(async () => false),
   // No run today and no snapshot ever loaded: a scheduled rescreen is due.
   runKeyExists: vi.fn(async () => false),
   getLatestUniverseLoad: vi.fn(async () => null),
@@ -107,6 +108,7 @@ const { createFakeAi } = fakeAi;
 const { DISCOVERY_WINDOW_DAYS } = await import('../src/services/topicDiscovery.js');
 const queries = await import('../src/db/queries.js');
 const pool = await import('../src/db/pool.js');
+const { LEGAL_NOT_ACCEPTED } = await import('../src/services/accountHold.js');
 
 /** One claim succeeds, every later claim of the same key is refused - which is
  *  what the runs table does, without needing a database in this suite. */
@@ -516,6 +518,33 @@ describe('API', () => {
     expect(queries.claimRun).toHaveBeenLastCalledWith(
       expect.objectContaining({ kind: 'daily_digest', retryFailed: false }),
     );
+  });
+
+  it("holds a user's work until the current terms are accepted, but still takes the snapshot (D320)", async () => {
+    const held = createApp(
+      loadConfig(ENV),
+      createFakeAi(),
+      undefined,
+      null,
+      undefined,
+      undefined,
+      undefined,
+      '2026-11-01',
+    );
+    const post = (kind: string) =>
+      held.request('/internal/runs', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
+        body: JSON.stringify({ kind, userId: USER.id }),
+      });
+    for (const kind of ['daily_digest', 'portfolio_scan', 'topic_scan', 'topic_discovery']) {
+      vi.mocked(queries.finishRun).mockClear();
+      expect(await (await post(kind)).json(), kind).toMatchObject({ status: 'skipped', result: { reason: LEGAL_NOT_ACCEPTED } });
+    }
+    expect(queries.listHoldings).not.toHaveBeenCalled();
+    expect(queries.hasAcceptedLegalVersion).toHaveBeenCalledWith(USER.id, '2026-11-01');
+    const snapshot = await (await post('snapshot')).json();
+    expect(snapshot.result?.reason).not.toBe(LEGAL_NOT_ACCEPTED);
   });
 
   it("refuses a user's kind that names no user, instead of running it as the first account (D161)", async () => {
