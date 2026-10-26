@@ -198,6 +198,9 @@ describe('API', () => {
       '/auth/signup',
       '/auth/verify',
       '/auth/verify/resend',
+      // A forgotten password is, by definition, asked about signed out (D260).
+      '/auth/reset/request',
+      '/auth/reset',
       // Telegram calls it; it proves itself with the secret header instead.
       '/telegram/webhook',
     ]);

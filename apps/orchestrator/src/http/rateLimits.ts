@@ -63,6 +63,10 @@ export const RATE_LIMITS = {
   signupPerEmail: { points: 3, durationSeconds: HOUR },
   /** New verification links for one account, asked from sign-in (D306): each is a mail. */
   verificationResendPerAccount: { points: 3, durationSeconds: HOUR },
+  /** Reset links asked for from one address, for any email (D260). */
+  resetRequestPerAddress: { points: 5, durationSeconds: HOUR },
+  /** Reset links asked for one email: each is a mail to it (D260). */
+  resetRequestPerEmail: { points: 3, durationSeconds: HOUR },
   /** Address changes asked for by one user: each mails the new address and the old (D259). */
   emailChangePerUser: { points: 5, durationSeconds: HOUR },
   /** *Run a scan now*: three active agents, each a few times an hour. */

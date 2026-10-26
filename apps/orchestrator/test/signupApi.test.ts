@@ -117,7 +117,7 @@ describe('asking to join (D156, D185, D259, D303)', () => {
       purpose: 'verify_email',
       email: 'noa@example.com',
       tokenHash: linkTokenHash(token),
-      ttlHours: VERIFY_TOKEN_TTL_HOURS,
+      ttlMinutes: VERIFY_TOKEN_TTL_HOURS * 60,
     });
     expect(announceSignupRequest).not.toHaveBeenCalled();
   });

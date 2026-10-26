@@ -312,7 +312,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
       async function link(userId: string, address: string, purpose: 'verify_email' | 'verify_new_email' = 'verify_email') {
         const token = newLinkToken();
-        await queries.issueAuthToken({ userId, purpose, email: address, tokenHash: linkTokenHash(token), ttlHours: 1 });
+        await queries.issueAuthToken({ userId, purpose, email: address, tokenHash: linkTokenHash(token), ttlMinutes: 60 });
         return linkTokenHash(token);
       }
       const status = async (userId: string) =>
@@ -427,7 +427,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           purpose: 'reset_password',
           email: email('reset'),
           tokenHash: linkTokenHash(token),
-          ttlHours: 1,
+          ttlMinutes: 60,
         });
         expect(await queries.useVerificationToken(linkTokenHash(token), RULES, PROOF)).toEqual({ outcome: 'invalid' });
         expect(await status(created.userId)).toMatchObject({ verified: false });
@@ -476,6 +476,70 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         expect(result).toEqual({ outcome: 'email_taken' });
         const { rows } = await getPool().query('SELECT pending_email FROM users WHERE id = $1', [created.userId]);
         expect(rows[0].pending_email).toBeNull();
+      });
+
+      describe('reset links (D260, D310)', () => {
+        async function resetLink(userId: string, address: string) {
+          const token = newLinkToken();
+          await queries.issueAuthToken({ userId, purpose: 'reset_password', email: address, tokenHash: linkTokenHash(token), ttlMinutes: 30 });
+          return linkTokenHash(token);
+        }
+        const activeAccount = async (name: string) => {
+          const created = (await ask(email(name))) as { userId: string };
+          await getPool().query("UPDATE users SET status = 'active', email_verified_at = now(), llm_cap_micro_usd = 0 WHERE id = $1", [
+            created.userId,
+          ]);
+          return created.userId;
+        };
+
+        it('mails only an active account with a proven address, whatever the case typed', async () => {
+          const active = await activeAccount('reset-active');
+          expect(await queries.getResetRecipient(email('reset-active').toUpperCase())).toMatchObject({ id: active, language: 'he' });
+          const unverified = (await ask(email('reset-pending'))) as { userId: string };
+          expect(await queries.getResetRecipient(email('reset-pending'))).toBeNull();
+          await getPool().query("UPDATE users SET status = 'disabled' WHERE id = $1", [active]);
+          expect(await queries.getResetRecipient(email('reset-active'))).toBeNull();
+          expect(await queries.getResetRecipient(email('reset-nobody'))).toBeNull();
+          expect(unverified.userId).toBeTruthy();
+        });
+
+        it('sets the password once, clears "must change", and ends every session', async () => {
+          const userId = await activeAccount('reset-once');
+          await getPool().query('UPDATE users SET password_must_change = true WHERE id = $1', [userId]);
+          await queries.createSession({
+            userId,
+            tokenHash: linkTokenHash(newLinkToken()),
+            ttlHours: 1,
+            userAgent: null,
+            ipAddress: null,
+            maxPerUser: SESSIONS_PER_USER_MAX,
+          });
+          const hash = await resetLink(userId, email('reset-once'));
+          expect(await queries.useResetToken(hash, 'the new hash')).toEqual({ outcome: 'reset', userId, email: email('reset-once') });
+          const { rows } = await getPool().query(
+            `SELECT password_hash, password_must_change, session_version,
+                    (SELECT count(*)::int FROM user_sessions WHERE user_id = $1) AS sessions
+               FROM users WHERE id = $1`,
+            [userId],
+          );
+          expect(rows[0]).toMatchObject({ password_hash: 'the new hash', password_must_change: false, sessions: 0 });
+          expect(await queries.useResetToken(hash, 'another hash')).toEqual({ outcome: 'used' });
+        });
+
+        it('refuses an expired link, a verification link, and an account no longer active or at that address', async () => {
+          const userId = await activeAccount('reset-refused');
+          const expired = await resetLink(userId, email('reset-refused'));
+          await getPool().query("UPDATE auth_tokens SET created_at = now() - interval '2 hours', expires_at = now() - interval '1 second' WHERE token_hash = $1", [
+            expired,
+          ]);
+          expect(await queries.useResetToken(expired, 'x')).toEqual({ outcome: 'expired' });
+          expect(await queries.useResetToken(await link(userId, email('reset-refused')), 'x')).toEqual({ outcome: 'invalid' });
+          const moved = await resetLink(userId, email('reset-refused'));
+          await getPool().query('UPDATE users SET email = $2 WHERE id = $1', [userId, email('reset-moved')]);
+          expect(await queries.useResetToken(moved, 'x')).toEqual({ outcome: 'invalid' });
+          const { rows } = await getPool().query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+          expect(rows[0].password_hash).toBe('hash');
+        });
       });
 
       it('sweeps unverified sign-ups past their window, never a verified request or an account (D304)', async () => {

@@ -4,6 +4,7 @@ import { RouterProvider } from '@tanstack/react-router';
 
 import { LoginPage } from './pages/LoginPage.tsx';
 import { PasswordRequiredPage } from './pages/PasswordRequiredPage.tsx';
+import { RESET_PATH, ResetPage } from './pages/ResetPage.tsx';
 import { VERIFY_PATH, VerifyPage } from './pages/VerifyPage.tsx';
 import { Spinner } from './components/ui.tsx';
 import { createAppRouter } from './router.tsx';
@@ -22,6 +23,7 @@ export const App = observer(function App({
 
   // A mailed link (D259) opens signed out as well as in: before both gates.
   if (window.location.pathname === VERIFY_PATH) return <VerifyPage />;
+  if (window.location.pathname === RESET_PATH) return <ResetPage />;
 
   // Wait for the first session check so an authenticated reload does not flash
   // the login screen.
