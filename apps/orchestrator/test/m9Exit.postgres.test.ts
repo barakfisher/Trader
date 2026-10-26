@@ -101,6 +101,8 @@ const WRITE_BODIES: Record<string, unknown> = {
   'POST /auth/reset/request': {},
   'POST /auth/reset': { token: 'not-a-token-anyone-issued', newPassword: 'a new password here' },
   'POST /auth/timezone': { timezone: 'Europe/London' },
+  // Names no row: it records only the caller's own acceptance (D265).
+  'POST /auth/legal/accept': { version: '2026-11-01' },
   'POST /holdings': {},
   'PATCH /holdings/:id': { notes: 'changed' },
   'DELETE /holdings/:id': null,
