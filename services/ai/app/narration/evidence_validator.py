@@ -74,12 +74,46 @@ _PERCENT_AFTER = re.compile(
     r" ?(?:%|percent(?:age)?(?![a-z])|per cent(?![a-z])|אחוז)", re.IGNORECASE
 )
 
-#: An ISO 8601 date, optionally followed by a time. Timestamps are mined for
-#: their DATE only: the clock components of "2026-09-16T11:30:00+00:00" are 11,
-#: 30 and 0, and admitting those would quietly whitelist most small integers -
-#: enough for "fallen 30% this year" to read as sourced. A narration may quote
-#: the day something happened; it has no business quoting the minute.
-_ISO_DATE_PREFIX = re.compile(r"^(\d{4})-(\d{2})-(\d{2})(?:[T ]|$)")
+#: Dashes a model writes for "-": hyphen, non-breaking hyphen, figure dash, en
+#: dash, minus. Read as "-" for the check only, so "7‑day" names the window
+#: "7-day" does and "−9.03%" is the figure "-9.03%" is; the text shown is
+#: the model's. Measured 2026-10-11: a real assistant reply wrote every hyphen as U+2011.
+_DASHES = str.maketrans(dict.fromkeys("‐‑‒–−", "-"))
+
+#: A date, optionally with a time and zone: "2026-10-12", "2026-10-12T09:57:05.19+00:00",
+#: "2026-10-12 09:57". Read as a date, never as the numbers 2026, 10 and 12.
+_DATE = re.compile(
+    r"\b(\d{4}-\d{2}-\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2}| ?UTC)?)?"
+)
+
+#: A month's name, in English (whole, three letters, "Sept") and Hebrew ("מרס" and
+#: "מרץ" are both March), as its number.
+_MONTH_NUMBERS = {
+    **{
+        name: number
+        for number, names in enumerate(
+            (
+                ("january", "jan"), ("february", "feb"), ("march", "mar"), ("april", "apr"),
+                ("may",), ("june", "jun"), ("july", "jul"), ("august", "aug"),
+                ("september", "sept", "sep"), ("october", "oct"), ("november", "nov"),
+                ("december", "dec"),
+            ),
+            start=1,
+        )
+        for name in names
+    },
+    "ינואר": 1, "פברואר": 2, "מרץ": 3, "מרס": 3, "אפריל": 4, "מאי": 5, "יוני": 6,
+    "יולי": 7, "אוגוסט": 8, "ספטמבר": 9, "אוקטובר": 10, "נובמבר": 11, "דצמבר": 12,
+}  # fmt: skip
+#: A month's name, longest first so "October" is not read as "Oct". Hebrew joins
+#: a preposition to it ("באוקטובר", "in October").
+_MONTH = r"(?:[בלמה]-?)?(" + "|".join(sorted(_MONTH_NUMBERS, key=len, reverse=True)) + r")\b\.?"
+_ORDINAL = r"(\d{1,2})(?:st|nd|rd|th)?"
+_YEAR = r"(?:,?\s+(\d{4}))?"
+#: A date written in words: "12 October", "Oct 12, 2026", "12th of October 2026",
+#: "20 בנובמבר 2026".
+_DAY_MONTH = re.compile(rf"\b{_ORDINAL}\s+(?:of\s+)?{_MONTH}{_YEAR}\b", re.IGNORECASE)
+_MONTH_DAY = re.compile(rf"\b{_MONTH}\s+{_ORDINAL}\b{_YEAR}", re.IGNORECASE)
 
 #: A unit of time straight after a number, joined by a hyphen, a maqaf or one
 #: space - "60-day", "52 weeks", "20 ימי" - captured as its key letter (d, w, m,
@@ -202,9 +236,10 @@ def sourced_values(
         if whole is not None:
             return _forms_for(_key, whole, _currency, percent)
 
-        iso = _ISO_DATE_PREFIX.match(evidence)
-        tokens = iso.groups() if iso else _NUMBER_PATTERN.findall(evidence)
-        for token in tokens:
+        # A date sources no figure: on the 23rd an invented "23%" read as sourced,
+        # and a timestamp's clock whitelists most small integers. The text's own
+        # dates are matched as dates instead (`_as_checked`).
+        for token in _NUMBER_PATTERN.findall(_DATE.sub(" ", evidence)):
             number = _parse(token)
             if number is not None:
                 found |= {number, -number}
@@ -281,9 +316,57 @@ def _as_written(token: str, text: str, start: int) -> str:
     return token
 
 
+def _strings(value: object) -> Iterable[str]:
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, Mapping):
+        for item in value.values():
+            yield from _strings(item)
+    elif isinstance(value, Iterable) and not isinstance(value, bytes):
+        for item in value:
+            yield from _strings(item)
+
+
+def stated_dates(evidence: object) -> set[str]:
+    """The days the evidence states, as "YYYY-MM-DD"."""
+    return {match.group(1) for s in _strings(evidence) for match in _DATE.finditer(s)}
+
+
+def _stated(dates: set[str], month: str, day: str, year: str | None) -> bool:
+    wanted = f"-{_MONTH_NUMBERS[month.lower()]:02d}-{int(day):02d}"
+    return any(
+        stated.endswith(wanted) and (year is None or stated.startswith(year)) for stated in dates
+    )
+
+
+def _as_checked(text: str, dates: set[str]) -> str:
+    """The text as the check reads it: dashes as "-", and a date the evidence states
+    removed whole, written as digits or in words. The text shown is the writer's own.
+
+    Measured 2026-10-26 over 445 Flash-Lite narrations: 34 of the 41 refused were
+    true and quoted a timestamp ("2026-10-23T20:00:00+00:00"), refused for its 20
+    and 00. A date whose day the evidence does not state stays in, and its digits
+    are checked - so a wrong month in words ("20 בנובמבר" for 20 October, llm_calls
+    476) is refused rather than passed on its day's digits (D323).
+    """
+    checked = _DATE.sub(
+        lambda m: " " if m.group(1) in dates else m.group(0), text.translate(_DASHES)
+    )
+    checked = _DAY_MONTH.sub(
+        lambda m: " " if _stated(dates, m.group(2), m.group(1), m.group(3)) else m.group(0),
+        checked,
+    )
+    return _MONTH_DAY.sub(
+        lambda m: " " if _stated(dates, m.group(1), m.group(2), m.group(3)) else m.group(0),
+        checked,
+    )
+
+
 def _figures(text: str, evidence: Mapping[str, object]) -> list[tuple[str, bool]]:
     """Each figure in `text`, as written, with whether the evidence supports it.
-    A window's length a key names is not a figure, so it is left out."""
+    A window's length a key names is not a figure, so it is left out, and so is a
+    date the evidence states."""
+    text = _as_checked(text, stated_dates(evidence))
     sourced = sourced_values(evidence)
     as_percent = sourced_values(evidence, percent=True)
     windows = named_windows(evidence)

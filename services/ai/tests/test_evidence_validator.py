@@ -244,3 +244,69 @@ def test_quotes_any_finds_one_figure_of_the_evidence_in_the_text() -> None:
     assert quotes_any("75% of capital waits.", idle)
     assert not quotes_any("Nothing fits; 12.00 is the price.", idle)
     assert not quotes_any("Nothing fits.", idle)
+
+
+# -- dates and dashes, measured 2026-10-26 over 517 stored narrations (D322, D323) --
+
+SIGMA_MOVE = {
+    "symbol": "NET",
+    "currency": "USD",
+    "price": "325.73",
+    "as_of": "2026-10-23T20:00:00+00:00",
+    "previous_as_of": "2026-10-22T20:00:00+00:00",
+    "change_pct": 0.0729,
+    "change_percent": {"60d": "5.29"},
+}
+
+
+def test_a_timestamp_the_evidence_states_is_one_date_not_its_clock_digits():
+    # 34 of 41 refusals on Flash-Lite: a true narration quoting the timestamp whole
+    # was refused for the "20" and "00" of its time.
+    text = "NET rose 7.29%. This move was observed on 2026-10-23T20:00:00+00:00."
+    assert unsourced_figures(text, SIGMA_MOVE) == []
+    assert unsourced_figures("Compared with 2026-10-22 20:00 UTC.", SIGMA_MOVE) == []
+
+
+def test_a_dates_digits_source_no_figure():
+    # The 23rd of the month sourced an invented "23%", and the year an invented 2026.
+    assert unsourced_figures("NET rose 23% on heavy volume.", SIGMA_MOVE) == ["23"]
+    assert unsourced_figures("Its 2026 low was 290.", SIGMA_MOVE) == ["2026", "290"]
+
+
+def test_a_date_the_evidence_does_not_state_is_checked():
+    assert unsourced_figures("Observed on 2026-10-24.", SIGMA_MOVE) != []
+
+
+def test_a_dash_a_model_writes_for_a_hyphen_is_a_hyphen():
+    # Measured 2026-10-11 on the assistant: every hyphen came back as U+2011.
+    assert unsourced_figures("Up 5.29% over the 60‑day window.", SIGMA_MOVE) == []
+    assert unsourced_figures("A change of −7.29% would be a fall.", SIGMA_MOVE) == []
+
+
+@pytest.mark.parametrize(
+    "written",
+    [
+        "23 October",
+        "Oct 23, 2026",
+        "October 23rd",
+        "the 23rd of October 2026",
+        "23 באוקטובר 2026",
+        "ל-23 באוקטובר",
+    ],
+)
+def test_a_date_in_words_the_evidence_states_passes(written):
+    assert unsourced_figures(f"NET rose 7.29% on {written}.", SIGMA_MOVE) == []
+
+
+@pytest.mark.parametrize(
+    ("written", "offender"),
+    [
+        # llm_calls 476 (2026-10-21): a 20 October snapshot given as November.
+        ("20 בנובמבר 2026", "20"),
+        ("November 22", "22"),
+        ("22 במרס", "22"),
+        ("Oct 23, 2025", "2025"),
+    ],
+)
+def test_a_date_in_words_the_evidence_does_not_state_is_refused(written, offender):
+    assert offender in unsourced_figures(f"NET rose 7.29% on {written}.", SIGMA_MOVE)

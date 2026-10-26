@@ -332,3 +332,5 @@ while this file is out of date.
 | 319 | D265's gate holds production installations only |
 | 320 | An account that has not accepted the current version is blocked until it does, except export and deletion |
 | 321 | How PR 15 builds D265 |
+| 322 | Dates and dashes are the shared figure check's, and narration writes a date without its time |
+| 323 | The figure check reads a date written in words, in English and Hebrew |
