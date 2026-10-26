@@ -5204,8 +5204,12 @@ failure they prevent.
       or images. No fallback between languages: a missing file fails `legal.test.tsx`.
     - **Placeholders carry `<!-- legal-text-pending -->`,** and `legal.test.tsx` requires it in
       every file exactly while `LEGAL_VERSION` is null - publishing the text and setting the
-      version cannot come apart. The placeholder says only that the text is not published: no
-      legal wording was written (D265: the wording is the user's or a lawyer's).
+      version cannot come apart. No legal wording was written (D265: the wording is the
+      user's or a lawyer's). At the user's request (2026-10-26) the placeholders became
+      fill-in templates: each section a "To write" note plus the facts the app establishes
+      (what is held, where it goes, retention, rights, cookies), in English and in its own
+      Hebrew. **Re-check those facts before publishing** - they are true of the code as of
+      #334, and a later PR that changes retention or the export makes them wrong.
     - **`legal_acceptances(user_id, version, accepted_at)`,** one row per version, so the
       history survives a new version. Append-only for `traders_app` (REVOKE UPDATE, DELETE,
       TRUNCATE); cascades from `users`, so the erase (D317) and an unverified request's removal
