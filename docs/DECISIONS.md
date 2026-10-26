@@ -324,3 +324,4 @@ while this file is out of date.
 | 311 | Kind's Mailpit is served at `mailpit.localhost`, this Mac only |
 | 312 | How PR 11 builds D260's reset |
 | 313 | The admin is never reset by email, and a reset unbinds Telegram |
+| 314 | How PR 13 builds OAuth (D262, D263) |

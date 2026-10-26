@@ -4962,6 +4962,40 @@ failure they prevent.
     - **Rejected:** the admin resettable like anyone (a compromised mailbox becomes a
       compromised installation); unbinding on every password change (a routine change would
       cost a re-bind each time); keeping the binding (only the notice mail would reveal it).
+314. **How PR 13 builds OAuth (D262, D263)** (assumptions stated to the user, 2026-10-26; M10 PR 13;
+    migration `0075_user_identities`).
+    - **Providers are configuration:** `GOOGLE_CLIENT_ID/SECRET`, `GITHUB_CLIENT_ID/SECRET`; a
+      provider with either missing is not offered, so nothing changes until the user registers
+      the apps (`.env.example` says how). Behind `OAuthProvider` (`src/oauth/providers.ts`,
+      guideline 6); tests inject a fake through `createApp`'s last argument - no network.
+    - **The redirect URI is `<origin>/api/auth/oauth/<provider>/callback`**, where origin is the
+      page's own and must be in `ALLOWED_ORIGINS` - the browser is sent back there too, so
+      nothing else chooses either. Every origin that should offer a provider is registered in
+      its console. Whether a `*.ts.net` name is accepted there is still unchecked
+      (M10-MEASUREMENT).
+    - **The state cookie** (`traders_oauth`, `src/oauth/stateCookie.ts`): `state`, PKCE's
+      verifier, origin, intent, and the browser's zone and language for a new account, HMAC-signed
+      with the session secret, HttpOnly, SameSite=Lax (the provider returns with a top-level
+      GET), 10 minutes, spent on the callback. A callback this browser did not start, or for
+      another provider, signs nobody in. GitHub's OAuth apps take no PKCE; `state` binds them.
+    - **Who an identity is, in order:** linked already (signs in if active); asked from
+      Settings (links to that session's account, which must still be the one that asked);
+      an account at an address the provider vouches for (linked automatically and mailed,
+      D263); none (a new account with no password, verified, admitted by `admitVerified` - the
+      same step a verification link uses, so the modes and limits hold). An address the
+      provider does not vouch for links and opens nothing.
+    - **Assumption 1 - an unverified request at the vouched address is claimed:** its password
+      is dropped, its sign-up link deleted, the identity linked, and it is admitted. Otherwise
+      D309's stranger, who signed up first with your address, would be the one your Google
+      sign-in completes.
+    - **Assumption 2 - the admin is never linked automatically** (D313's reasoning): the
+      callback answers `link_from_settings`; the admin signs in with the password and links
+      from Settings.
+    - **Unlink is refused for the last way in** (no password and no other provider). An
+      OAuth-only account can set a password through the reset link (D312) - it is active and
+      verified.
+    - **Not tested live:** no provider app exists yet; the flows are proven against the fake.
+      The first real sign-in on the public host (PR 16) is the check that remains.
 ---
 
 ## Bugs that cost real time, and the lesson from each
