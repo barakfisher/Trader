@@ -46,7 +46,7 @@ vi.mock('../src/db/queries.js', () => ({
 const { createApp } = await import('../src/http/app.js');
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
 const { SESSION_COOKIE, sessionTokenHash, verifySessionToken } = await import('../src/http/auth.js');
-const { USER_AGENT_MAX_LENGTH } = await import('../src/http/sessions.js');
+const { SESSIONS_PER_USER_MAX, USER_AGENT_MAX_LENGTH } = await import('../src/http/sessions.js');
 const { hashPassword, PASSWORD_MIN_LENGTH } = await import('../src/http/password.js');
 const queries = await import('../src/db/queries.js');
 const { createFakeAi } = await import('./fakeAi.js');
@@ -156,6 +156,7 @@ describe('signing in', () => {
       ttlHours: config.SESSION_TTL_HOURS,
       userAgent: 'Mozilla/5.0 (iPhone) Safari/604.1',
       ipAddress: null,
+      maxPerUser: SESSIONS_PER_USER_MAX,
     });
     const created = vi.mocked(queries.createSession).mock.calls[0]![0];
     expect(created.tokenHash.toString('base64url')).not.toContain(claim.secret);

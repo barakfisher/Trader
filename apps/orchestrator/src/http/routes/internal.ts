@@ -43,6 +43,7 @@ import { planScheduledScans } from '../../services/scheduledScans.js';
 import { logger } from '../../logger.js';
 import { localDate, takeSnapshot } from '../../services/snapshot.js';
 import { currentUserId, type AppEnv } from '../app.js';
+import { safeEqual } from '../auth.js';
 import { ApiProblem, badRequest, conflict, notFound } from '../errors.js';
 
 /**
@@ -366,7 +367,7 @@ async function runForUser(
 export function registerInternalRoutes(app: Hono<AppEnv>): void {
   app.post('/internal/runs', async (context) => {
     const config = context.get('config');
-    if (context.req.header('x-internal-key') !== config.INTERNAL_API_KEY) {
+    if (!safeEqual(context.req.header('x-internal-key') ?? '', config.INTERNAL_API_KEY)) {
       throw new ApiProblem(401, 'unauthorized', 'invalid internal API key');
     }
 

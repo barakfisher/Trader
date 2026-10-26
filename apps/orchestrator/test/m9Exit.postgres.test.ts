@@ -157,6 +157,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
   const { AiServiceError } = await import('@traders/shared/ai');
   const { createSessionToken, newSessionSecret, sessionTokenHash, SESSION_COOKIE } = await import('../src/http/auth.js');
   const { createSession } = await import('../src/db/queries.js');
+  const { SESSIONS_PER_USER_MAX } = await import('../src/http/sessions.js');
 
   /** A new signed-in session for `userId`: its row, and the cookie that names it (D261). */
   async function signIn(userId: string): Promise<{ id: string; cookie: string }> {
@@ -167,6 +168,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
       ttlHours: 1,
       userAgent: 'm9Exit',
       ipAddress: null,
+      maxPerUser: SESSIONS_PER_USER_MAX,
     });
     const { rows } = await getPool().query<{ session_version: number }>('SELECT session_version FROM users WHERE id = $1', [userId]);
     const token = createSessionToken(

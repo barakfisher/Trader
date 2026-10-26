@@ -24,13 +24,20 @@ import { requestClientAddress } from './clientAddress.js';
  */
 export const SESSION_TOUCH_INTERVAL_SECONDS = 5 * 60;
 
+/**
+ * The most sessions one account holds; signing in past it ends the oldest
+ * (D302). Nobody is locked out, and the device list stays short enough to read.
+ */
+export const SESSIONS_PER_USER_MAX = 4;
+
 /** The longest user agent kept (0071's CHECK); a longer one is cut, never refused. */
 export const USER_AGENT_MAX_LENGTH = 512;
 
 /**
  * Sign this device in as `user`: a new session row, and the cookie that names
  * it. The row expires `SESSION_TTL_HOURS` from now and is never extended
- * (D295); the cookie lives exactly as long.
+ * (D295); the cookie lives exactly as long. Past `SESSIONS_PER_USER_MAX`,
+ * the account's oldest session ends (D302).
  */
 export async function issueSession(context: Context<AppEnv>, user: UserRow): Promise<void> {
   const config = context.get('config');
@@ -42,6 +49,7 @@ export async function issueSession(context: Context<AppEnv>, user: UserRow): Pro
     ttlHours: config.SESSION_TTL_HOURS,
     userAgent,
     ipAddress: requestClientAddress(context, config.TRUSTED_PROXY_HOPS),
+    maxPerUser: SESSIONS_PER_USER_MAX,
   });
   const token = createSessionToken(
     { secret, userId: user.id, sessionVersion: user.session_version },

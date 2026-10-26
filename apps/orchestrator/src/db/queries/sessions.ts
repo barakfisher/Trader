@@ -30,15 +30,33 @@ export interface NewSession {
   ttlHours: number;
   userAgent: string | null;
   ipAddress: string | null;
+  /** The most sessions the user may hold once this one exists (D302). */
+  maxPerUser: number;
 }
 
-/** A new session, expiring `ttlHours` from now and never extended (D295). */
+/**
+ * A new session, expiring `ttlHours` from now and never extended (D295). The
+ * user's oldest sessions go in the same statement, so that with this one they
+ * hold at most `maxPerUser` (D302). Two sign-ins at the same instant can each
+ * keep the same survivors and leave one too many; the next sign-in trims it.
+ */
 export function createSession(session: NewSession): Promise<{ id: string; expires_at: Date }> {
+  // `OFFSET NULL` is no offset at all: a missing cap would end every other session.
+  if (!Number.isInteger(session.maxPerUser) || session.maxPerUser < 1) {
+    return Promise.reject(new Error(`maxPerUser must be a positive integer, got ${String(session.maxPerUser)}`));
+  }
   return queryOne<{ id: string; expires_at: Date }>(
-    `INSERT INTO user_sessions (user_id, token_hash, expires_at, user_agent, ip_address)
+    `WITH evicted AS (
+       DELETE FROM user_sessions
+        WHERE id IN (SELECT id FROM user_sessions
+                      WHERE user_id = $1
+                      ORDER BY created_at DESC, id DESC
+                     OFFSET $6 - 1)
+     )
+     INSERT INTO user_sessions (user_id, token_hash, expires_at, user_agent, ip_address)
      VALUES ($1, $2, now() + make_interval(hours => $3), $4, $5)
      RETURNING id, expires_at`,
-    [session.userId, session.tokenHash, session.ttlHours, session.userAgent, session.ipAddress],
+    [session.userId, session.tokenHash, session.ttlHours, session.userAgent, session.ipAddress, session.maxPerUser],
   ).then((row) => {
     if (!row) throw new Error('the session was not created');
     return row;

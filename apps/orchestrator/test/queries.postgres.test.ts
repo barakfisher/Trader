@@ -2211,6 +2211,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
   describe('sessions (0071, D261)', async () => {
     const { sessionTokenHash } = await import('../src/http/auth.js');
+    const { SESSIONS_PER_USER_MAX } = await import('../src/http/sessions.js');
     const TTL_HOURS = 1;
     const TOUCH_SECONDS = 300;
 
@@ -2227,7 +2228,14 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
     async function signIn(userId: string, secret = randomUUID()): Promise<{ id: string; hash: Buffer }> {
       const hash = sessionTokenHash(secret);
-      const created = await queries.createSession({ userId, tokenHash: hash, ttlHours: TTL_HOURS, userAgent: 'UA', ipAddress: '203.0.113.7' });
+      const created = await queries.createSession({
+        userId,
+        tokenHash: hash,
+        ttlHours: TTL_HOURS,
+        userAgent: 'UA',
+        ipAddress: '203.0.113.7',
+        maxPerUser: SESSIONS_PER_USER_MAX,
+      });
       return { id: created.id, hash };
     }
 
@@ -2242,6 +2250,60 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         expect(await queries.getSessionUser(USER, session.hash, TOUCH_SECONDS)).toBeNull();
         const { rows } = await getPool().query('SELECT expires_at - created_at AS ttl FROM user_sessions WHERE id = $1', [session.id]);
         expect(rows[0]!.ttl).toMatchObject({ hours: TTL_HOURS });
+      });
+    });
+
+    it('ends the oldest sessions when a sign-in passes the cap, and only that user\'s', async () => {
+      await withUser(async (userId) => {
+        const other = await signIn(USER);
+        try {
+          const first: string[] = [];
+          for (let index = 0; index < SESSIONS_PER_USER_MAX; index += 1) {
+            const session = await signIn(userId);
+            // Distinct ages, oldest first, so "oldest" does not rest on the clock's resolution.
+            await getPool().query("UPDATE user_sessions SET created_at = now() - make_interval(mins => $2) WHERE id = $1", [
+              session.id,
+              SESSIONS_PER_USER_MAX - index,
+            ]);
+            first.push(session.id);
+          }
+          expect(await sessionIds(userId)).toEqual([...first].sort());
+
+          const newest = await signIn(userId);
+          expect(await sessionIds(userId)).toEqual([...first.slice(1), newest.id].sort());
+          expect((await queries.listSessions(USER)).map((row) => row.id)).toContain(other.id);
+        } finally {
+          await queries.deleteSession(USER, other.id);
+        }
+      });
+    });
+
+    it('keeps only the new session at a cap of one, and refuses a cap that is not a positive integer', async () => {
+      await withUser(async (userId) => {
+        await signIn(userId);
+        const created = await queries.createSession({
+          userId,
+          tokenHash: sessionTokenHash(randomUUID()),
+          ttlHours: TTL_HOURS,
+          userAgent: 'UA',
+          ipAddress: null,
+          maxPerUser: 1,
+        });
+        expect(await sessionIds(userId)).toEqual([created.id]);
+        for (const maxPerUser of [0, -1, 1.5, null as unknown as number]) {
+          await expect(
+            queries.createSession({
+              userId,
+              tokenHash: sessionTokenHash(randomUUID()),
+              ttlHours: TTL_HOURS,
+              userAgent: 'UA',
+              ipAddress: null,
+              maxPerUser,
+            }),
+            String(maxPerUser),
+          ).rejects.toThrow('maxPerUser');
+        }
+        expect(await sessionIds(userId)).toEqual([created.id]);
       });
     });
 

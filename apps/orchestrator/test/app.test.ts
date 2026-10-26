@@ -450,6 +450,18 @@ describe('API', () => {
     expect(response.status).toBe(401);
   });
 
+  it('refuses a wrong internal key, of the same length or another', async () => {
+    const right = loadConfig(ENV).INTERNAL_API_KEY;
+    for (const key of [`${right.slice(0, -1)}#`, right.slice(1), `${right}-and-more`]) {
+      const response = await app.request('/internal/runs', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-internal-key': key },
+        body: JSON.stringify({ kind: 'snapshot', userId: USER.id }),
+      });
+      expect(response.status, key).toBe(401);
+    }
+  });
+
   it('records the run and its outcome in the runs table', async () => {
     const response = await app.request('/internal/runs', {
       method: 'POST',

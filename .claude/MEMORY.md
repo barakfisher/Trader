@@ -4,7 +4,20 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-26, later - **Handoff on the user's word, after D301** (this PR; the user asked
+Updated: 2026-10-26, afternoon - **Not a handoff: M10 resumed; its open issues closed (D302).**
+- **Deployed:** compose and kind both run `e197e13` (#323) at `0073`, 2026-10-26 ~13:10 UTC,
+  after `db-backup.sh --target all` (`traders-*-20261026T1306*Z.dump`/`T1307*Z`). Both readyz
+  200, no errors in ten minutes of logs; each deploy moved the owner's password into its own
+  file (`.env.owner`, `owner.env`). Tailscale forwarded to kind this time. **The smoke test was
+  not run:** it needs the admin's password, and compose's 26 holdings may no longer be demo-only.
+- **This PR:** `/internal/runs` compares the internal key in constant time (`safeEqual`, the AI
+  service already used `compare_digest`), and D302 caps sessions at four.
+- **M10 is un-parked** (the user, 2026-10-26): the line below that ruled it out no longer holds.
+  The next M10 item is PR 10 (email, verification, signup modes), and it starts by asking the
+  user for the email provider; the user asked to review before it starts.
+- **Decisions reach 302** (next: **303**). **Migrations:** `0073` head; next free `0074`.
+
+Previous update, 2026-10-26, later - **Handoff on the user's word, after D301** (this PR; the user asked
 for a handoff with it).
 - **Merges since #322:** this PR only - the universe rules warn at approval (D301).
 - **Decisions reach 301** (next: **302**). **Migrations:** `0073` is head; next free is `0074`.
@@ -4621,10 +4634,9 @@ failure they prevent.
       one-time password or a disable (the version moved) is refused - otherwise the old password
       could open a session after the change that should have ended it. And signing in again on
       a browser deletes the session that browser already had.
-    - **Not done, as consequences:** nothing caps how many sessions one account holds (only
-      failed sign-ins are rate-limited, so anyone with the password can add rows until they
-      expire); the cookie has no `__Host-` prefix (worth adding once `Secure` is on in
-      production, D256).
+    - **Not done, as consequences:** the cookie has no `__Host-` prefix (worth adding once
+      `Secure` is on in production, D256 - it is refused over plain HTTP, so it belongs with M10
+      PR 16). The session cap this line also named is D302.
     - **Deploy cost:** every cookie made before 0071 has no `sid` and is refused once - everyone
       signs in again. Accepted with three accounts rather than converting old cookies.
     - **Tests:** the unit suites mock `getSessionUser` through their own `getUser`
@@ -4727,6 +4739,29 @@ failure they prevent.
       - asking the AI service to run `universe_problems` at preview: a network hop in the
         approval path for five comparisons, and the size rules already live in the orchestrator;
       - suggesting the sector for an equity: it is one click that silently admits a whole sector.
+302. **An account holds at most four sessions; signing in past that ends the oldest** (the user,
+    2026-10-26; closes D294-D297's "nothing caps how many sessions"; no migration).
+    - `createSession` deletes the user's sessions beyond the newest `maxPerUser - 1` in the same
+      statement as the insert; `SESSIONS_PER_USER_MAX` (`http/sessions.ts`) is 4. Expired rows
+      are the oldest, so they go first. The ended device gets D294's "You were signed out on
+      this device" at its next request.
+    - **Why:** only failed sign-ins are rate-limited (D257), so anyone with the password could
+      add rows until the 7-day expiry, each holding an address and a user agent, and the
+      Settings device list would grow past reading.
+    - **"Oldest" is by `created_at`, not `last_seen_at`:** a desktop signed in six days ago and
+      used hourly goes before yesterday's forgotten private window. Least-recently-used was
+      raised by the security review and not taken here, because "the oldest" is what the user
+      chose; it is a one-line change to the `ORDER BY` if it bites.
+    - **A cap that is not a positive integer is refused before the SQL:** `OFFSET NULL` is no
+      offset, so a missing cap would have ended every other session of the user.
+    - **Accepted:** two sign-ins in the same instant can each keep the same three survivors and
+      leave five; the next sign-in trims it. Serialising sign-ins per user (a row lock in a
+      transaction) costs more than one extra row for a moment.
+    - **Rejected:**
+      - refusing the sign-in at the cap: a lost phone or a cleared browser would lock the user
+        out for up to seven days;
+      - no cap: the rows and the device list stay unbounded for whoever holds the password;
+      - ten (the first suggestion): the user chose four.
 ---
 
 ## Bugs that cost real time, and the lesson from each
