@@ -4,10 +4,17 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-26, later - **Not a handoff: the universe rules warn at approval too (D301).**
-Decisions reach 301 (next: **302**); next free migration is still `0074`. The new Telegram and
-card sentences (en, he) owe the same look on the phone and in the browser as D299's. Merges since
-handoff #322: none before this PR.
+Updated: 2026-10-26, later - **Handoff on the user's word, after D301** (this PR; the user asked
+for a handoff with it).
+- **Merges since #322:** this PR only - the universe rules warn at approval (D301).
+- **Decisions reach 301** (next: **302**). **Migrations:** `0073` is head; next free is `0074`.
+- **Deployed:** not by this session (it cannot reach the user's machine). `main` after this PR
+  applies `0072` and `0073` if the user has not deployed #321 yet. Deploy with
+  `bash scripts/dev-docker.sh` (first run moves the owner's password into `.env.owner`).
+- **Owed by the user:** the deploy; a look at D299's and D301's Hebrew on the card and on
+  Telegram; the paid assistant eval over `get_research`; the earlier Telegram phone check.
+- **The user ruled out M10 work for now** (2026-10-26): do not propose PRs 10-16 as the next item.
+- **Next:** "Next session: after D301" below.
 
 Previous update, 2026-10-26 - **Handoff by count: five merges since #317** (#318-#321, and this PR).
 - **Merges since #317:**
@@ -6005,6 +6012,40 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after D301 (written 2026-10-26)
+
+**State:** the D299 follow-up is done (D301). The user declined M10 work for now, so what a
+session can take without the user's input is small:
+- **Redis warming from `quotes`** (debt row): self-contained, low value.
+- **Stale debt rows:** "Scheduled runs serve only `SINGLE_USER_ID`" reads as open but the setting
+  no longer exists in the orchestrator (removed in M9; D238 covers scans). Check news and digest
+  per user before striking it; there may be others like it.
+- **Needs a number from the user first:** the validator reading timestamp digits (narration's
+  `llm_calls` by verdict and problem), and dates with the month spelled out (how often answers do
+  it). Give the user the query and wait.
+- **A flaky orchestrator test:** `telegramMenu.test.ts` "/status offers the quick mutes" fails
+  whenever now + 1h crosses midnight in Asia/Jerusalem (the reply then names a date). Pin the
+  clock in the test.
+
+**Lessons from this stretch:**
+- **The cloud container runs the Postgres suite with no Docker** (as "after the research
+  follow-ups" says), but `apt-get install postgresql-16-pgvector` needs an `apt-get update` first
+  in a fresh container. `initdb -U traders --auth=trust` under `/var/lib/postgresql`, `pg_ctl -o
+  '-p 55432 -k /tmp'`, `createdb traders_ci`, `scripts/migrate.py` with `APP_DB_PASSWORD`, then
+  the suite with `TEST_DATABASE_URL=postgresql://traders_app:traders_app@localhost:55432/traders_ci`.
+- **The Python venv needs 3.12** (`pyproject` says `<3.13`; the container's python3 is 3.13):
+  `uv venv -p 3.12 .venv && uv pip install -p .venv -e '.[dev]'`.
+- **Typing a helper's `t` parameter as `ReturnType<typeof useTranslation>['t']` overflows tsc**
+  ("excessively deep"). Helpers outside the component use the module-level `t` from `i18n/index.ts`.
+- **Prettier is not enforced in CI**, and several files on `main` are not prettier-clean; do not
+  reformat whole files in a feature PR.
+
+**Debt, as consequences:**
+- D301's Hebrew sentences (card and Telegram) were written by the model and not seen rendered;
+  taxonomy names are English data inside LTR isolates.
+- D301 reads an ETF category's sector from `universe_taxonomy`; until the loader rebuilds it after
+  a change to `ETF_CATEGORY_SECTORS`, the approval and the scan can disagree about one ETF.
 
 ### Next session: after the debt sweep (written 2026-10-26)
 
