@@ -4,7 +4,26 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-26, evening - **Handoff by count: five merges since #323** (#324-#328, and this PR).
+Updated: 2026-10-26, late evening - **Handoff on the user's word: M10 PR 14 merged and deployed.**
+- **Merges since #328:** #330, M10 PR 14: delete your own account with a 7-day grace period,
+  and export your data (D264, D316-D318; migration `0076`); #329, the previous handoff (below).
+- **Deployed:** compose and kind both run `e986006` (#330) at `0076_account_deletion`,
+  2026-10-26 ~18:00 UTC, after `db-backup.sh --target all` (`traders-*-20261026T1756*Z.dump`).
+  Both readyz 200; `erase_account` exists; an `account_erase` run on compose finished `ok` with
+  nothing due; kind's CronJob `run-account-erase` runs at minute 7. (#329 changed only this
+  file, so `ed6f436` deploys nothing new.)
+- **Decisions reach 318** (next: **319**). **Migrations:** `0076` head; next free `0077`.
+- **M10 status:** PRs 1-14 merged and live. **PR 15** (legal pages and consent, D265): the
+  app's part can be built now, the wording is the user's; **PR 16** (the public host, D255)
+  needs the user to rent it and own a domain.
+- **Owed by the user**, beside those listed under the previous update:
+  - nothing new to check for PR 14 in a browser: its screens were checked against a mock API
+    (no test account exists), and the first real erase can happen only 7 days after someone
+    closes an account. On compose, `SELECT status, deletion_due_at FROM users WHERE status =
+    'closed'` and the `account_erase` rows in `runs` show it working.
+- **Next:** "Next session: after M10 PR 14" below.
+
+Previous update, 2026-10-26, evening - **Handoff by count: five merges since #323** (#324-#328, and #329).
 - **Merges since #323:**
   - #324: sessions capped at four, the oldest signed out (D302); constant-time internal key;
   - #325, M10 PR 10: email verification and the signup modes (D303-D311; migration `0074`) -
@@ -6422,6 +6441,43 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after M10 PR 14 (written 2026-10-26)
+
+**State:** M10 needs PRs 15 and 16. The user's grant (2026-10-26, "continue until M10 is done;
+merge, deploy, start sessions") still stands; design questions go to them one at a time, and a
+handoff follows every five merges (the count restarts at #330).
+
+**Next: M10 PR 15, the app's part of D265** - `/privacy` and `/terms` reachable signed out, one
+Markdown file per language (Hebrew its own text, never translated), the consent record (version
+and time, a migration `0077`, seeded in D266's test), and the gate that keeps automatic or
+approval signup for the public closed until the text exists. **Ask the user before writing any
+legal wording;** placeholders that say "text pending" are the app's to ship. The facts a privacy
+page must state are in M10-MEASUREMENT §6, plus what PR 14 settled:
+- a deleted account is closed at once and erased 7 days later; backups keep it up to 56 days;
+- the export holds settings, holdings, agents, ledgers, scans, proposals, observations, topics
+  and conversations - **not** `llm_calls` prompts, notifications or research ratings (D318);
+  a privacy page promising a complete export must add them first;
+- rejected sign-up requests are erased after 90 days in automatic mode only.
+
+**Small and worth folding in:** a scan already queued when an account closes - or is disabled
+(D239) - still runs once, because `runSlotAttempt` (`services/scheduledScans.ts`) checks the agent,
+not the user. A user-status check there closes both (D316's debt).
+
+**Lessons from PR 14:**
+- **A foreign-key cascade runs with the table owner's rights.** Making a history table cascade
+  from `users` hands its deletion to every role that may delete a user, around every REVOKE
+  and guard function. Keep NO ACTION and delete in an owner-run function (D317).
+- **`IF NOT (condition)` on a row that was not found is `IF NULL`, which plpgsql treats as
+  false** - the first `erase_account` would have erased the admin. `coalesce(..., false)`, and
+  test the "no row" case.
+- **The migration round trip and the TypeScript Postgres suites share `traders_ci`:** run them
+  one after the other. Run together, the round trip wipes the schema under the other suite and
+  both fail for no reason of their own.
+- **A signed-in screen with no test account** was checked by running the branch's web app
+  (`API_PROXY_TARGET=... npx vite --port 5190`) against a throwaway Node mock of the few routes
+  the page reads. It found a real bug (the closed screen lost the account's language after
+  sign-out) that jsdom had passed.
 
 ### Next session: after M10 PR 13 (written 2026-10-26)
 
