@@ -23,7 +23,7 @@
 import { PAYER_REFUSALS, RESEARCH_REFUSALS } from '@traders/shared';
 import { AiServiceError, type AiClient } from '@traders/shared/ai';
 
-import { claimRun, finishRun, listSlotAttempts, type ResearchAssignmentRow } from '../db/queries.js';
+import { claimRun, finishRun, getUser, listSlotAttempts, type ResearchAssignmentRow } from '../db/queries.js';
 import { logger } from '../logger.js';
 import { dueSlots, type DueSlot, type Session } from './scanSchedule.js';
 import type { SlotAttemptJob } from './scheduledScans.js';
@@ -78,6 +78,12 @@ export async function planResearch(input: {
 const FINAL_REFUSALS = new Set<string>([...RESEARCH_REFUSALS, ...PAYER_REFUSALS]);
 
 /** One research attempt, on the worker. Never throws: the run records what happened. */
+/**
+ * Why a queued attempt was skipped: its account was closed (D264) or disabled
+ * (D239) after the slot was queued, so it runs nothing more (D316's debt).
+ */
+export const USER_NOT_ACTIVE = 'user_not_active';
+
 export async function runResearchAttempt(job: SlotAttemptJob, deps: { ai: AiClient; now?: () => Date }): Promise<void> {
   const now = (deps.now ?? (() => new Date()))();
   const runKey = researchRunKey(job);
@@ -86,6 +92,10 @@ export async function runResearchAttempt(job: SlotAttemptJob, deps: { ai: AiClie
   const runId = claim.runId as string;
   if (now.getTime() >= Date.parse(job.until)) {
     await finishRun(runId, 'skipped', { reason: 'window_closed' });
+    return;
+  }
+  if ((await getUser(job.userId))?.status !== 'active') {
+    await finishRun(runId, 'skipped', { reason: USER_NOT_ACTIVE });
     return;
   }
   try {

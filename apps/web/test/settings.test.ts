@@ -228,6 +228,7 @@ describe('SettingsStore', () => {
       language: 'en',
       mustChangePassword: false,
       pendingEmail: null,
+      legalAcceptanceRequired: null,
     };
     root.settings.setLanguage('he');
     expect(root.settings.isDirty).toBe(true);

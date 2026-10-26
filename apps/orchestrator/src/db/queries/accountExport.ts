@@ -37,6 +37,7 @@ SELECT jsonb_build_object(
                 'monthlyCapMicroUsd', u.llm_cap_micro_usd)
                 FROM users u WHERE u.id = $1),
   'settings', (SELECT to_jsonb(t) - 'user_id' FROM user_settings t WHERE t.user_id = $1),
+  'legalAcceptances', ${rows('legal_acceptances', 't.accepted_at, t.version')},
   'agents', ${rows('agents', 't.created_at, t.id')},
   'agentScans', ${rows('agent_scans', 't.started_at, t.id')},
   'holdings', ${rows('holdings', 't.created_at, t.id', ` || jsonb_build_object('quantity', t.quantity::text) ${SYMBOL}`)},

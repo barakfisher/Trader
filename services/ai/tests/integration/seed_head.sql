@@ -392,3 +392,8 @@ UPDATE users SET status = 'closed', deletion_due_at = now() + interval '7 days'
  WHERE id = '00000000-0000-0000-0000-000000000010';
 INSERT INTO runs (id, kind, run_key, status) VALUES
   ('20000000-0000-0000-0000-0000000000aa', 'account_erase', 'account_erase:seed:2026-10-26:10', 'ok');
+-- Legal acceptances (0077, D265): one user who accepted two versions, the
+-- history a later version leaves.
+INSERT INTO legal_acceptances (user_id, version, accepted_at) VALUES
+  ('00000000-0000-0000-0000-00000000000b', '2026-11-01', now() - interval '30 days'),
+  ('00000000-0000-0000-0000-00000000000b', '2026-12-01', now());

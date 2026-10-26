@@ -5109,9 +5109,9 @@ failure they prevent.
       signing in with it. The link is mailed (D263), the account is only closed, and a reset
       during the grace period removes linked providers (D315). The export needs a session, not
       a fresh sign-in: it is rate-limited and sent `no-store`.
-    - **Debt:** a scan already on the queue when the account closes still runs (`runSlotAttempt`
-      checks the agent, not the user) - at most one, within the quarter hour; the same is true
-      of a disable (D239). A user-status check there closes both.
+    - **Debt, closed by M10 PR 15:** a scan already on the queue when the account closed still
+      ran (`runSlotAttempt` checked the agent, not the user), and so did one after a disable
+      (D239). Both a scan and a research attempt now skip as `user_not_active`.
 317. **The erase is a function the app may call but cannot reproduce** (M10 PR 14; migration
     `0076`).
     - **`erase_account(user)`**, `SECURITY DEFINER`, owned by the migration role, granted to
@@ -5156,6 +5156,64 @@ failure they prevent.
       deploy), and the erase run removes those older than `REJECTED_SIGNUP_RETENTION_DAYS` (90)
       only while signup is *automatic* - in *approval* mode the rejection is the admin's record
       (D156).
+319. **D265's gate holds production installations only** (the user, 2026-10-26; M10 PR 15).
+    - **How:** with `APP_ENV=production` and no legal version (`LEGAL_VERSION === null`), the
+      Admin page refuses *automatic* and *approval* (`legal_text_pending`) and says why, and
+      sign-up - by password, by a new Google/GitHub account, or by a provider claiming an
+      unverified request - answers `closed` whatever the stored mode. Both, so a mode set before
+      the gate existed cannot leak past it.
+    - **Why production:** it is the signal for "strangers reach this" (D256: only the
+      production build faces the internet). compose and kind run `development` for the
+      household and keep their modes (kind is in *approval*).
+    - **Rejected:** everywhere (kind's household flow would stop until the text exists, for no
+      stranger's benefit); only the switch, everywhere (an installation already open stays open
+      without text - half a gate).
+    - **Not in the gate:** D265's other condition, the D254 question (are per-stock sentiment
+      ratings advice where users live), has no code: it is the user's to answer before
+      publishing the text.
+320. **An account that has not accepted the current version is blocked until it does, except
+    export and deletion** (the user, 2026-10-26; M10 PR 15).
+    - **How:** the session middleware reads, in the same query as the session, whether the user
+      holds a row for the current version. The session gate then answers
+      `403 legal_acceptance_required` on every protected route but `/account/export` and
+      `/account/deletion`; `/auth/*` (accepting, signing out) is outside the gate already. The
+      web shows only the acceptance screen (both documents in new tabs, Accept, a "do not
+      accept" section with the export and deletion cards, Sign out), and an API refusal
+      mid-session reloads the session so the screen appears.
+    - **Applies to open sessions** on their next request, not only at the next sign-in, and to
+      accounts made through Google or GitHub, which agree to nothing on the way in: one
+      mechanism instead of a consent step inside the OAuth round trip.
+    - **The admin is never asked:** the terms are the admin's installation's.
+    - **Rejected:** asking at sign-in only (sessions already open would carry on under terms
+      never agreed to, for up to `SESSION_TTL_HOURS`); a dismissible banner (no record of
+      agreement - what D265 rejected).
+321. **How PR 15 builds D265** (assumptions stated to the user, 2026-10-26; migration `0077`).
+    - **One version covers both documents in both languages:** `LEGAL_VERSION` in
+      `packages/shared/src/legal.ts`, the publication date `YYYY-MM-DD`, and `null` while the
+      text is pending. One constant because the server needs only the version, and the web
+      bundles the text; a date because "which version did they accept" should answer "the one
+      published on". A typo fix may keep the date; a change people must agree to sets a new
+      one - the editor's call.
+    - **The text is four Markdown files** under `apps/web/src/legal/<language>/`, bundled (the
+      pages work signed out and with the API down), rendered by `react-markdown` without HTML
+      or images. No fallback between languages: a missing file fails `legal.test.tsx`.
+    - **Placeholders carry `<!-- legal-text-pending -->`,** and `legal.test.tsx` requires it in
+      every file exactly while `LEGAL_VERSION` is null - publishing the text and setting the
+      version cannot come apart. The placeholder says only that the text is not published: no
+      legal wording was written (D265: the wording is the user's or a lawyer's).
+    - **`legal_acceptances(user_id, version, accepted_at)`,** one row per version, so the
+      history survives a new version. Append-only for `traders_app` (REVOKE UPDATE, DELETE,
+      TRUNCATE); cascades from `users`, so the erase (D317) and an unverified request's removal
+      take it. A CHECK holds the date form. In the export (D318) as `legalAcceptances`.
+    - **Sign-up stores the version in the request's own statement** (`createSignupRequest`), and
+      the route refuses a request whose box agreed to anything but the current version
+      (`legal_not_accepted`) - a page left open across a new version agrees to nothing.
+      Accepting refuses a stale version the same way (`409 legal_version_stale`).
+    - **Telegram is not gated:** an account that has not accepted keeps its alerts and Ask in
+      Telegram until it does (debt, below).
+    - **Rejected:** a content hash as the version (every typo fix would ask everyone again);
+      columns on `users` (one version only, no history); the version in each file's front
+      matter (four places to agree, and a parser for them).
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -5970,6 +6028,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 
 | Item | Where | Impact |
 |---|---|---|
+| **Telegram ignores the legal acceptance** | `telegram/*`, D320 | An account that has not accepted the current version (D265) is refused by the web and the API, but Telegram's alerts, digest and Ask carry on until it does. Only matters once a version exists; the fix is the same check before Telegram answers a user |
 | **The template creator's UI has not been seen in a browser** | `MandateFields.tsx`, `TaxonomyPicker.tsx`, `InstructionsCheck.tsx` | jsdom covers the behaviour; layout, Hebrew RTL and the picker's menu are unseen. The UX4 rehearsal method (below, "Running a branch's orchestrator against a copy of the live DB") does it without touching the dev database |
 | **No real model has run `mandate_check`** | `app/agents/mandate_check.py` | Tested with scripted answers only. A model that paraphrases instead of copying quotes has every conflict dropped - safe, but it then looks like it never finds one. Read the first real `llm_calls` rows with `purpose = 'mandate_check'` |
 | ~~Mandate limits are not re-checked at approval~~ | — | **Resolved** (2026-10-25, D299): the approval preview warns of each size rule a buy breaks, how far, and the setting that would allow it; Confirm still fills |

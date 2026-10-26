@@ -51,6 +51,7 @@ const USER: SessionUser = {
   language: 'en',
   mustChangePassword: false,
   pendingEmail: null,
+  legalAcceptanceRequired: null,
 };
 
 function type(label: string, value: string) {

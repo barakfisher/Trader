@@ -415,6 +415,12 @@ export interface AdminSettingsResponse {
    * address can be verified, so nobody can sign up, whatever the mode.
    */
   emailConfigured: boolean;
+  /**
+   * A production installation whose privacy policy and terms are still
+   * placeholders (D265): sign-up stays closed, whatever the mode, and the mode
+   * cannot be set to *automatic* or *approval*.
+   */
+  signupHeldForLegalText: boolean;
   updatedAt: string;
 }
 
@@ -967,6 +973,12 @@ export interface SessionUser {
   mustChangePassword: boolean;
   /** An address change waiting for its link (D259); the sign-in address is still `email`. */
   pendingEmail: string | null;
+  /**
+   * The current legal version (D265) this account has not accepted, or null:
+   * the app shows nothing but the acceptance until it is, and the server
+   * refuses everything else but export and deletion.
+   */
+  legalAcceptanceRequired: string | null;
 }
 
 /**
@@ -1009,6 +1021,11 @@ export interface SignupInput {
   password: string;
   timezone: string;
   language: UiLanguage;
+  /**
+   * The legal version (D265) the person agreed to by ticking the box: required
+   * once a version exists, and refused unless it is still the current one.
+   */
+  acceptedLegalVersion?: string;
 }
 
 /**

@@ -43,6 +43,8 @@ export async function createSignupRequest(input: {
   passwordHash: string;
   timezone: string;
   language: string;
+  /** The legal version the form's box agreed to (D265); null while none exists. */
+  legalVersion: string | null;
 }): Promise<SignupCreation> {
   const row = await queryOne<{
     open: boolean;
@@ -70,6 +72,11 @@ export async function createSignupRequest(input: {
        INSERT INTO user_settings (user_id, language)
        SELECT id, $4 FROM inserted WHERE created
        RETURNING user_id
+     ), consent AS (
+       -- A retried request is the person holding its new password agreeing too.
+       INSERT INTO legal_acceptances (user_id, version)
+       SELECT id, $5 FROM inserted WHERE $5::text IS NOT NULL
+       ON CONFLICT (user_id, version) DO NOTHING
      ), existing AS (
        SELECT u.id, u.status, u.email_verified_at IS NOT NULL AS verified, coalesce(us.language, 'en') AS language
          FROM users u LEFT JOIN user_settings us ON us.user_id = u.id
@@ -81,7 +88,7 @@ export async function createSignupRequest(input: {
             (SELECT status FROM existing) AS existing_status,
             (SELECT verified FROM existing) AS existing_verified,
             (SELECT language FROM existing) AS existing_language`,
-    [input.email, input.passwordHash, input.timezone, input.language],
+    [input.email, input.passwordHash, input.timezone, input.language, input.legalVersion],
   );
   if (!row?.open) return { outcome: 'closed' };
   if (row.user_id !== null) return { outcome: 'created', userId: row.user_id };

@@ -24,6 +24,7 @@ import {
   type SessionUser,
   type SignupResponse,
   type UiLanguage,
+  type LegalAcceptanceInput,
   type ResetPasswordResponse,
   type VerifyEmailResponse,
 } from '@traders/shared';
@@ -40,6 +41,8 @@ import {
   getResetRecipient,
   getUser,
   getUserCredentialsByEmail,
+  hasAcceptedLegalVersion,
+  recordLegalAcceptance,
   recordSignIn,
   reopenClosedAccount,
   setPendingEmail,
@@ -63,6 +66,7 @@ import { announceSignupRequest } from '../../telegram/signupApproval.js';
 import type { AppEnv } from '../app.js';
 import { SESSION_COOKIE } from '../auth.js';
 import { issueSession } from '../sessions.js';
+import { legalAcceptanceRequired, signupHeldForLegalText } from '../legal.js';
 import { ApiProblem, badRequest, conflict, unauthorized } from '../errors.js';
 import { emailKey, requestAddressKey, userKey } from '../rateLimits.js';
 import { PASSWORD_MAX_LENGTH, hashPassword, passwordMatches, passwordProblem } from '../password.js';
@@ -84,7 +88,10 @@ const signupSchema = z.object({
   password: submittedPassword,
   timezone: z.string().max(200),
   language: z.enum(UI_LANGUAGES),
+  acceptedLegalVersion: z.string().max(40).optional(),
 });
+
+const legalAcceptanceSchema = z.object({ version: z.string().max(40) }).strict() satisfies z.ZodType<LegalAcceptanceInput>;
 
 const passwordChangeSchema = z.object({
   currentPassword: submittedPassword,
@@ -95,6 +102,9 @@ const timeZoneChangeSchema = z.object({ timezone: z.string().max(200) });
 
 /** A sign-up's link carries its password (D309); an address change's does not need one. */
 const verifySchema = z.object({ token: z.string().min(1).max(200), password: submittedPassword.optional() });
+
+/** Sign-up's refusal when the box for the current legal version was not ticked (D265). */
+export const LEGAL_NOT_ACCEPTED = 'legal_not_accepted';
 
 /** The sign-in refusal for a request whose address was never proven (D306); the web offers a new link. */
 export const EMAIL_UNVERIFIED = 'email_unverified';
@@ -137,7 +147,7 @@ const emailChangeSchema = z.object({
  * (materialised with the schema's defaults if the user never saved one), so
  * the first screen is already in it.
  */
-async function sessionUser(user: UserRow): Promise<SessionUser> {
+async function sessionUser(context: Context<AppEnv>, user: UserRow): Promise<SessionUser> {
   const settings = await getOrCreateUserSettings(user.id);
   return {
     id: user.id,
@@ -148,7 +158,19 @@ async function sessionUser(user: UserRow): Promise<SessionUser> {
     language: settings.language as UiLanguage,
     mustChangePassword: user.password_must_change,
     pendingEmail: user.pending_email,
+    legalAcceptanceRequired: await legalVersionToAccept(context, user),
   };
+}
+
+/**
+ * The legal version this user must still accept (D265), or null: none exists
+ * yet, the user accepted it, or the user is the admin - whose installation's
+ * terms these are. The session gate refuses by the same rule.
+ */
+async function legalVersionToAccept(context: Context<AppEnv>, user: UserRow): Promise<string | null> {
+  const version = context.get('legalVersion');
+  if (version === null) return null;
+  return legalAcceptanceRequired(user, await hasAcceptedLegalVersion(user.id, version)) ? version : null;
 }
 
 export function registerAuthRoutes(app: Hono<AppEnv>): void {
@@ -213,7 +235,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     await recordSignIn(user.id);
     await issueSession(context, user);
     if (reopened !== null) announceAccountRestored(context.get('email'), reopened);
-    const body: LoginResponse = { ...(await sessionUser(user)), deletionCancelled: reopened !== null };
+    const body: LoginResponse = { ...(await sessionUser(context, user)), deletionCancelled: reopened !== null };
     return context.json(body);
   });
 
@@ -248,11 +270,18 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     if (timeZoneProblem(parsed.data.timezone) !== null) {
       throw badRequest('timezone_invalid', 'the time zone is not an IANA zone name');
     }
+    // Once the text exists, joining means agreeing to the version the form
+    // showed - not an older one a page left open still shows (D265).
+    const legalVersion = context.get('legalVersion');
+    if (legalVersion !== null && parsed.data.acceptedLegalVersion !== legalVersion) {
+      throw badRequest(LEGAL_NOT_ACCEPTED, 'accept the current privacy policy and terms to sign up');
+    }
 
     const passwordHash = await hashPassword(parsed.data.password);
     // Without mail no address can be proven, so nobody can get in (D259).
+    // A public installation stays closed until its privacy policy and terms exist (D265).
     const sender = context.get('email');
-    if (sender === null) {
+    if (sender === null || signupHeldForLegalText(context)) {
       const closed: SignupResponse = { outcome: 'closed' };
       return context.json(closed);
     }
@@ -261,6 +290,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
       passwordHash,
       timezone: parsed.data.timezone,
       language: parsed.data.language,
+      legalVersion,
     });
     const origin = requestOrigin(context);
     if (created.outcome === 'created') {
@@ -461,11 +491,30 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     return context.json({ ok: true });
   });
 
+  /**
+   * Accept the current privacy policy and terms (D265): the version the page
+   * showed, which must still be the current one - agreeing to text the person
+   * did not see is no agreement. Under `/auth/*`, so the session gate's
+   * refusal does not stand in its way.
+   */
+  app.post('/auth/legal/accept', async (context) => {
+    const user = context.get('user');
+    if (!user) throw unauthorized();
+    const parsed = legalAcceptanceSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) throw badRequest('invalid_body', 'expected { version: string }');
+    const current = context.get('legalVersion');
+    if (current === null || parsed.data.version !== current) {
+      throw conflict('legal_version_stale', 'this is not the current version of the privacy policy and terms');
+    }
+    await recordLegalAcceptance(user.id, current);
+    return context.json(await sessionUser(context, user));
+  });
+
   app.get('/auth/session', async (context) => {
     // Already read and checked against the cookie by the session middleware.
     const user = context.get('user');
     if (!user) return context.json({ authenticated: false }, 200);
-    return context.json({ authenticated: true, user: await sessionUser(user) });
+    return context.json({ authenticated: true, user: await sessionUser(context, user) });
   });
 
   /**
@@ -503,7 +552,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     }
     // The change ended every session, this one too; this device gets a new one.
     await issueSession(context, updated);
-    return context.json(await sessionUser(updated));
+    return context.json(await sessionUser(context, updated));
   });
 
   /**
@@ -546,7 +595,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     }
     const updated = await getUser(user.id);
     if (!updated) throw unauthorized();
-    return context.json(await sessionUser(updated));
+    return context.json(await sessionUser(context, updated));
   });
 
   /**
@@ -567,6 +616,6 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     }
     const updated = await changeTimeZone(user.id, parsed.data.timezone);
     if (!updated) throw unauthorized();
-    return context.json(await sessionUser(updated));
+    return context.json(await sessionUser(context, updated));
   });
 }

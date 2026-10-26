@@ -6,10 +6,10 @@
  * to inspect response status codes.
  */
 
-import type { ApiError } from '@traders/shared';
+import { LEGAL_ACCEPTANCE_REQUIRED, type ApiError } from '@traders/shared';
 
 import { t } from '../i18n/index.ts';
-import { reportSessionEnded } from './sessionEnded.ts';
+import { reportLegalAcceptanceRequired, reportSessionEnded } from './sessionEnded.ts';
 
 // Relative: the API is served on the page's own origin, by nginx in the image
 // and by Vite's proxy in development (vite.config.ts), so the session cookie
@@ -63,6 +63,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     const error = (body ?? {}) as ApiError;
     if (response.status === 401 && error.error === UNAUTHORIZED) reportSessionEnded();
+    if (response.status === 403 && error.error === LEGAL_ACCEPTANCE_REQUIRED) reportLegalAcceptanceRequired();
     if (error.error === RATE_LIMITED) {
       // The one refusal said here rather than by each caller: any limited
       // route can answer it, and every caller shows `message` (D257).

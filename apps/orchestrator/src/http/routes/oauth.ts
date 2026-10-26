@@ -62,6 +62,7 @@ import { ApiProblem, notFound, unauthorized } from '../errors.js';
 import { pageLink } from '../linkTokens.js';
 import { requestAddressKey } from '../rateLimits.js';
 import { issueSession } from '../sessions.js';
+import { signupHeldForLegalText } from '../legal.js';
 
 /** The callback's path under the web origin; nginx strips `/api` before the orchestrator. */
 export function oauthRedirectUri(origin: string, provider: OAuthProviderName): string {
@@ -245,6 +246,8 @@ async function settle(
     // in with the password and links from Settings.
     if (account.role === 'admin' || !identity.authoritative || context.get('email') === null) return 'link_from_settings';
     if (account.status === 'pending' && !account.email_verified) {
+      // Claiming a request is joining: held, like a new account, until the text exists (D265).
+      if (signupHeldForLegalText(context)) return 'closed';
       const claimed = await claimUnverifiedRequest({ userId: account.id, provider, subject: identity.subject, email }, rules);
       if (claimed === 'signup_full') return 'closed';
       if (claimed === 'taken') return 'failed';
@@ -264,7 +267,10 @@ async function settle(
     return account.status === 'pending' ? 'pending' : signIn(context, account.id);
   }
 
-  // A new account is a sign-up, counted as one per address (D257).
+  // A new account is a sign-up, counted as one per address (D257), and held
+  // on a public installation until its privacy policy and terms exist (D265).
+  // It has accepted no version: the session gate asks at its first request.
+  if (signupHeldForLegalText(context)) return 'closed';
   await context.get('rateLimits').consume('signupPerAddress', requestAddressKey(context, config.TRUSTED_PROXY_HOPS));
   const created = await createOAuthAccount(
     { email, provider, subject: identity.subject, timezone: saved.timezone, language: saved.language },

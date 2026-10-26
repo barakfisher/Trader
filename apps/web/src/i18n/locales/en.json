@@ -1384,6 +1384,7 @@
     "signupSettings": {
       "title": "Sign-up",
       "noEmail": "This installation cannot send email (SMTP_HOST and EMAIL_FROM are not set), so no address can be confirmed and nobody can sign up.",
+      "legalTextPending": "Sign-up stays closed: this is a production installation, and its privacy policy and terms of use have not been published yet.",
       "mode": "Who can get in",
       "modes": {
         "automatic": {
@@ -2304,5 +2305,24 @@
     "closedEmail": "An email with this date is on its way to your address.",
     "closedSignIn": "Go to sign in",
     "cancelledBanner": "Signing in cancelled your account's deletion. Full access is back."
+  },
+  "legal": {
+    "privacy": "Privacy policy",
+    "terms": "Terms of use",
+    "documents": "Legal documents",
+    "language": "Language",
+    "backToApp": "Back to the app",
+    "acceptTitle": "Before you continue",
+    "acceptIntro": "Read the privacy policy and the terms of use (version {{version}}), and accept them to use the app.",
+    "opensInNewTab": "opens in a new tab",
+    "accept": "I have read them and accept",
+    "accepting": "Saving…",
+    "acceptFailed": "Could not save your acceptance.",
+    "stale": "A newer version was published while this page was open. Reload the page to read it.",
+    "declineTitle": "If you do not accept",
+    "declineIntro": "You can download a copy of your data and delete your account instead.",
+    "signOut": "Sign out",
+    "signupAgree": "I have read and accept the <privacy>privacy policy</privacy> and the <terms>terms of use</terms>.",
+    "signupRequired": "Accept the privacy policy and the terms of use to ask to join."
   }
 }

@@ -315,6 +315,8 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
       `INSERT INTO user_identities (user_id, provider, subject, email) VALUES ($1, 'google', $2, $3)`,
       [user.id, `${user.mark}-google-sub`, `${user.mark.toLowerCase()}@example.com`],
     );
+    // The legal version the user accepted (0077, D265): a record nobody else's request may add to or change.
+    await pool.query(`INSERT INTO legal_acceptances (user_id, version) VALUES ($1, '2026-11-01')`, [user.id]);
     user.proposal = proposal;
     user.agent = agent;
     user.conversation = conversation;

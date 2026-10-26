@@ -251,6 +251,25 @@ describe('coming back from the provider (D262, D263, D314)', () => {
     expect(landedOn(await roundTrip(buildApp())).searchParams.get('oauth')).toBe('closed');
   });
 
+  it('opens and claims nothing on a production installation whose legal text is pending (D265)', async () => {
+    resetConfigForTests();
+    const held = createApp(
+      loadConfig({ ...ENV, APP_ENV: 'production' } as NodeJS.ProcessEnv),
+      createFakeAi(),
+      undefined,
+      null,
+      memoryRateLimits(),
+      mail,
+      new Map([['google', fakeGoogle]]),
+      null,
+    );
+    expect(landedOn(await roundTrip(held)).searchParams.get('oauth')).toBe('closed');
+    expect(queries.createOAuthAccount).not.toHaveBeenCalled();
+    vi.mocked(queries.getAccountByEmail).mockResolvedValue({ id: ACCOUNT, status: 'pending', role: 'user', email_verified: false });
+    expect(landedOn(await roundTrip(held)).searchParams.get('oauth')).toBe('closed');
+    expect(queries.claimUnverifiedRequest).not.toHaveBeenCalled();
+  });
+
   it('says it failed, and signs nobody in, when the provider refuses the code', async () => {
     identify.mockRejectedValueOnce(new Error('invalid_grant'));
     const response = await roundTrip(buildApp());

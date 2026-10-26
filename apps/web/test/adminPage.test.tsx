@@ -164,6 +164,7 @@ const SETTINGS = {
   signupMode: 'approval' as const,
   dailyNewAccountsLimit: 20,
   emailConfigured: true,
+  signupHeldForLegalText: false,
   updatedAt: '2026-10-08T09:00:00Z',
 };
 
@@ -378,6 +379,18 @@ describe('the admin page', () => {
     renderAt('/admin?tab=settings', ADMIN);
     expect(await screen.findByText(/cannot send email/)).toBeTruthy();
     expect((screen.getByRole('radio', { name: /Automatic/ }) as HTMLInputElement).disabled).toBe(true);
+  });
+
+  it('offers only closed on a production installation whose legal text is pending (D265)', async () => {
+    const defaultGet = get.getMockImplementation()!;
+    get.mockImplementation((path: string) =>
+      path === '/admin/settings' ? Promise.resolve({ ...SETTINGS, signupHeldForLegalText: true }) : defaultGet(path),
+    );
+    renderAt('/admin?tab=settings', ADMIN);
+    expect(await screen.findByText(/privacy policy and terms of use have not been published yet/)).toBeTruthy();
+    expect((screen.getByRole('radio', { name: /Automatic/ }) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole('radio', { name: /Approval/ }) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole('radio', { name: /Closed/ }) as HTMLInputElement).disabled).toBe(false);
   });
 
   it('is not linked for anyone else', async () => {

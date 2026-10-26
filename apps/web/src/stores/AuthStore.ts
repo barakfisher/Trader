@@ -3,6 +3,7 @@ import { makeAutoObservable, reaction, runInAction } from 'mobx';
 import type {
   AccountDeletionInput,
   AccountDeletionResponse,
+  LegalAcceptanceInput,
   LoginResponse,
   ResendVerificationInput,
   SessionUser,
@@ -10,7 +11,7 @@ import type {
 } from '@traders/shared';
 
 import { ApiRequestError, api } from '../api/client.ts';
-import { onSessionEnded } from '../api/sessionEnded.ts';
+import { onLegalAcceptanceRequired, onSessionEnded } from '../api/sessionEnded.ts';
 import { setDisplayTimeZone } from '../lib/relativeTime.ts';
 import { applyLanguage, signedOutLanguage, t } from '../i18n/index.ts';
 import type { RootStore } from './RootStore.ts';
@@ -44,6 +45,9 @@ export class AuthStore {
   constructor(private readonly root: RootStore) {
     makeAutoObservable(this, {}, { autoBind: true });
     onSessionEnded(this.sessionEnded);
+    // A new legal version published while the page was open (D265): the
+    // session says which, and the app gives way to the acceptance.
+    onLegalAcceptanceRequired(() => void this.loadSession());
     // Every time on screen is shown in the signed-in user's timezone. Followed
     // by reaction rather than set in `login` and `loadSession`, so however the
     // user changes - a sign-in, a reload, a sign-out - the zone follows it
@@ -144,6 +148,18 @@ export class AuthStore {
   /** The account's own zone (D163); the display zone follows the returned user. */
   async changeTimeZone(timezone: string): Promise<void> {
     const user = await api.post<SessionUser>('/auth/timezone', { timezone });
+    runInAction(() => {
+      this.user = user;
+    });
+  }
+
+  /**
+   * Accept the privacy policy and terms the page showed (D265). The returned
+   * user no longer needs to, so the acceptance gives way to the app. Throws
+   * for the page to show - a version replaced while it was open among them.
+   */
+  async acceptLegal(version: string): Promise<void> {
+    const user = await api.post<SessionUser>('/auth/legal/accept', { version } satisfies LegalAcceptanceInput);
     runInAction(() => {
       this.user = user;
     });
