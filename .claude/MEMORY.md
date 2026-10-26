@@ -4785,8 +4785,9 @@ failure they prevent.
       (`test_run_kinds_contract.py`), so its past rows stay describable - and nothing sends it.
       `k8s-up.sh` deletes the old `run-session-sweep` CronJob because `apply` does not prune.
     - **A link opens `/verify#token=...`:** the token rides in the fragment, which no browser
-      sends to a server, so it stays out of access logs and `Referer`. The page posts it once
-      and clears it from the address bar.
+      sends to a server, so it stays out of access logs and `Referer`. The page clears it from
+      the address bar at once and posts it **only when the person presses Confirm** - a mail
+      scanner that opens links and runs their scripts must not confirm an address (D309).
     - **A link proves the mailbox and signs nobody in.** The one exception: confirming a new
       address on the device already signed in to that account gives it a new session, as a
       change did before D259; every other session ends.
@@ -4846,6 +4847,38 @@ failure they prevent.
         an AWS account with IAM credentials to run;
       - deciding at PR 16: possible, since nothing in PR 10's code depends on it, but the user
         chose now.
+309. **A sign-up's link is opened with the sign-up's password; signing up again on an unverified
+    request replaces it** (the user, 2026-10-26; M10 PR 10; closes the security review's
+    pre-hijacking finding).
+    - **The attack:** someone signs up with another person's address and their own password.
+      The owner later signs up, is mailed a fresh link (D303's retry), opens it - and the
+      account is verified with the stranger's password, which the stranger then signs in with.
+    - **The fix, in three parts:**
+      - signing up again on a request still waiting for its link replaces its password and zone
+        (`createSignupRequest`'s `ON CONFLICT ... DO UPDATE ... WHERE` unverified pending); a
+        verified request or an account is never touched;
+      - the link's page asks for that password (`#token=...&for=signup` tells the form; the
+        server decides from the link's own row). The route checks it with argon2, counted
+        against the same sign-in failures as `/auth/login`, and the query compares the hash
+        again inside its transaction, so a re-signup between check and update is refused;
+      - a wrong or missing password answers `wrong_password` and leaves the link unused. A used
+        or expired link asks for nothing and says which it is.
+    - An address change's link (`verify_new_email`) needs no password: it was asked for from a
+      signed-in session, and its page has only Confirm.
+    - **The same PR closes the review's three other findings:**
+      - **the email rule refuses address lists** (`packages/shared/src/email.ts`): one plain
+        address - RFC 5322 atext, a dotted domain - because `nodemailer` reads `a@x.com,b@y.com`,
+        `Name <a@x.com>` and quoted forms as someone other than the address checked;
+      - **approval's waiting limit is checked again when a link verifies** (unverified requests
+        are not counted at sign-up, D304, so many could verify past it), and *closed* refuses
+        too: `signup_full`, the link left unused until it expires;
+      - **`/verify` posts only on Confirm** (D304's bullet above).
+    - **Rejected:**
+      - each link carrying the password it was asked with: a narrow race remains - a stranger's
+        re-signup between the owner's sign-up and click mails the owner a link with the
+        stranger's password;
+      - the latest sign-up's password winning with no check at the link: a stranger re-signing
+        after the owner wins outright.
 ---
 
 ## Bugs that cost real time, and the lesson from each

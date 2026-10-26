@@ -43,6 +43,7 @@ vi.mock('../src/db/queries.js', () => ({
   insertAdminAudit: vi.fn(async () => undefined),
   issueAuthToken: vi.fn(async () => undefined),
   useVerificationToken: vi.fn(),
+  peekVerificationToken: vi.fn(),
   getUserCredentialsByEmail: vi.fn(),
   createSession: vi.fn(async () => ({ id: '5e551000-0000-4000-8000-0000000000cc', expires_at: new Date(Date.now() + 3_600_000) })),
 }));
@@ -108,7 +109,8 @@ describe('asking to join (D156, D185, D259, D303)', () => {
     await mail.settled();
     expect(mail.sent.map((sent) => sent.to)).toEqual(['noa@example.com']);
     const token = mail.tokenSentTo('noa@example.com')!;
-    expect(mail.sent[0]!.text).toContain(`http://localhost:5173/verify#token=${token}`);
+    // A sign-up's link says so, for the page to ask for the password (D309).
+    expect(mail.sent[0]!.text).toContain(`http://localhost:5173/verify#token=${token}&for=signup`);
     expect(mail.sent[0]!.html).toContain('dir="rtl"');
     expect(queries.issueAuthToken).toHaveBeenCalledWith({
       userId: REQUESTER,
@@ -187,18 +189,38 @@ describe('asking to join (D156, D185, D259, D303)', () => {
   });
 });
 
-describe('opening a verification link (D259, D260)', () => {
+describe('opening a verification link (D259, D260, D309)', () => {
   let app: App;
+  let passwordHash: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     vi.mocked(queries.getInstallationSettings).mockResolvedValue({
       default_llm_cap_micro_usd: 10_000_000,
       signup_mode: 'automatic',
       daily_new_accounts_limit: 20,
+      max_pending_signups: 50,
     } as never);
+    const { hashPassword } = await import('../src/http/password.js');
+    passwordHash = await hashPassword(PASSWORD);
+    // An address change's link by default: it needs no password.
+    vi.mocked(queries.peekVerificationToken).mockResolvedValue({
+      purpose: 'verify_new_email',
+      email: 'noa@example.com',
+      passwordHash: null,
+      open: true,
+    });
     app = buildApp();
   });
+
+  /** A sign-up's open link, whose request was made with PASSWORD. */
+  const signupLink = () =>
+    vi.mocked(queries.peekVerificationToken).mockResolvedValue({
+      purpose: 'verify_email',
+      email: 'noa@example.com',
+      passwordHash,
+      open: true,
+    });
 
   const verify = (body: unknown) =>
     app.request('/auth/verify', { method: 'POST', headers: HEADERS, body: JSON.stringify(body) });
@@ -207,12 +229,17 @@ describe('opening a verification link (D259, D260)', () => {
     vi.mocked(queries.useVerificationToken).mockResolvedValue({ outcome: 'activated', userId: REQUESTER });
     const response = await verify({ token: 'the-token' });
     expect(await response.json()).toEqual({ outcome: 'activated' });
-    expect(queries.useVerificationToken).toHaveBeenCalledWith(linkTokenHash('the-token'), {
-      mode: 'automatic',
-      dailyLimit: 20,
-      defaultCapMicroUsd: 10_000_000,
-      timezone: loadConfig(ENV).APP_TIMEZONE,
-    });
+    expect(queries.useVerificationToken).toHaveBeenCalledWith(
+      linkTokenHash('the-token'),
+      {
+        mode: 'automatic',
+        dailyLimit: 20,
+        defaultCapMicroUsd: 10_000_000,
+        timezone: loadConfig(ENV).APP_TIMEZONE,
+        maxPendingSignups: 50,
+      },
+      null,
+    );
     expect(announceSignupRequest).not.toHaveBeenCalled();
     // A link proves the mailbox; it is not the password, so it opens no session.
     expect(response.headers.get('set-cookie')).toBeNull();
@@ -241,7 +268,40 @@ describe('opening a verification link (D259, D260)', () => {
     expect(elsewhere.headers.get('set-cookie')).toBeNull();
   });
 
-  it.each(['expired', 'used', 'invalid'] as const)('passes %s through, changing nothing else', async (outcome) => {
+  it("opens a sign-up's link only with its password, and hands the database the hash it checked", async () => {
+    signupLink();
+    vi.mocked(queries.useVerificationToken).mockResolvedValue({ outcome: 'activated', userId: REQUESTER });
+    expect(await (await verify({ token: 'the-token' })).json()).toEqual({ outcome: 'wrong_password' });
+    expect(await (await verify({ token: 'the-token', password: 'not the password' })).json()).toEqual({
+      outcome: 'wrong_password',
+    });
+    expect(queries.useVerificationToken).not.toHaveBeenCalled();
+    expect(await (await verify({ token: 'the-token', password: PASSWORD })).json()).toEqual({ outcome: 'activated' });
+    expect(queries.useVerificationToken).toHaveBeenCalledWith(linkTokenHash('the-token'), expect.anything(), { passwordHash });
+  });
+
+  it('counts wrong passwords on a link as failed sign-ins, and refuses once they are spent', async () => {
+    signupLink();
+    const { RATE_LIMITS } = await import('../src/http/rateLimits.js');
+    const allowed = RATE_LIMITS.loginFailuresPerAccount.points;
+    for (let attempt = 0; attempt < allowed; attempt += 1) {
+      expect((await verify({ token: 'the-token', password: 'not the password' })).status).toBe(200);
+    }
+    expect((await verify({ token: 'the-token', password: PASSWORD })).status).toBe(429);
+  });
+
+  it('asks no password of a used or expired link, so it can say which it is', async () => {
+    vi.mocked(queries.peekVerificationToken).mockResolvedValue({
+      purpose: 'verify_email',
+      email: 'noa@example.com',
+      passwordHash,
+      open: false,
+    });
+    vi.mocked(queries.useVerificationToken).mockResolvedValue({ outcome: 'expired' });
+    expect(await (await verify({ token: 'the-token' })).json()).toEqual({ outcome: 'expired' });
+  });
+
+  it.each(['expired', 'used', 'invalid', 'signup_full'] as const)('passes %s through, changing nothing else', async (outcome) => {
     vi.mocked(queries.useVerificationToken).mockResolvedValue({ outcome });
     expect(await (await verify({ token: 'the-token' })).json()).toEqual({ outcome });
     expect(announceSignupRequest).not.toHaveBeenCalled();

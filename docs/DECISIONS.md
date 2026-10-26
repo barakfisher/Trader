@@ -319,3 +319,4 @@ while this file is out of date.
 | 306 | A new verification link is asked for from sign-in, with the password |
 | 307 | Mailpit catches all mail in compose and kind; it is never part of a public deployment |
 | 308 | The public host sends mail through Resend, over SMTP |
+| 309 | A sign-up's link is opened with the sign-up's password; signing up again on an unverified request replaces it |

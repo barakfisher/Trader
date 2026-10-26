@@ -524,6 +524,8 @@ describe("changing one's own email (D259)", () => {
     expect(queries.issueAuthToken).toHaveBeenCalledWith(
       expect.objectContaining({ userId: USER.id, purpose: 'verify_new_email', email: NEW_EMAIL, tokenHash: linkTokenHash(token) }),
     );
+    // An address change's link asks for no password (D309): the request came from a signed-in session.
+    expect(mail.sent.find((sent) => sent.to === NEW_EMAIL)!.text).not.toContain('for=signup');
     const notice = mail.sent.find((sent) => sent.to === USER.email)!;
     expect(notice.text).toContain(NEW_EMAIL);
     expect(notice.text).not.toContain('#token=');
