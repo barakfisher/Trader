@@ -28,6 +28,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
   const { getPool, initPool } = await import('../src/db/pool.js');
   const queries = await import('../src/db/queries.js');
   const { EMPTY_MANDATE } = await import('../src/http/agentMandate.js');
+  const { SESSIONS_PER_USER_MAX } = await import('../src/http/sessions.js');
   const USER = randomUUID();
   /** USER's primary agent, made by the trigger on `users` (migration 0036). */
   let AGENT = '';
@@ -357,7 +358,14 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       it('confirms a pending new address: the sign-in address changes and every session ends', async () => {
         const created = (await ask(email('mover'))) as { userId: string };
         await queries.useVerificationToken(await link(created.userId, email('mover')), RULES);
-        await queries.createSession({ userId: created.userId, tokenHash: linkTokenHash(newLinkToken()), ttlHours: 1, userAgent: null, ipAddress: null });
+        await queries.createSession({
+          userId: created.userId,
+          tokenHash: linkTokenHash(newLinkToken()),
+          ttlHours: 1,
+          userAgent: null,
+          ipAddress: null,
+          maxPerUser: SESSIONS_PER_USER_MAX,
+        });
         await queries.setPendingEmail(created.userId, email('moved'));
         const result = await queries.useVerificationToken(await link(created.userId, email('moved'), 'verify_new_email'), RULES);
         expect(result).toEqual({ outcome: 'email_changed', userId: created.userId });
@@ -2354,7 +2362,6 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
   describe('sessions (0071, D261)', async () => {
     const { sessionTokenHash } = await import('../src/http/auth.js');
-    const { SESSIONS_PER_USER_MAX } = await import('../src/http/sessions.js');
     const TTL_HOURS = 1;
     const TOUCH_SECONDS = 300;
 
