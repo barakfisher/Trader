@@ -24,7 +24,7 @@
  * already spent. Errors are logged; the user hears through the callback answer.
  */
 
-import { isTradeProposalKind } from '@traders/shared';
+import { LEGAL_VERSION, isTradeProposalKind } from '@traders/shared';
 import type { AiClient } from '@traders/shared/ai';
 import { z } from 'zod';
 
@@ -300,6 +300,11 @@ export async function handleTelegramUpdate(deps: UpdateDeps, raw: unknown): Prom
   }
 }
 
+/** A tap's answer for an account that has not accepted the current terms (D320), in its language. */
+async function legalRefusal(userId: string): Promise<string> {
+  return messagesFor((await getOrCreateUserSettings(userId)).language).legalAcceptanceRequiredShort;
+}
+
 function telegramOf(deps: UpdateDeps): TelegramNotifier | null {
   return deps.notifier instanceof TelegramNotifier ? deps.notifier : null;
 }
@@ -333,7 +338,7 @@ async function handleMessage(
   // Check two, for every command except /start with a link: an unbound chat is
   // ignored in silence. /start is the exception because binding is precisely
   // what it does.
-  const binding = await findTelegramBindingByChat(chatId);
+  const binding = await findTelegramBindingByChat(chatId, LEGAL_VERSION);
   if (binding === null) {
     if (command === '/start') {
       // A bare /start in a chat that is not connected: say how to connect.
@@ -341,6 +346,14 @@ async function handleMessage(
       return;
     }
     logger().info({ chatId }, 'telegram.message_from_unbound_chat');
+    return;
+  }
+
+  // Not served until the account accepts the current terms (D320); /stop still
+  // disconnects - declining must never trap anyone in a bot they cannot leave.
+  if (binding.legal_accepted !== true && command !== '/stop') {
+    const { language } = await getOrCreateUserSettings(binding.user_id);
+    await telegram?.sendText(chatId, messagesFor(language).legalAcceptanceRequired);
     return;
   }
 
@@ -508,7 +521,11 @@ async function handleCallback(
   }
   const signup = decodeSignupData(callback.data, config.TELEGRAM_SIGNING_SECRET);
   const payload = signup === null ? decodeCallbackData(callback.data, config.TELEGRAM_SIGNING_SECRET) : null;
-  const binding = await findTelegramBindingByChat(chatId);
+  const binding = await findTelegramBindingByChat(chatId, LEGAL_VERSION);
+  if (binding !== null && binding.legal_accepted !== true) {
+    await telegram?.answerCallback(callback.id, await legalRefusal(binding.user_id));
+    return;
+  }
 
   if (signup !== null && binding !== null) {
     await handleSignupCallback({
@@ -709,7 +726,7 @@ async function handleMenuCallback(
   let binding: Awaited<ReturnType<typeof findTelegramBindingByChat>>;
   let language: string;
   try {
-    binding = chatId === null || tap === null ? null : await findTelegramBindingByChat(chatId);
+    binding = chatId === null || tap === null ? null : await findTelegramBindingByChat(chatId, LEGAL_VERSION);
     language = binding === null ? 'en' : (await getOrCreateUserSettings(binding.user_id)).language;
   } catch (error) {
     // A tap is always answered, or its spinner runs until Telegram gives up.
@@ -720,6 +737,10 @@ async function handleMenuCallback(
   if (chatId === null || binding === null || callback.message === undefined || tap === null) {
     logger().warn({ chatId, bound: binding !== null, decoded: tap !== null }, 'telegram.menu_tap_rejected');
     await telegram.answerCallback(callback.id, messagesFor('en').buttonInvalid);
+    return;
+  }
+  if (binding.legal_accepted !== true) {
+    await telegram.answerCallback(callback.id, messagesFor(language).legalAcceptanceRequiredShort);
     return;
   }
   // Not awaited: a view waits on the AI service, and the poller must not (`menu.ts`).
@@ -748,10 +769,14 @@ async function handleAgentCallback(
 ): Promise<void> {
   const telegram = telegramOf(deps);
   if (telegram === null) return;
-  const binding = await findTelegramBindingByChat(chatId);
+  const binding = await findTelegramBindingByChat(chatId, LEGAL_VERSION);
   if (binding === null || callback.message === undefined) {
     logger().warn({ chatId, bound: binding !== null }, 'telegram.agent_action_rejected');
     await telegram.answerCallback(callback.id, messagesFor('en').buttonInvalid);
+    return;
+  }
+  if (binding.legal_accepted !== true) {
+    await telegram.answerCallback(callback.id, await legalRefusal(binding.user_id));
     return;
   }
   const { language } = await getOrCreateUserSettings(binding.user_id);

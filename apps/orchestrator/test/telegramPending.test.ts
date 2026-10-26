@@ -57,7 +57,7 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
-  findTelegramBindingByChat: vi.fn(async () => ({ user_id: USER, chat_id: String(CHAT) })),
+  findTelegramBindingByChat: vi.fn(async () => ({ user_id: USER, chat_id: String(CHAT), legal_accepted: true })),
   getOrCreateUserSettings: vi.fn(async () => ({ language, notify_severity: 'high', muted_until: null })),
   getUser: vi.fn(async () => ({ id: USER, role: 'user', base_currency: 'USD', timezone: 'Asia/Jerusalem' })),
   // Scoped by user, as the SQL is: another user's proposal is not found.

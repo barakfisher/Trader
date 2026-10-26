@@ -18,7 +18,7 @@ const CONVERSATION = '80000000-0000-0000-0000-000000000001';
 const LATER = '80000000-0000-0000-0000-000000000002';
 
 vi.mock('../src/db/queries.js', () => ({
-  findTelegramBindingByChat: vi.fn(async () => ({ user_id: USER, chat_id: String(CHAT) })),
+  findTelegramBindingByChat: vi.fn(async () => ({ user_id: USER, chat_id: String(CHAT), legal_accepted: true })),
   findTelegramConversation: vi.fn(async () => null),
   setTelegramConversation: vi.fn(async () => undefined),
   getOrCreateUserSettings: vi.fn(async () => ({ language: 'en', notify_severity: 'high' })),

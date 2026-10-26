@@ -38,6 +38,7 @@ vi.mock('../src/db/queries.js', () => ({
     chat_id: String(CHAT),
     username: 'someone',
     bound_at: new Date(),
+    legal_accepted: true,
   })),
   findProposal: vi.fn(async () => ({
     id: PROPOSAL,
@@ -76,6 +77,7 @@ const { decodeCallbackData, encodeCallbackData, mintNonce, MAX_CALLBACK_PRICE_MI
 );
 const approval = await import('../src/services/tradeApproval.js');
 const proposals = await import('../src/services/proposals.js');
+const queries = await import('../src/db/queries.js');
 const { ApiProblem } = await import('../src/http/errors.js');
 const { bpsAsPercent, withRefusal } = await import('../src/telegram/tradeApproval.js');
 const { messagesFor } = await import('../src/notify/messages.js');
@@ -216,6 +218,26 @@ describe('a trade opened from /pending (D282)', () => {
     } as never);
     await tap('confirm', 23_928n, HEADLINE, fromPending);
     expect(decodeMenuData(keyboardOf(lastEdit()).at(-1)!.callback_data!)).toEqual({ view: 'pending' });
+  });
+});
+
+describe('an account that has not accepted the current terms (D320)', () => {
+  it('decides nothing and previews nothing, whatever the button', async () => {
+    for (const action of ['approve', 'confirm', 'reject'] as const) {
+      sentCalls.length = 0;
+      vi.mocked(queries.findTelegramBindingByChat).mockResolvedValueOnce({
+        user_id: USER,
+        chat_id: String(CHAT),
+        username: null,
+        bound_at: new Date(),
+        legal_accepted: false,
+      } as never);
+      await tap(action, action === 'confirm' ? 23_928n : undefined);
+      expect(toast(), action).toBe(messagesFor('en').legalAcceptanceRequiredShort);
+    }
+    expect(approval.previewTradeApproval).not.toHaveBeenCalled();
+    expect(approval.confirmTradeApproval).not.toHaveBeenCalled();
+    expect(proposals.applyDecision).not.toHaveBeenCalled();
   });
 });
 

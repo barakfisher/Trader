@@ -234,6 +234,10 @@ export interface Messages {
   linkInvalid: string;
   /** `/start` in a group (D273): connect in a one-to-one chat. */
   privateChatOnly: string;
+  /** The account has not accepted the current privacy policy and terms (D265, D320). */
+  legalAcceptanceRequired: string;
+  /** The same, short enough for a button's answer. */
+  legalAcceptanceRequiredShort: string;
 
   /**
    * The bot's menu (M11 slice A1, D269-D272): `/help`, the views its buttons
@@ -600,6 +604,9 @@ const en: Messages = {
   linkInvalid: 'That link is not valid or has expired. Generate a new one.',
   privateChatOnly:
     'This bot works only in a private chat: in a group, every member would see your portfolio. Open the link from Settings again and connect in a chat with the bot itself.',
+  legalAcceptanceRequired:
+    'Open Traders and accept the privacy policy and terms of use first. Until then this bot does nothing for your account; /stop still disconnects it.',
+  legalAcceptanceRequiredShort: 'Accept the privacy policy and terms of use in the app first.',
 
   menu: {
     commands: {
@@ -1160,6 +1167,8 @@ const he: Messages = {
   linkInvalid: 'הקישור הזה לא תקף או שפג תוקפו. צרו קישור חדש.',
   privateChatOnly:
     'הבוט עובד רק בצ׳אט פרטי: בקבוצה כל החברים היו רואים את התיק שלך. פתחו שוב את הקישור מההגדרות והתחברו בצ׳אט עם הבוט עצמו.',
+  legalAcceptanceRequired: `פתחו את Traders ואשרו קודם את מדיניות הפרטיות ואת תנאי השימוש. עד אז הבוט לא עושה דבר עבור החשבון שלך; ${ltr('/stop')} עדיין מנתק אותו.`,
+  legalAcceptanceRequiredShort: 'קודם אשרו באפליקציה את מדיניות הפרטיות ואת תנאי השימוש.',
 
   menu: {
     commands: {

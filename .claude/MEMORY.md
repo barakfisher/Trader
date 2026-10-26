@@ -5214,8 +5214,18 @@ failure they prevent.
       the route refuses a request whose box agreed to anything but the current version
       (`legal_not_accepted`) - a page left open across a new version agrees to nothing.
       Accepting refuses a stale version the same way (`409 legal_version_stale`).
-    - **Telegram is not gated:** an account that has not accepted keeps its alerts and Ask in
-      Telegram until it does (debt, below).
+    - **Telegram, from the follow-up PR:** a chat whose user has not accepted gets one sentence
+      (accept in the app first) for every message and tap, `/stop` excepted - declining must not
+      trap anyone in a bot. Pushes to such a user are held (`findTelegramPushChat`), so nothing
+      is sent about an account under terms it has not agreed to; the notification row records
+      why, not "no chat connected", and a held alert is not re-sent after acceptance (its dedupe
+      key is spent) - the digest's entries stay pending and arrive with the next one. Pushes to
+      a closed or disabled account are held the same way (they were sent before, unlike its
+      chat's messages). Both read the acceptance in the binding's own query; the gate fails
+      closed (`legal_accepted !== true`); the admin is never held.
+    - **Left open (the second security review's questions):** the daily digest is still built
+      for an unaccepted account and only held at send; an admin with a one-time password
+      (D162) is not held in Telegram, as before.
     - **Rejected:** a content hash as the version (every typo fix would ask everyone again);
       columns on `users` (one version only, no history); the version in each file's front
       matter (four places to agree, and a parser for them).
@@ -6034,7 +6044,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | Item | Where | Impact |
 |---|---|---|
 | **Consent records go with an erased account** | `0077` cascade, D317's erase | Once an account is erased there is no record of what it agreed to. Whether consent must outlive the account (and for how long) is a legal retention question for the user or a lawyer, raised by the PR 15 security review; keeping it would need the erase to keep an anonymised row |
-| **Telegram ignores the legal acceptance** | `telegram/*`, D320 | An account that has not accepted the current version (D265) is refused by the web and the API, but Telegram's alerts, digest and Ask carry on until it does. Only matters once a version exists; the fix is the same check before Telegram answers a user |
+| ~~Telegram ignores the legal acceptance~~ | — | **Resolved** (2026-10-26, the PR after #332): messages and taps are answered with one sentence, `/stop` excepted, and pushes go nowhere until the account accepts (D321) |
 | **The template creator's UI has not been seen in a browser** | `MandateFields.tsx`, `TaxonomyPicker.tsx`, `InstructionsCheck.tsx` | jsdom covers the behaviour; layout, Hebrew RTL and the picker's menu are unseen. The UX4 rehearsal method (below, "Running a branch's orchestrator against a copy of the live DB") does it without touching the dev database |
 | **No real model has run `mandate_check`** | `app/agents/mandate_check.py` | Tested with scripted answers only. A model that paraphrases instead of copying quotes has every conflict dropped - safe, but it then looks like it never finds one. Read the first real `llm_calls` rows with `purpose = 'mandate_check'` |
 | ~~Mandate limits are not re-checked at approval~~ | — | **Resolved** (2026-10-25, D299): the approval preview warns of each size rule a buy breaks, how far, and the setting that would allow it; Confirm still fills |

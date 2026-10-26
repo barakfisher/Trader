@@ -30,7 +30,7 @@ vi.mock('../src/db/pool.js', () => ({
 }));
 
 vi.mock('../src/db/queries.js', () => ({
-  findTelegramBindingByChat: vi.fn(async () => ({ user_id: ADMIN, chat_id: String(CHAT), username: null, bound_at: new Date() })),
+  findTelegramBindingByChat: vi.fn(async () => ({ user_id: ADMIN, chat_id: String(CHAT), username: null, bound_at: new Date(), legal_accepted: true })),
   getUser: vi.fn(async () => ({ id: ADMIN, timezone: 'Asia/Jerusalem' })),
   getOrCreateUserSettings: vi.fn(async () => ({ language: 'en' })),
   isActiveAdmin: vi.fn(async () => admin),
