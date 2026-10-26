@@ -27,6 +27,7 @@ vi.mock('../src/db/queries.js', () => ({
   issueAuthToken: vi.fn(async () => undefined),
   getResetRecipient: vi.fn(),
   useResetToken: vi.fn(),
+  peekVerificationToken: vi.fn(),
   getPasswordHash: vi.fn(),
   changePassword: vi.fn(),
   createSession: vi.fn(async () => ({ id: '5e551000-0000-4000-8000-0000000000dd', expires_at: new Date(Date.now() + 3_600_000) })),
@@ -126,6 +127,13 @@ describe('opening a reset link (D260, D312)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // An open reset link by default.
+    vi.mocked(queries.peekVerificationToken).mockResolvedValue({
+      purpose: 'reset_password',
+      accountEmail: 'noa@example.com',
+      passwordHash: 'stored',
+      open: true,
+    });
     app = buildApp();
   });
 
@@ -140,6 +148,32 @@ describe('opening a reset link (D260, D312)', () => {
     await mail.settled();
     expect(mail.sent.map((sent) => sent.to)).toEqual(['noa@example.com']);
     expect(mail.sent[0]!.subject).toBe('הסיסמה שלכם ב-Traders שונתה');
+  });
+
+  // argon2 is the expensive part: a made-up token, or a link that cannot be used, must not cost it.
+  it('hashes nothing for an unknown or unusable link, and asks the database only what it is', async () => {
+    vi.mocked(queries.peekVerificationToken).mockResolvedValue(null);
+    vi.mocked(queries.useResetToken).mockResolvedValue({ outcome: 'invalid' });
+    expect(await (await post(app, '/auth/reset', { token: 'made-up', newPassword: NEW_PASSWORD })).json()).toEqual({ outcome: 'invalid' });
+    expect(queries.useResetToken).toHaveBeenLastCalledWith(linkTokenHash('made-up'), null);
+    vi.mocked(queries.peekVerificationToken).mockResolvedValue({
+      purpose: 'reset_password',
+      accountEmail: 'noa@example.com',
+      passwordHash: 'stored',
+      open: false,
+    });
+    vi.mocked(queries.useResetToken).mockResolvedValue({ outcome: 'expired' });
+    expect(await (await post(app, '/auth/reset', { token: 'old', newPassword: NEW_PASSWORD })).json()).toEqual({ outcome: 'expired' });
+    expect(queries.useResetToken).toHaveBeenLastCalledWith(linkTokenHash('old'), null);
+  });
+
+  it('limits new passwords sent from one address', async () => {
+    vi.mocked(queries.peekVerificationToken).mockResolvedValue(null);
+    vi.mocked(queries.useResetToken).mockResolvedValue({ outcome: 'invalid' });
+    for (let attempt = 0; attempt < RATE_LIMITS.resetAttemptPerAddress.points; attempt += 1) {
+      expect((await post(app, '/auth/reset', { token: `t${attempt}`, newPassword: NEW_PASSWORD })).status).toBe(200);
+    }
+    expect((await post(app, '/auth/reset', { token: 'one more', newPassword: NEW_PASSWORD })).status).toBe(429);
   });
 
   it('refuses a password the rule refuses before touching the link', async () => {

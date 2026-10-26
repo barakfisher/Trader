@@ -514,8 +514,18 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
             ipAddress: null,
             maxPerUser: SESSIONS_PER_USER_MAX,
           });
+          // A change of address someone asked for: a reset ends it, link and all (D310, D312).
+          await queries.setPendingEmail(userId, email('reset-elsewhere'));
+          await link(userId, email('reset-elsewhere'), 'verify_new_email');
           const hash = await resetLink(userId, email('reset-once'));
+          expect(await queries.useResetToken(hash, null)).toEqual({ outcome: 'invalid' });
           expect(await queries.useResetToken(hash, 'the new hash')).toEqual({ outcome: 'reset', userId, email: email('reset-once') });
+          const pending = await getPool().query(
+            `SELECT pending_email, (SELECT count(*)::int FROM auth_tokens WHERE user_id = $1 AND purpose = 'verify_new_email') AS links
+               FROM users WHERE id = $1`,
+            [userId],
+          );
+          expect(pending.rows[0]).toEqual({ pending_email: null, links: 0 });
           const { rows } = await getPool().query(
             `SELECT password_hash, password_must_change, session_version,
                     (SELECT count(*)::int FROM user_sessions WHERE user_id = $1) AS sessions

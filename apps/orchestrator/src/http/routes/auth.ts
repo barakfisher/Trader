@@ -412,7 +412,17 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     }
     const problem = passwordProblem(parsed.data.newPassword);
     if (problem !== null) throw badRequest(`password_${problem}`, `the new password is ${problem.replace('_', ' ')}`);
-    const result = await useResetToken(linkTokenHash(parsed.data.token), await hashPassword(parsed.data.newPassword));
+    await context.get('rateLimits').consume(
+      'resetAttemptPerAddress',
+      requestAddressKey(context, context.get('config').TRUSTED_PROXY_HOPS),
+    );
+    // The link is looked up before the new password is hashed: argon2 is the
+    // expensive part, and a made-up token must not cost it (D312).
+    const tokenHash = linkTokenHash(parsed.data.token);
+    const peek = await peekVerificationToken(tokenHash);
+    const usable = peek !== null && peek.purpose === 'reset_password' && peek.open;
+    // An unusable reset link is still asked, without a password, so it can say used or expired.
+    const result = await useResetToken(tokenHash, usable ? await hashPassword(parsed.data.newPassword) : null);
     if (result.outcome === 'reset') {
       const sender = context.get('email');
       if (sender !== null) {

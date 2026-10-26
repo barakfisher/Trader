@@ -272,7 +272,7 @@ export type ResetResult =
  * someone does when they think the password is known to another. Only an
  * active account whose address is still the one the link went to.
  */
-export async function useResetToken(tokenHash: Buffer, passwordHash: string): Promise<ResetResult> {
+export async function useResetToken(tokenHash: Buffer, passwordHash: string | null): Promise<ResetResult> {
   return transaction(async (client) => {
     const token = (
       await client.query<{ id: string; user_id: string; purpose: AuthTokenPurpose; email: string; expired: boolean; used: boolean }>(
@@ -284,10 +284,15 @@ export async function useResetToken(tokenHash: Buffer, passwordHash: string): Pr
     if (!token || token.purpose !== 'reset_password') return { outcome: 'invalid' };
     if (token.used) return { outcome: 'used' };
     if (token.expired) return { outcome: 'expired' };
+    // No password: the caller only asked what an unusable link is, and it is usable.
+    if (passwordHash === null) return { outcome: 'invalid' };
     await client.query('UPDATE auth_tokens SET used_at = now() WHERE id = $1', [token.id]);
+    // A pending address change goes too: whoever asked for it may be who the
+    // owner is resetting against, and its link could no longer be opened anyway (D310).
     const updated = await client.query<{ email: string }>(
       `UPDATE users
-          SET password_hash = $2, password_must_change = false, session_version = session_version + 1
+          SET password_hash = $2, password_must_change = false, session_version = session_version + 1,
+              pending_email = NULL
         WHERE id = $1 AND status = 'active' AND lower(email) = lower($3)
         RETURNING email`,
       [token.user_id, passwordHash, token.email],
@@ -295,6 +300,10 @@ export async function useResetToken(tokenHash: Buffer, passwordHash: string): Pr
     const changed = updated.rows[0];
     if (!changed) return { outcome: 'invalid' };
     await client.query('DELETE FROM user_sessions WHERE user_id = $1', [token.user_id]);
+    await client.query(
+      "DELETE FROM auth_tokens WHERE user_id = $1 AND purpose = 'verify_new_email' AND used_at IS NULL",
+      [token.user_id],
+    );
     return { outcome: 'reset', userId: token.user_id, email: changed.email };
   });
 }
