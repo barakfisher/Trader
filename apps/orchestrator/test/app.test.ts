@@ -201,6 +201,11 @@ describe('API', () => {
       // A forgotten password is, by definition, asked about signed out (D260).
       '/auth/reset/request',
       '/auth/reset',
+      // Signing in through Google or GitHub starts and ends signed out (D262);
+      // the callback proves itself with the state cookie, not a session.
+      '/auth/oauth/providers',
+      '/auth/oauth/:provider/start',
+      '/auth/oauth/:provider/callback',
       // Telegram calls it; it proves itself with the secret header instead.
       '/telegram/webhook',
     ]);
