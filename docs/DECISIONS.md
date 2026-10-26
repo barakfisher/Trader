@@ -329,3 +329,6 @@ while this file is out of date.
 | 316 | How PR 14 builds D264's deletion |
 | 317 | The erase is a function the app may call but cannot reproduce |
 | 318 | The export is an allow-list Postgres renders, sent as text |
+| 319 | D265's gate holds production installations only |
+| 320 | An account that has not accepted the current version is blocked until it does, except export and deletion |
+| 321 | How PR 15 builds D265 |

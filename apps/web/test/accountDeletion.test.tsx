@@ -45,6 +45,7 @@ const USER: SessionUser = {
   language: 'en',
   mustChangePassword: false,
   pendingEmail: null,
+  legalAcceptanceRequired: null,
 };
 
 const WITH_PASSWORD: AccountDeletionCheck = {

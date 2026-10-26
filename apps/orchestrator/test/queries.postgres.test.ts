@@ -206,7 +206,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
 
     const ask = (address: string) =>
-      queries.createSignupRequest({ email: address, passwordHash: 'hash', timezone: 'Europe/London', language: 'he' });
+      queries.createSignupRequest({ email: address, passwordHash: 'hash', timezone: 'Europe/London', language: 'he', legalVersion: null });
     const verified = (userId: string) => getPool().query('UPDATE users SET email_verified_at = now() WHERE id = $1', [userId]);
 
     it('writes an unverified pending user with no agent and no cap, its settings in the language asked in', async () => {
@@ -359,12 +359,14 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           passwordHash: 'the first',
           timezone: 'Europe/London',
           language: 'he',
+          legalVersion: null,
         })) as { userId: string };
         const again = await queries.createSignupRequest({
           email: email('prehijack'),
           passwordHash: 'the owner',
           timezone: 'Asia/Jerusalem',
           language: 'en',
+          legalVersion: null,
         });
         expect(again).toMatchObject({ outcome: 'exists', userId: first.userId, verified: false });
         const read = async (userId: string) =>
@@ -374,7 +376,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         expect(await queries.useVerificationToken(hash, RULES, { passwordHash: 'the first' })).toEqual({ outcome: 'wrong_password' });
 
         await verified(first.userId);
-        await queries.createSignupRequest({ email: email('prehijack'), passwordHash: 'a third', timezone: 'UTC', language: 'en' });
+        await queries.createSignupRequest({ email: email('prehijack'), passwordHash: 'a third', timezone: 'UTC', language: 'en', legalVersion: null });
         expect(await read(first.userId)).toEqual({ password_hash: 'the owner', timezone: 'Asia/Jerusalem' });
       });
 
@@ -2651,10 +2653,10 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     it("reads the session with its user, only by the right hash and the cookie's user", async () => {
       await withUser(async (userId) => {
         const session = await signIn(userId);
-        const found = await queries.getSessionUser(userId, session.hash, TOUCH_SECONDS);
+        const found = await queries.getSessionUser(userId, session.hash, TOUCH_SECONDS, null);
         expect(found).toMatchObject({ id: userId, status: 'active', session_id: session.id });
-        expect(await queries.getSessionUser(userId, sessionTokenHash('another secret'), TOUCH_SECONDS)).toBeNull();
-        expect(await queries.getSessionUser(USER, session.hash, TOUCH_SECONDS)).toBeNull();
+        expect(await queries.getSessionUser(userId, sessionTokenHash('another secret'), TOUCH_SECONDS, null)).toBeNull();
+        expect(await queries.getSessionUser(USER, session.hash, TOUCH_SECONDS, null)).toBeNull();
         const { rows } = await getPool().query('SELECT expires_at - created_at AS ttl FROM user_sessions WHERE id = $1', [session.id]);
         expect(rows[0]!.ttl).toMatchObject({ hours: TTL_HOURS });
       });
@@ -2721,12 +2723,12 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           (await getPool().query('SELECT last_seen_at FROM user_sessions WHERE id = $1', [session.id])).rows[0]!.last_seen_at as Date;
         const stale = new Date(Date.now() - (TOUCH_SECONDS + 60) * 1000);
         await getPool().query('UPDATE user_sessions SET last_seen_at = $2 WHERE id = $1', [session.id, stale]);
-        await queries.getSessionUser(userId, session.hash, TOUCH_SECONDS);
+        await queries.getSessionUser(userId, session.hash, TOUCH_SECONDS, null);
         const touched = await lastSeen();
         expect(touched.getTime()).toBeGreaterThan(stale.getTime());
         const recent = new Date(Date.now() - 60 * 1000);
         await getPool().query('UPDATE user_sessions SET last_seen_at = $2 WHERE id = $1', [session.id, recent]);
-        await queries.getSessionUser(userId, session.hash, TOUCH_SECONDS);
+        await queries.getSessionUser(userId, session.hash, TOUCH_SECONDS, null);
         expect((await lastSeen()).getTime()).toBe(recent.getTime());
       });
     });
@@ -2739,7 +2741,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           "UPDATE user_sessions SET created_at = now() - interval '2 days', expires_at = now() - interval '1 second' WHERE id = $1",
           [expired.id],
         );
-        expect(await queries.getSessionUser(userId, expired.hash, TOUCH_SECONDS)).toBeNull();
+        expect(await queries.getSessionUser(userId, expired.hash, TOUCH_SECONDS, null)).toBeNull();
         expect(await sessionIds(userId)).toEqual([live.id]);
         expect(await queries.deleteExpiredSessions()).toBeGreaterThanOrEqual(1);
         const { rows } = await getPool().query('SELECT id FROM user_sessions WHERE user_id = $1', [userId]);
@@ -2753,7 +2755,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         const others = await signIn(USER);
         expect(await queries.deleteSession(userId, others.id)).toBe(false);
         expect(await queries.deleteSession(userId, first.id)).toBe(true);
-        expect(await queries.getSessionUser(userId, first.hash, TOUCH_SECONDS)).toBeNull();
+        expect(await queries.getSessionUser(userId, first.hash, TOUCH_SECONDS, null)).toBeNull();
         const expired = await signIn(userId);
         await getPool().query(
           "UPDATE user_sessions SET created_at = now() - interval '2 days', expires_at = now() - interval '1 second' WHERE id = $1",
@@ -2762,7 +2764,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         // Third and the expired one go; only third was live, so only third is counted.
         expect(await queries.deleteOtherSessions(userId, second.id)).toBe(1);
         expect(await sessionIds(userId)).toEqual([second.id]);
-        expect(await queries.getSessionUser(userId, third.hash, TOUCH_SECONDS)).toBeNull();
+        expect(await queries.getSessionUser(userId, third.hash, TOUCH_SECONDS, null)).toBeNull();
         expect(await sessionIds(USER)).toContain(others.id);
         await queries.deleteSession(USER, others.id);
       });
@@ -2954,7 +2956,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
     it('dates a rejection, lists a request rejected long enough ago, and forgets the date on restore', async () => {
       const address = `rejected-${randomUUID()}@example.com`;
-      const created = await queries.createSignupRequest({ email: address, passwordHash: 'h', timezone: 'UTC', language: 'en' });
+      const created = await queries.createSignupRequest({ email: address, passwordHash: 'h', timezone: 'UTC', language: 'en', legalVersion: null });
       if (created.outcome !== 'created') throw new Error(`expected a new request, got ${created.outcome}`);
       const userId = created.userId;
       try {
@@ -2995,6 +2997,8 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
             [userId],
           );
 
+          await queries.recordLegalAcceptance(userId, '2026-11-01');
+
           const text = await queries.exportAccount(userId);
           // The exact digits, as a string: never through a float (guideline 4).
           expect(text).toContain('"quantity": "0.123456789012345678"');
@@ -3002,14 +3006,17 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
             account: { email: string };
             holdings: { symbol: string; cost_basis_minor: number }[];
             conversations: { messages: { content: string }[] }[];
+            legalAcceptances: unknown[];
           };
           expect(document.account.email).toBe(`${userId}@example.com`);
           expect(document.holdings).toEqual([expect.objectContaining({ symbol, cost_basis_minor: 12345 })]);
           expect(document.conversations[0]!.messages.map((message) => message.content)).toEqual(['What do I hold?']);
+          // What the user agreed to, and when (D265).
+          expect(document.legalAcceptances).toEqual([{ version: '2026-11-01', accepted_at: expect.any(String) }]);
           expect(Object.keys(document).sort()).toEqual(
             [
               'account', 'agentScans', 'agents', 'conversations', 'exportedAt', 'format', 'holdings', 'ledgers',
-              'observations', 'proposalTransitions', 'proposals', 'settings', 'targetWeights', 'topicInstruments', 'topics',
+              'legalAcceptances', 'observations', 'proposalTransitions', 'proposals', 'settings', 'targetWeights', 'topicInstruments', 'topics',
             ].sort(),
           );
           for (const secret of [SECRET_HASH, 'never-exported-ciphertext', 'abcd', 'token_hash', 'session_version', USER]) {
@@ -3020,6 +3027,84 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           await getPool().query('DELETE FROM instruments WHERE id = $1', [instrument]);
         }
       });
+    });
+  });
+  describe('legal acceptances (0077, D265)', async () => {
+    const { sessionTokenHash } = await import('../src/http/auth.js');
+    const VERSION = '2026-11-01';
+    const tag = randomUUID().slice(0, 8);
+    let saved: { max_pending_signups: number; signup_mode: string };
+
+    beforeAll(async () => {
+      saved = (await getPool().query('SELECT max_pending_signups, signup_mode FROM installation_settings')).rows[0];
+      await getPool().query("UPDATE installation_settings SET max_pending_signups = 50, signup_mode = 'approval'");
+    });
+
+    afterAll(async () => {
+      await getPool().query('UPDATE installation_settings SET max_pending_signups = $1, signup_mode = $2', [
+        saved.max_pending_signups,
+        saved.signup_mode,
+      ]);
+      await getPool().query('DELETE FROM users WHERE email LIKE $1', [`%-${tag}@legal.example.com`]);
+    });
+
+    const accepted = async (userId: string) =>
+      (await getPool().query<{ version: string }>('SELECT version FROM legal_acceptances WHERE user_id = $1 ORDER BY version', [userId])).rows.map(
+        (row) => row.version,
+      );
+
+    it('stores the version a sign-up agreed to with the request, and nothing while there is none', async () => {
+      const ask = (name: string, legalVersion: string | null) =>
+        queries.createSignupRequest({
+          email: `${name}-${tag}@legal.example.com`,
+          passwordHash: 'hash',
+          timezone: 'UTC',
+          language: 'en',
+          legalVersion,
+        }) as Promise<{ userId: string }>;
+      const agreed = await ask('agreed', VERSION);
+      expect(await accepted(agreed.userId)).toEqual([VERSION]);
+      // The same address asking again, still unverified: the one record stays.
+      await ask('agreed', VERSION);
+      expect(await accepted(agreed.userId)).toEqual([VERSION]);
+      const none = await ask('none', null);
+      expect(await accepted(none.userId)).toEqual([]);
+    });
+
+    it('records an acceptance once, keeping the first time, and one row per version', async () => {
+      const user = (
+        await getPool().query<{ id: string }>(
+          `INSERT INTO users (email, status, llm_cap_micro_usd) VALUES ($1, 'active', 0) RETURNING id`,
+          [`twice-${tag}@legal.example.com`],
+        )
+      ).rows[0]!.id;
+      await queries.recordLegalAcceptance(user, VERSION);
+      const first = (await getPool().query('SELECT accepted_at FROM legal_acceptances WHERE user_id = $1', [user])).rows[0]!.accepted_at;
+      await queries.recordLegalAcceptance(user, VERSION);
+      const again = (await getPool().query('SELECT accepted_at FROM legal_acceptances WHERE user_id = $1', [user])).rows[0]!.accepted_at;
+      expect(again).toEqual(first);
+      await queries.recordLegalAcceptance(user, '2026-12-01');
+      expect(await accepted(user)).toEqual([VERSION, '2026-12-01']);
+      expect(await queries.hasAcceptedLegalVersion(user, VERSION)).toBe(true);
+      expect(await queries.hasAcceptedLegalVersion(user, '2027-01-01')).toBe(false);
+    });
+
+    it("reads with the session whether the user accepted the current version, true while there is none", async () => {
+      const user = (
+        await getPool().query<{ id: string }>(
+          `INSERT INTO users (email, status, llm_cap_micro_usd) VALUES ($1, 'active', 0) RETURNING id`,
+          [`session-${tag}@legal.example.com`],
+        )
+      ).rows[0]!.id;
+      const hash = sessionTokenHash(randomUUID());
+      await queries.createSession({ userId: user, tokenHash: hash, ttlHours: 1, userAgent: null, ipAddress: null, maxPerUser: SESSIONS_PER_USER_MAX });
+      const read = async (version: string | null) => (await queries.getSessionUser(user, hash, 300, version))!.legal_accepted;
+      expect(await read(null)).toBe(true);
+      expect(await read(VERSION)).toBe(false);
+      await queries.recordLegalAcceptance(user, VERSION);
+      expect(await read(VERSION)).toBe(true);
+      // A newer version asks again (D265).
+      expect(await read('2026-12-01')).toBe(false);
     });
   });
 });

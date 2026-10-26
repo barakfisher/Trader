@@ -52,3 +52,4 @@ export * from './queries/research.js';
 export * from './queries/sessions.js';
 export * from './queries/authTokens.js';
 export * from './queries/identities.js';
+export * from './queries/legalAcceptances.js';

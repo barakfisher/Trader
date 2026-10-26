@@ -59,7 +59,8 @@ vi.mock('../src/db/queries.js', () => ({
   claimRun: vi.fn(async () => ({ claimed: true, runId: 'run-1' })),
   finishRun: vi.fn(async () => undefined),
   getOrCreateUserSettings: vi.fn(async () => SETTINGS),
-  getUser: vi.fn(async () => ({ id: USER, email: null, base_currency: 'USD', timezone: 'Asia/Jerusalem' })),
+  getUser: vi.fn(async () => ({ id: USER, email: null, base_currency: 'USD', timezone: 'Asia/Jerusalem', status: 'active' })),
+  hasAcceptedLegalVersion: vi.fn(async () => false),
   primaryAgentId: vi.fn(async () => 'primary'),
   // The give-up alert's ledger (D298): every claim wins unless a test says otherwise.
   claimNotification: vi.fn(async () => ({ id: 'n-1' })),
@@ -72,6 +73,7 @@ vi.mock('../src/services/tradeProposals.js', () => ({
 
 const queries = await import('../src/db/queries.js');
 const scheduled = await import('../src/services/scheduledScans.js');
+const { LEGAL_NOT_ACCEPTED, USER_NOT_ACTIVE, accountHold } = await import('../src/services/scheduledResearch.js');
 const { MAX_SLOT_ATTEMPTS, RETRY_AFTER_MS, nextAttempt, planScheduledScans, roundRobin, runSlotAttempt } = scheduled;
 
 const SCAN = { scan_id: 's-1', outcome: 'no_trade', steps: 2, cost_micro_usd: 30_000, model: 'm', answer: null, error: null };
@@ -226,6 +228,31 @@ describe('one attempt', () => {
     );
   });
 
+  it('skips the scan of an account closed or disabled after the slot was queued (D316)', async () => {
+    for (const status of ['closed', 'disabled'] as const) {
+      vi.clearAllMocks();
+      vi.mocked(queries.getUser).mockResolvedValueOnce({ id: USER, status } as never);
+      const ai = fakeAi();
+      await runSlotAttempt(job, { ai, notifier: notifier(), now: () => NOW });
+      expect(ai.scanAgent, status).not.toHaveBeenCalled();
+      expect(queries.finishRun, status).toHaveBeenCalledWith('run-1', 'skipped', { reason: USER_NOT_ACTIVE });
+    }
+  });
+
+  it('holds the work of an account that has not accepted the current terms, never the admin (D320)', async () => {
+    const VERSION = '2026-11-01';
+    vi.mocked(queries.getUser).mockResolvedValueOnce({ id: USER, status: 'active', role: 'user' } as never);
+    expect(await accountHold(USER, VERSION)).toBe(LEGAL_NOT_ACCEPTED);
+    vi.mocked(queries.getUser).mockResolvedValueOnce({ id: USER, status: 'active', role: 'user' } as never);
+    vi.mocked(queries.hasAcceptedLegalVersion).mockResolvedValueOnce(true);
+    expect(await accountHold(USER, VERSION)).toBeNull();
+    vi.mocked(queries.getUser).mockResolvedValueOnce({ id: USER, status: 'active', role: 'admin' } as never);
+    expect(await accountHold(USER, VERSION)).toBeNull();
+    // No version yet: nothing to accept.
+    vi.mocked(queries.getUser).mockResolvedValueOnce({ id: USER, status: 'active', role: 'user' } as never);
+    expect(await accountHold(USER, null)).toBeNull();
+  });
+
   it('records the give-up in the ledger against the run that gave up (D298)', async () => {
     const ai = fakeAi(async () => {
       throw new AiServiceError('AI service 502', 502);
@@ -374,6 +401,14 @@ describe('the daily research (D290)', () => {
     expect(ai.startResearch).toHaveBeenCalledWith({ user_id: USER, trigger: 'schedule' });
     expect(ai.scanAgent).not.toHaveBeenCalled();
     expect(queries.finishRun).toHaveBeenCalledWith('run-1', 'ok', { researchRunId: 'research-run-1', holdings: 3 });
+  });
+
+  it('skips the research of an account closed after the slot was queued (D316)', async () => {
+    vi.mocked(queries.getUser).mockResolvedValueOnce({ id: USER, status: 'closed' } as never);
+    const ai = fakeAi();
+    await runSlotAttempt(job, { ai, notifier: notifier() as never, now: () => AFTER_CLOSE });
+    expect(ai.startResearch).not.toHaveBeenCalled();
+    expect(queries.finishRun).toHaveBeenCalledWith('run-1', 'skipped', { reason: USER_NOT_ACTIVE });
   });
 
   it("takes a refusal as the day's answer, and a fault as retryable", async () => {

@@ -3,6 +3,8 @@ import { observer } from 'mobx-react-lite';
 import { RouterProvider } from '@tanstack/react-router';
 
 import { AccountClosedPage } from './pages/AccountClosedPage.tsx';
+import { LegalAcceptancePage } from './pages/LegalAcceptancePage.tsx';
+import { LegalPage, legalDocumentAt } from './pages/LegalPage.tsx';
 import { LoginPage } from './pages/LoginPage.tsx';
 import { PasswordRequiredPage } from './pages/PasswordRequiredPage.tsx';
 import { RESET_PATH, ResetPage } from './pages/ResetPage.tsx';
@@ -25,6 +27,9 @@ export const App = observer(function App({
   // A mailed link (D259) opens signed out as well as in: before both gates.
   if (window.location.pathname === VERIFY_PATH) return <VerifyPage />;
   if (window.location.pathname === RESET_PATH) return <ResetPage />;
+  // The privacy policy and terms (D265): read before joining, so before both gates too.
+  const legalDocument = legalDocumentAt(window.location.pathname);
+  if (legalDocument !== null) return <LegalPage document={legalDocument} />;
 
   // Wait for the first session check so an authenticated reload does not flash
   // the login screen.
@@ -42,6 +47,8 @@ export const App = observer(function App({
   if (!auth.isAuthenticated) return <LoginPage />;
   // The admin's one-time password (D162): nothing else until it is changed.
   if (auth.user?.mustChangePassword) return <PasswordRequiredPage />;
+  // A legal version not yet accepted (D265): nothing else until it is.
+  if (auth.user?.legalAcceptanceRequired) return <LegalAcceptancePage version={auth.user.legalAcceptanceRequired} />;
 
   return <RouterProvider router={router} />;
 });

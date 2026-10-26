@@ -324,11 +324,14 @@ describe('a session is checked against the user on every request (D160)', () => 
   it("looks the session up by the hash of the cookie's secret, for the cookie's user", async () => {
     vi.mocked(queries.getUser).mockResolvedValue(USER);
     const { SESSION_TOUCH_INTERVAL_SECONDS } = await import('../src/http/sessions.js');
+    const { LEGAL_VERSION } = await import('@traders/shared');
     await session(app, sessionCookie(USER.id, 1, 'this-devices-secret'));
     expect(queries.getSessionUser).toHaveBeenCalledWith(
       USER.id,
       sessionTokenHash('this-devices-secret'),
       SESSION_TOUCH_INTERVAL_SECONDS,
+      // The build's legal version, whose acceptance the same read answers (D265).
+      LEGAL_VERSION,
     );
   });
 

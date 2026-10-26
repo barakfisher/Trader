@@ -18,3 +18,18 @@ export function onSessionEnded(next: (() => void) | null): void {
 export function reportSessionEnded(): void {
   listener?.();
 }
+
+let legalListener: (() => void) | null = null;
+
+/**
+ * The other refusal the app must answer as a whole (D265): a new version of the
+ * privacy policy and terms was published while the page was open, and the
+ * server refuses everything until it is accepted.
+ */
+export function onLegalAcceptanceRequired(next: (() => void) | null): void {
+  legalListener = next;
+}
+
+export function reportLegalAcceptanceRequired(): void {
+  legalListener?.();
+}

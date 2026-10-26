@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { AtSign, LockKeyhole } from 'lucide-react';
 
 import {
+  LEGAL_VERSION,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   emailProblem,
@@ -12,7 +13,8 @@ import {
 } from '@traders/shared';
 
 import { ApiRequestError, api } from '../api/client.ts';
-import { currentLanguage, useTranslation } from '../i18n/index.ts';
+import { Trans, currentLanguage, useTranslation } from '../i18n/index.ts';
+import { legalPath } from '../legal/legalText.ts';
 import { PasswordInput } from './PasswordInput.tsx';
 import { Button, ErrorNote } from './ui.tsx';
 
@@ -31,8 +33,13 @@ function browserTimeZone(): string {
  * learns where they stand by signing in once the admin has decided (D187).
  * The rules are the server's own (`@traders/shared`), checked here first only
  * so the sentence arrives before a round trip.
+ *
+ * Once the privacy policy and terms exist (D265), joining means agreeing to
+ * them: a box, unticked, and the version it agreed to goes with the request,
+ * which the server stores. `legalVersion` is for tests; the app's is the
+ * build's.
  */
-export function SignupForm({ onBack }: { onBack: () => void }) {
+export function SignupForm({ onBack, legalVersion = LEGAL_VERSION }: { onBack: () => void; legalVersion?: string | null }) {
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -40,6 +47,7 @@ export function SignupForm({ onBack }: { onBack: () => void }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<SignupResponse['outcome'] | null>(null);
+  const [agreed, setAgreed] = useState(false);
   const timezone = browserTimeZone();
   const limits = { min: PASSWORD_MIN_LENGTH, max: PASSWORD_MAX_LENGTH };
 
@@ -55,6 +63,8 @@ export function SignupForm({ onBack }: { onBack: () => void }) {
         return t('password.errors.tooLong', limits);
       case 'timezone_invalid':
         return t('signup.errors.timezoneInvalid', { zone: timezone });
+      case 'legal_not_accepted':
+        return t('legal.signupRequired');
       default:
         return t('signup.errors.failed');
     }
@@ -66,10 +76,17 @@ export function SignupForm({ onBack }: { onBack: () => void }) {
     if (problem === 'too_short') return setError(t('password.errors.tooShort', limits));
     if (problem === 'too_long') return setError(t('password.errors.tooLong', limits));
     if (password !== repeat) return setError(t('signup.errors.mismatch'));
+    if (legalVersion !== null && !agreed) return setError(t('legal.signupRequired'));
     setError(null);
     setSubmitting(true);
     try {
-      const input: SignupInput = { email: email.trim(), password, timezone, language: currentLanguage() };
+      const input: SignupInput = {
+        email: email.trim(),
+        password,
+        timezone,
+        language: currentLanguage(),
+        ...(legalVersion !== null ? { acceptedLegalVersion: legalVersion } : {}),
+      };
       setOutcome((await api.post<SignupResponse>('/auth/signup', input)).outcome);
     } catch (caught) {
       setError(refusal(caught));
@@ -136,11 +153,32 @@ export function SignupForm({ onBack }: { onBack: () => void }) {
         {t('signup.timezone')} <bdi dir="ltr">{timezone}</bdi>
       </p>
 
+      {legalVersion !== null && (
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} className="mt-1" />
+          <span>
+            <Trans
+              i18nKey="legal.signupAgree"
+              components={{
+                privacy: <LegalLink href={legalPath('privacy')} />,
+                terms: <LegalLink href={legalPath('terms')} />,
+              }}
+            />
+          </span>
+        </label>
+      )}
+
       {error && <ErrorNote message={error} />}
 
       <Button
         type="submit"
-        disabled={submitting || email.trim().length === 0 || password.length === 0 || repeat.length === 0}
+        disabled={
+          submitting ||
+          email.trim().length === 0 ||
+          password.length === 0 ||
+          repeat.length === 0 ||
+          (legalVersion !== null && !agreed)
+        }
         className="w-full"
       >
         {submitting ? t('signup.submitting') : t('signup.submit')}
@@ -149,5 +187,14 @@ export function SignupForm({ onBack }: { onBack: () => void }) {
         {t('signup.backToSignIn')}
       </button>
     </form>
+  );
+}
+
+/** A legal page from the form, in a new tab so what was typed stays (D265). */
+function LegalLink({ href, children }: { href: string; children?: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noopener" className="text-accent hover:underline">
+      {children}
+    </a>
   );
 }

@@ -9,3 +9,4 @@ export * from './timeZone.js';
 export * from './portfolioSummary.js';
 export * from './quantity.js';
 export * from './research.js';
+export * from './legal.js';

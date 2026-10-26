@@ -101,6 +101,8 @@ const WRITE_BODIES: Record<string, unknown> = {
   'POST /auth/reset/request': {},
   'POST /auth/reset': { token: 'not-a-token-anyone-issued', newPassword: 'a new password here' },
   'POST /auth/timezone': { timezone: 'Europe/London' },
+  // Names no row: it records only the caller's own acceptance (D265).
+  'POST /auth/legal/accept': { version: '2026-11-01' },
   'POST /holdings': {},
   'PATCH /holdings/:id': { notes: 'changed' },
   'DELETE /holdings/:id': null,
@@ -315,6 +317,8 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
       `INSERT INTO user_identities (user_id, provider, subject, email) VALUES ($1, 'google', $2, $3)`,
       [user.id, `${user.mark}-google-sub`, `${user.mark.toLowerCase()}@example.com`],
     );
+    // The legal version the user accepted (0077, D265): a record nobody else's request may add to or change.
+    await pool.query(`INSERT INTO legal_acceptances (user_id, version) VALUES ($1, '2026-11-01')`, [user.id]);
     user.proposal = proposal;
     user.agent = agent;
     user.conversation = conversation;

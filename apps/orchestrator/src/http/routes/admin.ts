@@ -78,6 +78,7 @@ import { universeStatus } from '../../services/universeStatus.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, conflict, unprocessable, upstreamFailure } from '../errors.js';
 import { hashPassword } from '../password.js';
+import { signupHeldForLegalText } from '../legal.js';
 
 /** Enough to see a day of the half-hourly scans next to everything else. */
 const ADMIN_RUNS_LIMIT = 100;
@@ -104,7 +105,7 @@ const settingsSchema = z
   .strict()
   .refine((input) => Object.keys(input).length > 0, { message: 'name at least one setting' });
 
-async function adminSettings(emailConfigured: boolean): Promise<AdminSettingsResponse> {
+async function adminSettings(context: Context<AppEnv>): Promise<AdminSettingsResponse> {
   const row = await getInstallationSettings();
   return {
     maxAgentsPerUser: row.max_agents_per_user,
@@ -112,7 +113,8 @@ async function adminSettings(emailConfigured: boolean): Promise<AdminSettingsRes
     maxPendingSignups: row.max_pending_signups,
     signupMode: row.signup_mode,
     dailyNewAccountsLimit: row.daily_new_accounts_limit,
-    emailConfigured,
+    emailConfigured: context.get('config').emailConfigured,
+    signupHeldForLegalText: signupHeldForLegalText(context),
     updatedAt: row.updated_at.toISOString(),
   };
 }
@@ -390,7 +392,7 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
 
   /** The installation's settings (D72). */
   app.get('/admin/settings', async (context) =>
-    context.json(await adminSettings(context.get('config').emailConfigured)),
+    context.json(await adminSettings(context)),
   );
 
   /**
@@ -420,12 +422,16 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
       if (parsed.data.signupMode === 'automatic' && !context.get('config').emailConfigured) {
         throw unprocessable('email_unavailable', 'automatic sign-up needs outbound mail (SMTP_HOST and EMAIL_FROM)');
       }
+      // A public installation opens sign-up only once its privacy policy and terms exist (D265).
+      if (parsed.data.signupMode !== 'closed' && signupHeldForLegalText(context)) {
+        throw unprocessable('legal_text_pending', 'sign-up stays closed until the privacy policy and terms are published');
+      }
       await setSignupMode(parsed.data.signupMode, admin);
     }
     if (parsed.data.dailyNewAccountsLimit !== undefined) {
       await setDailyNewAccountsLimit(parsed.data.dailyNewAccountsLimit, admin);
     }
-    return context.json(await adminSettings(context.get('config').emailConfigured));
+    return context.json(await adminSettings(context));
   });
 
   /**

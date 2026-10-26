@@ -635,7 +635,9 @@ function RejectedSignup({ request }: { request: SignupRequestView }) {
  * daily limit on automatic accounts, beyond which a verified sign-up waits for
  * the admin (D305), and how many verified requests may wait at once (D156).
  * Without outbound mail no address can be verified, so nobody can sign up
- * whatever the mode, and *automatic* is not offered (D259). Users run on their
+ * whatever the mode, and *automatic* is not offered (D259). A production
+ * installation whose privacy policy and terms are still placeholders offers
+ * only *closed* (D265). Users run on their
  * own key only (D245).
  */
 function SignupSettingsCard() {
@@ -652,6 +654,7 @@ function SignupSettingsCard() {
   const maxValid = /^\d+$/.test(max) && Number(max) <= MAX_PENDING_SIGNUPS_CEILING;
   const unchanged = mode === storedMode && daily === storedDaily && max === storedMax;
   const emailConfigured = settings.data?.emailConfigured ?? false;
+  const heldForLegalText = settings.data?.signupHeldForLegalText ?? false;
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (dailyValid && maxValid) {
@@ -682,6 +685,11 @@ function SignupSettingsCard() {
               {t('admin.signupSettings.noEmail')}
             </p>
           )}
+          {heldForLegalText && (
+            <p role="status" className="rounded-lg border border-loss/40 bg-loss/10 px-3 py-2 text-loss">
+              {t('admin.signupSettings.legalTextPending')}
+            </p>
+          )}
           <fieldset className="space-y-2">
             <legend className="mb-1 text-text-muted">{t('admin.signupSettings.mode')}</legend>
             {SIGNUP_MODES.map((option) => (
@@ -691,7 +699,7 @@ function SignupSettingsCard() {
                   name="signup-mode"
                   value={option}
                   checked={mode === option}
-                  disabled={option === 'automatic' && !emailConfigured}
+                  disabled={(option === 'automatic' && !emailConfigured) || (option !== 'closed' && heldForLegalText)}
                   onChange={() => setMode(option)}
                   className="mt-1"
                 />

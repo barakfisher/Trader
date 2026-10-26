@@ -13,6 +13,8 @@ import { qualifiedUserColumns, type UserRow } from './users.js';
 /** The signed-in user, with the session the request came in on. */
 export interface SessionUserRow extends UserRow {
   session_id: string;
+  /** The user accepted the current legal version (D265), or there is none yet. */
+  legal_accepted: boolean;
 }
 
 export interface SessionRow {
@@ -69,12 +71,14 @@ export function createSession(session: NewSession): Promise<{ id: string; expire
  * session must be the cookie's user's and unexpired; the caller checks the
  * status and the version. `last_seen_at` moves in the same round trip, at
  * most once every `touchSeconds`, so a busy page writes a few times an hour
- * rather than on every request.
+ * rather than on every request. Whether the user accepted `legalVersion`
+ * (D265) comes in the same read: the session gate asks it of every request.
  */
 export function getSessionUser(
   userId: string,
   tokenHash: Buffer,
   touchSeconds: number,
+  legalVersion: string | null,
 ): Promise<SessionUserRow | null> {
   return queryOne<SessionUserRow>(
     `WITH found AS (
@@ -85,9 +89,11 @@ export function getSessionUser(
        UPDATE user_sessions SET last_seen_at = now()
         WHERE id IN (SELECT id FROM found WHERE last_seen_at < now() - make_interval(secs => $3))
      )
-     SELECT ${qualifiedUserColumns('u')}, found.id AS session_id
+     SELECT ${qualifiedUserColumns('u')}, found.id AS session_id,
+            ($4::text IS NULL OR EXISTS (SELECT 1 FROM legal_acceptances la
+                                          WHERE la.user_id = u.id AND la.version = $4)) AS legal_accepted
        FROM found JOIN users u ON u.id = found.user_id`,
-    [userId, tokenHash, touchSeconds],
+    [userId, tokenHash, touchSeconds, legalVersion],
   );
 }
 

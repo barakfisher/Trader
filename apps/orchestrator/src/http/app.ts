@@ -6,7 +6,7 @@
  * session resolution and the single error shape.
  */
 
-import type { OAuthProviderName } from '@traders/shared';
+import { LEGAL_ACCEPTANCE_REQUIRED, LEGAL_VERSION, type OAuthProviderName } from '@traders/shared';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { getCookie } from 'hono/cookie';
@@ -26,6 +26,7 @@ import { buildEmailSender, type EmailSender } from '../email/sender.js';
 import { memoryRateLimits, type RateLimits } from './rateLimits.js';
 import { getSessionUser, insertAdminAudit, type UserRow } from '../db/queries.js';
 import { auditEntry } from './adminAudit.js';
+import { exemptFromLegalGate, legalAcceptanceRequired } from './legal.js';
 import { forbidden, toErrorResponse, unauthorized, ApiProblem } from './errors.js';
 import { registerAccountRoutes } from './routes/account.js';
 import { registerAccountDeletionRoutes } from './routes/accountDeletion.js';
@@ -77,6 +78,10 @@ export interface AppEnv {
     rateLimits: RateLimits;
     /** Outbound mail (D258); null where none can be sent, which closes sign-up. */
     email: EmailSender | null;
+    /** The current privacy policy and terms (D265); null while their text is pending. */
+    legalVersion: string | null;
+    /** The signed-in user accepted `legalVersion`, or there is none to accept. */
+    legalAccepted?: boolean;
   };
 }
 
@@ -156,6 +161,8 @@ export function createApp(
   email: EmailSender | null = buildEmailSender(config),
   /** Sign-in providers with an app configured (D262); tests pass a fake. */
   oauthProviders: Map<OAuthProviderName, OAuthProvider> = buildOAuthProviders(config),
+  /** The legal version users must have accepted (D265); tests pass one, as the text is pending. */
+  legalVersion: string | null = LEGAL_VERSION,
 ): Hono<AppEnv> {
   const app = new Hono<AppEnv>();
 
@@ -168,6 +175,7 @@ export function createApp(
     context.set('scanQueue', scanQueue);
     context.set('rateLimits', rateLimits);
     context.set('email', email);
+    context.set('legalVersion', legalVersion);
     context.header('x-request-id', requestId);
     const startedAt = Date.now();
     await next();
@@ -234,12 +242,14 @@ export function createApp(
         claim.userId,
         sessionTokenHash(claim.secret),
         SESSION_TOUCH_INTERVAL_SECONDS,
+        legalVersion,
       );
       if (found && found.status === 'active' && found.session_version === claim.sessionVersion) {
-        const { session_id: sessionId, ...user } = found;
+        const { session_id: sessionId, legal_accepted: legalAccepted, ...user } = found;
         context.set('userId', user.id);
         context.set('user', user);
         context.set('sessionId', sessionId);
+        context.set('legalAccepted', legalAccepted);
       }
     }
     return next();
@@ -279,6 +289,13 @@ export function createApp(
     // can do nothing but change it - `/auth/*` is outside both gates.
     if (user.password_must_change) {
       throw new ApiProblem(403, 'password_change_required', 'set a new password first');
+    }
+    // A legal version this user has not accepted (D265, D320): nothing until
+    // they do, but taking their data, leaving, and ending their sessions
+    // (`legal.ts`). The admin runs the installation whose terms these are, so
+    // is never asked.
+    if (legalAcceptanceRequired(user, context.get('legalAccepted')) && !exemptFromLegalGate(path)) {
+      throw new ApiProblem(403, LEGAL_ACCEPTANCE_REQUIRED, 'accept the current privacy policy and terms first');
     }
     return next();
   });
