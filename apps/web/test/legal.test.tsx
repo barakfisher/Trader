@@ -93,7 +93,7 @@ describe('the pages, signed out (D265)', () => {
     openAt('/privacy');
     expect(screen.getByRole('heading', { level: 1, name: 'Privacy policy' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
-    expect(screen.getByRole('link', { name: 'Terms of use' }).getAttribute('href')).toBe('/terms');
+    expect(screen.getByRole('link', { name: 'Terms of use' }).getAttribute('href')).toBe('/terms?lang=en');
     expect(screen.getByRole('link', { name: 'Privacy policy' }).getAttribute('aria-current')).toBe('page');
     // The marker is for the build's check, never the reader.
     expect(document.body.innerHTML).not.toContain('legal-text-pending');
@@ -106,6 +106,13 @@ describe('the pages, signed out (D265)', () => {
     expect(article.getAttribute('lang')).toBe('he');
     expect(article.getAttribute('dir')).toBe('rtl');
     expect(within(article).getByRole('heading', { level: 1, name: 'תנאי שימוש' })).toBeTruthy();
+    // The other document keeps the choice.
+    expect(screen.getByRole('link', { name: 'Privacy policy' }).getAttribute('href')).toBe('/privacy?lang=he');
+  });
+
+  it('opens in the language a link asked for', async () => {
+    openAt('/privacy?lang=he');
+    expect(screen.getByRole('article').getAttribute('lang')).toBe('he');
   });
 
   it("opens in the interface's language: Hebrew for a Hebrew account", async () => {

@@ -14,6 +14,12 @@ export function legalDocumentAt(pathname: string): LegalDocument | null {
   return LEGAL_DOCUMENTS.find((document) => legalPath(document) === pathname) ?? null;
 }
 
+/** The language a link to the other document carried (`?lang=he`), so switching keeps it. */
+function languageFromAddress(): UiLanguage | null {
+  const asked = new URLSearchParams(window.location.search).get('lang');
+  return (UI_LANGUAGES as readonly string[]).includes(asked ?? '') ? (asked as UiLanguage) : null;
+}
+
 const components: Components = {
   h1: ({ children }) => <h1 className="text-xl font-semibold">{children}</h1>,
   h2: ({ children }) => <h2 className="pt-2 text-lg font-semibold">{children}</h2>,
@@ -45,7 +51,7 @@ const components: Components = {
  */
 export function LegalPage({ document }: { document: LegalDocument }) {
   const { t } = useTranslation();
-  const [language, setLanguage] = useState<UiLanguage>(currentLanguage);
+  const [language, setLanguage] = useState<UiLanguage>(() => languageFromAddress() ?? currentLanguage());
 
   return (
     <main className="mx-auto w-full max-w-2xl space-y-4 p-4 sm:p-6">
@@ -73,7 +79,7 @@ export function LegalPage({ document }: { document: LegalDocument }) {
         {LEGAL_DOCUMENTS.map((option) => (
           <a
             key={option}
-            href={legalPath(option)}
+            href={`${legalPath(option)}?lang=${language}`}
             aria-current={option === document ? 'page' : undefined}
             className={`-mb-px border-b-2 pb-2 ${option === document ? 'border-accent font-medium' : 'border-transparent text-text-muted hover:text-text-primary'}`}
           >

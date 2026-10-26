@@ -8,7 +8,7 @@ import { ApiRequestError } from '../api/client.ts';
 import { AccountDeletionCard } from '../components/AccountDeletionCard.tsx';
 import { AccountExportCard } from '../components/AccountExportCard.tsx';
 import { Button, ErrorNote } from '../components/ui.tsx';
-import { useTranslation } from '../i18n/index.ts';
+import { Trans, useTranslation } from '../i18n/index.ts';
 import { legalPath } from '../legal/legalText.ts';
 import { useStore } from '../stores/context.tsx';
 
@@ -45,7 +45,10 @@ export const LegalAcceptancePage = observer(function LegalAcceptancePage({ versi
           <h1 className="text-lg font-semibold">{t('legal.acceptTitle')}</h1>
         </div>
         <section className="space-y-3 rounded-xl border border-border-subtle bg-surface-raised p-4">
-          <p className="text-sm text-text-muted">{t('legal.acceptIntro', { version })}</p>
+          <p className="text-sm text-text-muted">
+            {/* A date read whole and left to right, in a Hebrew sentence too. */}
+            <Trans i18nKey="legal.acceptIntro" values={{ version }} components={{ version: <bdi dir="ltr" className="whitespace-nowrap" /> }} />
+          </p>
           <ul className="space-y-1 text-sm">
             {LEGAL_DOCUMENTS.map((document) => (
               <li key={document}>

@@ -2313,7 +2313,7 @@
     "language": "Language",
     "backToApp": "Back to the app",
     "acceptTitle": "Before you continue",
-    "acceptIntro": "Read the privacy policy and the terms of use (version {{version}}), and accept them to use the app.",
+    "acceptIntro": "Read the privacy policy and the terms of use (version <version>{{version}}</version>), and accept them to use the app.",
     "opensInNewTab": "opens in a new tab",
     "accept": "I have read them and accept",
     "accepting": "Saving…",
