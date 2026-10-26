@@ -39,7 +39,11 @@ function sign(data: string, signingSecret: string): string {
   return createHmac('sha256', signingSecret).update(data).digest('base64url');
 }
 
-function safeEqual(a: string, b: string): boolean {
+/**
+ * Constant-time string comparison, so response timing cannot reveal how much of a guessed secret
+ * was right. Length-checked first because `timingSafeEqual` throws when the lengths differ.
+ */
+export function safeEqual(a: string, b: string): boolean {
   const bufferA = Buffer.from(a);
   const bufferB = Buffer.from(b);
   if (bufferA.length !== bufferB.length) return false;
