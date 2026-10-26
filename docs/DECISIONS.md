@@ -325,3 +325,4 @@ while this file is out of date.
 | 312 | How PR 11 builds D260's reset |
 | 313 | The admin is never reset by email, and a reset unbinds Telegram |
 | 314 | How PR 13 builds OAuth (D262, D263) |
+| 315 | Google links an existing account automatically only where it is the mailbox's authority; a reset drops linked providers |

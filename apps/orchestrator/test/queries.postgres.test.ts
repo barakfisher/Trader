@@ -536,7 +536,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           expect(await queries.useResetToken(hash, 'another hash')).toEqual({ outcome: 'used' });
         });
 
-        it('never mails or resets the admin, and unbinds Telegram on a reset (D313)', async () => {
+        it('never mails or resets the admin, and unbinds Telegram and providers on a reset (D313, D315)', async () => {
           const userId = await activeAccount('reset-admin');
           await getPool().query("UPDATE users SET role = 'admin' WHERE id = $1", [userId]);
           expect(await queries.getResetRecipient(email('reset-admin'))).toBeNull();
@@ -545,9 +545,15 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           await getPool().query("UPDATE users SET role = 'user' WHERE id = $1", [userId]);
 
           await getPool().query('INSERT INTO telegram_bindings (user_id, chat_id) VALUES ($1, $2)', [userId, 990000000 + Math.floor(Math.random() * 1_000_000)]);
+          // And a provider linked from a stolen session goes too (D315).
+          await queries.linkIdentity({ userId, provider: 'github', subject: `sub-${randomUUID()}`, email: null });
           expect((await queries.useResetToken(await resetLink(userId, email('reset-admin')), 'new')).outcome).toBe('reset');
-          const { rows } = await getPool().query('SELECT count(*)::int AS n FROM telegram_bindings WHERE user_id = $1', [userId]);
-          expect(rows[0].n).toBe(0);
+          const { rows } = await getPool().query(
+            `SELECT (SELECT count(*)::int FROM telegram_bindings WHERE user_id = $1) AS bindings,
+                    (SELECT count(*)::int FROM user_identities WHERE user_id = $1) AS identities`,
+            [userId],
+          );
+          expect(rows[0]).toEqual({ bindings: 0, identities: 0 });
         });
 
         it('refuses an expired link, a verification link, and an account no longer active or at that address', async () => {

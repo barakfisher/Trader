@@ -168,19 +168,20 @@ export function listIdentities(userId: string): Promise<IdentityRow[]> {
  * in - no password and no other provider - so nobody locks themselves out.
  */
 export async function unlinkIdentity(userId: string, provider: OAuthProviderName): Promise<'unlinked' | 'last_method' | 'not_linked'> {
-  const row = await queryOne<{ deleted: boolean; linked: boolean }>(
-    `WITH target AS (
-       SELECT id FROM user_identities WHERE user_id = $1 AND provider = $2
-     ), allowed AS (
-       SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND password_hash IS NOT NULL)
-              OR EXISTS (SELECT 1 FROM user_identities WHERE user_id = $1 AND provider <> $2) AS ok
-     ), deleted AS (
-       DELETE FROM user_identities WHERE id IN (SELECT id FROM target) AND (SELECT ok FROM allowed)
-       RETURNING id
-     )
-     SELECT EXISTS (SELECT 1 FROM deleted) AS deleted, EXISTS (SELECT 1 FROM target) AS linked`,
-    [userId, provider],
-  );
-  if (row?.deleted) return 'unlinked';
-  return row?.linked ? 'last_method' : 'not_linked';
+  // The account's row is locked first, so two unlinks at once - Google and
+  // GitHub - cannot each see the other still there and leave no way in.
+  return transaction(async (client) => {
+    const account = (
+      await client.query<{ has_password: boolean }>(
+        'SELECT password_hash IS NOT NULL AS has_password FROM users WHERE id = $1 FOR UPDATE',
+        [userId],
+      )
+    ).rows[0];
+    const linked = (await client.query<{ provider: OAuthProviderName }>('SELECT provider FROM user_identities WHERE user_id = $1', [userId]))
+      .rows;
+    if (!account || !linked.some((row) => row.provider === provider)) return 'not_linked';
+    if (!account.has_password && linked.length === 1) return 'last_method';
+    await client.query('DELETE FROM user_identities WHERE user_id = $1 AND provider = $2', [userId, provider]);
+    return 'unlinked';
+  });
 }

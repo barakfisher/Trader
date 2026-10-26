@@ -19,6 +19,14 @@ export interface OAuthIdentity {
   subject: string;
   email: string | null;
   emailVerified: boolean;
+  /**
+   * Whether the provider is the authority for that mailbox now, not just a
+   * check it once made (D315): only then does it link to an existing account
+   * automatically. Google: a `@gmail.com` address, or a Workspace domain
+   * (`hd`). GitHub gives no such signal; its verified primary address keeps
+   * D263's rule.
+   */
+  authoritative: boolean;
 }
 
 export interface OAuthProvider {
@@ -52,12 +60,28 @@ class GoogleProvider implements OAuthProvider {
     // The ID token came straight from Google's token endpoint over TLS, in
     // exchange for our client secret, so OpenID Connect lets its signature go
     // unchecked (Core 3.1.3.7, item 6).
-    const claims = decodeIdToken(tokens.idToken()) as { sub?: unknown; email?: unknown; email_verified?: unknown };
+    const claims = decodeIdToken(tokens.idToken()) as {
+      iss?: unknown;
+      aud?: unknown;
+      sub?: unknown;
+      email?: unknown;
+      email_verified?: unknown;
+      hd?: unknown;
+    };
+    // Still checked without a signature (items 2 and 3): ours, and Google's.
+    if (claims.iss !== 'https://accounts.google.com' && claims.iss !== 'accounts.google.com') {
+      throw new Error('the ID token is not from Google');
+    }
+    if (claims.aud !== this.clientId) throw new Error('the ID token is for another client');
     if (typeof claims.sub !== 'string' || claims.sub.length === 0) throw new Error('Google returned no subject');
+    const email = typeof claims.email === 'string' ? claims.email : null;
+    const emailVerified = claims.email_verified === true;
     return {
       subject: claims.sub,
-      email: typeof claims.email === 'string' ? claims.email : null,
-      emailVerified: claims.email_verified === true,
+      email,
+      emailVerified,
+      authoritative:
+        emailVerified && email !== null && (email.toLowerCase().endsWith('@gmail.com') || typeof claims.hd === 'string'),
     };
   }
 }
@@ -91,7 +115,8 @@ class GitHubProvider implements OAuthProvider {
     if (typeof user.id !== 'number') throw new Error('GitHub returned no user id');
     const emails = await get<Array<{ email: string; primary: boolean; verified: boolean }>>('/user/emails');
     const primary = emails.find((entry) => entry.primary);
-    return { subject: String(user.id), email: primary?.email ?? null, emailVerified: primary?.verified === true };
+    const emailVerified = primary?.verified === true;
+    return { subject: String(user.id), email: primary?.email ?? null, emailVerified, authoritative: emailVerified };
   }
 }
 

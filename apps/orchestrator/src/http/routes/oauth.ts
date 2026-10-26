@@ -45,10 +45,10 @@ import {
 } from '../../db/queries.js';
 import { emailMessages } from '../../email/messages.js';
 import { logger } from '../../logger.js';
-import type { OAuthProvider } from '../../oauth/providers.js';
+import type { OAuthIdentity, OAuthProvider } from '../../oauth/providers.js';
 import {
-  OAUTH_STATE_COOKIE,
   OAUTH_STATE_TTL_SECONDS,
+  oauthStateCookieName,
   decodeOAuthState,
   encodeOAuthState,
   oauthSecret,
@@ -103,6 +103,12 @@ export function registerOAuthRoutes(app: Hono<AppEnv>, providers: Map<OAuthProvi
     const { origin, intent } = parsed.data;
     const userId = context.get('userId') ?? null;
     if (intent === 'link' && userId === null) throw unauthorized();
+    // A one-time password's session can change the password and nothing else
+    // (D162), here as on the other `/auth/*` writes: a link it planted would
+    // outlast the new password (D315).
+    if (intent === 'link' && context.get('user')?.password_must_change) {
+      throw new ApiProblem(403, 'password_change_required', 'set a new password first');
+    }
 
     const timezone = parsed.data.timezone && timeZoneProblem(parsed.data.timezone) === null ? parsed.data.timezone : 'UTC';
     const language = (UI_LANGUAGES as readonly string[]).includes(parsed.data.language ?? '') ? parsed.data.language! : 'en';
@@ -117,7 +123,7 @@ export function registerOAuthRoutes(app: Hono<AppEnv>, providers: Map<OAuthProvi
       language,
       expiresAt: Date.now() + OAUTH_STATE_TTL_SECONDS * 1000,
     };
-    setCookie(context, OAUTH_STATE_COOKIE, encodeOAuthState(state, config.SESSION_SECRET), {
+    setCookie(context, oauthStateCookieName(config.isProduction), encodeOAuthState(state, config.SESSION_SECRET), {
       httpOnly: true,
       // Lax: the provider sends the browser back with a top-level GET, which carries it.
       sameSite: 'Lax',
@@ -142,8 +148,9 @@ export function registerOAuthRoutes(app: Hono<AppEnv>, providers: Map<OAuthProvi
   app.get('/auth/oauth/:provider/callback', async (context) => {
     const config = context.get('config');
     const provider = providerOf(context, providers);
-    const saved = decodeOAuthState(getCookie(context, OAUTH_STATE_COOKIE), config.SESSION_SECRET);
-    deleteCookie(context, OAUTH_STATE_COOKIE, { path: '/' });
+    const cookieName = oauthStateCookieName(config.isProduction);
+    const saved = decodeOAuthState(getCookie(context, cookieName), config.SESSION_SECRET);
+    deleteCookie(context, cookieName, { path: '/', secure: config.isProduction });
     const returnedState = context.req.query('state') ?? '';
     const code = context.req.query('code');
     // Without a cookie there is no trusted origin to send the browser to: its own root.
@@ -183,6 +190,9 @@ export function registerOAuthRoutes(app: Hono<AppEnv>, providers: Map<OAuthProvi
   app.delete('/auth/identities/:provider', async (context) => {
     const userId = context.get('userId');
     if (!userId) throw unauthorized();
+    if (context.get('user')?.password_must_change) {
+      throw new ApiProblem(403, 'password_change_required', 'set a new password first');
+    }
     const name = context.req.param('provider');
     if (!(OAUTH_PROVIDERS as readonly string[]).includes(name)) throw notFound('no such provider');
     const result = await unlinkIdentity(userId, name as OAuthProviderName);
@@ -203,7 +213,7 @@ function landing(saved: OAuthState, outcome: OAuthOutcome): string {
 async function settle(
   context: Context<AppEnv>,
   provider: OAuthProviderName,
-  identity: { subject: string; email: string | null; emailVerified: boolean },
+  identity: OAuthIdentity,
   saved: OAuthState,
 ): Promise<OAuthOutcome> {
   const config = context.get('config');
@@ -212,7 +222,7 @@ async function settle(
   if (saved.intent === 'link') {
     // The session must still be the one that asked: a link is never made to anyone else.
     const userId = context.get('userId');
-    if (!userId || userId !== saved.userId) return 'failed';
+    if (!userId || userId !== saved.userId || context.get('user')?.password_must_change) return 'failed';
     if (linked) return linked.user_id === userId ? 'already_linked' : 'taken';
     const result = await linkIdentity({ userId, provider, subject: identity.subject, email: identity.email });
     if (result === 'linked') await announceLink(context, userId, provider, saved.origin);
@@ -228,7 +238,11 @@ async function settle(
   const rules = { defaultCapMicroUsd: settings.default_llm_cap_micro_usd, timezone: config.APP_TIMEZONE };
   const account = await getAccountByEmail(email);
   if (account) {
-    if (account.role === 'admin') return 'link_from_settings';
+    // An existing account is linked automatically only when the provider is
+    // the mailbox's authority now (D315), never to the admin (D314), and only
+    // where the link can be announced by mail (D263): otherwise the owner signs
+    // in with the password and links from Settings.
+    if (account.role === 'admin' || !identity.authoritative || context.get('email') === null) return 'link_from_settings';
     if (account.status === 'pending' && !account.email_verified) {
       const claimed = await claimUnverifiedRequest({ userId: account.id, provider, subject: identity.subject, email }, rules);
       if (claimed === 'signup_full') return 'closed';
@@ -242,11 +256,15 @@ async function settle(
     }
     if (account.status !== 'active' && account.status !== 'pending') return 'not_active';
     const result = await linkIdentity({ userId: account.id, provider, subject: identity.subject, email });
+    // `already_linked` here is another account of this provider on it: managed from Settings.
+    if (result === 'already_linked') return 'link_from_settings';
     if (result !== 'linked') return result;
     await announceLink(context, account.id, provider, saved.origin);
     return account.status === 'pending' ? 'pending' : signIn(context, account.id);
   }
 
+  // A new account is a sign-up, counted as one per address (D257).
+  await context.get('rateLimits').consume('signupPerAddress', requestAddressKey(context, config.TRUSTED_PROXY_HOPS));
   const created = await createOAuthAccount(
     { email, provider, subject: identity.subject, timezone: saved.timezone, language: saved.language },
     rules,

@@ -4996,6 +4996,37 @@ failure they prevent.
       verified.
     - **Not tested live:** no provider app exists yet; the flows are proven against the fake.
       The first real sign-in on the public host (PR 16) is the check that remains.
+315. **Google links an existing account automatically only where it is the mailbox's authority;
+    a reset drops linked providers** (the user chose the first, 2026-10-26; the rest closes the
+    PR 13 security review; M10 PR 13).
+    - **Authority (the user's choice):** Google's `email_verified` is authoritative only for a
+      `@gmail.com` address or a Workspace domain (`hd`); elsewhere it may be a check from years
+      ago on an address that has since changed hands. Automatic linking to an *existing*
+      account (and claiming a request, D314) needs `OAuthIdentity.authoritative`; otherwise
+      `link_from_settings`. New accounts keep `emailVerified`. GitHub gives no such signal: its
+      verified primary address keeps D263's rule.
+      *Rejected:* trusting `email_verified` everywhere (D263 as written); no automatic linking
+      at all (a second, empty account for whoever signs in with Google first).
+    - **A reset, and the admin's recovery on the host, delete `user_identities`** - D313's
+      reasoning for Telegram: a stolen session could link the thief's GitHub, and it outlived
+      the reset. The owner links again from Settings.
+    - **A one-time password's session cannot link or unlink** (`password_change_required`, as
+      every other `/auth/*` write; D162): a link it planted would outlast the new password.
+    - **No automatic link where no mail can announce it** (D263's accepted risk rests on the
+      notice): `link_from_settings` instead. New accounts through a provider stay possible
+      without SMTP - the provider proves the address.
+    - **Hardening:** Google's ID token is checked for `iss` and `aud` (OIDC Core 3.1.3.7, items
+      2-3); the state cookie is `__Host-traders_oauth` in production; unlinking locks the
+      account row (two unlinks at once left no way in); a new account through a provider
+      spends `signupPerAddress`; `already_linked` on the automatic path reads as
+      `link_from_settings`.
+    - **Accepted:** `/start` is a GET, so a third-party page can start a link of whatever
+      provider account the victim's browser is signed in to; the notice mail announces it,
+      and the link intent needs the victim's session anyway. A POST start is the fix if it
+      matters.
+    - **For M10 PR 14 (deletion):** `signIn` in `routes/oauth.ts` answers `not_active` for every
+      status but `active`; D264's pending-deletion marker must be handled there as on password
+      sign-in.
 ---
 
 ## Bugs that cost real time, and the lesson from each

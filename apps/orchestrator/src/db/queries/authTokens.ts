@@ -332,6 +332,8 @@ export async function useResetToken(tokenHash: Buffer, passwordHash: string | nu
     // that other bound must not keep the assistant and Approve (D313). The
     // owner binds again from Settings.
     await client.query('DELETE FROM telegram_bindings WHERE user_id = $1', [token.user_id]);
+    // So does a Google or GitHub account linked from a stolen session (D315).
+    await client.query('DELETE FROM user_identities WHERE user_id = $1', [token.user_id]);
     return { outcome: 'reset', userId: token.user_id, email: changed.email };
   });
 }

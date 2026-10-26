@@ -59,7 +59,7 @@ const ENV = {
 } as unknown as NodeJS.ProcessEnv;
 
 /** What the fake provider says signed in; each test sets it. */
-let who = { subject: 'google-sub-1', email: 'noa@example.com' as string | null, emailVerified: true };
+let who = { subject: 'google-sub-1', email: 'noa@example.com' as string | null, emailVerified: true, authoritative: true };
 const identify = vi.fn(async () => who);
 const fakeGoogle = {
   name: 'google' as const,
@@ -93,7 +93,7 @@ const landedOn = (response: Response) => new URL(response.headers.get('location'
 
 beforeEach(() => {
   vi.clearAllMocks();
-  who = { subject: 'google-sub-1', email: 'noa@example.com', emailVerified: true };
+  who = { subject: 'google-sub-1', email: 'noa@example.com', emailVerified: true, authoritative: true };
   vi.mocked(queries.getIdentityUser).mockResolvedValue(null);
   vi.mocked(queries.getAccountByEmail).mockResolvedValue(null);
   vi.mocked(queries.linkIdentity).mockResolvedValue('linked');
@@ -166,12 +166,28 @@ describe('coming back from the provider (D262, D263, D314)', () => {
   });
 
   it('links nothing and opens nothing for an address the provider does not vouch for', async () => {
-    who = { subject: 'google-sub-2', email: 'noa@example.com', emailVerified: false };
+    who = { subject: 'google-sub-2', email: 'noa@example.com', emailVerified: false, authoritative: false };
     vi.mocked(queries.getAccountByEmail).mockResolvedValue({ id: ACCOUNT, status: 'active', role: 'user', email_verified: true });
     const response = await roundTrip(buildApp());
     expect(landedOn(response).searchParams.get('oauth')).toBe('unverified_email');
     expect(queries.linkIdentity).not.toHaveBeenCalled();
     expect(queries.createOAuthAccount).not.toHaveBeenCalled();
+  });
+
+  it("links nothing automatically when the provider is not the mailbox's authority now (D315)", async () => {
+    who = { subject: 'google-sub-3', email: 'noa@company.example', emailVerified: true, authoritative: false };
+    vi.mocked(queries.getAccountByEmail).mockResolvedValue({ id: ACCOUNT, status: 'active', role: 'user', email_verified: true });
+    expect(landedOn(await roundTrip(buildApp())).searchParams.get('oauth')).toBe('link_from_settings');
+    expect(queries.linkIdentity).not.toHaveBeenCalled();
+    expect(queries.claimUnverifiedRequest).not.toHaveBeenCalled();
+  });
+
+  it('links nothing automatically where no mail could announce it (D263, D315)', async () => {
+    vi.mocked(queries.getAccountByEmail).mockResolvedValue({ id: ACCOUNT, status: 'active', role: 'user', email_verified: true });
+    resetConfigForTests();
+    const noMail = createApp(loadConfig(ENV), createFakeAi(), undefined, null, memoryRateLimits(), null, new Map([['google', fakeGoogle]]));
+    expect(landedOn(await roundTrip(noMail)).searchParams.get('oauth')).toBe('link_from_settings');
+    expect(queries.linkIdentity).not.toHaveBeenCalled();
   });
 
   it('never links the admin automatically: the admin links from Settings (D314)', async () => {
@@ -240,6 +256,18 @@ describe('linking from Settings (D263)', () => {
     const response = await roundTrip(buildApp(), { intent: 'link', cookie: sessionCookie() });
     expect(landedOn(response).searchParams.get('oauth')).toBe('taken');
     expect(queries.linkIdentity).not.toHaveBeenCalled();
+  });
+
+  it("refuses a one-time password's session: it can change the password and nothing else (D162, D315)", async () => {
+    vi.mocked(queries.getUser).mockResolvedValue({ ...ACTIVE_SESSION, id: TEST_USER_ID, password_must_change: true } as never);
+    const app = buildApp();
+    const start = await app.request(`/auth/oauth/google/start?origin=${encodeURIComponent(ORIGIN)}&intent=link`, {
+      headers: { cookie: sessionCookie() },
+    });
+    expect(start.status).toBe(403);
+    const unlink = await app.request('/auth/identities/google', { method: 'DELETE', headers: { cookie: sessionCookie(), origin: ORIGIN } });
+    expect(unlink.status).toBe(403);
+    expect(queries.unlinkIdentity).not.toHaveBeenCalled();
   });
 
   it('lists the linked providers and what this installation offers', async () => {

@@ -12,7 +12,17 @@ import { OAUTH_PROVIDERS, type OAuthProviderName } from '@traders/shared';
 
 import { safeEqual } from '../http/auth.js';
 
-export const OAUTH_STATE_COOKIE = 'traders_oauth';
+/**
+ * `__Host-` in production (D315): a browser then takes the cookie only from
+ * this exact host over HTTPS with path `/`, so a sibling subdomain or a plain
+ * HTTP page cannot plant one. Local stacks serve plain HTTP, which the prefix
+ * would refuse.
+ */
+export function oauthStateCookieName(isProduction: boolean): string {
+  return isProduction ? '__Host-traders_oauth' : 'traders_oauth';
+}
+
+export const OAUTH_STATE_COOKIE = oauthStateCookieName(false);
 
 /** Long enough to sign in at the provider, short enough that a stale cookie is gone. */
 export const OAUTH_STATE_TTL_SECONDS = 10 * 60;
