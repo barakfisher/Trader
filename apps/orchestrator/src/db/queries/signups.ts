@@ -32,6 +32,11 @@ export type SignupCreation =
  * fill the admin's queue - the rate limits bound how fast they arrive, and the
  * sweep removes them. `ON CONFLICT` on `lower(email)` makes "one request per
  * email" the unique index's decision, not a SELECT's.
+ *
+ * A request still waiting for its link takes the new password and zone
+ * (D309): whoever signed up first chose the password, and the link checks it,
+ * so the address's owner signing up again is what the link then expects. A
+ * verified request or an account is never touched.
  */
 export async function createSignupRequest(input: {
   email: string;
@@ -56,11 +61,14 @@ export async function createSignupRequest(input: {
      ), inserted AS (
        INSERT INTO users (email, password_hash, timezone, status)
        SELECT $1, $2, $3, 'pending' FROM limits WHERE open
-       ON CONFLICT ((lower(email))) DO NOTHING
-       RETURNING id
+       ON CONFLICT ((lower(email))) DO UPDATE
+          SET password_hash = EXCLUDED.password_hash, timezone = EXCLUDED.timezone
+        WHERE users.status = 'pending' AND users.email_verified_at IS NULL
+       -- xmax is 0 only on a row this statement inserted, not one it updated.
+       RETURNING id, xmax = 0 AS created
      ), settings AS (
        INSERT INTO user_settings (user_id, language)
-       SELECT id, $4 FROM inserted
+       SELECT id, $4 FROM inserted WHERE created
        RETURNING user_id
      ), existing AS (
        SELECT u.id, u.status, u.email_verified_at IS NOT NULL AS verified, coalesce(us.language, 'en') AS language

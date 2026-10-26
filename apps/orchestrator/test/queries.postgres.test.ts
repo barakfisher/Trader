@@ -287,7 +287,15 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
     describe('verification links (0074, D259, D260, D305)', async () => {
       const { linkTokenHash, newLinkToken } = await import('../src/http/linkTokens.js');
-      const RULES = { mode: 'automatic' as const, dailyLimit: 1_000, defaultCapMicroUsd: 10_000_000, timezone: 'Asia/Jerusalem' };
+      const RULES = {
+        mode: 'automatic' as const,
+        dailyLimit: 1_000,
+        defaultCapMicroUsd: 10_000_000,
+        timezone: 'Asia/Jerusalem',
+        maxPendingSignups: 1_000,
+      };
+      /** What `ask` signs up with: a sign-up's link is opened with its password (D309). */
+      const PROOF = { passwordHash: 'hash' };
 
       async function link(userId: string, address: string, purpose: 'verify_email' | 'verify_new_email' = 'verify_email') {
         const token = newLinkToken();
@@ -300,25 +308,75 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       it('lets a verified sign-up in under *automatic*, once; the second click is "used"', async () => {
         const created = (await ask(email('auto'))) as { userId: string };
         const hash = await link(created.userId, email('auto'));
-        expect(await queries.useVerificationToken(hash, RULES)).toEqual({ outcome: 'activated', userId: created.userId });
+        expect(await queries.useVerificationToken(hash, RULES, PROOF)).toEqual({ outcome: 'activated', userId: created.userId });
         expect(await status(created.userId)).toEqual({ status: 'active', verified: true, approved_automatically: true });
-        expect(await queries.useVerificationToken(hash, RULES)).toEqual({ outcome: 'used' });
+        expect(await queries.useVerificationToken(hash, RULES, PROOF)).toEqual({ outcome: 'used' });
       });
 
       it('keeps a verified sign-up for the admin under approval, and past the daily limit', async () => {
         const approval = (await ask(email('appr'))) as { userId: string };
-        expect(await queries.useVerificationToken(await link(approval.userId, email('appr')), { ...RULES, mode: 'approval' })).toEqual({
+        expect(await queries.useVerificationToken(await link(approval.userId, email('appr')), { ...RULES, mode: 'approval' }, PROOF)).toEqual({
           outcome: 'awaiting_approval',
           userId: approval.userId,
         });
         expect(await status(approval.userId)).toMatchObject({ status: 'pending', verified: true });
 
         const over = (await ask(email('over'))) as { userId: string };
-        expect(await queries.useVerificationToken(await link(over.userId, email('over')), { ...RULES, dailyLimit: 0 })).toEqual({
+        expect(await queries.useVerificationToken(await link(over.userId, email('over')), { ...RULES, dailyLimit: 0 }, PROOF)).toEqual({
           outcome: 'awaiting_approval',
           userId: over.userId,
         });
         expect(await status(over.userId)).toMatchObject({ status: 'pending', verified: true, approved_automatically: false });
+      });
+
+      it("refuses a sign-up's link without its password, or with another, and leaves it unused (D309)", async () => {
+        const created = (await ask(email('proof'))) as { userId: string };
+        const hash = await link(created.userId, email('proof'));
+        expect(await queries.useVerificationToken(hash, RULES, null)).toEqual({ outcome: 'wrong_password' });
+        expect(await queries.useVerificationToken(hash, RULES, { passwordHash: 'someone else' })).toEqual({ outcome: 'wrong_password' });
+        expect(await status(created.userId)).toMatchObject({ status: 'pending', verified: false });
+        expect(await queries.useVerificationToken(hash, RULES, PROOF)).toEqual({ outcome: 'activated', userId: created.userId });
+      });
+
+      it("takes the new password when an unverified request signs up again, and never a verified one's (D309)", async () => {
+        const first = (await queries.createSignupRequest({
+          email: email('prehijack'),
+          passwordHash: 'the first',
+          timezone: 'Europe/London',
+          language: 'he',
+        })) as { userId: string };
+        const again = await queries.createSignupRequest({
+          email: email('prehijack'),
+          passwordHash: 'the owner',
+          timezone: 'Asia/Jerusalem',
+          language: 'en',
+        });
+        expect(again).toMatchObject({ outcome: 'exists', userId: first.userId, verified: false });
+        const read = async (userId: string) =>
+          (await getPool().query('SELECT password_hash, timezone FROM users WHERE id = $1', [userId])).rows[0];
+        expect(await read(first.userId)).toEqual({ password_hash: 'the owner', timezone: 'Asia/Jerusalem' });
+        const hash = await link(first.userId, email('prehijack'));
+        expect(await queries.useVerificationToken(hash, RULES, { passwordHash: 'the first' })).toEqual({ outcome: 'wrong_password' });
+
+        await verified(first.userId);
+        await queries.createSignupRequest({ email: email('prehijack'), passwordHash: 'a third', timezone: 'UTC', language: 'en' });
+        expect(await read(first.userId)).toEqual({ password_hash: 'the owner', timezone: 'Asia/Jerusalem' });
+      });
+
+      it("holds approval's waiting limit when a link verifies, and refuses under closed - the link stays unused", async () => {
+        const created = (await ask(email('queue'))) as { userId: string };
+        const hash = await link(created.userId, email('queue'));
+        const { rows } = await getPool().query(
+          `SELECT count(*)::int AS n FROM users WHERE status = 'pending' AND role = 'user' AND email_verified_at IS NOT NULL`,
+        );
+        const full = { ...RULES, mode: 'approval' as const, maxPendingSignups: rows[0].n };
+        expect(await queries.useVerificationToken(hash, full, PROOF)).toEqual({ outcome: 'signup_full' });
+        expect(await queries.useVerificationToken(hash, { ...RULES, mode: 'closed' }, PROOF)).toEqual({ outcome: 'signup_full' });
+        expect(await status(created.userId)).toMatchObject({ status: 'pending', verified: false });
+        expect(await queries.useVerificationToken(hash, { ...full, maxPendingSignups: rows[0].n + 1 }, PROOF)).toEqual({
+          outcome: 'awaiting_approval',
+          userId: created.userId,
+        });
       });
 
       it('says expired for an old link and invalid for an unknown one, changing nothing', async () => {
@@ -328,8 +386,8 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           "UPDATE auth_tokens SET created_at = now() - interval '2 days', expires_at = now() - interval '1 second' WHERE token_hash = $1",
           [hash],
         );
-        expect(await queries.useVerificationToken(hash, RULES)).toEqual({ outcome: 'expired' });
-        expect(await queries.useVerificationToken(linkTokenHash('never issued'), RULES)).toEqual({ outcome: 'invalid' });
+        expect(await queries.useVerificationToken(hash, RULES, PROOF)).toEqual({ outcome: 'expired' });
+        expect(await queries.useVerificationToken(linkTokenHash('never issued'), RULES, PROOF)).toEqual({ outcome: 'invalid' });
         expect(await status(created.userId)).toMatchObject({ status: 'pending', verified: false });
       });
 
@@ -337,8 +395,8 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         const created = (await ask(email('twice'))) as { userId: string };
         const first = await link(created.userId, email('twice'));
         const second = await link(created.userId, email('twice'));
-        expect(await queries.useVerificationToken(first, RULES)).toEqual({ outcome: 'invalid' });
-        expect((await queries.useVerificationToken(second, RULES)).outcome).toBe('activated');
+        expect(await queries.useVerificationToken(first, RULES, PROOF)).toEqual({ outcome: 'invalid' });
+        expect((await queries.useVerificationToken(second, RULES, PROOF)).outcome).toBe('activated');
       });
 
       it('never treats a reset link as a verification link', async () => {
@@ -351,13 +409,13 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           tokenHash: linkTokenHash(token),
           ttlHours: 1,
         });
-        expect(await queries.useVerificationToken(linkTokenHash(token), RULES)).toEqual({ outcome: 'invalid' });
+        expect(await queries.useVerificationToken(linkTokenHash(token), RULES, PROOF)).toEqual({ outcome: 'invalid' });
         expect(await status(created.userId)).toMatchObject({ verified: false });
       });
 
       it('confirms a pending new address: the sign-in address changes and every session ends', async () => {
         const created = (await ask(email('mover'))) as { userId: string };
-        await queries.useVerificationToken(await link(created.userId, email('mover')), RULES);
+        await queries.useVerificationToken(await link(created.userId, email('mover')), RULES, PROOF);
         await queries.createSession({
           userId: created.userId,
           tokenHash: linkTokenHash(newLinkToken()),
@@ -367,7 +425,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           maxPerUser: SESSIONS_PER_USER_MAX,
         });
         await queries.setPendingEmail(created.userId, email('moved'));
-        const result = await queries.useVerificationToken(await link(created.userId, email('moved'), 'verify_new_email'), RULES);
+        const result = await queries.useVerificationToken(await link(created.userId, email('moved'), 'verify_new_email'), RULES, PROOF);
         expect(result).toEqual({ outcome: 'email_changed', userId: created.userId });
         const { rows } = await getPool().query(
           `SELECT email, pending_email, (SELECT count(*)::int FROM user_sessions WHERE user_id = $1) AS sessions FROM users WHERE id = $1`,
@@ -379,7 +437,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       it('refuses a new address another account took meanwhile, and forgets the change', async () => {
         const created = (await ask(email('late-mover'))) as { userId: string };
         await queries.setPendingEmail(created.userId, email('noa'));
-        const result = await queries.useVerificationToken(await link(created.userId, email('noa'), 'verify_new_email'), RULES);
+        const result = await queries.useVerificationToken(await link(created.userId, email('noa'), 'verify_new_email'), RULES, PROOF);
         expect(result).toEqual({ outcome: 'email_taken' });
         const { rows } = await getPool().query('SELECT pending_email FROM users WHERE id = $1', [created.userId]);
         expect(rows[0].pending_email).toBeNull();

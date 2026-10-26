@@ -1041,7 +1041,11 @@ export interface VerifyEmailResponse {
     | 'email_taken'
     | 'expired'
     | 'used'
-    | 'invalid';
+    | 'invalid'
+    /** A sign-up's link needs that sign-up's password (D309); the link still works. */
+    | 'wrong_password'
+    /** Sign-up is closed or approval's queue is full; the link still works until it expires. */
+    | 'signup_full';
 }
 
 /**

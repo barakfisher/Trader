@@ -35,8 +35,15 @@ export function linkTokenHash(token: string): Buffer {
  * not send the fragment to any server, so it stays out of access logs, proxies
  * and the `Referer` of anything the page loads. The page posts it to the API.
  */
-export function pageLink(origin: string, path: string, token?: string): string {
+export function pageLink(origin: string, path: string, token?: string, extra: Record<string, string> = {}): string {
   const url = new URL(path, origin);
-  if (token !== undefined) url.hash = `token=${token}`;
+  if (token !== undefined) url.hash = new URLSearchParams({ token, ...extra }).toString();
   return url.toString();
 }
+
+/**
+ * A sign-up's link says so (`for=signup`), so the page asks for the password
+ * up front (D309). It is a hint for the form only: the server decides from the
+ * link's own row whether a password is needed.
+ */
+export const SIGNUP_LINK_HINT = { for: 'signup' } as const;

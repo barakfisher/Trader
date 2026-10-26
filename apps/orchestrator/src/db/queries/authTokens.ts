@@ -42,12 +42,52 @@ export interface AdmissionRules {
   defaultCapMicroUsd: number;
   /** The installation's clock, whose day the limit counts (`APP_TIMEZONE`). */
   timezone: string;
+  /** *approval*'s limit on verified waiting requests (D243), checked again as a link verifies one. */
+  maxPendingSignups: number;
+}
+
+/**
+ * What a sign-up's link must be opened with (D309): the password hash the
+ * route checked the typed password against. Opening compares it again inside
+ * the transaction, so a sign-up again with a new password between the check
+ * and the update finds the link refused, not verified with the old answer.
+ */
+export interface SignupProof {
+  passwordHash: string;
 }
 
 export type VerificationResult =
   | { outcome: 'activated' | 'awaiting_approval'; userId: string }
   | { outcome: 'email_changed'; userId: string }
-  | { outcome: 'email_taken' | 'expired' | 'used' | 'invalid' };
+  | { outcome: 'email_taken' | 'expired' | 'used' | 'invalid' }
+  /** A sign-up's link opened without its password, or with another (D309); the link stays unused. */
+  | { outcome: 'wrong_password' }
+  /** Sign-up is closed, or approval's queue is full (D243); the link stays unused until it expires. */
+  | { outcome: 'signup_full' };
+
+/** What the route needs before opening a link: whose it is and, for a sign-up's, the password to check. */
+export interface VerificationTokenPeek {
+  purpose: AuthTokenPurpose;
+  /** The address the link went to: the sign-in failures are counted against it. */
+  email: string;
+  /** The account's password hash, for a `verify_email` link only. */
+  passwordHash: string | null;
+  /** Unused and unexpired: a used or expired link says so without asking for a password. */
+  open: boolean;
+}
+
+/** Read a link without opening it or locking anything; null when no link has this hash. */
+export function peekVerificationToken(tokenHash: Buffer): Promise<VerificationTokenPeek | null> {
+  return queryOne<{ purpose: AuthTokenPurpose; email: string; password_hash: string | null; open: boolean }>(
+    `SELECT t.purpose, t.email, CASE WHEN t.purpose = 'verify_email' THEN u.password_hash END AS password_hash,
+            t.used_at IS NULL AND t.expires_at > now() AS open
+       FROM auth_tokens t JOIN users u ON u.id = t.user_id
+      WHERE t.token_hash = $1`,
+    [tokenHash],
+  ).then((row) =>
+    row ? { purpose: row.purpose, email: row.email, passwordHash: row.password_hash, open: row.open } : null,
+  );
+}
 
 const UNIQUE_VIOLATION = '23505';
 
@@ -58,7 +98,11 @@ const UNIQUE_VIOLATION = '23505';
  * the sign-in address and ends every session (as any address change does).
  * A reset link is not a verification link: it is `invalid` here.
  */
-export async function useVerificationToken(tokenHash: Buffer, rules: AdmissionRules): Promise<VerificationResult> {
+export async function useVerificationToken(
+  tokenHash: Buffer,
+  rules: AdmissionRules,
+  proof: SignupProof | null,
+): Promise<VerificationResult> {
   try {
     return await transaction(async (client) => {
       const token = (
@@ -73,8 +117,8 @@ export async function useVerificationToken(tokenHash: Buffer, rules: AdmissionRu
       if (token.expired) return { outcome: 'expired' };
 
       const user = (
-        await client.query<{ status: string; email: string | null; pending_email: string | null }>(
-          'SELECT status, email, pending_email FROM users WHERE id = $1 FOR UPDATE',
+        await client.query<{ status: string; email: string | null; pending_email: string | null; password_hash: string | null }>(
+          'SELECT status, email, pending_email, password_hash FROM users WHERE id = $1 FOR UPDATE',
           [token.user_id],
         )
       ).rows[0];
@@ -86,11 +130,26 @@ export async function useVerificationToken(tokenHash: Buffer, rules: AdmissionRu
           await markUsed();
           return { outcome: 'invalid' };
         }
+        // The mailbox alone is not enough: whoever signed up first with this
+        // address chose the password, and it may not be the mailbox's owner (D309).
+        if (proof === null || user.password_hash !== proof.passwordHash) return { outcome: 'wrong_password' };
+        // The settings row is locked first, so two verifications cannot both
+        // take the last place of the day, or of approval's queue.
+        await client.query('SELECT 1 FROM installation_settings FOR UPDATE');
+        if (rules.mode === 'closed') return { outcome: 'signup_full' };
+        if (rules.mode === 'approval') {
+          // Unverified requests are not counted at sign-up (D304), so many can
+          // be waiting for their links at once; the limit holds here, where one
+          // joins the admin's queue.
+          const waiting = await client.query<{ count: number }>(
+            `SELECT count(*)::int AS count FROM users
+              WHERE status = 'pending' AND role = 'user' AND email_verified_at IS NOT NULL`,
+          );
+          if ((waiting.rows[0]?.count ?? 0) >= rules.maxPendingSignups) return { outcome: 'signup_full' };
+        }
         await client.query('UPDATE users SET email_verified_at = now() WHERE id = $1', [token.user_id]);
         await markUsed();
         if (rules.mode !== 'automatic') return { outcome: 'awaiting_approval', userId: token.user_id };
-        // The settings row is locked so two verifications cannot both take the last place of the day.
-        await client.query('SELECT 1 FROM installation_settings FOR UPDATE');
         const activated = await client.query(
           `UPDATE users
               SET status = 'active', llm_cap_micro_usd = $2, approved_at = now(), approved_automatically = true

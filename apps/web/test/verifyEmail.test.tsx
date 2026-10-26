@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Email verification in the web (D259, D306): the page a mailed link opens,
+ * Email verification in the web (D259, D306, D309): the page a mailed link opens,
  * and a sign-in to an address never confirmed, with its new link.
  */
 
@@ -41,6 +41,19 @@ afterEach(async () => {
 });
 
 describe('the page a verification link opens', () => {
+  /** An address change's link: no password, only Confirm. */
+  async function confirmAddressLink() {
+    openLink('#token=the-token');
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
+  }
+
+  /** A sign-up's link (D309): the password, then Confirm. */
+  async function confirmSignupLink(password = 'a long enough passphrase') {
+    openLink('#token=the-token&for=signup');
+    fireEvent.change(await screen.findByLabelText(/Password/), { target: { value: password } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+  }
+
   it.each([
     ['activated', 'Email confirmed', /Your account is ready/],
     ['awaiting_approval', 'Email confirmed', /with the installation's admin/],
@@ -49,21 +62,47 @@ describe('the page a verification link opens', () => {
     ['expired', 'This link has expired', /get a new one/],
     ['used', 'This link was already used', /Nothing more to do/],
     ['invalid', 'This link does not work', /newer link replaced it/],
+    ['signup_full', 'Sign-up is not taking requests right now', /keeps working until it expires/],
   ] as const)('says %s', async (outcome, title, body) => {
     post.mockResolvedValue({ outcome });
-    openLink('#token=the-token');
+    await confirmAddressLink();
     expect(await screen.findByText(title)).toBeTruthy();
     expect(screen.getByText(body)).toBeTruthy();
     expect(post).toHaveBeenCalledWith('/auth/verify', { token: 'the-token' });
   });
 
-  it('posts the token once, and clears it from the address bar at once', async () => {
-    post.mockResolvedValue({ outcome: 'activated' });
+  // A mail scanner that opens the link and runs its scripts must not confirm anything.
+  it('sends nothing until Confirm is pressed, and clears the token from the address bar at once', async () => {
+    post.mockResolvedValue({ outcome: 'email_changed' });
     openLink('#token=the-token');
-    await screen.findByText('Email confirmed');
-    expect(post).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('Confirm your new address')).toBeTruthy();
     expect(window.location.hash).toBe('');
     expect(window.location.pathname).toBe('/verify');
+    expect(post).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await screen.findByText('New address confirmed');
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks a sign-up's link for its password, and sends it with the token", async () => {
+    post.mockResolvedValue({ outcome: 'activated' });
+    openLink('#token=the-token&for=signup');
+    expect(await screen.findByText('Confirm your email')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText(/Password/), { target: { value: 'a long enough passphrase' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    expect(await screen.findByText('Email confirmed')).toBeTruthy();
+    expect(post).toHaveBeenCalledWith('/auth/verify', { token: 'the-token', password: 'a long enough passphrase' });
+  });
+
+  it('keeps the form after a wrong password, says so, and confirms with the right one', async () => {
+    post.mockResolvedValueOnce({ outcome: 'wrong_password' }).mockResolvedValueOnce({ outcome: 'activated' });
+    await confirmSignupLink('not the password');
+    expect(await screen.findByText(/not the password this sign-up was made with/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Password/), { target: { value: 'a long enough passphrase' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    expect(await screen.findByText('Email confirmed')).toBeTruthy();
+    expect(post).toHaveBeenLastCalledWith('/auth/verify', { token: 'the-token', password: 'a long enough passphrase' });
   });
 
   it('calls a link with no token invalid without asking the server', async () => {
@@ -72,26 +111,26 @@ describe('the page a verification link opens', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('says it is checking until the server answers', () => {
+  it('says it is checking until the server answers', async () => {
     post.mockImplementation(() => new Promise(() => {}));
-    openLink('#token=the-token');
-    expect(screen.getByRole('status').textContent).toContain('Checking the link');
+    await confirmAddressLink();
+    expect(await screen.findByRole('button', { name: 'Checking the link…' })).toBeTruthy();
   });
 
   it('says the link could not be checked, and checks it again on request - with the same token', async () => {
     post.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ outcome: 'activated' });
-    openLink('#token=the-token');
+    await confirmAddressLink();
     expect(await screen.findByText(/Could not check the link/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     expect(await screen.findByText('Email confirmed')).toBeTruthy();
     expect(post).toHaveBeenLastCalledWith('/auth/verify', { token: 'the-token' });
   });
 
   it('is in Hebrew in Hebrew', async () => {
     post.mockResolvedValue({ outcome: 'expired' });
-    openLink('#token=the-token');
+    openLink('#token=the-token&for=signup');
     await act(() => applyLanguage('he'));
-    expect(await screen.findByText('תוקף הקישור פג')).toBeTruthy();
+    expect(await screen.findByText('אשרו את האימייל')).toBeTruthy();
   });
 });
 

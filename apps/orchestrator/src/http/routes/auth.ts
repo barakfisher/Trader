@@ -39,6 +39,7 @@ import {
   getUserCredentialsByEmail,
   recordSignIn,
   setPendingEmail,
+  peekVerificationToken,
   useVerificationToken,
   type UserRow,
 } from '../../db/queries.js';
@@ -84,7 +85,8 @@ const passwordChangeSchema = z.object({
 
 const timeZoneChangeSchema = z.object({ timezone: z.string().max(200) });
 
-const verifySchema = z.object({ token: z.string().min(1).max(200) });
+/** A sign-up's link carries its password (D309); an address change's does not need one. */
+const verifySchema = z.object({ token: z.string().min(1).max(200), password: submittedPassword.optional() });
 
 /** The sign-in refusal for a request whose address was never proven (D306); the web offers a new link. */
 export const EMAIL_UNVERIFIED = 'email_unverified';
@@ -290,6 +292,11 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
    * become a session. When it confirms a new address while that same account
    * is signed in here, this device gets a new session, as a change did before
    * D259; every other session has ended.
+   *
+   * A sign-up's link needs the sign-up's password too (D309): whoever signs up
+   * first with an address chooses the password, so the mailbox alone would let
+   * its owner verify a stranger's account. A wrong one counts as a failed
+   * sign-in for that address and leaves the link unused.
    */
   app.post('/auth/verify', async (context) => {
     const parsed = verifySchema.safeParse(await context.req.json().catch(() => null));
@@ -298,13 +305,39 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
       return context.json(invalid);
     }
     const config = context.get('config');
+    const tokenHash = linkTokenHash(parsed.data.token);
+    let proof: { passwordHash: string } | null = null;
+    const peek = await peekVerificationToken(tokenHash);
+    if (peek?.purpose === 'verify_email' && peek.open) {
+      const limits = context.get('rateLimits');
+      const account = emailKey(normaliseEmail(peek.email));
+      const address = requestAddressKey(context, config.TRUSTED_PROXY_HOPS);
+      await limits.refuseIfSpent('loginFailuresPerAccount', account);
+      await limits.refuseIfSpent('loginFailuresPerAddress', address);
+      const password = parsed.data.password;
+      if (password === undefined || !(await passwordMatches(password, peek.passwordHash))) {
+        if (password !== undefined) {
+          await limits.record('loginFailuresPerAccount', account);
+          await limits.record('loginFailuresPerAddress', address);
+        }
+        const refused: VerifyEmailResponse = { outcome: 'wrong_password' };
+        return context.json(refused);
+      }
+      await limits.reset('loginFailuresPerAccount', account);
+      proof = { passwordHash: peek.passwordHash! };
+    }
     const settings = await getInstallationSettings();
-    const result = await useVerificationToken(linkTokenHash(parsed.data.token), {
-      mode: settings.signup_mode,
-      dailyLimit: settings.daily_new_accounts_limit,
-      defaultCapMicroUsd: settings.default_llm_cap_micro_usd,
-      timezone: config.APP_TIMEZONE,
-    });
+    const result = await useVerificationToken(
+      tokenHash,
+      {
+        mode: settings.signup_mode,
+        dailyLimit: settings.daily_new_accounts_limit,
+        defaultCapMicroUsd: settings.default_llm_cap_micro_usd,
+        timezone: config.APP_TIMEZONE,
+        maxPendingSignups: settings.max_pending_signups,
+      },
+      proof,
+    );
     if (result.outcome === 'awaiting_approval') {
       // Not awaited, as at sign-up before D259: the request waits on the Admin page whatever Telegram does.
       void announceSignupRequest(

@@ -91,6 +91,20 @@
     "invalid": {
       "title": "This link does not work",
       "body": "It may be incomplete, or a newer link replaced it. Sign in to get a new one."
+    },
+    "confirm": "Confirm",
+    "wrongPassword": "That is not the password this sign-up was made with. If you signed up again since, use the newest password and the newest email.",
+    "confirmSignup": {
+      "title": "Confirm your email",
+      "body": "Enter the password you chose when you signed up, so we know this request is yours."
+    },
+    "confirmAddress": {
+      "title": "Confirm your new address",
+      "body": "Press Confirm to make this your sign-in address."
+    },
+    "signup_full": {
+      "title": "Sign-up is not taking requests right now",
+      "body": "Your email is not confirmed yet. This link keeps working until it expires - try it again later."
     }
   },
   "password": {

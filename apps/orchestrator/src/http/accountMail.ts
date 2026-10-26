@@ -16,7 +16,7 @@ import { issueAuthToken } from '../db/queries.js';
 import { emailMessages } from '../email/messages.js';
 import type { EmailSender } from '../email/sender.js';
 import { logger } from '../logger.js';
-import { VERIFY_TOKEN_TTL_HOURS, linkTokenHash, newLinkToken, pageLink } from './linkTokens.js';
+import { SIGNUP_LINK_HINT, VERIFY_TOKEN_TTL_HOURS, linkTokenHash, newLinkToken, pageLink } from './linkTokens.js';
 
 /** Where the person reads a link: the sign-up's language, else English. */
 export function mailLanguage(language: string | null | undefined): UiLanguage {
@@ -50,7 +50,7 @@ export async function sendVerificationLink(
     tokenHash: linkTokenHash(token),
     ttlHours: VERIFY_TOKEN_TTL_HOURS,
   });
-  const link = pageLink(origin, VERIFY_PAGE, token);
+  const link = pageLink(origin, VERIFY_PAGE, token, purpose === 'verify_email' ? SIGNUP_LINK_HINT : {});
   const compose = purpose === 'verify_email' ? emailMessages.verifyEmail : emailMessages.verifyNewEmail;
   await sender.send(compose(recipient.email, recipient.language, link, VERIFY_TOKEN_TTL_HOURS));
 }
