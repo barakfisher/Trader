@@ -28,7 +28,7 @@
     "password": "Password",
     "signIn": "Sign in",
     "signingIn": "Signing in…",
-    "forgotten": "Forgot your password? Ask the installation's admin to set a one-time password.",
+    "forgotten": "Forgot your password?",
     "errors": {
       "incorrect": "That email and password do not match an account.",
       "notActive": "This account is not active. Ask the installation's admin.",
@@ -2219,5 +2219,38 @@
       "failed": "The latest attempt, {{date}}, failed; the rating above is the one before it."
     },
     "column": "Sentiment"
+  },
+  "reset": {
+    "requestTitle": "Reset your password",
+    "requestIntro": "Enter your account's email. If an account uses it, we send a link to choose a new password.",
+    "request": "Send the link",
+    "requesting": "Sending…",
+    "sentTitle": "Check your email",
+    "sent": "If an account uses that address, a link is on its way. It works once, for 30 minutes. Nothing arrived? Check your spam folder.",
+    "noEmail": "This installation cannot send email. Ask its admin to set a one-time password.",
+    "requestFailed": "Could not send the request. Check your connection and try again.",
+    "chooseTitle": "Choose a new password",
+    "chooseIntro": "Saving it signs you out on every device. Then sign in with the new password.",
+    "save": "Save the new password",
+    "saving": "Saving…",
+    "failed": "Could not save the password. Check your connection and try again.",
+    "outcomes": {
+      "reset": {
+        "title": "Password changed",
+        "body": "Every device was signed out. Sign in with your new password."
+      },
+      "expired": {
+        "title": "This link has expired",
+        "body": "Reset links work for 30 minutes. Ask for a new one from the sign-in page."
+      },
+      "used": {
+        "title": "This link was already used",
+        "body": "Each reset link works once. Ask for a new one from the sign-in page if you need it."
+      },
+      "invalid": {
+        "title": "This link does not work",
+        "body": "It may be incomplete, or a newer link replaced it. Ask for a new one from the sign-in page."
+      }
+    }
   }
 }

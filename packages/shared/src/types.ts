@@ -1048,6 +1048,11 @@ export interface VerifyEmailResponse {
     | 'signup_full';
 }
 
+/** `POST /auth/reset` (D260, D312): what a reset link did. */
+export interface ResetPasswordResponse {
+  outcome: 'reset' | 'expired' | 'used' | 'invalid';
+}
+
 /**
  * `POST /auth/verify/resend` (D306): the same email and password as a sign-in.
  * Only the right password to an unverified request sends a new link.

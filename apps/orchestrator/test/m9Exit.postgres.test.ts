@@ -94,6 +94,8 @@ const WRITE_BODIES: Record<string, unknown> = {
   // A link is its own authority: a token nobody issued is "invalid" and changes nothing.
   'POST /auth/verify': { token: 'not-a-token-anyone-issued' },
   'POST /auth/verify/resend': {},
+  'POST /auth/reset/request': {},
+  'POST /auth/reset': { token: 'not-a-token-anyone-issued', newPassword: 'a new password here' },
   'POST /auth/timezone': { timezone: 'Europe/London' },
   'POST /holdings': {},
   'PATCH /holdings/:id': { notes: 'changed' },

@@ -23,6 +23,7 @@ import {
   type SessionUser,
   type SignupResponse,
   type UiLanguage,
+  type ResetPasswordResponse,
   type VerifyEmailResponse,
 } from '@traders/shared';
 
@@ -35,11 +36,13 @@ import {
   getInstallationSettings,
   getOrCreateUserSettings,
   getPasswordHash,
+  getResetRecipient,
   getUser,
   getUserCredentialsByEmail,
   recordSignIn,
   setPendingEmail,
   peekVerificationToken,
+  useResetToken,
   useVerificationToken,
   type UserRow,
 } from '../../db/queries.js';
@@ -47,6 +50,8 @@ import {
   mailLanguage,
   sendEmailChangeNotice,
   sendInBackground,
+  sendPasswordChanged,
+  sendResetLink,
   sendSignupExists,
   sendVerificationLink,
 } from '../accountMail.js';
@@ -113,6 +118,10 @@ async function currentPasswordMatches(context: Context<AppEnv>, user: UserRow, p
   await limits.record('loginFailuresPerAccount', account);
   return false;
 }
+
+const resetRequestSchema = z.object({ email: z.string().max(1000) });
+
+const resetSchema = z.object({ token: z.string().min(1).max(200), newPassword: submittedPassword });
 
 const emailChangeSchema = z.object({
   email: z.string().max(1000),
@@ -363,6 +372,74 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
   });
 
   /**
+   * Ask for a reset link (D260, D312). The answer is the same whatever the
+   * address - an account, a request, a stranger's typo - so the form says
+   * nothing about who has an account (D185). Only an active account with a
+   * proven address is mailed, in the background, so SMTP's time does not tell
+   * the cases apart either. Counted per address and per email before any work.
+   */
+  app.post('/auth/reset/request', async (context) => {
+    const parsed = resetRequestSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) throw badRequest('invalid_body', 'expected { email: string }');
+    const email = normaliseEmail(parsed.data.email);
+    const limits = context.get('rateLimits');
+    await limits.consume('resetRequestPerAddress', requestAddressKey(context, context.get('config').TRUSTED_PROXY_HOPS));
+    await limits.consume('resetRequestPerEmail', emailKey(email));
+    const sender = context.get('email');
+    if (sender === null) throw new ApiProblem(503, 'email_unavailable', 'this installation cannot send mail');
+    if (emailProblem(email) === null) {
+      const recipient = await getResetRecipient(email);
+      if (recipient) {
+        const origin = requestOrigin(context);
+        sendInBackground(recipient.id, 'reset_password', () =>
+          sendResetLink(sender, origin, { userId: recipient.id, email: recipient.email, language: mailLanguage(recipient.language) }),
+        );
+      }
+    }
+    return context.json({ sent: true });
+  });
+
+  /**
+   * Choose a new password from a reset link (D260). It ends every session and
+   * signs nobody in (D312): the person signs in with the new password, as
+   * after any link. A password the rule refuses leaves the link unused.
+   */
+  app.post('/auth/reset', async (context) => {
+    const parsed = resetSchema.safeParse(await context.req.json().catch(() => null));
+    if (!parsed.success) {
+      const invalid: ResetPasswordResponse = { outcome: 'invalid' };
+      return context.json(invalid);
+    }
+    const problem = passwordProblem(parsed.data.newPassword);
+    if (problem !== null) throw badRequest(`password_${problem}`, `the new password is ${problem.replace('_', ' ')}`);
+    await context.get('rateLimits').consume(
+      'resetAttemptPerAddress',
+      requestAddressKey(context, context.get('config').TRUSTED_PROXY_HOPS),
+    );
+    // The link is looked up before the new password is hashed: argon2 is the
+    // expensive part, and a made-up token must not cost it (D312).
+    const tokenHash = linkTokenHash(parsed.data.token);
+    const peek = await peekVerificationToken(tokenHash);
+    const usable = peek !== null && peek.purpose === 'reset_password' && peek.open;
+    // An unusable reset link is still asked, without a password, so it can say used or expired.
+    const result = await useResetToken(tokenHash, usable ? await hashPassword(parsed.data.newPassword) : null);
+    if (result.outcome === 'reset') {
+      const sender = context.get('email');
+      if (sender !== null) {
+        const settings = await getOrCreateUserSettings(result.userId);
+        const origin = requestOrigin(context);
+        sendInBackground(result.userId, 'password_changed', () =>
+          sendPasswordChanged(sender, origin, { email: result.email, language: mailLanguage(settings.language) }),
+        );
+      }
+      // This browser's cookie named one of the sessions that just ended.
+      deleteCookie(context, SESSION_COOKIE, { path: '/' });
+    }
+    const body: ResetPasswordResponse = { outcome: result.outcome };
+    return context.json(body);
+  });
+
+  /**
    * Sign this device out (D261): its session row is deleted, so the cookie -
    * or any copy of it - names nothing from here on, and the browser's copy is
    * deleted too. Signed out already, it only deletes the browser's copy.
@@ -408,6 +485,13 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
 
     const updated = await changePassword(user.id, await hashPassword(newPassword));
     if (!updated) throw unauthorized();
+    const sender = context.get('email');
+    if (sender !== null && updated.email !== null) {
+      const settings = await getOrCreateUserSettings(updated.id);
+      const recipient = { email: updated.email, language: mailLanguage(settings.language) };
+      const origin = requestOrigin(context);
+      sendInBackground(updated.id, 'password_changed', () => sendPasswordChanged(sender, origin, recipient));
+    }
     // The change ended every session, this one too; this device gets a new one.
     await issueSession(context, updated);
     return context.json(await sessionUser(updated));

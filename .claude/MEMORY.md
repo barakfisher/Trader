@@ -4917,6 +4917,51 @@ failure they prevent.
     - **Cost:** a link in kind's Mailpit is opened on this Mac, not the phone.
     - **Rejected:** keeping `/mailpit/` on Tailscale (fine only while the tailnet holds nobody
       else's devices); no Mailpit on kind (the email flows could not be tried there).
+312. **How PR 11 builds D260's reset** (assumptions stated to the user, 2026-10-26; M10 PR 11; no
+    migration - `auth_tokens` already enumerates `reset_password`).
+    - **Who is mailed:** only an `active` account with a proven address
+      (`getResetRecipient`). An unknown address, a request, a disabled account: no mail. The
+      answer is `{ sent: true }` in every case (D185), and the mail goes in the background so
+      SMTP's time says nothing either. The page says "if an account uses that address".
+    - **The link** (`/reset#token=`, 30 minutes, `RESET_TOKEN_TTL_MINUTES`) works once; a new
+      request cancels the earlier link. `issueAuthToken` takes minutes now, so the half hour
+      and verification's day share one column.
+    - **Opening it signs nobody in:** the password is replaced, `password_must_change` cleared,
+      `session_version` bumped and every session row deleted in one transaction, and the
+      browser's cookie is deleted; the person signs in with the new password, as after any
+      link (D304). Only an account still `active` at the address the link went to.
+    - **Every password change mails a notice** ("your password was changed", with a link to the
+      sign-in page), by reset or from Settings: a change the owner did not make is seen.
+    - **A reset ends a pending address change too,** without extra code: D310's link needs the
+      account's current password.
+    - **Rate limits:** `resetRequestPerAddress` 5 an hour, `resetRequestPerEmail` 3 an hour,
+      spent before any lookup.
+    - **Rejected:**
+      - signing in on a successful reset (a mailbox is not a password, D304);
+      - mailing an unknown address "no account here" (it tells a prober the address is free,
+        and mails strangers on demand);
+      - a notice only on reset (a password changed from a stolen session is the case it is for).
+    - **From the security review:** `/auth/reset` looks the link up (`peekVerificationToken`)
+      before hashing the new password, and spends `resetAttemptPerAddress` (20 an hour) first:
+      argon2 is the expensive part, and a made-up token cost it before. A reset also clears
+      `pending_email` and its unused `verify_new_email` links.
+    - **Accepted:** two reset requests in the same instant can each leave a live link (the
+      cancel-and-insert is one statement, not a lock); both go to the same mailbox.
+    - **Checked:** migration 0074 marked every existing account verified, which now lets its
+      mailbox reset it. On compose and kind every such address is the user's own (2026-10-26).
+313. **The admin is never reset by email, and a reset unbinds Telegram** (the user, 2026-10-26;
+    M10 PR 11, from the security review).
+    - **The admin:** `getResetRecipient` and `useResetToken` skip `role = 'admin'`. The form
+      answers the same, so nothing is revealed; a lost admin password is set on the host with
+      `bash scripts/admin-password.sh`, as before. The installation's most valuable account no
+      longer depends on one mailbox.
+    - **Telegram:** a reset deletes the user's `telegram_bindings` row in its transaction. A
+      chat bound by whoever held a stolen session would otherwise keep the assistant and
+      Approve/Reject after the owner reset. A password change from Settings keeps the binding:
+      the owner was signed in and proved the old password.
+    - **Rejected:** the admin resettable like anyone (a compromised mailbox becomes a
+      compromised installation); unbinding on every password change (a routine change would
+      cost a re-bind each time); keeping the binding (only the notice mail would reveal it).
 ---
 
 ## Bugs that cost real time, and the lesson from each

@@ -4,19 +4,21 @@ import { AtSign, LineChart, LockKeyhole } from 'lucide-react';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { PasswordInput } from '../components/PasswordInput.tsx';
+import { ResetRequestForm } from '../components/ResetRequestForm.tsx';
 import { SignupForm } from '../components/SignupForm.tsx';
 import { Button, ErrorNote } from '../components/ui.tsx';
 import { ApiRequestError, RATE_LIMITED } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { useStore } from '../stores/context.tsx';
 
-/** Email and password (D159), and asking to join (D156): the only page that works signed out. */
+/** Email and password (D159), asking to join (D156), and a forgotten password (D260): the page that works signed out. */
 export const LoginPage = observer(function LoginPage() {
   const { auth } = useStore();
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [joining, setJoining] = useState(false);
+  const [forgotten, setForgotten] = useState(false);
 
   return (
     <main className="flex min-h-full items-center justify-center p-6">
@@ -27,6 +29,8 @@ export const LoginPage = observer(function LoginPage() {
         </div>
         {joining ? (
           <SignupForm onBack={() => setJoining(false)} />
+        ) : forgotten ? (
+          <ResetRequestForm onBack={() => setForgotten(false)} />
         ) : (
           <>
             {auth.sessionEndedNotice && (
@@ -81,7 +85,13 @@ export const LoginPage = observer(function LoginPage() {
               >
                 {auth.submitting ? t('login.signingIn') : t('login.signIn')}
               </Button>
-              <p className="text-xs text-text-muted">{t('login.forgotten')}</p>
+              <button
+                type="button"
+                onClick={() => setForgotten(true)}
+                className="w-full text-center text-xs text-accent hover:underline"
+              >
+                {t('login.forgotten')}
+              </button>
             </form>
             <button
               type="button"

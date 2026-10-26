@@ -19,7 +19,8 @@ export interface NewAuthToken {
   /** Where the link is sent: a link for an address the account no longer has proves nothing. */
   email: string;
   tokenHash: Buffer;
-  ttlHours: number;
+  /** Minutes, so a reset's half hour fits beside verification's day (D260). */
+  ttlMinutes: number;
 }
 
 /** Write a link, cancelling the user's earlier unused link of the same purpose (D260). */
@@ -29,8 +30,8 @@ export async function issueAuthToken(token: NewAuthToken): Promise<void> {
        DELETE FROM auth_tokens WHERE user_id = $1 AND purpose = $2 AND used_at IS NULL
      )
      INSERT INTO auth_tokens (user_id, purpose, email, token_hash, expires_at)
-     VALUES ($1, $2, $3, $4, now() + make_interval(hours => $5))`,
-    [token.userId, token.purpose, token.email, token.tokenHash, token.ttlHours],
+     VALUES ($1, $2, $3, $4, now() + make_interval(mins => $5))`,
+    [token.userId, token.purpose, token.email, token.tokenHash, token.ttlMinutes],
   );
 }
 
@@ -248,4 +249,71 @@ export async function deleteStaleUnverifiedSignups(days: number): Promise<number
     [days],
   );
   return row?.deleted ?? 0;
+}
+
+/**
+ * Who a reset mail goes to: an active account with a proven address, or
+ * nobody (D312). Never the admin: the installation's most valuable account
+ * does not depend on one mailbox, and is reset on the host with
+ * `scripts/admin-password.sh` (D313).
+ */
+export function getResetRecipient(email: string): Promise<{ id: string; email: string; language: string } | null> {
+  return queryOne<{ id: string; email: string; language: string }>(
+    `SELECT u.id, u.email, coalesce(us.language, 'en') AS language
+       FROM users u LEFT JOIN user_settings us ON us.user_id = u.id
+      WHERE lower(u.email) = lower($1) AND u.status = 'active' AND u.email_verified_at IS NOT NULL
+        AND u.role <> 'admin'`,
+    [email],
+  );
+}
+
+export type ResetResult =
+  | { outcome: 'reset'; userId: string; email: string }
+  | { outcome: 'expired' | 'used' | 'invalid' };
+
+/**
+ * Open a reset link with the new password's hash (D260): in one transaction
+ * the link is checked and used, the password replaced, the one-time
+ * password's "must change" cleared, and every session ended - a reset is what
+ * someone does when they think the password is known to another. Only an
+ * active account whose address is still the one the link went to.
+ */
+export async function useResetToken(tokenHash: Buffer, passwordHash: string | null): Promise<ResetResult> {
+  return transaction(async (client) => {
+    const token = (
+      await client.query<{ id: string; user_id: string; purpose: AuthTokenPurpose; email: string; expired: boolean; used: boolean }>(
+        `SELECT id, user_id, purpose, email, expires_at <= now() AS expired, used_at IS NOT NULL AS used
+           FROM auth_tokens WHERE token_hash = $1 FOR UPDATE`,
+        [tokenHash],
+      )
+    ).rows[0];
+    if (!token || token.purpose !== 'reset_password') return { outcome: 'invalid' };
+    if (token.used) return { outcome: 'used' };
+    if (token.expired) return { outcome: 'expired' };
+    // No password: the caller only asked what an unusable link is, and it is usable.
+    if (passwordHash === null) return { outcome: 'invalid' };
+    await client.query('UPDATE auth_tokens SET used_at = now() WHERE id = $1', [token.id]);
+    // A pending address change goes too: whoever asked for it may be who the
+    // owner is resetting against, and its link could no longer be opened anyway (D310).
+    const updated = await client.query<{ email: string }>(
+      `UPDATE users
+          SET password_hash = $2, password_must_change = false, session_version = session_version + 1,
+              pending_email = NULL
+        WHERE id = $1 AND status = 'active' AND role <> 'admin' AND lower(email) = lower($3)
+        RETURNING email`,
+      [token.user_id, passwordHash, token.email],
+    );
+    const changed = updated.rows[0];
+    if (!changed) return { outcome: 'invalid' };
+    await client.query('DELETE FROM user_sessions WHERE user_id = $1', [token.user_id]);
+    await client.query(
+      "DELETE FROM auth_tokens WHERE user_id = $1 AND purpose = 'verify_new_email' AND used_at IS NULL",
+      [token.user_id],
+    );
+    // A reset is what someone does when another may know the password: a chat
+    // that other bound must not keep the assistant and Approve (D313). The
+    // owner binds again from Settings.
+    await client.query('DELETE FROM telegram_bindings WHERE user_id = $1', [token.user_id]);
+    return { outcome: 'reset', userId: token.user_id, email: changed.email };
+  });
 }

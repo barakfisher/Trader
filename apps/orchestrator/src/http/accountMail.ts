@@ -16,7 +16,14 @@ import { issueAuthToken } from '../db/queries.js';
 import { emailMessages } from '../email/messages.js';
 import type { EmailSender } from '../email/sender.js';
 import { logger } from '../logger.js';
-import { SIGNUP_LINK_HINT, VERIFY_TOKEN_TTL_HOURS, linkTokenHash, newLinkToken, pageLink } from './linkTokens.js';
+import {
+  RESET_TOKEN_TTL_MINUTES,
+  SIGNUP_LINK_HINT,
+  VERIFY_TOKEN_TTL_HOURS,
+  linkTokenHash,
+  newLinkToken,
+  pageLink,
+} from './linkTokens.js';
 
 /** Where the person reads a link: the sign-up's language, else English. */
 export function mailLanguage(language: string | null | undefined): UiLanguage {
@@ -25,6 +32,9 @@ export function mailLanguage(language: string | null | undefined): UiLanguage {
 
 /** The page a verification link opens; it posts the token to `POST /auth/verify`. */
 export const VERIFY_PAGE = '/verify';
+
+/** The page a reset link opens; it posts the token and the new password to `POST /auth/reset`. */
+export const RESET_PAGE = '/reset';
 
 export interface Recipient {
   userId: string;
@@ -48,11 +58,30 @@ export async function sendVerificationLink(
     purpose,
     email: recipient.email,
     tokenHash: linkTokenHash(token),
-    ttlHours: VERIFY_TOKEN_TTL_HOURS,
+    ttlMinutes: VERIFY_TOKEN_TTL_HOURS * 60,
   });
   const link = pageLink(origin, VERIFY_PAGE, token, purpose === 'verify_email' ? SIGNUP_LINK_HINT : {});
   const compose = purpose === 'verify_email' ? emailMessages.verifyEmail : emailMessages.verifyNewEmail;
   await sender.send(compose(recipient.email, recipient.language, link, VERIFY_TOKEN_TTL_HOURS));
+}
+
+/** A new reset link (D260, D312), cancelling the account's earlier one; it works for half an hour. */
+export async function sendResetLink(sender: EmailSender, origin: string, recipient: Recipient): Promise<void> {
+  const token = newLinkToken();
+  await issueAuthToken({
+    userId: recipient.userId,
+    purpose: 'reset_password',
+    email: recipient.email,
+    tokenHash: linkTokenHash(token),
+    ttlMinutes: RESET_TOKEN_TTL_MINUTES,
+  });
+  const link = pageLink(origin, RESET_PAGE, token);
+  await sender.send(emailMessages.resetPassword(recipient.email, recipient.language, link, RESET_TOKEN_TTL_MINUTES));
+}
+
+/** After any password change, by reset or from Settings (D312): a change the owner did not make is seen. */
+export async function sendPasswordChanged(sender: EmailSender, origin: string, recipient: Omit<Recipient, 'userId'>): Promise<void> {
+  await sender.send(emailMessages.passwordChanged(recipient.email, recipient.language, pageLink(origin, '/')));
 }
 
 /** Sign-up with an address that already has an account or a decided request (D303). */

@@ -30,6 +30,10 @@ interface EmailCatalogue {
   verifyNewEmail(link: string, hours: number): Draft;
   /** To the current address, when a change to another one is asked for (D259). */
   emailChangeRequested(newEmail: string): Draft;
+  /** A reset link, to an active account's address (D260, D312). */
+  resetPassword(link: string, minutes: number): Draft;
+  /** After the password changed, by reset or from Settings (D312). */
+  passwordChanged(signInLink: string): Draft;
 }
 
 const isolate = (text: string) => `⁨${text}⁩`;
@@ -69,6 +73,23 @@ const CATALOGUE: Record<UiLanguage, EmailCatalogue> = {
         'If this was not you, sign in, change your password, and sign out the devices you do not recognise in Settings.',
       ],
     }),
+    resetPassword: (link, minutes) => ({
+      subject: 'Reset your Traders password',
+      blocks: [
+        'Someone asked to reset the password of the Traders account with this address. To choose a new one, open:',
+        { link },
+        `The link works once and expires in ${minutes} minutes. Choosing a new password signs you out on every device.`,
+        'If you did not ask for this, ignore this email: your password has not changed.',
+      ],
+    }),
+    passwordChanged: (signInLink) => ({
+      subject: 'Your Traders password was changed',
+      blocks: [
+        'The password of your Traders account was just changed, and every device was signed out.',
+        'If this was you, there is nothing more to do. If it was not, reset your password from the sign-in page now:',
+        { link: signInLink },
+      ],
+    }),
   },
   he: {
     verifyEmail: (link, hours) => ({
@@ -102,6 +123,23 @@ const CATALOGUE: Record<UiLanguage, EmailCatalogue> = {
         `מישהו שמחובר לחשבון ה-Traders שלכם ביקש לשנות את כתובת ההתחברות שלו ל-${isolate(newEmail)}.`,
         'שום דבר לא משתנה עד שהכתובת הזו תאושר - אתם עדיין מתחברים עם הכתובת הזו.',
         'אם זה לא הייתם אתם, התחברו, החליפו את הסיסמה ונתקו בהגדרות את המכשירים שאינכם מזהים.',
+      ],
+    }),
+    resetPassword: (link, minutes) => ({
+      subject: 'איפוס הסיסמה שלכם ב-Traders',
+      blocks: [
+        'מישהו ביקש לאפס את הסיסמה של חשבון ה-Traders עם הכתובת הזו. כדי לבחור סיסמה חדשה, פתחו:',
+        { link },
+        `הקישור עובד פעם אחת ותוקפו פג בעוד ${minutes} דקות. בחירת סיסמה חדשה מנתקת אתכם מכל המכשירים.`,
+        'אם לא ביקשתם זאת, התעלמו מהאימייל הזה: הסיסמה שלכם לא השתנתה.',
+      ],
+    }),
+    passwordChanged: (signInLink) => ({
+      subject: 'הסיסמה שלכם ב-Traders שונתה',
+      blocks: [
+        'הסיסמה של חשבון ה-Traders שלכם שונתה הרגע, וכל המכשירים נותקו.',
+        'אם זה הייתם אתם, אין צורך לעשות דבר. אם לא, אפסו את הסיסמה מדף ההתחברות עכשיו:',
+        { link: signInLink },
       ],
     }),
   },
@@ -150,4 +188,8 @@ export const emailMessages = {
     render(to, language, CATALOGUE[language].verifyNewEmail(link, hours)),
   emailChangeRequested: (to: string, language: UiLanguage, newEmail: string) =>
     render(to, language, CATALOGUE[language].emailChangeRequested(newEmail)),
+  resetPassword: (to: string, language: UiLanguage, link: string, minutes: number) =>
+    render(to, language, CATALOGUE[language].resetPassword(link, minutes)),
+  passwordChanged: (to: string, language: UiLanguage, signInLink: string) =>
+    render(to, language, CATALOGUE[language].passwordChanged(signInLink)),
 };

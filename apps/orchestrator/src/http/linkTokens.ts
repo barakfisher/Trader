@@ -11,6 +11,9 @@ export const LINK_TOKEN_BYTES = 32;
 /** How long a verification link works (D260's `VERIFY_TOKEN_TTL`). */
 export const VERIFY_TOKEN_TTL_HOURS = 24;
 
+/** How long a reset link works (D260's `RESET_TOKEN_TTL`): short, because it replaces the password. */
+export const RESET_TOKEN_TTL_MINUTES = 30;
+
 /** How long an unverified sign-up waits for its link before the sweep removes it (D304). */
 export const UNVERIFIED_SIGNUP_DAYS = 7;
 
