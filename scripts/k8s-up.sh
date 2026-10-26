@@ -307,7 +307,10 @@ done
 say "Waiting for the services"
 # `rollout status` returns once the Deployment's new pods pass their readiness
 # probes - the same signal the Service uses to send them traffic.
-for deployment in ai-service orchestrator web; do
+# Mailpit too (D307, D311): the orchestrator sends every link to it, so an
+# inbox that is missing - or in another namespace - fails the deploy here
+# rather than at the first sign-up.
+for deployment in ai-service orchestrator web mailpit; do
   kc rollout status "deployment/$deployment" --timeout=300s
 done
 kubectl --context "$CONTEXT" -n traefik rollout status deployment/traefik --timeout=120s

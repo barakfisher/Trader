@@ -5,6 +5,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# The base's `namespace:` reaches only the base's own resources; anything this
+# overlay adds needs it too, or it lands in `default` - where the orchestrator's
+# `SMTP_HOST=mailpit` cannot find it and the Ingress's backend does not exist.
+namespace: traders
+
 resources:
   - ../../base
   # This machine's mail catcher (D307); a public overlay points SMTP at a real provider instead.
