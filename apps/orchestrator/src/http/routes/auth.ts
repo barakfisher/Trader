@@ -49,6 +49,7 @@ import {
   type UserRow,
 } from '../../db/queries.js';
 import {
+  announceAccountRestored,
   mailLanguage,
   sendEmailChangeNotice,
   sendInBackground,
@@ -211,6 +212,7 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
 
     await recordSignIn(user.id);
     await issueSession(context, user);
+    if (reopened !== null) await announceAccountRestored(context.get('email'), reopened);
     const body: LoginResponse = { ...(await sessionUser(user)), deletionCancelled: reopened !== null };
     return context.json(body);
   });

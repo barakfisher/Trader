@@ -38,6 +38,8 @@ interface EmailCatalogue {
   identityLinked(provider: string, signInLink: string): Draft;
   /** The account was closed at the user's request and will be erased on `date` (D264). */
   accountClosed(date: string, signInLink: string): Draft;
+  /** A sign-in cancelled the account's pending deletion (D264), so one the owner did not make is seen. */
+  accountRestored(): Draft;
 }
 
 const isolate = (text: string) => `⁨${text}⁩`;
@@ -112,6 +114,13 @@ const CATALOGUE: Record<UiLanguage, EmailCatalogue> = {
         'If you did not ask for this, sign in now to keep your account, then change your password.',
       ],
     }),
+    accountRestored: () => ({
+      subject: 'Your Traders account will not be deleted',
+      blocks: [
+        'Someone signed in to your Traders account, which cancelled its deletion. The account is open again, with everything in it.',
+        'If this was you, there is nothing more to do. If it was not, reset your password from the sign-in page, then sign out the devices you do not recognise in Settings - and delete the account again if you still want it gone.',
+      ],
+    }),
   },
   he: {
     verifyEmail: (link, hours) => ({
@@ -182,6 +191,13 @@ const CATALOGUE: Record<UiLanguage, EmailCatalogue> = {
         'אם לא ביקשתם זאת, התחברו עכשיו כדי לשמור על החשבון, ואז החליפו את הסיסמה.',
       ],
     }),
+    accountRestored: () => ({
+      subject: 'חשבון ה-Traders שלכם לא יימחק',
+      blocks: [
+        'מישהו התחבר לחשבון ה-Traders שלכם, וההתחברות ביטלה את מחיקתו. החשבון פתוח שוב, עם כל מה שבו.',
+        'אם זה הייתם אתם, אין צורך לעשות דבר. אם לא, אפסו את הסיסמה מדף ההתחברות, נתקו בהגדרות את המכשירים שאינכם מזהים - ומחקו את החשבון שוב אם אתם עדיין רוצים בכך.',
+      ],
+    }),
   },
 };
 
@@ -236,4 +252,5 @@ export const emailMessages = {
     render(to, language, CATALOGUE[language].identityLinked(provider, signInLink)),
   accountClosed: (to: string, language: UiLanguage, date: string, signInLink: string) =>
     render(to, language, CATALOGUE[language].accountClosed(date, signInLink)),
+  accountRestored: (to: string, language: UiLanguage) => render(to, language, CATALOGUE[language].accountRestored()),
 };

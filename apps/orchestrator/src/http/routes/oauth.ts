@@ -56,7 +56,7 @@ import {
   type OAuthState,
 } from '../../oauth/stateCookie.js';
 import { announceSignupRequest } from '../../telegram/signupApproval.js';
-import { mailLanguage, sendInBackground } from '../accountMail.js';
+import { announceAccountRestored, mailLanguage, sendInBackground } from '../accountMail.js';
 import type { AppEnv } from '../app.js';
 import { ApiProblem, notFound, unauthorized } from '../errors.js';
 import { pageLink } from '../linkTokens.js';
@@ -288,6 +288,7 @@ async function signIn(context: Context<AppEnv>, userId: string): Promise<OAuthOu
   if (user.status !== 'active' && reopened === null) return 'not_active';
   await issueSession(context, reopened ?? user);
   await recordSignIn(user.id);
+  if (reopened !== null) await announceAccountRestored(context.get('email'), reopened);
   return reopened ? 'restored' : 'signed_in';
 }
 

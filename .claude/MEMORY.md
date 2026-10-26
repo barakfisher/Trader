@@ -5052,6 +5052,15 @@ failure they prevent.
       ended (it fell back to the browser's until the browser check caught it).
     - **Downgrading 0076 makes a closed account `disabled`** - no way in, nothing the older code
       would erase - rather than reopening it.
+    - **A closed account can still reset its password before its date** (the reset leaves it
+      closed; the sign-in after reopens it): otherwise a thief who changed the password and then
+      closed the account left the owner no way back. **A sign-in that reopens mails the
+      account** ("will not be deleted"), so a quiet undo by someone else is seen.
+    - **Accepted (security review):** an account with no password confirms by a sign-in within
+      10 minutes, and a stolen session can meet that by linking the thief's provider and
+      signing in with it. The link is mailed (D263), the account is only closed, and a reset
+      during the grace period removes linked providers (D315). The export needs a session, not
+      a fresh sign-in: it is rate-limited and sent `no-store`.
     - **Debt:** a scan already on the queue when the account closes still runs (`runSlotAttempt`
       checks the agent, not the user) - at most one, within the quarter hour; the same is true
       of a disable (D239). A user-status check there closes both.
@@ -5060,18 +5069,23 @@ failure they prevent.
     - **`erase_account(user)`**, `SECURITY DEFINER`, owned by the migration role, granted to
       `traders_app`: the app role cannot delete history (fills, movements, scans, attempts),
       and the function erases only a closed account past its date or a rejected request.
-    - **The seven keys with no delete rule cascade** (`agent_cash`, `agent_scans`,
-      `assistant_conversations`, `cash_movements`, `fills`, `proposal_attempts`), and
-      `admin_audit.admin_user_id` is nullable with `SET NULL`. Keys that `RESTRICT` stop a
-      cascade midway whatever its order, so the function deletes movements, fills and intents
-      first, then the user; everything else goes by cascade.
+    - **The seven keys with no delete rule keep it; the function settles them.** It deletes
+      movements, fills, intents, attempts, proposals, scans, cash and conversations in an order
+      their keys accept, then the user; everything else cascades. `admin_audit.admin_user_id`
+      is nullable with no rule, and the function clears it (a demoted admin may be erased).
+    - **Why not cascades (the security review's blocker):** a cascade runs with the table
+      owner's rights, and the app role may still `DELETE FROM users` (unverified sign-ups). The
+      first version made the six history keys cascade, so the app role - or SQL injection
+      through it - could erase any active user's scans, attempts and, with the flag any role can
+      set, fills and movements, never asking the function. NO ACTION keeps that `DELETE`
+      refused; `test_the_app_role_cannot_erase_history_around_the_function` pins it.
     - **`admin_audit` keeps its rows with the user's id replaced by `erased`** in `action` and
-      `detail`; the append-only guard allows that update only while the function sets
-      `traders.account_erase`.
+      `detail`, in any case; the append-only guard allows that update only while the function
+      sets `traders.account_erase` (the app role holds no UPDATE there, so the flag gives it
+      nothing).
     - **`account_resets` backups go with the user** (they already cascaded).
     - *Rejected:* granting the app role DELETE on history (the append-only ledger, D22/D23, would
-      be one bug away from editable); erasing table by table in TypeScript (a new user-owned
-      table without a cascade fails the erase in production, where the cascade fails the test).
+      be one bug away from editable); erasing table by table in TypeScript (the app role cannot).
     - **Lesson, caught by the test:** `IF NOT (a OR b)` with no row found is `IF NULL`, which
       plpgsql treats as false - the first version erased the admin. The guard is
       `coalesce(..., false)`.

@@ -95,6 +95,9 @@ def connection(as_app: Engine, migrated: Engine) -> Iterator[Connection]:
     with as_app.connect() as connection, connection.begin() as transaction:
         yield connection
         transaction.rollback()
+    # Other suites count the admins on this database.
+    with migrated.begin() as owner:
+        owner.execute(text("DELETE FROM users WHERE id = '00000000-0000-0000-0000-0000000000ad'"))
 
 
 def test_an_erase_leaves_nothing_of_the_account_and_touches_nobody_else(
@@ -240,3 +243,46 @@ def test_closed_means_a_date_and_a_date_means_closed(connection: Connection) -> 
             text("UPDATE users SET deletion_due_at = now() WHERE id = CAST(:u AS uuid)"),
             {"u": account["user"]},
         )
+
+
+def test_the_app_role_cannot_erase_history_around_the_function(connection: Connection) -> None:
+    """A plain `DELETE FROM users` (the app may delete unverified sign-ups) takes no history.
+
+    Both flags are set as anyone can set them: the seven keys still refuse,
+    because only the function deletes what they guard (0033, 0040, 0043, 0044).
+    """
+    account = _account(connection)
+    before = _owned(connection, account["user"])
+    with (
+        pytest.raises(Exception, match="foreign key"),
+        connection.begin_nested(),
+    ):
+        connection.execute(text("SET LOCAL traders.account_reset = 'on'"))
+        connection.execute(text("SET LOCAL traders.account_erase = 'on'"))
+        connection.execute(
+            text("DELETE FROM users WHERE id = CAST(:u AS uuid)"), {"u": account["user"]}
+        )
+    assert _owned(connection, account["user"]) == before
+
+
+def test_the_audit_loses_the_id_in_any_case_and_a_demoted_admins_name(
+    connection: Connection,
+) -> None:
+    account = _account(connection)
+    upper = account["user"].upper()
+    connection.execute(
+        text(
+            "INSERT INTO admin_audit (admin_user_id, action, detail) VALUES "
+            "(CAST(:u AS uuid), :action, '{}'::jsonb)"
+        ),
+        {"u": account["user"], "action": f"POST /admin/users/{upper}/enable"},
+    )
+    _close(connection, account["user"], "-1 minute")
+
+    assert _erase(connection, account["user"]) is True
+
+    row = connection.execute(
+        text("SELECT admin_user_id, action FROM admin_audit WHERE action LIKE '%/enable'")
+    ).one()
+    assert row.admin_user_id is None
+    assert row.action == "POST /admin/users/erased/enable"

@@ -2895,6 +2895,28 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       });
     });
 
+    it('lets a closed account reset its password during the grace period, and leaves it closed', async () => {
+      await withUser(async (userId) => {
+        const email = `${userId}@example.com`;
+        await getPool().query('UPDATE users SET email_verified_at = now() WHERE id = $1', [userId]);
+        await queries.closeAccount(userId, ACCOUNT_DELETION_GRACE_DAYS);
+        expect(await queries.getResetRecipient(email)).toMatchObject({ id: userId });
+
+        const token = Buffer.alloc(32, userId.slice(0, 1));
+        await getPool().query(
+          `INSERT INTO auth_tokens (user_id, purpose, token_hash, email, expires_at)
+           VALUES ($1, 'reset_password', $2, $3, now() + interval '30 minutes')`,
+          [userId, token, email],
+        );
+        expect(await queries.useResetToken(token, '$argon2id$v=19$m=19456,t=2,p=1$reset')).toMatchObject({ outcome: 'reset' });
+        expect(await statusOf(userId)).toBe('closed');
+
+        // Past its date there is nothing to reset: the erase may be taking it.
+        await backdate(userId, '1 minute');
+        expect(await queries.getResetRecipient(email)).toBeNull();
+      });
+    });
+
     it('counts a sign-in as recent only within the minutes asked, and only for its own user', async () => {
       await withUser(async (userId, sessionId) => {
         expect(await queries.sessionSignedInWithin(userId, sessionId, 10)).toBe(true);

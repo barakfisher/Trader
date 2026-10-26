@@ -12,16 +12,20 @@
   migration count from now: the shorter retention starts at deploy, never
   earlier than the user was told.
 - **The seven foreign keys with no delete rule** (M10-MEASUREMENT §6) are
-  settled: `agent_cash`, `agent_scans`, `assistant_conversations`,
-  `cash_movements`, `fills` and `proposal_attempts` cascade with the user;
-  `admin_audit.admin_user_id` becomes nullable and is cleared, so the audit
-  keeps its rows. `account_resets` already cascades.
+  settled by the function, not by cascades: `agent_cash`, `agent_scans`,
+  `assistant_conversations`, `cash_movements`, `fills` and `proposal_attempts`
+  keep NO ACTION, and `admin_audit.admin_user_id` becomes nullable with no
+  rule. A cascade runs with the table owner's rights, so it would let the
+  app's role - which may still `DELETE FROM users`, for unverified sign-ups -
+  erase the history it was denied (0033, 0040, 0043, 0044) for any user, past
+  any date, without asking the function. `account_resets` already cascades.
 - **`erase_account(user)`**, owned by the migration role: the app's role cannot
   delete history (fills, movements, scans, attempts), so the erase is a
   function it may call, which refuses anything but a closed account past its
-  date or a rejected request. It clears the user's id from `admin_audit`'s
-  action and detail, removes the rows a `RESTRICT` key would stop, and deletes
-  the user; every other row goes by cascade. Shared market data stays.
+  date or a rejected request. It clears the user's id from `admin_audit`
+  (their own admin attribution, and the id in action and detail), deletes the
+  rows the seven keys guard in an order their keys accept, then the user;
+  every other row goes by cascade. Shared market data stays.
 - **`account_erase`, a run kind**: the installation's run that calls it.
 
 The downgrade turns a closed account `disabled` - no way in, and nothing the
@@ -65,16 +69,6 @@ KINDS = (*PREVIOUS_KINDS, "account_erase")
 PREVIOUS_STATUSES = ("pending", "active", "rejected", "disabled")
 USER_STATUSES = (*PREVIOUS_STATUSES, "closed")
 
-#: The user-owned tables whose key to `users` had no delete rule; they cascade now.
-CASCADING = (
-    "agent_cash",
-    "agent_scans",
-    "assistant_conversations",
-    "cash_movements",
-    "fills",
-    "proposal_attempts",
-)
-
 
 def _sql_list(values: tuple[str, ...]) -> str:
     return ", ".join(f"'{value}'" for value in values)
@@ -95,30 +89,14 @@ def _statuses(values: tuple[str, ...]) -> None:
     )
 
 
-def _user_keys(rule: str) -> None:
-    for table in CASCADING:
-        op.execute(
-            f"ALTER TABLE {table} DROP CONSTRAINT {table}_user_id_fkey, "
-            f"ADD CONSTRAINT {table}_user_id_fkey FOREIGN KEY (user_id) "
-            f"REFERENCES users (id){rule}"
-        )
-
-
-def _audit_key(rule: str) -> None:
-    op.execute(
-        "ALTER TABLE admin_audit DROP CONSTRAINT admin_audit_admin_user_id_fkey, "
-        "ADD CONSTRAINT admin_audit_admin_user_id_fkey FOREIGN KEY (admin_user_id) "
-        f"REFERENCES users (id){rule}"
-    )
-
-
 #: 0026's guard, with the one exception the erase needs.
 AUDIT_GUARD = """
         CREATE OR REPLACE FUNCTION admin_audit_refuse_change() RETURNS trigger
         LANGUAGE plpgsql AS $$
         BEGIN
             -- Only `erase_account` sets this, inside its own transaction: it
-            -- clears an erased user's id from the rows and keeps them.
+            -- clears an erased user's id from the rows and keeps them. Any role
+            -- can set the flag; only the owner holds UPDATE here (0033).
             IF TG_OP = 'UPDATE' AND current_setting('traders.account_erase', true) = 'on' THEN
                 RETURN NEW;
             END IF;
@@ -156,15 +134,13 @@ def upgrade() -> None:
     op.execute("CREATE INDEX users_deletion_due ON users (deletion_due_at) WHERE status = 'closed'")
     op.execute("CREATE INDEX users_rejected_at ON users (rejected_at) WHERE status = 'rejected'")
 
-    _user_keys(" ON DELETE CASCADE")
     op.execute("ALTER TABLE admin_audit ALTER COLUMN admin_user_id DROP NOT NULL")
-    _audit_key(" ON DELETE SET NULL")
     op.execute(AUDIT_GUARD)
 
     op.execute(
         """
         CREATE FUNCTION erase_account(p_user_id uuid) RETURNS boolean
-        LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
+        LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
         DECLARE
             v_status text;
             v_due timestamptz;
@@ -184,17 +160,26 @@ def upgrade() -> None:
             PERFORM set_config('traders.account_reset', 'on', true);
             PERFORM set_config('traders.account_erase', 'on', true);
 
-            -- The audit keeps what the admin did, without whom it was done to.
+            -- The audit keeps what was done, without whom it was done to or by
+            -- (an admin is never erased; a demoted one may be). Any case of the id.
             UPDATE admin_audit
-               SET action = replace(action, v_id, 'erased'),
-                   detail = replace(detail::text, v_id, 'erased')::jsonb
-             WHERE strpos(action, v_id) > 0 OR strpos(detail::text, v_id) > 0;
+               SET action = regexp_replace(action, v_id, 'erased', 'gi'),
+                   detail = regexp_replace(detail::text, v_id, 'erased', 'gi')::jsonb
+             WHERE action ~* v_id OR detail::text ~* v_id;
+            UPDATE admin_audit SET admin_user_id = NULL WHERE admin_user_id = p_user_id;
 
-            -- Keys that RESTRICT stop a cascade midway, whatever its order:
-            -- a fill's movement, a proposal's fills and intents go first.
+            -- The rows the seven keys guard, children before what they name:
+            -- a fill's movement, a proposal's fills, intents and attempts, then
+            -- the proposals (which name the scans), the scans, the cash and the
+            -- conversations. Then the user; the rest cascades.
             DELETE FROM cash_movements WHERE user_id = p_user_id;
             DELETE FROM fills WHERE user_id = p_user_id;
             DELETE FROM intents WHERE user_id = p_user_id;
+            DELETE FROM proposal_attempts WHERE user_id = p_user_id;
+            DELETE FROM proposals WHERE user_id = p_user_id;
+            DELETE FROM agent_scans WHERE user_id = p_user_id;
+            DELETE FROM agent_cash WHERE user_id = p_user_id;
+            DELETE FROM assistant_conversations WHERE user_id = p_user_id;
             DELETE FROM users WHERE id = p_user_id;
 
             PERFORM set_config('traders.account_erase', 'off', true);
@@ -223,9 +208,7 @@ def downgrade() -> None:
     )
     op.execute("DROP FUNCTION erase_account(uuid)")
     op.execute(AUDIT_GUARD_BEFORE)
-    _audit_key("")
     op.execute("ALTER TABLE admin_audit ALTER COLUMN admin_user_id SET NOT NULL")
-    _user_keys("")
 
     # No way in, and nothing the older code would erase.
     op.execute("ALTER TABLE users DROP CONSTRAINT users_closed_has_deletion_date")

@@ -19,6 +19,7 @@ describe('the email catalogue', () => {
     emailMessages.verifyNewEmail('a@example.com', language, LINK, 24),
     emailMessages.emailChangeRequested('a@example.com', language, 'new@example.com'),
     emailMessages.accountClosed('a@example.com', language, '2 November 2026 at 12:00', 'https://traders.example/'),
+    emailMessages.accountRestored('a@example.com', language),
   ];
 
   it.each(UI_LANGUAGES)('writes every kind in %s, addressed, with a subject, text and HTML', (language) => {

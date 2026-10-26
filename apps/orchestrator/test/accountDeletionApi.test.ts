@@ -110,6 +110,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mail = new RecordingEmailSender();
   vi.mocked(queries.getUser).mockResolvedValue(USER);
+  // One test mails in Hebrew; the rest read English.
+  vi.mocked(queries.getOrCreateUserSettings).mockResolvedValue({ language: 'en' } as never);
   vi.mocked(queries.getPasswordHash).mockResolvedValue(passwordHash);
   vi.mocked(queries.sessionSignedInWithin).mockResolvedValue(false);
   vi.mocked(queries.closeAccount).mockResolvedValue({
@@ -258,6 +260,9 @@ describe('signing in during the grace period (D264)', () => {
     expect(await response.json()).toMatchObject({ id: USER.id, deletionCancelled: true });
     expect(queries.reopenClosedAccount).toHaveBeenCalledWith(USER.id);
     expect(response.headers.get('set-cookie')).toContain(`${SESSION_COOKIE}=`);
+    // Mailed, so a sign-in by someone else that undid the deletion is seen.
+    await mail.settled();
+    expect(mail.sent.map((sent) => [sent.to, sent.subject])).toEqual([[USER.email, 'Your Traders account will not be deleted']]);
   });
 
   it('refuses a closed account whose date has passed - nothing left to reopen', async () => {
@@ -285,6 +290,8 @@ describe('signing in during the grace period (D264)', () => {
     const response = await login(app);
     expect(await response.json()).toMatchObject({ deletionCancelled: false });
     expect(queries.reopenClosedAccount).not.toHaveBeenCalled();
+    await mail.settled();
+    expect(mail.sent).toEqual([]);
   });
 });
 

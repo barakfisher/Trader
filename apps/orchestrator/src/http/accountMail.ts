@@ -12,7 +12,7 @@
 
 import { UI_LANGUAGES, type UiLanguage } from '@traders/shared';
 
-import { issueAuthToken } from '../db/queries.js';
+import { getOrCreateUserSettings, issueAuthToken } from '../db/queries.js';
 import { emailMessages } from '../email/messages.js';
 import type { EmailSender } from '../email/sender.js';
 import { logger } from '../logger.js';
@@ -112,6 +112,19 @@ export async function sendAccountClosed(
 ): Promise<void> {
   const date = deletionDate(dueAt, recipient.language, timeZone);
   await sender.send(emailMessages.accountClosed(recipient.email, recipient.language, date, pageLink(origin, '/')));
+}
+
+/**
+ * A sign-in reopened a closed account (D264): mailed in the background, so a
+ * sign-in by someone who knows the password - or a provider they linked -
+ * cannot quietly undo a deletion the owner believes has happened. Not awaited
+ * by the sign-in, and never fails it.
+ */
+export async function announceAccountRestored(sender: EmailSender | null, user: { id: string; email: string | null }): Promise<void> {
+  if (sender === null || user.email === null) return;
+  const to = user.email;
+  const language = mailLanguage((await getOrCreateUserSettings(user.id)).language);
+  sendInBackground(user.id, 'account_restored', () => sender.send(emailMessages.accountRestored(to, language)));
 }
 
 /**
