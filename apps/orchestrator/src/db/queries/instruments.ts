@@ -175,7 +175,8 @@ export interface InstrumentDirectoryRow {
  */
 export function listInstrumentDirectory(userId: string): Promise<InstrumentDirectoryRow[]> {
   return query<InstrumentDirectoryRow>(
-    `SELECT i.symbol, i.name, i.asset_class, i.exchange
+    `-- agent-blind: a symbol the user holds in any portfolio, real or simulated, is theirs to be offered.
+     SELECT i.symbol, i.name, i.asset_class, i.exchange
        FROM instruments i
       WHERE EXISTS (SELECT 1 FROM instrument_profiles p
                      WHERE p.instrument_id = i.id AND p.membership = 'screened')
