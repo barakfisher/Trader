@@ -100,7 +100,7 @@ async function proposeTrade(
   }
   const kind: TradeProposalKind = decision;
 
-  const instrument = await resolveTradable(userId, symbol);
+  const instrument = await resolveTradable(symbol);
   let calendar;
   try {
     calendar = await context.ai.marketCalendar(instrument.exchange ?? '', context.requestId);

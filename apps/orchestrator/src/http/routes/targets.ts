@@ -15,7 +15,7 @@ import type { Hono } from 'hono';
 import { z } from 'zod';
 
 import {
-  findVisibleInstrumentsBySymbols,
+  findInstrumentsBySymbols,
   listTargetWeights,
   primaryAgentId,
   replaceTargetWeights,
@@ -141,10 +141,7 @@ export function registerTargetsRoutes(app: Hono<AppEnv>): void {
       });
     }
 
-    const instruments = await findVisibleInstrumentsBySymbols(
-      userId,
-      requested.map((target) => target.symbol),
-    );
+    const instruments = await findInstrumentsBySymbols(requested.map((target) => target.symbol));
     const bySymbol = new Map(instruments.map((instrument) => [instrument.symbol, instrument]));
     /**
      * A symbol we have never resolved is rejected rather than resolved now.
@@ -152,8 +149,6 @@ export function registerTargetsRoutes(app: Hono<AppEnv>): void {
      * only thing that puts one there is a holding or an import - so an unknown
      * symbol here is overwhelmingly a typo, and a typo that silently created an
      * instrument would sit in the user's targets drifting against nothing.
-     * "Resolved" means for this user (D339): a symbol only another user added
-     * is unknown here too, or accepting it would say that someone holds it.
      * Keeping the write free of provider calls also means a market-data outage
      * can never stop someone correcting or clearing their own targets.
      */

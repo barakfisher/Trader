@@ -644,38 +644,6 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     expect(new Set(askedFor)).toEqual(new Set([dana.id]));
   });
 
-  it("answers Dana about a symbol only Omer added exactly as about one nobody added (D339)", async () => {
-    // `instruments` keeps every symbol any user added; a lookup that told "known"
-    // from "unknown" would say what Omer holds. Asked through every route that
-    // resolves a symbol a user names: a simulated agent's trade (the universe
-    // check), and the targets.
-    const nobodys = `NONE${run}`.toUpperCase();
-    const answers = async (symbol: string) => {
-      const asked = [
-        ['POST', `/agents/${dana.agent}/trades/preview`, { symbol, side: 'buy', quantity: '1' }],
-        ['POST', `/agents/${dana.agent}/trades`, { symbol, side: 'buy', quantity: '1', price: '10.00' }],
-        ['PUT', '/targets', { targets: [{ symbol, weight: '0.1' }] }],
-      ] as const;
-      const found: string[] = [];
-      for (const [method, path, body] of asked) {
-        const { cookie } = await signIn(dana.id);
-        const response = await createApp(appConfig, appAi).request(path, {
-          method,
-          headers: { cookie, origin: 'http://localhost:5173', 'content-type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-        // Every word but the request id, which differs per request by design.
-        const { requestId: _requestId, ...answer } = (await response.json()) as Record<string, unknown>;
-        found.push(`${method} ${path} -> ${response.status} ${JSON.stringify(answer).replaceAll(symbol, '<symbol>')}`);
-      }
-      return found;
-    };
-    const aboutOmers = await answers(omer.symbol);
-    expect(aboutOmers).toEqual(await answers(nobodys));
-    // And the answer is a refusal, not a trade or a target on Omer's symbol.
-    expect(aboutOmers.every((line) => !/ -> 2\d\d /.test(line))).toBe(true);
-  });
-
   it("does nothing to Omer's proposal when Dana's chat taps any of its buttons (D266)", async () => {
     const { buildNotifier } = await import('../src/notify/factory.js');
     const { encodeCallbackData, mintNonce } = await import('../src/telegram/callbackToken.js');

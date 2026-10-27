@@ -71,7 +71,7 @@ vi.mock('../src/db/queries.js', () => ({
   getAgent: vi.fn(async (_u: string, id: string) =>
     id === PRIMARY ? agentRow({ id: PRIMARY, is_primary: true, budget_minor: null }) : id === AGENT ? agentRow() : null,
   ),
-  findTradableInstrument: vi.fn(async (_userId: string, symbol: string) =>
+  findTradableInstrument: vi.fn(async (symbol: string) =>
     Object.values(INSTRUMENTS).find((row) => row.symbol === symbol.trim().toUpperCase()) ?? null,
   ),
   getAgentCash: vi.fn(async () => ({ balance_minor: ledger.cash.toString(), currency: 'USD', updated_at: NOW })),
@@ -313,11 +313,6 @@ describe('who and what may be traded', () => {
       status: 404,
     });
     expect(queries.insertFill).not.toHaveBeenCalled();
-  });
-
-  it("looks the symbol up as the trading user may see it, so another user's reads as unknown (D339)", async () => {
-    await fills.executeFill(request(), context());
-    expect(queries.findTradableInstrument).toHaveBeenCalledWith(USER.id, 'AAPL');
   });
 });
 

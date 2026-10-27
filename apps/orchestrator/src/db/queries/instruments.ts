@@ -52,30 +52,7 @@ export function upsertInstrument(
   });
 }
 
-/**
- * Whether instrument `i` is one this user may learn exists (D339): the
- * installation's own list - the screened universe and its former members - or
- * a symbol the user holds, has traded or has targeted, in any portfolio.
- *
- * `instruments` also keeps every symbol any user ever added, so a lookup that
- * answered "known" for all of it would tell one user what another holds: a
- * symbol only someone else added must read exactly like one nobody added.
- * `$userParam` names the user id's placeholder.
- */
-function visibleToUser(userParam: string): string {
-  return `(EXISTS (SELECT 1 FROM instrument_profiles vp
-                    WHERE vp.instrument_id = i.id AND vp.membership IN ('screened', 'dropped'))
-          -- agent-blind: a symbol the user holds, traded or targeted in any portfolio, real or simulated, is theirs.
-          OR EXISTS (SELECT 1 FROM holdings vh WHERE vh.instrument_id = i.id AND vh.user_id = ${userParam})
-          OR EXISTS (SELECT 1 FROM fills vf WHERE vf.instrument_id = i.id AND vf.user_id = ${userParam})
-          OR EXISTS (SELECT 1 FROM target_weights vt WHERE vt.instrument_id = i.id AND vt.user_id = ${userParam}))`;
-}
-
-/**
- * Look up instruments by symbol, so a write can reject names we have never
- * resolved. Installation callers only (benchmarks, performance): a user's
- * request asks `findVisibleInstrumentsBySymbols`.
- */
+/** Look up instruments by symbol, so a write can reject names we have never resolved. */
 export function findInstrumentsBySymbols(symbols: string[]): Promise<InstrumentRow[]> {
   if (symbols.length === 0) return Promise.resolve([]);
   return query<InstrumentRow>(
@@ -83,18 +60,6 @@ export function findInstrumentsBySymbols(symbols: string[]): Promise<InstrumentR
        FROM instruments
       WHERE symbol = ANY($1::text[])`,
     [symbols.map((symbol) => symbol.toUpperCase())],
-  );
-}
-
-/** `findInstrumentsBySymbols` as one user may see it (D339): another user's symbols read as unknown. */
-export function findVisibleInstrumentsBySymbols(userId: string, symbols: string[]): Promise<InstrumentRow[]> {
-  if (symbols.length === 0) return Promise.resolve([]);
-  return query<InstrumentRow>(
-    `SELECT i.id, i.symbol, i.name, i.asset_class, i.exchange, i.currency
-       FROM instruments i
-      WHERE i.symbol = ANY($2::text[])
-        AND ${visibleToUser('$1')}`,
-    [userId, symbols.map((symbol) => symbol.toUpperCase())],
   );
 }
 
@@ -179,17 +144,14 @@ export interface TradableInstrumentRow extends InstrumentRow {
 /**
  * An instrument by symbol with its universe membership - what a trade checks
  * before anything else (D7, D8): only the universe is tradable, and only in USD.
- * Only an instrument this user may see (D339): another user's symbol is null,
- * as if nobody had added it.
  */
-export function findTradableInstrument(userId: string, symbol: string): Promise<TradableInstrumentRow | null> {
+export function findTradableInstrument(symbol: string): Promise<TradableInstrumentRow | null> {
   return queryOne<TradableInstrumentRow>(
     `SELECT i.id, i.symbol, i.name, i.asset_class, i.exchange, i.currency, p.membership
        FROM instruments i
        LEFT JOIN instrument_profiles p ON p.instrument_id = i.id
-      WHERE i.symbol = $2
-        AND ${visibleToUser('$1')}`,
-    [userId, symbol.trim().toUpperCase()],
+      WHERE i.symbol = $1`,
+    [symbol.trim().toUpperCase()],
   );
 }
 

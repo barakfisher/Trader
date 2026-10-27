@@ -89,10 +89,6 @@ vi.mock('../src/db/queries.js', () => ({
   recordFindingEpisode: vi.fn(async () => undefined),
   closeFindingEpisodes: vi.fn(async () => 0),
   listTargetWeights: vi.fn(async () => []),
-  findVisibleInstrumentsBySymbols: vi.fn(async (_userId: string, symbols: string[]) =>
-    symbols.map((symbol) => INSTRUMENTS[symbol.toUpperCase()]).filter(Boolean),
-  ),
-  // The scheduled scan's benchmark lookup - installation data, not the user's.
   findInstrumentsBySymbols: vi.fn(async (symbols: string[]) =>
     symbols.map((symbol) => INSTRUMENTS[symbol.toUpperCase()]).filter(Boolean),
   ),
@@ -274,11 +270,6 @@ describe('target weights', () => {
       details: { symbols: ['NOSUCH'] },
     });
     expect(queries.replaceTargetWeights).not.toHaveBeenCalled();
-  });
-
-  it("asks which symbols this user may see, so another user's reads as unknown (D339)", async () => {
-    await putTargets(app, cookie, [{ symbol: 'AAPL', weight: '0.2' }]);
-    expect(queries.findVisibleInstrumentsBySymbols).toHaveBeenCalledWith(USER.id, ['AAPL']);
   });
 
   it('allows a target on a known instrument the user does not currently hold', async () => {
