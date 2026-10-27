@@ -87,6 +87,7 @@ vi.mock('../src/db/queries.js', () => ({
   getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
   getUser: vi.fn(async () => USER),
   listAgents: vi.fn(async () => agents),
+  sumFeesPaid: vi.fn(async () => 0),
   listHoldings: vi.fn(async (_user: string, agentId: string) => holdingsByAgent[agentId] ?? []),
   recordQuotes: vi.fn(async () => undefined),
   listProposals: vi.fn(async () => openProposals),

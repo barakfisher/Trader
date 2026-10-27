@@ -5338,6 +5338,48 @@ failure they prevent.
       "GBP" differ only in case and by a factor of 100.
     - **Not done:** the agents still trade USD-listed instruments only (D7); this only lets a
       Tel Aviv holding be valued.
+328. **The real portfolio gets the agents' ledger once the user sets its cash** (the user,
+    2026-10-27, holdings/ledger plan PR 2; amends D1).
+    - **How (migration 0078):** a primary's `budget_minor` stays NULL until the user enters the
+      cash available at the broker; setting it creates `agent_cash` and the opening deposit, as an
+      agent's creation does. `ledger_refuse_primary` now refuses only an unopened primary, and
+      `agents_primary_is_real` no longer forbids a primary's budget. $0 is a valid opening (no
+      deposit row; deposits must be positive).
+    - **Why:** buying and selling on the main portfolio (PR 3) must move the same cash, fees and
+      locks as an agent's trades; a second, lighter cash model would duplicate the fee and the
+      cash rules and keep no history for "fees paid" or "money put in".
+    - **The card says "not set", never $0**, until the user enters it: a figure nobody gave would
+      read as an empty account (guideline 7).
+    - **Rejected (by the user):** buy/sell as plain edits of quantity and cost plus a separate cash
+      number.
+329. **Holdings held when the cash is set stay as they are; their cost counts as money put in**
+    (the user, 2026-10-27).
+    - **How:** `agents.opening_holdings_cost_minor` keeps the holdings' total cost (base currency,
+      uncosted holdings left out) at the moment of opening. "Money put in" = deposits + that
+      figure, frozen: later trades re-average a holding's cost, so recomputing it from holdings
+      would count spent cash twice.
+    - **Rejected (by the user):** turning each existing holding into a historical buy fill - no
+      dates for any of the 22 holdings, and fees computed rather than paid: 22 invented records.
+330. **The cash can be set to what the broker shows: an `adjustment`, only when asked**
+    (2026-10-27).
+    - **How:** `PUT /portfolio/cash` moves the budget by the difference under the cash lock.
+      Before the first fill that edits the opening deposit; after it, the trigger writes an
+      `adjustment` movement of either sign - but only when the writer set
+      `traders.cash_kind = 'adjustment'` for its transaction. Without it a lower budget after
+      trading is still refused (D22), so no agent is ever "corrected" by accident.
+    - **Why:** interest, a dividend or a typo leave the app's cash off the broker's; a deposit can
+      only raise it, and D22's refusal would leave the user with no way to fix it.
+    - **Debt:** an adjustment counts in "money put in" (it moves the budget). A dividend corrected
+      in this way is therefore read as a deposit, not as income. Acceptable until income is
+      recorded on its own.
+331. **Resetting the main portfolio erases its ledger and unsets its cash** (2026-10-27).
+    - **How:** 0078 amends 0072's `reset_account` (loaded from its file, two asserted string
+      replacements): `main_portfolio` adds the primary to the ledger agents, and the primary's
+      budget and opening cost return to NULL.
+    - **Why:** a reset main portfolio with fills left behind would show cash and fees from
+      trades whose holdings were erased.
+    - **Downgrade refuses** while any primary has a ledger: 0040's triggers would refuse its rows,
+      and dropping them would discard real trades (`KNOWN_REFUSALS` in `test_migrations.py`).
 ---
 
 ## Bugs that cost real time, and the lesson from each

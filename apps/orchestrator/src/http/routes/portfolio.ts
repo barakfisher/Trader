@@ -106,7 +106,7 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
           .filter((agent) => !agent.is_primary && agent.state !== 'archived')
           .map(async (agent) => ({
             agent,
-            account: await valueAgentAccount(agent, await listHoldings(userId, agent.id), {
+            account: await valueAgentAccount(userId, agent, await listHoldings(userId, agent.id), {
               ...valuation,
               baseCurrency: agent.currency,
             }),

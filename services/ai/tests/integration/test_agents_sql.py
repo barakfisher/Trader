@@ -89,10 +89,7 @@ def test_a_user_cannot_have_a_second_primary(connection: Connection) -> None:
     assert "agents_one_primary_idx" in refusal
 
 
-@pytest.mark.parametrize(
-    "assignment",
-    ["budget_minor = 100000", "persona = 'Bold.'", "state = 'paused'"],
-)
+@pytest.mark.parametrize("assignment", ["persona = 'Bold.'", "state = 'paused'"])
 def test_the_primary_cannot_be_simulated_or_paused(connection: Connection, assignment: str) -> None:
     refusal = _refused(
         connection,
@@ -100,6 +97,23 @@ def test_the_primary_cannot_be_simulated_or_paused(connection: Connection, assig
         user=SEED_USER,
     )
     assert "agents_primary_is_real" in refusal
+
+
+def test_the_primarys_budget_is_its_cash_and_never_negative(connection: Connection) -> None:
+    """D328: a primary's budget is the cash the user set - allowed since 0078 - never below $0."""
+    connection.execute(
+        text(
+            "UPDATE agents SET budget_minor = 100000 "
+            "WHERE user_id = CAST(:user AS uuid) AND is_primary"
+        ),
+        {"user": SEED_USER},
+    )
+    refusal = _refused(
+        connection,
+        "UPDATE agents SET budget_minor = -1 WHERE user_id = CAST(:user AS uuid) AND is_primary",
+        user=SEED_USER,
+    )
+    assert "agents_simulated_has_budget" in refusal
 
 
 def test_a_holding_cannot_be_written_without_an_agent(connection: Connection) -> None:

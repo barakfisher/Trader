@@ -108,6 +108,7 @@ function account(overrides: Partial<AgentAccountResponse> = {}): AgentAccountRes
     netWorthMinor: 1_000_542,
     pnlMinor: 542,
     pnlPct: 0.0542,
+    feesPaidMinor: 1_500,
     portfolio: {
       summary: {
         baseCurrency: 'USD',

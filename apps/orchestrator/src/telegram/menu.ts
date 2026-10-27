@@ -367,7 +367,7 @@ async function agentScreen(reader: Reader, agent: AgentRow, deps: MenuDeps): Pro
     }
   }
 
-  const account = await valueAgentAccount(agent, await listHoldings(reader.userId, agent.id), {
+  const account = await valueAgentAccount(reader.userId, agent, await listHoldings(reader.userId, agent.id), {
     ai: deps.ai,
     baseCurrency: agent.currency,
   });

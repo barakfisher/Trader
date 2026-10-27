@@ -13,6 +13,8 @@ export const queryKeys = {
   instrumentDirectory: ['instruments', 'directory'] as const,
   instrumentSearch: (query: string) => ['instruments', 'search', query] as const,
   instrumentQuote: (symbol: string) => ['instruments', 'quote', symbol] as const,
+  /** The real portfolio's cash (D328). Under `portfolio`, so a trade's refresh reaches it. */
+  primaryCash: ['portfolio', 'cash'] as const,
   snapshots: ['portfolio', 'snapshots'] as const,
   /** Under the portfolio, so a holding's edit refreshes it; agent writes invalidate it too. */
   consolidated: ['portfolio', 'consolidated'] as const,

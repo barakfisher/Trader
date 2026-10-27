@@ -13,6 +13,7 @@ import { HoldingsScopeToggle } from '../components/HoldingsScopeToggle.tsx';
 import { HoldingsTable } from '../components/HoldingsTable.tsx';
 import { ImportWizard } from '../components/ImportWizard.tsx';
 import { NarrationBadge } from '../components/NarrationBadge.tsx';
+import { AccountCard } from '../components/AccountCard.tsx';
 import { SummaryCards } from '../components/SummaryCards.tsx';
 import { Button, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
 import { errorMessage } from '../api/client.ts';
@@ -163,7 +164,10 @@ export const DashboardPage = observer(function DashboardPage() {
                 />
               )
             ) : (
-              <SummaryCards summary={portfolio.data?.summary} />
+              <SummaryCards
+                summary={portfolio.data?.summary}
+                account={portfolio.data && <AccountCard summary={portfolio.data.summary} />}
+              />
             )}
             {hasSimulated && <HoldingsScopeToggle scope={scope} agents={simulatedAgents} onChange={setScope} />}
             {combinedView ? (

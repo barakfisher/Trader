@@ -57,6 +57,18 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "ALTER TABLE cash_movements DISABLE TRIGGER USER; ALTER TABLE fills DISABLE TRIGGER USER; "
         "DELETE FROM cash_movements WHERE kind <> 'opening_deposit'; DELETE FROM fills",
     ),
+    # A real portfolio's fills and movements are real trades (D328): 0040's
+    # triggers would refuse them, so 0078 refuses rather than discard them.
+    "0078_primary_ledger": (
+        "a real portfolio has a cash ledger",
+        "ALTER TABLE cash_movements DISABLE TRIGGER USER; ALTER TABLE fills DISABLE TRIGGER USER; "
+        "DELETE FROM cash_movements WHERE agent_id IN (SELECT id FROM agents WHERE is_primary); "
+        "DELETE FROM fills WHERE agent_id IN (SELECT id FROM agents WHERE is_primary); "
+        "DELETE FROM agent_cash WHERE agent_id IN (SELECT id FROM agents WHERE is_primary); "
+        "ALTER TABLE cash_movements ENABLE TRIGGER USER; ALTER TABLE fills ENABLE TRIGGER USER; "
+        "UPDATE agents SET budget_minor = NULL, opening_holdings_cost_minor = NULL "
+        "WHERE is_primary",
+    ),
     # A rule_rejected scan is a record of what an agent tried; 0056's outcomes
     # cannot name it, so 0057 refuses rather than relabel it.
     "0057_agent_mandate": (

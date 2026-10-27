@@ -338,3 +338,7 @@ while this file is out of date.
 | 325 | The local list is sent whole once and revalidated; a market search is cached a day |
 | 326 | The cost per unit is prefilled with the latest price; the date does not move it |
 | 327 | A price Yahoo states in a currency's hundredth is converted at the provider's edge |
+| 328 | The real portfolio gets the agents' ledger once the user sets its cash |
+| 329 | Holdings held when the cash is set stay as they are; their cost counts as money put in |
+| 330 | The cash can be set to what the broker shows: an `adjustment`, only when asked |
+| 331 | Resetting the main portfolio erases its ledger and unsets its cash |

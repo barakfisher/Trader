@@ -92,6 +92,42 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
+  describe("the real portfolio's cash (D328-D330)", () => {
+    // Its own account: opening a main portfolio's cash changes what the other tests read.
+    const OWNER = randomUUID();
+    let PRIMARY = '';
+    beforeAll(async () => {
+      await getPool().query("INSERT INTO users (id, status, llm_cap_micro_usd) VALUES ($1, 'active', 0)", [OWNER]);
+      PRIMARY = await queries.primaryAgentId(OWNER);
+    });
+    afterAll(async () => {
+      // An opened ledger is history `traders_app` may not delete row by row:
+      // the account's erase removes it in order, as it would for a real one (D264).
+      await getPool().query("UPDATE users SET status = 'rejected' WHERE id = $1", [OWNER]);
+      await getPool().query('SELECT erase_account($1)', [OWNER]);
+    });
+
+    it('opens once, takes deposits, and is set to a balance under the cash lock', async () => {
+      expect(await queries.getPrimaryCash(OWNER, PRIMARY)).toMatchObject({ budget_minor: null, balance_minor: null });
+      expect(await queries.openPrimaryCash(OWNER, PRIMARY, 5_000, 1_000)).toBe(true);
+      expect(await queries.openPrimaryCash(OWNER, PRIMARY, 9_999, 0)).toBe(false);
+      expect(await queries.getPrimaryCash(OWNER, PRIMARY)).toMatchObject({
+        budget_minor: '5000',
+        opening_holdings_cost_minor: '1000',
+        balance_minor: '5000',
+      });
+
+      expect(await queries.depositPrimaryCash(OWNER, PRIMARY, 1_000, 10_000)).toBe(true);
+      expect(await queries.depositPrimaryCash(OWNER, PRIMARY, 9_000, 10_000)).toBe(false);
+      expect((await queries.getPrimaryCash(OWNER, PRIMARY))?.balance_minor).toBe('6000');
+
+      const { transaction } = await import('../src/db/pool.js');
+      expect(await transaction((client) => queries.setPrimaryCash(client, OWNER, PRIMARY, 2_000))).toBe('set');
+      expect(await queries.getPrimaryCash(OWNER, PRIMARY)).toMatchObject({ budget_minor: '2000', balance_minor: '2000' });
+      expect(await queries.sumFeesPaid(OWNER, PRIMARY)).toBe(0);
+    });
+  });
+
   describe('users and passwords (D159, D160)', () => {
     it('finds a user by email whatever its case', async () => {
       const email = `${USER.slice(0, 8)}@Example.com`;

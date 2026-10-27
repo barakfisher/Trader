@@ -80,6 +80,7 @@ vi.mock('../src/db/queries.js', () => ({
   countActiveAgents: vi.fn(async () => 1),
   countLiveAgents: vi.fn(async () => 1),
   getInstallationSettings: vi.fn(async () => ({ max_agents_per_user: 3 })),
+  sumFeesPaid: vi.fn(async () => 0),
   listHoldings: vi.fn(async () => []),
   listAgentScans: vi.fn(async () => []),
   listAgents: vi.fn(async () => []),
