@@ -4,7 +4,50 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-27, morning - **Handoff by count: five merges since #331** (#332-#336).
+Updated: 2026-10-27, afternoon - **Handoff: the holdings/ledger plan is complete** (#338-#342).
+- **The plan** (agreed with the user question by question on 2026-10-27, from a pasted list of
+  ideas; grant: "merge, deploy, sessions, decisions, work until completion" - it ends here):
+  - #338, PR 1: symbol autocomplete (local list + Yahoo search, D324-D325), the cost prefilled with
+    the latest price (D326), Yahoo's sub-unit currencies converted at the edge (ILA/GBp, D327);
+  - #340, PR 2: the main portfolio's cash on the agents' ledger once the user sets it (migration
+    `0078`, D328-D331), the Account card replacing Total cost, fees paid;
+  - #341, PR 3: the holding row's "⋮" - Buy/Sell record a broker trade through the agents' fills,
+    Edit/Remove are corrections (D332-D334);
+  - #339, PR 4 (built in a parallel session): the rule-based agent review every ten scans with
+    Apply/Dismiss cards (migration `0079`, D335-D338);
+  - #342: the security review's two fixes (per-minute symbol lookup limit; `setPrimaryCash` locks
+    the agent row before the cash row).
+- **Deployed:** compose and kind at `3eb3ff2` (#339), migration head `0079_agent_suggestions`,
+  after `db-backup.sh --target all`. #338-#341 were each deployed as they merged.
+- **Decisions reach 338** (next: **339**). **Migrations:** `0079` head; next free `0080`.
+- **Not seen with a signed-in session:** the user's sign-in is theirs, so every screen was checked
+  on a local harness with real data (English/Hebrew, 375 px and desktop). **First thing for the
+  user:** open the dashboard and set the cash on the Account card - until then Buy/Sell stay
+  disabled and the card says "not set".
+- **Debt, as consequences:**
+  - **The trade preview tells whether any account ever added a symbol** (security review F1): an
+    unknown symbol is 404, a known one is not. Predates these PRs; #341 made it cleaner for the
+    main portfolio. Fix: apply `listInstrumentDirectory`'s scope (screened, or held/filled by this
+    user) in `resolveTradable`, after a market search adds the instrument.
+  - **Edit and Remove move holdings without the ledger** (D334, by design): after them, a main
+    portfolio's fills and holdings can disagree; a sale is checked against the edited holding.
+  - **An `adjustment` counts as money put in** (D330): a dividend corrected in is read as a deposit.
+  - **Tel Aviv holdings value in ILS now, but cannot be traded** - the cash ledger is USD only.
+- **Lessons:**
+  - **Read the "Test Files" line, not only "Tests".** A failing `afterAll` (a user delete blocked by
+    `agent_cash_user_id_fkey`) left "Tests 116 passed" green while the file failed; CI caught it.
+    `traders_app` cannot delete a ledger row by row - erase a test account with `erase_account`.
+  - **Two sessions must not share one integration database.** The python suite drops the schema;
+    parallel sessions on `traders_ci` (55434) wiped each other. Give each its own `*_ci` database.
+  - **Decision numbers are contiguous** (`test_decision_index.py`): a parallel session cannot be
+    given a reserved range (D340+); it renumbers after rebasing, so tell it so up front.
+  - **A shared reference table is a cross-user channel.** `instruments` keeps every symbol any
+    user ever added; sending it whole leaked them (the M9 exit test caught it). Scope lists to the
+    screened universe plus the user's own rows.
+  - **A popup in a scrolling table belongs in a portal** - both the "⋮" list (clipped) and the trade
+    form (inherited `text-end`) went wrong inside the row's cell; only the browser showed it.
+
+Previous update, 2026-10-27, morning - **Handoff by count: five merges since #331** (#332-#336).
 - **Merges since #331:**
   - #332, M10 PR 15: `/privacy` and `/terms`, the consent record and the public sign-up gate
     (D265, D319-D321; migration `0077`);
