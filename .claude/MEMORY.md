@@ -19,16 +19,14 @@ Updated: 2026-10-27, afternoon - **Handoff: the holdings/ledger plan is complete
     the agent row before the cash row).
 - **Deployed:** compose and kind at `3eb3ff2` (#339), migration head `0079_agent_suggestions`,
   after `db-backup.sh --target all`. #338-#341 were each deployed as they merged.
-- **Decisions reach 338** (next: **339**). **Migrations:** `0079` head; next free `0080`.
+- **Decisions reach 338** (next: **339**; F1's decision took 339 after this handoff). **Migrations:** `0079` head; next free `0080`.
 - **Not seen with a signed-in session:** the user's sign-in is theirs, so every screen was checked
   on a local harness with real data (English/Hebrew, 375 px and desktop). **First thing for the
   user:** open the dashboard and set the cash on the Account card - until then Buy/Sell stay
   disabled and the card says "not set".
 - **Debt, as consequences:**
-  - **The trade preview tells whether any account ever added a symbol** (security review F1): an
-    unknown symbol is 404, a known one is not. Predates these PRs; #341 made it cleaner for the
-    main portfolio. Fix: apply `listInstrumentDirectory`'s scope (screened, or held/filled by this
-    user) in `resolveTradable`, after a market search adds the instrument.
+  - **A lookup tells whether any account ever added a symbol** (security review F1) - accepted
+    after this handoff as D339, with the condition that would reopen it.
   - **Edit and Remove move holdings without the ledger** (D334, by design): after them, a main
     portfolio's fills and holdings can disagree; a sale is checked against the edited holding.
   - **An `adjustment` counts as money put in** (D330): a dividend corrected in is read as a deposit.
@@ -5506,6 +5504,25 @@ failure they prevent.
       every agent route does (D1).
     - **Not pushed:** suggestions are not sent to Telegram or the digest yet; they wait on the
       agent page. A notification is a follow-up if the user wants one.
+
+339. **A symbol a user adds joins the shared list, and what that reveals is an accepted risk** (the
+    user, 2026-10-27; security review F1).
+    - `instruments` keeps every symbol any user added; one outside the screened universe gets an
+      `on_demand` profile. So a lookup can tell a symbol someone added from one nobody added: a
+      simulated agent's trade answers `outside_universe` (422) vs 404, `PUT /targets` 200 vs 422,
+      and the assistant's `get_universe_info` says `known`. What it reveals is "someone on this
+      installation added X" - never who, how much or when, and only for listings outside the
+      ~5,200 screened ones.
+    - **Chosen: accept it, documented.** The shared knowledge is real public data and every user
+      gains from it: agents may trade an `on_demand` listing, and the AI service treats it as
+      tradable. The privacy template states the fact (section "Who can see your data").
+    - **Rejected: a per-user visibility rule** (built as #344's first version and reverted). It
+      needed the same rule in both services - the orchestrator alone made a scan proposing an
+      `on_demand` symbol fail with 404 and lose its other trades (the review's R1) - and it would
+      have taken those listings away from every other user's agents, for a signal that names
+      nobody. **Revisit** if users on one installation know each other well enough that
+      "someone" means one person (a family install): then apply the rule in both services,
+      `find_listing` and `get_universe_info` included, and add `topic_instruments` to it.
 ---
 
 ## Bugs that cost real time, and the lesson from each

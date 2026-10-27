@@ -80,6 +80,7 @@ Facts this section must state:
 Facts this section must state:
 
 - The operator can read the whole database, including stored model-call text.
+- A symbol you add that is outside the app's screened list of instruments joins the list every user shares, with its public description. Other users can then tell that someone on Traders added it - never who, how much, or when.
 
 ## Changes to this policy
 

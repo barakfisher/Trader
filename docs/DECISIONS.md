@@ -349,3 +349,4 @@ while this file is out of date.
 | 336 | A window is ten counted scans, keyed by its last scan |
 | 337 | The three rules and their thresholds |
 | 338 | The review never fails the scan, and the real portfolio is never reviewed |
+| 339 | A symbol a user adds joins the shared list, and what that reveals is an accepted risk |

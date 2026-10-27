@@ -157,7 +157,8 @@ function newUser(mark: string): SeededUser {
   return {
     id: randomUUID(),
     mark,
-    symbol: mark.replace('-', '').slice(0, 12),
+    // Upper case, as every symbol is stored: a lower-case one no lookup would ever find.
+    symbol: mark.replace('-', '').slice(0, 12).toUpperCase(),
     chatId: 1_000_000 + Math.floor(Math.random() * 1_000_000_000),
     ids: [],
     proposal: '',
