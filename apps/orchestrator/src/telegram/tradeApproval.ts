@@ -208,7 +208,10 @@ export async function handleTradeCallback(input: TradeCallback): Promise<void> {
   let toast: string;
   let block: string | null;
   let refused = false;
+  let refusalCode: string | undefined;
   let keyboard: Keyboard;
+  // What the tap came to, for the log line below.
+  let tapResult: 'previewed' | 'filled' | 'failed' | 'gone' | 'expired' | 'already_decided' | 'refused';
   try {
     if (payload.action === 'approve') {
       const preview = await previewTradeApproval(userId, payload.proposalId, 'telegram', context);
@@ -236,6 +239,7 @@ export async function handleTradeCallback(input: TradeCallback): Promise<void> {
       }
       if (!confirmable(live)) block = `${block}\n${messages.trade.confirmInApp}`;
       keyboard = { confirmAt: live };
+      tapResult = 'previewed';
     } else {
       const result = await confirmTradeApproval(
         userId,
@@ -256,6 +260,7 @@ export async function handleTradeCallback(input: TradeCallback): Promise<void> {
         at: stamp(now, timezone, messages),
       });
       keyboard = 'none';
+      tapResult = 'filled';
     }
   } catch (error) {
     if (!(error instanceof ApiProblem)) {
@@ -263,19 +268,23 @@ export async function handleTradeCallback(input: TradeCallback): Promise<void> {
       toast = messages.trade.reasons.other;
       block = null;
       keyboard = 'trade';
+      tapResult = 'failed';
     } else if (error.status === 404) {
       toast = messages.proposalGone;
       block = null;
       keyboard = 'none';
+      tapResult = 'gone';
     } else if (error.code === 'expired') {
       toast = messages.decisionReplies.expired ?? messages.cannotChange;
       block = `${messages.outcomeLines.expired ?? messages.nowState('expired')} (${stamp(now, timezone, messages)})`;
       // D217: the tap that finds it expired is where Re-check appears.
       keyboard = (await recheckOffered(userId, payload.proposalId)) ? 'recheck' : 'none';
+      tapResult = 'expired';
     } else if (error.code === 'already_decided') {
       toast = messages.refusalReplies.already_decided ?? messages.cannotChange;
       block = null;
       keyboard = 'none';
+      tapResult = 'already_decided';
     } else {
       // A refusal of the trade itself (D49): recorded by the service, still pending.
       const reason = refusalReason(error, messages, timezone);
@@ -283,8 +292,23 @@ export async function handleTradeCallback(input: TradeCallback): Promise<void> {
       block = messages.trade.refused(reason, stamp(now, timezone, messages));
       refused = true;
       keyboard = 'trade';
+      tapResult = 'refused';
+      refusalCode = error.code;
     }
   }
+
+  logger().info(
+    {
+      userId,
+      proposalId: payload.proposalId,
+      action: payload.action,
+      result: tapResult,
+      ...(refusalCode === undefined ? {} : { reason: refusalCode }),
+      ...(typeof keyboard === 'object' ? { confirmAtMinor: keyboard.confirmAt.toString() } : {}),
+      ...(payload.action === 'confirm' ? { priceMinor: payload.priceMinor!.toString() } : {}),
+    },
+    'telegram.trade_callback',
+  );
 
   // The toast first: it is what the user is waiting on.
   await telegram?.answerCallback(input.callbackId, toast);
