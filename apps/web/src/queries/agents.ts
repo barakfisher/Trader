@@ -16,6 +16,7 @@ import type {
   AgentPatchInput,
   AgentScanDetail,
   AgentScansResponse,
+  AgentSuggestionsResponse,
   AgentView,
   AgentsResponse,
   InstructionsCheckResult,
@@ -108,6 +109,33 @@ export function useDismissInstructionsCheck(agentId: string) {
   return useMutation({
     mutationFn: () => api.post<void>(`/agents/${agentId}/instructions-check/dismiss`),
     onSuccess: invalidate,
+  });
+}
+
+/** The agent review's open suggestions (D340-D343). Not asked of the primary. */
+export function useAgentSuggestionsQuery(agentId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.agentSuggestions(agentId),
+    queryFn: () => api.get<AgentSuggestionsResponse>(`/agents/${agentId}/suggestions`),
+    enabled,
+  });
+}
+
+/** Apply writes the suggestion's one setting; the agent and every view of it refresh. */
+export function useApplySuggestion(agentId: string) {
+  const invalidate = useInvalidateAgents();
+  return useMutation({
+    mutationFn: (suggestionId: string) => api.post<AgentView>(`/agents/${agentId}/suggestions/${suggestionId}/apply`),
+    // A refusal closes or keeps the card on the server's word: read it again either way.
+    onSettled: invalidate,
+  });
+}
+
+export function useDismissSuggestion(agentId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (suggestionId: string) => api.post<void>(`/agents/${agentId}/suggestions/${suggestionId}/dismiss`),
+    onSettled: () => client.invalidateQueries({ queryKey: queryKeys.agentSuggestions(agentId) }),
   });
 }
 

@@ -40,6 +40,7 @@ SELECT jsonb_build_object(
   'legalAcceptances', ${rows('legal_acceptances', 't.accepted_at, t.version')},
   'agents', ${rows('agents', 't.created_at, t.id')},
   'agentScans', ${rows('agent_scans', 't.started_at, t.id')},
+  'agentSuggestions', ${rows('agent_suggestions', 't.created_at, t.id')},
   'holdings', ${rows('holdings', 't.created_at, t.id', ` || jsonb_build_object('quantity', t.quantity::text) ${SYMBOL}`)},
   'targetWeights', ${rows('target_weights', 't.agent_id, t.instrument_id', ` || jsonb_build_object('weight', t.weight::text) ${SYMBOL}`)},
   'ledgers', jsonb_build_object(

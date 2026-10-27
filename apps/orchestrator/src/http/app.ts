@@ -35,6 +35,7 @@ import { registerAdminRoutes } from './routes/admin.js';
 import { registerAdminKeysRoutes } from './routes/adminKeys.js';
 import { registerAgentAccountRoutes } from './routes/agentAccount.js';
 import { registerAgentScanRoutes } from './routes/agentScans.js';
+import { registerAgentSuggestionRoutes } from './routes/agentSuggestions.js';
 import { registerAgentsRoutes } from './routes/agents.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerOAuthRoutes } from './routes/oauth.js';
@@ -350,6 +351,7 @@ export function createApp(
   registerTradesRoutes(app);
   registerAgentAccountRoutes(app);
   registerAgentScanRoutes(app);
+  registerAgentSuggestionRoutes(app);
   registerTargetsRoutes(app);
   registerProposalsRoutes(app);
   registerNotificationsRoutes(app);

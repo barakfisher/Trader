@@ -321,6 +321,85 @@ export interface AgentScanTrade {
   fillId: string | null;
 }
 
+/**
+ * The rule-based review of an agent every few scans (D340-D343): what a rule
+ * found, from the ledger and the scans, and the one setting it proposes to
+ * change - or none, when it only reports. Nothing changes until the user
+ * applies it; no model is asked.
+ */
+export const AGENT_REVIEW_RULES = ['idle_cash', 'fee_drag', 'benchmark_lag'] as const;
+
+/**
+ * A review every this many counted scans: two trading weeks at a new agent's
+ * default of one scan a day, enough that one quiet day is not a pattern (D341).
+ */
+export const AGENT_REVIEW_EVERY_SCANS = 10;
+export type AgentReviewRule = (typeof AGENT_REVIEW_RULES)[number];
+
+export const AGENT_SUGGESTION_STATUSES = ['open', 'applied', 'dismissed', 'superseded', 'stale'] as const;
+export type AgentSuggestionStatus = (typeof AGENT_SUGGESTION_STATUSES)[number];
+
+/** The settings a suggestion may change, as the `agents` columns name them. */
+export const SUGGESTION_SETTINGS = [
+  'cash_buffer_bps',
+  'market_caps',
+  'risk_level',
+  'max_decisions',
+  'scan_every_hours',
+  'max_position_bps',
+  'allow_etfs',
+] as const;
+export type SuggestionSetting = (typeof SUGGESTION_SETTINGS)[number];
+
+export type SuggestionValue = number | boolean | string[] | null;
+
+/** One setting, from what it was when the review ran to what the rule proposes. */
+export interface SuggestionChange {
+  setting: SuggestionSetting;
+  from: SuggestionValue;
+  to: SuggestionValue;
+}
+
+/**
+ * The figures a suggestion stands on, every one stored or computed from stored
+ * rows (guideline 7). Money is minor units; shares of a total are basis points.
+ */
+export interface SuggestionEvidence {
+  /** Counted scans in the window, and how many of them ended in a trade. */
+  scans: number;
+  tradeScans: number;
+  /** The window's first scan, ISO. */
+  since: string;
+  currency: string;
+  cashMinor?: number;
+  depositsMinor?: number;
+  /** Cash as a share of deposits (idle_cash). */
+  cashShareBps?: number;
+  /** Fees of the window's fills and their count (fee_drag). */
+  feesMinor?: number;
+  fills?: number;
+  feeShareBps?: number;
+  /** The agent against the shadow SPY since its first deposit (benchmark_lag, D115). */
+  returnPct?: number;
+  benchmarkReturnPct?: number;
+  differencePts?: number;
+  /** The last session the comparison is recorded for. */
+  day?: string;
+}
+
+export interface AgentSuggestion {
+  id: string;
+  rule: AgentReviewRule;
+  status: AgentSuggestionStatus;
+  createdAt: string;
+  evidence: SuggestionEvidence;
+  change: SuggestionChange | null;
+}
+
+export interface AgentSuggestionsResponse {
+  suggestions: AgentSuggestion[];
+}
+
 export interface AgentScansResponse {
   scans: AgentScanSummary[];
   /** Pass as `before` for the next older page; null when there is none. */

@@ -83,6 +83,8 @@ const WRITE_BODIES: Record<string, unknown> = {
   'POST /agents/:id/instructions-check': null,
   'POST /agents/:id/instructions-check/dismiss': null,
   'POST /agents/:id/scans': null,
+  'POST /agents/:id/suggestions/:suggestionId/apply': null,
+  'POST /agents/:id/suggestions/:suggestionId/dismiss': null,
   'POST /agents/:id/top-ups': { amount: '10' },
   'POST /agents/:id/trades': { symbol: OMERS.symbol, side: 'buy', quantity: '1' },
   'POST /agents/:id/trades/preview': { symbol: OMERS.symbol, side: 'buy', quantity: '1' },
@@ -164,7 +166,14 @@ function newUser(mark: string): SeededUser {
   };
 }
 
-describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only their own", async () => {
+/**
+ * Every route is asked with every one of Omer's ids, and a route with two
+ * parameters with every pair, so the sweeps grow with each id a table adds:
+ * past vitest's 5 s default once the agent review's suggestion (0078) joined.
+ */
+const SWEEP_TIMEOUT_MS = 60_000;
+
+describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only their own", { timeout: SWEEP_TIMEOUT_MS }, async () => {
   const { getPool, initPool } = await import('../src/db/pool.js');
   const { loadConfig, resetConfigForTests } = await import('../src/config.js');
   const { createApp } = await import('../src/http/app.js');
@@ -204,6 +213,8 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
   /** An account closed at its own request and waiting for its erase: the deletion marker (D264, D266). */
   const closed = randomUUID();
   let app: ReturnType<typeof createApp>;
+  let appConfig: Parameters<typeof createApp>[0];
+  let appAi: Parameters<typeof createApp>[1];
 
   async function seed(user: SeededUser): Promise<void> {
     const pool = getPool();
@@ -323,10 +334,19 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     );
     // The legal version the user accepted (0077, D265): a record nobody else's request may add to or change.
     await pool.query(`INSERT INTO legal_acceptances (user_id, version) VALUES ($1, '2026-11-01')`, [user.id]);
+    // An open suggestion of the agent review (0078, D340): another user's Apply or Dismiss must not reach it.
+    const suggestion = (
+      await pool.query<{ id: string }>(
+        `INSERT INTO agent_suggestions (user_id, agent_id, rule, dedupe_key, evidence, change)
+         VALUES ($1, $2, 'idle_cash', $3, '{"scans": 10, "tradeScans": 0}',
+                 '{"setting": "risk_level", "from": null, "to": 1}') RETURNING id`,
+        [user.id, agent, `${user.mark}-suggestion`],
+      )
+    ).rows[0]!.id;
     user.proposal = proposal;
     user.agent = agent;
     user.conversation = conversation;
-    user.ids.push(primary, agent, holding, topic, conversation, observation, proposal, fallback, research, session.id);
+    user.ids.push(primary, agent, holding, topic, conversation, observation, proposal, fallback, research, suggestion, session.id);
   }
 
   beforeAll(async () => {
@@ -349,18 +369,17 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     );
     danasCookie = (await signIn(dana.id)).cookie;
     resetConfigForTests();
-    app = createApp(
-      loadConfig({
-        APP_ENV: 'test',
-        LOG_LEVEL: 'error',
-        SESSION_SECRET: TEST_SESSION_SECRET,
-        DATABASE_URL,
-        AI_SERVICE_URL: 'http://ai-service:8000',
-        INTERNAL_API_KEY: 'internal-test-key',
-        ALLOWED_ORIGINS: 'http://localhost:5173',
-      } as unknown as NodeJS.ProcessEnv),
-      isolationAi(),
-    );
+    appConfig = loadConfig({
+      APP_ENV: 'test',
+      LOG_LEVEL: 'error',
+      SESSION_SECRET: TEST_SESSION_SECRET,
+      DATABASE_URL,
+      AI_SERVICE_URL: 'http://ai-service:8000',
+      INTERNAL_API_KEY: 'internal-test-key',
+      ALLOWED_ORIGINS: 'http://localhost:5173',
+    } as unknown as NodeJS.ProcessEnv);
+    appAi = isolationAi();
+    app = createApp(appConfig, appAi);
   });
 
   /** Who the app asked the assistant for, in the order it asked. */
@@ -598,7 +617,9 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
       for (const concrete of withOmersIds(path)) {
         const body = bodyFor(write);
         const { cookie } = await signIn(dana.id);
-        const response = await app.request(concrete, {
+        // Each request on an app of its own: rate limits count per user, and a limited route
+        // asked with every one of Omer's ids would answer 429 before its lookup is reached.
+        const response = await createApp(appConfig, appAi).request(concrete, {
           method,
           headers: {
             cookie,

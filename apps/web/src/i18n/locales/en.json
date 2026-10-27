@@ -1992,6 +1992,61 @@
       "open": "Open the agent's page",
       "scanned": "Scan finished.",
       "seeScan": "See what it decided"
+    },
+    "review": {
+      "title": "Suggestions from the review",
+      "intro_one": "After every scan the agent's last {{count}} scan and its ledger are checked against fixed rules. Nothing changes until you apply a suggestion.",
+      "intro_other": "After every {{count}} scans, the agent's last {{count}} scans and its ledger are checked against fixed rules. Nothing changes until you apply a suggestion.",
+      "proposed": "Proposed change",
+      "arrow": "→",
+      "to": "to",
+      "apply": "Apply",
+      "dismiss": "Dismiss",
+      "failed": "That did not go through. Try again.",
+      "refusals": {
+        "suggestion_stale": "This setting changed since the review, so nothing was applied.",
+        "suggestion_closed": "This suggestion was already applied, dismissed or replaced.",
+        "agent_archived": "The agent is archived. Restore it to change a setting.",
+        "nothing_to_apply": "This suggestion proposes no change. Dismiss it instead."
+      },
+      "rules": {
+        "idle_cash": {
+          "title": "Cash is sitting idle",
+          "evidence_one": "{{trades}} of the last {{scans}} scan ended in a trade, and cash is {{cash}} of {{deposits}} deposited ({{share}}).",
+          "evidence_other": "{{trades}} of the last {{scans}} scans ended in a trade, and cash is {{cash}} of {{deposits}} deposited ({{share}}).",
+          "noChange": "No setting is left to widen. The agent's instructions may be what holds it back."
+        },
+        "fee_drag": {
+          "title": "Fees are a large share of the money",
+          "evidence_one": "Since {{since}} the agent made {{fills}} trade and paid {{fees}} in fees: {{share}} of the {{deposits}} deposited.",
+          "evidence_other": "Since {{since}} the agent made {{fills}} trades and paid {{fees}} in fees: {{share}} of the {{deposits}} deposited.",
+          "noChange": "No setting is left to make trades fewer or larger. Each trade costs at least the minimum fee."
+        },
+        "benchmark_lag": {
+          "title": "Trailing the same money in SPY",
+          "evidence": "Since its first deposit the agent returned {{agentReturn}}, against {{benchmarkReturn}} for the same deposits held in SPY: {{points}} points behind, as of {{day}}.",
+          "noChange": "No setting change is proposed. Compare its holdings with the Performance tab before you change its instructions."
+        }
+      },
+      "settings": {
+        "cash_buffer_bps": "Cash buffer minimum",
+        "market_caps": "Company size",
+        "risk_level": "Risk appetite",
+        "max_decisions": "Trades per scan",
+        "scan_every_hours": "Scans during market hours",
+        "max_position_bps": "Max position",
+        "allow_etfs": "ETFs"
+      },
+      "values": {
+        "anySize": "Any size",
+        "listSeparator": ", ",
+        "risk": "{{level}} of 10",
+        "noMarketScans": "None",
+        "everyHours_one": "Every hour",
+        "everyHours_other": "Every {{count}} hours",
+        "allowed": "Allowed",
+        "notAllowed": "Not allowed"
+      }
     }
   },
   "consolidated": {

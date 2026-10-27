@@ -7,6 +7,7 @@ import type { AgentState, AgentView, TradeSide } from '@traders/shared';
 import { AccountSummary, AgentActivity, AgentHoldings } from '../components/AgentAccount.tsx';
 import { AgentDecisions } from '../components/AgentDecisions.tsx';
 import { AgentPerformance } from '../components/AgentPerformance.tsx';
+import { AgentReviewCards } from '../components/AgentReviewCards.tsx';
 import { RunScanCard, ScanScheduleCard } from '../components/AgentScans.tsx';
 import { TradePanel } from '../components/TradePanel.tsx';
 import { AgentField } from '../components/AgentField.tsx';
@@ -148,6 +149,7 @@ function SimulatedAgent({ agent }: { agent: AgentView }) {
         )}
       </div>
       <AccountSummary agent={agent} />
+      <AgentReviewCards agent={agent} />
       <div role="tablist" className="flex gap-2 overflow-x-auto border-b border-border-subtle">
         {TABS.map((name) => (
           <button
