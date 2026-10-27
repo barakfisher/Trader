@@ -109,3 +109,48 @@ async def test_resolve_survives_a_failing_name_lookup(monkeypatch):
     assert resolution.resolved is not None
     assert resolution.resolved.name is None
     assert resolution.confidence == 0.9
+
+
+def test_a_subunit_price_becomes_its_iso_currency():
+    """D327: Tel Aviv is quoted in agorot ("ILA"), London in pence ("GBp").
+
+    12,250 agorot is 122.50 shekels; "GBP" itself (pounds) is left alone - the
+    two codes differ only in case, by a factor of a hundred.
+    """
+    from app.providers.yfinance_provider import _in_major_unit
+
+    assert _in_major_unit(Decimal("12250"), "ILA") == (Decimal("122.5"), "ILS")
+    assert _in_major_unit(Decimal("450"), "GBp") == (Decimal("4.5"), "GBP")
+    assert _in_major_unit(Decimal("450"), "GBX") == (Decimal("4.5"), "GBP")
+    assert _in_major_unit(Decimal("4.5"), "GBP") == (Decimal("4.5"), "GBP")
+    assert _in_major_unit(Decimal("10"), "usd") == (Decimal("10"), "USD")
+    assert _in_major_unit(None, "ILA") == (None, "ILS")
+    assert _in_major_unit(Decimal("1"), None) == (Decimal("1"), "USD")
+
+
+async def test_search_maps_yahoo_rows_and_skips_one_without_a_symbol(monkeypatch):
+    import sys
+    import types
+
+    rows = [
+        {
+            "symbol": "teva.ta",
+            "longname": "Teva Pharmaceutical Industries Limited",
+            "shortname": "TEVA PHARMA IND",
+            "quoteType": "EQUITY",
+            "exchDisp": "Tel Aviv",
+        },
+        {"shortname": "no symbol"},
+        {"symbol": "SPY", "shortname": "SPDR S&P 500", "quoteType": "ETF", "exchange": "PCX"},
+    ]
+    fake = types.SimpleNamespace(
+        Search=lambda *_args, **_kwargs: types.SimpleNamespace(quotes=rows)
+    )
+    monkeypatch.setitem(sys.modules, "yfinance", fake)
+
+    matches = await YFinanceProvider().search_symbols("teva", 8)
+
+    assert [(m.symbol, m.name, m.asset_class, m.exchange) for m in matches] == [
+        ("TEVA.TA", "Teva Pharmaceutical Industries Limited", "equity", "Tel Aviv"),
+        ("SPY", "SPDR S&P 500", "etf", "PCX"),
+    ]

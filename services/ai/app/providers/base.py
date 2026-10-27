@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from app.models import DailyClose, FxRate, InstrumentResolution, Mover, Quote
+from app.models import DailyClose, FxRate, InstrumentResolution, Mover, Quote, SymbolMatch
 
 
 class ProviderError(RuntimeError):
@@ -33,6 +33,22 @@ class MoversProvider(Protocol):
 
     async def movers(self) -> list[Mover]:
         """Today's lists, or [] when the provider has none. Raises ProviderError."""
+        ...
+
+
+@runtime_checkable
+class SymbolSearchProvider(Protocol):
+    """A provider that can search listings by symbol or name (D324).
+
+    Separate from `MarketDataProvider` for the same reason as `MoversProvider`:
+    not every source has a search, and none is obliged to invent one. The
+    add-holding form asks only when the local list has no match.
+    """
+
+    name: str
+
+    async def search_symbols(self, query: str, limit: int) -> list[SymbolMatch]:
+        """Up to `limit` listings, best first, or []. Raises ProviderError."""
         ...
 
 

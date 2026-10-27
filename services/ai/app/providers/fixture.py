@@ -15,7 +15,15 @@ from pathlib import Path
 from app.core.logging import get_logger
 from app.core.money import to_minor
 from app.core.observation_time import observed_at
-from app.models import DailyClose, FxRate, Instrument, InstrumentResolution, Mover, Quote
+from app.models import (
+    DailyClose,
+    FxRate,
+    Instrument,
+    InstrumentResolution,
+    Mover,
+    Quote,
+    SymbolMatch,
+)
 
 log = get_logger("provider.fixture")
 
@@ -176,6 +184,29 @@ class FixtureProvider:
             confidence=0.5 if candidates else 0.0,
             reason="name substring match" if candidates else "not present in fixture set",
         )
+
+    async def search_symbols(self, query: str, limit: int) -> list[SymbolMatch]:
+        """Symbol prefix or name substring over the fixture set, symbols first."""
+        needle = query.strip().lower()
+        if not needle:
+            return []
+        items = list(self._instruments.values())
+        by_symbol = [item for item in items if item["symbol"].lower().startswith(needle)]
+        by_name = [
+            item
+            for item in items
+            if item not in by_symbol and needle in (item.get("name") or "").lower()
+        ]
+        return [
+            SymbolMatch(
+                symbol=item["symbol"],
+                name=item.get("name"),
+                asset_class=item.get("asset_class", "unknown"),
+                exchange=item.get("exchange"),
+                source=self.name,
+            )
+            for item in (by_symbol + by_name)[:limit]
+        ]
 
     async def fx_rate(self, base: str, quote: str) -> FxRate | None:
         if base.upper() == quote.upper():

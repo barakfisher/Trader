@@ -88,6 +88,19 @@ export const instrumentResolutionSchema = z.object({
   universe: instrumentUniverseSchema.nullable().optional(),
 });
 
+export const symbolMatchSchema = z.object({
+  asset_class: z.enum(['equity', 'etf', 'crypto', 'fx', 'index', 'unknown']),
+  exchange: z.string().nullable().optional(),
+  name: z.string().nullable().optional(),
+  source: z.string(),
+  symbol: z.string(),
+});
+
+export const symbolSearchResponseSchema = z.object({
+  matches: z.array(symbolMatchSchema).optional(),
+  query: z.string(),
+});
+
 export const fxRateSchema = z.object({
   as_of: z.string(),
   base: z.string(),
@@ -536,6 +549,12 @@ export type _AssertInstrumentUniverse = Expect<
 >;
 export type _AssertInstrumentResolution = Expect<
   Equal<z.infer<typeof instrumentResolutionSchema>, Schemas['InstrumentResolution']>
+>;
+export type _AssertSymbolMatch = Expect<
+  Equal<z.infer<typeof symbolMatchSchema>, Schemas['SymbolMatch']>
+>;
+export type _AssertSymbolSearchResponse = Expect<
+  Equal<z.infer<typeof symbolSearchResponseSchema>, Schemas['SymbolSearchResponse']>
 >;
 export type _AssertFxRate = Expect<Equal<z.infer<typeof fxRateSchema>, Schemas['FxRate']>>;
 export type _AssertObservation = Expect<

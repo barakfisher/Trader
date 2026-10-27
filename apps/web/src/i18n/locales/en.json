@@ -160,14 +160,24 @@
   "addHolding": {
     "title": "Add a holding",
     "symbol": "Symbol",
-    "symbolHint": "Ticker as your data provider spells it, e.g. AAPL or BTC-USD",
+    "symbolHint": "Pick a suggestion, or type the ticker as the market spells it, e.g. AAPL or TEVA.TA",
     "quantity": "Quantity",
     "costPerUnit": "Cost per unit",
     "optional": "Optional",
     "opened": "Opened",
     "failed": "Could not add that holding.",
     "adding": "Adding…",
-    "add": "Add holding"
+    "add": "Add holding",
+    "symbolPlaceholder": "Symbol or company name",
+    "searching": "Searching the market…",
+    "searchFailed": "The market search is unavailable. Type the ticker; it is checked when you add it.",
+    "noMatches": "No listing found. Type the full ticker; it is checked when you add it.",
+    "fromMarket": "Not in the app's list yet: these come from the market search.",
+    "priceLoading": "Fetching the latest price…",
+    "pricePrefilled": "Latest price {{price}}, {{age}}. Change it if you paid a different price.",
+    "noPrice": "No price is available for this symbol. Enter what you paid.",
+    "priceFailed": "The latest price could not be read. Enter what you paid.",
+    "searchMarket": "Search the market for “{{query}}”"
   },
   "allocation": {
     "title": "Allocation",

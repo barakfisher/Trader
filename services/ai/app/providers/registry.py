@@ -30,8 +30,21 @@ from app.core.cache_policy import quote_ttl
 from app.core.logging import get_logger
 from app.core.observation_time import at_last_close
 from app.core.ratelimit import RateLimiter
-from app.models import DailyClose, FxRate, InstrumentResolution, Mover, Quote, QuoteMarket
-from app.providers.base import MarketDataProvider, MoversProvider, ProviderError
+from app.models import (
+    DailyClose,
+    FxRate,
+    InstrumentResolution,
+    Mover,
+    Quote,
+    QuoteMarket,
+    SymbolMatch,
+)
+from app.providers.base import (
+    MarketDataProvider,
+    MoversProvider,
+    ProviderError,
+    SymbolSearchProvider,
+)
 from app.providers.fixture import FixtureProvider
 from app.providers.price_provenance import admissible_chain
 from app.providers.yfinance_provider import YFinanceProvider
@@ -73,6 +86,12 @@ def build_providers(settings: Settings) -> list[MarketDataProvider]:
 #: The movers lists a provider is asked for, and the cache key the day's answer is kept under.
 MOVER_LISTS = ("gainers", "losers", "most_active")
 MOVERS_CACHE_KEY = "movers"
+
+#: A symbol search is kept for a day (D324): listings change far more slowly
+#: than that, and every repeat of a query costs Yahoo nothing.
+SYMBOL_SEARCH_TTL_SECONDS = 24 * 3600
+#: The most matches a search returns - what the add-holding list shows.
+SYMBOL_SEARCH_LIMIT = 8
 
 
 class MarketDataService:
@@ -273,6 +292,49 @@ class MarketDataService:
                     self._settings.cache_ttl_news,
                 )
                 return movers
+        return []
+
+    async def search_symbols(self, query: str) -> list[SymbolMatch]:
+        """Listings matching `query` from the first provider that finds any (D324).
+
+        Cached per normalised query for SYMBOL_SEARCH_TTL_SECONDS. An empty
+        answer is cached only when every searching provider answered: one that
+        failed or was rate limited might have had matches, and caching "none"
+        for a day would hide them (a cold Yahoo timeout behind the fixture's
+        empty answer did exactly that for "teva" on the first preview).
+        """
+        needle = " ".join(query.split()).lower()
+        if not needle:
+            return []
+        cache_key = f"symbol_search:{needle}"
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            return [SymbolMatch.model_validate(item) for item in cached]
+        incomplete = False
+        for provider in self._providers:
+            if not isinstance(provider, SymbolSearchProvider):
+                continue
+            if provider.makes_external_requests and not await self._limiter.allow(
+                provider.name, self._settings.provider_rate_limit_per_minute, 1
+            ):
+                log.warning("providers.skipped_rate_limited", provider=provider.name)
+                incomplete = True
+                continue
+            try:
+                matches = await provider.search_symbols(needle, SYMBOL_SEARCH_LIMIT)
+            except ProviderError as exc:
+                log.warning("providers.search_failed", provider=provider.name, error=str(exc))
+                incomplete = True
+                continue
+            if matches:
+                await self._cache.set(
+                    cache_key,
+                    [match.model_dump(mode="json") for match in matches],
+                    SYMBOL_SEARCH_TTL_SECONDS,
+                )
+                return matches
+        if not incomplete:
+            await self._cache.set(cache_key, [], SYMBOL_SEARCH_TTL_SECONDS)
         return []
 
     async def resolve(self, query: str) -> InstrumentResolution:

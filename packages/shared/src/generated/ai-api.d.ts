@@ -446,6 +446,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/market/instruments/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Instruments
+         * @description Listings matching `query`, for the add-holding form when the local list has none (D324).
+         */
+        get: operations["search_instruments_market_instruments_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/market/quotes": {
         parameters: {
             query?: never;
@@ -2214,6 +2234,40 @@ export interface components {
             templated: number;
         };
         /**
+         * SymbolMatch
+         * @description One listing a provider's symbol search returned (D324).
+         *
+         *     No currency: Yahoo's search does not state one, and guessing USD for a
+         *     Tel Aviv listing would be invented (guideline 7). The holding's currency is
+         *     still set by `resolve` when it is added.
+         */
+        SymbolMatch: {
+            /**
+             * Asset Class
+             * @default unknown
+             * @enum {string}
+             */
+            asset_class: "equity" | "etf" | "crypto" | "fx" | "index" | "unknown";
+            /**
+             * Exchange
+             * @description The venue as the provider names it.
+             */
+            exchange?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Source */
+            source: string;
+            /** Symbol */
+            symbol: string;
+        };
+        /** SymbolSearchResponse */
+        SymbolSearchResponse: {
+            /** Matches */
+            matches?: components["schemas"]["SymbolMatch"][];
+            /** Query */
+            query: string;
+        };
+        /**
          * TopicCandidateOut
          * @description One instrument offered for a topic, with the reason it was offered.
          *
@@ -3330,6 +3384,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InstrumentResolution"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_instruments_market_instruments_search_get: {
+        parameters: {
+            query: {
+                /** @description Symbol or company name */
+                query: string;
+            };
+            header?: {
+                "x-internal-key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SymbolSearchResponse"];
                 };
             };
             /** @description Validation Error */

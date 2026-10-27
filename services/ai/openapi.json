@@ -3118,6 +3118,81 @@
         "title": "SuspectedNetwork",
         "type": "object"
       },
+      "SymbolMatch": {
+        "description": "One listing a provider's symbol search returned (D324).\n\nNo currency: Yahoo's search does not state one, and guessing USD for a\nTel Aviv listing would be invented (guideline 7). The holding's currency is\nstill set by `resolve` when it is added.",
+        "properties": {
+          "asset_class": {
+            "default": "unknown",
+            "enum": [
+              "equity",
+              "etf",
+              "crypto",
+              "fx",
+              "index",
+              "unknown"
+            ],
+            "title": "Asset Class",
+            "type": "string"
+          },
+          "exchange": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The venue as the provider names it.",
+            "title": "Exchange"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "source"
+        ],
+        "title": "SymbolMatch",
+        "type": "object"
+      },
+      "SymbolSearchResponse": {
+        "properties": {
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/SymbolMatch"
+            },
+            "title": "Matches",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "SymbolSearchResponse",
+        "type": "object"
+      },
       "TopicCandidateOut": {
         "description": "One instrument offered for a topic, with the reason it was offered.\n\n`rationale` is a sentence from the instrument's own description, verbatim -\nnever written by a model. `held_by` is the second, independent reason: the\ntopic's source ETFs that hold it. Either can be checked by the reader.\n\n`confidence` is a band, not a number, because a cosine is not a\nprobability; `similarity` is exposed for debugging and for the record, not\nfor display as a percentage.",
         "properties": {
@@ -5193,6 +5268,69 @@
           }
         },
         "summary": "Resolve Instrument",
+        "tags": [
+          "market"
+        ]
+      }
+    },
+    "/market/instruments/search": {
+      "get": {
+        "description": "Listings matching `query`, for the add-holding form when the local list has none (D324).",
+        "operationId": "search_instruments_market_instruments_search_get",
+        "parameters": [
+          {
+            "description": "Symbol or company name",
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "description": "Symbol or company name",
+              "maxLength": 64,
+              "minLength": 1,
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-internal-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Internal-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SymbolSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Instruments",
         "tags": [
           "market"
         ]

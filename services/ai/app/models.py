@@ -220,6 +220,26 @@ class Instrument(BaseModel):
     source: str = "unknown"
 
 
+class SymbolMatch(BaseModel):
+    """One listing a provider's symbol search returned (D324).
+
+    No currency: Yahoo's search does not state one, and guessing USD for a
+    Tel Aviv listing would be invented (guideline 7). The holding's currency is
+    still set by `resolve` when it is added.
+    """
+
+    symbol: str
+    name: str | None = None
+    asset_class: AssetClass = "unknown"
+    exchange: str | None = Field(default=None, description="The venue as the provider names it.")
+    source: str
+
+
+class SymbolSearchResponse(BaseModel):
+    query: str
+    matches: list[SymbolMatch] = Field(default_factory=list)
+
+
 class InstrumentUniverse(BaseModel):
     """Whether a resolved instrument is in the screened universe, and if not, why.
 

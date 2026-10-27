@@ -137,7 +137,8 @@ it('adds a holding in a drawer that takes focus, gives it back, and closes when 
   fireEvent.click(add);
 
   const drawer = screen.getByRole('dialog', { name: 'Add a holding' });
-  expect(document.activeElement).toBe(within(drawer).getAllByRole('textbox')[0]);
+  // The symbol is a combobox with suggestions (D324), and the first field.
+  expect(document.activeElement).toBe(within(drawer).getByRole('combobox', { name: 'Symbol' }));
 
   fireEvent.keyDown(window, { key: 'Escape' });
   expect(screen.queryByRole('dialog')).toBeNull();
@@ -145,7 +146,8 @@ it('adds a holding in a drawer that takes focus, gives it back, and closes when 
 
   fireEvent.click(add);
   const again = screen.getByRole('dialog', { name: 'Add a holding' });
-  const [symbol, quantity] = within(again).getAllByRole('textbox');
+  const symbol = within(again).getByRole('combobox', { name: 'Symbol' });
+  const [quantity] = within(again).getAllByRole('textbox');
   fireEvent.change(symbol!, { target: { value: 'msft' } });
   fireEvent.change(quantity!, { target: { value: '3' } });
   fireEvent.click(within(again).getByRole('button', { name: /Add holding/ }));

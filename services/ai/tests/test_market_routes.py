@@ -296,3 +296,14 @@ async def test_sessions_refuse_what_the_calendar_cannot_answer(client):
     assert unknown.status_code == 422
     assert reversed_span.status_code == 422
     assert uncovered.status_code == 503
+
+
+async def test_search_endpoint_lists_matches_without_a_currency(client):
+    async with client:
+        found = await client.get("/market/instruments/search", params={"query": "apple"})
+        empty = await client.get("/market/instruments/search", params={"query": "zzzzzz"})
+        blank = await client.get("/market/instruments/search", params={"query": ""})
+    assert [match["symbol"] for match in found.json()["matches"]] == ["AAPL"]
+    assert "currency" not in found.json()["matches"][0]
+    assert empty.json()["matches"] == []
+    assert blank.status_code == 422

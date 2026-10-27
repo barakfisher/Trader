@@ -64,8 +64,25 @@ function portfolioWorth(totalValueMinor: number): PortfolioResponse {
   };
 }
 
+const SYMBOL_FIELD = 'Symbol or company name';
+
+/** `get` answers the portfolio from `portfolio`, and the form's lookups with nothing. */
+function serve(...portfolios: PortfolioResponse[]) {
+  let served = 0;
+  get.mockImplementation(async (path: string) => {
+    if (path === '/portfolio') return portfolios[Math.min(served++, portfolios.length - 1)];
+    if (path === '/instruments') return { instruments: [] };
+    if (path.startsWith('/instruments/search')) return { query: '', matches: [] };
+    const quote = /^\/instruments\/([^/]+)\/quote$/.exec(path);
+    if (quote) return { symbol: quote[1], priceMinor: null, currency: null, asOf: null };
+    throw new Error(`unexpected GET ${path}`);
+  });
+}
+
+const portfolioReads = () => get.mock.calls.filter(([path]) => path === '/portfolio').length;
+
 function fillAndSubmit(symbol: string) {
-  fireEvent.change(screen.getByPlaceholderText('AAPL'), { target: { value: symbol } });
+  fireEvent.change(screen.getByPlaceholderText(SYMBOL_FIELD), { target: { value: symbol } });
   fireEvent.change(screen.getByPlaceholderText('10'), { target: { value: '1' } });
   fireEvent.click(screen.getByRole('button', { name: /add holding/i }));
 }
@@ -75,7 +92,7 @@ describe('adding a holding', () => {
   afterEach(cleanup);
 
   it('refreshes the portfolio on every screen once the server accepts it', async () => {
-    get.mockResolvedValueOnce(portfolioWorth(100000)).mockResolvedValueOnce(portfolioWorth(250000));
+    serve(portfolioWorth(100000), portfolioWorth(250000));
     post.mockResolvedValue({ id: 'h-1' });
     renderWithServerState(
       <>
@@ -92,14 +109,15 @@ describe('adding a holding', () => {
       symbol: 'MSFT',
       quantity: '1',
       costBasis: null,
-      openedAt: null,
+      // The opening date defaults to today (D326).
+      openedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     });
     // The form empties only on success, so a refusal leaves the typing to fix.
-    await waitFor(() => expect((screen.getByPlaceholderText('AAPL') as HTMLInputElement).value).toBe(''));
+    await waitFor(() => expect((screen.getByPlaceholderText(SYMBOL_FIELD) as HTMLInputElement).value).toBe(''));
   });
 
   it('reports a refusal, keeps the typing, and does not refetch', async () => {
-    get.mockResolvedValue(portfolioWorth(100000));
+    serve(portfolioWorth(100000));
     post.mockRejectedValue(
       new ApiRequestError('no market data provider could price "NOSUCH"', 422, 'unresolved_symbol'),
     );
@@ -114,7 +132,7 @@ describe('adding a holding', () => {
     fillAndSubmit('NOSUCH');
 
     expect(await screen.findByText(/could price "NOSUCH"/)).toBeTruthy();
-    expect((screen.getByPlaceholderText('AAPL') as HTMLInputElement).value).toBe('NOSUCH');
-    expect(get).toHaveBeenCalledTimes(1);
+    expect((screen.getByPlaceholderText(SYMBOL_FIELD) as HTMLInputElement).value).toBe('NOSUCH');
+    expect(portfolioReads()).toBe(1);
   });
 });
