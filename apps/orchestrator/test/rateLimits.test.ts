@@ -121,6 +121,7 @@ const PER_USER_ROUTES: { method: string; path: string; scope: RateLimitScope; bo
   { method: 'POST', path: '/topics', scope: 'topicResolve', body: {} },
   { method: 'PUT', path: `/topics/${TOPIC}`, scope: 'topicResolve', body: {} },
   { method: 'GET', path: '/concepts/search?q=drawdown', scope: 'conceptSearch' },
+  { method: 'POST', path: '/portfolio/cash/movements', scope: 'cashMovement', body: { type: 'income', amount: '1' } },
   // Each spends the installation's shared Yahoo budget: per hour, and per minute against a burst.
   { method: 'GET', path: '/instruments/search?q=teva', scope: 'symbolLookup' },
   { method: 'GET', path: '/instruments/search?q=teva', scope: 'symbolLookupBurst' },

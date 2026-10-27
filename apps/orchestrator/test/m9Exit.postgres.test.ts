@@ -112,7 +112,7 @@ const WRITE_BODIES: Record<string, unknown> = {
   'POST /imports/preview': {},
   // Name no row: each writes only the caller's own main portfolio's cash (D328).
   'POST /portfolio/cash': {},
-  'POST /portfolio/cash/deposits': {},
+  'POST /portfolio/cash/movements': {},
   'PUT /portfolio/cash': {},
   'POST /notifications/digest/seen': { sentAt: '2099-01-01T00:00:00Z' },
   'POST /observations/seen': { upTo: '2099-01-01T00:00:00Z' },

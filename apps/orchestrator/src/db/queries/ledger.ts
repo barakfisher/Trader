@@ -5,10 +5,13 @@
  * follows `agents.budget_minor`, a trade's debit or credit follows its fill -
  * and `traders_app` holds no write privilege on either table. What this module
  * writes is the fill itself and the holding it changes, both inside the
- * caller's transaction, after `lockAgentCash` (decision D3's row lock).
+ * caller's transaction, after `lockAgentCash` (decision D3's row lock). The
+ * real portfolio's income, charges and corrections go through
+ * `record_primary_cash_movement`, a function that writes only those (D340).
  */
 
 import type { PoolClient } from 'pg';
+import type { PrimaryMovementType } from '@traders/shared';
 
 import { query, queryOne } from '../pool.js';
 
@@ -258,9 +261,20 @@ export async function setAgentHolding(
   );
 }
 
+/** Every kind a cash movement may have; the last three are the real portfolio's only (D340). */
+export type CashMovementKind =
+  | 'opening_deposit'
+  | 'top_up'
+  | 'buy'
+  | 'sell'
+  | 'adjustment'
+  | 'withdrawal'
+  | 'income'
+  | 'charge';
+
 export interface CashActivityRow {
   id: string;
-  kind: 'opening_deposit' | 'top_up' | 'buy' | 'sell' | 'adjustment';
+  kind: CashMovementKind;
   amount_minor: string;
   balance_after_minor: string;
   created_at: Date;
@@ -383,14 +397,25 @@ export interface PrimaryCashRow {
   opening_holdings_cost_minor: string | null;
   balance_minor: string | null;
   currency: string;
+  income_minor: string;
+  charges_minor: string;
 }
 
-/** The real portfolio's cash (D328): its deposits, what it held when opened, and its balance. */
+/**
+ * The real portfolio's cash (D328): its net deposits, what it held when opened,
+ * its balance, and the income and charges recorded against it (D340).
+ */
 export function getPrimaryCash(userId: string, agentId: string): Promise<PrimaryCashRow | null> {
   return queryOne<PrimaryCashRow>(
     `SELECT a.budget_minor::text AS budget_minor,
             a.opening_holdings_cost_minor::text AS opening_holdings_cost_minor,
-            c.balance_minor::text AS balance_minor, a.currency
+            c.balance_minor::text AS balance_minor, a.currency,
+            coalesce((SELECT sum(m.amount_minor) FROM cash_movements m
+                       WHERE m.user_id = a.user_id AND m.agent_id = a.id AND m.kind = 'income'), 0)::text
+              AS income_minor,
+            coalesce((SELECT -sum(m.amount_minor) FROM cash_movements m
+                       WHERE m.user_id = a.user_id AND m.agent_id = a.id AND m.kind = 'charge'), 0)::text
+              AS charges_minor
        FROM agents a LEFT JOIN agent_cash c ON c.agent_id = a.id
       WHERE a.user_id = $1 AND a.id = $2 AND a.is_primary`,
     [userId, agentId],
@@ -417,29 +442,105 @@ export async function openPrimaryCash(
   return row !== null;
 }
 
-/** A deposit into the real portfolio's cash: the budget rises, the trigger records it. */
-export async function depositPrimaryCash(
-  userId: string,
-  agentId: string,
-  amountMinor: number,
-  ceilingMinor: number,
-): Promise<boolean> {
-  const row = await queryOne<{ id: string }>(
-    `UPDATE agents SET budget_minor = budget_minor + $3
-      WHERE user_id = $1 AND id = $2 AND is_primary AND budget_minor IS NOT NULL
-        AND budget_minor + $3 <= $4
-      RETURNING id`,
-    [userId, agentId, amountMinor, ceilingMinor],
-  );
-  return row !== null;
-}
-
-export type SetPrimaryCashOutcome = 'set' | 'unopened' | 'below_zero';
+export type PrimaryMovementOutcome = 'recorded' | 'unopened' | 'insufficient_cash' | 'over_ceiling';
 
 /**
- * Set the real portfolio's cash to what the broker shows (D330). Under the cash
- * row's lock, the budget moves by the difference; after the first fill the
- * trigger records it as an `adjustment`, which only this writer asks for.
+ * Lock the primary's cash row, then read its budget `FOR NO KEY UPDATE` - the
+ * order a fill and a reset take them in (cash row, then the agent row: a
+ * fill's foreign-key check, a reset's UPDATE). The other order deadlocked
+ * against a trade recorded at the same moment (security review of D340).
+ * `NO KEY` still keeps two cash writers apart without blocking a fill's
+ * foreign-key check. Null when the cash is not set.
+ *
+ * An unset budget is read first without a lock: opening takes the agent row
+ * before the cash row, and an unopened primary has nothing to lock for.
+ */
+async function lockPrimary(
+  client: PoolClient,
+  userId: string,
+  agentId: string,
+): Promise<{ budget: bigint; balance: bigint } | null> {
+  const budgetOf = async (lock: string) => {
+    const { rows } = await client.query<{ budget_minor: string | null }>(
+      `SELECT budget_minor::text AS budget_minor FROM agents
+        WHERE user_id = $1 AND id = $2 AND is_primary ${lock}`,
+      [userId, agentId],
+    );
+    return rows[0]?.budget_minor ?? null;
+  };
+  if ((await budgetOf('')) === null) return null;
+  const balance = await lockAgentCash(client, userId, agentId);
+  if (balance === null) return null;
+  // Read again under the lock: a reset may have unset it in between.
+  const budget = await budgetOf('FOR NO KEY UPDATE');
+  return budget === null ? null : { budget: BigInt(budget), balance };
+}
+
+/** A movement that does not follow the budget, through the one function allowed to write it (0080). */
+async function recordMovement(
+  client: PoolClient,
+  userId: string,
+  agentId: string,
+  kind: 'income' | 'charge' | 'adjustment',
+  amountMinor: bigint,
+): Promise<void> {
+  await client.query('SELECT record_primary_cash_movement($1, $2, $3, $4)', [
+    userId,
+    agentId,
+    kind,
+    amountMinor.toString(),
+  ]);
+}
+
+async function withCashKind(client: PoolClient, kind: 'top_up' | 'withdrawal', write: () => Promise<unknown>) {
+  await client.query(`SELECT set_config('traders.cash_kind', $1, true)`, [kind]);
+  await write();
+  await client.query(`SELECT set_config('traders.cash_kind', '', true)`);
+}
+
+/**
+ * Record one movement of the real portfolio's cash, as its own row (D340).
+ * A deposit or a withdrawal moves the net deposits - the budget, which the
+ * trigger on `agents` turns into a `top_up` or `withdrawal` row; income and
+ * charges are written as rows of their own and leave the deposits alone, so
+ * they count as gain or loss. Nothing takes the cash below zero.
+ */
+export async function recordPrimaryMovement(
+  client: PoolClient,
+  userId: string,
+  agentId: string,
+  type: PrimaryMovementType,
+  amountMinor: number,
+  ceilingMinor: number,
+): Promise<PrimaryMovementOutcome> {
+  const locked = await lockPrimary(client, userId, agentId);
+  if (!locked) return 'unopened';
+  const amount = BigInt(amountMinor);
+  const outgoing = type === 'withdrawal' || type === 'charge';
+  if (outgoing && locked.balance < amount) return 'insufficient_cash';
+  if (type === 'deposit' || type === 'withdrawal') {
+    if (type === 'deposit' && locked.budget + amount > BigInt(ceilingMinor)) return 'over_ceiling';
+    const delta = type === 'deposit' ? amount : -amount;
+    await withCashKind(client, type === 'deposit' ? 'top_up' : 'withdrawal', () =>
+      client.query(
+        `UPDATE agents SET budget_minor = budget_minor + $3 WHERE user_id = $1 AND id = $2 AND is_primary`,
+        [userId, agentId, delta.toString()],
+      ),
+    );
+    return 'recorded';
+  }
+  await recordMovement(client, userId, agentId, type, outgoing ? -amount : amount);
+  return 'recorded';
+}
+
+export type SetPrimaryCashOutcome = 'set' | 'unopened';
+
+/**
+ * Set the real portfolio's cash to what the broker shows, to put a typo right
+ * (D330, D342). While the opening deposit is the only movement, the opening
+ * amount itself was the typo: the budget moves and the trigger edits it. After
+ * anything else has moved the cash, the difference is an `adjustment` row of
+ * its own, which leaves the deposits alone - it counts as gain or loss.
  */
 export async function setPrimaryCash(
   client: PoolClient,
@@ -447,26 +548,22 @@ export async function setPrimaryCash(
   agentId: string,
   balanceMinor: number,
 ): Promise<SetPrimaryCashOutcome> {
-  // The agent row before the cash row, the order a deposit takes them in (its
-  // UPDATE, then the trigger's cash lock): the other order deadlocked a
-  // correction racing a deposit (security review of PRs 1-3, 2026-10-27).
-  const { rows } = await client.query<{ budget_minor: string | null }>(
-    `SELECT budget_minor::text AS budget_minor FROM agents
-      WHERE user_id = $1 AND id = $2 AND is_primary FOR UPDATE`,
+  const locked = await lockPrimary(client, userId, agentId);
+  if (!locked) return 'unopened';
+  const delta = BigInt(balanceMinor) - locked.balance;
+  if (delta === 0n) return 'set';
+  const { rows } = await client.query<{ others: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM cash_movements
+                     WHERE user_id = $1 AND agent_id = $2 AND kind <> 'opening_deposit') AS others`,
     [userId, agentId],
   );
-  const balance = await lockAgentCash(client, userId, agentId);
-  if (balance === null) return 'unopened';
-  const delta = BigInt(balanceMinor) - balance;
-  if (delta === 0n) return 'set';
-  const budget = rows[0]?.budget_minor;
-  if (budget == null) return 'unopened';
-  if (BigInt(budget) + delta < 0n) return 'below_zero';
-  await client.query(`SELECT set_config('traders.cash_kind', 'adjustment', true)`);
-  await client.query(
-    `UPDATE agents SET budget_minor = budget_minor + $3 WHERE user_id = $1 AND id = $2 AND is_primary`,
-    [userId, agentId, delta.toString()],
-  );
-  await client.query(`SELECT set_config('traders.cash_kind', '', true)`);
+  if (rows[0]?.others) {
+    await recordMovement(client, userId, agentId, 'adjustment', delta);
+  } else {
+    await client.query(
+      `UPDATE agents SET budget_minor = budget_minor + $3 WHERE user_id = $1 AND id = $2 AND is_primary`,
+      [userId, agentId, delta.toString()],
+    );
+  }
   return 'set';
 }

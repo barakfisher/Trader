@@ -107,40 +107,92 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       await getPool().query('SELECT erase_account($1)', [OWNER]);
     });
 
-    it('opens once, takes deposits, and is set to a balance under the cash lock', async () => {
+    it('opens once, moves for a named reason, and is set to a balance under the cash lock', async () => {
+      const { transaction } = await import('../src/db/pool.js');
+      const move = (type: 'deposit' | 'withdrawal' | 'income' | 'charge', amount: number, ceiling = 10_000) =>
+        transaction((client) => queries.recordPrimaryMovement(client, OWNER, PRIMARY, type, amount, ceiling));
+      const set = (balance: number) => transaction((client) => queries.setPrimaryCash(client, OWNER, PRIMARY, balance));
+
       expect(await queries.getPrimaryCash(OWNER, PRIMARY)).toMatchObject({ budget_minor: null, balance_minor: null });
+      expect(await move('income', 100)).toBe('unopened');
       expect(await queries.openPrimaryCash(OWNER, PRIMARY, 5_000, 1_000)).toBe(true);
       expect(await queries.openPrimaryCash(OWNER, PRIMARY, 9_999, 0)).toBe(false);
+
+      // While the opening is the only movement, a correction edits it (D342).
+      expect(await set(4_000)).toBe('set');
       expect(await queries.getPrimaryCash(OWNER, PRIMARY)).toMatchObject({
-        budget_minor: '5000',
+        budget_minor: '4000',
         opening_holdings_cost_minor: '1000',
-        balance_minor: '5000',
+        balance_minor: '4000',
       });
 
-      expect(await queries.depositPrimaryCash(OWNER, PRIMARY, 1_000, 10_000)).toBe(true);
-      expect(await queries.depositPrimaryCash(OWNER, PRIMARY, 9_000, 10_000)).toBe(false);
-      expect((await queries.getPrimaryCash(OWNER, PRIMARY))?.balance_minor).toBe('6000');
+      expect(await move('deposit', 1_000)).toBe('recorded');
+      expect(await move('deposit', 9_000)).toBe('over_ceiling');
+      expect(await move('income', 300)).toBe('recorded');
+      expect(await move('charge', 100)).toBe('recorded');
+      expect(await move('withdrawal', 500)).toBe('recorded');
+      expect(await move('charge', 999_999)).toBe('insufficient_cash');
+      expect(await queries.getPrimaryCash(OWNER, PRIMARY)).toMatchObject({
+        budget_minor: '4500',
+        balance_minor: '4700',
+        income_minor: '300',
+        charges_minor: '100',
+      });
 
-      const { transaction } = await import('../src/db/pool.js');
-      expect(await transaction((client) => queries.setPrimaryCash(client, OWNER, PRIMARY, 2_000))).toBe('set');
-      expect(await queries.getPrimaryCash(OWNER, PRIMARY)).toMatchObject({ budget_minor: '2000', balance_minor: '2000' });
+      // After other movements, a correction is an adjustment: the deposits stay.
+      expect(await set(4_650)).toBe('set');
+      expect(await queries.getPrimaryCash(OWNER, PRIMARY)).toMatchObject({ budget_minor: '4500', balance_minor: '4650' });
+      const kinds = await queries.listCashTimeline(OWNER, PRIMARY);
+      expect(kinds.map((row) => [row.kind, row.amount_minor])).toEqual(
+        expect.arrayContaining([
+          ['opening_deposit', '4000'],
+          ['top_up', '1000'],
+          ['income', '300'],
+          ['charge', '-100'],
+          ['withdrawal', '-500'],
+          ['adjustment', '-50'],
+        ]),
+      );
       expect(await queries.sumFeesPaid(OWNER, PRIMARY)).toBe(0);
     });
 
-    it('corrections and deposits at once leave the cash equal to the deposits', async () => {
+    it("takes the cash row before the agent row, as a fill does, so the two never deadlock", async () => {
       const { transaction } = await import('../src/db/pool.js');
-      // Ten of each at once. The lock order (agent, then cash, as a deposit
-      // takes them) is argued in `setPrimaryCash`; this run did not deadlock in
-      // the old order either, so it checks the outcome, not the ordering.
+      // A fill, as `executeFill` runs it: the cash row locked, then a row whose
+      // foreign key takes KEY SHARE on the agent row. Recorded in the other
+      // order, the movement held the agent row and waited for the cash row,
+      // while the fill held the cash row and waited for the agent row (40P01).
+      const fill = await getPool().connect();
+      try {
+        await fill.query('BEGIN');
+        await queries.lockAgentCash(fill, OWNER, PRIMARY);
+        const movement = transaction((client) =>
+          queries.recordPrimaryMovement(client, OWNER, PRIMARY, 'deposit', 100, 100_000_000),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        await fill.query('SELECT 1 FROM agents WHERE id = $1 FOR KEY SHARE', [PRIMARY]);
+        await fill.query('COMMIT');
+        expect(await movement).toBe('recorded');
+      } finally {
+        fill.release();
+      }
+    });
+
+    it('corrections and movements at once leave the cash equal to the sum of its movements', async () => {
+      const { transaction } = await import('../src/db/pool.js');
+      // Ten of each at once, every write taking the agent row before the cash
+      // row (`lockPrimary`), so none can deadlock another.
       await Promise.all(
         Array.from({ length: 10 }, (_, round) => [
           transaction((client) => queries.setPrimaryCash(client, OWNER, PRIMARY, 3_000 + round)),
-          queries.depositPrimaryCash(OWNER, PRIMARY, 100, 100_000_000),
+          transaction((client) => queries.recordPrimaryMovement(client, OWNER, PRIMARY, 'deposit', 100, 100_000_000)),
+          transaction((client) => queries.recordPrimaryMovement(client, OWNER, PRIMARY, 'income', 7, 100_000_000)),
         ]).flat(),
       );
       const after = await queries.getPrimaryCash(OWNER, PRIMARY);
-      // No fills: the cash is the deposits, whatever order the twenty ran in.
-      expect(after?.balance_minor).toBe(after?.budget_minor);
+      const timeline = await queries.listCashTimeline(OWNER, PRIMARY);
+      const total = timeline.reduce((sum, row) => sum + BigInt(row.amount_minor), 0n);
+      expect(after?.balance_minor).toBe(total.toString());
     });
   });
 
