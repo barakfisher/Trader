@@ -185,13 +185,16 @@ export function assertTradableAgent(agent: AgentRow): void {
 /**
  * The instrument a trade names, if it may be traded at all (D7, D8). The
  * universe binds an agent's choices; the main portfolio records what the user
- * bought, so any known USD listing will do (D333).
+ * bought, so any known USD listing will do (D333). "Known" is known to this
+ * user (D339): a symbol only another user added is not found, exactly like one
+ * nobody added, so the answer never says what someone else holds.
  */
 export async function resolveTradable(
+  userId: string,
   symbol: string,
   { anyListing = false }: { anyListing?: boolean } = {},
 ): Promise<TradableInstrumentRow> {
-  const instrument = await findTradableInstrument(symbol);
+  const instrument = await findTradableInstrument(userId, symbol);
   if (!instrument) throw notFound(`no instrument ${symbol.trim().toUpperCase()} is known`);
   if (!anyListing && (instrument.membership === null || instrument.membership === 'dropped')) {
     throw unprocessable('not_tradable', `${instrument.symbol} is not in the tradable universe`, {
@@ -328,7 +331,7 @@ function assertFits(side: TradeSide, cash: bigint, change: bigint, held: bigint,
 /** What the trade would do, computed exactly as `executeFill` would. Writes nothing. */
 export async function previewTrade(request: TradeRequest, context: TradeContext): Promise<TradePreview> {
   assertTradableAgent(request.agent);
-  const instrument = await resolveTradable(request.symbol, { anyListing: request.agent.is_primary });
+  const instrument = await resolveTradable(request.userId, request.symbol, { anyListing: request.agent.is_primary });
   const quantity = parseQuantity(request.quantity);
   const { priceMinor, quote } = await priceOf(instrument, request.price, context);
   const notional = notionalMinor(quantity.toString(), priceMinor);
@@ -415,7 +418,7 @@ export async function executeFill(
   const replayed = await replay(request);
   if (replayed) return replayed;
 
-  const instrument = await resolveTradable(request.symbol, { anyListing: request.agent.is_primary });
+  const instrument = await resolveTradable(request.userId, request.symbol, { anyListing: request.agent.is_primary });
   const quantity = parseQuantity(request.quantity);
   if (request.price.source === 'quote' && request.price.shownPriceMinor === null) {
     throw unprocessable('shown_price_required', 'a trade at the live price confirms the price it was shown');

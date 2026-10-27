@@ -114,7 +114,7 @@ vi.mock('../src/db/queries.js', () => ({
   transaction: vi.fn(async (fn: (client: unknown) => Promise<unknown>) => fn({})),
   getAgent: vi.fn(async () => agentRow()),
   findProposal: vi.fn(async () => proposal),
-  findTradableInstrument: vi.fn(async (symbol: string) => {
+  findTradableInstrument: vi.fn(async (_userId: string, symbol: string) => {
     const known = symbol.trim().toUpperCase();
     return known === 'AAPL' || known === 'MSFT'
       ? { id: `i-${known.toLowerCase()}`, symbol: known, name: known, asset_class: 'equity', exchange: 'NMS', currency: 'USD', membership: 'screened' }

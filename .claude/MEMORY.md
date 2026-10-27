@@ -19,16 +19,14 @@ Updated: 2026-10-27, afternoon - **Handoff: the holdings/ledger plan is complete
     the agent row before the cash row).
 - **Deployed:** compose and kind at `3eb3ff2` (#339), migration head `0079_agent_suggestions`,
   after `db-backup.sh --target all`. #338-#341 were each deployed as they merged.
-- **Decisions reach 338** (next: **339**). **Migrations:** `0079` head; next free `0080`.
+- **Decisions reach 338** (next: **339**; F1's fix took 339 after this handoff). **Migrations:** `0079` head; next free `0080`.
 - **Not seen with a signed-in session:** the user's sign-in is theirs, so every screen was checked
   on a local harness with real data (English/Hebrew, 375 px and desktop). **First thing for the
   user:** open the dashboard and set the cash on the Account card - until then Buy/Sell stay
   disabled and the card says "not set".
 - **Debt, as consequences:**
-  - **The trade preview tells whether any account ever added a symbol** (security review F1): an
-    unknown symbol is 404, a known one is not. Predates these PRs; #341 made it cleaner for the
-    main portfolio. Fix: apply `listInstrumentDirectory`'s scope (screened, or held/filled by this
-    user) in `resolveTradable`, after a market search adds the instrument.
+  - ~~**The trade preview tells whether any account ever added a symbol** (security review F1).~~
+    Fixed after this handoff by D339, together with the same oracle in `PUT /targets`.
   - **Edit and Remove move holdings without the ledger** (D334, by design): after them, a main
     portfolio's fills and holdings can disagree; a sale is checked against the edited holding.
   - **An `adjustment` counts as money put in** (D330): a dividend corrected in is read as a deposit.
@@ -5506,6 +5504,26 @@ failure they prevent.
       every agent route does (D1).
     - **Not pushed:** suggestions are not sent to Telegram or the digest yet; they wait on the
       agent page. A notification is a follow-up if the user wants one.
+
+339. **A symbol only another user added reads exactly like one nobody added** (the user, 2026-10-27;
+    security review F1).
+    - `instruments` is shared reference data, and it keeps every symbol any user ever added. A
+      lookup that answered "known" for all of it was an oracle: a simulated agent's trade said
+      `outside_universe` (422) for another user's symbol and "no instrument" (404) for a made-up
+      one, and `PUT /targets` accepted the first and refused the second. Probing symbols told one
+      user what another holds.
+    - **One rule, `visibleToUser` in `queries/instruments.ts`:** the installation's list
+      (`screened` and `dropped` profiles - never `on_demand`, which exists because one user named
+      the symbol) plus whatever this user holds, has traded or has targeted, in any portfolio.
+      Trades (agents and the main portfolio), scan proposals and targets resolve through it;
+      benchmarks and performance, which are the installation's, keep the unscoped lookup.
+    - **Rejected: fixing the trade routes only** - targets would have kept the same oracle with a
+      200 instead of a 422. **Rejected: promoting a user-added symbol into the universe for
+      everyone** - that is the same leak in the autocomplete, and the universe's size floor exists
+      so that one person's small holding does not change what every agent sees (decision 89).
+      Nothing is lost: any user still finds any listing through the market search (D325), and
+      once they add it, it is theirs to trade.
+    - Proved in `m9Exit.postgres.test.ts`, which fails on the old code with exactly those answers.
 ---
 
 ## Bugs that cost real time, and the lesson from each

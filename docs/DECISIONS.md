@@ -349,3 +349,4 @@ while this file is out of date.
 | 336 | A window is ten counted scans, keyed by its last scan |
 | 337 | The three rules and their thresholds |
 | 338 | The review never fails the scan, and the real portfolio is never reviewed |
+| 339 | A symbol only another user added reads exactly like one nobody added |
