@@ -664,8 +664,11 @@ export interface AgentAccountResponse {
 /** One movement of an agent's cash, with the balance it left (D31). */
 export interface ActivityEntry {
   id: string;
-  /** `adjustment`: the real portfolio's cash set to what the broker shows (D330). */
-  kind: 'opening_deposit' | 'top_up' | 'buy' | 'sell' | 'adjustment';
+  /**
+   * `adjustment`: the real portfolio's cash set to what the broker shows (D330);
+   * `withdrawal`, `income`, `charge`: the real portfolio's only (D340).
+   */
+  kind: 'opening_deposit' | 'top_up' | 'buy' | 'sell' | 'adjustment' | 'withdrawal' | 'income' | 'charge';
   /** Signed: a buy is negative, its fee included. */
   amountMinor: number;
   balanceAfterMinor: number;
@@ -1042,17 +1045,34 @@ export type PrimaryCashResponse =
       state: 'open';
       currency: string;
       cashMinor: number;
-      /** The opening cash and every deposit and correction since. */
+      /**
+       * Net deposits: the opening cash and every deposit, less every withdrawal
+       * (D340). Below zero once more was taken out than put in (D341).
+       */
       depositsMinor: number;
       /** What the holdings already held had cost when the cash was set (D329). */
       openingHoldingsCostMinor: number;
       /** Money put in: the deposits plus what was already invested. */
       investedMinor: number;
       feesPaidMinor: number;
+      /** Dividends and interest recorded as income: gain, not deposits (D340). */
+      incomeMinor: number;
+      /** Broker charges and taxes, as a positive amount: loss, not withdrawals (D340). */
+      chargesMinor: number;
     };
 
 /** An amount in the currency's major units, as typed: "1250.50". */
 export interface PrimaryCashInput {
+  amount: string;
+}
+
+/** What a movement of the real portfolio's cash is (D340), in the form's order. */
+export const PRIMARY_MOVEMENT_TYPES = ['deposit', 'withdrawal', 'income', 'charge'] as const;
+export type PrimaryMovementType = (typeof PRIMARY_MOVEMENT_TYPES)[number];
+
+/** One movement: what it is, and its amount as typed - always positive. */
+export interface PrimaryCashMovementInput {
+  type: PrimaryMovementType;
   amount: string;
 }
 

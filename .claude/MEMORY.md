@@ -19,7 +19,7 @@ Updated: 2026-10-27, afternoon - **Handoff: the holdings/ledger plan is complete
     the agent row before the cash row).
 - **Deployed:** compose and kind at `3eb3ff2` (#339), migration head `0079_agent_suggestions`,
   after `db-backup.sh --target all`. #338-#341 were each deployed as they merged.
-- **Decisions reach 338** (next: **339**; F1's decision took 339 after this handoff). **Migrations:** `0079` head; next free `0080`.
+- **Decisions reach 338** (next: **339**; after this handoff F1 took 339 and cash movements 340-343). **Migrations:** `0079` head; next free `0080` (taken after this handoff by cash movements).
 - **Not seen with a signed-in session:** the user's sign-in is theirs, so every screen was checked
   on a local harness with real data (English/Hebrew, 375 px and desktop). **First thing for the
   user:** open the dashboard and set the cash on the Account card - until then Buy/Sell stay
@@ -29,7 +29,7 @@ Updated: 2026-10-27, afternoon - **Handoff: the holdings/ledger plan is complete
     after this handoff as D339, with the condition that would reopen it.
   - **Edit and Remove move holdings without the ledger** (D334, by design): after them, a main
     portfolio's fills and holdings can disagree; a sale is checked against the edited holding.
-  - **An `adjustment` counts as money put in** (D330): a dividend corrected in is read as a deposit.
+  - ~~**An `adjustment` counts as money put in** (D330).~~ Fixed after this handoff by D340-D343.
   - **Tel Aviv holdings value in ILS now, but cannot be traded** - the cash ledger is USD only.
 - **Lessons:**
   - **Read the "Test Files" line, not only "Tests".** A failing `afterAll` (a user delete blocked by
@@ -5523,6 +5523,53 @@ failure they prevent.
       nobody. **Revisit** if users on one installation know each other well enough that
       "someone" means one person (a family install): then apply the rule in both services,
       `find_listing` and `get_universe_info` included, and add `topic_instruments` to it.
+340. **The real portfolio's cash moves for a named reason: deposit, withdrawal, income or charge**
+    (the user, 2026-10-27; migration `0080`).
+    - **How:** one form in the Account drawer - the type, then the amount, always positive.
+      `POST /portfolio/cash/movements`. A deposit or withdrawal moves the budget, which the
+      trigger turns into a `top_up` or `withdrawal` row when the writer names it in
+      `traders.cash_kind` - a row of its own before the first trade too, unlike an agent's
+      budget edit. Income and charges are rows that move the balance and not the budget, so
+      "money put in" (budget + opening holdings' cost) leaves them out and the gain includes
+      them. Drawer facts add "Income received" and "Charges".
+    - **Why:** before this every correction moved "money put in": a dividend read as a deposit,
+      and money taken out had no name (D330's debt).
+    - **Rejected: set the broker's balance and ask the reason for the difference** - one day's
+      dividend and withdrawal would be one difference that is neither. **Rejected: every
+      correction is gain or loss** - a withdrawal would read as a loss.
+    - **Not done:** a dividend is not tied to a holding (no per-stock yield); simulated agents
+      keep top-ups only. Rows are separate events, so tying them later needs no backfill.
+341. **A primary's net deposits may go below zero** (2026-10-27).
+    - Withdraw more than was ever deposited - after income, or years of gains - and the budget
+      is negative. `agents_simulated_has_budget` now bounds simulated agents only; the trigger
+      refuses a negative budget from anything but a named withdrawal (`net_deposits_below_zero`),
+      so a plain edit cannot desync it from the cash; the cash itself still never goes below
+      zero (`agent_cash`'s CHECK).
+    - **Rejected: refuse a withdrawal beyond the deposits** - it would make a real withdrawal of
+      gains unrecordable, and the user would "correct" it into a loss instead.
+342. **A typo correction edits the opening while it is the only movement, then is gain or loss**
+    (2026-10-27; amends D330).
+    - **How:** `setPrimaryCash` locks the cash row, then reads the agent row `FOR NO KEY UPDATE`
+      (`lockPrimary`, which every primary cash write shares), and moves the budget only while
+      the opening deposit is
+      the primary's only movement - then the opening amount was the typo. After anything else,
+      the difference is an `adjustment` row that leaves the budget alone. The trigger's
+      `adjustment` branch is gone; nothing sets `cash_kind = 'adjustment'` any more.
+343. **The rows that do not follow the budget go through one `SECURITY DEFINER` function**
+    (2026-10-27).
+    - `traders_app` has no write privilege on `cash_movements` (0040), and that stays:
+      `record_primary_cash_movement(user, agent, kind, amount)` writes only `income`, `charge`
+      and `adjustment`, only for an opened primary of that user, with the table's own sign
+      CHECK. **Rejected: granting INSERT** - every movement kind, every agent, any amount, from
+      any query in the orchestrator.
+    - **Lock order (security review of this PR, its one confirmed finding):** cash row first,
+      then the agent row `FOR NO KEY UPDATE` - the order a fill (its foreign-key check takes KEY
+      SHARE on the agent row) and a reset already take. #342 had put the agent row first, which
+      deadlocked a movement against a trade recorded at the same moment; the Postgres test
+      reproduces it with the old order. `NO KEY` keeps two cash writers apart without blocking a
+      fill. The function also locks the row itself, so a direct call cannot race a reset.
+    - **Debt:** a movement has no idempotency key - a network retry records a deposit twice
+      (the form disables itself while saving, one tab only). Rate-limited to 60 an hour.
 ---
 
 ## Bugs that cost real time, and the lesson from each

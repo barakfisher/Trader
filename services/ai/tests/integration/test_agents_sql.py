@@ -99,8 +99,8 @@ def test_the_primary_cannot_be_simulated_or_paused(connection: Connection, assig
     assert "agents_primary_is_real" in refusal
 
 
-def test_the_primarys_budget_is_its_cash_and_never_negative(connection: Connection) -> None:
-    """D328: a primary's budget is the cash the user set - allowed since 0078 - never below $0."""
+def test_the_primarys_budget_goes_below_zero_only_by_a_withdrawal(connection: Connection) -> None:
+    """D328, D341: a primary's budget is its net deposits; a plain edit never takes it below $0."""
     connection.execute(
         text(
             "UPDATE agents SET budget_minor = 100000 "
@@ -113,7 +113,7 @@ def test_the_primarys_budget_is_its_cash_and_never_negative(connection: Connecti
         "UPDATE agents SET budget_minor = -1 WHERE user_id = CAST(:user AS uuid) AND is_primary",
         user=SEED_USER,
     )
-    assert "agents_simulated_has_budget" in refusal
+    assert "net_deposits_below_zero" in refusal
 
 
 def test_a_holding_cannot_be_written_without_an_agent(connection: Connection) -> None:

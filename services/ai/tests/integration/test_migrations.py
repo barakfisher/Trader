@@ -57,6 +57,17 @@ KNOWN_REFUSALS: dict[str, tuple[str, str]] = {
         "ALTER TABLE cash_movements DISABLE TRIGGER USER; ALTER TABLE fills DISABLE TRIGGER USER; "
         "DELETE FROM cash_movements WHERE kind <> 'opening_deposit'; DELETE FROM fills",
     ),
+    # A withdrawal, income or a charge is a kind 0078 has no name for, and a
+    # primary's deposits and corrections mean something else there, so 0080
+    # refuses rather than discard or miscount the real portfolio's movements.
+    "0080_cash_movement_kinds": (
+        "cash movements of a named kind exist",
+        "ALTER TABLE cash_movements DISABLE TRIGGER USER; "
+        "DELETE FROM cash_movements WHERE kind IN ('withdrawal', 'income', 'charge') "
+        "OR (kind IN ('top_up', 'adjustment') "
+        "AND agent_id IN (SELECT id FROM agents WHERE is_primary)); "
+        "ALTER TABLE cash_movements ENABLE TRIGGER USER;",
+    ),
     # A real portfolio's fills and movements are real trades (D328): 0040's
     # triggers would refuse them, so 0078 refuses rather than discard them.
     "0078_primary_ledger": (

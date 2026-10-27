@@ -1,13 +1,18 @@
 import { useState, type FormEvent } from 'react';
 import { AlertTriangle, Wallet } from 'lucide-react';
 
-import type { PortfolioSummary, PrimaryCashResponse } from '@traders/shared';
+import {
+  PRIMARY_MOVEMENT_TYPES,
+  type PortfolioSummary,
+  type PrimaryCashResponse,
+  type PrimaryMovementType,
+} from '@traders/shared';
 
-import { errorMessage } from '../api/client.ts';
+import { ApiRequestError } from '../api/client.ts';
 import { formatMoney } from '../i18n/format.ts';
-import { useTranslation } from '../i18n/index.ts';
+import { t as translate, useTranslation } from '../i18n/index.ts';
 import { BUDGET_INPUT } from '../lib/agentPresentation.ts';
-import { useCashWrite, usePrimaryCash, type CashAction } from '../queries/portfolioCash.ts';
+import { useCashMovement, useCashWrite, usePrimaryCash, type CashAction } from '../queries/portfolioCash.ts';
 import { Drawer } from './Drawer.tsx';
 import { Button, Delta, ErrorNote } from './ui.tsx';
 
@@ -103,7 +108,27 @@ export function AccountCard({ summary }: { summary: PortfolioSummary }) {
   );
 }
 
-/** Set the opening cash; once set, deposit or correct it to what the broker shows. */
+/** The sentence for a refused cash write, from its code: the server's own words are English only. */
+function cashErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof ApiRequestError)) return fallback;
+  switch (error.code) {
+    case 'insufficient_cash':
+      return translate('account.errors.insufficientCash');
+    case 'amount_out_of_range':
+      return translate('account.errors.outOfRange');
+    case 'cash_not_set':
+      return translate('account.errors.notSet');
+    case 'cash_already_set':
+      return translate('account.errors.alreadySet');
+    default:
+      return fallback;
+  }
+}
+
+/**
+ * Set the opening cash; once set, record a movement for what it is (D340), or
+ * set the cash to what the broker shows to put a typo right (D342).
+ */
 function CashForms({ cash, onDone }: { cash: PrimaryCashResponse; onDone: () => void }) {
   const { t } = useTranslation();
   if (cash.state === 'unset') {
@@ -121,12 +146,10 @@ function CashForms({ cash, onDone }: { cash: PrimaryCashResponse; onDone: () => 
         <Fact label={t('account.deposits')} value={formatMoney(cash.depositsMinor, cash.currency)} />
         <Fact label={t('account.openingHoldings')} value={formatMoney(cash.openingHoldingsCostMinor, cash.currency)} />
         <Fact label={t('account.feesPaid')} value={formatMoney(cash.feesPaidMinor, cash.currency)} />
+        <Fact label={t('account.income')} value={formatMoney(cash.incomeMinor, cash.currency)} />
+        <Fact label={t('account.charges')} value={formatMoney(cash.chargesMinor, cash.currency)} />
       </dl>
-      <section className="space-y-2">
-        <h3 className="font-medium">{t('account.depositTitle')}</h3>
-        <p className="text-xs text-text-muted">{t('account.depositExplained')}</p>
-        <AmountForm action="deposit" label={t('account.depositLabel')} submit={t('account.depositSubmit')} onDone={onDone} />
-      </section>
+      <MovementForm onDone={onDone} />
       <section className="space-y-2">
         <h3 className="font-medium">{t('account.correctTitle')}</h3>
         <p className="text-xs text-text-muted">{t('account.correctExplained')}</p>
@@ -142,6 +165,71 @@ function CashForms({ cash, onDone }: { cash: PrimaryCashResponse; onDone: () => 
   );
 }
 
+/** One movement of the cash: what it is, then its amount - always positive, the type says which way. */
+function MovementForm({ onDone }: { onDone: () => void }) {
+  const { t } = useTranslation();
+  const write = useCashMovement();
+  const [type, setType] = useState<PrimaryMovementType>('deposit');
+  const [amount, setAmount] = useState('');
+  const typed = amount.trim();
+  const valid = BUDGET_INPUT.test(typed) && Number(typed) > 0;
+  const send = (event: FormEvent) => {
+    event.preventDefault();
+    // On the promise, as `AmountForm` does: the drawer closes when the write lands.
+    write.mutateAsync({ type, amount: typed }).then(onDone, () => {
+      // The error is shown from `write.error`.
+    });
+  };
+  return (
+    <section className="space-y-2">
+      <h3 className="font-medium">{t('account.movementTitle')}</h3>
+      <form onSubmit={send} className="space-y-2">
+        <fieldset className="space-y-1">
+          <legend className="text-xs text-text-muted">{t('account.movementType')}</legend>
+          <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+            {PRIMARY_MOVEMENT_TYPES.map((option) => (
+              <label
+                key={option}
+                className={`cursor-pointer rounded-lg border px-2 py-1.5 text-center text-xs transition ${
+                  option === type
+                    ? 'border-accent bg-accent/10 font-medium text-text-primary'
+                    : 'border-border-subtle text-text-muted hover:bg-surface-hover'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="movement-type"
+                  value={option}
+                  checked={option === type}
+                  onChange={() => setType(option)}
+                  className="sr-only"
+                />
+                {t(`account.movements.${option}.label`)}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <p className="text-xs text-text-muted">{t(`account.movements.${type}.explained`)}</p>
+        <label className="block space-y-1">
+          <span className="text-xs text-text-muted">{t('account.movementAmount')}</span>
+          <input
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+            inputMode="decimal"
+            dir="ltr"
+            placeholder="0.00"
+            aria-invalid={amount !== '' && !valid}
+            className="input"
+          />
+        </label>
+        <Button type="submit" disabled={!valid || write.isPending}>
+          {t(`account.movements.${type}.submit`)}
+        </Button>
+        {write.error && <ErrorNote message={cashErrorMessage(write.error, t('account.saveFailed'))} />}
+      </form>
+    </section>
+  );
+}
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -197,7 +285,7 @@ function AmountForm({
       <Button type="submit" disabled={!valid || write.isPending}>
         {submit}
       </Button>
-      {write.error && <ErrorNote message={errorMessage(write.error, t('account.saveFailed'))} />}
+      {write.error && <ErrorNote message={cashErrorMessage(write.error, t('account.saveFailed'))} />}
     </form>
   );
 }

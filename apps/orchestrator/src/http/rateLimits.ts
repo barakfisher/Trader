@@ -102,6 +102,12 @@ export const RATE_LIMITS = {
    * queries stays well inside it.
    */
   symbolLookupBurst: { points: 20, durationSeconds: MINUTE },
+  /**
+   * A movement of the real portfolio's cash recorded (D340). A person records a
+   * few a month; this caps a script, which would otherwise grow the ledger and
+   * its sums without bound (security review of D340).
+   */
+  cashMovement: { points: 60, durationSeconds: HOUR },
   /** A topic resolved, created or renamed: an embedding and a market-data resolve. */
   topicResolve: { points: 60, durationSeconds: HOUR },
   /** A concept searched: an embedding. */

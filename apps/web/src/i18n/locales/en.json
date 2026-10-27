@@ -2417,22 +2417,51 @@
     "cash": "Available cash",
     "invested": "Money put in",
     "gain": "Gain on it",
-    "deposits": "Deposits",
+    "deposits": "Deposits, less withdrawals",
     "openingHoldings": "Holdings when set",
     "feesPaid": "Fees paid",
+    "income": "Income received",
+    "charges": "Charges",
     "incomplete": "Some holdings are unpriced, so the value leaves them out.",
     "drawerTitle": "Cash at the broker",
     "openExplained": "Enter the cash available in your broker account now. Your holdings stay as they are; what they cost counts as money you already put in. Nothing here moves money anywhere.",
     "openLabel": "Available cash (USD)",
     "openSubmit": "Set cash",
-    "depositTitle": "Deposit",
-    "depositExplained": "Money you added to the broker account. It counts as money put in.",
-    "depositLabel": "Amount (USD)",
-    "depositSubmit": "Record deposit",
+    "movementTitle": "Record a cash movement",
+    "movementType": "What happened",
+    "movementAmount": "Amount (USD)",
+    "movements": {
+      "deposit": {
+        "label": "Deposit",
+        "explained": "Money you added to the broker account. It counts as money put in.",
+        "submit": "Record deposit"
+      },
+      "withdrawal": {
+        "label": "Withdrawal",
+        "explained": "Money you took out of the broker account. It lowers the money put in.",
+        "submit": "Record withdrawal"
+      },
+      "income": {
+        "label": "Income",
+        "explained": "A dividend or interest paid into the account. It counts as gain, not as money put in.",
+        "submit": "Record income"
+      },
+      "charge": {
+        "label": "Charge",
+        "explained": "A fee or tax the broker took from the account. It counts as a loss, not as money taken out.",
+        "submit": "Record charge"
+      }
+    },
     "correctTitle": "Correct the balance",
-    "correctExplained": "Set the cash to exactly what your broker shows, for example after interest, a dividend or a typo. The difference is recorded as a correction.",
+    "correctExplained": "To fix a typo: set the cash to exactly what your broker shows. Until anything else is recorded, this changes the opening amount; after that, the difference counts as gain or loss, not as money put in.",
     "correctLabel": "Cash your broker shows (USD)",
     "correctSubmit": "Set balance",
-    "saveFailed": "The cash could not be saved."
+    "saveFailed": "The cash could not be saved.",
+    "errors": {
+      "insufficientCash": "There is not that much cash in the account.",
+      "outOfRange": "That amount is outside what can be recorded.",
+      "notSet": "Set the cash first.",
+      "alreadySet": "The cash is already set."
+    }
   }
 }

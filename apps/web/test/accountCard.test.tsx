@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 /**
- * The main portfolio's account card (D328-D330): holdings plus the cash at the
- * broker, the money put in under it - and, until the cash is set, a card that
- * says so instead of a $0 nobody entered.
+ * The main portfolio's account card (D328-D330, D340-D342): holdings plus the
+ * cash at the broker, the money put in under it - and, until the cash is set, a
+ * card that says so instead of a $0 nobody entered. Its drawer records a
+ * movement for what it is, and corrects the balance to what the broker shows.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -16,7 +17,15 @@ const put = vi.fn();
 
 vi.mock('../src/api/client.ts', () => ({
   api: { get, post, put, postForm: vi.fn(), patch: vi.fn(), delete: vi.fn() },
-  ApiRequestError: class extends Error {},
+  ApiRequestError: class extends Error {
+    constructor(
+      message: string,
+      readonly status: number,
+      readonly code: string,
+    ) {
+      super(message);
+    }
+  },
   errorMessage: (_error: unknown, fallback: string) => fallback,
 }));
 
@@ -47,6 +56,8 @@ const OPEN: PrimaryCashResponse = {
   openingHoldingsCostMinor: 250_000,
   investedMinor: 350_000,
   feesPaidMinor: 1_500,
+  incomeMinor: 1_230,
+  chargesMinor: 400,
 };
 
 let cash: PrimaryCashResponse = OPEN;
@@ -86,29 +97,58 @@ describe('the account card', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
-  it('deposits, and corrects the balance to what the broker shows', async () => {
-    post.mockResolvedValue(OPEN);
+  const openDrawer = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: /Cash/ }));
+    return screen.getByRole('dialog', { name: 'Cash at the broker' });
+  };
+
+  it('shows the fees, income and charges recorded, and corrects the balance to what the broker shows', async () => {
     put.mockResolvedValue(OPEN);
     renderWithServerState(<AccountCard summary={SUMMARY} />);
-    fireEvent.click(await screen.findByRole('button', { name: /Cash/ }));
-    const drawer = screen.getByRole('dialog', { name: 'Cash at the broker' });
+    const drawer = await openDrawer();
     expect(within(drawer).getByText('$15.00')).toBeTruthy();
+    expect(within(drawer).getByText('$12.30')).toBeTruthy();
+    expect(within(drawer).getByText('$4.00')).toBeTruthy();
 
-    const [deposit, correct] = within(drawer).getAllByPlaceholderText('0.00');
-    fireEvent.change(correct!, { target: { value: '1180.25' } });
+    const correct = within(drawer).getByLabelText('Cash your broker shows (USD)');
+    fireEvent.change(correct, { target: { value: '1180.25' } });
     fireEvent.click(within(drawer).getByRole('button', { name: 'Set balance' }));
     await waitFor(() => expect(put).toHaveBeenCalledWith('/portfolio/cash', { amount: '1180.25' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
 
-    fireEvent.click(await screen.findByRole('button', { name: /Cash/ }));
-    const again = screen.getByRole('dialog', { name: 'Cash at the broker' });
-    const [depositAgain] = within(again).getAllByPlaceholderText('0.00');
-    expect(deposit).toBeTruthy();
-    fireEvent.change(depositAgain!, { target: { value: '0' } });
-    // A $0 deposit is not offered.
-    expect((within(again).getByRole('button', { name: 'Record deposit' }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.change(depositAgain!, { target: { value: '250' } });
-    fireEvent.click(within(again).getByRole('button', { name: 'Record deposit' }));
-    await waitFor(() => expect(post).toHaveBeenCalledWith('/portfolio/cash/deposits', { amount: '250' }));
+  it('records each kind of movement as what it is, the amount always positive (D340)', async () => {
+    post.mockResolvedValue(OPEN);
+    renderWithServerState(<AccountCard summary={SUMMARY} />);
+    for (const [label, type, submit] of [
+      ['Deposit', 'deposit', 'Record deposit'],
+      ['Withdrawal', 'withdrawal', 'Record withdrawal'],
+      ['Income', 'income', 'Record income'],
+      ['Charge', 'charge', 'Record charge'],
+    ] as const) {
+      const drawer = await openDrawer();
+      fireEvent.click(within(drawer).getByRole('radio', { name: label }));
+      const amount = within(drawer).getByLabelText('Amount (USD)');
+      fireEvent.change(amount, { target: { value: '0' } });
+      // A $0 movement is not offered.
+      expect((within(drawer).getByRole('button', { name: submit }) as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.change(amount, { target: { value: '12.30' } });
+      fireEvent.click(within(drawer).getByRole('button', { name: submit }));
+      await waitFor(() => expect(post).toHaveBeenLastCalledWith('/portfolio/cash/movements', { type, amount: '12.30' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    }
+  });
+
+  it('keeps the drawer open and says why when a movement is refused', async () => {
+    const { ApiRequestError } = await import('../src/api/client.ts');
+    post.mockRejectedValue(new ApiRequestError('no', 422, 'insufficient_cash'));
+    renderWithServerState(<AccountCard summary={SUMMARY} />);
+    const drawer = await openDrawer();
+    fireEvent.click(within(drawer).getByRole('radio', { name: 'Withdrawal' }));
+    fireEvent.change(within(drawer).getByLabelText('Amount (USD)'), { target: { value: '99999' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Record withdrawal' }));
+    expect(await within(drawer).findByText('There is not that much cash in the account.')).toBeTruthy();
+    expect(screen.getByRole('dialog')).toBeTruthy();
   });
 
   it('leaves out the gain when a holding is unpriced, and says so', async () => {

@@ -350,3 +350,7 @@ while this file is out of date.
 | 337 | The three rules and their thresholds |
 | 338 | The review never fails the scan, and the real portfolio is never reviewed |
 | 339 | A symbol a user adds joins the shared list, and what that reveals is an accepted risk |
+| 340 | The real portfolio's cash moves for a named reason: deposit, withdrawal, income or charge |
+| 341 | A primary's net deposits may go below zero |
+| 342 | A typo correction edits the opening while it is the only movement, then is gain or loss |
+| 343 | The rows that do not follow the budget go through one `SECURITY DEFINER` function |
