@@ -447,14 +447,18 @@ export async function setPrimaryCash(
   agentId: string,
   balanceMinor: number,
 ): Promise<SetPrimaryCashOutcome> {
+  // The agent row before the cash row, the order a deposit takes them in (its
+  // UPDATE, then the trigger's cash lock): the other order deadlocked a
+  // correction racing a deposit (security review of PRs 1-3, 2026-10-27).
+  const { rows } = await client.query<{ budget_minor: string | null }>(
+    `SELECT budget_minor::text AS budget_minor FROM agents
+      WHERE user_id = $1 AND id = $2 AND is_primary FOR UPDATE`,
+    [userId, agentId],
+  );
   const balance = await lockAgentCash(client, userId, agentId);
   if (balance === null) return 'unopened';
   const delta = BigInt(balanceMinor) - balance;
   if (delta === 0n) return 'set';
-  const { rows } = await client.query<{ budget_minor: string | null }>(
-    `SELECT budget_minor::text AS budget_minor FROM agents WHERE user_id = $1 AND id = $2 AND is_primary`,
-    [userId, agentId],
-  );
   const budget = rows[0]?.budget_minor;
   if (budget == null) return 'unopened';
   if (BigInt(budget) + delta < 0n) return 'below_zero';

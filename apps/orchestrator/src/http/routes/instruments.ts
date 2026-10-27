@@ -54,7 +54,7 @@ export function registerInstrumentsRoutes(app: Hono<AppEnv>): void {
     return context.json(body);
   });
 
-  app.get('/instruments/search', limitPerUser('symbolLookup'), async (context) => {
+  app.get('/instruments/search', limitPerUser('symbolLookupBurst'), limitPerUser('symbolLookup'), async (context) => {
     currentUserId(context);
     const parsed = searchQuery.safeParse(context.req.query('q') ?? '');
     if (!parsed.success) throw badRequest('invalid_query', 'q must be 1 to 64 characters');
@@ -76,7 +76,7 @@ export function registerInstrumentsRoutes(app: Hono<AppEnv>): void {
     }
   });
 
-  app.get('/instruments/:symbol/quote', limitPerUser('symbolLookup'), async (context) => {
+  app.get('/instruments/:symbol/quote', limitPerUser('symbolLookupBurst'), limitPerUser('symbolLookup'), async (context) => {
     currentUserId(context);
     const parsed = symbolParam.safeParse(context.req.param('symbol'));
     if (!parsed.success) throw badRequest('invalid_symbol', 'not a symbol');

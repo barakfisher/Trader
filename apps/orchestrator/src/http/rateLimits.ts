@@ -94,6 +94,14 @@ export const RATE_LIMITS = {
    * caps a script, not a typist.
    */
   symbolLookup: { points: 240, durationSeconds: HOUR },
+  /**
+   * The same lookups per minute. Each distinct query misses the AI service's
+   * cache and spends one call from the installation's shared Yahoo budget (60 a
+   * minute), so a burst from one account must not empty it for everyone
+   * (security review of PRs 1-3, 2026-10-27). A typist pausing 300 ms between
+   * queries stays well inside it.
+   */
+  symbolLookupBurst: { points: 20, durationSeconds: MINUTE },
   /** A topic resolved, created or renamed: an embedding and a market-data resolve. */
   topicResolve: { points: 60, durationSeconds: HOUR },
   /** A concept searched: an embedding. */
