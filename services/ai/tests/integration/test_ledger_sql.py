@@ -5,8 +5,8 @@ it or refusing it: an agent's cash and opening deposit appear when it is made;
 a fill writes its own cash effect and the balance follows; cash never goes
 below zero; the budget is the sum of deposits (D22); fills and movements are
 append-only (D23); whole shares only (D9); the real portfolio has no ledger
-(D1); and `traders_app`, as which every service connects, may insert a fill
-and lock the cash row but write nothing else.
+until its cash is set (D1, D328-D331); and `traders_app`, as which every
+service connects, may insert a fill and lock the cash row but write nothing else.
 """
 
 from __future__ import annotations
@@ -241,11 +241,24 @@ def test_an_agent_that_never_traded_can_be_deleted_one_that_traded_cannot(
     assert "fills_agent_fkey" in refusal
 
 
-def test_the_real_portfolio_has_no_ledger(connection: Connection) -> None:
-    primary = connection.execute(
+def _primary(connection: Connection) -> str:
+    return connection.execute(
         text("SELECT id FROM agents WHERE user_id = CAST(:u AS uuid) AND is_primary"),
         {"u": SEED_USER},
     ).scalar_one()
+
+
+def _set_budget(connection: Connection, agent: str, budget: int | None, kind: str = "") -> None:
+    connection.execute(text("SELECT set_config('traders.cash_kind', :kind, true)"), {"kind": kind})
+    connection.execute(
+        text("UPDATE agents SET budget_minor = :budget WHERE id = :agent"),
+        {"budget": budget, "agent": agent},
+    )
+    connection.execute(text("SELECT set_config('traders.cash_kind', '', true)"))
+
+
+def test_the_real_portfolio_has_no_ledger_until_its_cash_is_set(connection: Connection) -> None:
+    primary = _primary(connection)
     assert (
         connection.execute(
             text("SELECT count(*) FROM agent_cash WHERE agent_id = :a"), {"a": primary}
@@ -290,3 +303,92 @@ def test_the_app_role_trades_through_the_triggers_and_writes_nothing_else(
             refusal = _refused(connection, statement, a=agent, u=SEED_USER)
             assert "permission denied" in refusal
         transaction.rollback()
+
+
+def test_setting_the_real_portfolios_cash_opens_its_ledger(connection: Connection) -> None:
+    """D328: the opening is the user's, not the creation's - and then it trades like an agent."""
+    primary = _primary(connection)
+    _set_budget(connection, primary, 50_000)
+    assert _cash(connection, primary) == 50_000
+    assert _movements(connection, primary) == [("opening_deposit", 50_000)]
+
+    # Before its first fill the opening is edited in place, as an agent's budget is.
+    _set_budget(connection, primary, 40_000)
+    assert _movements(connection, primary) == [("opening_deposit", 40_000)]
+    assert _cash(connection, primary) == 40_000
+
+    _fill(connection, primary, quantity="10", price=1_000, fee=750)
+    assert _cash(connection, primary) == 40_000 - 10_000 - 750
+
+
+def test_no_cash_at_the_broker_opens_a_ledger_with_no_deposit(connection: Connection) -> None:
+    primary = _primary(connection)
+    _set_budget(connection, primary, 0)
+    assert _cash(connection, primary) == 0
+    assert _movements(connection, primary) == []
+    _set_budget(connection, primary, 20_000)
+    assert _movements(connection, primary) == [("opening_deposit", 20_000)]
+    # Back to none before any trade: the deposit goes, and so does its cash.
+    _set_budget(connection, primary, 0)
+    assert _movements(connection, primary) == []
+    assert _cash(connection, primary) == 0
+
+
+def test_a_correction_after_trading_is_an_adjustment_and_only_when_asked(
+    connection: Connection,
+) -> None:
+    """D330: lower after a fill only as a named adjustment; an agent never gets one."""
+    primary = _primary(connection)
+    _set_budget(connection, primary, 50_000)
+    _fill(connection, primary, quantity="1", price=1_000, fee=750)
+
+    refusal = _refused(
+        connection, "UPDATE agents SET budget_minor = 45000 WHERE id = :a", a=primary
+    )
+    assert "budget_decrease_after_trade" in refusal
+
+    _set_budget(connection, primary, 45_000, kind="adjustment")
+    assert ("adjustment", -5_000) in _movements(connection, primary)
+    assert _cash(connection, primary) == 50_000 - 1_750 - 5_000
+    _set_budget(connection, primary, 47_000, kind="adjustment")
+    assert ("adjustment", 2_000) in _movements(connection, primary)
+
+    agent = _agent(connection, slug="no-adjustments")
+    _fill(connection, agent, key="agent-fill")
+    connection.execute(text("SELECT set_config('traders.cash_kind', 'adjustment', true)"))
+    refusal = _refused(connection, "UPDATE agents SET budget_minor = 1 WHERE id = :a", a=agent)
+    assert "budget_decrease_after_trade" in refusal
+
+
+def test_a_reset_of_the_main_portfolio_erases_its_ledger_and_unsets_its_cash(
+    connection: Connection,
+) -> None:
+    """D331: a reset main portfolio is one that was never opened."""
+    primary = _primary(connection)
+    connection.execute(
+        text("UPDATE agents SET opening_holdings_cost_minor = 9000 WHERE id = :a"), {"a": primary}
+    )
+    _set_budget(connection, primary, 50_000)
+    _fill(connection, primary, quantity="1", price=1_000, fee=750)
+
+    connection.execute(
+        text("SELECT * FROM reset_account(CAST(:u AS uuid), ARRAY['main_portfolio'])"),
+        {"u": SEED_USER},
+    )
+    row = connection.execute(
+        text("SELECT budget_minor, opening_holdings_cost_minor FROM agents WHERE id = :a"),
+        {"a": primary},
+    ).one()
+    assert (row.budget_minor, row.opening_holdings_cost_minor) == (None, None)
+    assert _movements(connection, primary) == []
+    assert (
+        connection.execute(
+            text("SELECT count(*) FROM fills WHERE agent_id = :a"), {"a": primary}
+        ).scalar_one()
+        == 0
+    )
+
+    # Set again after the reset: a fresh opening.
+    _set_budget(connection, primary, 30_000)
+    assert _movements(connection, primary) == [("opening_deposit", 30_000)]
+    assert _cash(connection, primary) == 30_000

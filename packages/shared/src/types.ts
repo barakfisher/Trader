@@ -577,13 +577,16 @@ export interface AgentAccountResponse {
   netWorthMinor: number | null;
   pnlMinor: number | null;
   pnlPct: number | null;
+  /** Every fee its fills paid: IBI's, by the published rate (D136). */
+  feesPaidMinor: number;
   portfolio: PortfolioResponse;
 }
 
 /** One movement of an agent's cash, with the balance it left (D31). */
 export interface ActivityEntry {
   id: string;
-  kind: 'opening_deposit' | 'top_up' | 'buy' | 'sell';
+  /** `adjustment`: the real portfolio's cash set to what the broker shows (D330). */
+  kind: 'opening_deposit' | 'top_up' | 'buy' | 'sell' | 'adjustment';
   /** Signed: a buy is negative, its fee included. */
   amountMinor: number;
   balanceAfterMinor: number;
@@ -946,6 +949,32 @@ export interface HoldingInput {
   currency?: string;
   openedAt?: string | null;
   notes?: string | null;
+}
+
+// --- The real portfolio's cash (D328-D330) -----------------------------------
+
+/**
+ * The main portfolio's cash at the broker, as the user entered it. `unset`
+ * until they do: never shown as $0, which would be a figure nobody gave.
+ */
+export type PrimaryCashResponse =
+  | { state: 'unset' }
+  | {
+      state: 'open';
+      currency: string;
+      cashMinor: number;
+      /** The opening cash and every deposit and correction since. */
+      depositsMinor: number;
+      /** What the holdings already held had cost when the cash was set (D329). */
+      openingHoldingsCostMinor: number;
+      /** Money put in: the deposits plus what was already invested. */
+      investedMinor: number;
+      feesPaidMinor: number;
+    };
+
+/** An amount in the currency's major units, as typed: "1250.50". */
+export interface PrimaryCashInput {
+  amount: string;
 }
 
 // --- Instrument lookup (D324) -----------------------------------------------

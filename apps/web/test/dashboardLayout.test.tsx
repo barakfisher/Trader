@@ -89,6 +89,7 @@ beforeEach(() => {
     if (path === '/agents') return Promise.resolve({ agents: [] });
     // Adding a holding waits for every portfolio read to refresh, the curve's included.
     if (path.startsWith('/portfolio/snapshots')) return Promise.resolve({ snapshots: [] });
+    if (path === '/portfolio/cash') return Promise.resolve({ state: 'unset' });
     return new Promise(() => {});
   });
   window.scrollTo = () => {};

@@ -18,7 +18,7 @@ export interface AgentCashRow {
   updated_at: Date;
 }
 
-/** A simulated agent's cash; null for the primary, which has none (D1). */
+/** An agent's cash; null for a primary whose opening cash is not set (D1, D328). */
 export async function getAgentCash(userId: string, agentId: string): Promise<AgentCashRow | null> {
   return queryOne<AgentCashRow>(
     `SELECT balance_minor::text AS balance_minor, currency, updated_at
@@ -258,7 +258,7 @@ export async function setAgentHolding(
 
 export interface CashActivityRow {
   id: string;
-  kind: 'opening_deposit' | 'top_up' | 'buy' | 'sell';
+  kind: 'opening_deposit' | 'top_up' | 'buy' | 'sell' | 'adjustment';
   amount_minor: string;
   balance_after_minor: string;
   created_at: Date;
@@ -365,4 +365,102 @@ export async function topUpAgent(
       RETURNING budget_minor::text AS budget_minor`,
     [userId, agentId, amountMinor, ceilingMinor],
   );
+}
+
+/** Every fee the agent's fills paid, in minor units: the "Fees paid" line (2026-10-27 plan). */
+export async function sumFeesPaid(userId: string, agentId: string): Promise<number> {
+  const row = await queryOne<{ fees: string }>(
+    `SELECT coalesce(sum(fee_minor), 0)::text AS fees FROM fills WHERE user_id = $1 AND agent_id = $2`,
+    [userId, agentId],
+  );
+  return Number(row?.fees ?? 0);
+}
+
+export interface PrimaryCashRow {
+  budget_minor: string | null;
+  opening_holdings_cost_minor: string | null;
+  balance_minor: string | null;
+  currency: string;
+}
+
+/** The real portfolio's cash (D328): its deposits, what it held when opened, and its balance. */
+export function getPrimaryCash(userId: string, agentId: string): Promise<PrimaryCashRow | null> {
+  return queryOne<PrimaryCashRow>(
+    `SELECT a.budget_minor::text AS budget_minor,
+            a.opening_holdings_cost_minor::text AS opening_holdings_cost_minor,
+            c.balance_minor::text AS balance_minor, a.currency
+       FROM agents a LEFT JOIN agent_cash c ON c.agent_id = a.id
+      WHERE a.user_id = $1 AND a.id = $2 AND a.is_primary`,
+    [userId, agentId],
+  );
+}
+
+/**
+ * Open the real portfolio's ledger with the cash the user has at the broker and
+ * the cost of what it already holds (D328, D329). The trigger on `agents`
+ * creates the cash row and the opening deposit. False when it was already open.
+ */
+export async function openPrimaryCash(
+  userId: string,
+  agentId: string,
+  cashMinor: number,
+  holdingsCostMinor: number,
+): Promise<boolean> {
+  const row = await queryOne<{ id: string }>(
+    `UPDATE agents SET budget_minor = $3, opening_holdings_cost_minor = $4
+      WHERE user_id = $1 AND id = $2 AND is_primary AND budget_minor IS NULL
+      RETURNING id`,
+    [userId, agentId, cashMinor, holdingsCostMinor],
+  );
+  return row !== null;
+}
+
+/** A deposit into the real portfolio's cash: the budget rises, the trigger records it. */
+export async function depositPrimaryCash(
+  userId: string,
+  agentId: string,
+  amountMinor: number,
+  ceilingMinor: number,
+): Promise<boolean> {
+  const row = await queryOne<{ id: string }>(
+    `UPDATE agents SET budget_minor = budget_minor + $3
+      WHERE user_id = $1 AND id = $2 AND is_primary AND budget_minor IS NOT NULL
+        AND budget_minor + $3 <= $4
+      RETURNING id`,
+    [userId, agentId, amountMinor, ceilingMinor],
+  );
+  return row !== null;
+}
+
+export type SetPrimaryCashOutcome = 'set' | 'unopened' | 'below_zero';
+
+/**
+ * Set the real portfolio's cash to what the broker shows (D330). Under the cash
+ * row's lock, the budget moves by the difference; after the first fill the
+ * trigger records it as an `adjustment`, which only this writer asks for.
+ */
+export async function setPrimaryCash(
+  client: PoolClient,
+  userId: string,
+  agentId: string,
+  balanceMinor: number,
+): Promise<SetPrimaryCashOutcome> {
+  const balance = await lockAgentCash(client, userId, agentId);
+  if (balance === null) return 'unopened';
+  const delta = BigInt(balanceMinor) - balance;
+  if (delta === 0n) return 'set';
+  const { rows } = await client.query<{ budget_minor: string | null }>(
+    `SELECT budget_minor::text AS budget_minor FROM agents WHERE user_id = $1 AND id = $2 AND is_primary`,
+    [userId, agentId],
+  );
+  const budget = rows[0]?.budget_minor;
+  if (budget == null) return 'unopened';
+  if (BigInt(budget) + delta < 0n) return 'below_zero';
+  await client.query(`SELECT set_config('traders.cash_kind', 'adjustment', true)`);
+  await client.query(
+    `UPDATE agents SET budget_minor = budget_minor + $3 WHERE user_id = $1 AND id = $2 AND is_primary`,
+    [userId, agentId, delta.toString()],
+  );
+  await client.query(`SELECT set_config('traders.cash_kind', '', true)`);
+  return 'set';
 }

@@ -132,6 +132,7 @@ vi.mock('../src/db/queries.js', () => ({
   getUser: vi.fn(async () => ({ id: USER, base_currency: 'USD', timezone: 'Asia/Jerusalem' })),
   muteUntil: vi.fn(async () => undefined),
   primaryAgentId: vi.fn(async () => PRIMARY),
+  sumFeesPaid: vi.fn(async () => 0),
   listHoldings: vi.fn(async () => []),
   listProposals: vi.fn(async () => []),
   listAgents: vi.fn(async () => []),

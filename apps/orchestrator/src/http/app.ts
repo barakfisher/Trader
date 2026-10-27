@@ -44,6 +44,7 @@ import { registerConceptsRoutes } from './routes/concepts.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerHoldingsRoutes } from './routes/holdings.js';
 import { registerInstrumentsRoutes } from './routes/instruments.js';
+import { registerPortfolioCashRoutes } from './routes/portfolioCash.js';
 import { registerImportRoutes } from './routes/imports.js';
 import { registerInternalRoutes } from './routes/internal.js';
 import {
@@ -342,6 +343,7 @@ export function createApp(
   registerAccountDeletionRoutes(app);
   registerAccountSessionRoutes(app);
   registerPortfolioRoutes(app);
+  registerPortfolioCashRoutes(app);
   registerHoldingsRoutes(app);
   registerInstrumentsRoutes(app);
   registerAgentsRoutes(app);

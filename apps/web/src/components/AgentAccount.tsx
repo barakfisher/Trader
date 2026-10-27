@@ -35,7 +35,7 @@ export function AccountSummary({ agent }: { agent: AgentView }) {
   const unpriced = data.portfolio.summary.unpricedSymbols;
   return (
     <Card title={t('agents.account.title')} action={agent.state === 'archived' ? undefined : <AddCash agent={agent} />}>
-      <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
         <Figure label={t('agents.account.cash')}>{money(data.cashMinor)}</Figure>
         <Figure label={t('agents.account.holdingsValue')}>{money(data.holdingsValueMinor)}</Figure>
         <Figure label={t('agents.account.netWorth')}>{money(data.netWorthMinor)}</Figure>
@@ -44,6 +44,7 @@ export function AccountSummary({ agent }: { agent: AgentView }) {
             {money(data.pnlMinor)} <bdi>{formatPercent(data.pnlPct)}</bdi>
           </Delta>
         </Figure>
+        <Figure label={t('agents.account.feesPaid')}>{money(data.feesPaidMinor)}</Figure>
       </dl>
       <p className="mt-3 text-xs text-text-muted">
         {t('agents.account.pnlHint', { deposits: formatMoney(data.depositsMinor, data.currency) })}

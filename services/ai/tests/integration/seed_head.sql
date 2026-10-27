@@ -285,6 +285,17 @@ INSERT INTO proposal_attempts (user_id, proposal_id, surface, reason, agent_pric
 INSERT INTO fills (user_id, agent_id, instrument_id, side, quantity, price_minor, notional_minor, fee_minor, price_source, quote_as_of, quote_delay_seconds, source, proposal_id, idempotency_key) VALUES
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', '10000000-0000-0000-0000-000000000001', 'sell', '2', 1100, 2200, 150, 'user', NULL, NULL, 'agent', '50000000-0000-0000-0000-000000000021', 'seed-sell');
 UPDATE agents SET budget_minor = 150000 WHERE id = '90000000-0000-0000-0000-0000000000a1';
+-- The real portfolio's ledger (0078, D328-D330): user a's primary opened with
+-- its cash and its holdings' cost, a buy recorded against it, and its balance
+-- then set to what the broker shows - an `adjustment` - which makes 0078's
+-- downgrade refuse.
+UPDATE agents SET budget_minor = 100000, opening_holdings_cost_minor = 5000
+ WHERE id = '90000000-0000-0000-0000-00000000000a';
+INSERT INTO fills (user_id, agent_id, instrument_id, side, quantity, price_minor, notional_minor, fee_minor, price_source, quote_as_of, quote_delay_seconds, source, idempotency_key) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-00000000000a', '10000000-0000-0000-0000-000000000001', 'buy', '1', 1000, 1000, 750, 'user', NULL, NULL, 'manual_user_override', 'seed-primary-buy');
+SELECT set_config('traders.cash_kind', 'adjustment', true);
+UPDATE agents SET budget_minor = 90000 WHERE id = '90000000-0000-0000-0000-00000000000a';
+SELECT set_config('traders.cash_kind', '', true);
 -- A reset's backup (0045), which makes its downgrade refuse: it would discard it.
 INSERT INTO account_resets (user_id, groups, counts, backup) VALUES
   ('00000000-0000-0000-0000-00000000000a', ARRAY['followed_topics'], '{"topics": 0}', '{"topics": []}');

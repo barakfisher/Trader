@@ -1597,7 +1597,8 @@
       "netWorth": "Net worth",
       "pnl": "Profit / loss",
       "pnlHint": "Net worth minus everything deposited ({{deposits}}). Fees have already left cash.",
-      "unpriced": "Totals unavailable: {{symbols}} could not be priced."
+      "unpriced": "Totals unavailable: {{symbols}} could not be priced.",
+      "feesPaid": "Fees paid"
     },
     "addCash": {
       "button": "Add cash",
@@ -2334,5 +2335,33 @@
     "signOut": "Sign out",
     "signupAgree": "I have read and accept the <privacy>privacy policy</privacy> and the <terms>terms of use</terms>.",
     "signupRequired": "Accept the privacy policy and the terms of use to ask to join."
+  },
+  "account": {
+    "title": "Account",
+    "loading": "Reading the cash…",
+    "loadFailed": "The cash could not be read.",
+    "cashUnset": "Holdings only: the cash at your broker is not set.",
+    "setCash": "Set cash",
+    "manage": "Cash",
+    "cash": "Available cash",
+    "invested": "Money put in",
+    "gain": "Gain on it",
+    "deposits": "Deposits",
+    "openingHoldings": "Holdings when set",
+    "feesPaid": "Fees paid",
+    "incomplete": "Some holdings are unpriced, so the value leaves them out.",
+    "drawerTitle": "Cash at the broker",
+    "openExplained": "Enter the cash available in your broker account now. Your holdings stay as they are; what they cost counts as money you already put in. Nothing here moves money anywhere.",
+    "openLabel": "Available cash (USD)",
+    "openSubmit": "Set cash",
+    "depositTitle": "Deposit",
+    "depositExplained": "Money you added to the broker account. It counts as money put in.",
+    "depositLabel": "Amount (USD)",
+    "depositSubmit": "Record deposit",
+    "correctTitle": "Correct the balance",
+    "correctExplained": "Set the cash to exactly what your broker shows, for example after interest, a dividend or a typo. The difference is recorded as a correction.",
+    "correctLabel": "Cash your broker shows (USD)",
+    "correctSubmit": "Set balance",
+    "saveFailed": "The cash could not be saved."
   }
 }

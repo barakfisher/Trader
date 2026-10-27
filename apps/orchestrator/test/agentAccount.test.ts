@@ -71,6 +71,7 @@ vi.mock('../src/db/queries.js', () => ({
   getAgent: vi.fn(async (_u: string, id: string) =>
     id === PRIMARY ? agentRow({ id: PRIMARY, is_primary: true, budget_minor: null, cash_minor: null }) : id === AGENT ? agent : null,
   ),
+  sumFeesPaid: vi.fn(async () => 0),
   listHoldings: vi.fn(async () => holdings),
   recordQuotes: vi.fn(async () => undefined),
   listCashActivity: vi.fn(async () => [

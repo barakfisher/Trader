@@ -69,7 +69,7 @@ export function registerAgentAccountRoutes(app: Hono<AppEnv>): void {
     const agent = simulated(await getAgent(userId, agentIdFrom(context.req.param('id'))));
     const rows = await listHoldings(userId, agent.id);
     return context.json(
-      await valueAgentAccount(agent, rows, {
+      await valueAgentAccount(userId, agent, rows, {
         baseCurrency: agent.currency,
         ai: context.get('ai'),
         requestId: context.get('requestId'),
