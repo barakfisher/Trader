@@ -180,11 +180,14 @@ export function applySuggestion(userId: string, agentId: string, suggestionId: s
     if (suggestion.status !== 'open') return { status: 'closed' };
     const change = suggestion.change;
     if (change === null) return { status: 'nothing_to_apply' };
+    // Own keys only: the name is spliced into SQL, and `constructor` is on every object.
+    if (!Object.hasOwn(SETTING_TYPES, change.setting)) return { status: 'nothing_to_apply' };
     const type = SETTING_TYPES[change.setting];
-    if (type === undefined) return { status: 'nothing_to_apply' };
 
+    // NO KEY: a review inserting a suggestion holds the agent's key-share lock (its foreign
+    // key) and then supersedes this row; FOR UPDATE would deadlock against it.
     const agent = await client.query<{ state: string }>(
-      `SELECT state FROM agents WHERE user_id = $1 AND id = $2 AND NOT is_primary FOR UPDATE`,
+      `SELECT state FROM agents WHERE user_id = $1 AND id = $2 AND NOT is_primary FOR NO KEY UPDATE`,
       [userId, agentId],
     );
     if (!agent.rows[0]) return { status: 'not_found' };
