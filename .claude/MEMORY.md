@@ -5405,6 +5405,64 @@ failure they prevent.
       end alignment until it moved to the portal too (both seen in the browser). Remove's
       confirmation says it corrects a mistake and moves no cash; Sell records a sale.
     - **Not changed:** the combined view's rows keep their pencil and bin.
+335. **An agent is reviewed by fixed rules, not a model, and nothing changes without the user's
+    Apply** (the user, 2026-10-27, PR 4 of the holdings/ledger plan).
+    - **How:** after every scan, `reviewAfterScan` (`services/agentReview.ts`) counts the agent's
+      scans; on every `AGENT_REVIEW_EVERY_SCANS`-th it reads the last window and the ledger, and
+      each of three rules that fires stores one row in `agent_suggestions` (0079): the figures
+      it stands on (`evidence`) and one `agents` column it proposes to change (`change`: setting,
+      from, to), or none. The agent page shows a card per open row; **Apply** writes that one
+      column and marks the row applied in one transaction, **Dismiss** closes it.
+    - **Why rules:** free, deterministic, testable to the threshold, and every figure is the
+      ledger's (guideline 7) - there is no text to validate. An LLM explanation layer may come
+      later, on top of the same evidence.
+    - **Rejected:** an LLM review (a cost per agent per window and a figure check on its prose for
+      advice the rules can state); applying changes automatically (the user's settings change
+      only by the user's hand).
+336. **A window is ten counted scans, keyed by its last scan** (2026-10-27).
+    - **Counted:** `trigger` manual or schedule, `outcome` trade, no_trade, rule_rejected,
+      invalid_answer or step_limit - the model answered. A provider failure, a spent budget or
+      key never decided anything, and a proposal's re-check (`refresh`) is not the agent's scan.
+    - **Ten:** two trading weeks at a new agent's default of one scan a day; one quiet day is not
+      a pattern. Measured on compose 2026-10-27: Test agent 11 counted scans in 15 days, וורן 8 in
+      8, agressive 18 in 8 (hourly), George 3 - every agent but George reaches a window within
+      about two weeks, agressive within a few days.
+    - **Key:** `dedupe_key = <last scan id>:<rule>`, unique per agent - a review run twice (the
+      scheduled path and a manual scan, a retry) writes once. A scan id rather than the count,
+      because a reset (D117) erases scans and a count would restart at a window already used.
+    - **Superseded:** a new row of the same rule closes the agent's open one (`superseded`): the
+      later window's figures are the ones to act on. **Stale:** Apply writes only while the column
+      still holds `from`; otherwise the row becomes `stale` and nothing changes.
+    - **Rejected:** a scheduled sweep over all agents (a second trigger for what a scan already
+      marks); a time window (an agent that scans hourly and one that scans daily would be judged
+      on different amounts of evidence).
+337. **The three rules and their thresholds** (2026-10-27, from the compose measurement).
+    - **idle_cash:** at most `IDLE_MAX_TRADE_SCANS` (1) of the window's scans traded while cash
+      is at least `IDLE_CASH_SHARE_BPS` (50%) of deposits. Cash over deposits needs no price, so
+      an unpriced holding cannot hide it. Proposes, first that applies: half the cash buffer (to
+      a whole percent), the next smaller company size, one step more risk; else reports only.
+      Measured: וורן 0 trades in 8 scans at 100% cash (fires: Mega+Large -> add Mid); Test agent
+      77% cash but 2 trades in 10 (does not).
+    - **fee_drag:** the agent's own fills since the window began paid at least
+      `FEE_DRAG_SHARE_BPS` (1%) of deposits. One percent in two weeks is a quarter of the money a
+      year. Proposes: one decision less per scan, then half as many market-hours scans (cap 6 h),
+      then a 1.5x position limit (cap 100%). Measured: agressive's first window paid 3 x $7.50 =
+      2.25% of $1,000 (fires: hourly -> every 2 hours); its scans said as much ("the minimum
+      fee is high against the position size").
+    - **benchmark_lag:** since the first deposit the agent trails the shadow SPY (D115) by at
+      least `BENCHMARK_LAG_POINTS` (5). The Performance tab's own computation
+      (`services/performanceInputs.ts`, shared with the route), so the card and the tab agree;
+      no comparison, no rule. Proposes allowing ETFs when they are off; else reports only.
+      Measured: agressive -6.59% against SPY's -0.17% (fires, report only).
+    - **Not a rule:** widening sectors. Clearing them while industries are set would narrow the
+      universe, and which sector to add is the user's judgement, not a threshold's.
+338. **The review never fails the scan, and the real portfolio is never reviewed** (2026-10-27).
+    - `reviewAfterScan` catches everything and logs `agent_review.failed`: a review is a
+      by-product of a scan that already ran and was paid for. An unavailable comparison (no
+      calendar, no closes) skips benchmark_lag alone. The routes answer 409 for the primary, as
+      every agent route does (D1).
+    - **Not pushed:** suggestions are not sent to Telegram or the digest yet; they wait on the
+      agent page. A notification is a follow-up if the user wants one.
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -6219,6 +6277,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 
 | Item | Where | Impact |
 |---|---|---|
+| **A reset keeps the agent review's suggestions** | `reset_account` (0072), `agent_suggestions` (0079) | A reset of `agents_trading` erases the scans and fills a suggestion's evidence came from, but an open card stays until dismissed or superseded by the next window. Its Apply still checks the setting's current value, so it can change nothing unexpected; the figures are only out of date. Fix: add the table to the reset's `agents_trading` group (a `CREATE OR REPLACE` of the function, as 0072 did) |
 | **Consent records go with an erased account** | `0077` cascade, D317's erase | Once an account is erased there is no record of what it agreed to. Whether consent must outlive the account (and for how long) is a legal retention question for the user or a lawyer, raised by the PR 15 security review; keeping it would need the erase to keep an anonymised row |
 | ~~Telegram ignores the legal acceptance~~ | — | **Resolved** (2026-10-26, the PR after #332): messages and taps are answered with one sentence, `/stop` excepted, and pushes go nowhere until the account accepts (D321) |
 | **The template creator's UI has not been seen in a browser** | `MandateFields.tsx`, `TaxonomyPicker.tsx`, `InstructionsCheck.tsx` | jsdom covers the behaviour; layout, Hebrew RTL and the picker's menu are unseen. The UX4 rehearsal method (below, "Running a branch's orchestrator against a copy of the live DB") does it without touching the dev database |

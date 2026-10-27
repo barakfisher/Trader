@@ -3106,7 +3106,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           expect(document.legalAcceptances).toEqual([{ version: '2026-11-01', accepted_at: expect.any(String) }]);
           expect(Object.keys(document).sort()).toEqual(
             [
-              'account', 'agentScans', 'agents', 'conversations', 'exportedAt', 'format', 'holdings', 'ledgers',
+              'account', 'agentScans', 'agentSuggestions', 'agents', 'conversations', 'exportedAt', 'format', 'holdings', 'ledgers',
               'legalAcceptances', 'observations', 'proposalTransitions', 'proposals', 'settings', 'targetWeights', 'topicInstruments', 'topics',
             ].sort(),
           );
@@ -3229,6 +3229,88 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         await getPool().query('DELETE FROM telegram_bindings WHERE user_id = $1', [user]);
         await getPool().query("UPDATE users SET role = 'user', status = 'active' WHERE id = $1", [user]);
       }
+    });
+  });
+
+  describe('the agent review (0079, D335-D338)', () => {
+    // As the seeded admin, like the scans above: traders_app may not delete a scan.
+    const SEED_ADMIN = '00000000-0000-0000-0000-000000000001';
+    const newAgent = async () =>
+      (
+        await getPool().query(
+          `INSERT INTO agents (user_id, slug, name, persona, budget_minor)
+           VALUES ($1, $2, $2, 'Patient.', 100000) RETURNING id`,
+          [SEED_ADMIN, `review-${randomUUID().slice(0, 8)}`],
+        )
+      ).rows[0].id as string;
+
+    it('reads the window: counted scans only, newest first, with deposits and cash', async () => {
+      const pool = getPool();
+      const agent = await newAgent();
+      const scan = (startedAt: string, outcome: string, trigger = 'schedule') =>
+        pool.query(
+          `INSERT INTO agent_scans (user_id, agent_id, trigger, started_at, finished_at, outcome, briefing)
+           VALUES ($1, $2, $3, $4, $4::timestamptz + interval '10 seconds', $5, '{}')`,
+          [SEED_ADMIN, agent, trigger, startedAt, outcome],
+        );
+      await scan('2026-10-19T13:00:00Z', 'trade');
+      await scan('2026-10-20T13:00:00Z', 'no_trade');
+      await scan('2026-10-21T13:00:00Z', 'failed');
+      await scan('2026-10-22T13:00:00Z', 'no_trade', 'manual');
+      const window = await queries.readReviewWindow(SEED_ADMIN, agent, ['trade', 'no_trade'], 2);
+      expect(window).toMatchObject({
+        counted: '3',
+        scans: '2',
+        trade_scans: '0',
+        since: new Date('2026-10-20T13:00:00Z'),
+        fills: '0',
+        fees_minor: '0',
+        deposits_minor: '100000',
+        cash_minor: '100000',
+      });
+    });
+
+    it('stores a window once, and a later window of the same rule supersedes the open one', async () => {
+      const agent = await newAgent();
+      const suggestion = (key: string) => ({
+        rule: 'idle_cash',
+        dedupeKey: key,
+        evidence: { scans: 10 },
+        change: { setting: 'risk_level' as const, from: null, to: 1 },
+      });
+      const [first] = await queries.insertSuggestions(SEED_ADMIN, agent, [suggestion('w1:idle_cash')]);
+      expect(await queries.insertSuggestions(SEED_ADMIN, agent, [suggestion('w1:idle_cash')])).toEqual([]);
+      const [second] = await queries.insertSuggestions(SEED_ADMIN, agent, [suggestion('w2:idle_cash')]);
+      const open = await queries.listOpenSuggestions(SEED_ADMIN, agent);
+      expect(open.map((row) => row.id)).toEqual([second]);
+      const { rows } = await getPool().query('SELECT status FROM agent_suggestions WHERE id = $1', [first]);
+      expect(rows[0].status).toBe('superseded');
+    });
+
+    it('applies only while the setting is what the review read, and closes the suggestion either way', async () => {
+      const pool = getPool();
+      const agent = await newAgent();
+      await pool.query("UPDATE agents SET market_caps = '{mega,large}' WHERE id = $1", [agent]);
+      const [caps] = await queries.insertSuggestions(SEED_ADMIN, agent, [
+        { rule: 'idle_cash', dedupeKey: 'w1:idle_cash', evidence: {}, change: { setting: 'market_caps', from: ['mega', 'large'], to: ['mega', 'large', 'mid'] } },
+      ]);
+      expect(await queries.applySuggestion(SEED_ADMIN, agent, caps!)).toEqual({ status: 'applied' });
+      expect((await queries.getAgent(SEED_ADMIN, agent))?.market_caps).toEqual(['mega', 'large', 'mid']);
+      expect(await queries.applySuggestion(SEED_ADMIN, agent, caps!)).toEqual({ status: 'closed' });
+
+      const [risk] = await queries.insertSuggestions(SEED_ADMIN, agent, [
+        { rule: 'fee_drag', dedupeKey: 'w1:fee_drag', evidence: {}, change: { setting: 'max_decisions', from: 3, to: 2 } },
+      ]);
+      expect(await queries.applySuggestion(SEED_ADMIN, agent, risk!)).toEqual({ status: 'stale' });
+      expect((await queries.getAgent(SEED_ADMIN, agent))?.max_decisions).toBe(1);
+
+      const [report] = await queries.insertSuggestions(SEED_ADMIN, agent, [
+        { rule: 'benchmark_lag', dedupeKey: 'w1:benchmark_lag', evidence: {}, change: null },
+      ]);
+      expect(await queries.applySuggestion(SEED_ADMIN, agent, report!)).toEqual({ status: 'nothing_to_apply' });
+      expect(await queries.dismissSuggestion(SEED_ADMIN, agent, report!)).toBe(true);
+      expect(await queries.dismissSuggestion(SEED_ADMIN, agent, report!)).toBe(false);
+      expect(await queries.applySuggestion(USER, agent, report!)).toEqual({ status: 'not_found' });
     });
   });
 });

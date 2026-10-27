@@ -47,6 +47,7 @@ import { accountHold } from './accountHold.js';
 import { readyToScan } from './agentReadiness.js';
 import { proposeFromScan } from './tradeProposals.js';
 import { announceModelFallbacks } from './modelFallbacks.js';
+import { reviewAfterScan } from './agentReview.js';
 import { planResearch, researchRunKey, runResearchAttempt } from './scheduledResearch.js';
 
 /** D69: one attempt and at most two retries per slot. */
@@ -267,6 +268,7 @@ export async function runSlotAttempt(job: SlotAttemptJob, deps: AttemptDeps): Pr
     const scan = await deps.ai.scanAgent(agent.id, { user_id: job.userId, trigger: 'schedule' });
     const proposalIds = await proposeFromScan(job.userId, agent, scan, { ai: deps.ai, notifier: deps.notifier });
     await announceModelFallbacks(job.userId, deps.notifier);
+    await reviewAfterScan(job.userId, agent, { ai: deps.ai, now: () => now });
     const stats = { outcome: scan.outcome, scanId: scan.scan_id, proposalIds, costMicroUsd: scan.cost_micro_usd };
     if (scan.outcome === 'failed') {
       // The scan ran and the model call failed: the provider's trouble, worth another try.

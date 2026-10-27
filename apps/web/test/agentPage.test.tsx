@@ -279,6 +279,8 @@ function serveAgent(agent: AgentView = AGENT, accountBody: AgentAccountResponse 
     [`/agents/${AGENT_ID}/performance`]: PERFORMANCE,
     [`/agents/${AGENT_ID}/scans`]: SCANS,
     [`/agents/${AGENT_ID}/scans/${SCAN_ID}`]: SCAN_DETAIL,
+    // The review's cards (D335): none here; a scan re-reads them, and waits for it.
+    [`/agents/${AGENT_ID}/suggestions`]: { suggestions: [] },
     // The list carries the agent limit, which the state controls read (D199).
     '/agents': { agents: [agent], agentLimit: { used: 1, max: 3, total: 1 } },
     // The app bar's inbox count: a scan re-reads it, and waits for it.

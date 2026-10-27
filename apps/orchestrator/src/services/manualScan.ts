@@ -19,6 +19,7 @@ import { ApiProblem, aiRefusal, conflict, notFound, upstreamFailure } from '../h
 import { readyToScan } from './agentReadiness.js';
 import { proposeFromScan, type TradeProposalContext } from './tradeProposals.js';
 import { announceModelFallbacks } from './modelFallbacks.js';
+import { reviewAfterScan } from './agentReview.js';
 
 /** Why a scan cannot start, before the AI service is asked; null when it can. */
 export function scanBlocked(agent: AgentRow): ApiProblem | null {
@@ -57,5 +58,7 @@ export async function runManualScan(
   }
   const proposalIds = await proposeFromScan(userId, agent, scan, context);
   await announceModelFallbacks(userId, context.notifier);
+  // The tenth scan may be one the user asked for; its review is the same (D336).
+  await reviewAfterScan(userId, agent, { ai: context.ai, requestId: context.requestId });
   return { scan, proposalIds };
 }

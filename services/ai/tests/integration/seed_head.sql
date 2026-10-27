@@ -408,3 +408,15 @@ INSERT INTO runs (id, kind, run_key, status) VALUES
 INSERT INTO legal_acceptances (user_id, version, accepted_at) VALUES
   ('00000000-0000-0000-0000-00000000000b', '2026-11-01', now() - interval '30 days'),
   ('00000000-0000-0000-0000-00000000000b', '2026-12-01', now());
+-- Agent suggestions (0079, D335-D338): every rule and every status, one window each.
+INSERT INTO agent_suggestions (user_id, agent_id, rule, dedupe_key, evidence, change, status, decided_at) VALUES
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'idle_cash', 'seed-1:idle_cash',
+   '{"scans": 10, "tradeScans": 0}', '{"setting": "cash_buffer_bps", "from": 2000, "to": 1000}', 'open', NULL),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'fee_drag', 'seed-1:fee_drag',
+   '{"scans": 10, "feesMinor": 2250}', '{"setting": "max_decisions", "from": 2, "to": 1}', 'applied', now()),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'benchmark_lag', 'seed-1:benchmark_lag',
+   '{"scans": 10, "differencePts": -6.5}', NULL, 'dismissed', now()),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'idle_cash', 'seed-0:idle_cash',
+   '{"scans": 10, "tradeScans": 1}', NULL, 'superseded', now()),
+  ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'fee_drag', 'seed-0:fee_drag',
+   '{"scans": 10, "feesMinor": 1500}', '{"setting": "scan_every_hours", "from": 1, "to": 2}', 'stale', now());
