@@ -5288,6 +5288,52 @@ failure they prevent.
       reader's language).
     - **Still read as digits:** a time written apart from its date ("בשעה 15:00") - passes only
       if the evidence carries those numbers elsewhere.
+324. **A symbol is found in the local list first, then in the market's search** (the user,
+    2026-10-27, holdings/ledger plan PR 1).
+    - **How:** the add-holding symbol is a combobox. `instruments` (5,230 rows) is matched in the
+      browser - symbol prefix from one character, name from two. The market-data provider's search
+      (`SymbolSearchProvider`, Yahoo's `Search` in `yfinance`) is asked when nothing local matches,
+      after a 300 ms pause, or from the list's last row, "Search the market for ...". Free typing
+      stays: the server still resolves the symbol on submit.
+    - **Why the last row:** "elbit" matches ESLT by name locally, so the automatic fallback never
+      fired and ESLT.TA (Tel Aviv) could not be found - and Tel Aviv was the reason for choosing
+      the market search at all. Found in the browser, not by a test.
+    - **A match carries no currency** (`SymbolMatch`): Yahoo's search states none, and USD for a
+      Tel Aviv listing would be invented. `resolve` sets the holding's currency on submit.
+    - **Rejected:** the local list alone (no Tel Aviv, nothing listed since the last rescreen);
+      always asking the market (a Yahoo call per pause for names the list already has).
+325. **The local list is sent whole once and revalidated; a market search is cached a day**
+    (the user, 2026-10-27).
+    - **How:** `GET /instruments` is gzipped (273 KB raw, 67 KB on the wire, measured) and
+      stamped with an ETag by `hono/compress` and `hono/etag`, `Cache-Control: private, no-cache`:
+      a later load is an empty 304 until the list changes; TanStack keeps it 24 h in a session.
+      A market search is cached per normalised query for `SYMBOL_SEARCH_TTL_SECONDS` (a day) in
+      the AI service, behind the per-user `symbolLookup` limit (240/hour).
+    - **An empty answer is cached only when every searching provider answered.** The first live
+      check cached "teva" as empty for a day: Yahoo timed out cold, the fixture provider behind it
+      said "none", and "none" was stored. Lesson: an empty answer from the fallback behind a
+      failure is "unknown", not "nothing".
+    - **Rejected:** a server search per keystroke (every new query waits on the network, which is
+      felt on the phone over Tailscale, to save 67 KB once).
+326. **The cost per unit is prefilled with the latest price; the date does not move it** (the
+    user, 2026-10-27).
+    - **How:** settling on a symbol (a suggestion chosen, or the field left) reads
+      `GET /instruments/:symbol/quote` and fills the cost, with "Latest price $X, N ago" under it.
+      A cost the user typed is never replaced; one the form filled follows the symbol. No price
+      is an empty field and says so - never zero (guideline 7). The opening date defaults to
+      today in the user's zone and cannot be in the future.
+    - **Rejected (by the user):** the close of the opening date, re-filled as the date changes -
+      more correct for a past purchase, more code; the hint tells the user to change the price.
+327. **A price Yahoo states in a currency's hundredth is converted at the provider's edge**
+    (2026-10-27, found while checking PR 1 against live data).
+    - **How:** `yfinance_provider._in_major_unit`: "ILA" (agorot, Tel Aviv) -> ILS, "GBp"/"GBX"
+      (pence) -> GBP, "ZAc" -> ZAR, each divided by 100, in quotes, history and movers. TEVA.TA
+      was "ILA 12,250.00"; it is ₪122.50, and ILS->USD converts it on the dashboard.
+    - **Why at the edge:** none of these is an ISO 4217 code, so minor units, FX pairs and the
+      formatter all go wrong downstream, each differently. Matched before upper-casing: "GBp" and
+      "GBP" differ only in case and by a factor of 100.
+    - **Not done:** the agents still trade USD-listed instruments only (D7); this only lets a
+      Tel Aviv holding be valued.
 ---
 
 ## Bugs that cost real time, and the lesson from each

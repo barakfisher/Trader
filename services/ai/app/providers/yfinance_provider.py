@@ -28,6 +28,7 @@ from app.models import (
     Mover,
     MoverList,
     Quote,
+    SymbolMatch,
 )
 from app.providers.base import ProviderError
 
@@ -55,6 +56,28 @@ _QUOTE_TYPE_MAP: dict[str, AssetClass] = {
     "CURRENCY": "fx",
     "INDEX": "index",
 }
+
+
+#: Yahoo prices some venues in a currency's hundredth (D327): Tel Aviv in agorot
+#: ("ILA"), London in pence ("GBp"/"GBX"), Johannesburg in cents ("ZAc"). None of
+#: these is an ISO 4217 code, so nothing downstream - minor units, FX, the
+#: formatter - can treat them as money. Each is converted to its currency here,
+#: at the edge, and the rest of the app sees ILS, GBP and ZAR. Matched before
+#: upper-casing: "GBp" and "GBP" differ only in case and by a factor of 100.
+_SUBUNIT_CURRENCIES: dict[str, tuple[str, int]] = {
+    "ILA": ("ILS", 100),
+    "GBp": ("GBP", 100),
+    "GBX": ("GBP", 100),
+    "ZAc": ("ZAR", 100),
+}
+
+
+def _in_major_unit(price: Decimal | None, currency: str | None) -> tuple[Decimal | None, str]:
+    """`price` in `currency` as Yahoo states it -> the same price in the ISO currency."""
+    if currency in _SUBUNIT_CURRENCIES:
+        major, divisor = _SUBUNIT_CURRENCIES[currency]
+        return (None if price is None else price / divisor), major
+    return price, (currency or "USD").upper()
 
 
 def _as_decimal(value: object) -> Decimal | None:
@@ -124,10 +147,12 @@ class YFinanceProvider:
         if price is None:
             return None
 
+        price, major = _in_major_unit(price, currency)
+        previous, _ = _in_major_unit(previous, currency)
         return {
             "price": price,
             "previous_close": previous,
-            "currency": (currency or "USD").upper(),
+            "currency": major,
             "quote_type": quote_type,
             "exchange": exchange,
         }
@@ -233,15 +258,15 @@ class YFinanceProvider:
         if frame.empty:
             return []
 
-        currency = "USD"
+        stated: str | None = None
         try:
-            currency = (ticker.fast_info.get("currency") or "USD").upper()
+            stated = ticker.fast_info.get("currency")
         except Exception as exc:  # noqa: BLE001 - third-party surface
             log.debug("yfinance.history_currency_failed", symbol=symbol, error=str(exc))
 
         closes: list[tuple[date, Decimal, str]] = []
         for timestamp, row in frame.iterrows():
-            price = _as_decimal(row.get("Close"))
+            price, currency = _in_major_unit(_as_decimal(row.get("Close")), stated)
             if price is None:
                 continue
             closes.append((timestamp.date(), price, currency))
@@ -284,10 +309,13 @@ class YFinanceProvider:
             result = yf.screen(screen, count=_MOVERS_PER_LIST)
             for row in result.get("quotes") or []:
                 symbol = row.get("symbol")
-                price = _as_decimal(row.get("regularMarketPrice"))
                 change = row.get("regularMarketChangePercent")
-                currency = row.get("currency")
-                if not symbol or price is None or change is None or not currency:
+                if not row.get("currency"):
+                    continue
+                price, currency = _in_major_unit(
+                    _as_decimal(row.get("regularMarketPrice")), str(row.get("currency"))
+                )
+                if not symbol or price is None or change is None:
                     continue
                 movers.append(
                     Mover(
@@ -309,6 +337,45 @@ class YFinanceProvider:
             )
         except TimeoutError as exc:
             raise ProviderError(self.name, "movers timed out") from exc
+        except Exception as exc:  # noqa: BLE001
+            raise ProviderError(self.name, str(exc)) from exc
+
+    def _search_blocking(self, query: str, limit: int) -> list[SymbolMatch]:
+        """Yahoo's symbol search. Runs in a worker thread.
+
+        Fuzzy matching is off: "appl" should find AAPL by prefix, not a list
+        of near-spellings. A row with no symbol is skipped, never filled in.
+        """
+        import yfinance as yf
+
+        result = yf.Search(
+            query, max_results=limit, news_count=0, lists_count=0, enable_fuzzy_query=False
+        )
+        matches: list[SymbolMatch] = []
+        for row in result.quotes or []:
+            symbol = row.get("symbol")
+            if not symbol:
+                continue
+            matches.append(
+                SymbolMatch(
+                    symbol=str(symbol).upper(),
+                    name=row.get("longname") or row.get("shortname"),
+                    asset_class=_QUOTE_TYPE_MAP.get(
+                        str(row.get("quoteType") or "").upper(), "unknown"
+                    ),
+                    exchange=row.get("exchDisp") or row.get("exchange"),
+                    source=self.name,
+                )
+            )
+        return matches[:limit]
+
+    async def search_symbols(self, query: str, limit: int) -> list[SymbolMatch]:
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(self._search_blocking, query, limit), timeout=self._timeout
+            )
+        except TimeoutError as exc:
+            raise ProviderError(self.name, "symbol search timed out") from exc
         except Exception as exc:  # noqa: BLE001
             raise ProviderError(self.name, str(exc)) from exc
 

@@ -87,6 +87,13 @@ export const RATE_LIMITS = {
   proposalRecheck: { points: 20, durationSeconds: HOUR },
   /** A holding added or a file previewed: each resolves symbols against market data. */
   symbolResolve: { points: 60, durationSeconds: HOUR },
+  /**
+   * A symbol searched at the market-data provider or a price read for the
+   * add-holding form (D324). Generous, since the form asks only when the local
+   * list has no match and the AI service caches each query for a day; it
+   * caps a script, not a typist.
+   */
+  symbolLookup: { points: 240, durationSeconds: HOUR },
   /** A topic resolved, created or renamed: an embedding and a market-data resolve. */
   topicResolve: { points: 60, durationSeconds: HOUR },
   /** A concept searched: an embedding. */

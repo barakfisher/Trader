@@ -98,3 +98,13 @@ export function formatClockTime(when: Date | string | number): string {
   if (Number.isNaN(parsed.getTime())) return t('common.unknown');
   return formatIn(parsed, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 }
+
+/** Today as `YYYY-MM-DD` in the user's timezone: the day a date input means by "today". */
+export function todayInDisplayZone(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: getDisplayTimeZone(),
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}

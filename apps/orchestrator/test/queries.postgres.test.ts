@@ -53,6 +53,26 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     await getPool().end();
   });
 
+  describe('the instrument directory (D324)', () => {
+    const SYMBOL = `ZZDIR${randomUUID().slice(0, 6).toUpperCase()}`;
+    afterAll(async () => {
+      await getPool().query('DELETE FROM instruments WHERE symbol = $1', [SYMBOL]);
+    });
+
+    it('lists every instrument by symbol with its name, class and venue', async () => {
+      await queries.upsertInstrument({ symbol: SYMBOL, name: 'Directory Test', assetClass: 'etf', exchange: 'PCX' });
+      const rows = await queries.listInstrumentDirectory();
+      expect(rows.find((row) => row.symbol === SYMBOL)).toEqual({
+        symbol: SYMBOL,
+        name: 'Directory Test',
+        asset_class: 'etf',
+        exchange: 'PCX',
+      });
+      const symbols = rows.map((row) => row.symbol);
+      expect(symbols).toEqual([...symbols].sort());
+    });
+  });
+
   describe('users and passwords (D159, D160)', () => {
     it('finds a user by email whatever its case', async () => {
       const email = `${USER.slice(0, 8)}@Example.com`;

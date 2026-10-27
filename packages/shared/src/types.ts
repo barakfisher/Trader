@@ -948,6 +948,35 @@ export interface HoldingInput {
   notes?: string | null;
 }
 
+// --- Instrument lookup (D324) -----------------------------------------------
+
+/** One listing offered while typing a symbol. `exchange` is the venue as its source names it. */
+export interface InstrumentSuggestion {
+  symbol: string;
+  name: string | null;
+  assetClass: AssetClass;
+  exchange: string | null;
+}
+
+/** Every instrument the installation knows: fetched once, filtered in the browser. */
+export interface InstrumentDirectoryResponse {
+  instruments: InstrumentSuggestion[];
+}
+
+/** A market-data search, asked only when the directory has no match. */
+export interface InstrumentSearchResponse {
+  query: string;
+  matches: InstrumentSuggestion[];
+}
+
+/** The latest price for a symbol, to prefill a holding's cost; null when none is known. */
+export interface InstrumentQuoteResponse {
+  symbol: string;
+  priceMinor: number | null;
+  currency: string | null;
+  asOf: string | null;
+}
+
 // --- Auth --------------------------------------------------------------------
 
 export type UserRole = 'user' | 'admin';

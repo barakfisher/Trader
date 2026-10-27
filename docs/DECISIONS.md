@@ -334,3 +334,7 @@ while this file is out of date.
 | 321 | How PR 15 builds D265 |
 | 322 | Dates and dashes are the shared figure check's, and narration writes a date without its time |
 | 323 | The figure check reads a date written in words, in English and Hebrew |
+| 324 | A symbol is found in the local list first, then in the market's search |
+| 325 | The local list is sent whole once and revalidated; a market search is cached a day |
+| 326 | The cost per unit is prefilled with the latest price; the date does not move it |
+| 327 | A price Yahoo states in a currency's hundredth is converted at the provider's edge |

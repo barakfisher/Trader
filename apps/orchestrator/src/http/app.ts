@@ -43,6 +43,7 @@ import { registerAssistantRoutes } from './routes/assistant.js';
 import { registerConceptsRoutes } from './routes/concepts.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerHoldingsRoutes } from './routes/holdings.js';
+import { registerInstrumentsRoutes } from './routes/instruments.js';
 import { registerImportRoutes } from './routes/imports.js';
 import { registerInternalRoutes } from './routes/internal.js';
 import {
@@ -110,6 +111,8 @@ const PROTECTED_PREFIXES = [
   '/narration',
   // Like '/topics': no `user_id` (the agent template taxonomy), still the product.
   '/universe',
+  // Like '/universe': the instrument list and the symbol lookup (D324), no `user_id`.
+  '/instruments',
   // The assistant's questions and the conversations they make (migration 0052).
   '/assistant',
   // Research on the main portfolio (D254): its ratings and the paid run.
@@ -340,6 +343,7 @@ export function createApp(
   registerAccountSessionRoutes(app);
   registerPortfolioRoutes(app);
   registerHoldingsRoutes(app);
+  registerInstrumentsRoutes(app);
   registerAgentsRoutes(app);
   registerTradesRoutes(app);
   registerAgentAccountRoutes(app);

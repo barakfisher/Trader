@@ -9,6 +9,10 @@
 
 export const queryKeys = {
   portfolio: ['portfolio'] as const,
+  /** Every instrument the installation knows, for the add-holding suggestions (D324). */
+  instrumentDirectory: ['instruments', 'directory'] as const,
+  instrumentSearch: (query: string) => ['instruments', 'search', query] as const,
+  instrumentQuote: (symbol: string) => ['instruments', 'quote', symbol] as const,
   snapshots: ['portfolio', 'snapshots'] as const,
   /** Under the portfolio, so a holding's edit refreshes it; agent writes invalidate it too. */
   consolidated: ['portfolio', 'consolidated'] as const,

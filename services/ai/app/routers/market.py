@@ -34,6 +34,7 @@ from app.models import (
     PriceHistoryResponse,
     QuoteRequest,
     QuoteResponse,
+    SymbolSearchResponse,
 )
 from app.providers.price_provenance import excluded_price_sources
 from app.universe.membership import universe_status
@@ -155,6 +156,15 @@ async def resolve_instrument(
     return resolution.model_copy(
         update={"universe": universe_status(resolution.resolved, membership)}
     )
+
+
+@router.get("/instruments/search", response_model=SymbolSearchResponse)
+async def search_instruments(
+    market: MarketDataDep,
+    query: str = Query(min_length=1, max_length=64, description="Symbol or company name"),
+) -> SymbolSearchResponse:
+    """Listings matching `query`, for the add-holding form when the local list has none (D324)."""
+    return SymbolSearchResponse(query=query, matches=await market.search_symbols(query))
 
 
 @router.get("/fx", response_model=FxRate)

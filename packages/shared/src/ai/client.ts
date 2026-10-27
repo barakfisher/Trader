@@ -28,6 +28,7 @@ import {
   backfillResponseSchema,
   priceHistoryResponseSchema,
   instrumentResolutionSchema,
+  symbolSearchResponseSchema,
   marketCalendarStatusSchema,
   installationKeyTestResponseSchema,
   installationKeysResponseSchema,
@@ -53,6 +54,7 @@ export type QuoteResponse = components['schemas']['QuoteResponse'];
 export type QuoteMarket = components['schemas']['QuoteMarket'];
 export type InstrumentResolution = components['schemas']['InstrumentResolution'];
 export type AiInstrument = components['schemas']['Instrument'];
+export type SymbolSearchResponse = components['schemas']['SymbolSearchResponse'];
 export type FxRate = components['schemas']['FxRate'];
 export type HealthResponse = components['schemas']['HealthResponse'];
 export type NarrationConfig = components['schemas']['NarrationConfigResponse'];
@@ -238,6 +240,15 @@ export class AiClient {
   resolveInstrument(query: string, requestId?: string): Promise<InstrumentResolution> {
     const search = new URLSearchParams({ query });
     return this.request(`/market/instruments/resolve?${search}`, instrumentResolutionSchema, {
+      method: 'GET',
+      requestId,
+    });
+  }
+
+  /** Listings a provider's search finds for `query` (D324): the add-holding form's fallback. */
+  searchInstruments(query: string, requestId?: string): Promise<SymbolSearchResponse> {
+    const search = new URLSearchParams({ query });
+    return this.request(`/market/instruments/search?${search}`, symbolSearchResponseSchema, {
       method: 'GET',
       requestId,
     });

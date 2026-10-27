@@ -108,6 +108,14 @@ export function createFakeAi(options: FakeAiOptions = {}): AiClient {
       return { quotes, missing };
     },
 
+    async searchInstruments(query: string) {
+      const needle = query.trim().toLowerCase();
+      const matches = Object.keys(PRICES)
+        .filter((symbol) => symbol.toLowerCase().startsWith(needle))
+        .map((symbol) => ({ symbol, name: symbol, asset_class: 'equity' as const, exchange: 'TEST', source: 'fake' }));
+      return { query, matches };
+    },
+
     async resolveInstrument(query: string) {
       const symbol = query.toUpperCase();
       const candidates = options.ambiguous?.[symbol];

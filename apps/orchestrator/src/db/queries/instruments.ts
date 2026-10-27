@@ -154,3 +154,24 @@ export function findTradableInstrument(symbol: string): Promise<TradableInstrume
     [symbol.trim().toUpperCase()],
   );
 }
+
+export interface InstrumentDirectoryRow {
+  symbol: string;
+  name: string | null;
+  asset_class: AssetClass;
+  exchange: string | null;
+}
+
+/**
+ * Every instrument the installation knows, for the add-holding form's
+ * suggestions (D324). Reference data, not scoped to a user, like the rest of
+ * `instruments`. ~5,200 rows (67 KB gzipped, measured 2026-10-27): sent whole
+ * once and filtered in the browser, revalidated by ETag.
+ */
+export function listInstrumentDirectory(): Promise<InstrumentDirectoryRow[]> {
+  return query<InstrumentDirectoryRow>(
+    `SELECT symbol, name, asset_class, exchange
+       FROM instruments
+      ORDER BY symbol`,
+  );
+}
