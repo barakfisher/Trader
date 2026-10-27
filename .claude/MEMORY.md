@@ -4,7 +4,31 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-26, late evening - **Handoff on the user's word: M10 PR 14 merged and deployed.**
+Updated: 2026-10-27, morning - **Handoff by count: five merges since #331** (#332-#336).
+- **Merges since #331:**
+  - #332, M10 PR 15: `/privacy` and `/terms`, the consent record and the public sign-up gate
+    (D265, D319-D321; migration `0077`);
+  - #333: Telegram honours the acceptance - one sentence until accepted, pushes held (D320, D321);
+  - #334: a user's digest and scans wait for the acceptance (snapshot excepted); an account
+    holding the one-time password (D162) is pushed nothing;
+  - #335: the four legal placeholders became fill-in templates (a "To write" note per section
+    plus the facts the app establishes) - still no legal wording;
+  - #336 (outside M10): one date-and-dash rule for every figure check, dates in words read in
+    English and Hebrew (D322, D323).
+- **Deployed:** compose and kind both run `8a35fca` (#336) at `0077_legal_acceptances`,
+  2026-10-27 ~07:55 UTC, after `db-backup.sh --target all` (`traders-*-20261027T0752*Z.dump`).
+  Both readyz 200; the new validator is in both AI images; no errors in the first minutes of
+  logs. The kind pods in `Error` from 12 h to 4 days ago are CronJobs that fired while an
+  earlier deploy restarted the orchestrator (`curl: Failed to connect to orchestrator:8080`) -
+  noise, not a fault; later runs of the same jobs completed.
+- **Decisions reach 323** (next: **324**). **Migrations:** `0077` head; next free `0078`.
+- **M10 status:** PRs 1-15's app part merged and live. Everything left is the user's: the legal
+  wording (templates under PR 15), the D254 question (are per-stock sentiment ratings advice
+  where users live), and PR 16 (rent the host, own the domain). The queue outside M10 is empty
+  (#336 emptied it).
+- **Next:** "Next session: after M10 PR 15" below.
+
+Previous update, 2026-10-26, late evening - **Handoff on the user's word: M10 PR 14 merged and deployed.**
 - **Merges since #328:** #330, M10 PR 14: delete your own account with a 7-day grace period,
   and export your data (D264, D316-D318; migration `0076`); #329, the previous handoff (below).
 - **Deployed:** compose and kind both run `e986006` (#330) at `0076_account_deletion`,
@@ -6551,6 +6575,35 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: after M10 PR 15 (written 2026-10-27)
+
+**State:** every M10 PR the app can build is merged and deployed. The user's grant ("continue
+until M10 is done; merge, deploy, start sessions") still stands for M10's remaining work, but
+none of it can start without the user. The handoff count restarts at this PR.
+
+**Next - ask the user which; each needs their input first:**
+- **The legal wording (D265).** The templates are in place (`/privacy`, `/terms`, English and
+  its own Hebrew); filling them is the user's or a lawyer's. A session may help draft only on
+  their word, one question at a time, and must **re-check the templates' facts against the
+  code first** - they were true as of #334, and anything that changed retention or the export
+  since makes them wrong. Publishing sets `LEGAL_VERSION`; every non-admin account is then
+  blocked until it accepts (D320) - the admin never is (`services/accountHold.ts`).
+- **The D254 question:** whether per-stock Bullish/Bearish/Neutral ratings count as advice
+  where users live. It has no code; it gates publishing together with the text.
+- **PR 16, the public host (D255):** the user rents it and owns the domain. Production
+  `ALLOWED_ORIGINS` must hold the public host alone (D310); Resend's domain needs SPF and DKIM;
+  the OAuth apps' redirect URIs move to the domain.
+- **Outside M10:** the queue is empty. Do not invent one; ask.
+
+**Lessons from PR 15:**
+- **A gate is every door, not the switch.** D319 refuses the Admin mode change, but a
+  verification link mailed before the gate would still have created an account; the security
+  review found it (now `signup_full`). When adding a gate, list every path that creates the
+  state it guards - password, OAuth, a pending link - not the one the UI shows.
+- **Blocking the web is not blocking the account.** #332 blocked the web and API; Telegram and
+  the scheduled runs kept using the account's data until #333 and #334. A per-account hold
+  belongs in one place (`services/accountHold.ts`) that every entry point reads.
 
 ### Next session: after M10 PR 14 (written 2026-10-26)
 
