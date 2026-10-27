@@ -1041,9 +1041,7 @@ queue: Hebrew and RTL** - which needs CLAUDE.md guideline 1 amended first (the p
 docs stay English, UI copy becomes localizable with English the default); measure hard-coded
 strings and left-to-right assumptions before designing it.
 
-| # | Task | Milestone | Size | Where, and what "done" means |
-|---|---|---|---|---|
-| 17 | **Narration: why two of three model texts are rejected, fixed on the free model** (the user, 2026-10-07) | — | S | **Measured 2026-10-07** over the 38 `unsourced_figures` rejections on compose (all `nvidia/nemotron-3.5-lightning:free`, the validator re-run on each): **34 of 38 mention a threshold** ("crossed the 25% high threshold") that is true but refused, because `thresholds_pct` / `thresholds_weight` are nested and their keys (`info`, `notable`, `high`) carry no ratio marker - **5 were refused for that alone**; **30 of 38 copy a price in minor units** ("fell to 790" for $7.90), rightly refused, but the evidence invites it by handing the model `*_minor` integers; **3 are real inventions** ("$10.14M" for $101,427.80). **One error passed:** "the 0.03% information threshold" for 0.03 = 3%, accepted because the bare digits are in the evidence. **Fixes, one PR:** (1) the validator reads values under a `thresholds_*` key as ratios; (2) narration's evidence gives money as decimal strings ("7.90"), as the agent tools do since #177; (3) a ratio's bare digits followed by `%` are refused ("0.03%" for 0.03), while "0.03%" for a true 0.0003 stays accepted. **Then measure again on the free model** - the user's choice, because a paid model costs money and the fixes may make it unnecessary for narration (estimated at $0.03-0.07 a week on Flash-Lite or Haiku, against the agents' $0.04-0.38 a scan; the Admin page already sets narration's model separately). **The three fixes landed in the PR after #178; what remains is the re-measurement** on the free model once compose and kind run it - re-run the 2026-10-07 export (`llm_calls` where `purpose = 'narration'`) over the narrations written after the deploy. Done when that rate is recorded here, and this row is then removed |
+**The queue is empty** (2026-10-26): task 17 left it with D322, its re-measurement closed because the free model no longer narrates.
 
 **Not in the queue, and why** - so they are not added back by the next sweep:
 - *Everyday-word company names* ("Apple" the fruit): the user deferred it to a dedicated PR after
@@ -5237,6 +5235,35 @@ failure they prevent.
     - **Rejected:** a content hash as the version (every typo fix would ask everyone again);
       columns on `users` (one version only, no history); the version in each file's front
       matter (four places to agree, and a parser for them).
+322. **Dates and dashes are the shared figure check's, and narration writes a date without its
+    time** (the user, 2026-10-26).
+    - **How:** `evidence_validator` reads a date the evidence states - a timestamp included - as
+      one date and removes it whole, and its digits source no figure; U+2010-2013 and U+2212
+      read as "-". Narration, the agents, research ratings and the assistant all get it from
+      `unsourced_figures`; the assistant keeps only its markdown handling (list markers, link
+      targets). Narration's prompt asks for "2026-10-23", never with its time.
+    - **Measured first** (read-only replay of every stored text on compose): on Flash-Lite, 41
+      of 445 narrations were refused and 34 of those were true, quoting the evidence's
+      timestamp and refused for its "20" and "00"; under the new rule 7 are refused, each a
+      real error. No narration accepted before is refused now; agent theses (45) do not change;
+      the assistant already worked this way.
+    - **Rejected:** accepting quoted timestamps without the prompt change (raw ISO stamps on
+      Insights); keeping the clock digits refused in narration only (two checkers again, the
+      debt this closes).
+323. **The figure check reads a date written in words, in English and Hebrew** (the user,
+    2026-10-26).
+    - **How:** "20 November", "Oct 20, 2026", "20 בנובמבר 2026", "ל-23 באוקטובר" are read as
+      one date. The evidence states it: removed whole. It does not: left in, and its digits are
+      checked - so a wrong month is refused instead of passing on its day's number. A month
+      with no day ("in October") is words, not a figure.
+    - **Why:** llm_calls 476 (2026-10-21) gave a 20 October snapshot as "20 בנובמבר" and was
+      refused only because the year happened to be missing; llm_calls 824 wrote a correct
+      "27 באוקטובר 2026" and was refused because Hebrew months were unknown (a paid retry).
+    - **Rejected:** an instruction alone (476 is a model translating a date it was given);
+      both (narration is asked for ISO dates already, D322, and the assistant answers in its
+      reader's language).
+    - **Still read as digits:** a time written apart from its date ("בשעה 15:00") - passes only
+      if the evidence carries those numbers elsewhere.
 ---
 
 ## Bugs that cost real time, and the lesson from each
@@ -6057,12 +6084,12 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | **No real model has run `mandate_check`** | `app/agents/mandate_check.py` | Tested with scripted answers only. A model that paraphrases instead of copying quotes has every conflict dropped - safe, but it then looks like it never finds one. Read the first real `llm_calls` rows with `purpose = 'mandate_check'` |
 | ~~Mandate limits are not re-checked at approval~~ | — | **Resolved** (2026-10-25, D299): the approval preview warns of each size rule a buy breaks, how far, and the setting that would allow it; Confirm still fills |
 | **The instructions are still `persona` underneath** | `agents.persona`, `AgentView.persona`, wire code `no_persona` | Relabelled in the UI only ("Additional instructions", D170/D174); renaming the column and the code is churn with no behaviour, left on purpose |
-| **Narration's and the agents' figure checks still read a timestamp's digits as sources, and refuse U+2011 hyphens** | `app/narration/evidence_validator.py`; the assistant fixed it in `app/assistant/reply.py` only | A small whole number (a day, hour or minute) written by a model passes whenever its evidence carries a timestamp that contains it; "7‑day" with a non-breaking hyphen is refused. Moving `_without_dates` and the dash normalisation into the validator fixes both for everyone - and changes narration's behaviour, so measure its rejection rate before and after |
+| ~~Narration's and the agents' figure checks read a timestamp's digits as sources, and refuse U+2011 hyphens~~ | — | **Resolved** (2026-10-26, D322): the assistant's date and dash handling moved into `evidence_validator`, so every caller has it. Measured before: 34 of 41 refused Flash-Lite narrations were true texts quoting a timestamp; 7 are refused after. Task 17's re-measurement closed with it: the free model it was to be measured on no longer narrates (Flash-Lite since 2026-10-14) |
 | ~~A key with "pct" in it is read as a ratio, so the mandate's own percentages cannot be quoted~~ | — | **Resolved** (2026-10-24, the mandate limit keys renamed to `max_position_percent_of_capital` and `min_cash_percent_of_capital`): found 2026-10-21 (D235), a thesis writing "my 25% cash buffer" was refused as unsourced, because the validator offers 2500% for a `pct` key. Briefings stored before the rename keep the old key names |
 | **Scheduled runs serve only `SINGLE_USER_ID`** | `scheduler.ts` (`triggerRun` names no user), `routes/internal.ts` falls back to it | Found 2026-10-21: the second user's agent George has never had a scheduled scan; `agent_scans` runs report `"agents": 3`, the admin's. Every scheduled kind - scans, news, digest - is the admin's only. The three-part fix is M9-MEASUREMENT.md's "Scheduling" item; proposed as its own session |
 | **A few cents above the buffer still asks for a justification** | `mandate.cash_above_buffer` (D235), `scan._quotes_idle` (D236) | As decided: any amount above the buffer is idle, so an agent left with $3 is sent back unless it quotes "3.00". Cheap and harmless, but reads oddly; a floor (cash that buys one share plus the fee) would need a decision |
 | **`purpose = 'ask'` outlives `/ask`** | `Purpose` in `app/llm/base.py`, `SCOPE_FOR_PURPOSE`, `llm_calls`' CHECK, `services/llmPanel.ts`, `spend_estimate.py` | Nothing emits it since PR 4; kept so stored rows still read. Retention (30 days) empties them; then drop it with a migration |
-| **A month written as a word is never checked** | `app/assistant/reply.py`, `app/narration/evidence_validator.py` (both read digits) | Live 2026-10-21 (llm_calls 476): a Hebrew answer gave a 2026-10-20 snapshot as "20 בנובמבר 2026" - November. The checks compare digits, so "20" and "2026" are the only figures they see; this time the year was missing from the evidence and the reply was refused, but "20 בנובמבר" alone, or "November 20" in English, passes with the wrong month. Not Hebrew-specific - D220 makes it likelier, because a Hebrew answer translates the ISO date instead of quoting it. A fix would be one rule in the assistant's instructions (quote dates as they appear in tool results) or month names in the validator, in both languages; measure first how often answers spell out a date |
+| ~~A month written as a word is never checked~~ | — | **Resolved** (2026-10-26, D323): English and Hebrew month names are read as dates; a date the evidence does not state is refused (llm_calls 476's November). A time written apart from its date is still read as digits |
 | **The assistant eval runs only by hand** | `scripts/run_assistant_eval.py` | Keyed and paid, so never in CI: a prompt or tool change can regress it unseen. Run it (Flash-Lite, `--repeat 3`, ~$1.30 with the judge) before merging any change to the assistant's prompt, tools or checks |
 | **No backup leaves the laptop** | `~/Backups/traders` (DB1, decision 137) | The daily dumps survive `k8s-down.sh`, a lost Docker volume and a bad migration, but not the Mac's disk failing or the laptop being lost: Time Machine has no destination and no synced folder exists (checked 2026-10-11). The fix is the user's - a Time Machine disk (`~/Backups` is already included) or a synced folder (`TRADERS_BACKUP_DIR`, then `backup-schedule.sh install` again) |
 | **The shadow SPY pays no fees** | `services/performance.ts` (`benchmarkOn`), D38 | The user's choice for now (2026-10-05), to be revisited: they will add fees. The agent pays 10 bps / $1.50 on every trade and the shadow pays nothing, so the comparison leans slightly against the agent - about $1.50-$10 per deposit at today's budgets. When fees are added, decide whether each deposit pays one fee on the way in (the shadow buys once per deposit) and record it as a decision; the hint under the figures ("without fees", `agents.performance.hint`) must change with it |
@@ -6075,7 +6102,7 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | ~~The give-up alert ignores quiet hours, mute and dedupe~~ | — | **Resolved** (2026-10-25, D298, 0073): through `fanOut` with `refKind: 'run'`; held for the digest during quiet hours and a mute, once per run |
 | ~~Scheduled scans run for `SINGLE_USER_ID` only~~ | — | **Resolved by M9's completion (D238)**: every active user's due slots, enqueued round-robin. Was: | The ask plans one user's agents, as every run kind does. Multi-user means iterating users here, and per-user fairness on the queue needs BullMQ Pro's groups (D73) |
 | **The plan needs the AI service's calendar** | `planScheduledScans` | With the AI service down the ask fails (recorded "AI service unreachable", HTTP 500 - a failed CronJob in kind) and the next ask, 15 minutes later, catches up; a slot's window is hours, so nothing is lost unless the outage outlasts it |
-| **Agents' answers are refused for formatted figures** | evidence validator (`app/agents/answer.py`, `narration` checker) | The first scheduled scan (2026-10-08) wrote "1,923" - refused as unsourced. Measure how often real scans are refused and for what before changing anything; a computed figure (shares x price) is rightly refused, a re-formatted one may not be |
+| **Agents' answers are refused for formatted figures** | evidence validator (`app/agents/answer.py`, `narration` checker) | The first scheduled scan (2026-10-08) wrote "1,923" - refused as unsourced. Measure how often real scans are refused and for what before changing anything; a computed figure (shares x price) is rightly refused, a re-formatted one may not be **Measured 2026-10-26:** 6 of 47 checked answers refused, none for formatting since: "1,923" (shares x price, rightly), "3%" quoted from the agent's instructions (2026-10-15/20; today's check, which includes the instructions, accepts it), and a "110 USD" price target; D322 changes none of them |
 | **#197's commit title on `main` reads "wip: PR 7a before merging main"** | git history | Cosmetic and permanent (the ruleset forbids the force push a fix would need); the PR and this file name it correctly |
 | **The trading strings in Hebrew were written by the model** | `he.json` `agents.trade`, `agents.account`, `agents.activity` | Read in the preview and laid out correctly, but not reviewed by the user line by line - the same standing as the earlier Hebrew row |
 | **The exchange calendar ends 2030-12-31** | `data/calendar/xnys.json` | Its test fails from 2030-10-02; the fix is one generator command (RUNBOOK §4). A closure no rule predicts must be added by hand when announced |

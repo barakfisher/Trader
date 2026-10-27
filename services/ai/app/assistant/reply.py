@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
@@ -41,11 +41,6 @@ MAX_SUGGESTIONS = 3
 MAX_SUGGESTION_CHARS = 120
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL)
-#: Dashes a model writes for "-": hyphen, non-breaking hyphen, figure dash, en
-#: dash, minus. Read as "-" for the check only, so "7\u2011day" names the window
-#: "7-day" does and "\u22129.03%" is the figure "-9.03%" is; the text shown is
-#: the model's. Measured 2026-10-11: a real reply wrote every hyphen as U+2011.
-_DASHES = str.maketrans(dict.fromkeys("\u2010\u2011\u2012\u2013\u2212", "-"))
 #: A markdown numbered-list marker ("2. " at a line's start): a position, not a
 #: figure. Measured 2026-10-12: a real step-by-step reply was refused for its "2.".
 _LIST_MARKER = re.compile(r"^(\s*)\d{1,2}[.)](?=\s)", re.MULTILINE)
@@ -99,11 +94,6 @@ def parse(raw: str) -> Reply | None:
     return Reply(outcome=outcome, text=text_.strip(), reason=reason, suggestions=suggestions)
 
 
-#: A date, optionally with a time and zone: "2026-10-12", "2026-10-12T09:57:05.19+00:00",
-#: "2026-10-12 09:57". Read as a date, never as the numbers 2026, 10 and 12.
-_DATE = re.compile(
-    r"\b(\d{4}-\d{2}-\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2}| ?UTC)?)?"
-)
 #: A markdown link's target and a bare URL: where a link goes, checked by
 #: `unknown_links`, never read for figures (an id's digits are not a figure).
 _LINK_TARGET = re.compile(r"\]\([^)]*\)")
@@ -113,82 +103,12 @@ _APP_LINK = re.compile(r"\]\((/[^)\s]*)\)")
 _ID_SEGMENT = re.compile(r"/[0-9a-fA-F-]{8,}(?=/|$)")
 
 
-def _strings(value: Any) -> Iterable[str]:
-    if isinstance(value, str):
-        yield value
-    elif isinstance(value, Mapping):
-        for item in value.values():
-            yield from _strings(item)
-    elif isinstance(value, list | tuple):
-        for item in value:
-            yield from _strings(item)
-
-
-_MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
-_MONTH_NAMES = (
-    "january", "february", "march", "april", "may", "june", "july", "august", "september",
-    "october", "november", "december", "sept",
-)  # fmt: skip
-#: A month's name, whole or as three letters: "October", "Oct", "Sept.".
-_MONTH = rf"((?:{'|'.join((*_MONTH_NAMES, *_MONTHS))})\b)\.?"
-_ORDINAL = r"(\d{1,2})(?:st|nd|rd|th)?"
-_YEAR = r"(?:,?\s+(\d{4}))?"
-#: A date written in words: "12 October", "Oct 12, 2026", "12th of October 2026".
-_DAY_MONTH = re.compile(rf"\b{_ORDINAL}\s+(?:of\s+)?{_MONTH}{_YEAR}\b", re.IGNORECASE)
-_MONTH_DAY = re.compile(rf"\b{_MONTH}\s+{_ORDINAL}\b{_YEAR}", re.IGNORECASE)
-
-
-def _month_number(name: str) -> int:
-    return _MONTHS.index(name[:3].lower()) + 1
-
-
-def _stated(evidence_dates: set[str], month: str, day: str, year: str | None) -> bool:
-    wanted = f"-{_month_number(month):02d}-{int(day):02d}"
-    return any(
-        stated.endswith(wanted) and (year is None or stated.startswith(year))
-        for stated in evidence_dates
-    )
-
-
-def _as_checked(written: str, evidence_dates: set[str]) -> str:
-    """The text as the figure check reads it: dashes as "-", list markers removed,
-    and a date the evidence states removed whole. The text shown is the model's own.
-
-    Dates are read as dates (measured 2026-10-12): a real reply quoting
-    "2026-10-12T09:57:05.199619+00:00" was refused for "57", and on the 12th of
-    the month an invented "12%" passed because a timestamp held a 12. A date
-    whose day the evidence does not state stays in, and its digits are checked.
-    A date in words - "12 October", "Oct 12, 2026" - is the same date: the
-    instructions ask for it, and Haiku's replies were refused for writing it
-    (measured 2026-10-12, PR 4's eval).
-    """
-    text_ = _LIST_MARKER.sub(r"\1", written.translate(_DASHES))
-    text_ = _LINK_TARGET.sub("]()", _URL.sub(" ", text_))
-    text_ = _DATE.sub(lambda m: " " if m.group(1) in evidence_dates else m.group(0), text_)
-    text_ = _DAY_MONTH.sub(
-        lambda m: (
-            " " if _stated(evidence_dates, m.group(2), m.group(1), m.group(3)) else m.group(0)
-        ),
-        text_,
-    )
-    return _MONTH_DAY.sub(
-        lambda m: (
-            " " if _stated(evidence_dates, m.group(1), m.group(2), m.group(3)) else m.group(0)
-        ),
-        text_,
-    )
-
-
-def _without_dates(value: Any) -> Any:
-    """The evidence with its dates taken out of its strings, so the digits of a
-    timestamp never source a figure ("2026-10-12T..." vouched for an invented 12)."""
-    if isinstance(value, str):
-        return _DATE.sub(" ", value)
-    if isinstance(value, Mapping):
-        return {key: _without_dates(item) for key, item in value.items()}
-    if isinstance(value, list | tuple):
-        return [_without_dates(item) for item in value]
-    return value
+def _as_checked(written: str) -> str:
+    """The text as the figure check reads it: list markers removed, and a link's
+    target dropped. Dates and dashes are the shared checker's (D322). The text shown
+    is the model's own."""
+    text_ = _LIST_MARKER.sub(r"\1", written)
+    return _LINK_TARGET.sub("]()", _URL.sub(" ", text_))
 
 
 #: A whole markdown link to a path of this app: "[label](/path)".
@@ -225,12 +145,10 @@ def check(raw: str, *, tool_results: Sequence[Any], user_messages: Sequence[str]
     if reply is None:
         return Checked(reply=None, problems=("malformed",))
     evidence = {"tool_results": list(tool_results), "user": list(user_messages)}
-    dates = {m.group(1) for s in _strings(evidence) for m in _DATE.finditer(s)}
-    dateless = _without_dates(evidence)
     unsourced = tuple(
         figure
         for written in (reply.text, *reply.suggestions)
-        for figure in unsourced_figures(_as_checked(written, dates), dateless)
+        for figure in unsourced_figures(_as_checked(written), evidence)
     )
     if unsourced:
         return Checked(

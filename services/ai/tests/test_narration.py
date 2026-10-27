@@ -95,6 +95,22 @@ async def test_a_well_sourced_narration_is_used():
     assert "8.5%" in result.headline
 
 
+async def test_a_quoted_timestamp_is_a_date_not_invented_clock_digits():
+    # Measured 2026-10-26: 34 of 41 refused Flash-Lite narrations were true, and quoted
+    # the evidence's timestamp whole (D322).
+    finding = Finding(
+        kind=PRICE_MOVE.kind,
+        severity=PRICE_MOVE.severity,
+        subject_ref=PRICE_MOVE.subject_ref,
+        as_of=NOW,
+        evidence={**PRICE_MOVE.evidence, "as_of": "2026-09-16T20:00:00+00:00"},
+    )
+    llm = StubLLM(reply("NVDA fell 8.5% to $118.45", "Observed on 2026-09-16T20:00:00+00:00."))
+    result = await narrate(finding, [], llm)
+    assert result.source == "llm"
+    assert llm.verdicts == [(7, "accepted")]
+
+
 async def test_narration_asks_for_the_least_reasoning_itself():
     """Its own value, never the deployment's: a refused effort here is a week of
     template fallbacks, so the call site's choice is pinned."""
