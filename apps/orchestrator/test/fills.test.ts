@@ -50,7 +50,7 @@ const INSTRUMENTS: Record<string, Record<string, unknown>> = {
 
 interface Ledger {
   cash: bigint;
-  holdings: Map<string, { quantity: string; cost_basis_minor: string }>;
+  holdings: Map<string, { quantity: string; cost_basis_minor: string | null }>;
   fills: Record<string, unknown>[];
 }
 const ledger: Ledger = { cash: 0n, holdings: new Map(), fills: [] };
@@ -119,7 +119,7 @@ vi.mock('../src/db/queries.js', () => ({
     else
       ledger.holdings.set(instrumentId, {
         quantity: `${holding.quantity}.000000000000000000`,
-        cost_basis_minor: String(holding.costBasisMinor),
+        cost_basis_minor: holding.costBasisMinor == null ? null : String(holding.costBasisMinor),
       });
   }),
 }));
@@ -250,16 +250,51 @@ describe('the price rules', () => {
 });
 
 describe('who and what may be traded', () => {
-  it('never trades the real portfolio (D1) or an archived agent (D30); a paused one may', async () => {
-    const primary = request({ agent: agentRow({ id: PRIMARY, is_primary: true }) as never });
-    expect(await refusal(fills.executeFill(primary, context()))).toMatchObject({
+  it('trades the main portfolio only once its cash is set (D328), never an archived agent (D30); a paused one may', async () => {
+    const unopened = request({ agent: agentRow({ id: PRIMARY, is_primary: true, budget_minor: null }) as never });
+    expect(await refusal(fills.executeFill(unopened, context()))).toMatchObject({
       status: 409,
-      code: 'primary_agent_is_passive',
+      code: 'cash_not_set',
     });
+    const opened = request({
+      agent: agentRow({ id: PRIMARY, is_primary: true, budget_minor: '100000' }) as never,
+      idempotencyKey: 'key-primary',
+    });
+    expect((await fills.executeFill(opened, context())).created).toBe(true);
     const archived = request({ agent: agentRow({ state: 'archived' }) as never });
     expect(await refusal(fills.executeFill(archived, context()))).toMatchObject({ code: 'agent_archived' });
+    // The mock keeps one ledger: the agent below starts from a full one again.
+    ledger.cash = 100_000n;
     const paused = request({ agent: agentRow({ state: 'paused' }) as never });
     expect((await fills.executeFill(paused, context())).created).toBe(true);
+  });
+
+  it('records any USD listing for the main portfolio, outside the universe too (D333)', async () => {
+    const primary = agentRow({ id: PRIMARY, is_primary: true, budget_minor: '100000' }) as never;
+    const typed = { source: 'user' as const, priceMinor: 1_000n };
+    for (const symbol of ['BTC-USD', 'GONE']) {
+      const result = await fills.executeFill(
+        request({ agent: primary, symbol, price: typed, quantity: '1', idempotencyKey: `key-${symbol}` }),
+        context(),
+      );
+      expect(result.created, symbol).toBe(true);
+    }
+    expect(
+      await refusal(fills.executeFill(request({ agent: primary, symbol: 'SAP.DE', price: typed }), context())),
+    ).toMatchObject({ code: 'not_tradable', details: { reason: 'not_usd' } });
+  });
+
+  it('refuses to trade a fractional holding, and keeps an unknown cost unknown (D333)', async () => {
+    const primary = agentRow({ id: PRIMARY, is_primary: true, budget_minor: '100000' }) as never;
+    const typed = { source: 'user' as const, priceMinor: 20_000n };
+    ledger.holdings.set('i-aapl', { quantity: '2.500000000000000000', cost_basis_minor: '15000' });
+    expect(
+      await refusal(fills.executeFill(request({ agent: primary, side: 'sell', quantity: '1', price: typed }), context())),
+    ).toMatchObject({ status: 422, code: 'fractional_holding' });
+
+    ledger.holdings.set('i-aapl', { quantity: '2.000000000000000000', cost_basis_minor: null });
+    await fills.executeFill(request({ agent: primary, quantity: '1', price: typed, idempotencyKey: 'key-uncosted' }), context());
+    expect(ledger.holdings.get('i-aapl')).toEqual({ quantity: '3.000000000000000000', cost_basis_minor: null });
   });
 
   it('refuses what is outside the universe, dropped from it, or not in USD (D7, D8)', async () => {

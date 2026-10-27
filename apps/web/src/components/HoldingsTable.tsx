@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
-import { AlertTriangle, Check, Clock, Pencil, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Check, Clock, X } from 'lucide-react';
 
 import { minorToDecimalString, minorToNumber, type HoldingView, type ResearchHolding } from '@traders/shared';
 
@@ -12,6 +12,7 @@ import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { baseCurrencyOf } from '../lib/portfolioView.ts';
 import { useNarrowViewport } from '../lib/viewport.ts';
 import { usePortfolioQuery, useRemoveHolding, useUpdateHolding } from '../queries/portfolio.ts';
+import { HoldingRowMenu } from './HoldingRowMenu.tsx';
 import { sentimentRank, sortHoldings, type SortFields } from '../lib/holdingsSort.ts';
 import { SortControl, SortableTh, useSortColumns, type SortProps } from './SortableHeader.tsx';
 import { SentimentCell, useSentiments } from './SentimentBadge.tsx';
@@ -327,6 +328,7 @@ function HoldingRow({
       <td className="py-2 text-end">
         {confirmingDelete ? (
           <span className="flex items-center justify-end gap-2 text-xs">
+            <span className="max-w-56 text-start text-[11px] text-text-muted">{t('holdings.removeNote')}</span>
             <button
               type="button"
               onClick={() => removeHolding.mutate(holding.id)}
@@ -339,23 +341,12 @@ function HoldingRow({
             </button>
           </span>
         ) : (
-          <span className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={startEditing}
-              aria-label={t('holdings.editSymbol', { symbol: holding.instrument.symbol })}
-              className="text-text-muted hover:text-text-primary"
-            >
-              <Pencil className="size-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmingDelete(true)}
-              aria-label={t('holdings.removeSymbol', { symbol: holding.instrument.symbol })}
-              className="text-text-muted hover:text-loss"
-            >
-              <Trash2 className="size-4" />
-            </button>
+          <span className="flex items-center justify-end">
+            <HoldingRowMenu
+              symbol={holding.instrument.symbol}
+              onEdit={startEditing}
+              onRemove={() => setConfirmingDelete(true)}
+            />
           </span>
         )}
       </td>
@@ -503,6 +494,7 @@ function HoldingCard({
       ) : confirmingDelete ? (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-text-muted">{t('holdings.removeConfirm', { symbol })}</span>
+          <span className="w-full text-[11px] text-text-muted">{t('holdings.removeNote')}</span>
           <button
             type="button"
             onClick={() => removeHolding.mutate(holding.id)}
@@ -519,23 +511,8 @@ function HoldingCard({
           </button>
         </div>
       ) : (
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={startEditing}
-            aria-label={t('holdings.editSymbol', { symbol })}
-            className={`${CARD_BUTTON} text-text-muted`}
-          >
-            <Pencil className="size-4" aria-hidden /> {t('common.edit')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmingDelete(true)}
-            aria-label={t('holdings.removeSymbol', { symbol })}
-            className={`${CARD_BUTTON} text-text-muted`}
-          >
-            <Trash2 className="size-4" aria-hidden /> {t('common.remove')}
-          </button>
+        <div className="flex justify-end">
+          <HoldingRowMenu symbol={symbol} onEdit={startEditing} onRemove={() => setConfirmingDelete(true)} />
         </div>
       )}
     </div>

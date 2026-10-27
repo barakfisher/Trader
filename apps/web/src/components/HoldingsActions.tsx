@@ -69,7 +69,8 @@ export function HoldingsActions() {
   );
 }
 
-function MenuButton({
+/** An item of a "⋯" list: an icon and a label, dimmed when it does not apply. */
+export function MenuButton({
   onClick,
   disabled = false,
   icon,
