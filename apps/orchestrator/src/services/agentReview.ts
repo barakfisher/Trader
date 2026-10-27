@@ -1,5 +1,5 @@
 /**
- * The agent review (D340-D343): every `AGENT_REVIEW_EVERY_SCANS` counted scans
+ * The agent review (D335-D338): every `AGENT_REVIEW_EVERY_SCANS` counted scans
  * of a simulated agent, three rules read its last window of scans and its
  * ledger, and each that fires stores one suggestion - the figures it stands
  * on, and one setting it proposes to change, or none. Nothing changes until
@@ -228,7 +228,7 @@ export function closesWindow(counted: number): boolean {
   return counted > 0 && counted % AGENT_REVIEW_EVERY_SCANS === 0;
 }
 
-/** A window is named by its last scan, so a review run twice writes once (D341). */
+/** A window is named by its last scan, so a review run twice writes once (D336). */
 export function suggestionKey(lastScanId: string, rule: AgentReviewRule): string {
   return `${lastScanId}:${rule}`;
 }

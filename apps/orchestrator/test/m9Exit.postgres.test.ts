@@ -169,7 +169,7 @@ function newUser(mark: string): SeededUser {
 /**
  * Every route is asked with every one of Omer's ids, and a route with two
  * parameters with every pair, so the sweeps grow with each id a table adds:
- * past vitest's 5 s default once the agent review's suggestion (0078) joined.
+ * past vitest's 5 s default once the agent review's suggestion (0079) joined.
  */
 const SWEEP_TIMEOUT_MS = 60_000;
 
@@ -334,7 +334,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     );
     // The legal version the user accepted (0077, D265): a record nobody else's request may add to or change.
     await pool.query(`INSERT INTO legal_acceptances (user_id, version) VALUES ($1, '2026-11-01')`, [user.id]);
-    // An open suggestion of the agent review (0078, D340): another user's Apply or Dismiss must not reach it.
+    // An open suggestion of the agent review (0079, D335): another user's Apply or Dismiss must not reach it.
     const suggestion = (
       await pool.query<{ id: string }>(
         `INSERT INTO agent_suggestions (user_id, agent_id, rule, dedupe_key, evidence, change)

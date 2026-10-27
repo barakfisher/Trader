@@ -408,7 +408,7 @@ INSERT INTO runs (id, kind, run_key, status) VALUES
 INSERT INTO legal_acceptances (user_id, version, accepted_at) VALUES
   ('00000000-0000-0000-0000-00000000000b', '2026-11-01', now() - interval '30 days'),
   ('00000000-0000-0000-0000-00000000000b', '2026-12-01', now());
--- Agent suggestions (0078, D340-D343): every rule and every status, one window each.
+-- Agent suggestions (0079, D335-D338): every rule and every status, one window each.
 INSERT INTO agent_suggestions (user_id, agent_id, rule, dedupe_key, evidence, change, status, decided_at) VALUES
   ('00000000-0000-0000-0000-00000000000a', '90000000-0000-0000-0000-0000000000a1', 'idle_cash', 'seed-1:idle_cash',
    '{"scans": 10, "tradeScans": 0}', '{"setting": "cash_buffer_bps", "from": 2000, "to": 1000}', 'open', NULL),

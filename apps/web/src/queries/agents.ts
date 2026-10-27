@@ -112,7 +112,7 @@ export function useDismissInstructionsCheck(agentId: string) {
   });
 }
 
-/** The agent review's open suggestions (D340-D343). Not asked of the primary. */
+/** The agent review's open suggestions (D335-D338). Not asked of the primary. */
 export function useAgentSuggestionsQuery(agentId: string, enabled: boolean) {
   return useQuery({
     queryKey: queryKeys.agentSuggestions(agentId),

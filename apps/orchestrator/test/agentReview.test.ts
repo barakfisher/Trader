@@ -1,5 +1,5 @@
 /**
- * The agent review's rules and its hook after a scan (D340-D343).
+ * The agent review's rules and its hook after a scan (D335-D338).
  *
  * The rules are pure and run on hand-built windows; thresholds are read from
  * their constants, so retuning one breaks no test here. The hook runs against

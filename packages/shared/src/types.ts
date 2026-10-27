@@ -322,7 +322,7 @@ export interface AgentScanTrade {
 }
 
 /**
- * The rule-based review of an agent every few scans (D340-D343): what a rule
+ * The rule-based review of an agent every few scans (D335-D338): what a rule
  * found, from the ledger and the scans, and the one setting it proposes to
  * change - or none, when it only reports. Nothing changes until the user
  * applies it; no model is asked.
@@ -331,7 +331,7 @@ export const AGENT_REVIEW_RULES = ['idle_cash', 'fee_drag', 'benchmark_lag'] as 
 
 /**
  * A review every this many counted scans: two trading weeks at a new agent's
- * default of one scan a day, enough that one quiet day is not a pattern (D341).
+ * default of one scan a day, enough that one quiet day is not a pattern (D336).
  */
 export const AGENT_REVIEW_EVERY_SCANS = 10;
 export type AgentReviewRule = (typeof AGENT_REVIEW_RULES)[number];

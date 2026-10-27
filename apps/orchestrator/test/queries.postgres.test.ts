@@ -3232,7 +3232,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
-  describe('the agent review (0078, D340-D343)', () => {
+  describe('the agent review (0079, D335-D338)', () => {
     // As the seeded admin, like the scans above: traders_app may not delete a scan.
     const SEED_ADMIN = '00000000-0000-0000-0000-000000000001';
     const newAgent = async () =>

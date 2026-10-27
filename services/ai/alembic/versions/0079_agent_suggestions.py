@@ -1,4 +1,4 @@
-"""A rule-based review of each simulated agent every N scans (D340-D343).
+"""A rule-based review of each simulated agent every N scans (D335-D338).
 
 - **`agent_suggestions`**: what a review found, one row per rule that fired.
   The orchestrator writes it after every N-th counted scan of an agent; the
@@ -16,14 +16,14 @@
 - The rows go with the agent and with the user by cascade, so the erase (0076)
   takes them without a change.
 
-Revision ID: 0078_agent_suggestions
-Revises: 0077_legal_acceptances
+Revision ID: 0079_agent_suggestions
+Revises: 0078_primary_ledger
 """
 
 from alembic import op
 
-revision = "0078_agent_suggestions"
-down_revision = "0077_legal_acceptances"
+revision = "0079_agent_suggestions"
+down_revision = "0078_primary_ledger"
 branch_labels = None
 depends_on = None
 

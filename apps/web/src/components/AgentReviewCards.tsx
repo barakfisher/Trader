@@ -13,7 +13,7 @@ import { Button, Card } from './ui.tsx';
 const REFUSALS = ['suggestion_stale', 'suggestion_closed', 'agent_archived', 'nothing_to_apply'] as const;
 
 /**
- * The agent review's open suggestions (D340-D343), one card each: what a rule
+ * The agent review's open suggestions (D335-D338), one card each: what a rule
  * found, with the figures it stands on, and the one setting it proposes to
  * change. Apply writes that setting; Dismiss closes the card. Shown above the
  * tabs, so a suggestion is seen whichever tab is open; nothing when there is

@@ -2,7 +2,7 @@
  * Everything `agentPerformance` needs, read for one agent: its cash timeline
  * and fills from the ledger, the benchmark's instrument, and the calendar and
  * stored closes from the AI service (D24, D36-D42). The performance route and
- * the agent review (D343) both compute from this, so the figure a review
+ * the agent review (D338) both compute from this, so the figure a review
  * quotes is the one the Performance tab shows.
  */
 

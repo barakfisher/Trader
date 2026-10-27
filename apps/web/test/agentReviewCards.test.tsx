@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * The agent review's cards, rendered (D340-D343): each says what its rule
+ * The agent review's cards, rendered (D335-D338): each says what its rule
  * found with the figures from its evidence, and the one change it proposes;
  * Apply and Dismiss call their routes; a suggestion with no change offers
  * Dismiss only; a stale Apply says why in the reader's language; Hebrew

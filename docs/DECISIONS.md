@@ -345,3 +345,7 @@ while this file is out of date.
 | 332 | Buy and Sell on a main-portfolio holding record a trade made at the broker, through the agents' fills |
 | 333 | The main portfolio trades any known USD listing; fractional and uncosted holdings are handled, not guessed |
 | 334 | The holding row's actions are one "⋮" list: Buy, Sell, Edit, Remove |
+| 335 | An agent is reviewed by fixed rules, not a model, and nothing changes without the user's Apply |
+| 336 | A window is ten counted scans, keyed by its last scan |
+| 337 | The three rules and their thresholds |
+| 338 | The review never fails the scan, and the real portfolio is never reviewed |

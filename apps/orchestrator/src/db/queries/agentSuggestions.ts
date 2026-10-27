@@ -3,9 +3,9 @@ import type { SuggestionChange, SuggestionSetting } from '@traders/shared';
 import { query, queryOne, transaction } from '../pool.js';
 
 /**
- * The agent review's reads and writes (D340-D343): the window of scans a
+ * The agent review's reads and writes (D335-D338): the window of scans a
  * review looks at, with the ledger figures beside it, and the suggestions it
- * stores (migration 0078). Apply changes one `agents` column and closes the
+ * stores (migration 0079). Apply changes one `agents` column and closes the
  * suggestion in one transaction.
  */
 

@@ -58,7 +58,7 @@ export async function runManualScan(
   }
   const proposalIds = await proposeFromScan(userId, agent, scan, context);
   await announceModelFallbacks(userId, context.notifier);
-  // The tenth scan may be one the user asked for; its review is the same (D341).
+  // The tenth scan may be one the user asked for; its review is the same (D336).
   await reviewAfterScan(userId, agent, { ai: context.ai, requestId: context.requestId });
   return { scan, proposalIds };
 }

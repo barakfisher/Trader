@@ -1,5 +1,5 @@
 /**
- * How an agent review's suggestion reads (D340-D343): each value of the one
+ * How an agent review's suggestion reads (D335-D338): each value of the one
  * setting it changes, in the reader's language. Every figure is the
  * suggestion's own evidence or change; nothing here computes a new one.
  */

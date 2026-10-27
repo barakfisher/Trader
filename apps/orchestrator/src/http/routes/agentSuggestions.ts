@@ -1,5 +1,5 @@
 /**
- * The agent review's suggestions on the agent page (D340-D343): the open ones,
+ * The agent review's suggestions on the agent page (D335-D338): the open ones,
  * and the user's Apply or Dismiss. Apply writes the one setting the suggestion
  * names and answers the agent as it now is; nothing else changes it.
  */
