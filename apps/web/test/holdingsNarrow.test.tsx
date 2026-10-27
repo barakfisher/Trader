@@ -58,6 +58,12 @@ const AAPL: HoldingView = {
 
 const PORTFOLIO = { summary: { baseCurrency: 'USD' }, holdings: [AAPL] } as unknown as PortfolioResponse;
 
+/** A holding's actions are behind its "⋮" (D334): open it, then choose. */
+async function choose(symbol: string, action: 'Edit' | 'Remove') {
+  fireEvent.click(await screen.findByRole('button', { name: `Actions for ${symbol}` }));
+  fireEvent.click(screen.getByRole('button', { name: action }));
+}
+
 function narrowScreen(narrow: boolean) {
   window.matchMedia = ((query: string) => ({
     matches: narrow,
@@ -69,7 +75,11 @@ function narrowScreen(narrow: boolean) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  get.mockResolvedValue(PORTFOLIO);
+  get.mockImplementation(async (path: string) => {
+    if (path === '/agents') return { agents: [] };
+    if (path === '/portfolio/cash') return { state: 'unset' };
+    return PORTFOLIO;
+  });
 });
 afterEach(() => {
   cleanup();
@@ -100,7 +110,7 @@ it('edits a quantity from the card through the same request as the table', async
   patch.mockResolvedValue({ id: 'h-aapl', symbol: 'AAPL' });
   renderPage(<HoldingsTable />);
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Edit AAPL' }));
+  await choose('AAPL', 'Edit');
   fireEvent.change(screen.getByLabelText('Quantity for AAPL'), { target: { value: '30' } });
   fireEvent.click(screen.getByRole('button', { name: /Save/ }));
 
@@ -112,7 +122,7 @@ it('asks before it removes, and removes only on the second press', async () => {
   del.mockResolvedValue({ ok: true });
   renderPage(<HoldingsTable />);
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Remove AAPL' }));
+  await choose('AAPL', 'Remove');
   expect(screen.getByText('Remove AAPL?')).toBeTruthy();
   expect(del).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
@@ -124,7 +134,7 @@ it('edits the cost per unit from the table, starting from the stored value', asy
   patch.mockResolvedValue({ id: 'h-aapl', symbol: 'AAPL' });
   renderPage(<HoldingsTable />);
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Edit AAPL' }));
+  await choose('AAPL', 'Edit');
   const cost = screen.getByLabelText('Cost per unit for AAPL, in USD') as HTMLInputElement;
   expect(cost.value).toBe('185.40');
   fireEvent.change(cost, { target: { value: '190' } });
@@ -145,7 +155,7 @@ it('clears a cost from the card when the field is emptied', async () => {
   patch.mockResolvedValue({ id: 'h-aapl', symbol: 'AAPL' });
   renderPage(<HoldingsTable />);
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Edit AAPL' }));
+  await choose('AAPL', 'Edit');
   fireEvent.change(screen.getByLabelText('Cost per unit for AAPL, in USD'), { target: { value: '' } });
   fireEvent.click(screen.getByRole('button', { name: /Save/ }));
 
@@ -170,7 +180,7 @@ it('shows a yen cost as yen, with no decimal places to invent', async () => {
   get.mockResolvedValue({ ...PORTFOLIO, holdings: [toyota] });
   renderPage(<HoldingsTable />);
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Edit 7203.T' }));
+  await choose('7203.T', 'Edit');
   expect((screen.getByLabelText('Cost per unit for 7203.T, in JPY') as HTMLInputElement).value).toBe(
     '1500',
   );

@@ -147,9 +147,11 @@ export function usePreviewTrade(agentId: string) {
 /** Record a trade. Cash, holdings and the timeline all live under the agent's key. */
 export function useTrade(agentId: string) {
   const invalidate = useInvalidateAgents();
+  const client = useQueryClient();
   return useMutation({
     mutationFn: (input: TradeInput) => api.post<TradeResult>(`/agents/${agentId}/trades`, input),
-    onSuccess: invalidate,
+    // A trade on the main portfolio (D332) moves its holdings and its cash, both under `portfolio`.
+    onSuccess: () => Promise.all([invalidate(), client.invalidateQueries({ queryKey: queryKeys.portfolio })]),
   });
 }
 

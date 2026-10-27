@@ -128,6 +128,10 @@ export function tradeErrorMessage(error: unknown, fallback: string, currency = '
       return t('agents.trade.errors.invalidPrice');
     case 'agent_archived':
       return t('agents.trade.errors.archived');
+    case 'cash_not_set':
+      return t('agents.trade.errors.cashNotSet');
+    case 'fractional_holding':
+      return t('agents.trade.errors.fractionalHolding');
     case 'budget_out_of_range':
       return t('agents.errors.budgetRange');
     case 'price_far_from_agent':

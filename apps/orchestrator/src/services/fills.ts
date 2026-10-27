@@ -5,10 +5,12 @@
  * an agent's proposal will run through the same function (D26), so every rule
  * here is proven by hand before a model can propose through it:
  *
- * - **Who may trade.** A simulated agent that is active or paused; never the
- *   primary (D1), never an archived agent (D30).
- * - **What.** A USD instrument in the universe (D7, D8) on an exchange with a
- *   calendar (D25), in whole shares (D9).
+ * - **Who may trade.** A simulated agent that is active or paused, never an
+ *   archived one (D30); and the main portfolio once its cash is set (D328,
+ *   D332), recording a trade the user made at their broker.
+ * - **What.** A USD instrument on an exchange with a calendar (D25), in whole
+ *   shares (D9) - in the universe for an agent (D7, D8); any such listing for
+ *   the main portfolio, whose holdings are whatever the user holds (D333).
  * - **At what price.** Either the live quote - the exchange open, the quote at
  *   most `MAX_QUOTE_AGE_MS` old and not stale (D28), and within
  *   `DEFAULT_RANGE_BPS` of the price the user was shown (D3, D27) - or a price
@@ -146,11 +148,18 @@ export function parseTypedPrice(text: string): bigint {
   return minor;
 }
 
-/** A whole-share holding quantity as stored (`numeric(38,18)` text), as a bigint. */
+/**
+ * A whole-share holding quantity as stored (`numeric(38,18)` text), as a bigint.
+ * An agent's always is (D9); a main-portfolio holding entered by hand may not
+ * be, and is then corrected by Edit rather than traded (D333).
+ */
 function wholeShares(stored: string): bigint {
   const [whole, fraction = ''] = stored.split('.');
   if (/[1-9]/.test(fraction)) {
-    throw new Error(`a simulated holding is whole shares, found ${stored}`);
+    throw unprocessable(
+      'fractional_holding',
+      `the holding is ${stored.replace(/\.?0+$/, '')} shares, not a whole number: correct it with Edit`,
+    );
   }
   return BigInt(whole!);
 }
@@ -163,24 +172,28 @@ function toNumber(value: bigint): number {
   return Number(value);
 }
 
-/** The agent may be traded: simulated (D1), and not archived (D30). */
+/** The agent may be traded: not archived (D30); the main portfolio once its cash is set (D328). */
 export function assertTradableAgent(agent: AgentRow): void {
-  if (agent.is_primary) {
-    throw conflict(
-      'primary_agent_is_passive',
-      'the real portfolio never trades: trades go into a simulated agent',
-    );
+  if (agent.is_primary && agent.budget_minor === null) {
+    throw conflict('cash_not_set', "set the main portfolio's cash first: a trade moves it");
   }
   if (agent.state === 'archived') {
     throw conflict('agent_archived', 'an archived agent is read-only history; restore it to trade');
   }
 }
 
-/** The instrument a trade names, if it may be traded at all (D7, D8). */
-export async function resolveTradable(symbol: string): Promise<TradableInstrumentRow> {
+/**
+ * The instrument a trade names, if it may be traded at all (D7, D8). The
+ * universe binds an agent's choices; the main portfolio records what the user
+ * bought, so any known USD listing will do (D333).
+ */
+export async function resolveTradable(
+  symbol: string,
+  { anyListing = false }: { anyListing?: boolean } = {},
+): Promise<TradableInstrumentRow> {
   const instrument = await findTradableInstrument(symbol);
   if (!instrument) throw notFound(`no instrument ${symbol.trim().toUpperCase()} is known`);
-  if (instrument.membership === null || instrument.membership === 'dropped') {
+  if (!anyListing && (instrument.membership === null || instrument.membership === 'dropped')) {
     throw unprocessable('not_tradable', `${instrument.symbol} is not in the tradable universe`, {
       reason: 'outside_universe',
     });
@@ -315,7 +328,7 @@ function assertFits(side: TradeSide, cash: bigint, change: bigint, held: bigint,
 /** What the trade would do, computed exactly as `executeFill` would. Writes nothing. */
 export async function previewTrade(request: TradeRequest, context: TradeContext): Promise<TradePreview> {
   assertTradableAgent(request.agent);
-  const instrument = await resolveTradable(request.symbol);
+  const instrument = await resolveTradable(request.symbol, { anyListing: request.agent.is_primary });
   const quantity = parseQuantity(request.quantity);
   const { priceMinor, quote } = await priceOf(instrument, request.price, context);
   const notional = notionalMinor(quantity.toString(), priceMinor);
@@ -402,7 +415,7 @@ export async function executeFill(
   const replayed = await replay(request);
   if (replayed) return replayed;
 
-  const instrument = await resolveTradable(request.symbol);
+  const instrument = await resolveTradable(request.symbol, { anyListing: request.agent.is_primary });
   const quantity = parseQuantity(request.quantity);
   if (request.price.source === 'quote' && request.price.shownPriceMinor === null) {
     throw unprocessable('shown_price_required', 'a trade at the live price confirms the price it was shown');
@@ -452,14 +465,19 @@ export async function executeFill(
       });
 
       const heldAfter = request.side === 'buy' ? held + quantity : held - quantity;
-      const heldCost = BigInt(holding?.cost_basis_minor ?? '0');
+      // A main-portfolio holding entered without a cost stays without one: an
+      // average over an unknown cost is unknown, never a cost of zero (D333).
+      const heldCost =
+        held > 0n && holding?.cost_basis_minor == null ? null : BigInt(holding?.cost_basis_minor ?? '0');
       await setAgentHolding(client, {
         userId: request.userId,
         agentId: request.agent.id,
         instrumentId: instrument.id,
         quantity: heldAfter,
         costBasisMinor:
-          request.side === 'buy' ? averageCostMinor(held, heldCost, quantity, priceMinor) : heldCost,
+          request.side === 'buy' && heldCost !== null
+            ? averageCostMinor(held, heldCost, quantity, priceMinor)
+            : heldCost,
         openedAt: localDate(context.timezone, now),
       });
 

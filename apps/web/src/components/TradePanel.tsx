@@ -29,11 +29,17 @@ export function TradePanel({
   agentId,
   initialSymbol = '',
   initialSide = 'buy',
+  real = false,
   onClose,
 }: {
   agentId: string;
   initialSymbol?: string;
   initialSide?: TradeSide;
+  /**
+   * The main portfolio (D332): a trade the user made at their broker, recorded
+   * at the price they got - so "My price" comes first - and said to be a record.
+   */
+  real?: boolean;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -42,7 +48,7 @@ export function TradePanel({
   const [symbol, setSymbol] = useState(initialSymbol);
   const [side, setSide] = useState<TradeSide>(initialSide);
   const [quantity, setQuantity] = useState('');
-  const [mode, setMode] = useState<PriceMode>('market');
+  const [mode, setMode] = useState<PriceMode>(real ? 'typed' : 'market');
   const [price, setPrice] = useState('');
   const [shown, setShown] = useState<{ preview: TradePreview; key: string } | null>(null);
 
@@ -85,9 +91,14 @@ export function TradePanel({
   };
 
   return (
-    <Drawer title={t('agents.trade.title')} closeLabel={t('agents.trade.close')} onClose={onClose}>
+    <Drawer
+      title={real ? t('holdings.trade.title') : t('agents.trade.title')}
+      closeLabel={t('agents.trade.close')}
+      onClose={onClose}
+    >
       <form onSubmit={ask} className="space-y-3">
-        <AgentField label={t('agents.trade.symbol')} hint={t('agents.trade.symbolHint')}>
+        {real && <p className="text-xs text-text-muted">{t('holdings.trade.note')}</p>}
+        <AgentField label={t('agents.trade.symbol')} hint={real ? t('holdings.trade.symbolHint') : t('agents.trade.symbolHint')}>
           <input
             value={symbol}
             onChange={(event) => setSymbol(event.target.value)}

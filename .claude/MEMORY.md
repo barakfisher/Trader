@@ -5380,6 +5380,31 @@ failure they prevent.
       trades whose holdings were erased.
     - **Downgrade refuses** while any primary has a ledger: 0040's triggers would refuse its rows,
       and dropping them would discard real trades (`KNOWN_REFUSALS` in `test_migrations.py`).
+332. **Buy and Sell on a main-portfolio holding record a trade made at the broker, through the
+    agents' fills** (the user, 2026-10-27, holdings/ledger plan PR 3).
+    - **How:** the row's "⋮" opens the agents' `TradePanel` against the primary
+      (`POST /agents/:primaryId/trades`), in a "Record a trade" mode: "My price" first, since the
+      trade already happened at a price the user knows; the market price stays available. IBI's fee
+      (D136) and the cash move exactly as an agent's; a buy re-averages the cost per unit.
+      Allowed once the cash is set (D328) - before that, `cash_not_set` and the menu says where.
+    - **Why the same path:** the fee, the cash lock, the idempotency key and the preview-then-confirm
+      are tested once; a second trade path for the real portfolio would drift from it.
+    - **Nothing is sent to a broker** (guideline 2): the form says so.
+333. **The main portfolio trades any known USD listing; fractional and uncosted holdings are
+    handled, not guessed** (2026-10-27).
+    - **How:** `resolveTradable(..., { anyListing })` skips the universe check for the primary - the
+      universe binds an agent's choices, not what the user owns. A non-USD listing is still refused
+      (the cash ledger is USD only). A holding entered by hand with a fractional quantity is
+      refused with `fractional_holding` ("correct it with Edit") instead of the 500 an agent's
+      whole-share assertion threw; a buy onto a holding with no cost keeps it without one - an
+      average over an unknown cost is unknown.
+    - **Measured:** 1 of the 22 real holdings is fractional; none is uncosted.
+334. **The holding row's actions are one "⋮" list: Buy, Sell, Edit, Remove** (the user, 2026-10-27).
+    - **How:** `HoldingRowMenu`, drawn in a portal at the button: the table scrolls sideways inside
+      its card, which clipped a list drawn inside it, and the trade form inherited the cell's
+      end alignment until it moved to the portal too (both seen in the browser). Remove's
+      confirmation says it corrects a mistake and moves no cash; Sell records a sale.
+    - **Not changed:** the combined view's rows keep their pencil and bin.
 ---
 
 ## Bugs that cost real time, and the lesson from each

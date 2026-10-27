@@ -334,7 +334,21 @@
       "by": "Sort by {{column}}",
       "ascending": "Ascending. Tap to reverse.",
       "descending": "Descending. Tap to reverse."
-    }
+    },
+    "trade": {
+      "title": "Record a trade",
+      "note": "Record a buy or sell you made at your broker, at the price you got. IBI's fee is added, and the cash moves on the Account card. Nothing is sent to your broker.",
+      "symbolHint": "A US-listed stock or fund, e.g. AAPL or VOO."
+    },
+    "menu": {
+      "label": "Actions for {{symbol}}",
+      "buy": "Buy",
+      "sell": "Sell",
+      "edit": "Edit",
+      "remove": "Remove",
+      "needsCash": "Set the cash on the Account card to record trades."
+    },
+    "removeNote": "Remove corrects a holding entered by mistake; the cash does not change. To record a sale, use Sell."
   },
   "import": {
     "title": "Import holdings",
@@ -1670,7 +1684,9 @@
         "unknownSymbol": "No instrument with that symbol is known.",
         "invalidQuantity": "Enter a whole number of shares.",
         "invalidPrice": "Enter a price in dollars, with at most two decimals.",
-        "archived": "This agent is archived. Restore it to trade or add cash."
+        "archived": "This agent is archived. Restore it to trade or add cash.",
+        "cashNotSet": "Set the main portfolio's cash first, on the Account card: a trade moves it.",
+        "fractionalHolding": "This holding is not a whole number of shares. Correct it with Edit, then record the trade."
       }
     },
     "performance": {

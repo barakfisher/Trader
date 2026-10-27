@@ -342,3 +342,6 @@ while this file is out of date.
 | 329 | Holdings held when the cash is set stay as they are; their cost counts as money put in |
 | 330 | The cash can be set to what the broker shows: an `adjustment`, only when asked |
 | 331 | Resetting the main portfolio erases its ledger and unsets its cash |
+| 332 | Buy and Sell on a main-portfolio holding record a trade made at the broker, through the agents' fills |
+| 333 | The main portfolio trades any known USD listing; fractional and uncosted holdings are handled, not guessed |
+| 334 | The holding row's actions are one "⋮" list: Buy, Sell, Edit, Remove |

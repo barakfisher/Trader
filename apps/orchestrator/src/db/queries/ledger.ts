@@ -218,7 +218,8 @@ export async function insertFill(client: PoolClient, fill: FillToInsert): Promis
 /**
  * Set the agent's holding of an instrument after a fill: quantity and cost per
  * unit, or remove the row when nothing is left. Only fills reach a simulated
- * agent's holdings - the holdings routes write the primary's alone.
+ * agent's holdings; the main portfolio's are written by fills and by the
+ * holdings routes' corrections (D332).
  */
 export async function setAgentHolding(
   client: PoolClient,
@@ -227,7 +228,8 @@ export async function setAgentHolding(
     agentId: string;
     instrumentId: string;
     quantity: bigint;
-    costBasisMinor: bigint;
+    /** Null only for a main-portfolio holding entered without a cost (D333). */
+    costBasisMinor: bigint | null;
     openedAt: string;
   },
 ): Promise<void> {
@@ -250,7 +252,7 @@ export async function setAgentHolding(
       holding.agentId,
       holding.instrumentId,
       holding.quantity.toString(),
-      holding.costBasisMinor.toString(),
+      holding.costBasisMinor?.toString() ?? null,
       holding.openedAt,
     ],
   );
