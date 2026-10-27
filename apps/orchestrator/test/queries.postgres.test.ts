@@ -126,6 +126,22 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       expect(await queries.getPrimaryCash(OWNER, PRIMARY)).toMatchObject({ budget_minor: '2000', balance_minor: '2000' });
       expect(await queries.sumFeesPaid(OWNER, PRIMARY)).toBe(0);
     });
+
+    it('corrections and deposits at once leave the cash equal to the deposits', async () => {
+      const { transaction } = await import('../src/db/pool.js');
+      // Ten of each at once. The lock order (agent, then cash, as a deposit
+      // takes them) is argued in `setPrimaryCash`; this run did not deadlock in
+      // the old order either, so it checks the outcome, not the ordering.
+      await Promise.all(
+        Array.from({ length: 10 }, (_, round) => [
+          transaction((client) => queries.setPrimaryCash(client, OWNER, PRIMARY, 3_000 + round)),
+          queries.depositPrimaryCash(OWNER, PRIMARY, 100, 100_000_000),
+        ]).flat(),
+      );
+      const after = await queries.getPrimaryCash(OWNER, PRIMARY);
+      // No fills: the cash is the deposits, whatever order the twenty ran in.
+      expect(after?.balance_minor).toBe(after?.budget_minor);
+    });
   });
 
   describe('users and passwords (D159, D160)', () => {
