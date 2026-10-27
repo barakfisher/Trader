@@ -163,15 +163,25 @@ export interface InstrumentDirectoryRow {
 }
 
 /**
- * Every instrument the installation knows, for the add-holding form's
- * suggestions (D324). Reference data, not scoped to a user, like the rest of
- * `instruments`. ~5,200 rows (67 KB gzipped, measured 2026-10-27): sent whole
- * once and filtered in the browser, revalidated by ETag.
+ * The instruments a user may be offered while adding a holding (D324, D325):
+ * the screened universe, which is the installation's own reference list, plus
+ * whatever this user already holds or has traded. ~5,200 rows (67 KB gzipped,
+ * measured 2026-10-27): sent whole once and filtered in the browser.
+ *
+ * Not all of `instruments`: that table also holds every symbol any user ever
+ * added, and listing it would tell one user what another holds (the M9 exit
+ * test caught exactly that). A listing outside both is found through the
+ * market search instead.
  */
-export function listInstrumentDirectory(): Promise<InstrumentDirectoryRow[]> {
+export function listInstrumentDirectory(userId: string): Promise<InstrumentDirectoryRow[]> {
   return query<InstrumentDirectoryRow>(
-    `SELECT symbol, name, asset_class, exchange
-       FROM instruments
-      ORDER BY symbol`,
+    `SELECT i.symbol, i.name, i.asset_class, i.exchange
+       FROM instruments i
+      WHERE EXISTS (SELECT 1 FROM instrument_profiles p
+                     WHERE p.instrument_id = i.id AND p.membership = 'screened')
+         OR EXISTS (SELECT 1 FROM holdings h WHERE h.instrument_id = i.id AND h.user_id = $1)
+         OR EXISTS (SELECT 1 FROM fills f WHERE f.instrument_id = i.id AND f.user_id = $1)
+      ORDER BY i.symbol`,
+    [userId],
   );
 }

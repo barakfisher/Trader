@@ -2,8 +2,8 @@
  * Symbol lookup for the add-holding form (D324, D325).
  *
  * Three reads, cheapest first:
- * - `GET /instruments`: every instrument the installation knows, sent whole
- *   once and filtered in the browser. Gzipped and stamped with an ETag, so a
+ * - `GET /instruments`: the screened universe plus the user's own instruments,
+ *   sent whole once and filtered in the browser. Gzipped and stamped with an ETag, so a
  *   later visit costs an empty 304 until the list itself changes.
  * - `GET /instruments/search`: the market-data provider's search, asked only
  *   when the local list has no match. The AI service caches each query.
@@ -40,8 +40,7 @@ const symbolParam = z
 
 export function registerInstrumentsRoutes(app: Hono<AppEnv>): void {
   app.get('/instruments', compress(), etag(), async (context) => {
-    currentUserId(context);
-    const rows = await listInstrumentDirectory();
+    const rows = await listInstrumentDirectory(currentUserId(context));
     const body: InstrumentDirectoryResponse = {
       instruments: rows.map((row) => ({
         symbol: row.symbol,

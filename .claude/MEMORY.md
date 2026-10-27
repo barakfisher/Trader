@@ -5313,6 +5313,10 @@ failure they prevent.
       check cached "teva" as empty for a day: Yahoo timed out cold, the fixture provider behind it
       said "none", and "none" was stored. Lesson: an empty answer from the fallback behind a
       failure is "unknown", not "nothing".
+    - **The list is the screened universe plus the user's own instruments, not all of
+      `instruments`**: that table keeps every symbol any user ever added, so sending it whole
+      told one user what another holds. The M9 exit test (`m9Exit.postgres.test.ts`) caught it
+      in CI; a symbol outside both is found through the market search.
     - **Rejected:** a server search per keystroke (every new query waits on the network, which is
       felt on the phone over Tailscale, to save 67 KB once).
 326. **The cost per unit is prefilled with the latest price; the date does not move it** (the

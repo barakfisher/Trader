@@ -53,22 +53,41 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     await getPool().end();
   });
 
-  describe('the instrument directory (D324)', () => {
-    const SYMBOL = `ZZDIR${randomUUID().slice(0, 6).toUpperCase()}`;
+  describe('the instrument directory (D324, D325)', () => {
+    const SCREENED = `ZZDIR${randomUUID().slice(0, 6).toUpperCase()}`;
+    const OWN = `ZZOWN${randomUUID().slice(0, 6).toUpperCase()}`;
+    const ELSEWHERE = `ZZOTH${randomUUID().slice(0, 6).toUpperCase()}`;
     afterAll(async () => {
-      await getPool().query('DELETE FROM instruments WHERE symbol = $1', [SYMBOL]);
+      await getPool().query('DELETE FROM holdings WHERE user_id = $1', [USER]);
+      await getPool().query('DELETE FROM instrument_profiles WHERE instrument_id IN (SELECT id FROM instruments WHERE symbol = ANY($1))', [[SCREENED, OWN, ELSEWHERE]]);
+      await getPool().query('DELETE FROM instruments WHERE symbol = ANY($1)', [[SCREENED, OWN, ELSEWHERE]]);
     });
 
-    it('lists every instrument by symbol with its name, class and venue', async () => {
-      await queries.upsertInstrument({ symbol: SYMBOL, name: 'Directory Test', assetClass: 'etf', exchange: 'PCX' });
-      const rows = await queries.listInstrumentDirectory();
-      expect(rows.find((row) => row.symbol === SYMBOL)).toEqual({
-        symbol: SYMBOL,
-        name: 'Directory Test',
+    it("lists the screened universe and the user's own instruments, never another user's", async () => {
+      const screened = await queries.upsertInstrument({ symbol: SCREENED, name: 'Screened', assetClass: 'etf', exchange: 'PCX' });
+      await getPool().query(
+        `INSERT INTO instrument_profiles
+           (instrument_id, description, matching_text, source, license, content_hash, size_as_of, updated_at, membership)
+         VALUES ($1, 'd', 'd', 'test', 'test', 'h', now(), now(), 'screened')`,
+        [screened.id],
+      );
+      const own = await queries.upsertInstrument({ symbol: OWN, name: 'Own', assetClass: 'equity' });
+      await getPool().query(
+        `INSERT INTO holdings (user_id, agent_id, instrument_id, quantity) VALUES ($1, $2, $3, 1)`,
+        [USER, AGENT, own.id],
+      );
+      await queries.upsertInstrument({ symbol: ELSEWHERE, name: 'Someone else added it' });
+
+      const rows = await queries.listInstrumentDirectory(USER);
+      const symbols = rows.map((row) => row.symbol);
+      expect(rows.find((row) => row.symbol === SCREENED)).toEqual({
+        symbol: SCREENED,
+        name: 'Screened',
         asset_class: 'etf',
         exchange: 'PCX',
       });
-      const symbols = rows.map((row) => row.symbol);
+      expect(symbols).toContain(OWN);
+      expect(symbols).not.toContain(ELSEWHERE);
       expect(symbols).toEqual([...symbols].sort());
     });
   });

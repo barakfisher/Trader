@@ -24,7 +24,7 @@ vi.mock('../src/db/pool.js', () => ({
   closePool: vi.fn(),
 }));
 
-const directory = vi.fn(async () => [
+const directory = vi.fn(async (_userId: string) => [
   { symbol: 'AAPL', name: 'Apple Inc.', asset_class: 'equity', exchange: 'NMS' },
   { symbol: 'SPY', name: 'SPDR S&P 500 ETF Trust', asset_class: 'etf', exchange: 'PCX' },
 ]);
@@ -32,7 +32,7 @@ const directory = vi.fn(async () => [
 vi.mock('../src/db/queries.js', () => ({
   getSessionUser: vi.fn(async (userId: string) => (await import('./session.js')).mockedSessionUser(userId)),
   getUser: vi.fn(async () => USER),
-  listInstrumentDirectory: () => directory(),
+  listInstrumentDirectory: (userId: string) => directory(userId),
 }));
 
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
@@ -77,6 +77,9 @@ describe('the instrument lookup API', () => {
       assetClass: 'equity',
       exchange: 'NMS',
     });
+
+    // Scoped to the signed-in user: nobody else's holdings are listed (D325).
+    expect(directory).toHaveBeenCalledWith(USER.id);
 
     const again = await app.request('/instruments', { headers: { cookie, 'if-none-match': tag! } });
     expect(again.status).toBe(304);
