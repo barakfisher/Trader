@@ -81,6 +81,7 @@ const queries = await import('../src/db/queries.js');
 const { ApiProblem } = await import('../src/http/errors.js');
 const { bpsAsPercent, withRefusal } = await import('../src/telegram/tradeApproval.js');
 const { messagesFor } = await import('../src/notify/messages.js');
+const { logger } = await import('../src/logger.js');
 const { decodeMenuData, encodeMenuData, MENU_PREFIX } = await import('../src/telegram/menuData.js');
 
 const ENV = {
@@ -481,6 +482,54 @@ describe('Reject', () => {
     expect(proposals.applyDecision).toHaveBeenCalledWith(expect.objectContaining({ action: 'reject', surface: 'telegram' }));
     expect(approval.previewTradeApproval).not.toHaveBeenCalled();
     expect(keyboardOf(lastEdit())).toEqual([]);
+  });
+});
+
+describe('the log', () => {
+  /** The structured fields of every `info` line named `msg`. */
+  const lines = (spy: ReturnType<typeof vi.spyOn>, msg: string) =>
+    spy.mock.calls.filter((call) => call[1] === msg).map((call) => call[0] as Record<string, unknown>);
+
+  it('records the Approve that only previewed, which the database never sees', async () => {
+    const info = vi.spyOn(logger(), 'info');
+    await tap('approve');
+    expect(lines(info, 'telegram.proposal_tap')).toEqual([
+      { userId: USER, proposalId: PROPOSAL, action: 'approve', trade: true },
+    ]);
+    expect(lines(info, 'telegram.trade_callback')).toEqual([
+      {
+        userId: USER,
+        proposalId: PROPOSAL,
+        action: 'approve',
+        result: 'previewed',
+        confirmAtMinor: String(PREVIEW.trade.priceMinor),
+      },
+    ]);
+    info.mockRestore();
+  });
+
+  it('records a refused approval with its reason', async () => {
+    vi.mocked(approval.previewTradeApproval).mockRejectedValueOnce(
+      new ApiProblem(409, 'quote_too_old', 'The quote is too old.'),
+    );
+    const info = vi.spyOn(logger(), 'info');
+    await tap('approve');
+    expect(lines(info, 'telegram.trade_callback')).toEqual([
+      expect.objectContaining({ action: 'approve', result: 'refused', reason: 'quote_too_old' }),
+    ]);
+    info.mockRestore();
+  });
+
+  it('records a Reject and what the transition made of it', async () => {
+    const info = vi.spyOn(logger(), 'info');
+    await tap('reject');
+    expect(lines(info, 'telegram.proposal_tap')).toEqual([
+      { userId: USER, proposalId: PROPOSAL, action: 'reject', trade: true },
+    ]);
+    expect(lines(info, 'telegram.proposal_decision')).toEqual([
+      { userId: USER, proposalId: PROPOSAL, action: 'reject', outcome: 'applied', state: 'rejected' },
+    ]);
+    info.mockRestore();
   });
 });
 

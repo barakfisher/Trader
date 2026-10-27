@@ -561,6 +561,13 @@ async function handleCallback(
   // the shared transition below. Read once to know which this is.
   const row = await findProposal(binding.user_id, payload.proposalId);
   const trade = row !== null && isTradeProposalKind(row.kind);
+  // Every signed tap is a line, whatever it leads to: "I pressed Approve" is
+  // then answered from the log. A trade's preview writes nothing to the
+  // database, so without this the tap before a Reject leaves no trace at all.
+  logger().info(
+    { userId: binding.user_id, proposalId: payload.proposalId, action: payload.action, trade },
+    'telegram.proposal_tap',
+  );
   if (payload.action === 'approve' || payload.action === 'confirm') {
     if (trade) {
       await handleTradeCallback({
@@ -630,6 +637,18 @@ async function handleCallback(
       ? { snoozeUntil: new Date(Date.now() + TELEGRAM_SNOOZE_HOURS * 3_600_000) }
       : {}),
   });
+
+  logger().info(
+    {
+      userId: binding.user_id,
+      proposalId: payload.proposalId,
+      action: decisionAction,
+      outcome: result.outcome,
+      ...('state' in result ? { state: result.state } : {}),
+      ...(result.outcome === 'refused' ? { reason: result.reason } : {}),
+    },
+    'telegram.proposal_decision',
+  );
 
   const reply =
     result.outcome === 'not_found'
