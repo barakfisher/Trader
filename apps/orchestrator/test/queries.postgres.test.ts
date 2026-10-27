@@ -101,7 +101,10 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       PRIMARY = await queries.primaryAgentId(OWNER);
     });
     afterAll(async () => {
-      await getPool().query('DELETE FROM users WHERE id = $1', [OWNER]);
+      // An opened ledger is history `traders_app` may not delete row by row:
+      // the account's erase removes it in order, as it would for a real one (D264).
+      await getPool().query("UPDATE users SET status = 'rejected' WHERE id = $1", [OWNER]);
+      await getPool().query('SELECT erase_account($1)', [OWNER]);
     });
 
     it('opens once, takes deposits, and is set to a balance under the cash lock', async () => {
