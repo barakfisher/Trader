@@ -66,7 +66,7 @@ import { announceSignupRequest } from '../../telegram/signupApproval.js';
 import type { AppEnv } from '../app.js';
 import { SESSION_COOKIE } from '../auth.js';
 import { issueSession } from '../sessions.js';
-import { legalAcceptanceRequired, signupHeldForLegalText } from '../legal.js';
+import { automaticSignupHeld, legalAcceptanceRequired } from '../legal.js';
 import { ApiProblem, badRequest, conflict, unauthorized } from '../errors.js';
 import { emailKey, requestAddressKey, userKey } from '../rateLimits.js';
 import { PASSWORD_MAX_LENGTH, hashPassword, passwordMatches, passwordProblem } from '../password.js';
@@ -279,9 +279,8 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
 
     const passwordHash = await hashPassword(parsed.data.password);
     // Without mail no address can be proven, so nobody can get in (D259).
-    // A public installation stays closed until its privacy policy and terms exist (D265).
     const sender = context.get('email');
-    if (sender === null || signupHeldForLegalText(context)) {
+    if (sender === null) {
       const closed: SignupResponse = { outcome: 'closed' };
       return context.json(closed);
     }
@@ -291,6 +290,8 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
       timezone: parsed.data.timezone,
       language: parsed.data.language,
       legalVersion,
+      // A public installation holds *automatic* until its privacy policy and terms exist (D265, D344).
+      automaticHeld: automaticSignupHeld(context),
     });
     const origin = requestOrigin(context);
     if (created.outcome === 'created') {
@@ -371,13 +372,6 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     const tokenHash = linkTokenHash(parsed.data.token);
     let proof: { passwordHash: string } | null = null;
     const peek = await peekVerificationToken(tokenHash);
-    // A sign-up's link joins: held with the rest of sign-up until the legal
-    // text exists (D265, D319). The link is not used, so it works once the
-    // gate opens, while it lasts.
-    if (peek?.purpose === 'verify_email' && signupHeldForLegalText(context)) {
-      const held: VerifyEmailResponse = { outcome: 'signup_full' };
-      return context.json(held);
-    }
     if (peek !== null && peek.purpose !== 'reset_password' && peek.open) {
       const limits = context.get('rateLimits');
       const account = emailKey(normaliseEmail(peek.accountEmail ?? ''));
@@ -399,7 +393,13 @@ export function registerAuthRoutes(app: Hono<AppEnv>): void {
     const settings = await getInstallationSettings();
     const result = await useVerificationToken(
       tokenHash,
-      { defaultCapMicroUsd: settings.default_llm_cap_micro_usd, timezone: config.APP_TIMEZONE },
+      // A sign-up's link joins: under a held *automatic* it answers `signup_full`
+      // and stays unused, so it works once the text exists, while it lasts (D344).
+      {
+        defaultCapMicroUsd: settings.default_llm_cap_micro_usd,
+        timezone: config.APP_TIMEZONE,
+        automaticHeld: automaticSignupHeld(context),
+      },
       proof,
     );
     if (result.outcome === 'awaiting_approval') {

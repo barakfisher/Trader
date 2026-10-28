@@ -496,10 +496,10 @@ export interface AdminSettingsResponse {
   emailConfigured: boolean;
   /**
    * A production installation whose privacy policy and terms are still
-   * placeholders (D265): sign-up stays closed, whatever the mode, and the mode
-   * cannot be set to *automatic* or *approval*.
+   * placeholders (D265, D344): *automatic* is held - a stored one admits
+   * nobody, and the mode cannot be set to it. *Approval* works.
    */
-  signupHeldForLegalText: boolean;
+  automaticSignupHeldForLegalText: boolean;
   updatedAt: string;
 }
 

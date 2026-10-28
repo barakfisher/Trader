@@ -59,6 +59,7 @@ const { createFakeAi } = await import('./fakeAi.js');
 const { memoryRateLimits } = await import('../src/http/rateLimits.js');
 const { linkTokenHash, VERIFY_TOKEN_TTL_HOURS } = await import('../src/http/linkTokens.js');
 const { RecordingEmailSender } = await import('./recordingEmailSender.js');
+const { emailMessages } = await import('../src/email/messages.js');
 
 const ENV = {
   APP_ENV: 'test',
@@ -231,7 +232,7 @@ describe('opening a verification link (D259, D260, D309)', () => {
     expect(await response.json()).toEqual({ outcome: 'activated' });
     expect(queries.useVerificationToken).toHaveBeenCalledWith(
       linkTokenHash('the-token'),
-      { defaultCapMicroUsd: 10_000_000, timezone: loadConfig(ENV).APP_TIMEZONE },
+      { defaultCapMicroUsd: 10_000_000, timezone: loadConfig(ENV).APP_TIMEZONE, automaticHeld: false },
       { passwordHash },
     );
     expect(announceSignupRequest).not.toHaveBeenCalled();
@@ -420,6 +421,40 @@ describe('deciding a request on the Admin page (D188)', () => {
     const { default_llm_cap_micro_usd: retired } = await queries.getInstallationSettings();
     expect(queries.approveSignup).toHaveBeenCalledWith(REQUESTER, retired, ADMIN.id);
     expect(queries.insertAdminAudit).toHaveBeenCalledTimes(1);
+  });
+
+  it('mails the approved person once, in their language, with a link to sign in (D344)', async () => {
+    vi.mocked(queries.approveSignup).mockResolvedValue({ applied: true, status: 'active', email: 'noa@example.com' });
+    vi.mocked(queries.getOrCreateUserSettings).mockResolvedValueOnce({ language: 'he' } as never);
+    await post(`/admin/signups/${REQUESTER}/approve`, {});
+    await mail.settled();
+    expect(mail.sent).toHaveLength(1);
+    expect(mail.sent[0]).toMatchObject({ to: 'noa@example.com', subject: emailMessages.signupApproved('x', 'he', 'x').subject });
+    expect(mail.sent[0]!.text).toContain('http://localhost:5173/');
+    expect(mail.sent[0]!.html).toContain('dir="rtl"');
+    expect(queries.getOrCreateUserSettings).toHaveBeenCalledWith(REQUESTER);
+  });
+
+  it('mails nobody when the approval did not apply, or on a rejection (D344)', async () => {
+    vi.mocked(queries.approveSignup).mockResolvedValue({ applied: false, status: 'active', email: 'noa@example.com' });
+    await post(`/admin/signups/${REQUESTER}/approve`, {});
+    vi.mocked(queries.rejectSignup).mockResolvedValue({ applied: true, status: 'rejected', email: 'noa@example.com' });
+    expect(await (await post(`/admin/signups/${REQUESTER}/reject`)).json()).toEqual({ applied: true, status: 'rejected' });
+    await mail.settled();
+    expect(mail.sent).toEqual([]);
+  });
+
+  it('approves even when the mail fails, and logs it by user id, never the address (D344)', async () => {
+    const { logger } = await import('../src/logger.js');
+    const logged = vi.spyOn(logger(), 'error');
+    vi.mocked(queries.approveSignup).mockResolvedValue({ applied: true, status: 'active', email: 'noa@example.com' });
+    mail.failWith = new Error('550 refused for noa@example.com');
+    const response = await post(`/admin/signups/${REQUESTER}/approve`, {});
+    expect(await response.json()).toEqual({ applied: true, status: 'active' });
+    await mail.settled();
+    expect(logged).toHaveBeenCalledWith(expect.objectContaining({ userId: REQUESTER, mail: 'signup_approved' }), 'mail not sent');
+    expect(JSON.stringify(logged.mock.calls)).not.toContain('noa@example.com');
+    logged.mockRestore();
   });
 
   it('answers a request already decided from Telegram with where it is now', async () => {

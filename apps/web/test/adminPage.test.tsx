@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { createMemoryHistory } from '@tanstack/react-router';
 
-import { DAILY_NEW_ACCOUNTS_CEILING } from '@traders/shared';
+import { DAILY_NEW_ACCOUNTS_CEILING, type AdminSettingsResponse } from '@traders/shared';
 
 const get = vi.fn();
 const post = vi.fn();
@@ -164,9 +164,9 @@ const SETTINGS = {
   signupMode: 'approval' as const,
   dailyNewAccountsLimit: 20,
   emailConfigured: true,
-  signupHeldForLegalText: false,
+  automaticSignupHeldForLegalText: false,
   updatedAt: '2026-10-08T09:00:00Z',
-};
+} satisfies AdminSettingsResponse;
 
 const SIGNUPS = {
   pending: [
@@ -381,15 +381,15 @@ describe('the admin page', () => {
     expect((screen.getByRole('radio', { name: /Automatic/ }) as HTMLInputElement).disabled).toBe(true);
   });
 
-  it('offers only closed on a production installation whose legal text is pending (D265)', async () => {
+  it('holds only automatic on a production installation whose legal text is pending (D265, D344)', async () => {
     const defaultGet = get.getMockImplementation()!;
     get.mockImplementation((path: string) =>
-      path === '/admin/settings' ? Promise.resolve({ ...SETTINGS, signupHeldForLegalText: true }) : defaultGet(path),
+      path === '/admin/settings' ? Promise.resolve({ ...SETTINGS, automaticSignupHeldForLegalText: true }) : defaultGet(path),
     );
     renderAt('/admin?tab=settings', ADMIN);
     expect(await screen.findByText(/privacy policy and terms of use have not been published yet/)).toBeTruthy();
     expect((screen.getByRole('radio', { name: /Automatic/ }) as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByRole('radio', { name: /Approval/ }) as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole('radio', { name: /Approval/ }) as HTMLInputElement).disabled).toBe(false);
     expect((screen.getByRole('radio', { name: /Closed/ }) as HTMLInputElement).disabled).toBe(false);
   });
 

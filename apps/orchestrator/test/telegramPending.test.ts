@@ -106,7 +106,7 @@ function deps() {
       return new Response('{"ok":true}', { status: 200 });
     },
   });
-  return { config: loadConfig(ENV), notifier, ai: createFakeAi() as never, rateLimits: memoryRateLimits() };
+  return { config: loadConfig(ENV), notifier, ai: createFakeAi() as never, rateLimits: memoryRateLimits(), email: null };
 }
 
 type Button = { text: string; callback_data?: string; url?: string };

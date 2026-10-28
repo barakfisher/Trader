@@ -26,8 +26,9 @@ export type SignupCreation =
 
 /**
  * Write a request, unverified, with its settings row in the request's
- * language, in one statement. Sign-up is open unless the mode is `closed`, or
- * it is `approval` with the limit on *verified* waiting requests reached:
+ * language, in one statement. Sign-up is open unless the mode is `closed`,
+ * `automatic` while it is held (D344), or `approval` with the limit on
+ * *verified* waiting requests reached:
  * unverified requests do not count (D259), so addresses nobody opens cannot
  * fill the admin's queue - the rate limits bound how fast they arrive, and the
  * sweep removes them. `ON CONFLICT` on `lower(email)` makes "one request per
@@ -45,6 +46,8 @@ export async function createSignupRequest(input: {
   language: string;
   /** The legal version the form's box agreed to (D265); null while none exists. */
   legalVersion: string | null;
+  /** *Automatic* is held until the legal text exists (D344): a stored *automatic* is then closed. */
+  automaticHeld: boolean;
 }): Promise<SignupCreation> {
   const row = await queryOne<{
     open: boolean;
@@ -56,6 +59,7 @@ export async function createSignupRequest(input: {
   }>(
     `WITH limits AS (
        SELECT s.signup_mode <> 'closed'
+              AND NOT (s.signup_mode = 'automatic' AND $6::boolean)
               AND (s.signup_mode = 'automatic'
                    OR s.max_pending_signups > (SELECT count(*) FROM users
                                                 WHERE status = 'pending' AND email_verified_at IS NOT NULL)) AS open
@@ -88,7 +92,7 @@ export async function createSignupRequest(input: {
             (SELECT status FROM existing) AS existing_status,
             (SELECT verified FROM existing) AS existing_verified,
             (SELECT language FROM existing) AS existing_language`,
-    [input.email, input.passwordHash, input.timezone, input.language, input.legalVersion],
+    [input.email, input.passwordHash, input.timezone, input.language, input.legalVersion, input.automaticHeld],
   );
   if (!row?.open) return { outcome: 'closed' };
   if (row.user_id !== null) return { outcome: 'created', userId: row.user_id };

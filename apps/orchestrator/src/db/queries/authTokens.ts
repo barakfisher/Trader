@@ -48,6 +48,12 @@ export interface AdmissionRules {
   defaultCapMicroUsd: number;
   /** The installation's clock, whose day the limit counts (`APP_TIMEZONE`). */
   timezone: string;
+  /**
+   * *Automatic* is held: a production installation whose legal text is pending
+   * (D265, D344). A stored *automatic* then admits nobody, as *closed* does;
+   * *approval* is unaffected - the admin decides every request.
+   */
+  automaticHeld: boolean;
 }
 
 /**
@@ -237,6 +243,7 @@ export async function admitVerified(
     )
   ).rows[0];
   if (!settings || settings.signup_mode === 'closed') return 'signup_full';
+  if (settings.signup_mode === 'automatic' && rules.automaticHeld) return 'signup_full';
   if (settings.signup_mode === 'automatic') {
     const today = await client.query<{ count: number }>(
       `SELECT count(*)::int AS count FROM users

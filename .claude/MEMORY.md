@@ -5226,6 +5226,7 @@ failure they prevent.
       unverified request - answers `closed` whatever the stored mode; a sign-up's verification
       link answers `signup_full` and stays unused (the security review found that path open).
       All of them, so a mode or a request from before the gate cannot leak past it.
+      **Narrowed by D344 (2026-10-28): only *automatic* is held now; *approval* works.**
     - **Why production:** it is the signal for "strangers reach this" (D256: only the
       production build faces the internet). compose and kind run `development` for the
       household and keep their modes (kind is in *approval*).
@@ -5570,6 +5571,44 @@ failure they prevent.
       fill. The function also locks the row itself, so a direct call cannot race a reset.
     - **Debt:** a movement has no idempotency key - a network retry records a deposit twice
       (the form disables itself while saving, one tab only). Rate-limited to 60 an hour.
+344. **Until the legal text exists, production holds *automatic* sign-up only; an approved
+    request is mailed** (the user, 2026-10-28; refines D319).
+    - **Why:** the private-first production host (M10 PR 16) runs in *approval* so the admin
+      can invite people they know. D319 closed *approval* too, so nobody could be invited until
+      the text was written - for no stranger's benefit, since the admin decides every request.
+      *Automatic* lets anyone with a mailbox in, so it still needs terms to agree to (D265).
+    - **How:** `automaticSignupHeld` (`http/legal.ts`: production and `LEGAL_VERSION === null`)
+      is passed into the database as `automaticHeld` - `createSignupRequest`'s statement and
+      `admitVerified`'s transaction, which read the mode under its lock - so a *stored*
+      *automatic* answers as *closed* on every door (password sign-up `closed`, OAuth sign-up
+      and a provider claiming an unverified request `closed`, the verification link
+      `signup_full` and unused), and *approval* goes through them untouched. The Admin page
+      refuses only *automatic* (`legal_text_pending`); the wire flag is renamed
+      `automaticSignupHeldForLegalText` so it cannot be read as "sign-up is closed". With no
+      version there is still no consent box, and existing accounts are asked nothing
+      (`services/accountHold.ts`), both unchanged.
+    - **The approved mail is part of it:** before, an approved person learned it only by trying
+      to sign in, which is what makes invited sign-ups usable. `announceSignupApproved`
+      (`http/accountMail.ts`) mails "your account is ready" with a sign-in link, in the user's
+      language, from both doors that approve - the Admin route and the Telegram button - only
+      when `approveSignup`'s conditional UPDATE applied (a second tap or a stale page sends
+      nothing), after it committed, in the background: a failure is logged by user id, never
+      the address, and never undoes or fails the approval. The link base is the first
+      `ALLOWED_ORIGINS` entry, not the admin's origin: the admin may be on localhost or the
+      Tailscale name, and D310 makes the public host production's only entry. Telegram's
+      `UpdateDeps` carries the sender for it (`server.ts` builds one sender for the routes and
+      the poller).
+    - **No mail on a rejection, deliberately:** a "you were turned down" mail tells whoever
+      typed an address that it reached a person and was judged, invites a reply or a retry
+      with another address, and the request is already kept so the address cannot ask again
+      (D156). Silence is the same answer as a request still waiting.
+    - **Rejected: keep D319 as it is** - blocks inviting known people until the text is
+      written, for no stranger's benefit (fails in the direction of a host nobody can use).
+      **Rejected: open both modes** - *automatic* is truly public, and strangers would join
+      under terms that do not exist (D265's failure). **Rejected: hold in the routes** (as
+      D319 did, before reading the mode) - a route-level read of the mode is a second read,
+      and only the statement that admits can make "stored *automatic*" and "admitted" one
+      decision.
 ---
 
 ## Bugs that cost real time, and the lesson from each

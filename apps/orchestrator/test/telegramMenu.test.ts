@@ -204,7 +204,7 @@ function deps(webBaseUrl: string | null = null) {
     },
   });
   const ai = { ...createFakeAi({ unpriceable: ['ACME'] }), marketSessions: vi.fn(async () => ({ sessions: [sessionAhead()] })) };
-  return { config: loadConfig(ENV), notifier, ai: ai as never, rateLimits: memoryRateLimits() };
+  return { config: loadConfig(ENV), notifier, ai: ai as never, rateLimits: memoryRateLimits(), email: null };
 }
 
 const command = (text: string) => ({ message: { chat: { id: CHAT, type: 'private' }, text } });
