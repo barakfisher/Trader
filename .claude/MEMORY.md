@@ -5609,6 +5609,29 @@ failure they prevent.
       D319 did, before reading the mode) - a route-level read of the mode is a second read,
       and only the statement that admits can make "stored *automatic*" and "admitted" one
       decision.
+345. **Production refuses to start unless the first `ALLOWED_ORIGINS` entry is https**
+    (the user, 2026-10-28; follows D344).
+    - **Why:** D344's approval mail links to the first entry, since no request carries the
+      approved person's origin. The compose walk-through of #347 mailed `http://localhost:5173/`
+      while compose serves `127.0.0.1:5174` - the `.env` listed dev-local's address first. In
+      production D310 says the public host alone, but nothing enforced it: a leftover
+      development address first would mail every approved person a dead link, and no check,
+      log or test would notice.
+    - **How:** `productionOriginsProblem` (`config.ts`) runs at `loadConfig` when
+      `APP_ENV=production`: an empty list, a non-URL or a non-https first entry stops the boot
+      with `Invalid environment configuration`. Outside production nothing is checked.
+      `.env.example` and the compose default now list `http://127.0.0.1:5173` first (the address
+      `dev-docker.sh` tells you to use); the user's compose `.env` was reordered to
+      `http://127.0.0.1:5174` first by hand (not committed - `.env` never is).
+    - **Rejected: link to `WEB_BASE_URL`** - optional, a second setting for the same address
+      that can drift from the list the Origin gate checks. **Rejected: store the origin a
+      person signed up from** - a migration for a development-only problem, and it would still
+      be a dev address on a dev install. **Rejected: require the public host to be the only
+      entry** - D310's policy, but too strict for a boot check (a second https alias is
+      harmless; only the first is ever linked).
+    - **Debt:** kind lists `http://traders.localhost` first, so an approval mailed from kind links
+      there - dead on the phone, which reaches kind by its Tailscale https name. Development
+      only; reorder `k8s-up.sh`'s list if approvals are tried from kind.
 ---
 
 ## Bugs that cost real time, and the lesson from each

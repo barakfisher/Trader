@@ -254,7 +254,7 @@ describe('coming back from the provider (D262, D263, D314)', () => {
   it('holds only *automatic* on a production installation whose legal text is pending (D265, D344)', async () => {
     resetConfigForTests();
     const held = createApp(
-      loadConfig({ ...ENV, APP_ENV: 'production' } as NodeJS.ProcessEnv),
+      loadConfig({ ...ENV, APP_ENV: 'production', ALLOWED_ORIGINS: 'https://traders.example,http://localhost:5173' } as NodeJS.ProcessEnv),
       createFakeAi(),
       undefined,
       null,

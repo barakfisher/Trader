@@ -213,7 +213,7 @@ describe('signing in', () => {
     expect(plain).not.toContain('Secure');
 
     resetConfigForTests();
-    const production = createApp(loadConfig({ ...ENV, APP_ENV: 'production' }), createFakeAi());
+    const production = createApp(loadConfig({ ...ENV, APP_ENV: 'production', ALLOWED_ORIGINS: 'https://traders.example,http://localhost:5173' }), createFakeAi());
     const header = (await login(production, USER.email, PASSWORD)).headers.get('set-cookie') ?? '';
     expect(header).toContain('Secure');
     expect(header).toContain('HttpOnly');

@@ -93,7 +93,7 @@ const HEADERS = { origin: 'http://localhost:5173', 'content-type': 'application/
 
 function buildApp({ legalVersion = VERSION as string | null, production = false } = {}) {
   resetConfigForTests();
-  const config = loadConfig({ ...ENV, APP_ENV: production ? 'production' : 'test' } as NodeJS.ProcessEnv);
+  const config = loadConfig({ ...ENV, APP_ENV: production ? 'production' : 'test', ...(production ? { ALLOWED_ORIGINS: 'https://traders.example,http://localhost:5173' } : {}) } as NodeJS.ProcessEnv);
   return createApp(config, createFakeAi(), undefined, null, memoryRateLimits(), new RecordingEmailSender(), new Map(), legalVersion);
 }
 

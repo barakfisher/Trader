@@ -257,7 +257,7 @@ its domain are chosen at deployment (D255). Until then, kind and compose stay `d
 | Setting | Value on the public host | Why |
 |---|---|---|
 | `APP_ENV` | `production` | The session cookie becomes `Secure`, sent only over HTTPS. TLS ends at the host's edge; never set it where the browser reaches the app over plain HTTP, or nobody stays signed in |
-| `ALLOWED_ORIGINS` | `https://<the domain>` only | A write whose Origin is missing or not listed is refused (`missing_origin`, `bad_origin`) |
+| `ALLOWED_ORIGINS` | `https://<the domain>` only | A write whose Origin is missing or not listed is refused (`missing_origin`, `bad_origin`). The orchestrator refuses to start in production unless the first entry is https: the approval mail links to it (D344, D345) |
 | `TRUSTED_PROXY_HOPS` | nginx plus the host's own proxies (2 behind one load balancer) | The client's address is read past exactly these. Too high, and a client chooses its own address with a header |
 | The web image | the `prod` target (nginx) | It serves the security headers (`infra/docker/security-headers.conf`) and refuses `/api/internal/*`. Compose's `dev` target is the Vite dev server and is never public |
 
