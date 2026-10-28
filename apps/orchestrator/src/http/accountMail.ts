@@ -138,8 +138,8 @@ export function announceAccountRestored(sender: EmailSender | null, user: { id: 
  *
  * The link is the installation's first `ALLOWED_ORIGINS` entry, not the
  * admin's origin: the admin may be on localhost or the phone's Tailscale name,
- * which the person cannot reach, and in production D310 leaves the public host
- * the only entry. A rejection is never mailed (D344).
+ * which the person cannot reach, and production refuses to start unless the
+ * first entry is https (D345). A rejection is never mailed (D344).
  */
 export function announceSignupApproved(
   sender: EmailSender | null,

@@ -355,3 +355,4 @@ while this file is out of date.
 | 342 | A typo correction edits the opening while it is the only movement, then is gain or loss |
 | 343 | The rows that do not follow the budget go through one `SECURITY DEFINER` function |
 | 344 | Until the legal text exists, production holds *automatic* sign-up only; an approved request is mailed |
+| 345 | Production refuses to start unless the first `ALLOWED_ORIGINS` entry is https |

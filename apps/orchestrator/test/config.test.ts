@@ -88,3 +88,19 @@ describe('required settings', () => {
     expect(() => load({ DATABASE_URL: '' })).toThrow(/Invalid environment configuration/);
   });
 });
+
+describe('ALLOWED_ORIGINS in production (D345)', () => {
+  it('refuses to start unless the first entry is an https address', () => {
+    for (const origins of ['http://localhost:5173', 'http://127.0.0.1:5174,https://traders.example', 'not a url', ' , ']) {
+      expect(() => load({ APP_ENV: 'production', ALLOWED_ORIGINS: origins }), origins).toThrow(/ALLOWED_ORIGINS/);
+    }
+  });
+
+  it('starts with the public https address first', () => {
+    expect(load({ APP_ENV: 'production', ALLOWED_ORIGINS: 'https://traders.example' }).allowedOrigins).toEqual(['https://traders.example']);
+  });
+
+  it('checks nothing outside production, where the first entry is a local one', () => {
+    expect(load({ APP_ENV: 'development', ALLOWED_ORIGINS: 'http://127.0.0.1:5173' }).allowedOrigins).toEqual(['http://127.0.0.1:5173']);
+  });
+});

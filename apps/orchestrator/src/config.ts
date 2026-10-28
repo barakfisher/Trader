@@ -41,6 +41,11 @@ const schema = z.object({
   APP_TIMEZONE: z.string().default('Asia/Jerusalem'),
 
   ORCHESTRATOR_PORT: z.coerce.number().int().positive().default(8080),
+  /**
+   * Every address the web app is opened at (D256). The first is the
+   * installation's own: mails that no request carries an origin for link to
+   * it (D344), so production refuses to start unless it is https (D345).
+   */
   ALLOWED_ORIGINS: z.string().default('http://localhost:5173'),
   /**
    * How many proxies in front of this process append to `X-Forwarded-For`, so
@@ -226,6 +231,25 @@ export type Config = z.infer<typeof schema> & {
 
 let cached: Config | null = null;
 
+/**
+ * Why `origins` cannot serve a production installation, or null. The first
+ * entry is the installation's own address - the approval mail links to it
+ * (D344, `accountMail.ts`) - so in production it must be an https URL: a
+ * development address listed first there would mail every approved person a
+ * link that leads nowhere, and nothing else would notice (D345).
+ */
+export function productionOriginsProblem(origins: readonly string[]): string | null {
+  const first = origins[0];
+  if (first === undefined) return 'ALLOWED_ORIGINS is empty';
+  let protocol: string;
+  try {
+    protocol = new URL(first).protocol;
+  } catch {
+    return `the first ALLOWED_ORIGINS entry (${first}) is not a URL`;
+  }
+  return protocol === 'https:' ? null : `the first ALLOWED_ORIGINS entry (${first}) must be the public https address`;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (cached) return cached;
   const parsed = schema.safeParse(env);
@@ -235,12 +259,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       .join('\n');
     throw new Error(`Invalid environment configuration:\n${issues}`);
   }
+  const allowedOrigins = parsed.data.ALLOWED_ORIGINS.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const isProduction = parsed.data.APP_ENV === 'production';
+  const originsProblem = isProduction ? productionOriginsProblem(allowedOrigins) : null;
+  if (originsProblem !== null) {
+    throw new Error(`Invalid environment configuration:\n  - ALLOWED_ORIGINS: ${originsProblem} in production`);
+  }
   cached = {
     ...parsed.data,
-    allowedOrigins: parsed.data.ALLOWED_ORIGINS.split(',')
-      .map((origin) => origin.trim())
-      .filter(Boolean),
-    isProduction: parsed.data.APP_ENV === 'production',
+    allowedOrigins,
+    isProduction,
     emailConfigured: parsed.data.SMTP_HOST !== undefined && parsed.data.EMAIL_FROM !== undefined,
   };
   return cached;
