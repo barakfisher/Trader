@@ -251,7 +251,7 @@ describe('coming back from the provider (D262, D263, D314)', () => {
     expect(landedOn(await roundTrip(buildApp())).searchParams.get('oauth')).toBe('closed');
   });
 
-  it('opens and claims nothing on a production installation whose legal text is pending (D265)', async () => {
+  it('holds only *automatic* on a production installation whose legal text is pending (D265, D344)', async () => {
     resetConfigForTests();
     const held = createApp(
       loadConfig({ ...ENV, APP_ENV: 'production' } as NodeJS.ProcessEnv),
@@ -263,11 +263,27 @@ describe('coming back from the provider (D262, D263, D314)', () => {
       new Map([['google', fakeGoogle]]),
       null,
     );
+    const heldRules = expect.objectContaining({ automaticHeld: true });
+    // A stored *automatic*: the database admits nobody, so both doors answer closed.
+    vi.mocked(queries.createOAuthAccount).mockResolvedValue({ outcome: 'signup_full' });
     expect(landedOn(await roundTrip(held)).searchParams.get('oauth')).toBe('closed');
-    expect(queries.createOAuthAccount).not.toHaveBeenCalled();
+    expect(queries.createOAuthAccount).toHaveBeenCalledWith(expect.anything(), heldRules);
     vi.mocked(queries.getAccountByEmail).mockResolvedValue({ id: ACCOUNT, status: 'pending', role: 'user', email_verified: false });
+    vi.mocked(queries.claimUnverifiedRequest).mockResolvedValue('signup_full');
     expect(landedOn(await roundTrip(held)).searchParams.get('oauth')).toBe('closed');
-    expect(queries.claimUnverifiedRequest).not.toHaveBeenCalled();
+    expect(queries.claimUnverifiedRequest).toHaveBeenCalledWith(expect.anything(), heldRules);
+    // *Approval*: the request waits for the admin, as anywhere else.
+    vi.mocked(queries.claimUnverifiedRequest).mockResolvedValue('awaiting_approval');
+    expect(landedOn(await roundTrip(held)).searchParams.get('oauth')).toBe('pending');
+    vi.mocked(queries.getAccountByEmail).mockResolvedValue(null);
+    vi.mocked(queries.createOAuthAccount).mockResolvedValue({ outcome: 'awaiting_approval', userId: ACCOUNT });
+    expect(landedOn(await roundTrip(held)).searchParams.get('oauth')).toBe('pending');
+  });
+
+  it('holds nothing on a development installation (D256)', async () => {
+    vi.mocked(queries.createOAuthAccount).mockResolvedValue({ outcome: 'signup_full' });
+    await roundTrip(buildApp());
+    expect(queries.createOAuthAccount).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ automaticHeld: false }));
   });
 
   it('says it failed, and signs nobody in, when the provider refuses the code', async () => {

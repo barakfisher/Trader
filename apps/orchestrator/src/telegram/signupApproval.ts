@@ -26,6 +26,8 @@ import {
   rejectSignup,
   type SignupDecision,
 } from '../db/queries.js';
+import type { EmailSender } from '../email/sender.js';
+import { announceSignupApproved } from '../http/accountMail.js';
 import { logger } from '../logger.js';
 import { messagesFor, type Messages } from '../notify/messages.js';
 import type { Notifier } from '../notify/notifier.js';
@@ -106,6 +108,10 @@ export interface SignupCallback {
   chatId: string;
   message?: { message_id: number; text?: string };
   payload: SignupPayload;
+  /** The approved person is mailed (D344); null on an installation without mail. */
+  email: EmailSender | null;
+  /** The approval mail's link base: the first entry (`accountMail.ts`). */
+  allowedOrigins: readonly string[];
 }
 
 function stamp(timezone: string, messages: Messages): string {
@@ -172,6 +178,10 @@ export async function handleSignupCallback(callback: SignupCallback): Promise<vo
   if (!decision.applied) {
     await healed(decision);
     return;
+  }
+  // Before anything Telegram does: a failed toast or edit must not cost the person their mail (D344).
+  if (payload.action === 'approve') {
+    announceSignupApproved(callback.email, callback.allowedOrigins, { id: payload.userId, email: decision.email });
   }
 
   await telegram?.answerCallback(

@@ -104,7 +104,7 @@ describe('the installation settings (D72)', () => {
       signupMode: 'approval',
       dailyNewAccountsLimit: 20,
       emailConfigured: false,
-      signupHeldForLegalText: false,
+      automaticSignupHeldForLegalText: false,
       updatedAt: '2026-10-08T09:00:00.000Z',
     });
   });

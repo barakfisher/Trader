@@ -1,7 +1,7 @@
 /**
- * The mails about an account (D258, D259, D303): a verification link, "someone
- * tried to sign up with your address", a new address's link and the notice to
- * the old one. Each is written in the account's language and links back to the
+ * The mails about an account (D258, D259, D303, D344): a verification link,
+ * "someone tried to sign up with your address", a new address's link and the
+ * notice to the old one, and "your account was approved". Each is written in the account's language and links back to the
  * origin the request came from (`pageLink`).
  *
  * Sign-up sends in the background (`sendInBackground`): the answer must not
@@ -127,6 +127,31 @@ export function announceAccountRestored(sender: EmailSender | null, user: { id: 
   sendInBackground(user.id, 'account_restored', async () => {
     const language = mailLanguage((await getOrCreateUserSettings(user.id)).language);
     await sender.send(emailMessages.accountRestored(to, language));
+  });
+}
+
+/**
+ * A waiting sign-up was approved (D344), from the Admin page or Telegram: until
+ * then the person learned it only by trying to sign in. Called once, when the
+ * approval's own UPDATE applied - a second tap or a stale page sends nothing -
+ * and in the background, so a mail failure neither undoes nor fails it.
+ *
+ * The link is the installation's first `ALLOWED_ORIGINS` entry, not the
+ * admin's origin: the admin may be on localhost or the phone's Tailscale name,
+ * which the person cannot reach, and in production D310 leaves the public host
+ * the only entry. A rejection is never mailed (D344).
+ */
+export function announceSignupApproved(
+  sender: EmailSender | null,
+  allowedOrigins: readonly string[],
+  user: { id: string; email: string | null },
+): void {
+  const origin = allowedOrigins[0];
+  if (sender === null || user.email === null || origin === undefined) return;
+  const to = user.email;
+  sendInBackground(user.id, 'signup_approved', async () => {
+    const language = mailLanguage((await getOrCreateUserSettings(user.id)).language);
+    await sender.send(emailMessages.signupApproved(to, language, pageLink(origin, '/')));
   });
 }
 

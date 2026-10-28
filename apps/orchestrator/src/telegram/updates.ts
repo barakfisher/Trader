@@ -49,6 +49,7 @@ import {
 } from '../services/proposalState.js';
 import { applyDecision, factsOf } from '../services/proposals.js';
 import { MESSAGES, messagesFor, type Messages } from '../notify/messages.js';
+import type { EmailSender } from '../email/sender.js';
 import type { RateLimits } from '../http/rateLimits.js';
 import { startQuestion } from './assistantQuestion.js';
 import { decodeBindToken } from './bindToken.js';
@@ -71,6 +72,8 @@ export interface UpdateDeps {
   ai: AiClient;
   /** The routes' limits: a question and a re-check count with the page's (D257). */
   rateLimits: RateLimits;
+  /** Outbound mail, for the sign-up approved from a button (D344); null without SMTP. */
+  email: EmailSender | null;
 }
 
 /** How long a `/mute` lasts when the user names no duration. */
@@ -537,6 +540,8 @@ async function handleCallback(
       chatId,
       ...(callback.message === undefined ? {} : { message: callback.message }),
       payload: signup,
+      email: deps.email,
+      allowedOrigins: config.allowedOrigins,
     });
     return;
   }

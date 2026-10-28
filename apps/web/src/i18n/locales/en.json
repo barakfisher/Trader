@@ -1408,7 +1408,7 @@
     "signupSettings": {
       "title": "Sign-up",
       "noEmail": "This installation cannot send email (SMTP_HOST and EMAIL_FROM are not set), so no address can be confirmed and nobody can sign up.",
-      "legalTextPending": "Sign-up stays closed: this is a production installation, and its privacy policy and terms of use have not been published yet.",
+      "legalTextPending": "Automatic sign-up waits: this is a production installation, and its privacy policy and terms of use have not been published yet. Approval works - you decide every request.",
       "mode": "Who can get in",
       "modes": {
         "automatic": {

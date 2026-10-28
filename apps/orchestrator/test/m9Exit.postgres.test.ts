@@ -658,7 +658,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
       INTERNAL_API_KEY: 'internal-test-key',
       TELEGRAM_SIGNING_SECRET: 'telegram-signing-secret-for-tests',
     } as unknown as NodeJS.ProcessEnv);
-    const deps = { config, notifier: buildNotifier(config), ai: createFakeAi(), rateLimits: memoryRateLimits() };
+    const deps = { config, notifier: buildNotifier(config), ai: createFakeAi(), rateLimits: memoryRateLimits(), email: null };
 
     const before = await omersRows();
     for (const action of ['approve', 'confirm', 'reject', 'snooze', 'undo', 'recheck'] as const) {
@@ -718,7 +718,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     const scanAgent = vi.fn(async () => {
       throw new Error('no scan may start for Omer');
     });
-    const deps = { config, notifier, ai: { ...createFakeAi(), scanAgent } as never, rateLimits: memoryRateLimits() };
+    const deps = { config, notifier, ai: { ...createFakeAi(), scanAgent } as never, rateLimits: memoryRateLimits(), email: null };
     const tap = async (id: string, data: string) => {
       await handleTelegramUpdate(deps, {
         update_id: 3,
@@ -787,7 +787,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
       });
       const assistantMessage = vi.fn();
       const scanAgent = vi.fn();
-      const deps = { config, notifier, ai: { ...createFakeAi(), assistantMessage, scanAgent } as never, rateLimits: memoryRateLimits() };
+      const deps = { config, notifier, ai: { ...createFakeAi(), assistantMessage, scanAgent } as never, rateLimits: memoryRateLimits(), email: null };
       const chat = { id: chatId, type: 'private' };
 
       await handleTelegramUpdate(deps, { update_id: 4, message: { text: 'What do I hold?', chat } });
@@ -832,7 +832,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     } as unknown as ReturnType<typeof createFakeAi>;
 
     await handleTelegramUpdate(
-      { config, notifier: buildNotifier(config), ai, rateLimits: memoryRateLimits() },
+      { config, notifier: buildNotifier(config), ai, rateLimits: memoryRateLimits(), email: null },
       { update_id: 2, message: { text: 'What do I hold?', chat: { id: dana.chatId, type: 'private' } } },
     );
     await vi.waitFor(() => expect(asked).toHaveLength(1));

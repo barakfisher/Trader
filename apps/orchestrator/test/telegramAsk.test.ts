@@ -75,7 +75,7 @@ function deps(webBaseUrl: string | null = null) {
       return new Response('{"ok":true}', { status: 200 });
     },
   });
-  return { config: loadConfig(ENV), notifier, ai: { assistantMessage } as never, rateLimits: memoryRateLimits() };
+  return { config: loadConfig(ENV), notifier, ai: { assistantMessage } as never, rateLimits: memoryRateLimits(), email: null };
 }
 
 const message = (text?: string) => ({ message: { chat: { id: CHAT, type: 'private' }, ...(text === undefined ? {} : { text }) } });

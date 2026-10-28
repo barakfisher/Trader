@@ -94,6 +94,7 @@ export function registerTelegramRoutes(app: Hono<AppEnv>): void {
         notifier: context.get('notifier'),
         ai: context.get('ai'),
         rateLimits: context.get('rateLimits'),
+        email: context.get('email'),
       },
       await context.req.json().catch(() => null),
     );

@@ -40,6 +40,8 @@ interface EmailCatalogue {
   accountClosed(date: string, signInLink: string): Draft;
   /** A sign-in cancelled the account's pending deletion (D264), so one the owner did not make is seen. */
   accountRestored(): Draft;
+  /** The admin approved a waiting sign-up (D344); never sent on a rejection. */
+  signupApproved(signInLink: string): Draft;
 }
 
 const isolate = (text: string) => `⁨${text}⁩`;
@@ -121,6 +123,13 @@ const CATALOGUE: Record<UiLanguage, EmailCatalogue> = {
         'If this was you, there is nothing more to do. If it was not, reset your password from the sign-in page, then sign out the devices you do not recognise in Settings - and delete the account again if you still want it gone.',
       ],
     }),
+    signupApproved: (signInLink) => ({
+      subject: 'Your Traders account is ready',
+      blocks: [
+        'Your request to join Traders was approved. Sign in with the email and password you signed up with, or the Google or GitHub account you used:',
+        { link: signInLink },
+      ],
+    }),
   },
   he: {
     verifyEmail: (link, hours) => ({
@@ -198,6 +207,13 @@ const CATALOGUE: Record<UiLanguage, EmailCatalogue> = {
         'אם זה הייתם אתם, אין צורך לעשות דבר. אם לא, אפסו את הסיסמה מדף ההתחברות, נתקו בהגדרות את המכשירים שאינכם מזהים - ומחקו את החשבון שוב אם אתם עדיין רוצים בכך.',
       ],
     }),
+    signupApproved: (signInLink) => ({
+      subject: 'חשבון ה-Traders שלכם מוכן',
+      blocks: [
+        'הבקשה שלכם להצטרף ל-Traders אושרה. התחברו עם האימייל והסיסמה שאיתם נרשמתם, או עם חשבון ה-Google או ה-GitHub שבו השתמשתם:',
+        { link: signInLink },
+      ],
+    }),
   },
 };
 
@@ -253,4 +269,6 @@ export const emailMessages = {
   accountClosed: (to: string, language: UiLanguage, date: string, signInLink: string) =>
     render(to, language, CATALOGUE[language].accountClosed(date, signInLink)),
   accountRestored: (to: string, language: UiLanguage) => render(to, language, CATALOGUE[language].accountRestored()),
+  signupApproved: (to: string, language: UiLanguage, signInLink: string) =>
+    render(to, language, CATALOGUE[language].signupApproved(signInLink)),
 };

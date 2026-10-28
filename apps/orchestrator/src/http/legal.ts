@@ -1,7 +1,7 @@
 /**
  * The privacy policy and terms on the server (D265): who must accept the
- * current version, and the gate that keeps public sign-up closed while the
- * text is pending.
+ * current version, and the gate that holds *automatic* sign-up while the
+ * text is pending (D344).
  */
 
 import type { Context } from 'hono';
@@ -35,11 +35,15 @@ export function legalAcceptanceRequired(user: UserRow, legalAccepted: boolean | 
 }
 
 /**
- * A production installation whose text is still the placeholder (D265, the
- * user's choice of scope): sign-up is closed whatever the mode, and the mode
- * cannot be opened. Development installations - compose and kind, which no
- * stranger reaches (D256) - are not held.
+ * A production installation whose text is still the placeholder (D265, D319):
+ * *automatic* sign-up is held - no stranger joins under terms that do not
+ * exist - and the Admin page cannot choose it. *Approval* is not held (D344):
+ * the admin decides every request, so only people the admin lets in arrive,
+ * and the approved ones are mailed. Every door applies this inside the same
+ * statement or transaction that reads the mode (`automaticHeld`), so a stored
+ * *automatic* answers as *closed*. Development installations - compose and
+ * kind, which no stranger reaches (D256) - are not held.
  */
-export function signupHeldForLegalText(context: Context<AppEnv>): boolean {
+export function automaticSignupHeld(context: Context<AppEnv>): boolean {
   return context.get('config').isProduction && context.get('legalVersion') === null;
 }

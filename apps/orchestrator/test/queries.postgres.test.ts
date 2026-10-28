@@ -349,7 +349,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
 
     const ask = (address: string) =>
-      queries.createSignupRequest({ email: address, passwordHash: 'hash', timezone: 'Europe/London', language: 'he', legalVersion: null });
+      queries.createSignupRequest({ email: address, passwordHash: 'hash', timezone: 'Europe/London', language: 'he', legalVersion: null, automaticHeld: false });
     const verified = (userId: string) => getPool().query('UPDATE users SET email_verified_at = now() WHERE id = $1', [userId]);
 
     it('writes an unverified pending user with no agent and no cap, its settings in the language asked in', async () => {
@@ -430,7 +430,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
     describe('verification links (0074, D259, D260, D305)', async () => {
       const { linkTokenHash, newLinkToken } = await import('../src/http/linkTokens.js');
-      const RULES = { defaultCapMicroUsd: 10_000_000, timezone: 'Asia/Jerusalem' };
+      const RULES = { defaultCapMicroUsd: 10_000_000, timezone: 'Asia/Jerusalem', automaticHeld: false };
       /** The installation's sign-up settings, read by opening a link under their lock (D310). */
       const { DAILY_NEW_ACCOUNTS_CEILING, MAX_PENDING_SIGNUPS_CEILING } = await import('@traders/shared');
       const signupSettings = (
@@ -503,6 +503,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           timezone: 'Europe/London',
           language: 'he',
           legalVersion: null,
+          automaticHeld: false,
         })) as { userId: string };
         const again = await queries.createSignupRequest({
           email: email('prehijack'),
@@ -510,6 +511,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           timezone: 'Asia/Jerusalem',
           language: 'en',
           legalVersion: null,
+          automaticHeld: false,
         });
         expect(again).toMatchObject({ outcome: 'exists', userId: first.userId, verified: false });
         const read = async (userId: string) =>
@@ -519,7 +521,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         expect(await queries.useVerificationToken(hash, RULES, { passwordHash: 'the first' })).toEqual({ outcome: 'wrong_password' });
 
         await verified(first.userId);
-        await queries.createSignupRequest({ email: email('prehijack'), passwordHash: 'a third', timezone: 'UTC', language: 'en', legalVersion: null });
+        await queries.createSignupRequest({ email: email('prehijack'), passwordHash: 'a third', timezone: 'UTC', language: 'en', legalVersion: null, automaticHeld: false });
         expect(await read(first.userId)).toEqual({ password_hash: 'the owner', timezone: 'Asia/Jerusalem' });
       });
 
@@ -542,6 +544,35 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           outcome: 'awaiting_approval',
           userId: created.userId,
         });
+      });
+
+      it('holds a stored *automatic* on every door while the legal text is pending, and lets *approval* through (D344)', async () => {
+        const HELD = { ...RULES, automaticHeld: true };
+        const signUp = (address: string) =>
+          queries.createSignupRequest({ email: address, passwordHash: 'hash', timezone: 'UTC', language: 'en', legalVersion: null, automaticHeld: true });
+        const created = (await ask(email('held'))) as { userId: string };
+        const hash = await link(created.userId, email('held'));
+        const subject = `sub-${randomUUID()}`;
+        const oauth = (address: string) =>
+          queries.createOAuthAccount({ email: address, provider: 'google', subject: `sub-${randomUUID()}`, timezone: 'UTC', language: 'en' }, HELD);
+
+        // Under *automatic*, held: as *closed* - nothing written, the link unused.
+        expect(await signUp(email('held-new'))).toEqual({ outcome: 'closed' });
+        expect(await queries.getAccountByEmail(email('held-new'))).toBeNull();
+        expect(await queries.useVerificationToken(hash, HELD, PROOF)).toEqual({ outcome: 'signup_full' });
+        expect(await oauth(email('held-oauth'))).toEqual({ outcome: 'signup_full' });
+        expect(await queries.getAccountByEmail(email('held-oauth'))).toBeNull();
+        expect(
+          await queries.claimUnverifiedRequest({ userId: created.userId, provider: 'google', subject, email: email('held') }, HELD),
+        ).toBe('signup_full');
+        expect(await queries.getIdentityUser('google', subject)).toBeNull();
+        expect(await status(created.userId)).toMatchObject({ status: 'pending', verified: false });
+
+        // Under *approval*, the same hold changes nothing: every request waits for the admin.
+        await signupSettings('approval');
+        expect(await signUp(email('held-approval'))).toMatchObject({ outcome: 'created' });
+        expect(await queries.useVerificationToken(hash, HELD, PROOF)).toEqual({ outcome: 'awaiting_approval', userId: created.userId });
+        expect(await oauth(email('held-oauth-approval'))).toMatchObject({ outcome: 'awaiting_approval' });
       });
 
       it('says expired for an old link and invalid for an unknown one, changing nothing', async () => {
@@ -3099,7 +3130,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
     it('dates a rejection, lists a request rejected long enough ago, and forgets the date on restore', async () => {
       const address = `rejected-${randomUUID()}@example.com`;
-      const created = await queries.createSignupRequest({ email: address, passwordHash: 'h', timezone: 'UTC', language: 'en', legalVersion: null });
+      const created = await queries.createSignupRequest({ email: address, passwordHash: 'h', timezone: 'UTC', language: 'en', legalVersion: null, automaticHeld: false });
       if (created.outcome !== 'created') throw new Error(`expected a new request, got ${created.outcome}`);
       const userId = created.userId;
       try {
@@ -3204,6 +3235,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           timezone: 'UTC',
           language: 'en',
           legalVersion,
+          automaticHeld: false,
         }) as Promise<{ userId: string }>;
       const agreed = await ask('agreed', VERSION);
       expect(await accepted(agreed.userId)).toEqual([VERSION]);

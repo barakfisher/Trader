@@ -75,10 +75,11 @@ import {
 import { choiceRefusal, isLlmScope, LLM_SCOPES, toAdminLlmModels } from '../../services/llmModels.js';
 import { startRescreen } from '../../services/universeRescreen.js';
 import { universeStatus } from '../../services/universeStatus.js';
+import { announceSignupApproved } from '../accountMail.js';
 import { currentUserId, type AppEnv } from '../app.js';
 import { badRequest, conflict, unprocessable, upstreamFailure } from '../errors.js';
 import { hashPassword } from '../password.js';
-import { signupHeldForLegalText } from '../legal.js';
+import { automaticSignupHeld } from '../legal.js';
 
 /** Enough to see a day of the half-hourly scans next to everything else. */
 const ADMIN_RUNS_LIMIT = 100;
@@ -114,7 +115,7 @@ async function adminSettings(context: Context<AppEnv>): Promise<AdminSettingsRes
     signupMode: row.signup_mode,
     dailyNewAccountsLimit: row.daily_new_accounts_limit,
     emailConfigured: context.get('config').emailConfigured,
-    signupHeldForLegalText: signupHeldForLegalText(context),
+    automaticSignupHeldForLegalText: automaticSignupHeld(context),
     updatedAt: row.updated_at.toISOString(),
   };
 }
@@ -378,7 +379,12 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
     // No amount: a user runs on their own key only (D245), and the retired monthly
     // cap keeps its column's CHECK satisfied with the installation's default (D279).
     const { default_llm_cap_micro_usd: retiredCap } = await getInstallationSettings();
-    return context.json(decisionBody(await approveSignup(userId, retiredCap, currentUserId(context))));
+    const decision = await approveSignup(userId, retiredCap, currentUserId(context));
+    // Told once, by the request whose UPDATE applied; a failed mail never fails the approval (D344).
+    if (decision.applied) {
+      announceSignupApproved(context.get('email'), context.get('config').allowedOrigins, { id: userId, email: decision.email });
+    }
+    return context.json(decisionBody(decision));
   });
 
   app.post('/admin/signups/:userId/reject', async (context) =>
@@ -422,9 +428,10 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
       if (parsed.data.signupMode === 'automatic' && !context.get('config').emailConfigured) {
         throw unprocessable('email_unavailable', 'automatic sign-up needs outbound mail (SMTP_HOST and EMAIL_FROM)');
       }
-      // A public installation opens sign-up only once its privacy policy and terms exist (D265).
-      if (parsed.data.signupMode !== 'closed' && signupHeldForLegalText(context)) {
-        throw unprocessable('legal_text_pending', 'sign-up stays closed until the privacy policy and terms are published');
+      // A public installation opens *automatic* only once its privacy policy and terms exist (D265);
+      // *approval* works without them, since the admin decides every request (D344).
+      if (parsed.data.signupMode === 'automatic' && automaticSignupHeld(context)) {
+        throw unprocessable('legal_text_pending', 'automatic sign-up waits until the privacy policy and terms are published');
       }
       await setSignupMode(parsed.data.signupMode, admin);
     }

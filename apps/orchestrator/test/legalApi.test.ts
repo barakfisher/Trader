@@ -1,8 +1,8 @@
 /**
  * The privacy policy and terms on the server (D265): sign-up stores the version
  * its box agreed to, a user who has not accepted the current version can do
- * nothing but accept it, export or delete, and a production installation keeps
- * sign-up closed while the text is pending. The database is mocked; mail is
+ * nothing but accept it, export or delete, and a production installation holds
+ * *automatic* sign-up while the text is pending (D344). The database is mocked; mail is
  * recorded.
  */
 
@@ -146,44 +146,68 @@ describe('signing up agrees to the current version', () => {
   });
 });
 
-describe('a production installation with no text keeps sign-up closed', () => {
-  it('answers closed and writes nothing, whatever the mode', async () => {
-    const response = await signup(buildApp({ legalVersion: null, production: true }), SIGNUP);
+describe('a production installation with no text holds *automatic* only (D265, D344)', () => {
+  const held = () => buildApp({ legalVersion: null, production: true });
+
+  it('takes a request under *approval*, with no box to agree to, and tells the database to hold *automatic*', async () => {
+    const response = await signup(held(), SIGNUP);
+    expect(await response.json()).toEqual({ outcome: 'received' });
+    expect(queries.createSignupRequest).toHaveBeenCalledWith(expect.objectContaining({ legalVersion: null, automaticHeld: true }));
+  });
+
+  it('answers closed when the stored mode is *automatic*: the database admits nobody', async () => {
+    vi.mocked(queries.createSignupRequest).mockResolvedValueOnce({ outcome: 'closed' });
+    const response = await signup(held(), SIGNUP);
     expect(await response.json()).toEqual({ outcome: 'closed' });
-    expect(queries.createSignupRequest).not.toHaveBeenCalled();
   });
 
-  it("leaves a sign-up's link unused, so a request made before the gate cannot join through it", async () => {
-    const response = await buildApp({ legalVersion: null, production: true }).request('/auth/verify', {
-      method: 'POST',
-      headers: HEADERS,
-      body: JSON.stringify({ token: 'the-token', password: PASSWORD }),
+  it("opens a sign-up's link under the same hold, and passes on what the database decided", async () => {
+    const verify = () =>
+      held().request('/auth/verify', {
+        method: 'POST',
+        headers: HEADERS,
+        body: JSON.stringify({ token: 'the-token', password: PASSWORD }),
+      });
+    vi.mocked(queries.peekVerificationToken).mockResolvedValue({
+      purpose: 'verify_email',
+      open: true,
+      accountEmail: 'noa@example.com',
+      passwordHash: await (await import('../src/http/password.js')).hashPassword(PASSWORD),
     });
-    expect(await response.json()).toEqual({ outcome: 'signup_full' });
-    expect(queries.useVerificationToken).not.toHaveBeenCalled();
+    // A stored *automatic*: the link stays unused (the database does not mark it).
+    vi.mocked(queries.useVerificationToken).mockResolvedValueOnce({ outcome: 'signup_full' });
+    expect(await (await verify()).json()).toEqual({ outcome: 'signup_full' });
+    vi.mocked(queries.useVerificationToken).mockResolvedValueOnce({ outcome: 'awaiting_approval', userId: TEST_USER_ID });
+    expect(await (await verify()).json()).toEqual({ outcome: 'awaiting_approval' });
+    for (const call of vi.mocked(queries.useVerificationToken).mock.calls) {
+      expect(call[1]).toMatchObject({ automaticHeld: true });
+    }
   });
 
-  it('refuses to open the mode, allows closing it, and says why on the Admin page', async () => {
+  it('refuses *automatic* on the Admin page, allows *approval* and *closed*, and says why', async () => {
     user.role = 'admin';
-    const app = buildApp({ legalVersion: null, production: true });
-    for (const signupMode of ['automatic', 'approval']) {
-      const response = await signedIn(app, '/admin/settings', { method: 'PUT', body: JSON.stringify({ signupMode }) });
-      expect(response.status, signupMode).toBe(422);
-      expect((await response.json()).error).toBe('legal_text_pending');
-    }
+    const app = held();
+    const automatic = await signedIn(app, '/admin/settings', { method: 'PUT', body: JSON.stringify({ signupMode: 'automatic' }) });
+    expect(automatic.status).toBe(422);
+    expect((await automatic.json()).error).toBe('legal_text_pending');
     expect(queries.setSignupMode).not.toHaveBeenCalled();
-    const closing = await signedIn(app, '/admin/settings', { method: 'PUT', body: JSON.stringify({ signupMode: 'closed' }) });
-    expect(closing.status).toBe(200);
-    expect((await closing.json()).signupHeldForLegalText).toBe(true);
+    for (const signupMode of ['approval', 'closed']) {
+      const response = await signedIn(app, '/admin/settings', { method: 'PUT', body: JSON.stringify({ signupMode }) });
+      expect(response.status, signupMode).toBe(200);
+      expect((await response.json()).automaticSignupHeldForLegalText).toBe(true);
+      expect(queries.setSignupMode).toHaveBeenLastCalledWith(signupMode, TEST_USER_ID);
+    }
   });
 
   it('holds nothing once the text exists, nor on a development installation', async () => {
     user.role = 'admin';
     for (const app of [buildApp({ production: true }), buildApp({ legalVersion: null })]) {
-      const response = await signedIn(app, '/admin/settings', { method: 'PUT', body: JSON.stringify({ signupMode: 'approval' }) });
+      const response = await signedIn(app, '/admin/settings', { method: 'PUT', body: JSON.stringify({ signupMode: 'automatic' }) });
       expect(response.status).toBe(200);
-      expect((await response.json()).signupHeldForLegalText).toBe(false);
+      expect((await response.json()).automaticSignupHeldForLegalText).toBe(false);
     }
+    await signup(buildApp({ legalVersion: null }), SIGNUP);
+    expect(queries.createSignupRequest).toHaveBeenCalledWith(expect.objectContaining({ automaticHeld: false }));
   });
 });
 

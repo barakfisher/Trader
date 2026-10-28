@@ -141,7 +141,7 @@ function deps() {
     },
   });
   const ai = { ...createFakeAi(), scanAgent, marketSessions: vi.fn(async () => ({ sessions: [] })) };
-  return { config: loadConfig(ENV), notifier, ai: ai as never, rateLimits: memoryRateLimits() };
+  return { config: loadConfig(ENV), notifier, ai: ai as never, rateLimits: memoryRateLimits(), email: null };
 }
 
 const calls = (method: string) => sent.filter((call) => call.method === method).map((call) => call.body);

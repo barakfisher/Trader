@@ -654,7 +654,7 @@ function SignupSettingsCard() {
   const maxValid = /^\d+$/.test(max) && Number(max) <= MAX_PENDING_SIGNUPS_CEILING;
   const unchanged = mode === storedMode && daily === storedDaily && max === storedMax;
   const emailConfigured = settings.data?.emailConfigured ?? false;
-  const heldForLegalText = settings.data?.signupHeldForLegalText ?? false;
+  const heldForLegalText = settings.data?.automaticSignupHeldForLegalText ?? false;
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (dailyValid && maxValid) {
@@ -699,7 +699,7 @@ function SignupSettingsCard() {
                   name="signup-mode"
                   value={option}
                   checked={mode === option}
-                  disabled={(option === 'automatic' && !emailConfigured) || (option !== 'closed' && heldForLegalText)}
+                  disabled={(option === 'automatic' && !emailConfigured) || (option === 'automatic' && heldForLegalText)}
                   onChange={() => setMode(option)}
                   className="mt-1"
                 />

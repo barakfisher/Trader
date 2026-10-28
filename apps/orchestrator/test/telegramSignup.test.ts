@@ -52,6 +52,8 @@ vi.mock('../src/db/queries.js', () => ({
 const { loadConfig, resetConfigForTests } = await import('../src/config.js');
 const { createApp } = await import('../src/http/app.js');
 const { createFakeAi } = await import('./fakeAi.js');
+const { memoryRateLimits } = await import('../src/http/rateLimits.js');
+const { RecordingEmailSender } = await import('./recordingEmailSender.js');
 const { TelegramNotifier } = await import('../src/telegram/client.js');
 const { MAX_CALLBACK_DATA_BYTES, decodeCallbackData } = await import('../src/telegram/callbackToken.js');
 const { decodeSignupData, encodeSignupData } = await import('../src/telegram/signupToken.js');
@@ -91,12 +93,14 @@ function buildNotifier(webBaseUrl: string | null = 'https://traders.example.ts.n
 }
 
 let app: ReturnType<typeof createApp>;
+let mail = new RecordingEmailSender();
 
 function build(webBaseUrl?: string | null) {
   resetConfigForTests();
   calls = [];
   notifier = buildNotifier(webBaseUrl);
-  app = createApp(loadConfig(ENV), createFakeAi(), notifier);
+  mail = new RecordingEmailSender();
+  app = createApp(loadConfig(ENV), createFakeAi(), notifier, null, memoryRateLimits(), mail);
 }
 
 const REQUEST_TEXT = 'New sign-up request\n\nnoa@example.com';
@@ -202,6 +206,35 @@ describe('a tap on a request', () => {
     expect(buttonsOf(edit)).toEqual([]);
   });
 
+  it('mails the approved person once, with a link to sign in on the first allowed origin (D344)', async () => {
+    await tap(encodeSignupData({ userId: REQUESTER, action: 'approve', capMicroUsd: 20_000_000 }, SIGNING_SECRET));
+    await mail.settled();
+    expect(mail.sent).toHaveLength(1);
+    expect(mail.sent[0]).toMatchObject({ to: 'noa@example.com', subject: 'Your Traders account is ready' });
+    expect(mail.sent[0]!.text).toContain('http://localhost:5173/');
+    // A second tap finds the request decided: no second mail.
+    vi.mocked(queries.approveSignup).mockResolvedValueOnce({ applied: false, status: 'active', email: 'noa@example.com' });
+    await tap(encodeSignupData({ userId: REQUESTER, action: 'approve', capMicroUsd: 20_000_000 }, SIGNING_SECRET));
+    await mail.settled();
+    expect(mail.sent).toHaveLength(1);
+  });
+
+  it('mails nobody on a rejection (D344)', async () => {
+    await tap(encodeSignupData({ userId: REQUESTER, action: 'reject' }, SIGNING_SECRET));
+    await mail.settled();
+    expect(queries.rejectSignup).toHaveBeenCalledWith(REQUESTER);
+    expect(mail.sent).toEqual([]);
+  });
+
+  it('still approves, toasts and edits the message when the mail fails (D344)', async () => {
+    mail.failWith = new Error('smtp down');
+    await tap(encodeSignupData({ userId: REQUESTER, action: 'approve', capMicroUsd: 20_000_000 }, SIGNING_SECRET));
+    await mail.settled();
+    expect(queries.approveSignup).toHaveBeenCalledTimes(1);
+    expect(toast()).toBe('Approved.');
+    expect(calls.some((call) => call.method === 'editMessageText')).toBe(true);
+  });
+
   it('heals a message already decided on the page: says where it is, and drops the buttons', async () => {
     vi.mocked(queries.rejectSignup).mockResolvedValueOnce({ applied: false, status: 'active', email: 'noa@example.com' });
     await tap(encodeSignupData({ userId: REQUESTER, action: 'reject' }, SIGNING_SECRET));
@@ -215,5 +248,7 @@ describe('a tap on a request', () => {
     await tap(encodeSignupData({ userId: REQUESTER, action: 'approve', capMicroUsd: 5_000_000 }, SIGNING_SECRET));
     expect(queries.approveSignup).not.toHaveBeenCalled();
     expect(queries.insertAdminAudit).not.toHaveBeenCalled();
+    await mail.settled();
+    expect(mail.sent).toEqual([]);
   });
 });
