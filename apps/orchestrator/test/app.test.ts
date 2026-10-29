@@ -172,6 +172,22 @@ describe('API', () => {
     });
   });
 
+  it("names no failure's detail in production, where anyone can ask (D346)", async () => {
+    const ai = createFakeAi();
+    ai.health = async () => {
+      throw new Error('connect ECONNREFUSED ai-service:8000');
+    };
+    vi.mocked(pool.queryOne).mockRejectedValueOnce(new Error('password authentication failed for user "traders_app"'));
+    resetConfigForTests();
+    const production = loadConfig({ ...ENV, APP_ENV: 'production', ALLOWED_ORIGINS: 'https://traders.example' } as NodeJS.ProcessEnv);
+    const response = await createApp(production, ai).request('/readyz');
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body.checks).toMatchObject({ postgres: 'error', aiService: 'error' });
+    expect(JSON.stringify(body)).not.toMatch(/traders_app|ai-service|ECONNREFUSED/);
+    resetConfigForTests();
+  });
+
   it('is not ready without its database', async () => {
     vi.mocked(pool.queryOne).mockRejectedValueOnce(new Error('connection refused'));
     const response = await app.request('/readyz');

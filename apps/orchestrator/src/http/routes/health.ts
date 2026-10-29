@@ -7,6 +7,7 @@
 import type { Hono } from 'hono';
 
 import { queryOne } from '../../db/pool.js';
+import { logger } from '../../logger.js';
 import type { AppEnv } from '../app.js';
 
 export const VERSION = '0.1.0';
@@ -18,12 +19,22 @@ export function registerHealthRoutes(app: Hono<AppEnv>): void {
 
   app.get('/readyz', async (context) => {
     const checks: Record<string, string> = {};
+    // In production this answers anyone on the internet: a failure's message
+    // (a role that cannot log in, an internal host or URL) is logged, and the
+    // body says only `error` (D346). Elsewhere the body keeps it, for whoever is
+    // looking at their own stack.
+    const failed = (check: string, error: unknown): string => {
+      const message = (error as Error).message;
+      if (!context.get('config').isProduction) return `error: ${message}`;
+      logger().warn({ check, err: message }, 'readyz.check_failed');
+      return 'error';
+    };
 
     try {
       await queryOne('SELECT 1 AS ok');
       checks.postgres = 'ok';
     } catch (error) {
-      checks.postgres = `error: ${(error as Error).message}`;
+      checks.postgres = failed('postgres', error);
     }
 
     try {
@@ -31,7 +42,7 @@ export function registerHealthRoutes(app: Hono<AppEnv>): void {
       checks.aiService = health.status;
       checks.providers = health.checks?.providers ?? 'unknown';
     } catch (error) {
-      checks.aiService = `error: ${(error as Error).message}`;
+      checks.aiService = failed('aiService', error);
     }
 
     const degraded = Object.values(checks).some(

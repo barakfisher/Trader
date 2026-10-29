@@ -2,10 +2,12 @@
 # =============================================================================
 # Give the installation's admin an email and a password (D179).
 #
-#   bash scripts/admin-password.sh <compose|kind|local> <email> [--if-unset] [--generate]
+#   bash scripts/admin-password.sh <compose|kind|local|prod> <email> [--if-unset] [--generate]
 #
 # Where the database is:
 #   compose  the docker compose stack's orchestrator container (dev-docker.sh)
+#   prod     the production host's orchestrator - run ON the server, in its
+#            checkout, at your own terminal (docs/RUNBOOK.md section 8)
 #   kind     the cluster's orchestrator pod (k8s-up.sh)
 #   local    this machine, against compose's Postgres (dev-local.sh)
 #
@@ -23,7 +25,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/dev-common.sh
 source "$REPO_ROOT/scripts/lib/dev-common.sh"
 
-usage() { fail "usage: bash scripts/admin-password.sh <compose|kind|local> <email> [--if-unset] [--generate]"; }
+usage() { fail "usage: bash scripts/admin-password.sh <compose|kind|local|prod> <email> [--if-unset] [--generate]"; }
 
 [ $# -ge 2 ] || usage
 TARGET="$1"
@@ -45,6 +47,10 @@ run_script() {
   case "$TARGET" in
     compose)
       docker compose -f "$REPO_ROOT/infra/compose/docker-compose.yml" --env-file "$REPO_ROOT/.env" \
+        exec -T orchestrator pnpm --silent admin:password "$@"
+      ;;
+    prod)
+      docker compose -f "$REPO_ROOT/infra/compose/docker-compose.prod.yml" --env-file "$REPO_ROOT/.env" \
         exec -T orchestrator pnpm --silent admin:password "$@"
       ;;
     kind)

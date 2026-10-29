@@ -232,6 +232,13 @@ export type Config = z.infer<typeof schema> & {
 let cached: Config | null = null;
 
 /**
+ * `.env.example`'s placeholder. Long enough for the length rule, and public:
+ * production refuses to start with it, as the AI service refuses its
+ * placeholder INTERNAL_API_KEY (D346).
+ */
+export const TEMPLATE_SESSION_SECRET = 'change-me-to-a-long-random-string';
+
+/**
  * Why `origins` cannot serve a production installation, or null. The first
  * entry is the installation's own address - the approval mail links to it
  * (D344, `accountMail.ts`) - so in production it must be an https URL: a
@@ -266,6 +273,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const originsProblem = isProduction ? productionOriginsProblem(allowedOrigins) : null;
   if (originsProblem !== null) {
     throw new Error(`Invalid environment configuration:\n  - ALLOWED_ORIGINS: ${originsProblem} in production`);
+  }
+  if (isProduction && parsed.data.SESSION_SECRET === TEMPLATE_SESSION_SECRET) {
+    throw new Error(
+      'Invalid environment configuration:\n  - SESSION_SECRET: the .env.example placeholder in production (scripts/prod-env.sh generates one)',
+    );
   }
   cached = {
     ...parsed.data,

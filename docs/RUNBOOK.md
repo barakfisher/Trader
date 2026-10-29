@@ -273,3 +273,89 @@ third-party origin in the page - a font, a script - is blocked by the browser un
 the CSP there.
 
 More on the cluster: [infra/k8s/README.md](../infra/k8s/README.md).
+
+---
+
+## 8. The production host
+
+The private-first public installation (M10 PR 16, D255, D346-D349): one Oracle Cloud VM running
+`infra/compose/docker-compose.prod.yml`, with Caddy in front for https. The images are built on
+the server from git; the Mac only runs commands over SSH.
+
+| | |
+|---|---|
+| Address | `https://app.tiklens.com` (a temporary domain, Spaceship; DNS: one `A` record `app`) |
+| Server | Oracle Cloud `traders-prod`: VM.Standard.A1.Flex, 2 OCPUs, 12 GB (Always Free covers up to 4 / 24), Ubuntu 24.04 aarch64, a 50 GB boot volume |
+| SSH | `ssh traders-prod` - the alias in `~/.ssh/config`, user `ubuntu`, key `~/.ssh/traders_oci`. The key's passphrase is in the Passwords app, "traders-oci SSH key"; never in the repository |
+| Checkout | `~/traders` on the server, detached at the deployed commit |
+| Secrets | `~/traders/.env` and `~/traders/.env.owner` on the server, mode 600, written by `scripts/prod-env.sh` |
+| Open ports | 22 (SSH), 80 and 443 in the subnet's security list. That list is what guards a container's published port: Docker forwards it before the server's own iptables (`/etc/iptables/rules.v4`) sees it, so the iptables rules matter only for what listens on the host itself. Only Caddy may publish a port (`scripts/check-prod-compose.sh`, in CI) |
+| Spend guard | an OCI budget of $1 with an email alert |
+
+### Deploy, and go back
+
+```bash
+bash scripts/prod-deploy.sh            # what is on origin/main
+bash scripts/prod-deploy.sh <commit>   # a given commit - also the way back to the previous one
+```
+
+It refuses a commit that is not on `origin/main` unless `--force` follows it (a pushed branch
+nobody reviewed must not deploy by accident). It fetches, checks the commit out, builds on the
+server, starts the stack (migrations first),
+then waits for `https://<APP_DOMAIN>` and `/api/readyz` and checks the security headers, the
+refused Origin-less write and the unreachable `/api/internal/*` from outside. Going back is
+deploying the earlier commit - **except across a migration**: Alembic does not run downgrades
+here, so an older commit on a newer schema needs the restore below.
+
+### Back up
+
+`bash scripts/db-backup.sh --target prod` pulls a verified dump over SSH into
+`~/Backups/traders/prod/` (D347), and the daily schedule (`backup-schedule.sh`, section 5)
+includes `prod` on any Mac whose `~/.ssh/config` knows `traders-prod`. **Off-host only while the
+Mac is on**: a copy in OCI Object Storage is the next PR. A restore is deliberately not wired to
+`prod` (`db-restore.sh` refuses it): to restore, copy the dump to the server and run
+`pg_restore` there, after a fresh backup of what is being replaced.
+
+### First time on a new server
+
+In this order; each step is idempotent or refuses to repeat.
+
+1. **The machine.** The console steps: shape and image as in the table, a public IPv4 address
+   (the instance's VNIC, *Ephemeral public IP*), ingress rules for TCP 80 and 443 from
+   `0.0.0.0/0` in the subnet's security list, and the public half of `~/.ssh/traders_oci`.
+2. **The server's own firewall** (Oracle's Ubuntu image rejects everything but SSH; this
+   matters for anything listening on the host itself, not for Docker's published ports):
+   ```bash
+   ssh traders-prod 'sudo iptables -I INPUT 5 -p tcp -m state --state NEW --dport 80 -j ACCEPT && sudo iptables -I INPUT 6 -p tcp -m state --state NEW --dport 443 -j ACCEPT && sudo netfilter-persistent save'
+   ```
+3. **Docker**, from Docker's own apt repository (docs.docker.com/engine/install/ubuntu), then
+   `sudo usermod -aG docker ubuntu`.
+4. **The checkout:**
+   ```bash
+   ssh traders-prod 'git clone https://github.com/barakfisher/Trader.git ~/traders'
+   ```
+5. **The secrets**, generated on the server and never printed:
+   ```bash
+   ssh traders-prod 'cd ~/traders && bash scripts/prod-env.sh app.tiklens.com <admin email>'
+   ```
+6. **What only you can supply**, typed on the server: `ssh traders-prod`, then
+   `nano ~/traders/.env`, and fill `OPENROUTER_API_KEY` (a key of its own, not development's),
+   `TELEGRAM_BOT_TOKEN` and `TELEGRAM_BOT_USERNAME` (a bot of its own: two installations polling
+   one bot steal each other's updates), and the mail provider's `SMTP_*` and `EMAIL_FROM`.
+   Until mail is set, sign-up answers `closed` (D259).
+7. **Deploy:** `bash scripts/prod-deploy.sh`.
+8. **The admin's password**, at your own terminal (it is printed once, to you alone):
+   ```bash
+   ssh -t traders-prod 'cd ~/traders && bash scripts/admin-password.sh prod <admin email>'
+   ```
+   Keep it in the Passwords app. Then sign in, open Admin → Settings, and set sign-up to
+   *approval* (D344): *automatic* stays held until the legal text exists.
+
+### What production deliberately does without (D349)
+
+- **Yahoo's company descriptions** are not loaded: topic resolution answers `unavailable` with
+  `universe.state: not_loaded`. Loading them is a copy of `descriptions.local.jsonl` to
+  `~/traders/data/universe/` and a mount - decided together with the legal text.
+- **Prices come from `yfinance`** and headlines from GDELT and Yahoo, with no fixture fallback:
+  an unavailable price is unpriced. Acceptable for the private phase only; decided again before
+  sign-up opens to strangers.

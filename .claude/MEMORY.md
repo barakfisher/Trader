@@ -5632,6 +5632,68 @@ failure they prevent.
     - **Debt:** kind lists `http://traders.localhost` first, so an approval mailed from kind links
       there - dead on the phone, which reaches kind by its Tailscale https name. Development
       only; reorder `k8s-up.sh`'s list if approvals are tried from kind.
+346. **The production host is one Oracle VM running compose behind Caddy, built from git on the
+    server** (the user, 2026-10-29; M10 PR 16, refines D255).
+    - **What:** Oracle Cloud Ampere A1 (2 OCPUs / 12 GB, inside Always Free's 4 / 24; the stack
+      measured ~1.3 GB in compose), Ubuntu 24.04, `infra/compose/docker-compose.prod.yml`, Caddy
+      for the certificate, `app.tiklens.com` (a temporary domain at Spaceship). `prod-deploy.sh`
+      on the Mac fetches, checks out a commit detached, and builds there over SSH;
+      `check-prod-compose.sh` in CI holds the file to: only Caddy public, `APP_ENV=production`,
+      https origin, nginx web image, no fixture providers, capped logs.
+    - **Rejected: images built in GitHub Actions and pulled from GHCR** - a registry,
+      permissions and arm64 builds in CI (emulated, or an ARM runner) for one server deployed
+      now and then; it is the move once rollbacks must be instant. **Rejected: build on the Mac
+      and copy** - every deploy needs the Mac on and moves 1-2 GB. **Rejected: Kubernetes (k3s)
+      on the VM** - a second orchestrator for one machine, where compose is already the
+      environment CI smoke-tests.
+    - **Secrets are generated on the server** (`prod-env.sh`), never printed, and the keys only
+      the user holds are typed there; the admin's password is printed once at the user's own
+      terminal (`admin-password.sh prod`). **Ports:** the subnet's security list is what guards
+      a container's published port - Docker forwards it before the host's `INPUT` rules see it,
+      so Oracle's Ubuntu iptables (`REJECT` after SSH) guards only what listens on the host
+      itself. That is why `check-prod-compose.sh` (only Caddy publishes) is the real guard.
+      Caddy's admin API is off; `/readyz` names no failure's detail in production, and the
+      template `SESSION_SECRET` stops the boot there (security review of this PR).
+    - **Debt:** a deploy across a migration has no rollback but a restore; SSH is open to
+      `0.0.0.0/0` (key-only); the `ig-quick-action-NSG` the console's *Connect* action added is
+      attached twice and does nothing; one compose network for everything, so Caddy can reach
+      Postgres and Redis (no Redis password) - an edge/backend split is the hardening; base
+      images pinned by tag, not digest, and `Dockerfile.ai` resolves Python dependencies at
+      build time, so two builds of one commit may differ; `check-prod-compose.sh` checks a
+      throwaway `.env`, not the server's hand-edited one; an IPv6 address on the VM would put
+      every IPv6 client behind Docker's proxy, sharing one rate-limit bucket (A record only today).
+347. **Production backups go to the Mac first, OCI Object Storage next** (the user, 2026-10-29).
+    - `db-backup.sh --target prod` dumps over SSH and verifies the archive as for compose and
+      kind; the daily schedule includes `prod` on a Mac whose `~/.ssh/config` knows the host, and
+      only there. `db-restore.sh` and `db-report.sh` refuse `prod`, so no command restores over
+      production by its target name.
+    - **Why staged:** D137's rule (a backup never shares a failure domain with its database) is
+      met by the Mac today, with the restore check that already works, for a few known users.
+      D137 itself named object storage as right for a real host: it is the next PR, so the
+      backup no longer depends on the Mac being awake before strangers sign up.
+    - **Rejected: Object Storage in this PR** - a dynamic group, a policy and a bucket in the
+      console, on top of a first deployment. **Rejected: a dump on the server's own disk** - it
+      dies with the VM it is meant to outlive.
+348. **Production starts with an empty database** (the user, 2026-10-29).
+    - The admin imports the portfolio through the app. **Rejected: restoring compose's dump**
+      (200 MB, history since 2026-09-15): it carries test accounts (`d344-*`), a second account
+      of the user's and rows made by tests, which would have to be found and deleted by hand in
+      the database that will hold other people's data; and its users' saved LLM keys are
+      encrypted under development's `LLM_KEY_ENCRYPTION_KEYS`, unreadable under production's
+      new key anyway. The history stays in compose, kind and their backups.
+349. **In the private phase production uses Yahoo for prices and headlines, and not Yahoo's
+    descriptions** (the user, 2026-10-29; to be decided again with the legal text, D254, before
+    sign-up opens to strangers).
+    - **Descriptions are left out:** they are licensed prose (D40), and the topic rationale
+      quotes them verbatim - shown to other people, not only the user. Topic resolution answers
+      `unavailable` / `not_loaded`, a named state; loading them later is a file copy and a
+      mount, no code.
+    - **`yfinance` stays:** a price is a fact (the line D40 already draws), and every keyed free
+      tier (Finnhub, Polygon, Alpha Vantage) restricts itself to personal, non-commercial use
+      too - switching would add setup without settling the licence. No `fixture` fallback in
+      production: an unavailable price is unpriced (guideline 7).
+    - **Rejected: copy the descriptions file now** - a licensing question answered by default,
+      in the direction that is hard to take back once others have seen the text.
 ---
 
 ## Bugs that cost real time, and the lesson from each
