@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -21,7 +22,7 @@ from app.llm.base import (
 )
 from app.narration import CandidateArticle, correlate, narrate
 from app.narration.evidence_validator import is_supported
-from app.narration.narrator import prompt_evidence
+from app.narration.narrator import SYSTEM_PROMPT, prompt_evidence
 from app.narration.templates import explanation_for, headline_for
 
 NOW = datetime(2026, 9, 16, 14, 0, tzinfo=UTC)
@@ -109,6 +110,19 @@ async def test_a_quoted_timestamp_is_a_date_not_invented_clock_digits():
     result = await narrate(finding, [], llm)
     assert result.source == "llm"
     assert llm.verdicts == [(7, "accepted")]
+
+
+def test_the_prompt_shows_the_date_the_check_accepts_and_names_the_day_it_refuses():
+    # Measured 2026-10-29: asked for "a date as its day alone", Flash-Lite wrote "on 29"
+    # in 11 of the day's 15 refused narrations - a bare number the evidence does not state.
+    # The model follows the prompt's examples, so the date it shows must read as the
+    # evidence's timestamp and the day it forbids must be refused, or the prompt and the
+    # check teach opposite things (D346).
+    (shown,) = re.findall(r"\((\d{4}-\d{2}-\d{2})\)", SYSTEM_PROMPT)
+    (forbidden,) = re.findall(r'\("(on \d{1,2})"\)', SYSTEM_PROMPT)
+    evidence = {"as_of": f"{shown}T20:00:00+00:00"}
+    assert is_supported(f"Observed on {shown}.", evidence)
+    assert not is_supported(f"Observed {forbidden}.", evidence)
 
 
 async def test_narration_asks_for_the_least_reasoning_itself():

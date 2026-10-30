@@ -356,3 +356,4 @@ while this file is out of date.
 | 343 | The rows that do not follow the budget go through one `SECURITY DEFINER` function |
 | 344 | Until the legal text exists, production holds *automatic* sign-up only; an approved request is mailed |
 | 345 | Production refuses to start unless the first `ALLOWED_ORIGINS` entry is https |
+| 346 | Narration's prompt asks for the whole date and names the bare day it must not write |
