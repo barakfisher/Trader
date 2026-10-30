@@ -5632,6 +5632,40 @@ failure they prevent.
     - **Debt:** kind lists `http://traders.localhost` first, so an approval mailed from kind links
       there - dead on the phone, which reaches kind by its Tailscale https name. Development
       only; reorder `k8s-up.sh`'s list if approvals are tried from kind.
+346. **Narration's prompt asks for the whole date and names the bare day it must not write**
+    (the user, 2026-10-29; replaces D322's prompt wording, D322's check unchanged).
+    - **Why:** D322 told the model "Write a date as its day alone (2026-10-23)". Flash-Lite read
+      "its day alone" as the day of the month and wrote "on 29". A bare number the evidence does
+      not state is rightly refused, so narration fell back to templates: no refused narration
+      had a bare day before #336 (2026-10-15..26); on 10-28, 2 of 4 did, and on 10-29, 11 of 15.
+      At 16:34 UTC on 10-29 every narration in a scan was refused, and the user got the Telegram
+      "explanations fell back to templates" notice (`narration_transitions` narrating ->
+      rejected, `unsourced_figures`).
+    - **How:** rule 1 now reads "Write a date whole, as year, month and day (2026-10-23): never
+      the day's number by itself ("on 23"), never with its time." A test reads both examples
+      out of `SYSTEM_PROMPT`: the date shown must pass the check against a timestamp of that
+      day, and the bare day forbidden must be refused.
+    - **Measured first** (replay on compose, nothing written: the 25 narration prompts of
+      10-28..29 with a verdict - 19 refused, 6 accepted - each sent twice to Flash-Lite at
+      narration's settings and checked against the observation's stored evidence): the old
+      wording, 39 of 50 refused (17 with a bare day); the new one, 48 of 50 accepted, then 50 of
+      50 on a second run. The one refusal left was a real error ("fell by 3.77.32 USD").
+    - **Rejected: let the check accept "on 29" when the evidence states the 29th** - a bare
+      number cannot be told from a figure. A replayed headline read "PANW stock fell 29", and
+      D322 exists because an invented "23%" passed on the 23rd. **Rejected: a more capable
+      model** (the "rejected" notice's own advice) - the same model is accepted 98 of 100 times
+      once the instruction is unambiguous. **Rejected: show dates without their time in
+      `prompt_evidence`** - changes what every caller is shown, and the model still needs to be
+      told how to write a date; not measured, because the wording alone was enough. **Rejected:
+      the wording without the `("on 23")` example** - 46 of 50 accepted. That is within noise of
+      the chosen one, but the example names the exact form measured, and none of 100 replies
+      copied it.
+    - **Lesson:** D322 was measured by replaying stored texts through the check, which proves the
+      check, not the instruction. A prompt change to a small model is measured by asking the
+      model.
+    - **Debt:** the "rejected" notice says "a more capable model is the fix; waiting is not". That
+      was wrong this time, because the cause was the prompt. It is right in the general case,
+      and the text is unchanged.
 347. **The production host is one Oracle VM running compose behind Caddy, built from git on the
     server** (the user, 2026-10-29; M10 PR 16, refines D255).
     - **What:** Oracle Cloud Ampere A1 (2 OCPUs / 12 GB, inside Always Free's 4 / 24; the stack
