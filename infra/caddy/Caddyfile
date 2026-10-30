@@ -1,0 +1,25 @@
+# The production host's front door (D347). Caddy gets and renews the https
+# certificate for APP_DOMAIN by itself, redirects http to https, and forwards
+# every request to nginx (the `web` container), which serves the page and
+# forwards /api/* to the orchestrator.
+#
+# The client's address: Caddy writes X-Forwarded-For itself and drops one the
+# client sent (no `trusted_proxies` here), nginx appends Caddy's address, and
+# the orchestrator reads past exactly these two hops (TRUSTED_PROXY_HOPS=2,
+# scripts/prod-env.sh). One proxy more or less here means changing that number.
+#
+# Security headers are nginx's (infra/docker/security-headers.conf), the same
+# file CI checks on every PR - not repeated here, so there is one place to change.
+
+# No admin API: by default Caddy listens on localhost:2019 inside its container
+# for configuration changes. Nothing here uses it - the file is the whole
+# configuration, and a restart reloads it - so it is off rather than trusted
+# to stay unreachable.
+{
+	admin off
+}
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy web:80
+}

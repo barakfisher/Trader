@@ -357,3 +357,7 @@ while this file is out of date.
 | 344 | Until the legal text exists, production holds *automatic* sign-up only; an approved request is mailed |
 | 345 | Production refuses to start unless the first `ALLOWED_ORIGINS` entry is https |
 | 346 | Narration's prompt asks for the whole date and names the bare day it must not write |
+| 347 | The production host is one Oracle VM running compose behind Caddy, built from git on the server |
+| 348 | Production backups go to the Mac first, OCI Object Storage next |
+| 349 | Production starts with an empty database |
+| 350 | In the private phase production uses Yahoo for prices and headlines, and not Yahoo's descriptions |

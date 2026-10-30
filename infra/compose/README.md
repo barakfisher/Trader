@@ -1,5 +1,13 @@
 # Compose environment
 
+Two files here, for two different machines:
+
+- `docker-compose.yml` - **development**, on the Mac (`scripts/dev-docker.sh`). Everything below
+  is about this one.
+- `docker-compose.prod.yml` - **the production host** only, run on the server by
+  `scripts/prod-deploy.sh` (D347). Never start it on the Mac. See
+  [docs/RUNBOOK.md section 8](../../docs/RUNBOOK.md#8-the-production-host).
+
 ```bash
 cp .env.example .env      # once, from the repository root
 cp .env.owner.example .env.owner   # the DB owner's password; only postgres and migrate load it (D300)

@@ -136,6 +136,10 @@ jobs:
           cp .env.owner.example .env.owner
           sed -i 's/^SESSION_SECRET=.*/SESSION_SECRET=ci-session-secret-value-long-enough/' .env
           sed -i 's/^MARKET_DATA_PROVIDERS=.*/MARKET_DATA_PROVIDERS=fixture/' .env
+      # The production host's stack (D347), resolved against throwaway secrets:
+      # only Caddy public, production settings, no fixture providers.
+      - name: Production compose file
+        run: bash scripts/check-prod-compose.sh
       - name: Start the stack
         run: docker compose -f infra/compose/docker-compose.yml up -d --build postgres redis migrate corpus universe ai-service orchestrator
       # The hermetic Python suite cannot reach this: it has no Postgres, and its

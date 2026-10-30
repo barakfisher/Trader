@@ -1,0 +1,205 @@
+# The production host (M10 PR 16, D255, D347): one Oracle Cloud VM, this file,
+# and Caddy in front for https.
+#
+# Run on the server, in its checkout, never on the Mac:
+#   docker compose -f infra/compose/docker-compose.prod.yml --env-file .env up -d --build
+# (scripts/prod-deploy.sh does this over SSH, and checks the result.) The
+# `--env-file .env` is what fills ${APP_DB_PASSWORD} and ${APP_DOMAIN} below;
+# without it compose stops and names the missing setting.
+#
+# It differs from docker-compose.yml, the development stack, on purpose:
+#   - APP_ENV=production is set here, not read from .env, so it cannot be left
+#     out: Secure cookies, and ALLOWED_ORIGINS must start with https (D345).
+#   - Only Caddy publishes ports (80 and 443). Postgres, Redis and the services
+#     are reachable from their own network and nowhere else.
+#   - web is the nginx image (target prod): security headers, /api/internal/*
+#     refused. Never the Vite dev server.
+#   - No Mailpit and no fixture providers: mail goes to the real provider, and
+#     an unavailable price stays unpriced rather than becoming a fixture's.
+#   - No Yahoo descriptions are mounted (D350): `universe` loads membership and
+#     holdings only, and topic resolution answers `unavailable`.
+#   - Every container's log is capped, so logs cannot fill the disk.
+#
+# Secrets: `.env` and `.env.owner` in the checkout's root, written once by
+# scripts/prod-env.sh on the server and never committed (guideline 9).
+
+name: traders-prod
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '3'
+
+x-app-env: &app-env
+  env_file:
+    - ../../.env
+  environment: &app-environment
+    APP_ENV: production
+    DATABASE_URL: postgresql://traders_app:${APP_DB_PASSWORD:?run scripts/prod-env.sh}@postgres:5432/${POSTGRES_DB:-traders}
+    REDIS_URL: redis://redis:6379/0
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    <<: *logging
+    # The same flags as development and the cluster (database sprint DB3): query statistics,
+    # slow statements and lock waits in the log.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - log_min_duration_statement=200
+      - -c
+      - log_lock_waits=on
+    env_file:
+      - ../../.env.owner
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-traders}
+      POSTGRES_DB: ${POSTGRES_DB:-traders}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-traders} -d ${POSTGRES_DB:-traders}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    <<: *logging
+    # Persistent for the same reason as in development: BullMQ's queue and the
+    # quote cache survive a restart.
+    command: ['redis-server', '--save', '300', '1', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Schema changes, as the owner; gives traders_app its password (D300).
+  migrate:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.ai
+    <<: *logging
+    env_file:
+      - ../../.env
+      - ../../.env.owner
+    environment:
+      APP_ENV: production
+    command: ['python', 'scripts/migrate.py']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  corpus:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.ai
+    <<: [*app-env, *logging]
+    environment:
+      <<: *app-environment
+      CORPUS_DIR: /app/data/corpus
+    command: ['python', 'scripts/ingest_corpus.py']
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: 'no'
+
+  # Membership and holdings from the image; no descriptions (D350).
+  universe:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.ai
+    <<: [*app-env, *logging]
+    environment:
+      <<: *app-environment
+      CORPUS_DIR: /app/data/corpus
+      UNIVERSE_SNAPSHOT_DIR: /var/lib/traders/universe
+    volumes:
+      - universe-snapshots:/var/lib/traders/universe
+    command: ['python', 'scripts/ingest_universe.py']
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: 'no'
+
+  ai-service:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.ai
+    <<: [*app-env, *logging]
+    environment:
+      <<: *app-environment
+      FIXTURES_DIR: /app/data/fixtures
+      UNIVERSE_SNAPSHOT_DIR: /var/lib/traders/universe
+    volumes:
+      - universe-snapshots:/var/lib/traders/universe
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  orchestrator:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.orchestrator
+    <<: [*app-env, *logging]
+    environment:
+      <<: *app-environment
+      AI_SERVICE_URL: http://ai-service:8000
+    depends_on:
+      ai-service:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.web
+      target: prod
+    <<: *logging
+    depends_on:
+      - orchestrator
+    restart: unless-stopped
+
+  # The only container the internet reaches. It gets and renews the https
+  # certificate for APP_DOMAIN by itself (Let's Encrypt, over port 80), and
+  # forwards everything to nginx. Its two volumes keep the certificate across
+  # restarts: without them every restart would ask for a new one, and Let's
+  # Encrypt limits how many a domain may get in a week.
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    <<: *logging
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN in .env (scripts/prod-env.sh)}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+
+volumes:
+  postgres-data:
+  redis-data:
+  universe-snapshots:
+  caddy-data:
+  caddy-config:

@@ -5,6 +5,7 @@
 # Usage:
 #   bash scripts/db-backup.sh --target kind      # the cluster's database
 #   bash scripts/db-backup.sh --target compose   # the compose stack's database
+#   bash scripts/db-backup.sh --target prod      # the production host's, over SSH (D348)
 #   bash scripts/db-backup.sh --target all       # each one that is running (the schedule's)
 #
 # Writes $TRADERS_BACKUP_DIR/<target>/traders-<target>-<UTC stamp>.dump
@@ -32,7 +33,7 @@ TARGET=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --target)
-      [ $# -ge 2 ] || fail "--target needs a value: kind, compose or all"
+      [ $# -ge 2 ] || fail "--target needs a value: kind, compose, prod or all"
       TARGET="$2"
       shift 2
       ;;
@@ -43,7 +44,7 @@ while [ $# -gt 0 ]; do
     *) fail "unknown option: $1 (try --help)" ;;
   esac
 done
-[ -n "$TARGET" ] || fail "say which database: --target kind, compose or all"
+[ -n "$TARGET" ] || fail "say which database: --target kind, compose, prod or all"
 
 # The rows of every table in a custom-format archive, as "schema.table|rows".
 # pg_restore turns the archive back into SQL, where each table's data is one
@@ -125,7 +126,7 @@ backup() {
 
 umask 077
 case "$TARGET" in
-  kind | compose)
+  kind | compose | prod)
     db_target_available "$TARGET" || fail "the $TARGET database is not running, so there is nothing to back up"
     backup "$TARGET"
     ;;
@@ -143,5 +144,5 @@ case "$TARGET" in
     done
     [ "$found" -eq 1 ] || warn "no database was running; nothing was backed up"
     ;;
-  *) fail "unknown target '$TARGET' - expected kind, compose or all" ;;
+  *) fail "unknown target '$TARGET' - expected kind, compose, prod or all" ;;
 esac

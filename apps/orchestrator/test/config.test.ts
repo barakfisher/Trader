@@ -18,7 +18,10 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { loadConfig, resetConfigForTests } from '../src/config.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+import { TEMPLATE_SESSION_SECRET, loadConfig, resetConfigForTests } from '../src/config.js';
 
 /** The minimum a deployment must supply for the service to boot at all. */
 const REQUIRED = {
@@ -102,5 +105,22 @@ describe('ALLOWED_ORIGINS in production (D345)', () => {
 
   it('checks nothing outside production, where the first entry is a local one', () => {
     expect(load({ APP_ENV: 'development', ALLOWED_ORIGINS: 'http://127.0.0.1:5173' }).allowedOrigins).toEqual(['http://127.0.0.1:5173']);
+  });
+});
+
+describe('SESSION_SECRET in production (D347)', () => {
+  const PRODUCTION = { APP_ENV: 'production', ALLOWED_ORIGINS: 'https://traders.example' };
+
+  it("refuses .env.example's placeholder, which anyone can read", () => {
+    expect(() => load({ ...PRODUCTION, SESSION_SECRET: TEMPLATE_SESSION_SECRET })).toThrow(/SESSION_SECRET/);
+  });
+
+  it('is the placeholder .env.example actually ships, so a reworded template cannot slip past', () => {
+    const template = readFileSync(fileURLToPath(new URL('../../../.env.example', import.meta.url)), 'utf8');
+    expect(template).toMatch(new RegExp(`^SESSION_SECRET=${TEMPLATE_SESSION_SECRET}$`, 'm'));
+  });
+
+  it('accepts the placeholder outside production', () => {
+    expect(load({ APP_ENV: 'development', SESSION_SECRET: TEMPLATE_SESSION_SECRET }).SESSION_SECRET).toBe(TEMPLATE_SESSION_SECRET);
   });
 });
