@@ -4,7 +4,68 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-27, afternoon - **Handoff: the holdings/ledger plan is complete** (#338-#342).
+Updated: 2026-10-30 - **Handoff by count: seven merges since #343** (#344-#350; the trigger
+was five, so this is two late - #349 and #350 merged first).
+- **Merges since #343:**
+  - #344: F1 accepted - a symbol a user adds joins the shared list (D339);
+  - #345: the real portfolio's cash moves for a named reason (D340-D343, migration `0080`);
+  - #346: every Telegram tap on a proposal is logged, the preview included (`telegram.proposal_tap`);
+  - #347: production holds only *automatic* sign-up until the legal text exists; *approval* works,
+    and an approved person is mailed once, in their language (D344);
+  - #348: production refuses to start unless the first `ALLOWED_ORIGINS` entry is https (D345);
+  - #349 (a parallel session): narration's prompt asks for the whole date, never the bare day (D346);
+  - #350, M10 PR 16's repository part: the production host - compose behind Caddy on one Oracle
+    VM, `prod-env.sh` / `prod-deploy.sh`, backups over SSH, a CI check of the prod compose file
+    (D347-D350).
+- **Deployed:** compose and kind run `b632fde` (#349), migration head `0080_cash_movement_kinds`.
+  **#350 is deployed nowhere** - its orchestrator changes (`/readyz` detail, the template
+  `SESSION_SECRET` refusal) act in production only, so compose and kind lose nothing.
+- **Decisions reach 350** (next: **351**). **Migrations:** `0080` head; next free `0081`.
+- **M10 status:** PR 16's code is merged; the host exists but runs nothing yet (see "Next
+  session: the first production deploy" below). Still the user's: the legal wording (D265) and
+  the D254 question; until the legal text exists production can run only in *approval* mode.
+- **The production host, as it stands (2026-10-30):**
+  - domain `tiklens.com` at Spaceship (bought 2026-10-29, one year, temporary by the user's
+    choice - the app lives on `app.tiklens.com` so a move is configuration only);
+  - Oracle pay-as-you-go account, a $1 budget alert; VM `traders-prod`, VM.Standard.A1.Flex
+    2 OCPU / 12 GB, Ubuntu 24.04 aarch64, public IPv4 `129.159.154.97`, A record `app` ->
+    that address (no AAAA, on purpose: D347's IPv6 debt);
+  - VCN security list allows 22, 80, 443 in; Ubuntu's iptables also opens 80/443 (saved with
+    `netfilter-persistent`); Docker 29 and Compose v5 installed, `ubuntu` in the `docker` group;
+  - the Mac reaches it as `ssh traders-prod` (`~/.ssh/config`, key `~/.ssh/traders_oci`; its
+    passphrase is in the user's Passwords app, never in the repository);
+  - **nothing cloned, no `.env`, no stack yet.**
+- **Left over from the walk-throughs (the user's to clear):** four `d344-*-1415@example.com`
+  accounts on compose (disable them on the Admin page); a `traders_d344_test` database on the
+  compose Postgres (`docker exec traders-postgres-1 psql -U traders -d traders -c 'DROP DATABASE
+  traders_d344_test'`).
+- **Deliberate asymmetries - do not "fix":**
+  - the local `.env` lists `http://127.0.0.1:5174` first in `ALLOWED_ORIGINS`: compose's web
+    address, so an approval mailed from compose links somewhere that answers (D345);
+  - production has no `.env` anywhere but the server: `prod-env.sh` generates its secrets there
+    and the deploy script only reads `APP_DOMAIN` back. Never copy it to the Mac or a chat;
+  - production mounts no Yahoo descriptions (D350) and starts from an empty database (D349),
+    unlike compose and kind.
+- **Lessons:**
+  - **Docker's published ports go around the host's firewall.** A `ports:` entry is a NAT rule in
+    Docker's own chains, before Ubuntu's `INPUT` rules are read, so `iptables`/`ufw` do not guard
+    a container. On the VM the guard is OCI's security list, and the compose file's guard is
+    "only Caddy publishes" (CI-checked). Postgres with a `ports:` line would be on the internet
+    whatever the host firewall says.
+  - **Look at the console before saying what it lacks.** I told the user the VCN had no internet
+    gateway; the console's *Connect* action showed it had one and only the public IP was
+    missing. Read the resource, then speak - a wrong "it's missing" sends the user to create a
+    duplicate (that action also added an unused NSG - D347's debt).
+  - **A decision number is claimed when it merges, not when its PR opens.** #349 merged D346
+    while #350 was open with D346-D349; #350 renumbered after merging main. Rename from the top
+    down (D349->D350 first) with word boundaries, or two decisions collapse into one number.
+  - **A link base is a choice of origin.** Mail links use `ALLOWED_ORIGINS[0]`; compose mailed
+    `localhost:5173`, a port nothing listens on. The walk-through on compose found it, not a test
+    (D345). Any list whose first entry means something needs its order checked where it is set.
+  - **`gh pr merge --match-head-commit` wants the full 40-character hash**; a short one fails
+    with a GraphQL coercion error and merges nothing.
+
+Previous update, 2026-10-27, afternoon - **Handoff: the holdings/ledger plan is complete** (#338-#342).
 - **The plan** (agreed with the user question by question on 2026-10-27, from a pasted list of
   ideas; grant: "merge, deploy, sessions, decisions, work until completion" - it ends here):
   - #338, PR 1: symbol autocomplete (local list + Yahoo search, D324-D325), the cost prefilled with
@@ -7016,6 +7077,40 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: the first production deploy (written 2026-10-30)
+
+**State:** the repository part of M10 PR 16 is merged (#350); the VM is up and empty (see the
+2026-10-30 update at the top). No grant is open: every merge and every deploy needs the user's
+word, asked for each time.
+
+**Next - with the user, step by step, one action per turn** (RUNBOOK section 8 is the script;
+spell out each manual step - the user has no Docker or server background):
+1. On the server: `git clone https://github.com/barakfisher/Trader.git ~/traders`.
+2. **The user** runs `bash scripts/prod-env.sh app.tiklens.com <admin email>` there. Do not run it
+   for them in a way that prints `.env`.
+3. **The user** fills `.env` with `nano` - and needs these first:
+   - a **new** OpenRouter key for production (not the development one), with a spending limit;
+   - a **new** Telegram bot from BotFather (production must not share the dev bot's webhook);
+   - Resend: add the domain `mail.tiklens.com`, put its SPF/DKIM records at Spaceship, wait for
+     "verified", then `SMTP_*` and `EMAIL_FROM`. Until then sign-up stays closed (D259).
+4. From the Mac: `bash scripts/prod-deploy.sh`. The first run waits for the certificate; its
+   outside checks (headers, the Origin-less 403, `/api/internal/*` 404) are the first time any of
+   #350 runs against a real host - expect to fix something, in a PR.
+5. **The user**, at their own terminal: `ssh -t traders-prod 'cd ~/traders && bash
+   scripts/admin-password.sh prod <email>'`. The password is never typed into the chat.
+6. Sign in, set sign-up to *approval* on the Admin page (automatic is held, D344), import the
+   portfolio (D349).
+7. `bash scripts/db-backup.sh --target prod` from the Mac, and check the dump lists the tables.
+8. The Telegram webhook for the production bot, then a tap from the phone.
+
+**After it:** the Object Storage backup PR (D348); then the hardening in D347's debt, worst first
+(SSH open to the world, the edge/backend network split with a Redis password). Before opening
+sign-up to strangers: the legal text, D254, and replacing yfinance (D350).
+
+**Owed checks elsewhere:** narration's verdicts after a market-hours scan (`llm_calls`,
+`purpose='narration'`, expect mostly accepted - D346); the Telegram live checks from the phone
+(M11 and #346's tap logs).
 
 ### Next session: after M10 PR 15 (written 2026-10-27)
 
