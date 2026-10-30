@@ -5,7 +5,7 @@
 # Usage:
 #   bash scripts/db-backup.sh --target kind      # the cluster's database
 #   bash scripts/db-backup.sh --target compose   # the compose stack's database
-#   bash scripts/db-backup.sh --target prod      # the production host's, over SSH (D347)
+#   bash scripts/db-backup.sh --target prod      # the production host's, over SSH (D348)
 #   bash scripts/db-backup.sh --target all       # each one that is running (the schedule's)
 #
 # Writes $TRADERS_BACKUP_DIR/<target>/traders-<target>-<UTC stamp>.dump

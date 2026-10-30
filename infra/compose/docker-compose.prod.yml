@@ -1,4 +1,4 @@
-# The production host (M10 PR 16, D255, D346): one Oracle Cloud VM, this file,
+# The production host (M10 PR 16, D255, D347): one Oracle Cloud VM, this file,
 # and Caddy in front for https.
 #
 # Run on the server, in its checkout, never on the Mac:
@@ -16,7 +16,7 @@
 #     refused. Never the Vite dev server.
 #   - No Mailpit and no fixture providers: mail goes to the real provider, and
 #     an unavailable price stays unpriced rather than becoming a fixture's.
-#   - No Yahoo descriptions are mounted (D349): `universe` loads membership and
+#   - No Yahoo descriptions are mounted (D350): `universe` loads membership and
 #     holdings only, and topic resolution answers `unavailable`.
 #   - Every container's log is capped, so logs cannot fill the disk.
 #
@@ -114,7 +114,7 @@ services:
         condition: service_completed_successfully
     restart: 'no'
 
-  # Membership and holdings from the image; no descriptions (D349).
+  # Membership and holdings from the image; no descriptions (D350).
   universe:
     build:
       context: ../..

@@ -5632,7 +5632,7 @@ failure they prevent.
     - **Debt:** kind lists `http://traders.localhost` first, so an approval mailed from kind links
       there - dead on the phone, which reaches kind by its Tailscale https name. Development
       only; reorder `k8s-up.sh`'s list if approvals are tried from kind.
-346. **The production host is one Oracle VM running compose behind Caddy, built from git on the
+347. **The production host is one Oracle VM running compose behind Caddy, built from git on the
     server** (the user, 2026-10-29; M10 PR 16, refines D255).
     - **What:** Oracle Cloud Ampere A1 (2 OCPUs / 12 GB, inside Always Free's 4 / 24; the stack
       measured ~1.3 GB in compose), Ubuntu 24.04, `infra/compose/docker-compose.prod.yml`, Caddy
@@ -5662,7 +5662,7 @@ failure they prevent.
       build time, so two builds of one commit may differ; `check-prod-compose.sh` checks a
       throwaway `.env`, not the server's hand-edited one; an IPv6 address on the VM would put
       every IPv6 client behind Docker's proxy, sharing one rate-limit bucket (A record only today).
-347. **Production backups go to the Mac first, OCI Object Storage next** (the user, 2026-10-29).
+348. **Production backups go to the Mac first, OCI Object Storage next** (the user, 2026-10-29).
     - `db-backup.sh --target prod` dumps over SSH and verifies the archive as for compose and
       kind; the daily schedule includes `prod` on a Mac whose `~/.ssh/config` knows the host, and
       only there. `db-restore.sh` and `db-report.sh` refuse `prod`, so no command restores over
@@ -5674,14 +5674,14 @@ failure they prevent.
     - **Rejected: Object Storage in this PR** - a dynamic group, a policy and a bucket in the
       console, on top of a first deployment. **Rejected: a dump on the server's own disk** - it
       dies with the VM it is meant to outlive.
-348. **Production starts with an empty database** (the user, 2026-10-29).
+349. **Production starts with an empty database** (the user, 2026-10-29).
     - The admin imports the portfolio through the app. **Rejected: restoring compose's dump**
       (200 MB, history since 2026-09-15): it carries test accounts (`d344-*`), a second account
       of the user's and rows made by tests, which would have to be found and deleted by hand in
       the database that will hold other people's data; and its users' saved LLM keys are
       encrypted under development's `LLM_KEY_ENCRYPTION_KEYS`, unreadable under production's
       new key anyway. The history stays in compose, kind and their backups.
-349. **In the private phase production uses Yahoo for prices and headlines, and not Yahoo's
+350. **In the private phase production uses Yahoo for prices and headlines, and not Yahoo's
     descriptions** (the user, 2026-10-29; to be decided again with the legal text, D254, before
     sign-up opens to strangers).
     - **Descriptions are left out:** they are licensed prose (D40), and the topic rationale

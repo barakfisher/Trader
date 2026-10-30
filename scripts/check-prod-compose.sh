@@ -7,7 +7,7 @@
 # Writes a throwaway pair of secrets files with scripts/prod-env.sh in a
 # temporary copy of the files it needs, lets docker compose resolve
 # infra/compose/docker-compose.prod.yml against them, and checks what a
-# mistake there would quietly undo (D346):
+# mistake there would quietly undo (D347):
 #   - only Caddy publishes ports, so Postgres, Redis and the services stay off
 #     the internet;
 #   - every app service runs with APP_ENV=production and the https origin;

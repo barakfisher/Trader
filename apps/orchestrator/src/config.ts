@@ -234,7 +234,7 @@ let cached: Config | null = null;
 /**
  * `.env.example`'s placeholder. Long enough for the length rule, and public:
  * production refuses to start with it, as the AI service refuses its
- * placeholder INTERNAL_API_KEY (D346).
+ * placeholder INTERNAL_API_KEY (D347).
  */
 export const TEMPLATE_SESSION_SECRET = 'change-me-to-a-long-random-string';
 

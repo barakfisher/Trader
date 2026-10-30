@@ -1,4 +1,4 @@
-# The production host's front door (D346). Caddy gets and renews the https
+# The production host's front door (D347). Caddy gets and renews the https
 # certificate for APP_DOMAIN by itself, redirects http to https, and forwards
 # every request to nginx (the `web` container), which serves the page and
 # forwards /api/* to the orchestrator.

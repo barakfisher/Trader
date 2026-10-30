@@ -21,7 +21,7 @@ export function registerHealthRoutes(app: Hono<AppEnv>): void {
     const checks: Record<string, string> = {};
     // In production this answers anyone on the internet: a failure's message
     // (a role that cannot log in, an internal host or URL) is logged, and the
-    // body says only `error` (D346). Elsewhere the body keeps it, for whoever is
+    // body says only `error` (D347). Elsewhere the body keeps it, for whoever is
     // looking at their own stack.
     const failed = (check: string, error: unknown): string => {
       const message = (error as Error).message;

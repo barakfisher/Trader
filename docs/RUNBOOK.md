@@ -278,7 +278,7 @@ More on the cluster: [infra/k8s/README.md](../infra/k8s/README.md).
 
 ## 8. The production host
 
-The private-first public installation (M10 PR 16, D255, D346-D349): one Oracle Cloud VM running
+The private-first public installation (M10 PR 16, D255, D347-D350): one Oracle Cloud VM running
 `infra/compose/docker-compose.prod.yml`, with Caddy in front for https. The images are built on
 the server from git; the Mac only runs commands over SSH.
 
@@ -310,7 +310,7 @@ here, so an older commit on a newer schema needs the restore below.
 ### Back up
 
 `bash scripts/db-backup.sh --target prod` pulls a verified dump over SSH into
-`~/Backups/traders/prod/` (D347), and the daily schedule (`backup-schedule.sh`, section 5)
+`~/Backups/traders/prod/` (D348), and the daily schedule (`backup-schedule.sh`, section 5)
 includes `prod` on any Mac whose `~/.ssh/config` knows `traders-prod`. **Off-host only while the
 Mac is on**: a copy in OCI Object Storage is the next PR. A restore is deliberately not wired to
 `prod` (`db-restore.sh` refuses it): to restore, copy the dump to the server and run
@@ -351,7 +351,7 @@ In this order; each step is idempotent or refuses to repeat.
    Keep it in the Passwords app. Then sign in, open Admin → Settings, and set sign-up to
    *approval* (D344): *automatic* stays held until the legal text exists.
 
-### What production deliberately does without (D349)
+### What production deliberately does without (D350)
 
 - **Yahoo's company descriptions** are not loaded: topic resolution answers `unavailable` with
   `universe.state: not_loaded`. Loading them is a copy of `descriptions.local.jsonl` to

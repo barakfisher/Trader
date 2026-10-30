@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# prod-env.sh - write the production host's two secrets files, once (D346).
+# prod-env.sh - write the production host's two secrets files, once (D347).
 #
 # Run ON THE SERVER, in its checkout, never on the Mac:
 #   bash scripts/prod-env.sh <domain> <admin email>
@@ -91,7 +91,7 @@ set_key "$ENV_FILE" LLM_KEY_ENCRYPTION_KEYS "$(fernet_key)"
 set_key "$ENV_FILE" TELEGRAM_SIGNING_SECRET "$(hex 32)"
 set_key "$ENV_FILE" TELEGRAM_WEBHOOK_SECRET "$(hex 32)"
 set_key "$ENV_FILE" ENABLE_SCHEDULED_SCANS true
-# Real providers only (D349 records why Yahoo is acceptable in the private phase).
+# Real providers only (D350 records why Yahoo is acceptable in the private phase).
 set_key "$ENV_FILE" MARKET_DATA_PROVIDERS yfinance
 set_key "$ENV_FILE" NEWS_PROVIDERS gdelt
 set_key "$ENV_FILE" AGENT_NEWS_PROVIDER yahoo

@@ -108,7 +108,7 @@ describe('ALLOWED_ORIGINS in production (D345)', () => {
   });
 });
 
-describe('SESSION_SECRET in production (D346)', () => {
+describe('SESSION_SECRET in production (D347)', () => {
   const PRODUCTION = { APP_ENV: 'production', ALLOWED_ORIGINS: 'https://traders.example' };
 
   it("refuses .env.example's placeholder, which anyone can read", () => {

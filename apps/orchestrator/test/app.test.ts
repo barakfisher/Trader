@@ -172,7 +172,7 @@ describe('API', () => {
     });
   });
 
-  it("names no failure's detail in production, where anyone can ask (D346)", async () => {
+  it("names no failure's detail in production, where anyone can ask (D347)", async () => {
     const ai = createFakeAi();
     ai.health = async () => {
       throw new Error('connect ECONNREFUSED ai-service:8000');

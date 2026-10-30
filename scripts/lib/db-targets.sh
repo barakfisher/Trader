@@ -3,7 +3,7 @@
 # host's - from this Mac. Sourced (after dev-common.sh) by lib/backups.sh and
 # db-report.sh.
 #
-# `prod` (D347) is reached over SSH, and is a target for backups only:
+# `prod` (D348) is reached over SSH, and is a target for backups only:
 # db-restore.sh and db-report.sh still accept kind and compose alone
 # (require_db_target), so nothing here can restore over production by mistake.
 #

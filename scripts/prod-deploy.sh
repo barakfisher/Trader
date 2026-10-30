@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# prod-deploy.sh - deploy a commit to the production host, from the Mac (D346).
+# prod-deploy.sh - deploy a commit to the production host, from the Mac (D347).
 #
 #   bash scripts/prod-deploy.sh                    # what is on origin/main now
 #   bash scripts/prod-deploy.sh <commit>           # an earlier main commit: the way back
@@ -14,7 +14,7 @@
 #   3. waits until https://<APP_DOMAIN> answers through Caddy, and the API's
 #      /readyz does too, and checks the security headers from outside.
 #
-# The images are built on the server, from git (D346): no registry, nothing
+# The images are built on the server, from git (D347): no registry, nothing
 # pushed anywhere. A deploy takes a few minutes, mostly the build.
 #
 # First time on a new server: docs/RUNBOOK.md section 8 (clone, prod-env.sh,
