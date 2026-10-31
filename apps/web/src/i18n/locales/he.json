@@ -967,7 +967,10 @@
     "label": "ראשי",
     "insights": "תובנות",
     "unread": "ממצאים חדשים",
-    "research": "מחקר"
+    "research": "מחקר",
+    "version": "גרסה {{date}}, קומיט {{commit}}",
+    "versionDirty": "גרסה {{date}}, קומיט {{commit}}, עם שינויים שלא נכנסו לקומיט",
+    "versionUnknown": "גרסה לא ידועה"
   },
   "dashboard": {
     "title": "תיק",

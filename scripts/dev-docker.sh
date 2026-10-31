@@ -84,6 +84,9 @@ if [ "$RESET" = true ]; then
 fi
 
 say "Starting the stack"
+# The header's version (D351); compose passes it to the web build.
+APP_VERSION="$(bash "$REPO_ROOT/scripts/app-version.sh" || true)"
+export APP_VERSION
 if [ "$REBUILD" = true ]; then
   "${COMPOSE[@]}" up -d --build
 else

@@ -20,7 +20,7 @@ was five, so this is two late - #349 and #350 merged first).
 - **Deployed:** compose and kind run `b632fde` (#349), migration head `0080_cash_movement_kinds`.
   **#350 is deployed nowhere** - its orchestrator changes (`/readyz` detail, the template
   `SESSION_SECRET` refusal) act in production only, so compose and kind lose nothing.
-- **Decisions reach 350** (next: **351**). **Migrations:** `0080` head; next free `0081`.
+- **Decisions reach 351** (next: **352**). **Migrations:** `0080` head; next free `0081`.
 - **M10 status:** PR 16's code is merged; the host exists but runs nothing yet (see "Next
   session: the first production deploy" below). Still the user's: the legal wording (D265) and
   the D254 question; until the legal text exists production can run only in *approval* mode.
@@ -5789,6 +5789,20 @@ failure they prevent.
       production: an unavailable price is unpriced (guideline 7).
     - **Rejected: copy the descriptions file now** - a licensing question answered by default,
       in the direction that is hard to take back once others have seen the text.
+351. **The header's version is derived from git: the commit's UTC date as YY.MM.DD, plus the short
+    hash** (the user, 2026-10-31) - `26.10.31 · 0cad4d6`, an asterisk when the checkout had
+    uncommitted changes, "Version unknown" when none was built in. So production and a local
+    checkout can be told apart at a glance.
+    - `scripts/app-version.sh` is the one place it is computed. `vite.config.ts` asks it directly
+      (dev server, local build); a Docker build cannot (`.git` is excluded from the context), so
+      `dev-docker.sh`, `build-images.sh` and `prod-deploy.sh` pass it as the `APP_VERSION` build
+      argument. The dev server reads it once at start: a commit made while it runs shows after a
+      restart.
+    - **Rejected: hand-bumped semver in `package.json`** - every package still said `0.1.0` after
+      393 commits. A forgotten bump shows the same number for different code on production and
+      the Mac, which is the exact mistake the label exists to catch. **Rejected: the date alone** -
+      several merges a day share it (2026-10-27 had five). **Rejected: a commit count** - a branch
+      and `main` reach the same count with different content.
 ---
 
 ## Bugs that cost real time, and the lesson from each

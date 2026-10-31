@@ -943,7 +943,10 @@
     "label": "Main",
     "insights": "Insights",
     "unread": "New findings",
-    "research": "Research"
+    "research": "Research",
+    "version": "Version {{date}}, commit {{commit}}",
+    "versionDirty": "Version {{date}}, commit {{commit}}, with uncommitted changes",
+    "versionUnknown": "Version unknown"
   },
   "dashboard": {
     "title": "Portfolio",
