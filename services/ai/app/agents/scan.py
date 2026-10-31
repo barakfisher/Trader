@@ -51,6 +51,7 @@ from app.agents.scan_log import (
     finish_scan,
     start_scan,
 )
+from app.agents.scan_memory import RECENT_SCANS_KEY, recent_scans, without_memory
 from app.agents.tools import TOOLS, ToolContext, money, run_tool
 from app.agents.trade_review import TradeReview, holdings_cost, load_book
 from app.core.fees import FEE_PER_SHARE_MINOR, MIN_FEE_MINOR
@@ -178,6 +179,12 @@ Rules the server enforces after you answer:
 - The briefing's "waiting_for_approval" lists your proposals the user has not
   decided yet. Do not propose the same symbol and side again; a buy's cash is
   what remains after those buys.
+- The briefing's "recent_scans" lists your last scans, newest first: when each
+  ran, what it decided, and what became of each trade (approved, rejected,
+  expired, waiting). Do not repeat a decision only because you made it before:
+  look at what changed since. Propose a trade the user rejected again only if
+  something changed, and say what. "recent_scans" is not evidence: quote no
+  figure from it.
 - A buy must keep within your mandate's limits. A buy that breaks one is sent
   back to you once with the reason; a sell is always allowed.
 - Every figure in a thesis must appear in the briefing or a tool result.
@@ -266,8 +273,12 @@ async def run_briefed(
         briefing["mandate"] = brief
     pending = pending_trades(engine, agent.user_id, agent.agent_id, context.now)
     briefing["waiting_for_approval"] = [trade.as_briefing() for trade in pending]
-    # D235: a re-check is about one trade (D216), so it is not asked about idle cash.
+    # D235: a re-check is about one trade (D216), so it is not asked about idle cash,
+    # nor told its earlier scans (D354): its preface already names the trade.
     if focus is None:
+        briefing[RECENT_SCANS_KEY] = [
+            scan.as_briefing() for scan in recent_scans(engine, agent.user_id, agent.agent_id)
+        ]
         cash, positions = load_book(context, pending)
         if (idle := cash_above_buffer(agent.mandate, cash, holdings_cost(positions))) is not None:
             briefing["cash_above_buffer"] = idle
@@ -361,7 +372,11 @@ async def _converse(
         messages=[UserMessage(f"{focus.preface}\n\n{opening}" if focus else opening)],
         transcript=result.transcript,
     )
-    evidence: dict[str, Any] = {"briefing": briefing, "tool_results": state.tool_results}
+    # D354: the recent scans are shown, never a source - their figures are hours old.
+    evidence: dict[str, Any] = {
+        "briefing": without_memory(briefing),
+        "tool_results": state.tool_results,
+    }
     # The user's own instructions are a source, as a question is on the Ask page: a
     # thesis quoting its rule - "a drop of 3% or more" - is not inventing a figure.
     # Measured 2026-10-21: 2 of 16 scans were refused for exactly that (D227).

@@ -22,7 +22,7 @@ was five, so this is two late - #349 and #350 merged first).
   local kind cluster is gone** - deleted 2026-10-31 after a backup in `~/Backups/traders/kind/`;
   the phone opens production instead (docs/PHONE-ACCESS.md). `infra/k8s/` and CI's kind job
   stay. Older lines below that say "deployed compose and kind" describe the time before.
-- **Decisions reach 352** (next: **353**). **Migrations:** `0080` head; next free `0081`.
+- **Decisions reach 355** (next: **356**). **Migrations:** `0080` head; next free `0081`.
 - **M10 status:** PR 16's code is merged and the host runs it since 2026-10-31 (the first deploy
   is "Next session: the first production deploy" below). Still the user's: the legal wording (D265) and
   the D254 question; until the legal text exists production can run only in *approval* mode.
@@ -5816,6 +5816,60 @@ failure they prevent.
       as the user asked for it. **Rejected: the time in UTC** - 16:12 for a merge the user saw at
       18:12 reads as wrong. **Rejected: the time alone at every width** - a deploy a day later at
       the same minute would look identical; on a phone it is the trade-off for the bar's width.
+353. **The admin chooses each agent's model too; an agent with none keeps the Admin page's** (the
+    user, 2026-10-31; amends D244 and D283's "the admin is unchanged"). The agent page's model
+    card, the `PUT /agents/:id/model` route and the provider chain now serve the admin as they
+    serve a user (`UserModelChoice.own`): a saved model runs, resolved against OpenRouter's live
+    list with D284's fallback, its record and its notice. **What differs is "not chosen"**: the
+    admin's agent runs on `llm_model_choices.agent` (the Admin page), a user's on the tested
+    model. The AI service says which as `agent_default`, and the picker's first option names it.
+    The admin's Ask and explanations stay the Admin page's only (`PUT /settings/llm-models` still
+    answers 403), so the Dashboard banner lists only the admin's agents. Why: the user wanted a
+    model per agent, set in the agent's settings, and as the admin had none. "Not chosen" keeps
+    the Admin page's model is **assumed, low risk** (the recommendation; the user went ahead
+    without picking): revisit if the admin wants unset agents on the tested model. **Measured first** (compose, 81 model scans, all Flash-Lite, 2026-10-31):
+    about $0.002 a scan; the picker estimates $0.0185 a scan for Flash-Lite and $0.11 for Sonnet
+    5.5 at the installation's average size. **Rejected: unset falls to the tested model, as for
+    users** - every existing agent of the admin's would change model the moment this deployed.
+    **Rejected: the Admin page's five-model catalogue as the admin's list** - a second list to keep
+    beside the one users choose from. **Rejected: a model per scan slot (strong first, light
+    after)** - the user dropped it (2026-10-31): with scans that do not know each other's results,
+    the light scans redo the strong one's work worse, and two models disagreeing an hour apart
+    pay the fee twice.
+354. **A scan is told its last three decided scans - facts only, never a source** (the user,
+    2026-10-31; `app/agents/scan_memory.py`). The briefing carries `recent_scans`: for each of the
+    agent's last `RECENT_SCANS` scans that decided something (`trade`, `no_trade`,
+    `rule_rejected`), newest first, when it ran, its outcome, and each proposed trade's side,
+    symbol, quantity and fate (approved, rejected, expired, waiting). No thesis, no price. It is
+    stored with the scan (the Scans tab's raw briefing shows it) but `without_memory` takes it out
+    of the evidence, so a figure from it is refused like an invented one - as a re-check's preface
+    is kept out (D212). A re-check is not told (it is about one trade). **A rejected trade is shown,
+    not blocked:** the prompt asks the model to propose it again only if something changed and to
+    say what; the server refuses nothing on it. **Measured first** (compose, 2026-10-31): 81 model
+    scans; an hourly agent wrote the same "cash 141.28, 14.5%, no opportunity" pass eight times
+    in one day; 56 of 75 consecutive scan pairs were a pass after a pass; no buy-then-sell of a
+    symbol, and the one rejected proposal was never proposed again - repetition is the problem,
+    not churn. *Rejected (by the user):* the earlier thesis too (a small model copies a text in
+    front of it; the eight passes were already near-identical); only today's scans (a once-a-day
+    agent - most of them - would never see one); a rejected trade blocked for the day (a server
+    rule for a failure not seen, and it would stop a good idea after the price moved). *Rejected:*
+    the list as evidence (prices hours old become citable). **Re-measure** the pass-after-pass
+    rate after a week of scans with it.
+355. **The daily ceiling admits a call only if its most fits under the cap** (the user,
+    2026-10-31; from the security review of D353). `BudgetedProvider` now asks the same
+    `ceiling_cost_micro_usd` a user's safety limit asks (D250) - the prompt's characters at the
+    input price plus every output token it may write, at the call's own model's price, the
+    unknown rate for an unpriced one - and `DailySpendGuard` refuses when spend plus that would
+    pass `LLM_DAILY_BUDGET_USD`. Before, a call was admitted while spend was merely under the cap,
+    so it could overshoot by one whole call: fractions of a cent on the five-model catalogue, but
+    with D353 the admin may put any of ~370 listed models on an agent, and one scan (1,500 output
+    tokens) on a dear one could pass a $5 cap by dollars. Applies to every installation call -
+    narration, Ask, scans - so near the cap a call is refused up to one call's maximum earlier;
+    the refusal is the same `LLMBudgetExceededError` each caller already handles. Still not a
+    reservation: two calls checked at once can both pass. *Rejected:* a price ceiling on what the
+    admin may pick (a second list rule, and it bounds price, not spend); reserving the maximum and
+    refunding (`budget.py`'s own reasoning: a round trip per call and a leaked reservation per
+    crash).
 ---
 
 ## Bugs that cost real time, and the lesson from each

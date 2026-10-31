@@ -175,17 +175,33 @@ async def user_llm_models(
         resolution: ModelResolution = resolve(model, listed, prices)
         return LlmModelResolution(**vars(resolution))
 
+    def resolved_agent(model: str | None) -> LlmModelResolution:
+        # D353: the admin's agent with nothing saved runs on the Admin page's choice.
+        if saved.admin and model is None:
+            return LlmModelResolution(saved=None, effective=agent_default, fallback=False)
+        return resolved(model)
+
+    if saved.admin:
+        agent_default = (
+            DatabaseModelChoices(engine).chosen("agent") if choosable else None
+        ) or configured_model(settings)
+    else:
+        agent_default = resolved(None).effective
+
     return UserLlmModelsResponse(
         admin=saved.admin,
         choosable=choosable,
         live=listed.live,
+        agent_default=agent_default,
         choices=[
             UserLlmScopeModel(scope="explain", **resolved(saved.explain).model_dump()),
             UserLlmScopeModel(scope="assistant", **resolved(saved.assistant).model_dump()),
         ],
         agents=[
             AgentLlmModel(
-                agent_id=UUID(agent.agent_id), name=agent.name, **resolved(agent.saved).model_dump()
+                agent_id=UUID(agent.agent_id),
+                name=agent.name,
+                **resolved_agent(agent.saved).model_dump(),
             )
             for agent in saved.agents
         ],

@@ -1,6 +1,7 @@
 import type { ModelChoicesResponse } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
+import { leftToRight } from '../i18n/format.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { useChooseAgentModel, useChooseUserModel, useModelChoicesQuery } from '../queries/modelChoices.ts';
 import { useStore } from '../stores/context.tsx';
@@ -47,14 +48,14 @@ function UserScopePicker({ data, scope }: { data: ModelChoicesResponse; scope: '
   );
 }
 
-/** The model an agent scans with (D244); for the admin, the Admin page's. */
+/**
+ * The model an agent scans with (D244). The admin chooses here too (D353); an
+ * agent of theirs with none runs on the Admin page's agent model.
+ */
 export function AgentModelCard({ agentId }: { agentId: string }) {
   const { t } = useTranslation();
-  const { auth } = useStore();
-  const isAdmin = auth.user?.role === 'admin';
-  const query = useModelChoicesQuery(!isAdmin);
+  const query = useModelChoicesQuery();
   const save = useChooseAgentModel(agentId);
-  if (isAdmin) return null;
   return (
     <Card title={t('models.agentTitle')}>
       <ModelChoicesBody query={query}>
@@ -70,6 +71,14 @@ export function AgentModelCard({ agentId }: { agentId: string }) {
               resolution={agent}
               save={save}
               perScan
+              unchosen={
+                data.admin && data.agentDefault
+                  ? {
+                      model: data.agentDefault,
+                      label: t('models.notChosenAdmin', { model: leftToRight(data.agentDefault) }),
+                    }
+                  : undefined
+              }
             />
           );
         }}

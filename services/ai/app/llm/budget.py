@@ -13,13 +13,18 @@ uses it: this models the provider's own billing day, not the user's day.
 Three properties are deliberate:
 
   * **Check before, record after.** The cost of a call is unknown until the
-    response reports its token usage, so the guard admits a call while the day's
-    recorded spend is under the cap and charges the real estimate afterwards.
-    The cap can therefore be overshot by at most one call, which at narration
-    sizes is a fraction of a cent. Reserving a worst-case amount up front and
-    refunding the difference was the alternative: it costs a second round trip
-    per call and turns every crashed process into a permanently leaked
-    reservation.
+    response reports its token usage, so the guard charges the real estimate
+    afterwards. Before the call it admits it only when the day's recorded spend
+    plus **the most the call can cost** - its prompt's characters at the input
+    price and every token it may write at the output price
+    (`pricing.ceiling_cost_micro_usd`, the check a user's safety limit makes) -
+    stays within the cap (D355). Without that, a call was admitted while spend
+    was merely under the cap, and since the admin may pick any listed model for
+    an agent (D353) one scan on a dear model could pass the cap by dollars.
+    Two calls checked at the same instant can still both pass. Reserving a
+    worst-case amount and refunding the difference was the alternative: it
+    costs a second round trip per call and turns every crashed process into a
+    permanently leaked reservation.
   * **A failed call still records what it burned.** `LLMError.metered_micro_usd`
     carries spend that happened despite the failure; it is recorded before the
     error propagates. A charge nobody wrote down is worse than a charge.
@@ -50,10 +55,17 @@ from app.llm.base import (
     LLMProvider,
     Message,
     ToolSpec,
+    UserMessage,
     Verdict,
 )
+from app.llm.monthly_cap import prompt_chars
 
 log = get_logger("llm.budget")
+
+#: The most a call may cost before it is made, from its model (None: the
+#: configured one), its prompt's characters and its output ceiling (None: the
+#: adapter's default). Built in `factory.py`, where the prices are known.
+CallCeiling = Callable[[str | None, int, int | None], int]
 
 #: Same reasoning as the rate limiter's daily key: a counter that outlives its
 #: own date is harmless because nothing reads it again, whereas one that expires
@@ -103,8 +115,9 @@ class DailySpendGuard:
             log.error("llm.budget_counter_unreadable", value=str(raw))
             return self._cap_micro_usd
 
-    async def ensure_within_budget(self) -> None:
-        """Raise `LLMBudgetExceededError` when today's cap is already reached.
+    async def ensure_within_budget(self, estimate_micro_usd: int = 0) -> None:
+        """Raise `LLMBudgetExceededError` when today's cap is reached, or when a
+        call that may cost `estimate_micro_usd` would pass it (D355).
 
         A cap of zero or less means no paid call is permitted. This is the
         opposite of the rate limiter's convention, where 0 means "uncapped", and
@@ -118,11 +131,12 @@ class DailySpendGuard:
             log.warning("llm.budget_disabled", day=day, cap_usd="0")
             raise LLMBudgetExceededError(0, self._cap_micro_usd, day)
         spent = await self.spent_micro_usd(day)
-        if spent >= self._cap_micro_usd:
+        if spent >= self._cap_micro_usd or spent + estimate_micro_usd > self._cap_micro_usd:
             log.warning(
                 "llm.budget_exhausted",
                 day=day,
                 spent_micro_usd=spent,
+                estimate_micro_usd=estimate_micro_usd,
                 cap_micro_usd=self._cap_micro_usd,
             )
             raise LLMBudgetExceededError(spent, self._cap_micro_usd, day)
@@ -147,9 +161,13 @@ class BudgetedProvider:
     place either is assembled.
     """
 
-    def __init__(self, inner: LLMProvider, guard: DailySpendGuard) -> None:
+    def __init__(
+        self, inner: LLMProvider, guard: DailySpendGuard, *, ceiling: CallCeiling | None = None
+    ) -> None:
         self._inner = inner
         self._guard = guard
+        #: Without one, a call is admitted while spend is under the cap (tests).
+        self._ceiling = ceiling
         self.name = inner.name
         self.charges_per_token = inner.charges_per_token
 
@@ -165,6 +183,7 @@ class BudgetedProvider:
         model: str | None = None,
     ) -> LLMCompletion:
         return await self._metered(
+            self._estimate(model, prompt_chars(system, [UserMessage(user)], []), max_output_tokens),
             lambda: self._inner.complete(
                 system=system,
                 user=user,
@@ -173,7 +192,7 @@ class BudgetedProvider:
                 reasoning_effort=reasoning_effort,
                 caller=caller,
                 model=model,
-            )
+            ),
         )
 
     async def converse(
@@ -189,6 +208,7 @@ class BudgetedProvider:
         model: str | None = None,
     ) -> LLMCompletion:
         return await self._metered(
+            self._estimate(model, prompt_chars(system, messages, tools), max_output_tokens),
             lambda: self._inner.converse(
                 system=system,
                 messages=messages,
@@ -198,15 +218,22 @@ class BudgetedProvider:
                 reasoning_effort=reasoning_effort,
                 caller=caller,
                 model=model,
-            )
+            ),
         )
 
-    async def _metered(self, call: Callable[[], Awaitable[LLMCompletion]]) -> LLMCompletion:
+    def _estimate(self, model: str | None, chars: int, max_output_tokens: int | None) -> int:
+        if self._ceiling is None or not self.charges_per_token:
+            return 0
+        return self._ceiling(model, chars, max_output_tokens)
+
+    async def _metered(
+        self, estimate_micro_usd: int, call: Callable[[], Awaitable[LLMCompletion]]
+    ) -> LLMCompletion:
         """Check the cap, make the call, and record what it cost - even a failed one."""
         if not self.charges_per_token:
             return await call()
 
-        await self._guard.ensure_within_budget()
+        await self._guard.ensure_within_budget(estimate_micro_usd)
         try:
             completion = await call()
         except LLMError as exc:

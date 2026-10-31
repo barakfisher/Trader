@@ -3703,9 +3703,21 @@
         "description": "A user's models, resolved against OpenRouter's list (D244, D284).",
         "properties": {
           "admin": {
-            "description": "The admin's models are the Admin page's (D244).",
+            "description": "The admin's Ask and explanations are the Admin page's (D244); the admin's agents may each have a model of their own (D353).",
             "title": "Admin",
             "type": "boolean"
+          },
+          "agent_default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What an agent with no model of its own runs on: the tested model, or for the admin the Admin page's agent model (D353).",
+            "title": "Agent Default"
           },
           "agents": {
             "description": "Every agent that scans, oldest first.",
@@ -3735,6 +3747,7 @@
           "admin",
           "choosable",
           "live",
+          "agent_default",
           "choices",
           "agents"
         ],

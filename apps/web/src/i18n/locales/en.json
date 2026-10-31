@@ -2222,6 +2222,7 @@
     "search": "Search by name or id",
     "searchLabel": "Search the models for {{label}}",
     "notChosen": "Not chosen: the tested model",
+    "notChosenAdmin": "Not chosen: the Admin page's agent model, {{model}}",
     "noLongerOffered": "{{model}} (no longer offered)",
     "optionTested": "{{name}} (tested)",
     "matches_one": "{{count}} model matches.",

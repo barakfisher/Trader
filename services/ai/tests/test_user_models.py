@@ -138,10 +138,42 @@ async def test_a_user_who_chose_nothing_runs_on_the_tested_model():
     assert inner.models == [FALLBACK_MODEL]
 
 
-async def test_the_admin_keeps_the_admin_pages_choice():
-    provider, inner = chain(Users(UserModelChoice(admin=True, saved=CHOSEN)), listed(TESTED))
+async def test_the_admins_agent_with_no_model_of_its_own_keeps_the_admin_pages_choice():
+    provider, inner = chain(Users(UserModelChoice(admin=True, saved=None)), listed(TESTED))
     await provider.complete(system=None, user="u", caller=SCAN)
     assert inner.models == [ADMIN_PICK]
+
+
+async def test_the_admins_agent_with_a_model_of_its_own_runs_on_it():
+    # D353: the admin chooses per agent, under the users' rules.
+    provider, inner = chain(
+        Users(UserModelChoice(admin=True, saved=CHOSEN)), listed(model(CHOSEN, Decimal(3)), TESTED)
+    )
+    await provider.complete(system=None, user="u", caller=SCAN)
+    assert inner.models == [CHOSEN]
+
+
+async def test_the_admins_agent_model_that_left_the_list_falls_back_and_is_recorded():
+    users = Users(UserModelChoice(admin=True, saved=CHOSEN))
+    provider, inner = chain(users, listed(TESTED))
+    await provider.complete(system=None, user="u", caller=SCAN)
+    assert inner.models == [FALLBACK_MODEL]
+    assert users.recorded == [
+        (
+            "u1",
+            "agent",
+            "a1",
+            ModelResolution(saved=CHOSEN, effective=FALLBACK_MODEL, fallback=True),
+        )
+    ]
+
+
+def test_only_the_agent_scope_is_the_admins_own():
+    admin = UserModelChoice(admin=True, saved=CHOSEN)
+    assert admin.own("agent")
+    assert not admin.own("assistant") and not admin.own("explain")
+    assert not UserModelChoice(admin=True, saved=None).own("agent")
+    assert UserModelChoice(admin=False, saved=None).own("assistant")
 
 
 async def test_a_fallback_is_recorded_for_its_announcement():

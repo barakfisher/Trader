@@ -2534,9 +2534,14 @@ export interface components {
         UserLlmModelsResponse: {
             /**
              * Admin
-             * @description The admin's models are the Admin page's (D244).
+             * @description The admin's Ask and explanations are the Admin page's (D244); the admin's agents may each have a model of their own (D353).
              */
             admin: boolean;
+            /**
+             * Agent Default
+             * @description What an agent with no model of its own runs on: the tested model, or for the admin the Admin page's agent model (D353).
+             */
+            agent_default: string | null;
             /**
              * Agents
              * @description Every agent that scans, oldest first.

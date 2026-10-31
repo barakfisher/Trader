@@ -33,6 +33,7 @@ from app.agents.scan_log import (
     find_agent,
     start_scan,
 )
+from app.agents.scan_memory import RECENT_SCANS, RECENT_SCANS_KEY
 from app.agents.tools import money, scan_context
 from app.analysis.thresholds import AnalysisThresholds
 from app.core.fees import fee_minor
@@ -891,3 +892,125 @@ async def test_unsourced_figures_and_idle_cash_go_back_in_one_message(
     assert result.outcome == "no_trade", result.problems
     heard = llm.heard[-1].text
     assert "777" in heard and IDLE_CASH_PROBLEM in heard
+
+
+def _earlier(
+    engine: Engine,
+    agent: ScanAgent,
+    hours_ago: int,
+    outcome: str,
+    *trades: tuple[str, str, str, str],
+) -> None:
+    """A finished scan `hours_ago` hours back; each trade is (side, symbol, quantity, state),
+    proposed in the order given."""
+    with engine.begin() as connection:
+        scan = connection.execute(
+            text(
+                "INSERT INTO agent_scans (user_id, agent_id, trigger, briefing, started_at, "
+                "finished_at, outcome) VALUES (CAST(:u AS uuid), CAST(:a AS uuid), 'schedule', "
+                "'{}', :at, :at, :outcome) RETURNING id"
+            ),
+            {
+                "u": agent.user_id,
+                "a": agent.agent_id,
+                "at": NOW - timedelta(hours=hours_ago),
+                "outcome": outcome,
+            },
+        ).scalar_one()
+        for index, (side, symbol, quantity, state) in enumerate(trades):
+            observation = connection.execute(
+                text(
+                    "INSERT INTO observations (user_id, agent_id, kind, severity, subject_kind, "
+                    "subject_ref, headline, explanation, evidence, dedupe_key) VALUES "
+                    "(CAST(:u AS uuid), CAST(:a AS uuid), 'agent_trade', 'notable', 'instrument', "
+                    ":ref, 'h', 'e', '{}', :key) RETURNING id"
+                ),
+                {
+                    "u": agent.user_id,
+                    "a": agent.agent_id,
+                    "ref": f"instrument:{symbol}",
+                    "key": f"k:{scan}:{index}",
+                },
+            ).scalar_one()
+            connection.execute(
+                text(
+                    "INSERT INTO proposals (user_id, agent_id, observation_id, kind, payload, "
+                    "state, expires_at, scan_id, created_at) VALUES (CAST(:u AS uuid), "
+                    "CAST(:a AS uuid), :o, :kind, CAST(:payload AS jsonb), :state, "
+                    ":expires, :s, :at)"
+                ),
+                {
+                    "u": agent.user_id,
+                    "a": agent.agent_id,
+                    "o": observation,
+                    "kind": side,
+                    "s": scan,
+                    "state": state,
+                    "expires": NOW - timedelta(hours=hours_ago - 1),
+                    "at": NOW - timedelta(hours=hours_ago) + timedelta(seconds=index),
+                    "payload": json.dumps(
+                        {
+                            "symbol": symbol,
+                            "quantity": quantity,
+                            "priceMinor": 5_000,
+                            "currency": "USD",
+                        }
+                    ),
+                },
+            )
+
+
+PASS = "Nothing in the briefing fits a value investor; 1000.00 waits for one."
+
+
+async def test_a_first_scan_is_told_no_earlier_scans(loaded: Engine, agent: ScanAgent) -> None:
+    result = await _scan(loaded, agent, ScriptedLLM(_answer(decision="none", thesis=PASS)))
+    assert _stored(loaded, result.scan_id).briefing[RECENT_SCANS_KEY] == []
+
+
+async def test_a_scan_is_told_its_last_decided_scans_newest_first_with_each_trades_fate(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    _earlier(loaded, agent, 30, "no_trade")  # the fourth decided scan back: not told
+    _earlier(loaded, agent, 20, "trade", ("buy", "CCJ", "4", "approved"))
+    _earlier(
+        loaded, agent, 10, "trade", ("buy", "NXE", "7", "rejected"), ("sell", "CCJ", "2", "snoozed")
+    )
+    _earlier(loaded, agent, 5, "failed")  # decided nothing: not told
+    _earlier(loaded, agent, 3, "no_trade")
+
+    result = await _scan(loaded, agent, ScriptedLLM(_answer(decision="none", thesis=PASS)))
+
+    told = _stored(loaded, result.scan_id).briefing[RECENT_SCANS_KEY]
+    assert len(told) == RECENT_SCANS
+    assert [scan["outcome"] for scan in told] == ["no_trade", "trade", "trade"]
+    assert told[0]["at"] == (NOW - timedelta(hours=3)).isoformat()
+    assert [scan["trades"] for scan in told[1:]] == [
+        [
+            {"side": "buy", "symbol": "NXE", "quantity": "7", "state": "rejected"},
+            {"side": "sell", "symbol": "CCJ", "quantity": "2", "state": "waiting"},
+        ],
+        [{"side": "buy", "symbol": "CCJ", "quantity": "4", "state": "approved"}],
+    ]
+    # Facts only: no thesis and no price reaches the model (D354).
+    assert "thesis" not in json.dumps(told) and "price" not in json.dumps(told)
+
+
+async def test_a_figure_only_in_the_earlier_scans_is_not_a_source(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    _earlier(loaded, agent, 2, "trade", ("buy", "NXE", "37", "rejected"))
+    quoting = "The user rejected 37 NXE; 1000.00 waits for something better."
+    llm = ScriptedLLM(
+        _answer(decision="none", thesis=quoting), _answer(decision="none", thesis=quoting)
+    )
+
+    await _scan(loaded, agent, llm)
+
+    assert llm.verdicts[0] == "unsourced_figures"
+
+
+def test_the_instructions_say_the_earlier_scans_are_not_evidence(agent: ScanAgent) -> None:
+    prompt = instructions(agent)
+    assert f'"{RECENT_SCANS_KEY}" is not evidence' in prompt
+    assert "Propose a trade the user rejected again only if" in prompt
