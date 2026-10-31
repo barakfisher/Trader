@@ -944,8 +944,8 @@
     "insights": "Insights",
     "unread": "New findings",
     "research": "Research",
-    "version": "Version {{date}}, commit {{commit}}",
-    "versionDirty": "Version {{date}}, commit {{commit}}, with uncommitted changes",
+    "version": "Version {{date}} {{time}}, commit {{commit}}",
+    "versionDirty": "Version {{date}} {{time}}, commit {{commit}}, with uncommitted changes",
     "versionUnknown": "Version unknown"
   },
   "dashboard": {

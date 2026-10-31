@@ -47,7 +47,7 @@ export function fallbacksOf(
   data: ModelChoicesResponse,
 ): ({ scope: UserLlmScope; agentId?: undefined } | { scope: 'agent'; agentId: string })[] {
   const found: ({ scope: UserLlmScope; agentId?: undefined } | { scope: 'agent'; agentId: string })[] = [];
-  // The admin's Ask and explanations are the Admin page's; only their agents choose here (D352).
+  // The admin's Ask and explanations are the Admin page's; only their agents choose here (D353).
   if (!data.admin) {
     for (const scope of ['assistant', 'explain'] as const) {
       if (data.choices[scope].fallback) found.push({ scope });

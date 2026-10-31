@@ -8,7 +8,7 @@ import { fallbacksOf, useModelChoicesQuery } from '../queries/modelChoices.ts';
 /**
  * Every model the user chose that OpenRouter no longer lists, and what runs
  * instead (D284), each with the way to choose again: Settings for Ask and
- * explanations, the agent's page for an agent. The admin's agents too (D352),
+ * explanations, the agent's page for an agent. The admin's agents too (D353),
  * whose Ask and explanations are the Admin page's and never fall back here.
  * Nothing while the read is pending or failed, nothing when nothing fell back.
  */

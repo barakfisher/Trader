@@ -7,7 +7,7 @@ instructions check, `user_settings.llm_assistant_model` for Ask, and
 runs on the tested model (`catalogue.FALLBACK_MODEL`, D285) - never the admin's
 choice, which governs the admin alone.
 
-**The admin chooses per agent too** (D352): an agent of the admin's with a
+**The admin chooses per agent too** (D353): an agent of the admin's with a
 model saved runs on it under the same rules, fallback included; one with
 nothing saved runs on the Admin page's agent model, as every agent of the
 admin's did before.
@@ -96,7 +96,7 @@ class UserModelChoice:
         """Whether the call runs on this choice rather than the Admin page's.
 
         Always for a user who is not the admin. For the admin, only an agent
-        with a model of its own (D352): an agent with none, Ask and the
+        with a model of its own (D353): an agent with none, Ask and the
         explanations keep the Admin page's choice."""
         return not self.admin or (scope == "agent" and self.saved is not None)
 

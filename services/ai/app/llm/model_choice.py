@@ -3,7 +3,7 @@
 **A user who is not the admin** runs on what they chose for the agent, for Ask
 or for explanations, resolved against OpenRouter's list (`user_models.py`,
 D283-D284) - never on the admin's choice. **The admin's agent with a model of
-its own** runs on it the same way (D352). Everything below is about the rest of
+its own** runs on it the same way (D353). Everything below is about the rest of
 the admin's calls, and about calls for no user, which keep `llm_model_choices`.
 
 `llm_model_choices` holds one model per scope (migration 0041), written by the

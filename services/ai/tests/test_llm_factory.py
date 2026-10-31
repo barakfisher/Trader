@@ -184,7 +184,7 @@ async def test_the_factory_output_completes_a_call_end_to_end():
 
 
 async def test_the_guard_prices_a_call_at_its_own_model_before_making_it():
-    # D354: an unpriced model is priced at the unknown rate, and 1500 output
+    # D355: an unpriced model is priced at the unknown rate, and 1500 output
     # tokens at it cost more than this whole day's cap - refused, never sent.
     sent: list[httpx.Request] = []
 

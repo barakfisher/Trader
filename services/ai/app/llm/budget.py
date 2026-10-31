@@ -18,9 +18,9 @@ Three properties are deliberate:
     plus **the most the call can cost** - its prompt's characters at the input
     price and every token it may write at the output price
     (`pricing.ceiling_cost_micro_usd`, the check a user's safety limit makes) -
-    stays within the cap (D354). Without that, a call was admitted while spend
+    stays within the cap (D355). Without that, a call was admitted while spend
     was merely under the cap, and since the admin may pick any listed model for
-    an agent (D352) one scan on a dear model could pass the cap by dollars.
+    an agent (D353) one scan on a dear model could pass the cap by dollars.
     Two calls checked at the same instant can still both pass. Reserving a
     worst-case amount and refunding the difference was the alternative: it
     costs a second round trip per call and turns every crashed process into a
@@ -117,7 +117,7 @@ class DailySpendGuard:
 
     async def ensure_within_budget(self, estimate_micro_usd: int = 0) -> None:
         """Raise `LLMBudgetExceededError` when today's cap is reached, or when a
-        call that may cost `estimate_micro_usd` would pass it (D354).
+        call that may cost `estimate_micro_usd` would pass it (D355).
 
         A cap of zero or less means no paid call is permitted. This is the
         opposite of the rate limiter's convention, where 0 means "uncapped", and

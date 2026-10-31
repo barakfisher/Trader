@@ -262,7 +262,7 @@ def _build_provider(
     configured = provider.model
 
     def ceiling(model: str | None, chars: int, max_output_tokens: int | None) -> int:
-        # D354: the most this call can cost, priced as the call itself will be.
+        # D355: the most this call can cost, priced as the call itself will be.
         return ceiling_cost_micro_usd(
             model or configured,
             chars,

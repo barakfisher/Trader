@@ -49,7 +49,7 @@ function UserScopePicker({ data, scope }: { data: ModelChoicesResponse; scope: '
 }
 
 /**
- * The model an agent scans with (D244). The admin chooses here too (D352); an
+ * The model an agent scans with (D244). The admin chooses here too (D353); an
  * agent of theirs with none runs on the Admin page's agent model.
  */
 export function AgentModelCard({ agentId }: { agentId: string }) {

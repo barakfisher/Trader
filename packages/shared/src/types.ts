@@ -1614,7 +1614,7 @@ export interface ModelResolutionView {
 export interface ModelChoicesResponse {
   /**
    * The admin chooses Ask's and the explanations' models on the Admin page (D244);
-   * each agent of the admin's may have its own (D352).
+   * each agent of the admin's may have its own (D353).
    */
   admin: boolean;
   /** False unless the installation runs on OpenRouter: nothing can be chosen. */
@@ -1625,7 +1625,7 @@ export interface ModelChoicesResponse {
   fallbackModel: string;
   /**
    * What an agent with no model of its own runs on: the tested model, or for the
-   * admin the Admin page's agent model (D352). Null when nothing is configured.
+   * admin the Admin page's agent model (D353). Null when nothing is configured.
    */
   agentDefault: string | null;
   models: ListedModelView[];

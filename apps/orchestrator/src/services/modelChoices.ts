@@ -50,7 +50,7 @@ export function toModelChoices(listed: LlmListedModelsResponse, user: UserLlmMod
     live: listed.live,
     fallbackModel: listed.fallback_model,
     agentDefault: user.agent_default,
-    // The admin chooses each agent's model from the same list (D352).
+    // The admin chooses each agent's model from the same list (D353).
     models: listed.models.map((model) => ({
       id: model.id,
       name: model.name,

@@ -960,13 +960,13 @@ class UserLlmModelsResponse(BaseModel):
 
     admin: bool = Field(
         description="The admin's Ask and explanations are the Admin page's (D244); the "
-        "admin's agents may each have a model of their own (D352)."
+        "admin's agents may each have a model of their own (D353)."
     )
     choosable: bool
     live: bool
     agent_default: str | None = Field(
         description="What an agent with no model of its own runs on: the tested model, or "
-        "for the admin the Admin page's agent model (D352)."
+        "for the admin the Admin page's agent model (D353)."
     )
     choices: list[UserLlmScopeModel]
     agents: list[AgentLlmModel] = Field(description="Every agent that scans, oldest first.")

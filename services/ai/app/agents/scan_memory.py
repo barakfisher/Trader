@@ -1,4 +1,4 @@
-"""What an agent's scan is told about its own last scans (D353).
+"""What an agent's scan is told about its own last scans (D354).
 
 Every scan used to start from nothing: an hourly agent on compose (8-9 scans a
 day, 2026-10-26 to 10-30) wrote "cash 141.28, 14.5% of capital, no opportunity"

@@ -3,7 +3,7 @@
  * A user's own models (D244, D283-D285): the picker searches OpenRouter's list,
  * puts the tested model first, says when a saved model has fallen back, and
  * saves only on *Save*; the Dashboard banner lists every fallback. The admin
- * chooses only each agent's model here (D352), and "not chosen" there is the
+ * chooses only each agent's model here (D353), and "not chosen" there is the
  * Admin page's agent model.
  */
 
@@ -150,7 +150,7 @@ describe('the fallback banner', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it("names the admin's agent that fell back (D352)", async () => {
+  it("names the admin's agent that fell back (D353)", async () => {
     data = choices({
       admin: true,
       choices: {
@@ -168,7 +168,7 @@ describe('the fallback banner', () => {
 describe("an agent's model", () => {
   const ADMIN_PICK = 'anthropic/claude-sonnet-5.5';
 
-  it("offers the admin the list, with \"not chosen\" as the Admin page's agent model (D352)", async () => {
+  it("offers the admin the list, with \"not chosen\" as the Admin page's agent model (D353)", async () => {
     data = choices({
       admin: true,
       agentDefault: ADMIN_PICK,

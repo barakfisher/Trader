@@ -194,7 +194,7 @@ describe('a user choosing their models', () => {
     expect(queries.setUserModel).not.toHaveBeenCalled();
   });
 
-  it("lets the admin choose an agent's model from the same list (D352)", async () => {
+  it("lets the admin choose an agent's model from the same list (D353)", async () => {
     vi.mocked(queries.getUser).mockResolvedValue({ ...USER, role: 'admin' } as never);
     vi.mocked(queries.getAgent).mockResolvedValueOnce({ id: AGENT_ID, is_primary: false } as never);
     vi.mocked(queries.setAgentModel).mockResolvedValueOnce(true);

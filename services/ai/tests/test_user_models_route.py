@@ -1,4 +1,4 @@
-"""`GET /llm/users/{id}/models`: what an agent with no model of its own runs on (D352).
+"""`GET /llm/users/{id}/models`: what an agent with no model of its own runs on (D353).
 
 The resolution itself is `test_user_models.py`'s and the SQL is
 `integration/test_user_models_sql.py`'s. What is pinned here is the default the

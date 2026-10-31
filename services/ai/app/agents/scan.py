@@ -274,7 +274,7 @@ async def run_briefed(
     pending = pending_trades(engine, agent.user_id, agent.agent_id, context.now)
     briefing["waiting_for_approval"] = [trade.as_briefing() for trade in pending]
     # D235: a re-check is about one trade (D216), so it is not asked about idle cash,
-    # nor told its earlier scans (D353): its preface already names the trade.
+    # nor told its earlier scans (D354): its preface already names the trade.
     if focus is None:
         briefing[RECENT_SCANS_KEY] = [
             scan.as_briefing() for scan in recent_scans(engine, agent.user_id, agent.agent_id)
@@ -372,7 +372,7 @@ async def _converse(
         messages=[UserMessage(f"{focus.preface}\n\n{opening}" if focus else opening)],
         transcript=result.transcript,
     )
-    # D353: the recent scans are shown, never a source - their figures are hours old.
+    # D354: the recent scans are shown, never a source - their figures are hours old.
     evidence: dict[str, Any] = {
         "briefing": without_memory(briefing),
         "tool_results": state.tool_results,

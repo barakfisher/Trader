@@ -145,7 +145,7 @@ async def test_the_admins_agent_with_no_model_of_its_own_keeps_the_admin_pages_c
 
 
 async def test_the_admins_agent_with_a_model_of_its_own_runs_on_it():
-    # D352: the admin chooses per agent, under the users' rules.
+    # D353: the admin chooses per agent, under the users' rules.
     provider, inner = chain(
         Users(UserModelChoice(admin=True, saved=CHOSEN)), listed(model(CHOSEN, Decimal(3)), TESTED)
     )

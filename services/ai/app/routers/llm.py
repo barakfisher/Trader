@@ -176,7 +176,7 @@ async def user_llm_models(
         return LlmModelResolution(**vars(resolution))
 
     def resolved_agent(model: str | None) -> LlmModelResolution:
-        # D352: the admin's agent with nothing saved runs on the Admin page's choice.
+        # D353: the admin's agent with nothing saved runs on the Admin page's choice.
         if saved.admin and model is None:
             return LlmModelResolution(saved=None, effective=agent_default, fallback=False)
         return resolved(model)

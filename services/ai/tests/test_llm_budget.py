@@ -112,7 +112,7 @@ async def test_the_budget_refuses_once_the_day_is_spent():
 
 
 async def test_a_call_whose_most_would_pass_the_cap_is_refused_before_it_is_made():
-    # D354: the cap is checked against spend plus the most the call can cost,
+    # D355: the cap is checked against spend plus the most the call can cost,
     # so one call on a dear model cannot pass it by its whole price.
     guard = _guard(FakeRedis(), "1")
     await guard.record(600_000)

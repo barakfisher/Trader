@@ -992,7 +992,7 @@ async def test_a_scan_is_told_its_last_decided_scans_newest_first_with_each_trad
         ],
         [{"side": "buy", "symbol": "CCJ", "quantity": "4", "state": "approved"}],
     ]
-    # Facts only: no thesis and no price reaches the model (D353).
+    # Facts only: no thesis and no price reaches the model (D354).
     assert "thesis" not in json.dumps(told) and "price" not in json.dumps(told)
 
 

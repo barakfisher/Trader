@@ -342,7 +342,7 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
   });
 
   // An agent's own model, from OpenRouter's list (D244, D283). The admin's too
-  // (D352): an agent of theirs with none runs on the Admin page's choice. Answers
+  // (D353): an agent of theirs with none runs on the Admin page's choice. Answers
   // the user's whole model picture, as `PUT /settings/llm-models/:scope` does.
   app.put('/agents/:id/model', async (context) => {
     const userId = currentUserId(context);

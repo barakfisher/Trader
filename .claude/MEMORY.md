@@ -18,11 +18,11 @@ was five, so this is two late - #349 and #350 merged first).
     VM, `prod-env.sh` / `prod-deploy.sh`, backups over SSH, a CI check of the prod compose file
     (D347-D350).
 - **Deployed (2026-10-31):** production (`https://app.tiklens.com`) and compose run `c2a9e55`
-  (#353, D351: the header shows the commit), migration head `0080_cash_movement_kinds`. **The
+  (#353, D351: the header shows the version; D352 makes it the commit time), migration head `0080_cash_movement_kinds`. **The
   local kind cluster is gone** - deleted 2026-10-31 after a backup in `~/Backups/traders/kind/`;
   the phone opens production instead (docs/PHONE-ACCESS.md). `infra/k8s/` and CI's kind job
   stay. Older lines below that say "deployed compose and kind" describe the time before.
-- **Decisions reach 351** (next: **352**). **Migrations:** `0080` head; next free `0081`.
+- **Decisions reach 355** (next: **356**). **Migrations:** `0080` head; next free `0081`.
 - **M10 status:** PR 16's code is merged and the host runs it since 2026-10-31 (the first deploy
   is "Next session: the first production deploy" below). Still the user's: the legal wording (D265) and
   the D254 question; until the legal text exists production can run only in *approval* mode.
@@ -5805,7 +5805,18 @@ failure they prevent.
       the Mac, which is the exact mistake the label exists to catch. **Rejected: the date alone** -
       several merges a day share it (2026-10-27 had five). **Rejected: a commit count** - a branch
       and `main` reach the same count with different content.
-352. **The admin chooses each agent's model too; an agent with none keeps the Admin page's** (the
+352. **The header shows when the commit landed, on the user's clock, not its hash** (the user,
+    2026-10-31; replaces D351's visible part) - `26.10.31 18:12`, only `18:12` below `sm`.
+    - `app-version.sh` prints the commit time in UTC (`2026-10-31T16:12:41Z+c2a9e55`); for a
+      squash merge on GitHub that is the moment it reached `main`. The page renders it in
+      `users.timezone`, as every other time on screen (guideline 10), so the same build reads the
+      same on the Mac and the phone. The hash stays in the tooltip and the screen-reader sentence:
+      it is what `prod-deploy.sh <commit>` takes.
+    - A fixed `YY.MM.DD HH:MM` pattern, not the language's date format: it is a label to compare,
+      as the user asked for it. **Rejected: the time in UTC** - 16:12 for a merge the user saw at
+      18:12 reads as wrong. **Rejected: the time alone at every width** - a deploy a day later at
+      the same minute would look identical; on a phone it is the trade-off for the bar's width.
+353. **The admin chooses each agent's model too; an agent with none keeps the Admin page's** (the
     user, 2026-10-31; amends D244 and D283's "the admin is unchanged"). The agent page's model
     card, the `PUT /agents/:id/model` route and the provider chain now serve the admin as they
     serve a user (`UserModelChoice.own`): a saved model runs, resolved against OpenRouter's live
@@ -5825,7 +5836,7 @@ failure they prevent.
     after)** - the user dropped it (2026-10-31): with scans that do not know each other's results,
     the light scans redo the strong one's work worse, and two models disagreeing an hour apart
     pay the fee twice.
-353. **A scan is told its last three decided scans - facts only, never a source** (the user,
+354. **A scan is told its last three decided scans - facts only, never a source** (the user,
     2026-10-31; `app/agents/scan_memory.py`). The briefing carries `recent_scans`: for each of the
     agent's last `RECENT_SCANS` scans that decided something (`trade`, `no_trade`,
     `rule_rejected`), newest first, when it ran, its outcome, and each proposed trade's side,
@@ -5844,14 +5855,14 @@ failure they prevent.
     rule for a failure not seen, and it would stop a good idea after the price moved). *Rejected:*
     the list as evidence (prices hours old become citable). **Re-measure** the pass-after-pass
     rate after a week of scans with it.
-354. **The daily ceiling admits a call only if its most fits under the cap** (the user,
-    2026-10-31; from the security review of D352). `BudgetedProvider` now asks the same
+355. **The daily ceiling admits a call only if its most fits under the cap** (the user,
+    2026-10-31; from the security review of D353). `BudgetedProvider` now asks the same
     `ceiling_cost_micro_usd` a user's safety limit asks (D250) - the prompt's characters at the
     input price plus every output token it may write, at the call's own model's price, the
     unknown rate for an unpriced one - and `DailySpendGuard` refuses when spend plus that would
     pass `LLM_DAILY_BUDGET_USD`. Before, a call was admitted while spend was merely under the cap,
     so it could overshoot by one whole call: fractions of a cent on the five-model catalogue, but
-    with D352 the admin may put any of ~370 listed models on an agent, and one scan (1,500 output
+    with D353 the admin may put any of ~370 listed models on an agent, and one scan (1,500 output
     tokens) on a dear one could pass a $5 cap by dollars. Applies to every installation call -
     narration, Ask, scans - so near the cap a call is refused up to one call's maximum earlier;
     the refusal is the same `LLMBudgetExceededError` each caller already handles. Still not a
