@@ -2275,6 +2275,7 @@
     "search": "חיפוש לפי שם או מזהה",
     "searchLabel": "חיפוש מודלים עבור {{label}}",
     "notChosen": "לא נבחר: המודל הנבדק",
+    "notChosenAdmin": "לא נבחר: מודל הסוכנים מדף הניהול, {{model}}",
     "noLongerOffered": "{{model}} (כבר לא מוצע)",
     "optionTested": "{{name}} (נבדק)",
     "matches_one": "מודל אחד מתאים.",

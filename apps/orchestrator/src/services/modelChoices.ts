@@ -49,17 +49,16 @@ export function toModelChoices(listed: LlmListedModelsResponse, user: UserLlmMod
     choosable: listed.choosable,
     live: listed.live,
     fallbackModel: listed.fallback_model,
-    // The admin chooses on the Admin page; the list is not theirs to read here.
-    models: user.admin
-      ? []
-      : listed.models.map((model) => ({
-          id: model.id,
-          name: model.name,
-          promptUsdPerMtok: model.prompt_usd_per_mtok,
-          completionUsdPerMtok: model.completion_usd_per_mtok,
-          tested: model.tested,
-          scanEstimateMicroUsd: model.scan_estimate_micro_usd,
-        })),
+    agentDefault: user.agent_default,
+    // The admin chooses each agent's model from the same list (D352).
+    models: listed.models.map((model) => ({
+      id: model.id,
+      name: model.name,
+      promptUsdPerMtok: model.prompt_usd_per_mtok,
+      completionUsdPerMtok: model.completion_usd_per_mtok,
+      tested: model.tested,
+      scanEstimateMicroUsd: model.scan_estimate_micro_usd,
+    })),
     choices: { assistant: scope('assistant'), explain: scope('explain') },
     agents: user.agents.map((agent) => ({ agentId: agent.agent_id, name: agent.name, ...resolution(agent) })),
   };

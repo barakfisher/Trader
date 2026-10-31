@@ -2,8 +2,9 @@
 
 **A user who is not the admin** runs on what they chose for the agent, for Ask
 or for explanations, resolved against OpenRouter's list (`user_models.py`,
-D283-D284) - never on the admin's choice. Everything below is about the admin,
-and about calls for no user, which keep `llm_model_choices`.
+D283-D284) - never on the admin's choice. **The admin's agent with a model of
+its own** runs on it the same way (D352). Everything below is about the rest of
+the admin's calls, and about calls for no user, which keep `llm_model_choices`.
 
 `llm_model_choices` holds one model per scope (migration 0041), written by the
 orchestrator's admin route and read here on every call, so a choice takes
@@ -107,7 +108,7 @@ class ChoosingProvider:
                 # cheap answer, and never a stranger's call on the admin's pick.
                 log.warning("llm.user_model_unreadable", scope=scope, error=str(error))
                 return FALLBACK_MODEL
-            if choice is not None and not choice.admin:
+            if choice is not None and choice.own(scope):
                 resolution = resolve(
                     choice.saved, await self._listed.current(), self._listed.prices
                 )

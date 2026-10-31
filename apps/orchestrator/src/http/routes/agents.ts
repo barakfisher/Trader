@@ -62,7 +62,7 @@ import {
   toMandateView,
 } from '../agentMandate.js';
 import { currentUserId, type AppEnv } from '../app.js';
-import { badRequest, conflict, forbidden, notFound, unprocessable } from '../errors.js';
+import { badRequest, conflict, notFound, unprocessable } from '../errors.js';
 
 /** Agents trade USD-listed instruments only in v1 (decision D7), so their budgets are USD. */
 export const AGENT_CURRENCY = 'USD';
@@ -341,12 +341,11 @@ export function registerAgentsRoutes(app: Hono<AppEnv>): void {
     }
   });
 
-  // An agent's own model, from OpenRouter's list (D244, D283). Not the admin's:
-  // the admin's agents run on the Admin page's choice. Answers the user's whole
-  // model picture, as `PUT /settings/llm-models/:scope` does.
+  // An agent's own model, from OpenRouter's list (D244, D283). The admin's too
+  // (D352): an agent of theirs with none runs on the Admin page's choice. Answers
+  // the user's whole model picture, as `PUT /settings/llm-models/:scope` does.
   app.put('/agents/:id/model', async (context) => {
     const userId = currentUserId(context);
-    if (context.get('user')?.role === 'admin') throw forbidden('the admin chooses models on the Admin page');
     const parsed = modelChoiceSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) throw badRequest('invalid_body', 'expected { model: string | null }', parsed.error.issues);
     const agentId = agentIdFrom(context.req.param('id'));

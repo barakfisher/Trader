@@ -111,6 +111,39 @@ async def test_the_budget_refuses_once_the_day_is_spent():
     assert raised.value.spent_micro_usd == 1_200_000
 
 
+async def test_a_call_whose_most_would_pass_the_cap_is_refused_before_it_is_made():
+    # D354: the cap is checked against spend plus the most the call can cost,
+    # so one call on a dear model cannot pass it by its whole price.
+    guard = _guard(FakeRedis(), "1")
+    await guard.record(600_000)
+    asked: list[tuple[str | None, int, int | None]] = []
+
+    def ceiling(model: str | None, chars: int, max_output_tokens: int | None) -> int:
+        asked.append((model, chars, max_output_tokens))
+        return 400_001
+
+    inner = _StubProvider()
+    provider = BudgetedProvider(inner, guard, ceiling=ceiling)
+    with pytest.raises(LLMBudgetExceededError):
+        await provider.complete(
+            system="sys", user="finding", model="acme/dear", max_output_tokens=9
+        )
+
+    assert inner.calls == 0
+    assert asked == [("acme/dear", len("sys") + len("finding"), 9)]
+
+
+async def test_a_call_whose_most_just_fits_is_made():
+    guard = _guard(FakeRedis(), "1")
+    await guard.record(600_000)
+    inner = _StubProvider()
+    provider = BudgetedProvider(inner, guard, ceiling=lambda model, chars, tokens: 400_000)
+
+    await _complete(provider)
+
+    assert inner.calls == 1
+
+
 async def test_the_budget_resets_the_next_utc_day(monkeypatch):
     day = {"value": datetime(2026, 9, 15, 23, 50, tzinfo=UTC)}
 

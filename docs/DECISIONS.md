@@ -362,3 +362,6 @@ while this file is out of date.
 | 349 | Production starts with an empty database |
 | 350 | In the private phase production uses Yahoo for prices and headlines, and not Yahoo's descriptions |
 | 351 | The header's version is derived from git: the commit's UTC date as YY.MM.DD, plus the short hash |
+| 352 | The admin chooses each agent's model too; an agent with none keeps the Admin page's |
+| 353 | A scan is told its last three decided scans - facts only, never a source |
+| 354 | The daily ceiling admits a call only if its most fits under the cap |

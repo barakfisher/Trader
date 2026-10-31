@@ -18,6 +18,7 @@ const USER = {
   role: 'user',
 };
 const AGENT_ID = '11111111-1111-4111-8111-111111111111';
+const ADMIN_PICK = 'anthropic/claude-sonnet-5.5';
 const LISTED_MODEL = 'acme/model-1';
 const FALLBACK_MODEL = 'google/gemini-3.5-flash-lite';
 
@@ -91,6 +92,7 @@ function resolutions(): UserLlmModelsResponse {
     admin: false,
     choosable: true,
     live: true,
+    agent_default: FALLBACK_MODEL,
     choices: [
       { scope: 'explain', saved: null, effective: FALLBACK_MODEL, fallback: false },
       { scope: 'assistant', saved: 'acme/retired', effective: FALLBACK_MODEL, fallback: true },
@@ -186,18 +188,23 @@ describe('a user choosing their models', () => {
     expect((await put(`/agents/${AGENT_ID}/model`, { model: LISTED_MODEL })).status).toBe(404);
   });
 
-  it('refuses the admin, who chooses on the Admin page', async () => {
+  it("refuses the admin Ask's and the explanations' model, which are the Admin page's", async () => {
     vi.mocked(queries.getUser).mockResolvedValue({ ...USER, role: 'admin' } as never);
     expect((await put('/settings/llm-models/assistant', { model: LISTED_MODEL })).status).toBe(403);
-    expect((await put(`/agents/${AGENT_ID}/model`, { model: LISTED_MODEL })).status).toBe(403);
     expect(queries.setUserModel).not.toHaveBeenCalled();
-    expect(queries.setAgentModel).not.toHaveBeenCalled();
   });
 
-  it('gives the admin no list to choose from', async () => {
-    user = { ...resolutions(), admin: true };
-    const body = await (await app.request('/settings/llm-models', { headers: { ...HEADERS, cookie } })).json();
+  it("lets the admin choose an agent's model from the same list (D352)", async () => {
+    vi.mocked(queries.getUser).mockResolvedValue({ ...USER, role: 'admin' } as never);
+    vi.mocked(queries.getAgent).mockResolvedValueOnce({ id: AGENT_ID, is_primary: false } as never);
+    vi.mocked(queries.setAgentModel).mockResolvedValueOnce(true);
+    user = { ...resolutions(), admin: true, agent_default: ADMIN_PICK };
+    const response = await put(`/agents/${AGENT_ID}/model`, { model: LISTED_MODEL });
+    expect(response.status).toBe(200);
+    expect(queries.setAgentModel).toHaveBeenCalledWith(TEST_USER_ID, AGENT_ID, LISTED_MODEL);
+    const body = await response.json();
     expect(body.admin).toBe(true);
-    expect(body.models).toEqual([]);
+    expect(body.agentDefault).toBe(ADMIN_PICK);
+    expect(body.models.map((model: { id: string }) => model.id)).toEqual([FALLBACK_MODEL, LISTED_MODEL]);
   });
 });

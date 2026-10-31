@@ -1612,7 +1612,10 @@ export interface ModelResolutionView {
 
 /** `GET /settings/llm-models`. */
 export interface ModelChoicesResponse {
-  /** The admin chooses on the Admin page; nothing else here applies to them (D244). */
+  /**
+   * The admin chooses Ask's and the explanations' models on the Admin page (D244);
+   * each agent of the admin's may have its own (D352).
+   */
   admin: boolean;
   /** False unless the installation runs on OpenRouter: nothing can be chosen. */
   choosable: boolean;
@@ -1620,6 +1623,11 @@ export interface ModelChoicesResponse {
   live: boolean;
   /** The tested model a choice falls back to. */
   fallbackModel: string;
+  /**
+   * What an agent with no model of its own runs on: the tested model, or for the
+   * admin the Admin page's agent model (D352). Null when nothing is configured.
+   */
+  agentDefault: string | null;
   models: ListedModelView[];
   choices: Record<UserLlmScope, ModelResolutionView>;
   /** Every agent that scans, oldest first. */

@@ -2,8 +2,9 @@
 /**
  * A user's own models (D244, D283-D285): the picker searches OpenRouter's list,
  * puts the tested model first, says when a saved model has fallen back, and
- * saves only on *Save*; the Dashboard banner lists every fallback, for nobody
- * but a user on their own key.
+ * saves only on *Save*; the Dashboard banner lists every fallback. The admin
+ * chooses only each agent's model here (D352), and "not chosen" there is the
+ * Admin page's agent model.
  */
 
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
@@ -19,7 +20,7 @@ vi.mock('../src/api/client.ts', async () => {
   return { ...actual, api: { get, post: vi.fn(), put, delete: vi.fn(), postForm: vi.fn() } };
 });
 
-const { UserModelsCard } = await import('../src/components/ModelChoiceCards.tsx');
+const { AgentModelCard, UserModelsCard } = await import('../src/components/ModelChoiceCards.tsx');
 const { ModelFallbackBanner } = await import('../src/components/ModelFallbackBanner.tsx');
 const { MAX_SHOWN_MODELS, matching } = await import('../src/components/ModelPicker.tsx');
 const { renderPage } = await import('./serverStateHarness.tsx');
@@ -39,6 +40,7 @@ function choices(overrides: Partial<ModelChoicesResponse> = {}): ModelChoicesRes
     choosable: true,
     live: true,
     fallbackModel: TESTED,
+    agentDefault: TESTED,
     models: [model('acme/zeta', 'Acme: Zeta'), model(TESTED, 'Google: Gemini 3.5 Flash-Lite', true), model('acme/alpha', 'Acme: Alpha')],
     choices: {
       assistant: { saved: 'acme/retired', effective: TESTED, fallback: true },
@@ -146,9 +148,44 @@ describe('the fallback banner', () => {
     render(<ModelFallbackBanner />);
     await waitFor(() => expect(get).toHaveBeenCalled());
     expect(screen.queryByRole('status')).toBeNull();
-    cleanup();
-    vi.clearAllMocks();
+  });
+
+  it("names the admin's agent that fell back (D352)", async () => {
+    data = choices({
+      admin: true,
+      choices: {
+        assistant: { saved: null, effective: TESTED, fallback: false },
+        explain: { saved: null, effective: TESTED, fallback: false },
+      },
+    });
     render(<ModelFallbackBanner />, 'admin');
-    expect(get).not.toHaveBeenCalled();
+    const banner = await screen.findByRole('status');
+    expect(banner.textContent).toMatch(/acme\/gone.*Tech Agent/);
+    expect(screen.queryByRole('link', { name: 'Choose in Settings' })).toBeNull();
+  });
+});
+
+describe("an agent's model", () => {
+  const ADMIN_PICK = 'anthropic/claude-sonnet-5.5';
+
+  it("offers the admin the list, with \"not chosen\" as the Admin page's agent model (D352)", async () => {
+    data = choices({
+      admin: true,
+      agentDefault: ADMIN_PICK,
+      agents: [{ agentId: AGENT, name: 'Tech Agent', saved: null, effective: ADMIN_PICK, fallback: false }],
+    });
+    render(<AgentModelCard agentId={AGENT} />, 'admin');
+    const select = (await screen.findByLabelText('The model this agent scans with')) as HTMLSelectElement;
+    expect(select.options[0]!.textContent).toMatch(/^Not chosen: the Admin page's agent model, .*claude-sonnet-5\.5/);
+    fireEvent.change(select, { target: { value: 'acme/alpha' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(put).toHaveBeenCalledWith(`/agents/${AGENT}/model`, { model: 'acme/alpha' }));
+  });
+
+  it('says "not chosen" is the tested model to a user', async () => {
+    data = choices({ agents: [{ agentId: AGENT, name: 'Tech Agent', saved: null, effective: TESTED, fallback: false }] });
+    render(<AgentModelCard agentId={AGENT} />);
+    const select = (await screen.findByLabelText('The model this agent scans with')) as HTMLSelectElement;
+    expect(select.options[0]!.textContent).toMatch(/^Not chosen: the tested model/);
   });
 });

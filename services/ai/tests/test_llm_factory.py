@@ -9,10 +9,13 @@ is given a MockTransport.
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 import httpx
 import pytest
 
 from app.config import Settings
+from app.llm.base import LLMBudgetExceededError
 from app.llm.budget import BudgetedProvider
 from app.llm.factory import LLMConfigurationError, build_llm
 from app.llm.null_provider import NullProvider
@@ -178,6 +181,34 @@ async def test_the_factory_output_completes_a_call_end_to_end():
     assert result.estimated_cost_micro_usd > 0
     # The spend landed in the day's counter, which is what makes the cap enforceable.
     assert await provider._guard.spent_micro_usd() == result.estimated_cost_micro_usd
+
+
+async def test_the_guard_prices_a_call_at_its_own_model_before_making_it():
+    # D354: an unpriced model is priced at the unknown rate, and 1500 output
+    # tokens at it cost more than this whole day's cap - refused, never sent.
+    sent: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(500)
+
+    provider = build_llm(
+        build(
+            llm_provider="openrouter",
+            openrouter_api_key="sk-test",
+            llm_daily_budget_usd=Decimal("0.01"),
+        ),
+        FakeRedis(),
+        transport=httpx.MockTransport(handler),
+    )
+
+    with pytest.raises(LLMBudgetExceededError) as raised:
+        await provider.complete(
+            system="scan", user="briefing", model="acme/unpriced", max_output_tokens=1500
+        )
+
+    assert sent == []
+    assert raised.value.spent_micro_usd == 0
 
 
 class TestProductionRefusesMisconfiguration:

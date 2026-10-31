@@ -39,7 +39,8 @@ export function matching(models: ListedModelView[], search: string): ListedModel
  *
  * A saved model the list no longer has is said first, with the model used
  * meanwhile (D284), and stays selectable as it is so the select tells the truth.
- * "Not chosen" runs on the tested model.
+ * "Not chosen" runs on the tested model, or for the admin's agent on the Admin
+ * page's agent model (D352): `unchosen` says which.
  */
 export function ModelPicker({
   id,
@@ -48,6 +49,7 @@ export function ModelPicker({
   resolution,
   save,
   perScan,
+  unchosen,
 }: {
   id: string;
   label: string;
@@ -56,6 +58,8 @@ export function ModelPicker({
   save: Saving;
   /** Show each model's cost per scan: for an agent. */
   perScan: boolean;
+  /** What "not chosen" runs on, and how the option says it; the tested model when absent. */
+  unchosen?: { model: string; label: string };
 }) {
   const { t } = useTranslation();
   const stored = resolution.saved ?? '';
@@ -70,9 +74,9 @@ export function ModelPicker({
   // The selection is always an option, even when the search hides it.
   const selectedModel = byId.get(selected);
   if (selectedModel && !shown.includes(selectedModel)) shown.unshift(selectedModel);
-  const fallbackModel = byId.get(data.fallbackModel);
+  const unchosenModel = byId.get(unchosen?.model ?? data.fallbackModel);
   const nameOf = (modelId: string | null) => leftToRight((modelId && byId.get(modelId)?.name) || modelId || '');
-  const detail = selected === '' ? fallbackModel : selectedModel;
+  const detail = selected === '' ? unchosenModel : selectedModel;
 
   return (
     <div className="space-y-2">
@@ -102,7 +106,7 @@ export function ModelPicker({
           onChange={(event) => setSelected(event.target.value)}
           className="input min-w-0 sm:max-w-md"
         >
-          <option value="">{t('models.notChosen')}</option>
+          <option value="">{unchosen?.label ?? t('models.notChosen')}</option>
           {resolution.fallback && resolution.saved && (
             <option value={resolution.saved} disabled>
               {t('models.noLongerOffered', { model: leftToRight(resolution.saved) })}

@@ -32,7 +32,7 @@ from app.llm.openai_compatible import OpenAICompatibleProvider
 from app.llm.openrouter_models import OpenRouterModels
 from app.llm.own_key import OwnKeyProvider
 from app.llm.payer import PayerGate
-from app.llm.pricing import PriceBook
+from app.llm.pricing import PriceBook, ceiling_cost_micro_usd
 from app.llm.user_models import UserModelStore
 
 log = get_logger("llm.factory")
@@ -258,7 +258,22 @@ def _build_provider(
         model=provider.model,
         daily_budget_usd=str(settings.llm_daily_budget_usd),
     )
-    return BudgetedProvider(provider, DailySpendGuard(redis, settings.llm_daily_budget_usd))
+    book = prices if prices is not None else settings.llm_model_price_map
+    configured = provider.model
+
+    def ceiling(model: str | None, chars: int, max_output_tokens: int | None) -> int:
+        # D354: the most this call can cost, priced as the call itself will be.
+        return ceiling_cost_micro_usd(
+            model or configured,
+            chars,
+            max_output_tokens or settings.llm_max_output_tokens,
+            book,
+            unknown_price_usd_per_mtok=settings.llm_unknown_model_price_usd_per_mtok,
+        )
+
+    return BudgetedProvider(
+        provider, DailySpendGuard(redis, settings.llm_daily_budget_usd), ceiling=ceiling
+    )
 
 
 def _shared_options(settings: Settings, prices: PriceBook | None = None) -> dict[str, object]:

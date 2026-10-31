@@ -4,20 +4,18 @@ import { TriangleAlert } from 'lucide-react';
 import { leftToRight, ownDirection } from '../i18n/format.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { fallbacksOf, useModelChoicesQuery } from '../queries/modelChoices.ts';
-import { useStore } from '../stores/context.tsx';
 
 /**
  * Every model the user chose that OpenRouter no longer lists, and what runs
  * instead (D284), each with the way to choose again: Settings for Ask and
- * explanations, the agent's page for an agent. Nothing for the admin, nothing
- * while the read is pending or failed, nothing when nothing fell back.
+ * explanations, the agent's page for an agent. The admin's agents too (D352),
+ * whose Ask and explanations are the Admin page's and never fall back here.
+ * Nothing while the read is pending or failed, nothing when nothing fell back.
  */
 export function ModelFallbackBanner() {
   const { t } = useTranslation();
-  const { auth } = useStore();
-  const isAdmin = auth.user?.role === 'admin';
-  const data = useModelChoicesQuery(!isAdmin).data;
-  if (isAdmin || !data) return null;
+  const data = useModelChoicesQuery().data;
+  if (!data) return null;
   const fallbacks = fallbacksOf(data);
   if (fallbacks.length === 0) return null;
   return (

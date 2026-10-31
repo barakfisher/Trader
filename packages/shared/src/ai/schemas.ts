@@ -471,6 +471,7 @@ export const userLlmModelsResponseSchema = z.object({
   admin: z.boolean(),
   choosable: z.boolean(),
   live: z.boolean(),
+  agent_default: z.string().nullable(),
   choices: z.array(z.object({ scope: z.enum(['explain', 'assistant']), ...llmModelResolutionShape })),
   agents: z.array(z.object({ agent_id: z.string(), name: z.string(), ...llmModelResolutionShape })),
 });
