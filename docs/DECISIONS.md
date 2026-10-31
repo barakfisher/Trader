@@ -362,3 +362,4 @@ while this file is out of date.
 | 349 | Production starts with an empty database |
 | 350 | In the private phase production uses Yahoo for prices and headlines, and not Yahoo's descriptions |
 | 351 | The header's version is derived from git: the commit's UTC date as YY.MM.DD, plus the short hash |
+| 352 | The header shows when the commit landed, on the user's clock, not its hash |

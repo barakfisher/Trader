@@ -968,8 +968,8 @@
     "insights": "תובנות",
     "unread": "ממצאים חדשים",
     "research": "מחקר",
-    "version": "גרסה {{date}}, קומיט {{commit}}",
-    "versionDirty": "גרסה {{date}}, קומיט {{commit}}, עם שינויים שלא נכנסו לקומיט",
+    "version": "גרסה {{date}} {{time}}, קומיט {{commit}}",
+    "versionDirty": "גרסה {{date}} {{time}}, קומיט {{commit}}, עם שינויים שלא נכנסו לקומיט",
     "versionUnknown": "גרסה לא ידועה"
   },
   "dashboard": {

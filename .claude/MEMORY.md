@@ -18,11 +18,11 @@ was five, so this is two late - #349 and #350 merged first).
     VM, `prod-env.sh` / `prod-deploy.sh`, backups over SSH, a CI check of the prod compose file
     (D347-D350).
 - **Deployed (2026-10-31):** production (`https://app.tiklens.com`) and compose run `c2a9e55`
-  (#353, D351: the header shows the commit), migration head `0080_cash_movement_kinds`. **The
+  (#353, D351: the header shows the version; D352 makes it the commit time), migration head `0080_cash_movement_kinds`. **The
   local kind cluster is gone** - deleted 2026-10-31 after a backup in `~/Backups/traders/kind/`;
   the phone opens production instead (docs/PHONE-ACCESS.md). `infra/k8s/` and CI's kind job
   stay. Older lines below that say "deployed compose and kind" describe the time before.
-- **Decisions reach 351** (next: **352**). **Migrations:** `0080` head; next free `0081`.
+- **Decisions reach 352** (next: **353**). **Migrations:** `0080` head; next free `0081`.
 - **M10 status:** PR 16's code is merged and the host runs it since 2026-10-31 (the first deploy
   is "Next session: the first production deploy" below). Still the user's: the legal wording (D265) and
   the D254 question; until the legal text exists production can run only in *approval* mode.
@@ -5805,6 +5805,17 @@ failure they prevent.
       the Mac, which is the exact mistake the label exists to catch. **Rejected: the date alone** -
       several merges a day share it (2026-10-27 had five). **Rejected: a commit count** - a branch
       and `main` reach the same count with different content.
+352. **The header shows when the commit landed, on the user's clock, not its hash** (the user,
+    2026-10-31; replaces D351's visible part) - `26.10.31 18:12`, only `18:12` below `sm`.
+    - `app-version.sh` prints the commit time in UTC (`2026-10-31T16:12:41Z+c2a9e55`); for a
+      squash merge on GitHub that is the moment it reached `main`. The page renders it in
+      `users.timezone`, as every other time on screen (guideline 10), so the same build reads the
+      same on the Mac and the phone. The hash stays in the tooltip and the screen-reader sentence:
+      it is what `prod-deploy.sh <commit>` takes.
+    - A fixed `YY.MM.DD HH:MM` pattern, not the language's date format: it is a label to compare,
+      as the user asked for it. **Rejected: the time in UTC** - 16:12 for a merge the user saw at
+      18:12 reads as wrong. **Rejected: the time alone at every width** - a deploy a day later at
+      the same minute would look identical; on a phone it is the trade-off for the bar's width.
 ---
 
 ## Bugs that cost real time, and the lesson from each
