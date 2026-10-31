@@ -2,8 +2,9 @@
 
 **Open <https://app.tiklens.com>** - production (docs/RUNBOOK.md section 8) - and sign in with your
 email and password. It works on any network, with nothing installed on the phone and with the Mac
-off. The short commit hash in the header (D351) says which build it is; the Mac's compose stack
-shows its own, so a difference between the two is visible at a glance.
+off. The time in the header (D351, D352) says when the build's commit reached `main`, on your own
+clock; the Mac's compose stack shows its own, so a difference between the two is visible at a
+glance.
 
 ## The local stacks are not reachable from the phone
 

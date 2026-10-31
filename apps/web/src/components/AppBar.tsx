@@ -17,7 +17,8 @@ import {
 } from 'lucide-react';
 
 import { useTranslation } from '../i18n/index.ts';
-import { APP_VERSION, type AppVersion } from '../lib/appVersion.ts';
+import { APP_VERSION, type AppVersion, versionStamp } from '../lib/appVersion.ts';
+import { getDisplayTimeZone } from '../lib/relativeTime.ts';
 import { Disclosure } from './Disclosure.tsx';
 import { SpendIndicator } from './SpendIndicator.tsx';
 import { useAdminSignupCountQuery } from '../queries/admin.ts';
@@ -89,7 +90,7 @@ export const AppBar = observer(function AppBar() {
           {t('nav.portfolio')}
         </Link>
 
-        <VersionLabel version={APP_VERSION} />
+        <VersionLabel version={APP_VERSION} timeZone={getDisplayTimeZone()} />
 
         <ul className="hidden flex-1 items-center gap-1 md:flex">
           {places.map((place) => (
@@ -182,24 +183,26 @@ function PlaceLink({ place, pathname, wide = false }: { place: Place; pathname: 
 }
 
 /**
- * The commit this page was built from (D351), so production and a local
- * checkout can be told apart at a glance. Left to right in every language: it
- * is a code, and a right-to-left page would otherwise put the hash first. A
- * checkout with uncommitted changes gets an asterisk; the full sentence is the
- * tooltip and what a screen reader says. Below `sm` only the hash: with the
- * spend chip beside the menu, the date pushed a 375px bar past its width, and
- * the hash is the part that tells two builds apart.
+ * When the commit this page was built from landed (D351, D352), on the user's
+ * clock, so production and a local checkout can be told apart at a glance.
+ * Left to right in every language, so a right-to-left page keeps the date
+ * before the time. A checkout with uncommitted changes gets an asterisk; the
+ * full sentence, with the hash, is the tooltip and what a screen reader says.
+ * Below `sm` only the time: with the spend chip beside the menu, the date
+ * pushed a 375px bar past its width.
  */
-export function VersionLabel({ version }: { version: AppVersion | null }) {
+export function VersionLabel({ version, timeZone }: { version: AppVersion | null; timeZone: string }) {
   const { t } = useTranslation();
   if (!version) return <span className="text-xs text-text-muted">{t('nav.versionUnknown')}</span>;
-  const { date, commit, dirty } = version;
-  const label = dirty ? t('nav.versionDirty', { date, commit }) : t('nav.version', { date, commit });
+  const { commit, dirty } = version;
+  const { date, time } = versionStamp(version.committedAt, timeZone);
+  const values = { date, time, commit };
+  const label = dirty ? t('nav.versionDirty', values) : t('nav.version', values);
   return (
     <span className="text-xs text-text-muted tabular-nums" title={label}>
       <span dir="ltr" aria-hidden>
-        <span className="hidden sm:inline">{date} · </span>
-        {commit}
+        <span className="hidden sm:inline">{date} </span>
+        {time}
         {dirty && '*'}
       </span>
       <span className="sr-only">{label}</span>
