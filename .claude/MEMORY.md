@@ -17,12 +17,14 @@ was five, so this is two late - #349 and #350 merged first).
   - #350, M10 PR 16's repository part: the production host - compose behind Caddy on one Oracle
     VM, `prod-env.sh` / `prod-deploy.sh`, backups over SSH, a CI check of the prod compose file
     (D347-D350).
-- **Deployed:** compose and kind run `b632fde` (#349), migration head `0080_cash_movement_kinds`.
-  **#350 is deployed nowhere** - its orchestrator changes (`/readyz` detail, the template
-  `SESSION_SECRET` refusal) act in production only, so compose and kind lose nothing.
+- **Deployed (2026-10-31):** production (`https://app.tiklens.com`) and compose run `c2a9e55`
+  (#353, D351: the header shows the commit), migration head `0080_cash_movement_kinds`. **The
+  local kind cluster is gone** - deleted 2026-10-31 after a backup in `~/Backups/traders/kind/`;
+  the phone opens production instead (docs/PHONE-ACCESS.md). `infra/k8s/` and CI's kind job
+  stay. Older lines below that say "deployed compose and kind" describe the time before.
 - **Decisions reach 351** (next: **352**). **Migrations:** `0080` head; next free `0081`.
-- **M10 status:** PR 16's code is merged; the host exists but runs nothing yet (see "Next
-  session: the first production deploy" below). Still the user's: the legal wording (D265) and
+- **M10 status:** PR 16's code is merged and the host runs it since 2026-10-31 (the first deploy
+  is "Next session: the first production deploy" below). Still the user's: the legal wording (D265) and
   the D254 question; until the legal text exists production can run only in *approval* mode.
 - **The production host, as it stands (2026-10-30):**
   - domain `tiklens.com` at Spaceship (bought 2026-10-29, one year, temporary by the user's
