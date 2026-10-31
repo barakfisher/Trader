@@ -38,6 +38,8 @@ require_command docker "Docker Desktop: https://www.docker.com/products/docker-d
 docker info > /dev/null 2>&1 || fail "Docker is installed but not running. Start Docker Desktop and try again."
 
 IMAGE_TAG="${IMAGE_TAG:-$(image_tag)}"
+# The header's version (D351): .git is not in the build context, so it is passed in.
+APP_VERSION="${APP_VERSION:-$(bash "$REPO_ROOT/scripts/app-version.sh" || true)}"
 
 build() {
   local name="$1" dockerfile="$2"
@@ -52,6 +54,6 @@ build() {
 
 build ai-service Dockerfile.ai
 build orchestrator Dockerfile.orchestrator
-build web Dockerfile.web --target prod
+build web Dockerfile.web --target prod --build-arg "APP_VERSION=$APP_VERSION"
 
 ok "built traders/{ai-service,orchestrator,web}:$IMAGE_TAG"

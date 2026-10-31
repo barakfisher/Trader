@@ -211,6 +211,9 @@ services:
       context: ../..
       dockerfile: infra/docker/Dockerfile.web
       target: dev
+      args:
+        # Exported by dev-docker.sh / prod-deploy.sh from scripts/app-version.sh (D351).
+        APP_VERSION: ${APP_VERSION:-}
     environment:
       # The dev server forwards /api/* here (apps/web/vite.config.ts), so the
       # browser calls the API on the page's own address, whatever name it used.

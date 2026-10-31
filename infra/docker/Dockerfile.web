@@ -19,6 +19,12 @@ RUN pnpm install --frozen-lockfile --filter @traders/web...
 COPY packages/shared packages/shared
 COPY apps/web apps/web
 
+# The version the header shows (D351, scripts/app-version.sh). .git is not in
+# the build context, so the build is told; vite.config.ts reads it at build time
+# (prod) or at start (dev). After the install, so a new commit does not redo it.
+ARG APP_VERSION=
+ENV APP_VERSION=$APP_VERSION
+
 # --- development -------------------------------------------------------------
 FROM deps AS dev
 WORKDIR /repo/apps/web

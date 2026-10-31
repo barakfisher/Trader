@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -26,8 +28,27 @@ const apiProxy = {
   },
 };
 
+/**
+ * The version the header shows (D351): `26.10.31+0cad4d6`, from git.
+ *
+ * A Docker build passes it as APP_VERSION, because .git is not in the build
+ * context; everywhere else this machine's checkout is asked directly. Neither
+ * available - an empty string - and the header says the version is unknown
+ * rather than showing one it cannot vouch for.
+ */
+function appVersion(): string {
+  if (process.env.APP_VERSION) return process.env.APP_VERSION;
+  try {
+    const script = fileURLToPath(new URL('../../scripts/app-version.sh', import.meta.url));
+    return execFileSync('bash', [script], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return '';
+  }
+}
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  define: { 'import.meta.env.APP_VERSION': JSON.stringify(appVersion()) },
   server: {
     port: 5173,
     host: true, // reachable from the Docker network

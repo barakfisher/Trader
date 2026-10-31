@@ -66,7 +66,11 @@ if ! git merge-base --is-ancestor "$commit" origin/main && [ "$force" != --force
   exit 1
 fi
 git checkout --quiet --detach "$commit"
-echo "  .. deploying $commit $(git log -1 --format='%s')"
+# The header's version (D351), passed to the web build by compose. A commit from
+# before the script existed has none, and its header says the version is unknown.
+APP_VERSION="$(bash scripts/app-version.sh 2> /dev/null || true)"
+export APP_VERSION
+echo "  .. deploying $commit (${APP_VERSION:-no version}) $(git log -1 --format='%s')"
 
 compose=(docker compose -f "$compose_file" --env-file .env)
 up_status=0
