@@ -200,7 +200,8 @@ browser -> http://traders.localhost  (127.0.0.1:80 on the Mac; *.localhost needs
 ```
 
 The mapping listens on 127.0.0.1 only: other machines on your network cannot reach the cluster.
-A phone reaches it through Tailscale, whose `serve` connects to that same 127.0.0.1:80: see
+A phone used to reach it through Tailscale, whose `serve` connects to that same 127.0.0.1:80;
+since 2026-10-31 the phone opens production instead: see
 [docs/PHONE-ACCESS.md](../../docs/PHONE-ACCESS.md).
 `traders.localhost` is its own hostname, so its session cookie never collides with the compose
 app's on `127.0.0.1` - a browser keeps cookies per host, not per port.
