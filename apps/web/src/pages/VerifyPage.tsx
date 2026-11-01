@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { LineChart, LockKeyhole } from 'lucide-react';
+import { LockKeyhole } from 'lucide-react';
 
 import type { VerifyEmailResponse } from '@traders/shared';
 
@@ -10,6 +10,7 @@ import { PasswordInput } from '../components/PasswordInput.tsx';
 import { Button, ErrorNote } from '../components/ui.tsx';
 import { useTranslation } from '../i18n/index.ts';
 import { useStore } from '../stores/context.tsx';
+import { BrandMark } from '../components/BrandMark.tsx';
 
 /** The page a mailed link opens (D259); outside the router, so it works signed out as well as in. */
 export const VERIFY_PATH = '/verify';
@@ -86,7 +87,7 @@ export const VerifyPage = observer(function VerifyPage() {
     <main className="flex min-h-full items-center justify-center p-6">
       <div className="w-full max-w-sm space-y-4">
         <div className="flex items-center gap-2">
-          <LineChart className="size-6 text-accent" aria-hidden />
+          <BrandMark className="size-6" />
           <h1 className="text-lg font-semibold">{t('login.title')}</h1>
         </div>
         {outcome === null ? (

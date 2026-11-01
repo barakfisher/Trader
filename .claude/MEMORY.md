@@ -5870,6 +5870,18 @@ failure they prevent.
     admin may pick (a second list rule, and it bounds price, not spend); reserving the maximum and
     refunding (`budget.py`'s own reasoning: a round trip per call and a leaked reservation per
     crash).
+356. **The TikLens mark is a lens over a rising line, drawn inline, and the name stays "Traders"
+    for now** (the user, 2026-11-01). Chosen from four drawn directions (a T in a lens, a case
+    with a lens clasp, bars in a lens) because it says "a lens on a portfolio" without words.
+    Two variants: `public/logo.svg` (full, for large uses) and `public/favicon.svg` (thicker,
+    the chart cut to two strokes, so it still reads at 16 px), which `BrandMark` repeats inline;
+    `public/logo-120.png` is the square Google's OAuth consent screen asks for. *Rejected:*
+    `BrandMark` as an `<img src="/favicon.svg">` - the Ask page's test that a reply never renders
+    an image counts every `<img>` on the page, and the header's would have turned that guard into
+    one that must be scoped or weakened. Uploading the logo to Google is held back: a logo starts
+    Google's brand verification (home page and privacy policy on a verified domain, days of
+    review), which would delay Google sign-in until the legal text is final. Renaming the UI from
+    "Traders" to TikLens is a separate decision, not taken here.
 ---
 
 ## Bugs that cost real time, and the lesson from each
