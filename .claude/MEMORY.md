@@ -22,7 +22,7 @@ was five, so this is two late - #349 and #350 merged first).
   local kind cluster is gone** - deleted 2026-10-31 after a backup in `~/Backups/traders/kind/`;
   the phone opens production instead (docs/PHONE-ACCESS.md). `infra/k8s/` and CI's kind job
   stay. Older lines below that say "deployed compose and kind" describe the time before.
-- **Decisions reach 357** (next: **358**). **Migrations:** `0080` head; next free `0081`.
+- **Decisions reach 358** (next: **359**). **Migrations:** `0080` head; next free `0081`.
 - **M10 status:** PR 16's code is merged and the host runs it since 2026-10-31 (the first deploy
   is "Next session: the first production deploy" below). Still the user's: the legal wording (D265) and
   the D254 question; until the legal text exists production can run only in *approval* mode.
@@ -5896,6 +5896,19 @@ failure they prevent.
     unchanged, so D356's separate small variant has nothing left to simplify. The rule that
     outlives the drawing: a mark's tile must contrast with the surface it sits on, and is judged
     rendered at 16-20 px, not at 512. The UI name is still "Traders" (D356).
+358. **The product is called TikLens everywhere a user reads it; inside, it stays Traders** (the
+    user, 2026-11-01, taking the rename D356 left open). Renamed: the tab title, the sign-in
+    heading, the OAuth "already linked" message, the draft legal pages, every account email
+    (subjects included), the Telegram menu and legal notice, and the assistant's instructions and
+    product guide - in English and Hebrew alike. *Rejected:* the web UI alone - the domain, the bot
+    (@TikLensBot) and the sender domain already say TikLens, so a "Reset your Traders password"
+    mail from tiklens.com would read as two products, and to a careful user as phishing. Kept as
+    Traders on purpose, so a later session does not "finish" the rename: the repository, package
+    and container names, the AI service's OpenAPI title, the `x-title` sent to OpenRouter (it
+    names the app in OpenRouter's activity log; changing it splits that history), and code comments.
+    The From name of mail is not in the code: it is `EMAIL_FROM` in each installation's `.env`.
+    The header still shows the mark beside "Portfolio", not the name: that link is the only way
+    to the portfolio, so putting the name there would take a place away.
 ---
 
 ## Bugs that cost real time, and the lesson from each

@@ -18,7 +18,7 @@ from app.assistant.reply import DECLINE_REASONS, MAX_SUGGESTIONS
 
 def instructions(*, now: datetime, timezone: str, step_limit: int) -> str:
     local = now.astimezone(ZoneInfo(timezone))
-    return f"""You are the assistant inside Traders, an app that watches a user's portfolio,
+    return f"""You are the assistant inside TikLens, an app that watches a user's portfolio,
 explains what moves in it, and runs simulated agents that propose paper trades. No real
 order is ever placed. You talk with the app's user.
 

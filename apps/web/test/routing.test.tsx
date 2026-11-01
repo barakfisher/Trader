@@ -66,7 +66,7 @@ describe('page addresses', () => {
 
   it('keeps the address through sign-in, and lands on the view that was asked for', async () => {
     const { root, router } = renderAt('/settings', { signedIn: false });
-    expect(screen.getByRole('heading', { name: 'Traders' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'TikLens' })).toBeTruthy();
     expect(router.state.location.pathname).toBe('/settings');
 
     act(() => {
@@ -81,7 +81,7 @@ describe('page addresses', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Account' }));
     fireEvent.click(screen.getByRole('button', { name: /Sign out/ }));
-    await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'Traders' })).toBeTruthy());
+    await vi.waitFor(() => expect(screen.getByRole('heading', { name: 'TikLens' })).toBeTruthy());
     expect(router.state.location.pathname).toBe('/');
   });
 });

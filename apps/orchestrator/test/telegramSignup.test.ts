@@ -210,7 +210,7 @@ describe('a tap on a request', () => {
     await tap(encodeSignupData({ userId: REQUESTER, action: 'approve', capMicroUsd: 20_000_000 }, SIGNING_SECRET));
     await mail.settled();
     expect(mail.sent).toHaveLength(1);
-    expect(mail.sent[0]).toMatchObject({ to: 'noa@example.com', subject: 'Your Traders account is ready' });
+    expect(mail.sent[0]).toMatchObject({ to: 'noa@example.com', subject: 'Your TikLens account is ready' });
     expect(mail.sent[0]!.text).toContain('http://localhost:5173/');
     // A second tap finds the request decided: no second mail.
     vi.mocked(queries.approveSignup).mockResolvedValueOnce({ applied: false, status: 'active', email: 'noa@example.com' });

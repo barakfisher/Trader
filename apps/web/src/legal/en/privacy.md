@@ -1,7 +1,7 @@
 <!-- legal-text-pending -->
 # Privacy policy
 
-**Draft - not yet published.** This page is a template to be written before Traders opens to the public. Each section says what it must cover and lists the facts the app already establishes.
+**Draft - not yet published.** This page is a template to be written before TikLens opens to the public. Each section says what it must cover and lists the facts the app already establishes.
 
 ## Who is responsible for your data
 
@@ -80,7 +80,7 @@ Facts this section must state:
 Facts this section must state:
 
 - The operator can read the whole database, including stored model-call text.
-- A symbol you add that is outside the app's screened list of instruments joins the list every user shares, with its public description. Other users can then tell that someone on Traders added it - never who, how much, or when.
+- A symbol you add that is outside the app's screened list of instruments joins the list every user shares, with its public description. Other users can then tell that someone on TikLens added it - never who, how much, or when.
 
 ## Changes to this policy
 

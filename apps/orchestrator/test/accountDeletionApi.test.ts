@@ -262,7 +262,7 @@ describe('signing in during the grace period (D264)', () => {
     expect(response.headers.get('set-cookie')).toContain(`${SESSION_COOKIE}=`);
     // Mailed, so a sign-in by someone else that undid the deletion is seen.
     await mail.settled();
-    expect(mail.sent.map((sent) => [sent.to, sent.subject])).toEqual([[USER.email, 'Your Traders account will not be deleted']]);
+    expect(mail.sent.map((sent) => [sent.to, sent.subject])).toEqual([[USER.email, 'Your TikLens account will not be deleted']]);
   });
 
   it('refuses a closed account whose date has passed - nothing left to reopen', async () => {

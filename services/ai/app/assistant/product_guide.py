@@ -35,7 +35,7 @@ PAGES = (
 SECTIONS = MappingProxyType(
     {
         "overview": (
-            "Traders watches a portfolio, explains what moves in it, and lets simulated "
+            "TikLens watches a portfolio, explains what moves in it, and lets simulated "
             "agents propose paper trades. It never places a real order and never contacts a "
             "broker: approving a proposal records it in the app's own virtual ledger only. "
             "It explains and observes; it does not give personal investment advice."

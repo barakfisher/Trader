@@ -86,7 +86,7 @@ const ENV = {
   ALLOWED_ORIGINS: 'http://localhost:5173',
   // Mail configured, so *automatic* is refused for the legal text alone.
   SMTP_HOST: 'smtp.example.com',
-  EMAIL_FROM: 'Traders <noreply@example.com>',
+  EMAIL_FROM: 'TikLens <noreply@example.com>',
 } as unknown as NodeJS.ProcessEnv;
 
 const HEADERS = { origin: 'http://localhost:5173', 'content-type': 'application/json' };

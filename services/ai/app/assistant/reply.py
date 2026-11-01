@@ -176,7 +176,7 @@ _DATA = {
     "get_price_history": "Daily closes",
     "get_findings": "Rule findings",
     "search_universe": "Universe search",
-    "get_product_guide": "How Traders works",
+    "get_product_guide": "How TikLens works",
     "get_universe_info": "The universe snapshot",
 }
 

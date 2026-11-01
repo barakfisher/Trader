@@ -159,7 +159,7 @@ const schema = z.object({
     (value) => (value === '' || value === undefined ? undefined : value === 'true'),
     z.boolean().default(false),
   ),
-  /** The From line, e.g. `Traders <no-reply@example.com>`, on the domain with SPF and DKIM (D258). */
+  /** The From line, e.g. `TikLens <no-reply@example.com>`, on the domain with SPF and DKIM (D258). */
   EMAIL_FROM: optionalSetting(),
 
   /**

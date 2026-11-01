@@ -21,7 +21,7 @@
   },
   "disclaimer": "Educational and informational only. Nothing here is investment advice, no orders are ever placed, and prices may be delayed. Verify every figure before acting on it.",
   "login": {
-    "title": "Traders",
+    "title": "TikLens",
     "intro": "Portfolio copilot. Sign in with your email and password.",
     "sessionEnded": "You were signed out on this device - from another device, or because the session ended. Sign in again to continue.",
     "email": "Email",
@@ -2359,7 +2359,7 @@
       "admin_link_from_settings": "This address belongs to the admin account. Sign in with the password, then link the provider in Settings.",
       "linked": "Linked. You can now sign in with it.",
       "already_linked": "That provider is already linked to this account.",
-      "taken": "That provider account is already linked to another Traders account.",
+      "taken": "That provider account is already linked to another TikLens account.",
       "failed": "Signing in with the provider did not work. Try again, or sign in with your password.",
       "restored": "Signed in. Signing in cancelled your account's deletion, and full access is back."
     }
