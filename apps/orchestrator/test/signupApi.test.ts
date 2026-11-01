@@ -135,7 +135,7 @@ describe('asking to join (D156, D185, D259, D303)', () => {
     expect(await response.json()).toEqual({ outcome: 'received' });
     await mail.settled();
     expect(mail.sent).toHaveLength(1);
-    expect(mail.sent[0]).toMatchObject({ to: 'noa@example.com', subject: 'Someone tried to sign up to Traders with your address' });
+    expect(mail.sent[0]).toMatchObject({ to: 'noa@example.com', subject: 'Someone tried to sign up to TikLens with your address' });
     expect(mail.sent[0]!.text).not.toContain('#token=');
     expect(queries.issueAuthToken).not.toHaveBeenCalled();
     expect(announceSignupRequest).not.toHaveBeenCalled();

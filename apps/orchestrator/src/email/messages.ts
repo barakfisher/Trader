@@ -49,67 +49,67 @@ const isolate = (text: string) => `⁨${text}⁩`;
 const CATALOGUE: Record<UiLanguage, EmailCatalogue> = {
   en: {
     verifyEmail: (link, hours) => ({
-      subject: 'Confirm your email for Traders',
+      subject: 'Confirm your email for TikLens',
       blocks: [
-        'Confirm this address to finish signing up for Traders:',
+        'Confirm this address to finish signing up for TikLens:',
         { link },
         `The link works once and expires in ${hours} hours. If you did not sign up, ignore this email - nothing is created until the link is opened.`,
       ],
     }),
     signupExists: (signInLink) => ({
-      subject: 'Someone tried to sign up to Traders with your address',
+      subject: 'Someone tried to sign up to TikLens with your address',
       blocks: [
-        'Someone asked to create a Traders account with this address, which already has an account or a request.',
+        'Someone asked to create a TikLens account with this address, which already has an account or a request.',
         'If it was you, sign in instead:',
         { link: signInLink },
         'If it was not you, you can ignore this email: nothing was changed.',
       ],
     }),
     verifyNewEmail: (link, hours) => ({
-      subject: 'Confirm your new Traders sign-in address',
+      subject: 'Confirm your new TikLens sign-in address',
       blocks: [
-        'Confirm this address as the new sign-in address of your Traders account:',
+        'Confirm this address as the new sign-in address of your TikLens account:',
         { link },
         `The link works once and expires in ${hours} hours. Until it is opened, you sign in with your current address.`,
       ],
     }),
     emailChangeRequested: (newEmail) => ({
-      subject: 'A change of your Traders sign-in address was requested',
+      subject: 'A change of your TikLens sign-in address was requested',
       blocks: [
-        `Someone signed in to your Traders account asked to change its sign-in address to ${newEmail}.`,
+        `Someone signed in to your TikLens account asked to change its sign-in address to ${newEmail}.`,
         'Nothing changes until that address is confirmed - you still sign in with this one.',
         'If this was not you, sign in, change your password, and sign out the devices you do not recognise in Settings.',
       ],
     }),
     resetPassword: (link, minutes) => ({
-      subject: 'Reset your Traders password',
+      subject: 'Reset your TikLens password',
       blocks: [
-        'Someone asked to reset the password of the Traders account with this address. To choose a new one, open:',
+        'Someone asked to reset the password of the TikLens account with this address. To choose a new one, open:',
         { link },
         `The link works once and expires in ${minutes} minutes. Choosing a new password signs you out on every device.`,
         'If you did not ask for this, ignore this email: your password has not changed.',
       ],
     }),
     passwordChanged: (signInLink) => ({
-      subject: 'Your Traders password was changed',
+      subject: 'Your TikLens password was changed',
       blocks: [
-        'The password of your Traders account was just changed, and every device was signed out.',
+        'The password of your TikLens account was just changed, and every device was signed out.',
         'If this was you, there is nothing more to do. If it was not, reset your password from the sign-in page now:',
         { link: signInLink },
       ],
     }),
     identityLinked: (provider, signInLink) => ({
-      subject: `${provider} was linked to your Traders account`,
+      subject: `${provider} was linked to your TikLens account`,
       blocks: [
-        `Your Traders account can now be signed in to with ${provider}.`,
+        `Your TikLens account can now be signed in to with ${provider}.`,
         `If this was not you, sign in, unlink ${provider} in Settings, and change your password:`,
         { link: signInLink },
       ],
     }),
     accountClosed: (date, signInLink) => ({
-      subject: 'Your Traders account will be deleted',
+      subject: 'Your TikLens account will be deleted',
       blocks: [
-        'You asked to delete your Traders account. It is closed now: it is signed out everywhere, and no scans, alerts or digests run for it.',
+        'You asked to delete your TikLens account. It is closed now: it is signed out everywhere, and no scans, alerts or digests run for it.',
         `On ${date} it will be permanently deleted, with everything in it - holdings, agents and their ledgers, proposals, observations and conversations.`,
         'Changed your mind? Sign in before then and the deletion is cancelled:',
         { link: signInLink },
@@ -117,83 +117,83 @@ const CATALOGUE: Record<UiLanguage, EmailCatalogue> = {
       ],
     }),
     accountRestored: () => ({
-      subject: 'Your Traders account will not be deleted',
+      subject: 'Your TikLens account will not be deleted',
       blocks: [
-        'Someone signed in to your Traders account, which cancelled its deletion. The account is open again, with everything in it.',
+        'Someone signed in to your TikLens account, which cancelled its deletion. The account is open again, with everything in it.',
         'If this was you, there is nothing more to do. If it was not, reset your password from the sign-in page, then sign out the devices you do not recognise in Settings - and delete the account again if you still want it gone.',
       ],
     }),
     signupApproved: (signInLink) => ({
-      subject: 'Your Traders account is ready',
+      subject: 'Your TikLens account is ready',
       blocks: [
-        'Your request to join Traders was approved. Sign in with the email and password you signed up with, or the Google or GitHub account you used:',
+        'Your request to join TikLens was approved. Sign in with the email and password you signed up with, or the Google or GitHub account you used:',
         { link: signInLink },
       ],
     }),
   },
   he: {
     verifyEmail: (link, hours) => ({
-      subject: 'אישור כתובת האימייל שלכם ב-Traders',
+      subject: 'אישור כתובת האימייל שלכם ב-TikLens',
       blocks: [
-        'אשרו את הכתובת הזו כדי להשלים את ההרשמה ל-Traders:',
+        'אשרו את הכתובת הזו כדי להשלים את ההרשמה ל-TikLens:',
         { link },
         `הקישור עובד פעם אחת ותוקפו פג בעוד ${hours} שעות. אם לא נרשמתם, התעלמו מהאימייל הזה - שום דבר לא נוצר עד שהקישור נפתח.`,
       ],
     }),
     signupExists: (signInLink) => ({
-      subject: 'מישהו ניסה להירשם ל-Traders עם הכתובת שלכם',
+      subject: 'מישהו ניסה להירשם ל-TikLens עם הכתובת שלכם',
       blocks: [
-        'מישהו ביקש ליצור חשבון Traders עם הכתובת הזו, שכבר יש לה חשבון או בקשה.',
+        'מישהו ביקש ליצור חשבון TikLens עם הכתובת הזו, שכבר יש לה חשבון או בקשה.',
         'אם זה הייתם אתם, התחברו במקום זאת:',
         { link: signInLink },
         'אם זה לא הייתם אתם, אפשר להתעלם מהאימייל הזה: שום דבר לא השתנה.',
       ],
     }),
     verifyNewEmail: (link, hours) => ({
-      subject: 'אישור כתובת ההתחברות החדשה שלכם ב-Traders',
+      subject: 'אישור כתובת ההתחברות החדשה שלכם ב-TikLens',
       blocks: [
-        'אשרו את הכתובת הזו ככתובת ההתחברות החדשה של חשבון ה-Traders שלכם:',
+        'אשרו את הכתובת הזו ככתובת ההתחברות החדשה של חשבון ה-TikLens שלכם:',
         { link },
         `הקישור עובד פעם אחת ותוקפו פג בעוד ${hours} שעות. עד שייפתח, אתם מתחברים עם הכתובת הנוכחית.`,
       ],
     }),
     emailChangeRequested: (newEmail) => ({
-      subject: 'התבקש שינוי של כתובת ההתחברות שלכם ב-Traders',
+      subject: 'התבקש שינוי של כתובת ההתחברות שלכם ב-TikLens',
       blocks: [
-        `מישהו שמחובר לחשבון ה-Traders שלכם ביקש לשנות את כתובת ההתחברות שלו ל-${isolate(newEmail)}.`,
+        `מישהו שמחובר לחשבון ה-TikLens שלכם ביקש לשנות את כתובת ההתחברות שלו ל-${isolate(newEmail)}.`,
         'שום דבר לא משתנה עד שהכתובת הזו תאושר - אתם עדיין מתחברים עם הכתובת הזו.',
         'אם זה לא הייתם אתם, התחברו, החליפו את הסיסמה ונתקו בהגדרות את המכשירים שאינכם מזהים.',
       ],
     }),
     resetPassword: (link, minutes) => ({
-      subject: 'איפוס הסיסמה שלכם ב-Traders',
+      subject: 'איפוס הסיסמה שלכם ב-TikLens',
       blocks: [
-        'מישהו ביקש לאפס את הסיסמה של חשבון ה-Traders עם הכתובת הזו. כדי לבחור סיסמה חדשה, פתחו:',
+        'מישהו ביקש לאפס את הסיסמה של חשבון ה-TikLens עם הכתובת הזו. כדי לבחור סיסמה חדשה, פתחו:',
         { link },
         `הקישור עובד פעם אחת ותוקפו פג בעוד ${minutes} דקות. בחירת סיסמה חדשה מנתקת אתכם מכל המכשירים.`,
         'אם לא ביקשתם זאת, התעלמו מהאימייל הזה: הסיסמה שלכם לא השתנתה.',
       ],
     }),
     passwordChanged: (signInLink) => ({
-      subject: 'הסיסמה שלכם ב-Traders שונתה',
+      subject: 'הסיסמה שלכם ב-TikLens שונתה',
       blocks: [
-        'הסיסמה של חשבון ה-Traders שלכם שונתה הרגע, וכל המכשירים נותקו.',
+        'הסיסמה של חשבון ה-TikLens שלכם שונתה הרגע, וכל המכשירים נותקו.',
         'אם זה הייתם אתם, אין צורך לעשות דבר. אם לא, אפסו את הסיסמה מדף ההתחברות עכשיו:',
         { link: signInLink },
       ],
     }),
     identityLinked: (provider, signInLink) => ({
-      subject: `${provider} קושר לחשבון ה-Traders שלכם`,
+      subject: `${provider} קושר לחשבון ה-TikLens שלכם`,
       blocks: [
-        `מעכשיו אפשר להתחבר לחשבון ה-Traders שלכם עם ${provider}.`,
+        `מעכשיו אפשר להתחבר לחשבון ה-TikLens שלכם עם ${provider}.`,
         `אם זה לא הייתם אתם, התחברו, נתקו את ${provider} בהגדרות והחליפו את הסיסמה:`,
         { link: signInLink },
       ],
     }),
     accountClosed: (date, signInLink) => ({
-      subject: 'חשבון ה-Traders שלכם יימחק',
+      subject: 'חשבון ה-TikLens שלכם יימחק',
       blocks: [
-        'ביקשתם למחוק את חשבון ה-Traders שלכם. החשבון סגור עכשיו: הוא מנותק מכל המכשירים, ולא רצות עבורו סריקות, התראות או סיכומים.',
+        'ביקשתם למחוק את חשבון ה-TikLens שלכם. החשבון סגור עכשיו: הוא מנותק מכל המכשירים, ולא רצות עבורו סריקות, התראות או סיכומים.',
         `ב-${isolate(date)} הוא יימחק לצמיתות, עם כל מה שבו - אחזקות, סוכנים ויומני המסחר שלהם, הצעות, תצפיות ושיחות.`,
         'שיניתם את דעתכם? התחברו לפני כן והמחיקה תבוטל:',
         { link: signInLink },
@@ -201,16 +201,16 @@ const CATALOGUE: Record<UiLanguage, EmailCatalogue> = {
       ],
     }),
     accountRestored: () => ({
-      subject: 'חשבון ה-Traders שלכם לא יימחק',
+      subject: 'חשבון ה-TikLens שלכם לא יימחק',
       blocks: [
-        'מישהו התחבר לחשבון ה-Traders שלכם, וההתחברות ביטלה את מחיקתו. החשבון פתוח שוב, עם כל מה שבו.',
+        'מישהו התחבר לחשבון ה-TikLens שלכם, וההתחברות ביטלה את מחיקתו. החשבון פתוח שוב, עם כל מה שבו.',
         'אם זה הייתם אתם, אין צורך לעשות דבר. אם לא, אפסו את הסיסמה מדף ההתחברות, נתקו בהגדרות את המכשירים שאינכם מזהים - ומחקו את החשבון שוב אם אתם עדיין רוצים בכך.',
       ],
     }),
     signupApproved: (signInLink) => ({
-      subject: 'חשבון ה-Traders שלכם מוכן',
+      subject: 'חשבון ה-TikLens שלכם מוכן',
       blocks: [
-        'הבקשה שלכם להצטרף ל-Traders אושרה. התחברו עם האימייל והסיסמה שאיתם נרשמתם, או עם חשבון ה-Google או ה-GitHub שבו השתמשתם:',
+        'הבקשה שלכם להצטרף ל-TikLens אושרה. התחברו עם האימייל והסיסמה שאיתם נרשמתם, או עם חשבון ה-Google או ה-GitHub שבו השתמשתם:',
         { link: signInLink },
       ],
     }),

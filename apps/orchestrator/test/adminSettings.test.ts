@@ -111,7 +111,7 @@ describe('the installation settings (D72)', () => {
 
   it('changes the signup mode and the daily limit, within its ceiling (D243, D305)', async () => {
     resetConfigForTests();
-    app = createApp(loadConfig({ ...ENV, SMTP_HOST: 'mailpit', EMAIL_FROM: 'Traders <no-reply@example.test>' }), createFakeAi());
+    app = createApp(loadConfig({ ...ENV, SMTP_HOST: 'mailpit', EMAIL_FROM: 'TikLens <no-reply@example.test>' }), createFakeAi());
     const response = await put({ signupMode: 'automatic', dailyNewAccountsLimit: 40 });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ signupMode: 'automatic', emailConfigured: true });

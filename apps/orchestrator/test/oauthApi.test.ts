@@ -182,7 +182,7 @@ describe('coming back from the provider (D262, D263, D314)', () => {
     expect(queries.linkIdentity).toHaveBeenCalledWith({ userId: ACCOUNT, provider: 'google', subject: 'google-sub-1', email: 'noa@example.com' });
     expect(landedOn(response).searchParams.get('oauth')).toBe('signed_in');
     await mail.settled();
-    expect(mail.sent.map((sent) => sent.subject)).toEqual(['Google was linked to your Traders account']);
+    expect(mail.sent.map((sent) => sent.subject)).toEqual(['Google was linked to your TikLens account']);
   });
 
   it('links nothing and opens nothing for an address the provider does not vouch for', async () => {

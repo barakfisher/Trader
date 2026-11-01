@@ -368,3 +368,4 @@ while this file is out of date.
 | 355 | The daily ceiling admits a call only if its most fits under the cap |
 | 356 | The TikLens mark is a lens over a rising line, drawn inline, and the name stays "Traders" for now |
 | 357 | The TikLens mark is a white rising line on an accent tile; the lens is dropped |
+| 358 | The product is called TikLens everywhere a user reads it; inside, it stays Traders |

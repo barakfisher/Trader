@@ -605,7 +605,7 @@ const en: Messages = {
   privateChatOnly:
     'This bot works only in a private chat: in a group, every member would see your portfolio. Open the link from Settings again and connect in a chat with the bot itself.',
   legalAcceptanceRequired:
-    'Open Traders and accept the privacy policy and terms of use first. Until then this bot does nothing for your account; /stop still disconnects it.',
+    'Open TikLens and accept the privacy policy and terms of use first. Until then this bot does nothing for your account; /stop still disconnects it.',
   legalAcceptanceRequiredShort: 'Accept the privacy policy and terms of use in the app first.',
 
   menu: {
@@ -621,7 +621,7 @@ const en: Messages = {
       stop: 'Disconnect this chat',
     },
     help: [
-      '🧭 Traders',
+      '🧭 TikLens',
       'Write any question and the assistant answers it.',
       '',
       "/portfolio - your real portfolio: value and today's change",
@@ -1167,7 +1167,7 @@ const he: Messages = {
   linkInvalid: 'הקישור הזה לא תקף או שפג תוקפו. צרו קישור חדש.',
   privateChatOnly:
     'הבוט עובד רק בצ׳אט פרטי: בקבוצה כל החברים היו רואים את התיק שלך. פתחו שוב את הקישור מההגדרות והתחברו בצ׳אט עם הבוט עצמו.',
-  legalAcceptanceRequired: `פתחו את Traders ואשרו קודם את מדיניות הפרטיות ואת תנאי השימוש. עד אז הבוט לא עושה דבר עבור החשבון שלך; ${ltr('/stop')} עדיין מנתק אותו.`,
+  legalAcceptanceRequired: `פתחו את TikLens ואשרו קודם את מדיניות הפרטיות ואת תנאי השימוש. עד אז הבוט לא עושה דבר עבור החשבון שלך; ${ltr('/stop')} עדיין מנתק אותו.`,
   legalAcceptanceRequiredShort: 'קודם אשרו באפליקציה את מדיניות הפרטיות ואת תנאי השימוש.',
 
   menu: {
@@ -1183,7 +1183,7 @@ const he: Messages = {
       stop: 'ניתוק הצ׳אט הזה',
     },
     help: [
-      `🧭 ${ltr('Traders')}`,
+      `🧭 ${ltr('TikLens')}`,
       'כתבו כל שאלה והעוזר יענה עליה.',
       '',
       `${ltr('/portfolio')} - התיק האמיתי שלך: שווי ושינוי יומי`,

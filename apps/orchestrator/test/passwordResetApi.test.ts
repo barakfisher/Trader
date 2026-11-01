@@ -147,7 +147,7 @@ describe('opening a reset link (D260, D312)', () => {
     expect(queries.createSession).not.toHaveBeenCalled();
     await mail.settled();
     expect(mail.sent.map((sent) => sent.to)).toEqual(['noa@example.com']);
-    expect(mail.sent[0]!.subject).toBe('הסיסמה שלכם ב-Traders שונתה');
+    expect(mail.sent[0]!.subject).toBe('הסיסמה שלכם ב-TikLens שונתה');
   });
 
   // argon2 is the expensive part: a made-up token, or a link that cannot be used, must not cost it.

@@ -1,19 +1,19 @@
 <!-- legal-text-pending -->
 # Terms of use
 
-**Draft - not yet published.** This page is a template to be written before Traders opens to the public. Each section says what it must cover and lists the facts the app already establishes.
+**Draft - not yet published.** This page is a template to be written before TikLens opens to the public. Each section says what it must cover and lists the facts the app already establishes.
 
 ## Who we are
 
 > **To write:** the operator's name, the country it is based in, and how to contact them.
 
-## What Traders is - and is not
+## What TikLens is - and is not
 
 > **To write:** the service in your own words.
 
 Facts this section must state:
 
-- Traders explains and observes. It is educational and informational only, and nothing in it is investment advice.
+- TikLens explains and observes. It is educational and informational only, and nothing in it is investment advice.
 - It never places an order. Approving a proposal changes only a virtual ledger.
 - Prices may be delayed. A price that cannot be found is shown as missing, never as zero.
 
