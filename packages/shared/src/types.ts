@@ -1239,7 +1239,10 @@ export const OAUTH_OUTCOMES = [
   'closed',
   'unverified_email',
   'not_active',
+  // An account exists at the address, and is linked from its Settings after a password sign-in.
   'link_from_settings',
+  // The same, for the admin, who is never linked automatically (D314).
+  'admin_link_from_settings',
   'linked',
   'already_linked',
   'taken',
