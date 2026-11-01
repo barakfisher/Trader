@@ -22,7 +22,7 @@ was five, so this is two late - #349 and #350 merged first).
   local kind cluster is gone** - deleted 2026-10-31 after a backup in `~/Backups/traders/kind/`;
   the phone opens production instead (docs/PHONE-ACCESS.md). `infra/k8s/` and CI's kind job
   stay. Older lines below that say "deployed compose and kind" describe the time before.
-- **Decisions reach 355** (next: **356**). **Migrations:** `0080` head; next free `0081`.
+- **Decisions reach 357** (next: **358**). **Migrations:** `0080` head; next free `0081`.
 - **M10 status:** PR 16's code is merged and the host runs it since 2026-10-31 (the first deploy
   is "Next session: the first production deploy" below). Still the user's: the legal wording (D265) and
   the D254 question; until the legal text exists production can run only in *approval* mode.
@@ -5882,6 +5882,20 @@ failure they prevent.
     Google's brand verification (home page and privacy policy on a verified domain, days of
     review), which would delay Google sign-in until the legal text is final. Renaming the UI from
     "Traders" to TikLens is a separate decision, not taken here.
+357. **The TikLens mark is a white rising line on an accent tile; the lens is dropped** (the user,
+    2026-11-01, replacing D356's drawing). In the running app D356's mark failed at the size it is
+    used: its tile was `#0b1020`, the app bar's own surface colour, so the tile vanished and the
+    header showed a bare magnifying glass beside "Portfolio" - an icon that reads as a search
+    button, not a brand - and the green chart inside the lens was a smudge at 16-20 px. Chosen
+    from four directions drawn side by side in the app bar, light and dark browser tabs and 16 /
+    20 / 32 / 128 px: (A) this one, (B) the lens kept but filled, (C) three rising bars, (D) a T
+    whose crossbar is an arrow. *Rejected:* B - at 16 px it still reads as search, the original
+    failure; C - the clearest at 16 px but the generic "analytics" icon of many apps; D - the
+    arrow is lost at 16 px. The cost of A is that the mark no longer hints at "Lens". One drawing
+    now serves `favicon.svg`, `logo.svg`, `logo-120.png` and `BrandMark`: it reads at 16 px
+    unchanged, so D356's separate small variant has nothing left to simplify. The rule that
+    outlives the drawing: a mark's tile must contrast with the surface it sits on, and is judged
+    rendered at 16-20 px, not at 512. The UI name is still "Traders" (D356).
 ---
 
 ## Bugs that cost real time, and the lesson from each
