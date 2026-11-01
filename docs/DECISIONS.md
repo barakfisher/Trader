@@ -367,3 +367,4 @@ while this file is out of date.
 | 354 | A scan is told its last three decided scans - facts only, never a source |
 | 355 | The daily ceiling admits a call only if its most fits under the cap |
 | 356 | The TikLens mark is a lens over a rising line, drawn inline, and the name stays "Traders" for now |
+| 357 | The TikLens mark is a white rising line on an accent tile; the lens is dropped |
