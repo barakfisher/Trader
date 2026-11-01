@@ -5,7 +5,6 @@ import {
   Bot,
   CircleUser,
   Lightbulb,
-  LineChart,
   LogOut,
   Menu,
   MessageCircleQuestion,
@@ -25,6 +24,7 @@ import { useAdminSignupCountQuery } from '../queries/admin.ts';
 import { unreadCount, useInsightsDaysQuery } from '../queries/insightsDays.ts';
 import { openProposals, useProposalsQuery } from '../queries/proposals.ts';
 import { useStore } from '../stores/context.tsx';
+import { BrandMark } from './BrandMark.tsx';
 
 /**
  * The bar every signed-in page shares, rendered once by the root route.
@@ -86,7 +86,7 @@ export const AppBar = observer(function AppBar() {
           className="flex items-center gap-2 rounded-lg px-1 py-1 text-base font-semibold text-text-primary"
           aria-current={pathname === '/' ? 'page' : undefined}
         >
-          <LineChart className="size-5 text-accent" aria-hidden />
+          <BrandMark className="size-5" />
           {t('nav.portfolio')}
         </Link>
 

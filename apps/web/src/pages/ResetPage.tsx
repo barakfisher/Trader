@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LineChart, LockKeyhole } from 'lucide-react';
+import { LockKeyhole } from 'lucide-react';
 
 import {
   PASSWORD_MAX_LENGTH,
@@ -13,6 +13,7 @@ import { Disclaimer } from '../components/Disclaimer.tsx';
 import { PasswordInput } from '../components/PasswordInput.tsx';
 import { Button, ErrorNote } from '../components/ui.tsx';
 import { useTranslation } from '../i18n/index.ts';
+import { BrandMark } from '../components/BrandMark.tsx';
 
 /** The page a reset link opens (D260); outside the router, so it works signed out. */
 export const RESET_PATH = '/reset';
@@ -75,7 +76,7 @@ export function ResetPage() {
     <main className="flex min-h-full items-center justify-center p-6">
       <div className="w-full max-w-sm space-y-4">
         <div className="flex items-center gap-2">
-          <LineChart className="size-6 text-accent" aria-hidden />
+          <BrandMark className="size-6" />
           <h1 className="text-lg font-semibold">{t('login.title')}</h1>
         </div>
         {outcome === null ? (

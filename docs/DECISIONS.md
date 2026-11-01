@@ -366,3 +366,4 @@ while this file is out of date.
 | 353 | The admin chooses each agent's model too; an agent with none keeps the Admin page's |
 | 354 | A scan is told its last three decided scans - facts only, never a source |
 | 355 | The daily ceiling admits a call only if its most fits under the cap |
+| 356 | The TikLens mark is a lens over a rising line, drawn inline, and the name stays "Traders" for now |

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { observer } from 'mobx-react-lite';
-import { AtSign, LineChart, LockKeyhole } from 'lucide-react';
+import { AtSign, LockKeyhole } from 'lucide-react';
 
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { PasswordInput } from '../components/PasswordInput.tsx';
@@ -11,6 +11,7 @@ import { Button, ErrorNote } from '../components/ui.tsx';
 import { ApiRequestError, RATE_LIMITED } from '../api/client.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { useStore } from '../stores/context.tsx';
+import { BrandMark } from '../components/BrandMark.tsx';
 
 /** Email and password (D159), asking to join (D156), and a forgotten password (D260): the page that works signed out. */
 export const LoginPage = observer(function LoginPage() {
@@ -26,7 +27,7 @@ export const LoginPage = observer(function LoginPage() {
     <main className="flex min-h-full items-center justify-center p-6">
       <div className="w-full max-w-sm space-y-4">
         <div className="flex items-center gap-2">
-          <LineChart className="size-6 text-accent" aria-hidden />
+          <BrandMark className="size-6" />
           <h1 className="text-lg font-semibold">{t('login.title')}</h1>
         </div>
         {joining ? (
