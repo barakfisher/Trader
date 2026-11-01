@@ -249,7 +249,8 @@ async function settle(
     // the mailbox's authority now (D315), never to the admin (D314), and only
     // where the link can be announced by mail (D263): otherwise the owner signs
     // in with the password and links from Settings.
-    if (account.role === 'admin' || !identity.authoritative || context.get('email') === null) return 'link_from_settings';
+    if (account.role === 'admin') return 'admin_link_from_settings';
+    if (!identity.authoritative || context.get('email') === null) return 'link_from_settings';
     if (account.status === 'pending' && !account.email_verified) {
       // Claiming a request is joining: held, like a new account, by `rules` (D265, D344).
       const claimed = await claimUnverifiedRequest({ userId: account.id, provider, subject: identity.subject, email }, rules);

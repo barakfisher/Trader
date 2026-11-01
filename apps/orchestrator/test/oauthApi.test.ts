@@ -213,7 +213,7 @@ describe('coming back from the provider (D262, D263, D314)', () => {
   it('never links the admin automatically: the admin links from Settings (D314)', async () => {
     vi.mocked(queries.getAccountByEmail).mockResolvedValue({ id: ACCOUNT, status: 'active', role: 'admin', email_verified: true });
     const response = await roundTrip(buildApp());
-    expect(landedOn(response).searchParams.get('oauth')).toBe('link_from_settings');
+    expect(landedOn(response).searchParams.get('oauth')).toBe('admin_link_from_settings');
     expect(queries.linkIdentity).not.toHaveBeenCalled();
   });
 

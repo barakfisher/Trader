@@ -65,6 +65,21 @@ describe('the sign-in page', () => {
     expect(window.location.search).toBe('');
   });
 
+  it("tells a member to link from Settings without calling the account the admin's", async () => {
+    serve({ '/auth/oauth/providers': { providers: ['google'] } });
+    window.history.replaceState(null, '', '/?oauth=link_from_settings');
+    renderWithServerState(<LoginPage />);
+    const notice = await screen.findByText(/already has an account/);
+    expect(notice.textContent).not.toMatch(/admin/i);
+  });
+
+  it('tells the admin that the admin account links from Settings (D314)', async () => {
+    serve({ '/auth/oauth/providers': { providers: ['google'] } });
+    window.history.replaceState(null, '', '/?oauth=admin_link_from_settings');
+    renderWithServerState(<LoginPage />);
+    expect(await screen.findByText(/belongs to the admin account/)).toBeTruthy();
+  });
+
   it('reads an outcome it does not know as a failure, never as anything else', async () => {
     serve({ '/auth/oauth/providers': { providers: [] } });
     window.history.replaceState(null, '', '/?oauth=<script>');
