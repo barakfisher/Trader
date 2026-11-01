@@ -325,6 +325,28 @@ Not in M11: placing orders (never), editing holdings from the chat, a shekel vie
 
 ---
 
+## M12 — Capital gains tax & loss offsetting *(roadmap, added 2026-11-01; not scheduled, no decisions yet)*
+
+Today every P&L figure is gross: nothing computes capital gains tax on a sale, and nothing offsets
+a sale at a loss against one at a gain. What exists: realised P&L per agent (`scoreAgent` in
+`apps/orchestrator/src/services/performance.ts`, 30/60/90-day windows), unrealised P&L on the
+dashboard, average cost per unit that a sell leaves unchanged (`fills.ts`), and a "fee or tax"
+cash movement that records tax a broker took - a record, not a computation.
+
+**PR 1 - measure, read-only, before any design.** Then the decisions, one at a time:
+1. real or nominal gain - the Israeli rate applies to the real gain in shekels, which needs
+   historical exchange rates the system does not hold;
+2. offsetting within a tax year, and carrying an unused loss forward - a per-user, per-year pool;
+3. the cost method - average cost (today) or FIFO, against what the broker reports (form 867);
+4. scope - the agents' virtual ledgers, the user's real holdings, or both;
+5. the advice line (guideline 2) - an estimated tax is an observation; "sell at a loss to offset
+   a gain" is personalized advice and stays out.
+
+The exact rules (the substantial-shareholder rate, dividends) are checked with an accountant, not
+taken from a model. Exit criteria are set with the decisions.
+
+---
+
 ## Ordering notes
 - M2 depends on M1's provider layer; M3 is independent of M2 and can be parallelised if you want.
 - The Telegram bot (M4) is deliberately after observations exist — a bot with nothing to say is untestable.
