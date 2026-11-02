@@ -33,7 +33,7 @@ was five, so this is six late - nothing counted them across the production-deplo
 - **Next: the development tasks agreed 2026-11-02, one PR each, in this order, each on the
   user's word** (design questions one at a time):
   1. ~~Remove the "free tier" display~~ - #362, D359.
-  2. ~~**Admin model choices "like every user":**~~ - D360-D362 (PR open, not merged). Was: drop the three model pickers from the Admin page;
+  2. ~~**Admin model choices "like every user":**~~ - D360-D362 (#364, not merged). Was: drop the three model pickers from the Admin page;
      each agent's model on its agent page, the Ask model in Settings, and the explanations model
      on the "Main portfolio" agent page (its 15-minute `portfolio_scan` is rules plus narration,
      so narration's model is the one it has). Revisits D353's "an unset agent keeps the Admin
