@@ -1629,24 +1629,22 @@ export interface components {
          * NarrationConfigResponse
          * @description How narration is configured, for a UI that must not guess.
          *
-         *     `tier` is what a reader needs and the model id only implies: `free` is a
-         *     route that bills nothing and is served from a shared pool, `paid` bills per
-         *     token, `none` means no provider was asked for at all. The last is a
-         *     configuration rather than a failure, and the three are kept distinct so a UI
-         *     cannot report "deliberately off" as "broken".
+         *     `enabled` is false when no provider was asked for at all: a configuration
+         *     rather than a failure, kept distinct so a UI cannot report "deliberately
+         *     off" as "broken".
+         *
+         *     No model and no billing tier: the model a call uses is chosen per user and
+         *     per scope (`model_choice.py`), so `LLM_MODEL` here would name a model the
+         *     calls may not be using, and a "free tier" read from its suffix described
+         *     the environment, not the explanations a reader is looking at.
          */
         NarrationConfigResponse: {
             /** Daily Budget Usd */
             daily_budget_usd: string;
-            /** Model */
-            model: string | null;
+            /** Enabled */
+            enabled: boolean;
             /** Provider */
             provider: string;
-            /**
-             * Tier
-             * @enum {string}
-             */
-            tier: "free" | "paid" | "none";
         };
         /** NewsCollectRequest */
         NewsCollectRequest: {

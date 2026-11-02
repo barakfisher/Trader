@@ -417,7 +417,7 @@
       },
       "unavailable": {
         "label": "Model unavailable",
-        "summary": "The provider refused the last requests. On a free route this usually means the shared pool is busy.",
+        "summary": "The provider refused the last requests. This usually means it is busy or briefly down.",
         "consequence": "Templates are used meanwhile. This often clears by itself."
       },
       "unknown": {
@@ -433,18 +433,16 @@
     },
     "fund": {
       "title": "Fund the model — about $0.45 a month",
-      "detailFree": "Measured from real usage: roughly $0.0015 per explanation, and about ten new findings a day. A capable model restates the evidence without deriving figures of its own, which is what the free one cannot do.",
-      "detailPaid": "Measured from real usage: roughly $0.0015 per explanation, and about ten new findings a day. The figure moves with how much the holdings move."
+      "detail": "Measured from real usage: roughly $0.0015 per explanation, and about ten new findings a day. The figure moves with how much the holdings move."
     },
     "templates": {
       "title": "Stay on templates — no cost, no change needed",
       "detail": "Fixed phrasing over the same checked figures. Nothing is ever wrong and nothing is ever invented; what is lost is prose that can describe an unusual finding in its own words rather than in a sentence written in advance."
     },
     "badgeLabel": "Explanations: {{label}}",
-    "freeTier": "Free tier",
     "fallback": " · {{reason}}",
-    "sample_one": " · from {{count}} explanation",
-    "sample_other": " · from {{count}} explanations"
+    "sample_one": "Read from {{count}} explanation",
+    "sample_other": "Read from {{count}} explanations"
   },
   "units": {
     "percentagePoints": "{{value}}pp",

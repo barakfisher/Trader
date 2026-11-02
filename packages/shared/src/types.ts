@@ -2354,15 +2354,17 @@ export interface TargetsUpdateResponse {
  * sentences the evidence validator refuses only by a more capable model - no
  * amount of waiting or paying for the same one will help. A single "degraded"
  * would send a reader to the wrong answer, and "exhausted" would be wrong
- * outright for a free tier that answers every request and still narrates
- * nothing.
+ * outright for a model that answers every request and still narrates nothing.
+ *
+ * No model and no "free" or "paid" tier: those were read from `LLM_MODEL`,
+ * which is not the model a user's explanations run on (D244, D353).
  */
 export type NarrationState =
   /** No provider was asked for. A configuration, not a failure. */
   | 'off'
   /** The model is writing the explanations. */
   | 'narrating'
-  /** The provider refused. A shared free pool, or an outage. */
+  /** The provider refused: a busy shared pool, or an outage. */
   | 'unavailable'
   /** The spend ceiling stopped the calls. */
   | 'exhausted'
@@ -2373,13 +2375,8 @@ export type NarrationState =
   /** The user has no working OpenRouter key of their own, so templates explain (D245). */
   | 'own_key';
 
-/** `free` bills nothing and shares a pool; `paid` bills per token. */
-export type NarrationTier = 'free' | 'paid' | 'none';
-
 export interface NarrationHealthResponse {
   state: NarrationState;
-  tier: NarrationTier;
-  model: string | null;
   /** Explanations the state was read from. Zero means nothing is claimed. */
   sampleSize: number;
   /** The raw reason, for an operator rather than a reader. */

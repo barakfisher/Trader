@@ -22,7 +22,7 @@ was five, so this is two late - #349 and #350 merged first).
   local kind cluster is gone** - deleted 2026-10-31 after a backup in `~/Backups/traders/kind/`;
   the phone opens production instead (docs/PHONE-ACCESS.md). `infra/k8s/` and CI's kind job
   stay. Older lines below that say "deployed compose and kind" describe the time before.
-- **Decisions reach 358** (next: **359**). **Migrations:** `0080` head; next free `0081`.
+- **Decisions reach 359** (next: **360**). **Migrations:** `0080` head; next free `0081`.
 - **M10 status:** PR 16's code is merged and the host runs it since 2026-10-31 (the first deploy
   is "Next session: the first production deploy" below). Still the user's: the legal wording (D265) and
   the D254 question; until the legal text exists production can run only in *approval* mode.
@@ -5909,6 +5909,18 @@ failure they prevent.
     The From name of mail is not in the code: it is `EMAIL_FROM` in each installation's `.env`.
     The header still shows the mark beside "Portfolio", not the name: that link is the only way
     to the portfolio, so putting the name there would take a place away.
+359. **The narration badge states no model and no free or paid tier; it speaks only when templates
+    write** (the user, 2026-11-02: "remove the code that shows the free route - it is not good").
+    `/narration/config` read `LLM_MODEL` and called the route "free" from its `:free` suffix
+    (decision 88's heuristic). Since D244/D353 the model a call uses is chosen per user and per
+    scope (`model_choice.py`), so the header said "Free tier" over explanations written by the
+    user's own paid model - a confident answer about calls the environment no longer describes.
+    The endpoint now says only whether a provider is configured (`enabled`), which is still what
+    tells a deliberate `off` from a failure. *Rejected:* reporting the model actually resolved for
+    the caller - a second resolution path that must agree with `ChoosingProvider` on every call,
+    for a badge that has nothing to say while the model narrates; and keeping the tier and fixing
+    its input - "free" would still be inferred from a model-id suffix. Kept on purpose: the Admin
+    page's "free route" cost labels, which describe calls actually recorded on a `:free` model.
 ---
 
 ## Bugs that cost real time, and the lesson from each

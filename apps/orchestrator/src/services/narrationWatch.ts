@@ -91,12 +91,12 @@ export async function watchNarration(
 ): Promise<NarrationWatchOutcome> {
   try {
     const rows = await listRecentNarrationProvenance(userId, NARRATION_WINDOW);
-    // The tier is what tells `off` from a failure; without it, no reading is
+    // `enabled` is what tells `off` from a failure; without it, no reading is
     // better than a wrong one.
     const config = await ai.narrationConfig(requestId).catch(() => null);
     if (config === null) return 'not_measured';
 
-    const { state, lastFallbackReason } = narrationStateFrom(rows, config.tier);
+    const { state, lastFallbackReason } = narrationStateFrom(rows, config.enabled);
     if (state === 'unknown') return 'not_measured';
 
     const transition = await recordNarrationState(userId, state, lastFallbackReason, runId);

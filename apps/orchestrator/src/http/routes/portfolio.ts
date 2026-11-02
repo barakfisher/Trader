@@ -275,16 +275,13 @@ export function registerPortfolioRoutes(app: Hono<AppEnv>): void {
     }
 
     const rows = config === null ? [] : await listLatestNarrationProvenance(userId);
-    const tier = config?.tier ?? 'none';
     const { state, lastFallbackReason } =
       config === null
         ? { state: 'unknown' as const, lastFallbackReason: null }
-        : narrationStateFrom(rows, tier);
+        : narrationStateFrom(rows, config.enabled);
 
     return context.json({
       state,
-      tier: config === null ? 'none' : tier,
-      model: config?.model ?? null,
       sampleSize: rows.length,
       lastFallbackReason,
     });
