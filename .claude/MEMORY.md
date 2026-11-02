@@ -4,7 +4,93 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-10-30 - **Handoff by count: seven merges since #343** (#344-#350; the trigger
+Updated: 2026-11-02 - **Handoff by count: eleven merges since #351** (#352-#362; the trigger
+was five, so this is six late - nothing counted them across the production-deploy sessions).
+- **Merges since #351:**
+  - #352: the web healthcheck asks 127.0.0.1, not localhost (nginx listens on IPv4 only);
+  - #353, #355: the header shows the version, then the commit time on the user's clock (D351, D352);
+  - #354: docs - the phone opens production; the local kind cluster is retired;
+  - #356: a model per agent for the admin, scans told their last three decided scans, a daily
+    ceiling that admits a call only if its maximum cost fits (D353-D355);
+  - #357, #360, #361: the TikLens mark, redrawn, and the product called TikLens wherever a user
+    reads it - inside it stays Traders (D356-D358);
+  - #358: an OAuth member is told to link from Settings without being called the admin;
+  - #359: docs - the M12 roadmap (capital gains tax and loss offsetting), not started;
+  - #362: the narration badge names no model and no "free tier" (D359).
+- **Deployed:** production (`https://app.tiklens.com`) runs `dbf9cf6` (#361) since 2026-11-01;
+  compose runs `a8b3c30` (#356). **#362 is deployed nowhere yet** - on the user's word.
+  Migration head `0080_cash_movement_kinds` everywhere; no PR since added one.
+- **Decisions reach 359** (next: **360**). **Migrations:** `0080` head; next free `0081`.
+- **Production is the real installation; compose is a lab (user, 2026-11-02).** The user's real
+  portfolio lives on production. Compose's `.env` has `ENABLE_SCHEDULED_SCANS=false`,
+  `SCHEDULER_ENABLED=false` and `TELEGRAM_UPDATES=off`: the local stack runs nothing on its own
+  and does not poll the bot (two pollers on one token steal each other's updates). Deliberate - do
+  not "fix" it back on. Production: users are the admin, `barakfisher.dev` (user) and one pending
+  sign-up the user has not answered; the main portfolio's cash is still unset (the user's step).
+- **D254 is no longer a separate blocker:** the app is for the user's own use for now, so the
+  sentiment ratings carry no exposure today; the user will cover it in the legal text before
+  anyone else signs up. M10 is left with the legal wording only.
+- **Next: the development tasks agreed 2026-11-02, one PR each, in this order, each on the
+  user's word** (design questions one at a time):
+  1. ~~Remove the "free tier" display~~ - #362, D359.
+  2. **Admin model choices "like every user":** drop the three model pickers from the Admin page;
+     each agent's model on its agent page, the Ask model in Settings, and the explanations model
+     on the "Main portfolio" agent page (its 15-minute `portfolio_scan` is rules plus narration,
+     so narration's model is the one it has). Revisits D353's "an unset agent keeps the Admin
+     page's model": decide what an unset agent runs on.
+  3. **Two keys for the admin:** the installation key (shared work: embeddings for the universe,
+     the corpus and topic queries - none of it in `llm_calls`) and a personal key in Settings like
+     any user's, so the admin's own usage is tracked apart. Today the admin's calls are all
+     installation-paid (`own_key.py`, `payer.py`, D245).
+  4. **Every view looks the same:** All / Real only / Simulated show the same cards (the Account
+     card too), the same toolbar and the same row "⋮" menu (D334's `HoldingRowMenu`, today only in
+     the real-only view), plus "ask about this stock" and "research this stock". An action that
+     does not apply is disabled, not hidden: Buy whenever the main portfolio has free cash, Sell
+     only when the real portfolio holds the instrument.
+  5. **Remove the Topics page and auto-discovery** (deviates from PRD FR-10/FR-11 - a decision):
+     proposals, `topic_scan`, `topic_discovery`, the digest and Telegram topic parts,
+     `/topics/resolve`, i18n, the product guide, the account export. **Keep** `resolve_topic` (the
+     agents' theme-search tool) and the universe embeddings. The migration **drops** `topics` and
+     `topic_instruments` (user: "Drop them"; production holds none, compose 31 unanswered
+     proposals) - run it on a copy of the live database first. Measured: zero topics ever confirmed
+     on either installation. Record the embedder measurement below in `docs/TOPIC_RESOLUTION.md`.
+  6. The Re-evaluate button (the improvements queue's item 4).
+  Future, not scheduled: "Connect OpenRouter" by OpenRouter's OAuth PKCE flow (it returns a key
+  and no identity, so it is a key-entry shortcut, not a sign-in; Anthropic offers no OAuth that
+  yields API access); dropping GitHub OAuth; the legal text.
+- **Measured, not adopted - the embedder (2026-11-02, ~$0.10):** `text-embedding-3-large`
+  (`dimensions=1536`) against the current `-3-small` on a copy of compose, same resolver and
+  thresholds, `scripts/run_topic_eval.py --unseal`: small 10/31 (primary 9/20, sealed 1/11),
+  large 8/31 (8/20, 0/11). Large separates real topics from nonsense far better (held-out gap
+  0.068 -> 0.116) and ranks most missing symbols much higher (DLR 77 -> 10, LAC 45 -> 12, MDB
+  54 -> 21), but the gate and band were fitted to small's scale. *Decided: stay on small* - the
+  bottleneck is the resolver's gate and ranking, and a fair test of large needs both refitted
+  and new held-out topics, a project with one consumer left once task 5 lands.
+- **Lessons:**
+  - **A fact read from the environment goes stale when the decision moves to the database.**
+    `/narration/config` reported `LLM_MODEL` long after D244/D353 made the model a per-user,
+    per-scope choice, so the header said "Free tier" over a paid model's prose. When a setting
+    moves into a table, grep for every reader of the old variable - the UI ones especially,
+    because they fail confidently rather than loudly (D359).
+  - **Thresholds fitted to one model do not transfer to another.** Swapping the embedder alone
+    lowered the pass count while improving every ranking it was measured on. Compare models with
+    the thresholds refitted for each, or compare the rankings, never the pass count alone.
+  - **Count merges, not sessions.** Six handoffs-worth of work went through sessions that each
+    merged one or two PRs; none counted from the last handoff. Read this file's "Merges since"
+    line and `git log` before opening a PR.
+- **Local environment, an hour each to rediscover:**
+  - a worktree has no `services/ai/.venv`; the main checkout's venv lacks `cryptography` (declared
+    in `pyproject.toml`), so `app.config` will not import there. Build a scratch one:
+    `uv venv <dir> && VIRTUAL_ENV=<dir> uv pip install -e ".[dev]"`;
+  - compose's Postgres holds 127.0.0.1:55432 and a CI-agents one 55434 - a scratch database
+    needs another port, and a wait loop needs a bound;
+  - a branch's web server can be checked against compose without signing in again: run
+    `pnpm --filter @traders/web exec vite --port 5175 --host 127.0.0.1` and open
+    `http://127.0.0.1:5175` - the session cookie belongs to the host, not the port, and the
+    proxy reaches compose's orchestrator on 8080. That orchestrator runs compose's code, not the
+    branch's.
+
+Previous update, 2026-10-30 - **Handoff by count: seven merges since #343** (#344-#350; the trigger
 was five, so this is two late - #349 and #350 merged first).
 - **Merges since #343:**
   - #344: F1 accepted - a symbol a user adds joins the shared list (D339);
@@ -22,7 +108,7 @@ was five, so this is two late - #349 and #350 merged first).
   local kind cluster is gone** - deleted 2026-10-31 after a backup in `~/Backups/traders/kind/`;
   the phone opens production instead (docs/PHONE-ACCESS.md). `infra/k8s/` and CI's kind job
   stay. Older lines below that say "deployed compose and kind" describe the time before.
-- **Decisions reach 359** (next: **360**). **Migrations:** `0080` head; next free `0081`.
+- **Decisions then reached 350.** **Migrations:** `0080` head.
 - **M10 status:** PR 16's code is merged and the host runs it since 2026-10-31 (the first deploy
   is "Next session: the first production deploy" below). Still the user's: the legal wording (D265) and
   the D254 question; until the legal text exists production can run only in *approval* mode.
