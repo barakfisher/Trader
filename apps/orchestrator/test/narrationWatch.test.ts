@@ -56,8 +56,8 @@ const refused = { narration_source: 'template', fallback_reason: 'unsourced_figu
 const refusedByProvider = { narration_source: 'template', fallback_reason: 'provider_error' };
 const narrated = { narration_source: 'llm', fallback_reason: null };
 
-function ai(tier: 'free' | 'paid' | 'none' = 'free') {
-  return { narrationConfig: vi.fn(async () => ({ tier, model: 'some/model', provider: 'openrouter' })) };
+function ai(enabled = true) {
+  return { narrationConfig: vi.fn(async () => ({ enabled, provider: 'openrouter' })) };
 }
 
 function channel() {
@@ -209,7 +209,7 @@ describe('watchNarration', () => {
   });
 
   it('records nothing when the AI service cannot say how narration is configured', async () => {
-    // Without the tier, "no model configured" and "the model is failing" look
+    // Without `enabled`, "no model configured" and "the model is failing" look
     // alike, and a wrong reading would be recorded as a transition.
     db.provenance = [refused, refused, refused];
     const failing = { narrationConfig: vi.fn(async () => Promise.reject(new Error('down'))) };

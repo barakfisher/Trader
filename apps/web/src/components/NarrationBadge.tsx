@@ -8,10 +8,12 @@ import { useNarrationQuery } from '../queries/narration.ts';
  * A header badge saying who wrote the explanations in the feed, and what it
  * would take to change that.
  *
- * It renders nothing in the one state that needs no comment - a paid model
+ * It renders nothing in the one state that needs no comment - a model
  * narrating normally - because a badge that is always there is a badge nobody
- * reads. Everything it does show is either a cost the reader is paying in
- * quality or a fact about the bill.
+ * reads. Everything it does show is a cost the reader is paying in quality.
+ *
+ * It names no model and no "free tier": both were read from the installation's
+ * `LLM_MODEL`, which is not the model a user's explanations run on (D244).
  *
  * The detail is a hover rather than a dialog: this is context for a reader
  * already looking at something else, and it must never be in the way of the
@@ -24,7 +26,7 @@ export function NarrationBadge() {
   if (health === undefined || !isNoteworthy(health)) return null;
 
   const copy = describeNarration(health.state);
-  const options = narrationOptions(health.tier);
+  const options = narrationOptions();
   const tone = {
     neutral: 'border-border-subtle text-text-muted',
     warn: 'border-warn/40 text-warn',
@@ -39,7 +41,6 @@ export function NarrationBadge() {
         aria-label={t('narration.badgeLabel', { label: copy.label })}
       >
         <Sparkles className="size-3" aria-hidden />
-        {health.tier === 'free' && <span className="font-medium">{t('narration.freeTier')}</span>}
         <span>{copy.label}</span>
       </button>
 
@@ -62,12 +63,11 @@ export function NarrationBadge() {
           </div>
         )}
 
-        {health.model && (
+        {health.sampleSize > 0 && (
           <p className="mt-2 border-t border-border-subtle pt-2 text-[11px] text-text-muted">
-            {health.model}
+            {t('narration.sample', { count: health.sampleSize })}
             {health.lastFallbackReason &&
               t('narration.fallback', { reason: health.lastFallbackReason })}
-            {health.sampleSize > 0 && t('narration.sample', { count: health.sampleSize })}
           </p>
         )}
       </div>

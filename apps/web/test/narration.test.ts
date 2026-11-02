@@ -24,22 +24,20 @@ const { narrationQuery } = await import('../src/queries/narration.ts');
 
 const health = (over: Partial<NarrationHealthResponse> = {}): NarrationHealthResponse => ({
   state: 'rejected',
-  tier: 'free',
-  model: 'some/model:free',
   sampleSize: 4,
   lastFallbackReason: 'unsourced_figures',
   ...over,
 });
 
 describe('when the badge speaks', () => {
-  it('says nothing when a paid model is narrating normally', () => {
-    expect(isNoteworthy(health({ state: 'narrating', tier: 'paid' }))).toBe(false);
+  it('says nothing when a model is narrating normally', () => {
+    // Whatever the model: the badge once said "Free tier" from the
+    // installation's LLM_MODEL over a user's paid model, so it names no tier.
+    expect(isNoteworthy(health({ state: 'narrating' }))).toBe(false);
   });
 
-  it('speaks up on a free tier even when the model is narrating', () => {
-    // "This is costing you nothing" is itself worth saying, and it is the
-    // state the user asked to be able to see at a glance.
-    expect(isNoteworthy(health({ state: 'narrating', tier: 'free' }))).toBe(true);
+  it('speaks up whenever templates are writing instead', () => {
+    expect(isNoteworthy(health({ state: 'rejected' }))).toBe(true);
   });
 
   it('stays silent when it cannot reach its own subject', () => {
@@ -65,13 +63,13 @@ describe('narration copy', () => {
   });
 
   it('does not describe templates as merely worse', () => {
-    // They are the only output that clears the evidence check on this tier, so
-    // the trade-off is phrasing against nothing, not quality against quality.
-    const templates = narrationOptions('free')[1];
+    // Every figure in them is checked, so the trade-off is phrasing against
+    // nothing, not quality against quality.
+    const templates = narrationOptions()[1];
     expect(templates.detail).toMatch(/nothing is ever invented|never wrong|nothing is ever wrong/i);
   });
 
   it('quotes a cost that came from measurement', () => {
-    expect(narrationOptions('free')[0].title).toMatch(/\$0\.45/);
+    expect(narrationOptions()[0].title).toMatch(/\$0\.45/);
   });
 });

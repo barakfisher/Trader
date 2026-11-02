@@ -1993,41 +1993,24 @@
         "type": "object"
       },
       "NarrationConfigResponse": {
-        "description": "How narration is configured, for a UI that must not guess.\n\n`tier` is what a reader needs and the model id only implies: `free` is a\nroute that bills nothing and is served from a shared pool, `paid` bills per\ntoken, `none` means no provider was asked for at all. The last is a\nconfiguration rather than a failure, and the three are kept distinct so a UI\ncannot report \"deliberately off\" as \"broken\".",
+        "description": "How narration is configured, for a UI that must not guess.\n\n`enabled` is false when no provider was asked for at all: a configuration\nrather than a failure, kept distinct so a UI cannot report \"deliberately\noff\" as \"broken\".\n\nNo model and no billing tier: the model a call uses is chosen per user and\nper scope (`model_choice.py`), so `LLM_MODEL` here would name a model the\ncalls may not be using, and a \"free tier\" read from its suffix described\nthe environment, not the explanations a reader is looking at.",
         "properties": {
           "daily_budget_usd": {
             "title": "Daily Budget Usd",
             "type": "string"
           },
-          "model": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model"
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
           },
           "provider": {
             "title": "Provider",
-            "type": "string"
-          },
-          "tier": {
-            "enum": [
-              "free",
-              "paid",
-              "none"
-            ],
-            "title": "Tier",
             "type": "string"
           }
         },
         "required": [
           "provider",
-          "model",
-          "tier",
+          "enabled",
           "daily_budget_usd"
         ],
         "title": "NarrationConfigResponse",

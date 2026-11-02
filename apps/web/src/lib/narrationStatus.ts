@@ -13,7 +13,7 @@
  * something this page can promise.
  */
 
-import type { NarrationHealthResponse, NarrationState, NarrationTier } from '@traders/shared';
+import type { NarrationHealthResponse, NarrationState } from '@traders/shared';
 
 import { t } from '../i18n/index.ts';
 
@@ -60,11 +60,11 @@ export interface NarrationOption {
  * hold the constraint, or keep the templates that already do - and typing it as
  * a tuple means a caller reading `[1]` is reading something that exists.
  */
-export function narrationOptions(tier: NarrationTier): readonly [NarrationOption, NarrationOption] {
+export function narrationOptions(): readonly [NarrationOption, NarrationOption] {
   return [
     {
       title: t('narration.fund.title'),
-      detail: tier === 'free' ? t('narration.fund.detailFree') : t('narration.fund.detailPaid'),
+      detail: t('narration.fund.detail'),
     },
     {
       title: t('narration.templates.title'),
@@ -76,11 +76,11 @@ export function narrationOptions(tier: NarrationTier): readonly [NarrationOption
 /**
  * Whether the badge is worth showing at all.
  *
- * `narrating` on a paid model is the expected state and says nothing a reader
- * needs - a badge that is always present stops being read. Every other state
- * is either a cost the reader is paying in quality, or a fact about the bill.
+ * `narrating` is the expected state and says nothing a reader needs - a badge
+ * that is always present stops being read. Every other state is a cost the
+ * reader is paying in quality.
  */
 export function isNoteworthy(health: NarrationHealthResponse | undefined): boolean {
   if (health === undefined) return false;
-  return health.state !== 'narrating' || health.tier !== 'paid';
+  return health.state !== 'narrating';
 }

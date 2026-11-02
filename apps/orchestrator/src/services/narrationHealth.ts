@@ -12,10 +12,8 @@
  * validator refuses are fixed only by a more capable model, and no amount of
  * waiting or paying a smaller one will help. A single "degraded" would send
  * someone to the wrong remedy, and a single "exhausted" would be wrong outright:
- * the free tier here answers every request and still narrates nothing.
+ * a model can answer every request and still narrate nothing.
  */
-
-import type { NarrationConfig } from '@traders/shared/ai';
 
 /** Why narration is in the state it is in, in the words the UI uses. */
 export type NarrationState =
@@ -23,7 +21,7 @@ export type NarrationState =
   | 'off'
   /** The model is writing the explanations. */
   | 'narrating'
-  /** The provider refused - a shared free pool, or an outage. Waiting may fix it. */
+  /** The provider refused - a busy shared pool, or an outage. Waiting may fix it. */
   | 'unavailable'
   /** The spend ceiling stopped the calls. Paying fixes it; waiting does not. */
   | 'exhausted'
@@ -36,9 +34,6 @@ export type NarrationState =
 
 export interface NarrationHealth {
   state: NarrationState;
-  /** `free` bills nothing and is a shared pool; `paid` bills per token. */
-  tier: NarrationConfig['tier'];
-  model: string | null;
   /** How many explanations the state was read from. Zero means `unknown`. */
   sampleSize: number;
   /** The raw reason behind `rejected`/`unavailable`, for an operator, not a reader. */
@@ -55,9 +50,10 @@ export interface NarrationHealth {
  */
 export function narrationStateFrom(
   rows: { narration_source: string; fallback_reason: string | null }[],
-  tier: NarrationConfig['tier'],
+  /** Whether a provider is configured at all; false is `off`, not a failure. */
+  enabled: boolean,
 ): { state: NarrationState; lastFallbackReason: string | null } {
-  if (tier === 'none') return { state: 'off', lastFallbackReason: null };
+  if (!enabled) return { state: 'off', lastFallbackReason: null };
   if (rows.length === 0) return { state: 'unknown', lastFallbackReason: null };
   if (rows.some((row) => row.narration_source === 'llm')) {
     return { state: 'narrating', lastFallbackReason: null };

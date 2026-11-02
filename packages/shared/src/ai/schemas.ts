@@ -615,8 +615,7 @@ export type _AssertTopicDiscover = Expect<
 >;
 export const narrationConfigSchema = z.object({
   provider: z.string(),
-  model: z.string().nullable(),
-  tier: z.enum(['free', 'paid', 'none']),
+  enabled: z.boolean(),
   daily_budget_usd: z.string(),
 });
 

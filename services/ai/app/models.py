@@ -567,16 +567,18 @@ class TopicScanResponse(BaseModel):
 class NarrationConfigResponse(BaseModel):
     """How narration is configured, for a UI that must not guess.
 
-    `tier` is what a reader needs and the model id only implies: `free` is a
-    route that bills nothing and is served from a shared pool, `paid` bills per
-    token, `none` means no provider was asked for at all. The last is a
-    configuration rather than a failure, and the three are kept distinct so a UI
-    cannot report "deliberately off" as "broken".
+    `enabled` is false when no provider was asked for at all: a configuration
+    rather than a failure, kept distinct so a UI cannot report "deliberately
+    off" as "broken".
+
+    No model and no billing tier: the model a call uses is chosen per user and
+    per scope (`model_choice.py`), so `LLM_MODEL` here would name a model the
+    calls may not be using, and a "free tier" read from its suffix described
+    the environment, not the explanations a reader is looking at.
     """
 
     provider: str
-    model: str | None
-    tier: Literal["free", "paid", "none"]
+    enabled: bool
     #: Decimal as a string: money never crosses a wire as a float (guideline 3).
     daily_budget_usd: str
 
