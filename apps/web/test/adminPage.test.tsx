@@ -32,59 +32,8 @@ const { renderWithServerState } = await import('./serverStateHarness.tsx');
 const { duration } = await import('../src/pages/AdminPage.tsx');
 const { AccountResetCard } = await import('../src/components/AccountResetCard.tsx');
 
-const estimate = (daily: number) => ({ dailyMicroUsd: daily, monthlyMicroUsd: daily * 30 });
-/** Nothing chosen yet, the free route configured, ten dollars bought. */
-const MODELS = {
+const CREDITS = {
   provider: 'openrouter',
-  choosable: true,
-  configuredModel: 'nvidia/nemotron-3.5-lightning:free',
-  choices: [
-    { scope: 'explain', chosen: null, effective: 'nvidia/nemotron-3.5-lightning:free' },
-    { scope: 'agent', chosen: null, effective: 'nvidia/nemotron-3.5-lightning:free' },
-  ],
-  models: [
-    {
-      id: 'anthropic/claude-sonnet-5.5',
-      label: 'Claude Sonnet 5.5',
-      promptUsdPerMtok: '2',
-      completionUsdPerMtok: '10',
-      supportsTools: true,
-      free: false,
-      scopes: ['explain', 'agent'],
-      estimates: { explain: estimate(19_000), agent: estimate(110_000) },
-      scanEstimateMicroUsd: 110_000,
-    },
-    {
-      id: 'anthropic/claude-haiku-4.5',
-      label: 'Claude Haiku 4.5',
-      promptUsdPerMtok: '1',
-      completionUsdPerMtok: '5',
-      supportsTools: true,
-      free: false,
-      scopes: ['explain', 'agent'],
-      estimates: { explain: estimate(9_500), agent: estimate(55_000) },
-      scanEstimateMicroUsd: 55_000,
-    },
-    {
-      id: 'nvidia/nemotron-3.5-lightning:free',
-      label: 'Nemotron 3.5 Lightning (free)',
-      promptUsdPerMtok: '0',
-      completionUsdPerMtok: '0',
-      supportsTools: true,
-      free: true,
-      scopes: ['explain'],
-      estimates: { explain: estimate(0), agent: null },
-      scanEstimateMicroUsd: null,
-    },
-  ],
-  explainBasis: { windowDays: 7, promptTokensPerDay: 3500, completionTokensPerDay: 700 },
-  agentBasis: {
-    scanningAgents: 1,
-    scansPerDay: 1,
-    promptTokensPerScan: 45_000,
-    completionTokensPerScan: 2_000,
-    source: 'assumed',
-  },
   credits: { purchasedUsd: '10', usedUsd: '0.10290792', remainingUsd: '9.89709208' },
 };
 
@@ -275,8 +224,8 @@ describe('the admin page', () => {
                 },
               ],
             })
-          : path === '/admin/llm/models'
-            ? Promise.resolve(MODELS)
+          : path === '/admin/llm/credits'
+            ? Promise.resolve(CREDITS)
           : path === '/admin/settings'
             ? Promise.resolve(SETTINGS)
           : path === '/admin/signups'
@@ -442,32 +391,13 @@ describe('the admin page', () => {
     expect(get).toHaveBeenCalledWith('/admin/llm?days=7');
   });
 
-  it('shows each model choice with its cost, the total and the balance', async () => {
+  it('shows the balance and no model pickers: the admin chooses like every user (D360)', async () => {
     renderAt('/admin?tab=models', ADMIN);
-    const explain = (await screen.findByLabelText('Narration and questions')) as HTMLSelectElement;
-    const agents = screen.getByLabelText('Agents') as HTMLSelectElement;
-    // What is in use stays selected. Agents may not use the free route, so nothing offered is in
-    // use: the picker says so instead of showing the first model as chosen, and cannot save it.
-    expect(explain.value).toBe('nvidia/nemotron-3.5-lightning:free');
-    expect(agents.value).toBe('');
-    expect(agents.selectedOptions[0]!.textContent).toBe('Not chosen – using nvidia/nemotron-3.5-lightning:free');
-    expect([...agents.options].map((option) => option.value)).not.toContain('nvidia/nemotron-3.5-lightning:free');
-    const [, agentSave] = screen.getAllByRole('button', { name: 'Use this model' }) as HTMLButtonElement[];
-    expect(agentSave!.disabled).toBe(true);
-    expect(screen.getByText('Together: about $0 a day, $0 a month')).toBeTruthy();
-
-    fireEvent.change(agents, { target: { value: 'anthropic/claude-sonnet-5.5' } });
-    expect(agentSave!.disabled).toBe(false);
-    expect(screen.getByText('About $0.11 a day, $3.30 a month')).toBeTruthy();
-    expect(screen.getByText(/assumed until real scans are recorded/)).toBeTruthy();
-    expect(screen.getByText('Together: about $0.11 a day, $3.30 a month')).toBeTruthy();
-    expect(screen.getByText('OpenRouter balance: $9.8971 left ($0.1029 used of $10.00)')).toBeTruthy();
-    expect(screen.getByText('At this rate the balance lasts about 89 days.')).toBeTruthy();
-
-    // A different selection is estimated before anything is saved.
-    fireEvent.change(explain, { target: { value: 'anthropic/claude-sonnet-5.5' } });
-    expect(screen.getByText('Together: about $0.129 a day, $3.87 a month')).toBeTruthy();
-    expect(put).not.toHaveBeenCalled();
+    expect(await screen.findByText('$9.8971 left ($0.1029 used of $10.00)')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Balance and keys' })).toBeTruthy();
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.getByText(/Ask in Settings, explanations on the Main portfolio page/)).toBeTruthy();
+    expect(get).not.toHaveBeenCalledWith('/admin/llm/models');
   });
 
   it('sets how many agents a user may have, within 1 and the ceiling (D72)', async () => {
@@ -527,29 +457,10 @@ describe('the admin page', () => {
     for (const frame of frames) expect(frame).toEqual(['5', '0.50', '3']);
   });
 
-  it('offers the assistant a model picker of its own, with no estimate until one is measured', async () => {
-    renderAt('/admin?tab=models', ADMIN);
-    expect(await screen.findByLabelText('Assistant')).toBeTruthy();
-    expect(screen.getByText(/No estimate yet/)).toBeTruthy();
-  });
-
-  it('saves a choice for its scope only when it differs from the one in use', async () => {
-    put.mockResolvedValue({ ...MODELS, choices: [{ scope: 'explain', chosen: 'anthropic/claude-haiku-4.5', effective: 'anthropic/claude-haiku-4.5' }, MODELS.choices[1]] });
-    renderAt('/admin?tab=models', ADMIN);
-    const explain = (await screen.findByLabelText('Narration and questions')) as HTMLSelectElement;
-    fireEvent.change(explain, { target: { value: 'anthropic/claude-haiku-4.5' } });
-    const [explainSave] = screen.getAllByRole('button', { name: 'Use this model' });
-    await act(async () => {
-      fireEvent.click(explainSave!);
-    });
-    expect(put).toHaveBeenCalledWith('/admin/llm/models/explain', { model: 'anthropic/claude-haiku-4.5' });
-    expect(await screen.findByText('In use: anthropic/claude-haiku-4.5')).toBeTruthy();
-  });
-
   it('says when nothing is left on the account', async () => {
     get.mockImplementation((path: string) =>
-      path === '/admin/llm/models'
-        ? Promise.resolve({ ...MODELS, credits: { purchasedUsd: '0', usedUsd: '0.10290792', remainingUsd: '-0.10290792' } })
+      path === '/admin/llm/credits'
+        ? Promise.resolve({ ...CREDITS, credits: { purchasedUsd: '0', usedUsd: '0.10290792', remainingUsd: '-0.10290792' } })
         : new Promise(() => {}),
     );
     renderAt('/admin?tab=models', ADMIN);

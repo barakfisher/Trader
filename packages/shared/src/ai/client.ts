@@ -33,7 +33,7 @@ import {
   installationKeyTestResponseSchema,
   installationKeysResponseSchema,
   llmListedModelsResponseSchema,
-  llmModelsResponseSchema,
+  llmCreditsResponseSchema,
   marketSessionsSchema,
   narrationConfigSchema,
   ownLlmKeyStateSchema,
@@ -70,7 +70,7 @@ export type BackfillResponse = components['schemas']['BackfillResponse'];
 export type PriceHistoryResponse = components['schemas']['PriceHistoryResponse'];
 export type MarketCalendarStatus = components['schemas']['MarketCalendarStatus'];
 export type MarketSessions = components['schemas']['MarketSessions'];
-export type LlmModelsResponse = components['schemas']['LlmModelsResponse'];
+export type LlmCreditsResponse = components['schemas']['LlmCreditsResponse'];
 export type LlmListedModelsResponse = components['schemas']['LlmListedModelsResponse'];
 export type InstallationKeysResponse = components['schemas']['InstallationKeysResponse'];
 export type InstallationKeyTestResponse = components['schemas']['InstallationKeyTestResponse'];
@@ -86,8 +86,6 @@ export type MandateCheckResponse = components['schemas']['MandateCheckResponse']
 export type MandateConflict = components['schemas']['MandateConflict'];
 export type AssistantMessageRequest = components['schemas']['AssistantMessageRequest'];
 export type AssistantReply = components['schemas']['AssistantReply'];
-export type LlmOfferedModel = components['schemas']['LlmOfferedModel'];
-export type LlmScope = components['schemas']['LlmScopeChoice']['scope'];
 export type MarketSession = components['schemas']['MarketSession'];
 export type ConceptDocument = components['schemas']['ConceptDocumentResponse'];
 export type ConceptSection = components['schemas']['ConceptSection'];
@@ -453,8 +451,9 @@ export class AiClient {
     });
   }
 
-  llmModels(requestId?: string): Promise<LlmModelsResponse> {
-    return this.request<LlmModelsResponse>('/llm/models', llmModelsResponseSchema, {
+  /** The installation's provider balance, which pays the admin's calls (D360). */
+  llmCredits(requestId?: string): Promise<LlmCreditsResponse> {
+    return this.request<LlmCreditsResponse>('/llm/credits', llmCreditsResponseSchema, {
       method: 'GET',
       requestId,
     });

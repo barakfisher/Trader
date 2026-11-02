@@ -370,3 +370,6 @@ while this file is out of date.
 | 357 | The TikLens mark is a white rising line on an accent tile; the lens is dropped |
 | 358 | The product is called TikLens everywhere a user reads it; inside, it stays Traders |
 | 359 | The narration badge states no model and no free or paid tier; it speaks only when templates write |
+| 360 | The admin chooses models like every user; a scope with nothing saved runs on the tested model |
+| 361 | `llm_model_choices` is dropped (migration 0081), not left unread |
+| 362 | The Admin page keeps the installation's OpenRouter balance and nothing else of the models card |

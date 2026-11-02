@@ -18,9 +18,7 @@ import type {
   AdminSettingsInput,
   AdminSettingsResponse,
   AdminAuditResponse,
-  AdminLlmModelsResponse,
-  LlmModelChoiceInput,
-  LlmScope,
+  AdminLlmCreditsResponse,
   AdminRunsResponse,
   LlmPanelResponse,
   RescreenStartResponse,
@@ -78,27 +76,16 @@ export function useAdminLlmQuery(days: number) {
   return useQuery(adminLlmQuery(days));
 }
 
-export const adminLlmModelsQuery = queryOptions({
-  queryKey: queryKeys.adminLlmModels,
-  queryFn: () => api.get<AdminLlmModelsResponse>('/admin/llm/models'),
+export const adminLlmCreditsQuery = queryOptions({
+  queryKey: queryKeys.adminLlmCredits,
+  queryFn: () => api.get<AdminLlmCreditsResponse>('/admin/llm/credits'),
 });
 
-export function useAdminLlmModelsQuery() {
-  return useQuery(adminLlmModelsQuery);
+/** The installation's provider balance, which pays the admin's calls (D360). */
+export function useAdminLlmCreditsQuery() {
+  return useQuery(adminLlmCreditsQuery);
 }
 
-/** Choose a scope's model (D43). The answer is the page afresh; the audit list gains its row. */
-export function useChooseLlmModel() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: ({ scope, model }: { scope: LlmScope; model: string }) =>
-      api.put<AdminLlmModelsResponse>(`/admin/llm/models/${scope}`, { model } satisfies LlmModelChoiceInput),
-    onSuccess: (body) => {
-      client.setQueryData(queryKeys.adminLlmModels, body);
-      void client.invalidateQueries({ queryKey: queryKeys.adminAudit });
-    },
-  });
-}
 
 /**
  * Rescreen the universe. The run appears in the runs list at once, and the

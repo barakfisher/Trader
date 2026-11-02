@@ -3,18 +3,20 @@ import { TriangleAlert } from 'lucide-react';
 
 import { leftToRight, ownDirection } from '../i18n/format.ts';
 import { useTranslation } from '../i18n/index.ts';
+import { useAgentsQuery } from '../queries/agents.ts';
 import { fallbacksOf, useModelChoicesQuery } from '../queries/modelChoices.ts';
 
 /**
  * Every model the user chose that OpenRouter no longer lists, and what runs
- * instead (D284), each with the way to choose again: Settings for Ask and
- * explanations, the agent's page for an agent. The admin's agents too (D353),
- * whose Ask and explanations are the Admin page's and never fall back here.
- * Nothing while the read is pending or failed, nothing when nothing fell back.
+ * instead (D284), each with the way to choose again: Settings for Ask, the main
+ * portfolio's page for explanations, the agent's page for an agent - the same
+ * for the admin (D360). Nothing while the read is pending or failed, nothing
+ * when nothing fell back.
  */
 export function ModelFallbackBanner() {
   const { t } = useTranslation();
   const data = useModelChoicesQuery().data;
+  const primary = useAgentsQuery().data?.find((agent) => agent.isPrimary);
   if (!data) return null;
   const fallbacks = fallbacksOf(data);
   if (fallbacks.length === 0) return null;
@@ -43,6 +45,10 @@ export function ModelFallbackBanner() {
                 className="font-medium text-accent hover:underline"
               >
                 {t('models.banner.chooseAgent')}
+              </Link>
+            ) : fallback.scope === 'explain' && primary ? (
+              <Link to="/agents/$agentId" params={{ agentId: primary.id }} className="font-medium text-accent hover:underline">
+                {t('models.banner.choosePrimary')}
               </Link>
             ) : (
               <Link to="/settings" className="font-medium text-accent hover:underline">

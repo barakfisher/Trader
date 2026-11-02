@@ -12,11 +12,10 @@ import { randomBytes } from 'node:crypto';
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 
-import { AiServiceError, type LlmModelsResponse } from '@traders/shared/ai';
+import { AiServiceError, type LlmCreditsResponse } from '@traders/shared/ai';
 import {
   type AdminAuditResponse,
-  type AdminLlmModelsResponse,
-  type LlmModelChoiceInput,
+  type AdminLlmCreditsResponse,
   type AdminRunsResponse,
   type AdminSettingsResponse,
   type AdminSignupsResponse,
@@ -49,7 +48,6 @@ import {
   setUserStatus,
   countUniverse,
   firstLlmCallAt,
-  chooseLlmModel,
   getInstallationSettings,
   setAssistantDailyBudget,
   setMaxAgentsPerUser,
@@ -72,7 +70,7 @@ import {
   parseWindowDays,
   reconciliationSince,
 } from '../../services/llmPanel.js';
-import { choiceRefusal, isLlmScope, LLM_SCOPES, toAdminLlmModels } from '../../services/llmModels.js';
+import { toAdminLlmCredits } from '../../services/llmCredits.js';
 import { startRescreen } from '../../services/universeRescreen.js';
 import { universeStatus } from '../../services/universeStatus.js';
 import { announceSignupApproved } from '../accountMail.js';
@@ -162,17 +160,13 @@ function signupId(context: Context<AppEnv>): string {
   return parsed.data;
 }
 
-const modelChoiceSchema = z
-  .object({ model: z.string().trim().min(1).max(200) })
-  .strict() satisfies z.ZodType<LlmModelChoiceInput>;
-
-/** The AI service's catalogue; its failure is the page's "could not be read", not a 500. */
-async function llmCatalogue(context: Context<AppEnv>): Promise<LlmModelsResponse> {
+/** The AI service's answer about the balance; its failure is the page's "could not be read", not a 500. */
+async function llmCredits(context: Context<AppEnv>): Promise<LlmCreditsResponse> {
   try {
-    return await context.get('ai').llmModels(context.get('requestId'));
+    return await context.get('ai').llmCredits(context.get('requestId'));
   } catch (error) {
     if (error instanceof AiServiceError) {
-      throw upstreamFailure(error.status, 'The AI service could not list the models.');
+      throw upstreamFailure(error.status, 'The AI service could not read the balance.');
     }
     throw error;
   }
@@ -281,32 +275,12 @@ export function registerAdminRoutes(app: Hono<AppEnv>): void {
   });
 
   /**
-   * The models narration, `/ask` and agents may use, what each would cost, and
-   * the provider account's balance (D43, D44).
+   * The installation's provider balance, which pays the admin's calls (D44,
+   * D360). The admin chooses models like every user: per agent on its page, and
+   * Ask's in Settings.
    */
-  app.get('/admin/llm/models', async (context) => {
-    const body: AdminLlmModelsResponse = toAdminLlmModels(await llmCatalogue(context));
-    return context.json(body);
-  });
-
-  /**
-   * Choose the model for a scope (D43). Audited by the gate before this runs
-   * (decision 84); refused unless the AI service offers the model for that
-   * scope, so the page and this check read one list. Answers the page afresh.
-   */
-  app.put('/admin/llm/models/:scope', async (context) => {
-    const scope = context.req.param('scope');
-    if (!isLlmScope(scope)) throw badRequest('invalid_scope', `scope is one of ${LLM_SCOPES.join(', ')}`);
-    const parsed = modelChoiceSchema.safeParse(await context.req.json().catch(() => null));
-    if (!parsed.success) throw badRequest('invalid_body', 'expected { model }', parsed.error.issues);
-    const refusal = choiceRefusal(await llmCatalogue(context), scope, parsed.data.model);
-    if (refusal) {
-      throw refusal.code === 'models_not_choosable'
-        ? conflict(refusal.code, refusal.message)
-        : unprocessable(refusal.code, refusal.message);
-    }
-    await chooseLlmModel(scope, parsed.data.model, currentUserId(context));
-    const body: AdminLlmModelsResponse = toAdminLlmModels(await llmCatalogue(context));
+  app.get('/admin/llm/credits', async (context) => {
+    const body: AdminLlmCreditsResponse = toAdminLlmCredits(await llmCredits(context));
     return context.json(body);
   });
 

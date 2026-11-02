@@ -16,7 +16,7 @@ from app.llm.user_models import (
     fallback_from,
     resolve,
 )
-from tests.test_llm_model_choice import Choices, Inner
+from tests.test_llm_model_choice import Inner, Listed, Users
 
 CHOSEN = "acme/chosen"
 FALLBACK_PRICE = DEFAULT_MODEL_PRICES[FALLBACK_MODEL]
@@ -81,51 +81,16 @@ def test_while_the_list_was_never_read_an_unpriced_saved_model_runs_on_the_teste
     )
 
 
-class Users:
-    def __init__(self, choice: UserModelChoice | None, error: Exception | None = None):
-        self._choice = choice
-        self._error = error
-        self.asked: list[tuple[str, str, str | None]] = []
-        self.recorded: list[tuple[str, str, str | None, ModelResolution]] = []
-
-    def choice(self, user_id, scope, agent_id):
-        self.asked.append((user_id, scope, agent_id))
-        if self._error:
-            raise self._error
-        return self._choice
-
-    def record_fallback(self, user_id, scope, agent_id, resolution):
-        self.recorded.append((user_id, scope, agent_id, resolution))
-
-
-class Listed:
-    def __init__(self, models: ModelList) -> None:
-        self._models = models
-
-    async def current(self) -> ModelList:
-        return self._models
-
-    @property
-    def prices(self) -> dict[str, ModelPrice]:
-        return DEFAULT_MODEL_PRICES
-
-
-ADMIN_PICK = "anthropic/claude-sonnet-5.5"
-
-
 def chain(users: Users, models: ModelList) -> tuple[ChoosingProvider, Inner]:
     inner = Inner()
-    provider = ChoosingProvider(
-        inner, Choices({"agent": ADMIN_PICK}), users=users, listed=Listed(models)
-    )
-    return provider, inner
+    return ChoosingProvider(inner, users=users, listed=Listed(models)), inner
 
 
 SCAN = Caller("agent_scan", user_id="u1", agent_id="a1")
 
 
-async def test_a_user_runs_on_their_agents_model_never_the_admins():
-    users = Users(UserModelChoice(admin=False, saved=CHOSEN))
+async def test_a_user_runs_on_their_agents_model():
+    users = Users(UserModelChoice(saved=CHOSEN))
     provider, inner = chain(users, listed(model(CHOSEN, Decimal(3)), TESTED))
     await provider.complete(system=None, user="u", caller=SCAN)
     assert inner.models == [CHOSEN]
@@ -133,51 +98,23 @@ async def test_a_user_runs_on_their_agents_model_never_the_admins():
 
 
 async def test_a_user_who_chose_nothing_runs_on_the_tested_model():
-    provider, inner = chain(Users(UserModelChoice(admin=False, saved=None)), listed(TESTED))
-    await provider.complete(system=None, user="u", caller=SCAN)
-    assert inner.models == [FALLBACK_MODEL]
-
-
-async def test_the_admins_agent_with_no_model_of_its_own_keeps_the_admin_pages_choice():
-    provider, inner = chain(Users(UserModelChoice(admin=True, saved=None)), listed(TESTED))
-    await provider.complete(system=None, user="u", caller=SCAN)
-    assert inner.models == [ADMIN_PICK]
-
-
-async def test_the_admins_agent_with_a_model_of_its_own_runs_on_it():
-    # D353: the admin chooses per agent, under the users' rules.
-    provider, inner = chain(
-        Users(UserModelChoice(admin=True, saved=CHOSEN)), listed(model(CHOSEN, Decimal(3)), TESTED)
-    )
-    await provider.complete(system=None, user="u", caller=SCAN)
-    assert inner.models == [CHOSEN]
-
-
-async def test_the_admins_agent_model_that_left_the_list_falls_back_and_is_recorded():
-    users = Users(UserModelChoice(admin=True, saved=CHOSEN))
-    provider, inner = chain(users, listed(TESTED))
-    await provider.complete(system=None, user="u", caller=SCAN)
-    assert inner.models == [FALLBACK_MODEL]
-    assert users.recorded == [
-        (
-            "u1",
-            "agent",
-            "a1",
-            ModelResolution(saved=CHOSEN, effective=FALLBACK_MODEL, fallback=True),
+    # D360: the admin too - there is no installation-wide choice to fall back to.
+    provider, inner = chain(Users(UserModelChoice(saved=None)), listed(TESTED))
+    for purpose in ("agent_scan", "assistant", "narration"):
+        await provider.complete(
+            system=None, user="u", caller=Caller(purpose, user_id="u1", agent_id="a1")
         )
-    ]
+    assert inner.models == [FALLBACK_MODEL] * 3
 
 
-def test_only_the_agent_scope_is_the_admins_own():
-    admin = UserModelChoice(admin=True, saved=CHOSEN)
-    assert admin.own("agent")
-    assert not admin.own("assistant") and not admin.own("explain")
-    assert not UserModelChoice(admin=True, saved=None).own("agent")
-    assert UserModelChoice(admin=False, saved=None).own("assistant")
+async def test_an_unknown_user_runs_on_the_tested_model():
+    provider, inner = chain(Users(None), listed(TESTED))
+    await provider.complete(system=None, user="u", caller=SCAN)
+    assert inner.models == [FALLBACK_MODEL]
 
 
 async def test_a_fallback_is_recorded_for_its_announcement():
-    users = Users(UserModelChoice(admin=False, saved=CHOSEN))
+    users = Users(UserModelChoice(saved=CHOSEN))
     provider, inner = chain(users, listed(TESTED))
     await provider.complete(system=None, user="u", caller=SCAN)
     assert inner.models == [FALLBACK_MODEL]
@@ -197,17 +134,9 @@ async def test_an_unreadable_user_choice_runs_on_the_tested_model():
     assert inner.models == [FALLBACK_MODEL]
 
 
-async def test_a_call_for_no_user_keeps_the_admin_pages_choice():
-    provider, inner = chain(Users(UserModelChoice(admin=False, saved=CHOSEN)), listed(TESTED))
-    await provider.complete(system=None, user="u", caller=Caller("agent_scan"))
-    assert inner.models == [ADMIN_PICK]
-
-
 async def test_an_answer_names_the_model_it_fell_back_from():
-    users = Users(UserModelChoice(admin=False, saved=CHOSEN))
+    users = Users(UserModelChoice(saved=CHOSEN))
     assert await fallback_from(users, Listed(listed(TESTED)), "u1", "assistant") == CHOSEN
     assert users.asked == [("u1", "assistant", None)]
     on_list = Listed(listed(model(CHOSEN, Decimal(1)), TESTED))
     assert await fallback_from(users, on_list, "u1", "assistant") is None
-    admin = Users(UserModelChoice(admin=True, saved=CHOSEN))
-    assert await fallback_from(admin, Listed(listed(TESTED)), "u1", "assistant") is None

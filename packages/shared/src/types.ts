@@ -1496,64 +1496,11 @@ export interface LlmPanelResponse {
   recent: LlmCallSummary[];
 }
 
-/**
- * What a model choice is for: `explain` is narration and `/ask`, `agent` an
- * agent's scan (D43), `assistant` the assistant's conversations (migration 0052).
- */
-export type LlmScope = 'explain' | 'agent' | 'assistant';
-
-/** Estimated cost in integer micro-USD, rounded up (D44). */
-export interface LlmCostEstimate {
-  dailyMicroUsd: number;
-  monthlyMicroUsd: number;
-}
-
-/** A model the Admin page may choose. Prices are USD per million tokens, as decimal strings. */
-export interface LlmOfferedModelView {
-  id: string;
-  label: string;
-  promptUsdPerMtok: string;
-  completionUsdPerMtok: string;
-  supportsTools: boolean;
-  free: boolean;
-  scopes: LlmScope[];
-  estimates: { explain: LlmCostEstimate; agent: LlmCostEstimate | null };
-  /** One agent scan at the agent basis; null when not offered for agents. */
-  scanEstimateMicroUsd: number | null;
-}
-
-export interface LlmScopeChoiceView {
-  scope: LlmScope;
-  /** Chosen on the Admin page; null when nothing has been. */
-  chosen: string | null;
-  /** What calls use now: the choice, else the configured `LLM_MODEL`. */
-  effective: string | null;
-}
-
-/** `GET /admin/llm/models` (D43, D44). */
-export interface AdminLlmModelsResponse {
+/** `GET /admin/llm/credits`: the installation's provider balance, which pays the admin's calls (D360). */
+export interface AdminLlmCreditsResponse {
   provider: string;
-  /** False unless the provider is OpenRouter: the offered ids are OpenRouter's. */
-  choosable: boolean;
-  configuredModel: string | null;
-  choices: LlmScopeChoiceView[];
-  models: LlmOfferedModelView[];
-  explainBasis: { windowDays: number; promptTokensPerDay: number; completionTokensPerDay: number };
-  agentBasis: {
-    scanningAgents: number;
-    scansPerDay: number;
-    promptTokensPerScan: number;
-    completionTokensPerScan: number;
-    /** `assumed` until real scans are recorded. */
-    source: 'assumed' | 'measured';
-  };
   /** The provider account in USD, decimal strings; null when it reports none or could not be read. */
   credits: { purchasedUsd: string; usedUsd: string; remainingUsd: string } | null;
-}
-
-/** `PUT /admin/llm/models/:scope`. */
-export interface LlmModelChoiceInput {
-  model: string;
 }
 
 // --- The Admin page's Keys tab (D251, D288) ----------------------------------
@@ -1613,24 +1560,14 @@ export interface ModelResolutionView {
   fallback: boolean;
 }
 
-/** `GET /settings/llm-models`. */
+/** `GET /settings/llm-models`: the same for every user, the admin included (D360). */
 export interface ModelChoicesResponse {
-  /**
-   * The admin chooses Ask's and the explanations' models on the Admin page (D244);
-   * each agent of the admin's may have its own (D353).
-   */
-  admin: boolean;
   /** False unless the installation runs on OpenRouter: nothing can be chosen. */
   choosable: boolean;
   /** False while OpenRouter's list has never been read; a saved model is then used as it is. */
   live: boolean;
   /** The tested model a choice falls back to. */
   fallbackModel: string;
-  /**
-   * What an agent with no model of its own runs on: the tested model, or for the
-   * admin the Admin page's agent model (D353). Null when nothing is configured.
-   */
-  agentDefault: string | null;
   models: ListedModelView[];
   choices: Record<UserLlmScope, ModelResolutionView>;
   /** Every agent that scans, oldest first. */

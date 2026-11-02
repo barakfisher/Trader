@@ -8,7 +8,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
 from app.llm.catalogue import FALLBACK_MODEL
-from app.llm.user_models import DatabaseUserModels, ModelResolution
+from app.llm.user_models import DatabaseUserModels, ModelResolution, UserModelChoice
 
 CHOSEN = "acme/model-1"
 #: Any active non-admin needs a cap while the retired column's CHECK stands (D279).
@@ -59,20 +59,16 @@ def test_each_scope_reads_its_own_saved_model(migrated: Engine) -> None:
     assert store.choice(user, "agent", agent).saved == CHOSEN
     assert store.choice(user, "explain", None).saved == "acme/explain"
     assert store.choice(user, "assistant", None).saved == "acme/assistant"
-    assert not store.choice(user, "agent", agent).admin
     # Someone else's agent is not this user's choice.
     other = _agent(migrated, _user(migrated), "b", model="acme/other")
     assert store.choice(user, "agent", other).saved is None
 
 
-def test_a_user_without_settings_has_chosen_nothing_and_the_admin_is_known(
-    migrated: Engine,
-) -> None:
+def test_a_user_without_settings_has_chosen_nothing_the_admin_too(migrated: Engine) -> None:
     admin = _user(migrated, role="admin")
     store = DatabaseUserModels(migrated)
     try:
-        assert store.choice(admin, "explain", None).admin
-        assert store.choice(admin, "explain", None).saved is None
+        assert store.choice(admin, "explain", None) == UserModelChoice(saved=None)
         assert store.choice("00000000-0000-0000-0000-000000000000", "explain", None) is None
     finally:
         # The schema is left at head for the orchestrator's suites, one of which

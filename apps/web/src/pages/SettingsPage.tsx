@@ -14,7 +14,7 @@ import { EmailChange } from '../components/EmailChange.tsx';
 import { LinkedProviders, OAuthOutcomeNotice, useOAuthOutcome } from '../components/OAuthSignIn.tsx';
 import { OwnLlmKeyForm } from '../components/OwnLlmKeyForm.tsx';
 import { KeySpendDetails } from '../components/SpendIndicator.tsx';
-import { UserModelsCard } from '../components/ModelChoiceCards.tsx';
+import { AskModelCard } from '../components/ModelChoiceCards.tsx';
 import { PasswordChange } from '../components/PasswordChange.tsx';
 import { TelegramConnect } from '../components/TelegramConnect.tsx';
 import { TimeZoneChange } from '../components/TimeZoneChange.tsx';
@@ -302,7 +302,7 @@ export const SettingsPage = observer(function SettingsPage() {
 
           <SpendCard />
 
-          <UserModelsCard />
+          <AskModelCard />
 
           <SignInCard />
 

@@ -15,9 +15,7 @@ import {
 } from '@traders/shared';
 import type {
   AdminAuditEntry,
-  AdminLlmModelsResponse,
-  LlmOfferedModelView,
-  LlmScope,
+  AdminLlmCreditsResponse,
   AdminRun,
   LlmPurposeSummary,
   LlmCallSummary,
@@ -52,14 +50,13 @@ import { gapExplanation, gapProfile, gapSubject, isRealGap } from '../lib/univer
 import {
   useAdminAuditQuery,
   useAdminGapsQuery,
-  useAdminLlmModelsQuery,
+  useAdminLlmCreditsQuery,
   useAdminLlmQuery,
   useAdminRunsQuery,
   useAdminSettingsQuery,
   useAdminSignupsQuery,
   useAdminUniverseQuery,
   useAdminUsersQuery,
-  useChooseLlmModel,
   useDecideSignup,
   useOneTimePassword,
   useRescreen,
@@ -142,7 +139,7 @@ export const AdminPage = observer(function AdminPage() {
           )}
           {tab === 'models' && (
             <>
-              <ModelsCard />
+              <CreditsCard />
               <AdminKeysCard />
             </>
           )}
@@ -832,209 +829,49 @@ function AgentLimitCard() {
   );
 }
 
-function ModelsCard() {
-  const models = useAdminLlmModelsQuery();
+/**
+ * The installation's provider balance (D44). It pays the admin's calls; the
+ * admin's models are chosen like every user's, on the agent pages and in
+ * Settings (D360), so the pickers and their estimates that sat here are gone.
+ */
+function CreditsCard() {
+  const credits = useAdminLlmCreditsQuery();
   const { t } = useTranslation();
   return (
-    <Card title={t('admin.models.title')}>
-      {models.isPending && <Spinner label={t('admin.models.loading')} />}
-      {models.error && (
-        <ErrorNote message={errorMessage(models.error, t('admin.models.failed'))} onRetry={() => void models.refetch()} />
+    <Card title={t('admin.credits.title')}>
+      {credits.isPending && <Spinner label={t('admin.credits.loading')} />}
+      {credits.error && (
+        <ErrorNote message={errorMessage(credits.error, t('admin.credits.failed'))} onRetry={() => void credits.refetch()} />
       )}
-      {models.data && <ModelsPanel data={models.data} />}
+      {credits.data && (
+        <div className="space-y-1 text-sm">
+          <Credits credits={credits.data.credits} />
+          <p className="text-xs text-text-muted">{t('admin.credits.note')}</p>
+        </div>
+      )}
     </Card>
   );
 }
 
-const SCOPES: readonly LlmScope[] = ['explain', 'agent', 'assistant'];
-
-/**
- * The model in use, or '' when it is not offered for this scope - the free route
- * for agents, or a chosen model since withdrawn. Never the first offered model:
- * that showed Sonnet as chosen while scans ran on the configured default.
- */
-function initialSelection(data: AdminLlmModelsResponse, scope: LlmScope): string {
-  const choice = data.choices.find((candidate) => candidate.scope === scope);
-  const offered = data.models.filter((model) => model.scopes.includes(scope));
-  const current = choice?.chosen ?? choice?.effective ?? null;
-  return offered.find((model) => model.id === current)?.id ?? '';
-}
-
-/** The assistant has no estimate until its cost per question is measured (its PR 4). */
-function estimateFor(model: LlmOfferedModelView | undefined, scope: LlmScope) {
-  if (!model || scope === 'assistant') return null;
-  return scope === 'explain' ? model.estimates.explain : model.estimates.agent;
-}
-
-function ModelsPanel({ data }: { data: AdminLlmModelsResponse }) {
+function Credits({ credits }: { credits: AdminLlmCreditsResponse['credits'] }) {
   const { t } = useTranslation();
-  const [selected, setSelected] = useState<Record<LlmScope, string>>(() => ({
-    explain: initialSelection(data, 'explain'),
-    agent: initialSelection(data, 'agent'),
-    assistant: initialSelection(data, 'assistant'),
-  }));
-  const pick = (scope: LlmScope) => data.models.find((model) => model.id === selected[scope]);
-  const totals = SCOPES.map((scope) => estimateFor(pick(scope), scope));
-  const daily = totals.reduce((sum, estimate) => sum + (estimate?.dailyMicroUsd ?? 0), 0);
-  const monthly = totals.reduce((sum, estimate) => sum + (estimate?.monthlyMicroUsd ?? 0), 0);
-
-  return (
-    <div className="space-y-4 text-sm">
-      {!data.choosable && <p className="text-warn">{t('admin.models.notChoosable', { provider: data.provider })}</p>}
-      {SCOPES.map((scope) => (
-        <ScopePicker
-          key={scope}
-          data={data}
-          scope={scope}
-          value={selected[scope]}
-          onChange={(model) => setSelected((current) => ({ ...current, [scope]: model }))}
-        />
-      ))}
-      <div className="rounded border border-border-subtle p-3">
-        <div className="font-medium">
-          {t('admin.models.total', { daily: formatMicroUsd(daily), monthly: formatMicroUsd(monthly) })}
-        </div>
-        <Credits credits={data.credits} monthlyMicroUsd={monthly} />
-        <p className="mt-1 text-xs text-text-muted">{t('admin.models.estimateNote')}</p>
-      </div>
-    </div>
-  );
-}
-
-function ScopePicker({
-  data,
-  scope,
-  value,
-  onChange,
-}: {
-  data: AdminLlmModelsResponse;
-  scope: LlmScope;
-  value: string;
-  onChange: (model: string) => void;
-}) {
-  const { t } = useTranslation();
-  const choose = useChooseLlmModel();
-  const choice = data.choices.find((candidate) => candidate.scope === scope);
-  const offered = data.models.filter((model) => model.scopes.includes(scope));
-  const model = offered.find((candidate) => candidate.id === value);
-  const estimate = estimateFor(model, scope);
-  const unchanged = value === choice?.chosen;
-  const id = `model-${scope}`;
-
-  return (
-    <section className="space-y-1">
-      <label htmlFor={id} className="block font-medium">
-        {t(`admin.models.scope.${scope}`)}
-      </label>
-      <div className="flex flex-wrap items-center gap-2">
-        <select
-          id={id}
-          value={value}
-          disabled={!data.choosable || offered.length === 0}
-          onChange={(event) => onChange(event.target.value)}
-          className="input w-auto max-w-full min-w-0"
-        >
-          {value === '' && (
-            <option value="" disabled>
-              {choice?.chosen
-                ? t('admin.models.notOffered', { model: choice.chosen })
-                : t('admin.models.notChosen', { model: choice?.effective ?? t('admin.noModel') })}
-            </option>
-          )}
-          {offered.map((candidate) => (
-            <option key={candidate.id} value={candidate.id}>
-              {candidate.label}
-            </option>
-          ))}
-        </select>
-        <Button
-          variant="secondary"
-          disabled={!data.choosable || !value || unchanged || choose.isPending}
-          onClick={() => choose.mutate({ scope, model: value })}
-        >
-          {t('admin.models.save')}
-        </Button>
-      </div>
-      <p className="text-xs text-text-muted">
-        {choice?.chosen
-          ? t('admin.models.inUse', { model: choice.chosen })
-          : t('admin.models.inUseDefault', { model: choice?.effective ?? t('admin.noModel') })}
-      </p>
-      {model && (
-        <p className="text-xs text-text-muted">
-          {model.free
-            ? t('admin.models.freeRoute')
-            : t('admin.models.price', {
-                input: formatPerMtok(model.promptUsdPerMtok),
-                output: formatPerMtok(model.completionUsdPerMtok),
-              })}
-        </p>
-      )}
-      {estimate && (
-        <p>
-          {t('admin.models.estimate', {
-            daily: formatMicroUsd(estimate.dailyMicroUsd),
-            monthly: formatMicroUsd(estimate.monthlyMicroUsd),
-          })}
-        </p>
-      )}
-      <p className="text-xs text-text-muted">
-        {scope === 'assistant'
-          ? t('admin.models.assistantBasis')
-          : scope === 'explain'
-          ? t('admin.models.explainBasis', {
-              days: data.explainBasis.windowDays,
-              prompt: count.format(data.explainBasis.promptTokensPerDay),
-              completion: count.format(data.explainBasis.completionTokensPerDay),
-            })
-          : t(
-              data.agentBasis.source === 'assumed' ? 'admin.models.agentBasisAssumed' : 'admin.models.agentBasis',
-              {
-                count: data.agentBasis.scanningAgents,
-                scans: data.agentBasis.scansPerDay,
-                tokens: count.format(data.agentBasis.promptTokensPerScan + data.agentBasis.completionTokensPerScan),
-                scan: model?.scanEstimateMicroUsd != null ? formatMicroUsd(model.scanEstimateMicroUsd) : '-',
-              },
-            )}
-      </p>
-      {choose.error && <ErrorNote message={errorMessage(choose.error, t('admin.models.saveFailed'))} />}
-    </section>
-  );
-}
-
-function Credits({
-  credits,
-  monthlyMicroUsd,
-}: {
-  credits: AdminLlmModelsResponse['credits'];
-  monthlyMicroUsd: number;
-}) {
-  const { t } = useTranslation();
-  if (credits === null) return <p className="text-text-muted">{t('admin.models.balanceUnavailable')}</p>;
+  if (credits === null) return <p className="text-text-muted">{t('admin.credits.unavailable')}</p>;
   const remaining = decimalUsdToMicro(credits.remainingUsd);
   const used = decimalUsdToMicro(credits.usedUsd);
   const purchased = decimalUsdToMicro(credits.purchasedUsd);
   if (remaining === null || used === null || purchased === null) {
-    return <p className="text-text-muted">{t('admin.models.balanceUnavailable')}</p>;
+    return <p className="text-text-muted">{t('admin.credits.unavailable')}</p>;
   }
   return (
     <>
       <p>
-        {t('admin.models.balance', {
+        {t('admin.credits.balance', {
           remaining: formatMicroUsd(Math.max(remaining, 0)),
           used: formatMicroUsd(used),
           purchased: formatMicroUsd(purchased),
         })}
       </p>
-      {remaining <= 0 ? (
-        <p className="text-loss">{t('admin.models.noCredit')}</p>
-      ) : (
-        monthlyMicroUsd > 0 && (
-          <p className="text-text-muted">
-            {t('admin.models.lasts', { count: Math.floor((remaining * 30) / monthlyMicroUsd) })}
-          </p>
-        )
-      )}
+      {remaining <= 0 && <p className="text-loss">{t('admin.credits.none')}</p>}
     </>
   );
 }

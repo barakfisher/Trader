@@ -1,9 +1,9 @@
-"""The models the Admin page offers, what each would cost, and the account's balance -
-and the models a user on their own key may choose, with what each user chose (D244, D283).
+"""The installation's balance, and the models a user may choose with what each user
+chose (D244, D283, D360).
 
-Read-only: the orchestrator's admin route writes the choice (`llm_model_choices`)
-and audits it (decision 84); this service owns the catalogue, the prices and the
-estimate, and reads the choice on every call (`app/llm/model_choice.py`).
+Read-only: the orchestrator writes a user's choice (`user_settings`, `agents`)
+after checking it against this list; this service owns the list, the prices and
+the estimate, and reads the choice on every call (`app/llm/model_choice.py`).
 """
 
 from __future__ import annotations
@@ -17,31 +17,19 @@ from sqlalchemy.engine import Engine
 from app.config import get_settings
 from app.db import get_engine
 from app.deps import require_internal_key
-from app.llm.catalogue import FALLBACK_MODEL, SCOPES, TESTED_MODELS, offered_models
+from app.llm.catalogue import FALLBACK_MODEL, TESTED_MODELS
 from app.llm.credits import build_credit_source
 from app.llm.factory import configured_model, models_are_choosable
-from app.llm.model_choice import DatabaseModelChoices
 from app.llm.openrouter_models import ModelList, OpenRouterModels, stand_in
-from app.llm.spend_estimate import (
-    agent_basis,
-    agent_estimate,
-    explain_basis,
-    explain_estimate,
-    scan_estimate_micro_usd,
-)
+from app.llm.spend_estimate import agent_basis, scan_estimate_micro_usd
 from app.llm.user_models import DatabaseUserModels, ModelResolution, resolve
 from app.models import (
     AgentLlmModel,
-    LlmAgentBasis,
-    LlmCostEstimate,
     LlmCredits,
-    LlmExplainBasis,
+    LlmCreditsResponse,
     LlmListedModel,
     LlmListedModelsResponse,
     LlmModelResolution,
-    LlmModelsResponse,
-    LlmOfferedModel,
-    LlmScopeChoice,
     UserLlmModelsResponse,
     UserLlmScopeModel,
 )
@@ -49,59 +37,13 @@ from app.models import (
 router = APIRouter(prefix="/llm", tags=["llm"], dependencies=[Depends(require_internal_key)])
 
 
-@router.get("/models", response_model=LlmModelsResponse)
-async def llm_models(engine: Engine = Depends(get_engine)) -> LlmModelsResponse:
+@router.get("/credits", response_model=LlmCreditsResponse)
+async def llm_credits() -> LlmCreditsResponse:
     settings = get_settings()
-    choosable = models_are_choosable(settings)
-    configured = configured_model(settings)
-    chosen = DatabaseModelChoices(engine).all() if choosable else {}
-    explain = explain_basis(engine)
-    agents = agent_basis(engine)
-
-    models = []
-    for offered in offered_models(settings.llm_model_price_map):
-        for_agents = "agent" in offered.scopes
-        explained = explain_estimate(explain, offered.price)
-        scanned = agent_estimate(agents, offered.price) if for_agents else None
-        models.append(
-            LlmOfferedModel(
-                id=offered.model.id,
-                label=offered.model.label,
-                prompt_usd_per_mtok=str(offered.price.prompt_usd_per_mtok),
-                completion_usd_per_mtok=str(offered.price.completion_usd_per_mtok),
-                supports_tools=offered.model.supports_tools,
-                free=offered.free,
-                scopes=list(offered.scopes),
-                explain_estimate=LlmCostEstimate(**vars(explained)),
-                agent_estimate=LlmCostEstimate(**vars(scanned)) if scanned else None,
-                scan_estimate_micro_usd=(
-                    scan_estimate_micro_usd(agents, offered.price) if for_agents else None
-                ),
-            )
-        )
-
     source = build_credit_source(settings)
     credits = await source.credits() if source is not None else None
-
-    return LlmModelsResponse(
+    return LlmCreditsResponse(
         provider=settings.llm_provider.strip().lower(),
-        choosable=choosable,
-        configured_model=configured,
-        choices=[
-            LlmScopeChoice(
-                scope=scope,
-                chosen=chosen.get(scope),
-                effective=chosen.get(scope) or configured,
-            )
-            for scope in SCOPES
-        ],
-        models=models,
-        explain_basis=LlmExplainBasis(
-            window_days=explain.window_days,
-            prompt_tokens_per_day=round(explain.prompt_tokens_per_day),
-            completion_tokens_per_day=round(explain.completion_tokens_per_day),
-        ),
-        agent_basis=LlmAgentBasis(**vars(agents)),
         credits=(
             LlmCredits(
                 purchased_usd=str(credits.purchased_usd),
@@ -175,24 +117,9 @@ async def user_llm_models(
         resolution: ModelResolution = resolve(model, listed, prices)
         return LlmModelResolution(**vars(resolution))
 
-    def resolved_agent(model: str | None) -> LlmModelResolution:
-        # D353: the admin's agent with nothing saved runs on the Admin page's choice.
-        if saved.admin and model is None:
-            return LlmModelResolution(saved=None, effective=agent_default, fallback=False)
-        return resolved(model)
-
-    if saved.admin:
-        agent_default = (
-            DatabaseModelChoices(engine).chosen("agent") if choosable else None
-        ) or configured_model(settings)
-    else:
-        agent_default = resolved(None).effective
-
     return UserLlmModelsResponse(
-        admin=saved.admin,
         choosable=choosable,
         live=listed.live,
-        agent_default=agent_default,
         choices=[
             UserLlmScopeModel(scope="explain", **resolved(saved.explain).model_dump()),
             UserLlmScopeModel(scope="assistant", **resolved(saved.assistant).model_dump()),
@@ -201,7 +128,7 @@ async def user_llm_models(
             AgentLlmModel(
                 agent_id=UUID(agent.agent_id),
                 name=agent.name,
-                **resolved_agent(agent.saved).model_dump(),
+                **resolved(agent.saved).model_dump(),
             )
             for agent in saved.agents
         ],

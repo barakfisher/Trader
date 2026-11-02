@@ -25,7 +25,7 @@ from app.core.logging import get_logger
 from app.llm.base import LLMProvider
 from app.llm.budget import BudgetedProvider, DailySpendGuard
 from app.llm.call_log import CallLog, RecordingProvider
-from app.llm.model_choice import ChoosingProvider, ModelChoices
+from app.llm.model_choice import ChoosingProvider
 from app.llm.monthly_cap import MonthlyCapProvider
 from app.llm.null_provider import NullProvider
 from app.llm.openai_compatible import OpenAICompatibleProvider
@@ -51,7 +51,6 @@ def build_llm(
     *,
     transport: object | None = None,
     call_log: CallLog | None = None,
-    choices: ModelChoices | None = None,
     payer: PayerGate | None = None,
     prices: PriceBook | None = None,
     users: UserModelStore | None = None,
@@ -64,20 +63,18 @@ def build_llm(
     is recorded as well as one that reached a model (decision 87). Tests that
     pass no log get the provider exactly as before.
 
-    Given `choices`, the Admin page's model for each purpose (D43) is passed to
-    every call, outermost of all so the recorder sees the model chosen. Only
-    for OpenRouter: the offered models are OpenRouter ids (`catalogue.py`).
+    Given `users` and `listed`, each call is passed the model its user chose
+    for its purpose, from OpenRouter's list (D244, D283, D360), outermost of all
+    so the recorder sees the model chosen. Only for OpenRouter: the ids are
+    OpenRouter's. `prices` is the one price book every adapter charges from;
+    OpenRouter's list writes its prices into it (`openrouter_models.py`).
+    Without one, the configured table is used.
 
     Given a `payer` gate, every metered call for a user who is not the admin
     runs on that user's own OpenRouter key, under their monthly safety limit,
     or is refused (D245, D250); the admin's calls and the installation's own
     stay on the installation's key and its daily guard. Inside the recorder,
     so a refused call is recorded too.
-
-    Given `users` and `listed`, a user who is not the admin runs on their own
-    choice from OpenRouter's list instead (D244, D283). `prices` is the one
-    price book every adapter charges from; OpenRouter's list writes its prices
-    into it (`openrouter_models.py`). Without one, the configured table is used.
     """
     if prices is None:
         prices = PriceBook(settings.llm_model_prices)
@@ -100,8 +97,8 @@ def build_llm(
         provider = OwnKeyProvider(provider, payer, own)
     if call_log is not None:
         provider = RecordingProvider(provider, call_log, model=model)
-    if choices is not None and models_are_choosable(settings):
-        provider = ChoosingProvider(provider, choices, users=users, listed=listed)
+    if users is not None and listed is not None and models_are_choosable(settings):
+        provider = ChoosingProvider(provider, users=users, listed=listed)
     return provider
 
 
@@ -126,7 +123,7 @@ def own_key_adapter(
 
 
 def models_are_choosable(settings: Settings) -> bool:
-    """Whether the Admin page's choice applies: the catalogue holds OpenRouter ids."""
+    """Whether models are chosen at all: a choice is an OpenRouter id."""
     return settings.llm_provider.strip().lower() == "openrouter"
 
 
