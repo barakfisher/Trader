@@ -835,57 +835,6 @@ class TopicDiscoverResponse(BaseModel):
     phrases: list[DiscoveredPhrase] = Field(default_factory=list)
 
 
-LlmScope = Literal["explain", "agent", "assistant"]
-
-
-class LlmCostEstimate(BaseModel):
-    """A choice's cost, estimated (D44): integer micro-USD, rounded up."""
-
-    daily_micro_usd: int
-    monthly_micro_usd: int
-
-
-class LlmOfferedModel(BaseModel):
-    """A model the Admin page may choose, with what it would cost (D43, D44)."""
-
-    id: str = Field(description="OpenRouter's id, e.g. 'anthropic/claude-sonnet-5.5'.")
-    label: str
-    prompt_usd_per_mtok: str = Field(description="USD per million input tokens, a decimal.")
-    completion_usd_per_mtok: str = Field(description="USD per million output tokens, a decimal.")
-    supports_tools: bool
-    free: bool = Field(description="An OpenRouter `:free` route: unbilled, and slow.")
-    scopes: list[LlmScope] = Field(description="What it may be chosen for.")
-    explain_estimate: LlmCostEstimate
-    agent_estimate: LlmCostEstimate | None = Field(
-        description="Null when the model may not be chosen for agents."
-    )
-    scan_estimate_micro_usd: int | None = Field(
-        description="One agent scan at the agent basis; null when not offered for agents."
-    )
-
-
-class LlmScopeChoice(BaseModel):
-    scope: LlmScope
-    chosen: str | None = Field(description="The model chosen on the Admin page; null if none.")
-    effective: str | None = Field(
-        description="What calls use now: the choice, else the configured LLM_MODEL."
-    )
-
-
-class LlmExplainBasis(BaseModel):
-    window_days: int
-    prompt_tokens_per_day: int
-    completion_tokens_per_day: int
-
-
-class LlmAgentBasis(BaseModel):
-    scanning_agents: int = Field(description="Simulated, active, with a persona (D52).")
-    scans_per_day: int
-    prompt_tokens_per_scan: int
-    completion_tokens_per_scan: int
-    source: Literal["assumed", "measured"]
-
-
 class LlmCredits(BaseModel):
     """The provider account's balance in USD, decimals as strings."""
 
@@ -894,18 +843,10 @@ class LlmCredits(BaseModel):
     remaining_usd: str
 
 
-class LlmModelsResponse(BaseModel):
-    """What the Admin page's model pickers show (D43, D44)."""
+class LlmCreditsResponse(BaseModel):
+    """The installation's provider balance, which pays the admin's calls (D360)."""
 
     provider: str
-    choosable: bool = Field(
-        description="False unless LLM_PROVIDER is openrouter: the offered ids are OpenRouter's."
-    )
-    configured_model: str | None
-    choices: list[LlmScopeChoice]
-    models: list[LlmOfferedModel]
-    explain_basis: LlmExplainBasis
-    agent_basis: LlmAgentBasis
     credits: LlmCredits | None = Field(
         description="Null when the provider reports no balance or it could not be read."
     )
@@ -929,7 +870,7 @@ class LlmListedModelsResponse(BaseModel):
         description="False unless LLM_PROVIDER is openrouter: nothing can be chosen."
     )
     live: bool = Field(
-        description="False while OpenRouter's list has never been read: the Admin page's "
+        description="False while OpenRouter's list has never been read: the short "
         "catalogue stands in, and a saved model is used as it is (D284)."
     )
     fallback_model: str = Field(description="The tested model a choice falls back to (D284).")
@@ -960,16 +901,8 @@ class AgentLlmModel(LlmModelResolution):
 class UserLlmModelsResponse(BaseModel):
     """A user's models, resolved against OpenRouter's list (D244, D284)."""
 
-    admin: bool = Field(
-        description="The admin's Ask and explanations are the Admin page's (D244); the "
-        "admin's agents may each have a model of their own (D353)."
-    )
     choosable: bool
     live: bool
-    agent_default: str | None = Field(
-        description="What an agent with no model of its own runs on: the tested model, or "
-        "for the admin the Admin page's agent model (D353)."
-    )
     choices: list[UserLlmScopeModel]
     agents: list[AgentLlmModel] = Field(description="Every agent that scans, oldest first.")
 

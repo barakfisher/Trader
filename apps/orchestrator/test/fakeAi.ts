@@ -69,7 +69,6 @@ export function createFakeAi(options: FakeAiOptions = {}): AiClient {
     async userLlmModels() {
       const nothing = { saved: null, effective: 'google/gemini-3.5-flash-lite', fallback: false };
       return {
-        admin: false,
         choosable: true,
         live: true,
         choices: [

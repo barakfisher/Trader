@@ -230,8 +230,8 @@ class LLMProvider(Protocol):
     ) -> LLMCompletion:
         """Produce one completion, or raise an `LLMError` subclass.
 
-        `model` overrides the configured model for this call - the choice made
-        on the Admin page for the call's purpose (D43), passed down by
+        `model` overrides the configured model for this call - the model the
+        call's user chose for its purpose (D244, D360), passed down by
         `model_choice.ChoosingProvider`. None means the configured model; a
         call site never names one.
 

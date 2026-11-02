@@ -282,12 +282,6 @@ export const marketSessionsSchema = z.object({
   sessions: z.array(marketSessionSchema),
 });
 
-const llmScopeSchema = z.enum(['explain', 'agent', 'assistant']);
-const llmCostEstimateSchema = z.object({
-  daily_micro_usd: z.number().int(),
-  monthly_micro_usd: z.number().int(),
-});
-
 export const researchRunStartedSchema = z.object({
   run_id: z.string(),
   agent_id: z.string(),
@@ -468,47 +462,14 @@ const llmModelResolutionShape = {
 };
 
 export const userLlmModelsResponseSchema = z.object({
-  admin: z.boolean(),
   choosable: z.boolean(),
   live: z.boolean(),
-  agent_default: z.string().nullable(),
   choices: z.array(z.object({ scope: z.enum(['explain', 'assistant']), ...llmModelResolutionShape })),
   agents: z.array(z.object({ agent_id: z.string(), name: z.string(), ...llmModelResolutionShape })),
 });
 
-export const llmModelsResponseSchema = z.object({
+export const llmCreditsResponseSchema = z.object({
   provider: z.string(),
-  choosable: z.boolean(),
-  configured_model: z.string().nullable(),
-  choices: z.array(
-    z.object({ scope: llmScopeSchema, chosen: z.string().nullable(), effective: z.string().nullable() }),
-  ),
-  models: z.array(
-    z.object({
-      id: z.string(),
-      label: z.string(),
-      prompt_usd_per_mtok: z.string(),
-      completion_usd_per_mtok: z.string(),
-      supports_tools: z.boolean(),
-      free: z.boolean(),
-      scopes: z.array(llmScopeSchema),
-      explain_estimate: llmCostEstimateSchema,
-      agent_estimate: llmCostEstimateSchema.nullable(),
-      scan_estimate_micro_usd: z.number().int().nullable(),
-    }),
-  ),
-  explain_basis: z.object({
-    window_days: z.number().int(),
-    prompt_tokens_per_day: z.number().int(),
-    completion_tokens_per_day: z.number().int(),
-  }),
-  agent_basis: z.object({
-    scanning_agents: z.number().int(),
-    scans_per_day: z.number().int(),
-    prompt_tokens_per_scan: z.number().int(),
-    completion_tokens_per_scan: z.number().int(),
-    source: z.enum(['assumed', 'measured']),
-  }),
   credits: z
     .object({ purchased_usd: z.string(), used_usd: z.string(), remaining_usd: z.string() })
     .nullable(),
@@ -595,8 +556,8 @@ export type _AssertLlmListedModels = Expect<
 export type _AssertUserLlmModels = Expect<
   Equal<z.infer<typeof userLlmModelsResponseSchema>, Schemas['UserLlmModelsResponse']>
 >;
-export type _AssertLlmModels = Expect<
-  Equal<z.infer<typeof llmModelsResponseSchema>, Schemas['LlmModelsResponse']>
+export type _AssertLlmCredits = Expect<
+  Equal<z.infer<typeof llmCreditsResponseSchema>, Schemas['LlmCreditsResponse']>
 >;
 export type _AssertBackfill = Expect<
   Equal<z.infer<typeof backfillResponseSchema>, Schemas['BackfillResponse']>

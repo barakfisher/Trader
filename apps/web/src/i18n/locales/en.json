@@ -1261,38 +1261,14 @@
     "etf": "ETF"
   },
   "admin": {
-    "models": {
-      "title": "Models",
-      "loading": "Loading the models…",
-      "failed": "Could not load the models.",
-      "scope": {
-        "explain": "Narration and questions",
-        "agent": "Agents",
-        "assistant": "Assistant"
-      },
-      "save": "Use this model",
-      "saveFailed": "Could not save the model.",
-      "inUse": "In use: {{model}}",
-      "inUseDefault": "In use: {{model}} (the configured default; nothing chosen here yet)",
-      "notChosen": "Not chosen – using {{model}}",
-      "notOffered": "{{model}} – no longer offered here",
-      "price": "{{input}} per million input tokens, {{output}} per million output tokens",
-      "freeRoute": "Free route: unbilled, slow, and often rejected for unsourced figures",
-      "estimate": "About {{daily}} a day, {{monthly}} a month",
-      "explainBasis": "From the last {{days}} days: about {{prompt}} input and {{completion}} output tokens a day.",
-      "agentBasis_one": "{{count}} agent scanning, {{scans}} scan a day, about {{tokens}} tokens a scan; one scan about {{scan}}.",
-      "agentBasis_other": "{{count}} agents scanning, {{scans}} scan a day each, about {{tokens}} tokens a scan; one scan about {{scan}}.",
-      "agentBasisAssumed_one": "{{count}} agent scanning, {{scans}} scan a day, about {{tokens}} tokens a scan (assumed until real scans are recorded); one scan about {{scan}}.",
-      "agentBasisAssumed_other": "{{count}} agents scanning, {{scans}} scan a day each, about {{tokens}} tokens a scan (assumed until real scans are recorded); one scan about {{scan}}.",
-      "total": "Together: about {{daily}} a day, {{monthly}} a month",
-      "balance": "OpenRouter balance: {{remaining}} left ({{used}} used of {{purchased}})",
-      "balanceUnavailable": "The account balance could not be read.",
-      "noCredit": "No credit left: paid models will fail until credit is added at openrouter.ai.",
-      "lasts_one": "At this rate the balance lasts about {{count}} day.",
-      "lasts_other": "At this rate the balance lasts about {{count}} days.",
-      "estimateNote": "Estimates, rounded up, at list prices and without prompt caching; the real bill is usually lower.",
-      "notChoosable": "Models are chosen here only with OpenRouter; this installation uses {{provider}}.",
-      "assistantBasis": "No estimate yet: the cost of a question is measured once the assistant has a screen. Each user's spending is capped by the daily limit below."
+    "credits": {
+      "title": "OpenRouter balance",
+      "loading": "Loading the balance…",
+      "failed": "Could not load the balance.",
+      "balance": "{{remaining}} left ({{used}} used of {{purchased}})",
+      "unavailable": "The account balance could not be read.",
+      "none": "No credit left: paid models will fail until credit is added at openrouter.ai.",
+      "note": "This credit pays for your own model calls. Models are chosen like every user's: Ask in Settings, explanations on the Main portfolio page, each agent on its page."
     },
     "title": "Admin",
     "onlyTitle": "Administrators only",
@@ -1459,7 +1435,7 @@
     },
     "tabs": {
       "users": "Users",
-      "models": "Models and keys",
+      "models": "Balance and keys",
       "operations": "Operations",
       "settings": "Settings"
     },
@@ -2204,7 +2180,8 @@
   },
   "models": {
     "title": "Models",
-    "intro": "Your questions and explanations run on your own OpenRouter key, on the model you choose here; each agent's is on its Settings tab. Models come from OpenRouter's list, with their prices. Not chosen means the tested model, the one the scans and the figure check were tuned on.",
+    "intro": "Ask runs on the model you choose here. Explanations of findings run on the model chosen on the Main portfolio page, and each agent's on its Settings tab. Models come from OpenRouter's list, with their prices. Not chosen means the tested model, the one the scans and the figure check were tuned on.",
+    "explainIntro": "Your real portfolio is checked every 15 minutes by fixed rules, and its findings are explained in plain words by this model - the one model it runs on. Not chosen means the tested model, the one the figure check was tuned on.",
     "agentTitle": "Model",
     "agentNotScanning": "An archived agent doesn't scan, so it has no model to choose.",
     "loading": "Loading models…",
@@ -2220,7 +2197,6 @@
     "search": "Search by name or id",
     "searchLabel": "Search the models for {{label}}",
     "notChosen": "Not chosen: the tested model",
-    "notChosenAdmin": "Not chosen: the Admin page's agent model, {{model}}",
     "noLongerOffered": "{{model}} (no longer offered)",
     "optionTested": "{{name}} (tested)",
     "matches_one": "{{count}} model matches.",
@@ -2242,7 +2218,8 @@
       "explain": "explanations",
       "agent": "{{name}}",
       "chooseSettings": "Choose in Settings",
-      "chooseAgent": "Choose on the agent's page"
+      "chooseAgent": "Choose on the agent's page",
+      "choosePrimary": "Choose on the Main portfolio page"
     }
   },
   "research": {

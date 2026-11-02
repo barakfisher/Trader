@@ -1,4 +1,4 @@
-"""The model chosen on the Admin page reaches every call for its purpose (D43)."""
+"""The model a user chose reaches every call of theirs for its purpose (D244, D360)."""
 
 from __future__ import annotations
 
@@ -7,21 +7,55 @@ import pytest
 from app.config import Settings
 from app.llm.base import Caller, LLMCompletion, LLMUnavailableError, TokenUsage
 from app.llm.call_log import CallEntry
+from app.llm.catalogue import FALLBACK_MODEL
 from app.llm.factory import build_llm
 from app.llm.model_choice import SCOPE_FOR_PURPOSE, ChoosingProvider
+from app.llm.openrouter_models import ListedModel, ModelList
+from app.llm.pricing import DEFAULT_MODEL_PRICES, ModelPrice
+from app.llm.user_models import ModelResolution, UserModelChoice
+
+CHOSEN = "anthropic/claude-sonnet-5.5"
+TESTED = ListedModel(
+    id=FALLBACK_MODEL, name="Flash-Lite", price=DEFAULT_MODEL_PRICES[FALLBACK_MODEL]
+)
 
 
-class Choices:
-    def __init__(self, chosen: dict[str, str] | None = None, error: Exception | None = None):
-        self._chosen = chosen or {}
+class Users:
+    def __init__(self, choice: UserModelChoice | None, error: Exception | None = None):
+        self._choice = choice
         self._error = error
-        self.asked: list[str] = []
+        self.asked: list[tuple[str, str, str | None]] = []
+        self.recorded: list[tuple[str, str, str | None, ModelResolution]] = []
 
-    def chosen(self, scope):
-        self.asked.append(scope)
+    def choice(self, user_id, scope, agent_id):
+        self.asked.append((user_id, scope, agent_id))
         if self._error:
             raise self._error
-        return self._chosen.get(scope)
+        return self._choice
+
+    def record_fallback(self, user_id, scope, agent_id, resolution):
+        self.recorded.append((user_id, scope, agent_id, resolution))
+
+
+class Listed:
+    def __init__(self, models: ModelList) -> None:
+        self._models = models
+
+    async def current(self) -> ModelList:
+        return self._models
+
+    @property
+    def prices(self) -> dict[str, ModelPrice]:
+        return DEFAULT_MODEL_PRICES
+
+
+def listing(*models: ListedModel, live: bool = True) -> ModelList:
+    return ModelList(models=models, live=live)
+
+
+ON_THE_LIST = listing(
+    ListedModel(id=CHOSEN, name=CHOSEN, price=DEFAULT_MODEL_PRICES[CHOSEN]), TESTED
+)
 
 
 class Inner:
@@ -57,28 +91,34 @@ class MemoryLog:
         return None
 
 
-async def test_narration_and_ask_follow_the_explain_choice():
-    inner, choices = Inner(), Choices({"explain": "anthropic/claude-sonnet-5.5"})
-    provider = ChoosingProvider(inner, choices)
+async def test_narration_and_ask_follow_the_users_explain_choice():
+    inner, users = Inner(), Users(UserModelChoice(saved=CHOSEN))
+    provider = ChoosingProvider(inner, users=users, listed=Listed(ON_THE_LIST))
     for purpose in ("narration", "ask"):
-        await provider.complete(system=None, user="u", caller=Caller(purpose=purpose))
-    assert inner.models == ["anthropic/claude-sonnet-5.5"] * 2
-    assert choices.asked == [SCOPE_FOR_PURPOSE["narration"], SCOPE_FOR_PURPOSE["ask"]]
+        await provider.complete(system=None, user="u", caller=Caller(purpose, user_id="u1"))
+    assert inner.models == [CHOSEN] * 2
+    assert [scope for _, scope, _ in users.asked] == [
+        SCOPE_FOR_PURPOSE["narration"],
+        SCOPE_FOR_PURPOSE["ask"],
+    ]
 
 
-async def test_nothing_chosen_leaves_the_configured_model():
-    inner = Inner()
-    await ChoosingProvider(inner, Choices()).complete(
-        system=None, user="u", caller=Caller(purpose="ask")
-    )
-    assert inner.models == [None]
+async def test_a_call_for_no_user_runs_on_the_configured_model():
+    inner, users = Inner(), Users(UserModelChoice(saved=CHOSEN))
+    provider = ChoosingProvider(inner, users=users, listed=Listed(ON_THE_LIST))
+    await provider.complete(system=None, user="u", caller=Caller(purpose="ask"))
+    await provider.complete(system=None, user="u")
+    assert inner.models == [None, None] and users.asked == []
 
 
 async def test_an_unreadable_choice_never_fails_the_call():
     inner = Inner()
-    provider = ChoosingProvider(inner, Choices(error=RuntimeError("database down")))
-    completion = await provider.complete(system=None, user="u", caller=Caller(purpose="ask"))
-    assert inner.models == [None] and completion.text == "t"
+    users = Users(None, error=RuntimeError("database down"))
+    provider = ChoosingProvider(inner, users=users, listed=Listed(ON_THE_LIST))
+    completion = await provider.complete(
+        system=None, user="u", caller=Caller(purpose="ask", user_id="u1")
+    )
+    assert inner.models == [FALLBACK_MODEL] and completion.text == "t"
 
 
 def _settings(**overrides) -> Settings:
@@ -90,19 +130,21 @@ async def test_the_recorded_model_is_the_chosen_one_even_when_no_model_answered(
     llm = build_llm(
         _settings(llm_provider="openrouter", openrouter_api_key=None),
         call_log=log,
-        choices=Choices({"explain": "anthropic/claude-sonnet-5.5"}),
+        users=Users(UserModelChoice(saved=CHOSEN)),
+        listed=Listed(ON_THE_LIST),
     )
     with pytest.raises(LLMUnavailableError):
-        await llm.complete(system=None, user="q", caller=Caller(purpose="narration"))
+        await llm.complete(system=None, user="q", caller=Caller("narration", user_id="u1"))
     [entry] = log.entries
-    assert (entry.purpose, entry.model) == ("narration", "anthropic/claude-sonnet-5.5")
+    assert (entry.purpose, entry.model) == ("narration", CHOSEN)
 
 
 def test_a_choice_applies_only_to_openrouter():
-    choices = Choices({"explain": "anthropic/claude-sonnet-5.5"})
+    users, listed = Users(UserModelChoice(saved=CHOSEN)), Listed(ON_THE_LIST)
     assert isinstance(
-        build_llm(_settings(llm_provider="openrouter"), choices=choices), ChoosingProvider
+        build_llm(_settings(llm_provider="openrouter"), users=users, listed=listed),
+        ChoosingProvider,
     )
     assert not isinstance(
-        build_llm(_settings(llm_provider="ollama"), choices=choices), ChoosingProvider
+        build_llm(_settings(llm_provider="ollama"), users=users, listed=listed), ChoosingProvider
     )

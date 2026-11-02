@@ -1,34 +1,39 @@
 import type { ModelChoicesResponse } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
-import { leftToRight } from '../i18n/format.ts';
 import { useTranslation } from '../i18n/index.ts';
 import { useChooseAgentModel, useChooseUserModel, useModelChoicesQuery } from '../queries/modelChoices.ts';
-import { useStore } from '../stores/context.tsx';
 import { ModelPicker } from './ModelPicker.tsx';
 import { Card, ErrorNote, Spinner } from './ui.tsx';
 
 /**
- * Ask's model and the explanations' model, chosen by a user on their own key
- * (D244). The admin chooses on the Admin page and sees nothing here.
+ * Ask's model (D244), chosen in Settings by every user, the admin included
+ * (D360). The explanations' model is the main portfolio's (`ExplainModelCard`),
+ * each agent's on its own page.
  */
-export function UserModelsCard() {
+export function AskModelCard() {
   const { t } = useTranslation();
-  const { auth } = useStore();
-  const isAdmin = auth.user?.role === 'admin';
-  const query = useModelChoicesQuery(!isAdmin);
-  if (isAdmin) return null;
+  const query = useModelChoicesQuery();
   return (
     <Card title={t('models.title')}>
       <p className="mb-3 max-w-2xl text-xs text-text-muted">{t('models.intro')}</p>
-      <ModelChoicesBody query={query}>
-        {(data) => (
-          <div className="space-y-5">
-            <UserScopePicker data={data} scope="assistant" />
-            <UserScopePicker data={data} scope="explain" />
-          </div>
-        )}
-      </ModelChoicesBody>
+      <ModelChoicesBody query={query}>{(data) => <UserScopePicker data={data} scope="assistant" />}</ModelChoicesBody>
+    </Card>
+  );
+}
+
+/**
+ * The explanations' model (narration and Ask's "explain", D43), on the main
+ * portfolio's page (D360): its 15-minute scan is rules plus narration, so the
+ * narration's model is the one model call the real portfolio makes.
+ */
+export function ExplainModelCard() {
+  const { t } = useTranslation();
+  const query = useModelChoicesQuery();
+  return (
+    <Card title={t('models.agentTitle')}>
+      <p className="mb-3 max-w-2xl text-xs text-text-muted">{t('models.explainIntro')}</p>
+      <ModelChoicesBody query={query}>{(data) => <UserScopePicker data={data} scope="explain" />}</ModelChoicesBody>
     </Card>
   );
 }
@@ -48,10 +53,7 @@ function UserScopePicker({ data, scope }: { data: ModelChoicesResponse; scope: '
   );
 }
 
-/**
- * The model an agent scans with (D244). The admin chooses here too (D353); an
- * agent of theirs with none runs on the Admin page's agent model.
- */
+/** The model an agent scans with (D244); one with none runs on the tested model, the admin's too (D360). */
 export function AgentModelCard({ agentId }: { agentId: string }) {
   const { t } = useTranslation();
   const query = useModelChoicesQuery();
@@ -71,14 +73,6 @@ export function AgentModelCard({ agentId }: { agentId: string }) {
               resolution={agent}
               save={save}
               perScan
-              unchosen={
-                data.admin && data.agentDefault
-                  ? {
-                      model: data.agentDefault,
-                      label: t('models.notChosenAdmin', { model: leftToRight(data.agentDefault) }),
-                    }
-                  : undefined
-              }
             />
           );
         }}

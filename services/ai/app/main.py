@@ -25,7 +25,6 @@ from app.db import get_engine
 from app.llm.call_log import DatabaseCallLog
 from app.llm.factory import build_llm, models_are_choosable
 from app.llm.key_vault import build_vault
-from app.llm.model_choice import DatabaseModelChoices
 from app.llm.monthly_cap import DatabaseSafetyLimitLedger
 from app.llm.openrouter_models import OpenRouterModels
 from app.llm.own_key import DatabaseOwnKeyStore
@@ -88,7 +87,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings,
         redis,
         call_log=DatabaseCallLog(get_engine(), settings.llm_call_retention_days),
-        choices=DatabaseModelChoices(get_engine()),
         payer=payer,
         prices=prices,
         users=app.state.user_models,

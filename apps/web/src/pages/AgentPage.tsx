@@ -46,7 +46,7 @@ import {
   useUpdateAgent,
 } from '../queries/agents.ts';
 import { KindBadge, WaitingForBrief } from './AgentsPage.tsx';
-import { AgentModelCard } from '../components/ModelChoiceCards.tsx';
+import { AgentModelCard, ExplainModelCard } from '../components/ModelChoiceCards.tsx';
 
 const TABS = ['holdings', 'performance', 'activity', 'scans', 'settings'] as const;
 type Tab = (typeof TABS)[number];
@@ -115,12 +115,15 @@ export function AgentPage() {
 function PrimaryNote() {
   const { t } = useTranslation();
   return (
-    <Card>
-      <p className="text-sm text-text-muted">{t('agents.primaryNote')}</p>
-      <Link to="/" className={`${buttonClass('secondary')} mt-3`}>
-        {t('common.backToPortfolio')}
-      </Link>
-    </Card>
+    <>
+      <Card>
+        <p className="text-sm text-text-muted">{t('agents.primaryNote')}</p>
+        <Link to="/" className={`${buttonClass('secondary')} mt-3`}>
+          {t('common.backToPortfolio')}
+        </Link>
+      </Card>
+      <ExplainModelCard />
+    </>
   );
 }
 

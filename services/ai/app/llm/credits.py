@@ -1,4 +1,4 @@
-"""What is left on the LLM account, for the Admin page's "how much should I add" (D44).
+"""What is left on the LLM account, for the Admin page's balance (D44, D360).
 
 Only OpenRouter reports a balance through its API (`GET /credits`: what was
 bought and what was used, in USD). Other providers have no such endpoint, and
@@ -6,7 +6,7 @@ the page then says nothing rather than a zero - a zero would read as "empty".
 
 Read with the key the provider already uses, on request only; never cached, so
 a top-up shows on the next reload. A failure is reported as unavailable, never
-raised: the balance is a convenience beside the choice, not a precondition.
+raised: the balance is a convenience, not a precondition.
 """
 
 from __future__ import annotations

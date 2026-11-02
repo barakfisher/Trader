@@ -30,7 +30,9 @@ from app.llm.model_choice import ChoosingProvider
 from app.llm.null_provider import NullProvider
 from app.llm.openai_compatible import OpenAICompatibleProvider
 from app.llm.pricing import ModelPrice, estimate_cost_micro_usd
+from app.llm.user_models import UserModelChoice
 from tests.fakes import FakeRedis
+from tests.test_llm_model_choice import ON_THE_LIST, Listed, Users
 
 SONNET = "anthropic/claude-sonnet-5.5"
 GEMINI = "google/gemini-3.5-flash-lite"
@@ -214,21 +216,20 @@ async def test_no_model_means_no_turn():
         await NullProvider().converse(system="s", messages=CONVERSATION[:1], tools=[QUOTE])
 
 
-async def test_a_scan_uses_the_model_chosen_for_agents():
+async def test_a_scan_uses_the_model_chosen_for_its_agent():
     seen: dict = {}
-
-    class Choices:
-        def chosen(self, scope):
-            return {"agent": GEMINI, "explain": SONNET}[scope]
-
-    provider = ChoosingProvider(_provider(_capture(seen, _turn(content="ok"))), Choices())
+    users = Users(UserModelChoice(saved=SONNET))
+    provider = ChoosingProvider(
+        _provider(_capture(seen, _turn(content="ok"))), users=users, listed=Listed(ON_THE_LIST)
+    )
     await provider.converse(
         system="s",
         messages=CONVERSATION[:1],
         tools=[QUOTE],
         caller=Caller(purpose="agent_scan", user_id="u", agent_id="a"),
     )
-    assert seen["body"]["model"] == GEMINI
+    assert seen["body"]["model"] == SONNET
+    assert users.asked == [("u", "agent", "a")]
 
 
 # Measured 2026-10-14: Flash-Lite ends about one product-guide turn in ten with

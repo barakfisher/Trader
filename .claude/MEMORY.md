@@ -33,7 +33,7 @@ was five, so this is six late - nothing counted them across the production-deplo
 - **Next: the development tasks agreed 2026-11-02, one PR each, in this order, each on the
   user's word** (design questions one at a time):
   1. ~~Remove the "free tier" display~~ - #362, D359.
-  2. **Admin model choices "like every user":** drop the three model pickers from the Admin page;
+  2. ~~**Admin model choices "like every user":**~~ - D360-D362 (PR open, not merged). Was: drop the three model pickers from the Admin page;
      each agent's model on its agent page, the Ask model in Settings, and the explanations model
      on the "Main portfolio" agent page (its 15-minute `portfolio_scan` is rules plus narration,
      so narration's model is the one it has). Revisits D353's "an unset agent keeps the Admin
@@ -5922,6 +5922,8 @@ failure they prevent.
     after)** - the user dropped it (2026-10-31): with scans that do not know each other's results,
     the light scans redo the strong one's work worse, and two models disagreeing an hour apart
     pay the fee twice.
+    **Revised by D360 (2026-11-02):** the Admin page's choice is gone; an unset agent of the
+    admin's runs on the tested model, as a user's does.
 354. **A scan is told its last three decided scans - facts only, never a source** (the user,
     2026-10-31; `app/agents/scan_memory.py`). The briefing carries `recent_scans`: for each of the
     agent's last `RECENT_SCANS` scans that decided something (`trade`, `no_trade`,
@@ -6007,6 +6009,47 @@ failure they prevent.
     for a badge that has nothing to say while the model narrates; and keeping the tier and fixing
     its input - "free" would still be inferred from a model-id suffix. Kept on purpose: the Admin
     page's "free route" cost labels, which describe calls actually recorded on a `:free` model.
+360. **The admin chooses models like every user; a scope with nothing saved runs on the tested
+    model** (the user, 2026-11-02, option (a) of task 2 and the first design question; revises
+    D353 and D244's "the admin is unchanged"). The Admin page's three pickers are gone. Each
+    agent's model is on its agent page, Ask's in Settings, and the explanations' (narration and
+    Ask's "explain") on the **Main portfolio** agent page - for every user, not only the admin:
+    the main portfolio's 15-minute `portfolio_scan` is rules plus narration, so narration's model
+    is the one model call it makes. Settings keeps only Ask. `ChoosingProvider` has one rule now:
+    a call for a user runs on that user's saved model resolved against OpenRouter's list (D284's
+    fallback, record and notice included), nothing saved runs on `FALLBACK_MODEL`, and a call for
+    no user is passed no model (`LLM_MODEL`). `UserModelChoice.own`, `admin` and `agent_default`
+    are gone from the wire; `PUT /settings/llm-models/:scope` no longer refuses the admin (403);
+    the fallback banner lists the admin's Ask and explanations too, and an explanations fallback
+    links to the Main portfolio page. What still differs for the admin is who pays (D245; task 3).
+    **Measured first** (read-only, 2026-11-02): production's `llm_model_choices` held agent =
+    Haiku 4.5, assistant = explain = Flash-Lite (= `FALLBACK_MODEL`); the admin's only scanning
+    agent had its own model (Opus 5.5); no call had ever run without a user. So on production no
+    call changed model - D353's reason for keeping the Admin page's choice ("every existing agent
+    would change model") no longer held. *Rejected:* keeping `llm_model_choices` as a silent
+    fallback - a setting nobody can see or change that still decides, the asymmetry this removes;
+    copying the admin's choices into `user_settings`/`agents.model` - it would save Flash-Lite as
+    "chosen" for Ask and explanations (identical to the default, but claiming a choice nobody
+    made), and no unset agent existed to carry Haiku.
+361. **`llm_model_choices` is dropped (migration 0081), not left unread** (the user, 2026-11-02).
+    Nothing reads or writes it after D360; rows that look like settings and decide nothing invite
+    the next session to treat them as live. The downgrade recreates it empty with 0041's columns
+    and privileges and 0052's scopes. Rolled back without the downgrade, the old image still makes
+    every call (its failed read is logged and answered by `LLM_MODEL`); only its Admin model card
+    and the admin's model pickers fail to load. Rehearsed on a copy of production (upgrade,
+    downgrade, upgrade; row counts identical in the other 53 tables). *Rejected:* leaving it for a
+    later PR - cheaper by one file, at the cost above.
+362. **The Admin page keeps the installation's OpenRouter balance and nothing else of the models
+    card** (the user, 2026-11-02). `GET /admin/llm/credits` (AI service `GET /llm/credits`)
+    replaces `GET/PUT /admin/llm/models`; the tab is "Balance and keys" (its id stays `models` so
+    links keep working). The daily/monthly estimate, "lasts N days" and the explain-window basis
+    went with the pickers they summed: they priced choices that no longer exist, and the same
+    page's LLM card shows the real spend. `spend_estimate.py` keeps only the per-scan figure the
+    pickers show beside each model, and `catalogue.py` only the short list that stands in for
+    OpenRouter's until it is read. *Rejected:* an estimate recomputed from the models the admin
+    actually runs on - more AI-service code for a figure that moves with every agent's model and
+    that the recorded spend already answers; removing the card - the balance pays the admin's
+    calls and is shown nowhere else.
 ---
 
 ## Bugs that cost real time, and the lesson from each

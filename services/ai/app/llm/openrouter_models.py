@@ -20,7 +20,7 @@ bills, not at the pessimistic unknown-model rate.
 
 **A failed read keeps the last good list** and is retried after
 `RETRY_AFTER_FAILURE_SECONDS`, so an outage costs one slow call in five minutes,
-not one per call. With no list read yet, the Admin page's catalogue stands in,
+not one per call. With no list read yet, the short catalogue (`catalogue.py`) stands in,
 priced by the table, and is marked `live = False`: callers then cannot tell a
 model is gone, and use a saved one as it is (D284).
 
@@ -151,7 +151,7 @@ def offerable(entry: Any) -> ListedModel | None:
 
 
 def stand_in(prices: dict[str, ModelPrice]) -> ModelList:
-    """The Admin page's billed, tool-calling models, until OpenRouter's list is read."""
+    """The catalogue's billed, tool-calling models, until OpenRouter's list is read."""
     models = []
     for model in CATALOGUE:
         price = price_for(model.id, prices)

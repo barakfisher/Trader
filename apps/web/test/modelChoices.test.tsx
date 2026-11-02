@@ -2,9 +2,9 @@
 /**
  * A user's own models (D244, D283-D285): the picker searches OpenRouter's list,
  * puts the tested model first, says when a saved model has fallen back, and
- * saves only on *Save*; the Dashboard banner lists every fallback. The admin
- * chooses only each agent's model here (D353), and "not chosen" there is the
- * Admin page's agent model.
+ * saves only on *Save*; the Dashboard banner lists every fallback. Ask is chosen
+ * in Settings, explanations on the main portfolio's page, and the admin chooses
+ * everything the same way (D360).
  */
 
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
@@ -20,7 +20,7 @@ vi.mock('../src/api/client.ts', async () => {
   return { ...actual, api: { get, post: vi.fn(), put, delete: vi.fn(), postForm: vi.fn() } };
 });
 
-const { AgentModelCard, UserModelsCard } = await import('../src/components/ModelChoiceCards.tsx');
+const { AgentModelCard, AskModelCard, ExplainModelCard } = await import('../src/components/ModelChoiceCards.tsx');
 const { ModelFallbackBanner } = await import('../src/components/ModelFallbackBanner.tsx');
 const { MAX_SHOWN_MODELS, matching } = await import('../src/components/ModelPicker.tsx');
 const { renderPage } = await import('./serverStateHarness.tsx');
@@ -36,11 +36,9 @@ let data: ModelChoicesResponse;
 
 function choices(overrides: Partial<ModelChoicesResponse> = {}): ModelChoicesResponse {
   return {
-    admin: false,
     choosable: true,
     live: true,
     fallbackModel: TESTED,
-    agentDefault: TESTED,
     models: [model('acme/zeta', 'Acme: Zeta'), model(TESTED, 'Google: Gemini 3.5 Flash-Lite', true), model('acme/alpha', 'Acme: Alpha')],
     choices: {
       assistant: { saved: 'acme/retired', effective: TESTED, fallback: true },
@@ -72,7 +70,7 @@ afterEach(cleanup);
 
 describe('the model picker', () => {
   it('offers the tested model first, then by name, and says a saved model has fallen back', async () => {
-    render(<UserModelsCard />);
+    render(<AskModelCard />);
     const ask = (await screen.findByLabelText('Ask')) as HTMLSelectElement;
     const labels = [...ask.options].map((option) => option.textContent);
     expect(labels).toEqual([
@@ -86,19 +84,31 @@ describe('the model picker', () => {
   });
 
   it('saves only on Save, and "not chosen" as null', async () => {
-    render(<UserModelsCard />);
+    render(<ExplainModelCard />);
     const explain = (await screen.findByLabelText('Explanations of findings')) as HTMLSelectElement;
-    const save = screen.getAllByRole('button', { name: 'Save' })[1]!;
+    const save = screen.getByRole('button', { name: 'Save' });
     expect(save).toHaveProperty('disabled', true);
     fireEvent.change(explain, { target: { value: 'acme/alpha' } });
     expect(put).not.toHaveBeenCalled();
     fireEvent.click(save);
     await waitFor(() => expect(put).toHaveBeenCalledWith('/settings/llm-models/explain', { model: 'acme/alpha' }));
+    cleanup();
 
-    const ask = screen.getByLabelText('Ask') as HTMLSelectElement;
+    render(<AskModelCard />);
+    const ask = (await screen.findByLabelText('Ask')) as HTMLSelectElement;
     fireEvent.change(ask, { target: { value: '' } });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(put).toHaveBeenCalledWith('/settings/llm-models/assistant', { model: null }));
+  });
+
+  it('keeps Ask in Settings and explanations on the main portfolio page, each alone', async () => {
+    render(<AskModelCard />);
+    await screen.findByLabelText('Ask');
+    expect(screen.queryByLabelText('Explanations of findings')).toBeNull();
+    cleanup();
+    render(<ExplainModelCard />);
+    await screen.findByLabelText('Explanations of findings');
+    expect(screen.queryByLabelText('Ask')).toBeNull();
   });
 
   it('searches by name or id, whatever the case', () => {
@@ -111,17 +121,17 @@ describe('the model picker', () => {
   it('offers at most MAX_SHOWN_MODELS matches at once and says how many there are', async () => {
     const many = Array.from({ length: MAX_SHOWN_MODELS + 1 }, (_, i) => model(`acme/m-${i}`, `Acme ${i}`));
     data = choices({ models: many });
-    render(<UserModelsCard />);
+    render(<ExplainModelCard />);
     const explain = (await screen.findByLabelText('Explanations of findings')) as HTMLSelectElement;
     // "Not chosen" plus the matches shown.
     expect(explain.options).toHaveLength(1 + MAX_SHOWN_MODELS);
     expect(screen.getAllByText(`Showing ${MAX_SHOWN_MODELS} of ${MAX_SHOWN_MODELS + 1} models; search to narrow the list.`)).not.toHaveLength(0);
   });
 
-  it('is not shown to the admin, who chooses on the Admin page', () => {
-    render(<UserModelsCard />, 'admin');
-    expect(screen.queryByText('Models')).toBeNull();
-    expect(get).not.toHaveBeenCalled();
+  it('is shown to the admin too, who chooses like every user (D360)', async () => {
+    render(<AskModelCard />, 'admin');
+    expect(await screen.findByLabelText('Ask')).toBeTruthy();
+    expect(get).toHaveBeenCalledWith('/settings/llm-models');
   });
 });
 
@@ -137,7 +147,7 @@ describe('the fallback banner', () => {
     );
   });
 
-  it('says nothing when nothing fell back, or to the admin', async () => {
+  it('says nothing when nothing fell back', async () => {
     data = choices({
       choices: {
         assistant: { saved: null, effective: TESTED, fallback: false },
@@ -150,42 +160,51 @@ describe('the fallback banner', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it("names the admin's agent that fell back (D353)", async () => {
-    data = choices({
-      admin: true,
-      choices: {
-        assistant: { saved: null, effective: TESTED, fallback: false },
-        explain: { saved: null, effective: TESTED, fallback: false },
-      },
-    });
+  it("names the admin's Ask that fell back, as a user's (D360)", async () => {
     render(<ModelFallbackBanner />, 'admin');
     const banner = await screen.findByRole('status');
-    expect(banner.textContent).toMatch(/acme\/gone.*Tech Agent/);
-    expect(screen.queryByRole('link', { name: 'Choose in Settings' })).toBeNull();
+    expect(banner.textContent).toMatch(/acme\/retired.*Ask/);
+    expect(screen.getByRole('link', { name: 'Choose in Settings' })).toBeTruthy();
+  });
+
+  it("sends a fallen-back explanations model to the main portfolio's page", async () => {
+    const PRIMARY = '22222222-2222-4222-8222-222222222222';
+    data = choices({
+      choices: {
+        assistant: { saved: null, effective: TESTED, fallback: false },
+        explain: { saved: 'acme/retired', effective: TESTED, fallback: true },
+      },
+      agents: [],
+    });
+    get.mockImplementation((path: string) =>
+      path === '/settings/llm-models'
+        ? Promise.resolve(data)
+        : path === '/agents'
+          ? Promise.resolve({ agents: [{ id: PRIMARY, isPrimary: true }], agentLimit: null })
+          : new Promise(() => {}),
+    );
+    render(<ModelFallbackBanner />);
+    const link = await screen.findByRole('link', { name: 'Choose on the Main portfolio page' });
+    expect(link.getAttribute('href')).toBe(`/agents/${PRIMARY}`);
   });
 });
 
 describe("an agent's model", () => {
-  const ADMIN_PICK = 'anthropic/claude-sonnet-5.5';
+  it('says "not chosen" is the tested model, to the admin as to a user (D360)', async () => {
+    data = choices({ agents: [{ agentId: AGENT, name: 'Tech Agent', saved: null, effective: TESTED, fallback: false }] });
+    for (const role of ['user', 'admin'] as const) {
+      render(<AgentModelCard agentId={AGENT} />, role);
+      const select = (await screen.findByLabelText('The model this agent scans with')) as HTMLSelectElement;
+      expect(select.options[0]!.textContent).toMatch(/^Not chosen: the tested model/);
+      cleanup();
+    }
+  });
 
-  it("offers the admin the list, with \"not chosen\" as the Admin page's agent model (D353)", async () => {
-    data = choices({
-      admin: true,
-      agentDefault: ADMIN_PICK,
-      agents: [{ agentId: AGENT, name: 'Tech Agent', saved: null, effective: ADMIN_PICK, fallback: false }],
-    });
+  it('saves the chosen model for the agent', async () => {
     render(<AgentModelCard agentId={AGENT} />, 'admin');
     const select = (await screen.findByLabelText('The model this agent scans with')) as HTMLSelectElement;
-    expect(select.options[0]!.textContent).toMatch(/^Not chosen: the Admin page's agent model, .*claude-sonnet-5\.5/);
     fireEvent.change(select, { target: { value: 'acme/alpha' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(put).toHaveBeenCalledWith(`/agents/${AGENT}/model`, { model: 'acme/alpha' }));
-  });
-
-  it('says "not chosen" is the tested model to a user', async () => {
-    data = choices({ agents: [{ agentId: AGENT, name: 'Tech Agent', saved: null, effective: TESTED, fallback: false }] });
-    render(<AgentModelCard agentId={AGENT} />);
-    const select = (await screen.findByLabelText('The model this agent scans with')) as HTMLSelectElement;
-    expect(select.options[0]!.textContent).toMatch(/^Not chosen: the tested model/);
   });
 });

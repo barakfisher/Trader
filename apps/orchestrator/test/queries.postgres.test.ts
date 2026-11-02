@@ -1145,19 +1145,6 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
     });
   });
 
-  describe('the model choices (D43)', () => {
-    it("writes a scope's choice, replaces it, and may never delete it", async () => {
-      await queries.chooseLlmModel('explain', 'anthropic/claude-haiku-4.5', USER);
-      await queries.chooseLlmModel('explain', 'anthropic/claude-sonnet-5.5', USER);
-      const { rows } = await getPool().query(
-        `SELECT model, updated_by::text AS updated_by FROM llm_model_choices WHERE scope = 'explain'`,
-      );
-      expect(rows).toEqual([{ model: 'anthropic/claude-sonnet-5.5', updated_by: USER }]);
-      // A choice is replaced, never removed: no row means "use LLM_MODEL", which only a migration may restore.
-      await expect(getPool().query(`DELETE FROM llm_model_choices`)).rejects.toThrow(/permission denied/);
-    });
-  });
-
   describe('the LLM panel', () => {
     // Dated a day ahead so a window starting tomorrow sees only these rows,
     // whatever else the database holds.

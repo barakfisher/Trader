@@ -45,12 +45,10 @@ export function toModelChoices(listed: LlmListedModelsResponse, user: UserLlmMod
     return found ? resolution(found) : { saved: null, effective: null, fallback: false };
   };
   return {
-    admin: user.admin,
     choosable: listed.choosable,
     live: listed.live,
     fallbackModel: listed.fallback_model,
-    agentDefault: user.agent_default,
-    // The admin chooses each agent's model from the same list (D353).
+    // Every user chooses from the same list, the admin included (D360).
     models: listed.models.map((model) => ({
       id: model.id,
       name: model.name,

@@ -253,8 +253,7 @@ export function registerSettingsRoutes(app: Hono<AppEnv>): void {
 
   // A user's own model for Ask and for explanations, from OpenRouter's list
   // (D244, D283); each agent's is under `/agents/:id/model`. The admin chooses
-  // on the Admin page, so this answers them with `admin: true` and no list, and
-  // refuses their writes.
+  // here like every user (D360): their calls differ only in who pays.
   app.get('/settings/llm-models', async (context) => {
     const body: ModelChoicesResponse = await relayModels(() =>
       readModelChoices(context.get('ai'), currentUserId(context), context.get('requestId')),
@@ -263,7 +262,7 @@ export function registerSettingsRoutes(app: Hono<AppEnv>): void {
   });
 
   app.put('/settings/llm-models/:scope', async (context) => {
-    const userId = ownKeyUser(context);
+    const userId = currentUserId(context);
     const scope = context.req.param('scope');
     if (!(USER_LLM_SCOPES as readonly string[]).includes(scope)) {
       // An unknown scope is no resource of this user's, like an unknown id.

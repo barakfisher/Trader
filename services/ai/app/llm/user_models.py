@@ -1,16 +1,12 @@
-"""The model a user who is not the admin runs on, per agent, for Ask and for explanations (D244).
+"""The model a user runs on, per agent, for Ask and for explanations (D244, D360).
 
-A user on their own key (D245) chooses from OpenRouter's list
-(`openrouter_models.py`, D283): `agents.model` for an agent's scans and its
-instructions check, `user_settings.llm_assistant_model` for Ask, and
-`user_settings.llm_explain_model` for narration (migration 0069). Nothing chosen
-runs on the tested model (`catalogue.FALLBACK_MODEL`, D285) - never the admin's
-choice, which governs the admin alone.
-
-**The admin chooses per agent too** (D353): an agent of the admin's with a
-model saved runs on it under the same rules, fallback included; one with
-nothing saved runs on the Admin page's agent model, as every agent of the
-admin's did before.
+Every user chooses from OpenRouter's list (`openrouter_models.py`, D283):
+`agents.model` for an agent's scans and its instructions check,
+`user_settings.llm_assistant_model` for Ask, and `user_settings.llm_explain_model`
+for narration (migration 0069). Nothing chosen runs on the tested model
+(`catalogue.FALLBACK_MODEL`, D285). **The admin chooses the same way** (D360):
+the Admin page's model pickers and `llm_model_choices` are gone, and the admin's
+calls differ from a user's only in who pays for them (D245).
 
 **A saved model OpenRouter no longer lists falls back** (D284): to the tested
 model, or, when that is not listed either, to the listed model with the highest
@@ -87,18 +83,9 @@ def resolve(
 
 @dataclass(frozen=True)
 class UserModelChoice:
-    """Whether the user is the admin, and what they saved for one scope."""
+    """What a user saved for one scope; None when nothing is."""
 
-    admin: bool
     saved: str | None
-
-    def own(self, scope: Scope) -> bool:
-        """Whether the call runs on this choice rather than the Admin page's.
-
-        Always for a user who is not the admin. For the admin, only an agent
-        with a model of its own (D353): an agent with none, Ask and the
-        explanations keep the Admin page's choice."""
-        return not self.admin or (scope == "agent" and self.saved is not None)
 
 
 @dataclass(frozen=True)
@@ -112,7 +99,6 @@ class AgentModel:
 class UserModels:
     """Everything a user saved: the two scopes and each agent that scans."""
 
-    admin: bool
     explain: str | None
     assistant: str | None
     agents: tuple[AgentModel, ...]
@@ -139,7 +125,7 @@ class DatabaseUserModels:
             row = connection.execute(
                 text(
                     """
-                    SELECT u.role, s.llm_explain_model, s.llm_assistant_model, a.model
+                    SELECT s.llm_explain_model, s.llm_assistant_model, a.model
                       FROM users u
                       LEFT JOIN user_settings s ON s.user_id = u.id
                       LEFT JOIN agents a ON a.user_id = u.id AND a.id = CAST(:agent AS uuid)
@@ -156,7 +142,7 @@ class DatabaseUserModels:
             saved = row.llm_explain_model
         else:
             saved = row.llm_assistant_model
-        return UserModelChoice(admin=row.role == "admin", saved=saved)
+        return UserModelChoice(saved=saved)
 
     def record_fallback(
         self, user_id: str, scope: Scope, agent_id: str | None, resolution: ModelResolution
@@ -195,7 +181,7 @@ class DatabaseUserModels:
             user = connection.execute(
                 text(
                     """
-                    SELECT u.role, s.llm_explain_model, s.llm_assistant_model
+                    SELECT s.llm_explain_model, s.llm_assistant_model
                       FROM users u LEFT JOIN user_settings s ON s.user_id = u.id
                      WHERE u.id = CAST(:user AS uuid)
                     """
@@ -215,7 +201,6 @@ class DatabaseUserModels:
                 {"user": user_id},
             ).all()
         return UserModels(
-            admin=user.role == "admin",
             explain=user.llm_explain_model,
             assistant=user.llm_assistant_model,
             agents=tuple(
@@ -239,7 +224,7 @@ async def fallback_from(
     except Exception as error:  # noqa: BLE001 - the answer was given; the mark is not worth a 500
         log.warning("llm.user_model_unreadable", scope=scope, error=str(error))
         return None
-    if choice is None or choice.admin:
+    if choice is None:
         return None
     resolution = resolve(choice.saved, await listed.current(), listed.prices)
     return resolution.saved if resolution.fallback else None

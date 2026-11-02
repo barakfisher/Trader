@@ -233,10 +233,6 @@ UPDATE agents SET scan_pre_open = true, scan_post_close = true WHERE id = '90000
 UPDATE agents SET scan_every_hours = 4, scan_pre_open = false, llm_budget_micro_usd = 250000
  WHERE id = '90000000-0000-0000-0000-0000000000a2';
 UPDATE agents SET scan_every_hours = 2, scan_pre_open = true WHERE id = '90000000-0000-0000-0000-00000000000b';
--- The models chosen on the Admin page (0041).
-INSERT INTO llm_model_choices (scope, model, updated_by) VALUES
-  ('explain', 'anthropic/claude-sonnet-5.5', '00000000-0000-0000-0000-00000000000a'),
-  ('agent', 'anthropic/claude-sonnet-5.5', NULL);
 
 -- Proposal episodes (0032): one closed by each reason, and one still open.
 INSERT INTO proposal_episodes (user_id, agent_id, observation_kind, subject_ref, observation_id, asked_magnitude, closed_at, close_reason) VALUES
@@ -305,10 +301,8 @@ SELECT record_primary_cash_movement('00000000-0000-0000-0000-00000000000a', '900
 -- A reset's backup (0045), which makes its downgrade refuse: it would discard it.
 INSERT INTO account_resets (user_id, groups, counts, backup) VALUES
   ('00000000-0000-0000-0000-00000000000a', ARRAY['followed_topics'], '{"topics": 0}', '{"topics": []}');
--- The assistant (0052): its own model choice and purpose, and a conversation
+-- The assistant (0052): its own purpose, and a conversation
 -- whose replies cover every outcome and every decline reason.
-INSERT INTO llm_model_choices (scope, model, updated_by) VALUES
-  ('assistant', 'google/gemini-3.5-flash-lite', '00000000-0000-0000-0000-00000000000a');
 INSERT INTO llm_calls (user_id, purpose, provider, model, outcome, verdict, latency_ms, cost_micro_usd, prompt) VALUES
   ('00000000-0000-0000-0000-00000000000a', 'assistant', 'openrouter', 'm', 'ok', 'accepted', 900, 1200, 'p');
 INSERT INTO assistant_conversations (id, user_id, title) VALUES
