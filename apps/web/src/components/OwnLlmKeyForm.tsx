@@ -18,8 +18,20 @@ const SAVE_REFUSALS = ['key_rejected', 'key_malformed', 'key_check_unreachable',
  * the user's runs on it, and nothing replaces it (D245): with none saved, or one
  * OpenRouter has refused since (D207), scans and questions stop until they act,
  * and the card says so.
+ *
+ * The admin's key is personal and optional (D363): without one the installation's
+ * key pays for the admin's calls, so a missing key is said plainly, not warned of.
+ * A refused key still stops them - it is not covered by the installation.
  */
-export function OwnLlmKeyForm({ available, saved }: { available: boolean; saved: OwnLlmKey | null }) {
+export function OwnLlmKeyForm({
+  available,
+  saved,
+  installationFallback,
+}: {
+  available: boolean;
+  saved: OwnLlmKey | null;
+  installationFallback: boolean;
+}) {
   const { t } = useTranslation();
   const save = useSaveOwnLlmKey();
   const remove = useRemoveOwnLlmKey();
@@ -64,7 +76,9 @@ export function OwnLlmKeyForm({ available, saved }: { available: boolean; saved:
   const showForm = available && (saved === null || editing);
   return (
     <div className="space-y-3">
-      <p className="max-w-2xl text-xs text-text-muted">{t('settings.ownKey.intro')}</p>
+      <p className="max-w-2xl text-xs text-text-muted">
+        {t(installationFallback ? 'settings.ownKey.introAdmin' : 'settings.ownKey.intro')}
+      </p>
       <p className="max-w-2xl text-xs text-text-muted">{t('settings.ownKey.limitHint')}</p>
       {saved?.status === 'failed' && saved.failure && (
         <p role="status" className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">
@@ -81,13 +95,24 @@ export function OwnLlmKeyForm({ available, saved }: { available: boolean; saved:
           </bdi>
         </p>
       )}
-      {available && saved === null && !removed && (
+      {available && saved === null && !removed && !installationFallback && (
         <p role="status" className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">
           {t('settings.ownKey.none')}
         </p>
       )}
-      {!available && <p className="text-sm text-text-muted">{t('settings.ownKey.unavailable')}</p>}
-      {removed && saved === null && <p role="status" className="text-sm">{t('settings.ownKey.removed')}</p>}
+      {available && saved === null && !removed && installationFallback && (
+        <p className="text-sm">{t('settings.ownKey.noneAdmin')}</p>
+      )}
+      {!available && (
+        <p className="text-sm text-text-muted">
+          {t(installationFallback ? 'settings.ownKey.unavailableAdmin' : 'settings.ownKey.unavailable')}
+        </p>
+      )}
+      {removed && saved === null && (
+        <p role="status" className="text-sm">
+          {t(installationFallback ? 'settings.ownKey.removedAdmin' : 'settings.ownKey.removed')}
+        </p>
+      )}
       {showForm && (
         <form
           onSubmit={(event) => {

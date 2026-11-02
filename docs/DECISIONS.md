@@ -373,3 +373,6 @@ while this file is out of date.
 | 360 | The admin chooses models like every user; a scope with nothing saved runs on the tested model |
 | 361 | `llm_model_choices` is dropped (migration 0081), not left unread |
 | 362 | The Admin page keeps the installation's OpenRouter balance and nothing else of the models card |
+| 363 | The admin has two keys: a personal key pays for the admin's calls when one is saved, the installation's when none can be used |
+| 364 | The admin's personal key is under the same optional monthly safety limit as a user's |
+| 365 | The Admin page splits calls and cost by payer everywhere |

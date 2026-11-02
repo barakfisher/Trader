@@ -1307,7 +1307,7 @@ export interface components {
         };
         /**
          * LlmCreditsResponse
-         * @description The installation's provider balance, which pays the admin's calls (D360).
+         * @description The installation's provider balance: shared work, the admin's calls without a key (D363).
          */
         LlmCreditsResponse: {
             /** @description Null when the provider reports no balance or it could not be read. */

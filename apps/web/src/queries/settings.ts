@@ -28,7 +28,7 @@ export function useSettingsQuery() {
   return useQuery(settingsQuery);
 }
 
-/** This month's own-key spend and the user's safety limit (D250); null for the admin. */
+/** This month's own-key spend and the user's safety limit (D250), the admin's too (D363). */
 export const monthlySpendQuery = queryOptions({
   queryKey: queryKeys.monthlySpend,
   queryFn: async (): Promise<MonthlySpend | null> =>
@@ -41,8 +41,9 @@ export function useMonthlySpendQuery() {
 
 /**
  * What OpenRouter says the user's own key spent, against the limit that binds
- * first (D247-D250, D281); null for the admin. The server reads OpenRouter at most
- * every 15 minutes per user (D249), so a read on every page load costs nothing.
+ * first (D247-D250, D281); null for the admin with no key of their own (D363).
+ * The server reads OpenRouter at most every 15 minutes per user (D249), so a
+ * read on every page load costs nothing.
  */
 export function useKeySpendQuery(enabled: boolean) {
   return useQuery({
@@ -58,7 +59,7 @@ export const ownLlmKeyQuery = queryOptions({
   queryFn: () => api.get<OwnLlmKeyResponse>('/settings/llm-key'),
 });
 
-/** Not for the admin, who runs on the installation's key and is refused (D245). */
+/** Read once the month is known; the admin may hold a personal key too (D363). */
 export function useOwnLlmKeyQuery(enabled: boolean) {
   return useQuery({ ...ownLlmKeyQuery, enabled });
 }

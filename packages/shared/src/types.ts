@@ -1442,6 +1442,12 @@ export interface LlmModelUsage {
 }
 
 /** One agent's calls over the window. Money is integer micro-USD (guideline 3). */
+/** Whose key paid for a call (D209, D363): the installation's, or the user's own. */
+export type LlmPayer = 'installation' | 'ownKey';
+
+/** Calls and their cost, split by who paid (D363). */
+export type LlmPayerSplit = Record<LlmPayer, { calls: number; costMicroUsd: number }>;
+
 export interface LlmPurposeSummary {
   /** What the calls were for: `narration` or `ask` (`llm_calls.purpose`). */
   purpose: string;
@@ -1453,6 +1459,8 @@ export interface LlmPurposeSummary {
   promptTokens: number;
   completionTokens: number;
   costMicroUsd: number;
+  /** `calls` and `costMicroUsd` again, split by payer. */
+  byPayer: LlmPayerSplit;
   models: LlmModelUsage[];
 }
 
@@ -1481,6 +1489,7 @@ export interface LlmCallSummary {
   promptTokens: number;
   completionTokens: number;
   costMicroUsd: number;
+  paidBy: LlmPayer;
   startedAt: string;
 }
 
@@ -1488,6 +1497,8 @@ export interface LlmPanelResponse {
   window: { days: number; since: string };
   /** The oldest call still held (they are kept for a limited time); null when none is. */
   firstCallAt: string | null;
+  /** Every purpose's calls over the window, split by payer (D363). */
+  byPayer: LlmPayerSplit;
   purposes: LlmPurposeSummary[];
   /** Stored explanations over the whole window, by fallback reason - the longer record. */
   narrationFallbacks: { reason: string; count: number }[];
@@ -1496,7 +1507,10 @@ export interface LlmPanelResponse {
   recent: LlmCallSummary[];
 }
 
-/** `GET /admin/llm/credits`: the installation's provider balance, which pays the admin's calls (D360). */
+/**
+ * `GET /admin/llm/credits`: the installation's provider balance, which pays for
+ * shared work and for the admin's calls when the admin has no key of their own (D363).
+ */
 export interface AdminLlmCreditsResponse {
   provider: string;
   /** The provider account in USD, decimal strings; null when it reports none or could not be read. */
@@ -1844,9 +1858,14 @@ export interface MonthlySpend {
   /** The user's monthly safety limit, or null when none is set. */
   safetyLimitMicroUsd: number | null;
   resetsOn: string;
+  /**
+   * The admin's: with no usable key of their own the installation pays for their
+   * calls, so no key is no block (D363). False for everyone else.
+   */
+  installationFallback: boolean;
 }
 
-/** `spend` is null for the admin, who runs on the installation's key and sees no card. */
+/** `spend` is null only for a user the server does not know. */
 export interface MonthlySpendResponse {
   spend: MonthlySpend | null;
 }

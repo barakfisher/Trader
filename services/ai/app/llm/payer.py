@@ -1,14 +1,19 @@
-"""Who pays for a user's model call: the installation for the admin, the user's own key
-for everyone else, and nobody when that key is missing, refused or past its limit (D245).
+"""Who pays for a user's model call: the user's own key, the installation for the admin
+without one, and nobody when that key is missing, refused or past its limit (D245, D363).
 
-**The admin runs on the installation's key** and its daily ceiling
-(`LLM_DAILY_BUDGET_USD`), as before. **Every other user runs on their own
-OpenRouter key only** (D206's key, D245's rule): with no key saved, or one
-OpenRouter has refused (`rejected`, `no_credit`, D207), the call is not made
-and nothing falls back to the installation's key. Calls for no user - the
-installation's own work (D238) - and calls to a provider that does not charge
-per token (a local Ollama, or none at all) are not the installation's money
-and are not gated.
+**The admin has two keys** (D363): a personal OpenRouter key saved in Settings,
+like any user's, pays for the admin's own calls under the same optional safety
+limit; with none that can be used here - none saved, this installation cannot
+use saved keys, or one that no longer decrypts - the installation's key pays,
+under its daily ceiling (`LLM_DAILY_BUDGET_USD`), as before. A saved key
+OpenRouter refused, or a spent safety limit, refuses the admin like anyone:
+falling back would charge the installation for calls meant to be tracked apart.
+**Every other user runs on their own OpenRouter key only** (D206's key, D245's
+rule): with no key saved, or one OpenRouter has refused (`rejected`,
+`no_credit`, D207), the call is not made and nothing falls back to the
+installation's key. Calls for no user - the installation's own work (D238) - and
+calls to a provider that does not charge per token (a local Ollama, or none at
+all) are not the installation's money and are not gated.
 
 **A user's optional monthly safety limit** (D250) bounds what this app spends
 on their key: `user_settings.llm_safety_limit_micro_usd`, counted in the
@@ -51,6 +56,8 @@ class Payer:
     installation: bool = False
     key: UsableKey | None = None
     refusal: KeyRefusal | None = None
+    #: The admin's: with `key` unusable here, the installation pays (D363).
+    installation_fallback: bool = False
 
 
 INSTALLATION = Payer(installation=True)
@@ -61,7 +68,7 @@ class PayerGate:
 
     `own_keys_usable` is false when this installation cannot use a saved key at
     all - a provider other than OpenRouter, or no `LLM_KEY_ENCRYPTION_KEYS` - and
-    then no user but the admin has a payer.
+    then no user but the admin has a payer, and the admin's is the installation.
     """
 
     def __init__(self, store: OwnKeyStore, ledger: CapLedger, *, own_keys_usable: bool) -> None:
@@ -74,6 +81,8 @@ class PayerGate:
         if payer.installation or payer.refusal is not None:
             return payer
         if not self._own_keys_usable or payer.key is None:
+            if payer.installation_fallback:
+                return INSTALLATION
             return Payer(refusal="own_key_required")
         return payer
 

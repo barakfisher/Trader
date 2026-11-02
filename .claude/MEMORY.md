@@ -20,7 +20,7 @@ was five, so this is six late - nothing counted them across the production-deplo
 - **Deployed:** production (`https://app.tiklens.com`) runs `dbf9cf6` (#361) since 2026-11-01;
   compose runs `a8b3c30` (#356). **#362 is deployed nowhere yet** - on the user's word.
   Migration head `0080_cash_movement_kinds` everywhere; no PR since added one.
-- **Decisions reach 359** (next: **360**). **Migrations:** `0080` head; next free `0081`.
+- **Decisions reach 365** (next: **366**). **Migrations:** `0081` head (#364); next free `0082`.
 - **Production is the real installation; compose is a lab (user, 2026-11-02).** The user's real
   portfolio lives on production. Compose's `.env` has `ENABLE_SCHEDULED_SCANS=false`,
   `SCHEDULER_ENABLED=false` and `TELEGRAM_UPDATES=off`: the local stack runs nothing on its own
@@ -33,12 +33,12 @@ was five, so this is six late - nothing counted them across the production-deplo
 - **Next: the development tasks agreed 2026-11-02, one PR each, in this order, each on the
   user's word** (design questions one at a time):
   1. ~~Remove the "free tier" display~~ - #362, D359.
-  2. ~~**Admin model choices "like every user":**~~ - D360-D362 (#364, not merged). Was: drop the three model pickers from the Admin page;
+  2. ~~**Admin model choices "like every user":**~~ - D360-D362 (#364, merged as 8a707cf, not deployed). Was: drop the three model pickers from the Admin page;
      each agent's model on its agent page, the Ask model in Settings, and the explanations model
      on the "Main portfolio" agent page (its 15-minute `portfolio_scan` is rules plus narration,
      so narration's model is the one it has). Revisits D353's "an unset agent keeps the Admin
      page's model": decide what an unset agent runs on.
-  3. **Two keys for the admin:** the installation key (shared work: embeddings for the universe,
+  3. ~~**Two keys for the admin:**~~ - D363-D365 (this task's PR). Was: the installation key (shared work: embeddings for the universe,
      the corpus and topic queries - none of it in `llm_calls`) and a personal key in Settings like
      any user's, so the admin's own usage is tracked apart. Today the admin's calls are all
      installation-paid (`own_key.py`, `payer.py`, D245).
@@ -6050,6 +6050,38 @@ failure they prevent.
     actually runs on - more AI-service code for a figure that moves with every agent's model and
     that the recorded spend already answers; removing the card - the balance pays the admin's
     calls and is shown nowhere else.
+363. **The admin has two keys: a personal key pays for the admin's calls when one is saved, the
+    installation's when none can be used** (the user, 2026-11-02, task 3's first question;
+    revises D245's "the admin runs on the installation's key"). The installation's key keeps
+    paying shared work - embeddings for the universe, the corpus and topic queries, none of it in
+    `llm_calls` - and the admin may save an OpenRouter key in Settings like any user's
+    (`ownKeyUser`'s 403 is gone; `DatabaseOwnKeyStore.payer` no longer returns `INSTALLATION` for
+    the admin before reading the key row). With a valid key the admin's calls are `own_key`;
+    with none saved, this installation unable to use saved keys (`Payer.installation_fallback`
+    in `PayerGate`), or one that no longer decrypts, they stay installation-paid under
+    `LLM_DAILY_BUDGET_USD` - so deploying changes nothing until the key is saved. **A key
+    OpenRouter refused (401/402) refuses the admin like anyone**: falling back would charge the
+    installation for calls the admin chose to track apart, and the split on the Admin page would
+    stop meaning what it says. **Measured first** (read-only, 2026-11-02): production had 71
+    calls, all the admin's and all installation-paid, no key rows, no safety limits, no call
+    without a user. *Rejected:* refusing the admin without a key, as for a user - every scan,
+    question and explanation of the admin's stops from the deploy until a key is saved, and the
+    key cannot be saved before the deploy; falling back on a refused key too - a silent bill.
+364. **The admin's personal key is under the same optional monthly safety limit as a user's**
+    (the user, 2026-11-02, task 3's second question). `PUT /settings/llm-safety-limit` no longer
+    refuses the admin; `getMonthlySpend` no longer filters `role <> 'admin'` and says
+    `installation_fallback` (the web's `useModelAccess` read "admin" from a null month, which
+    would now be wrong); the limit counts only `paid_by = 'own_key'`, and when it is reached the
+    admin's calls are refused, not passed to the installation - a brake that falls through to
+    another payer brakes nothing. *Rejected:* no limit for the admin - a special case in code for
+    the one account most likely to run a loop by hand, and the limit is optional anyway.
+365. **The Admin page splits calls and cost by payer everywhere** (the user, 2026-11-02, task 3's
+    third question). `/admin/llm` groups by `paid_by` too: a window total (installation's key
+    against own keys, the admin's included), each purpose's cost split under it, and "installation's
+    key" / "own key" on each recent call; the balance card says it pays shared work and the
+    admin's calls without a personal key; the users list reads the admin's month as "on your key
+    and the installation's". *Rejected:* a totals line only - D363's fallback is silent by design,
+    and only the per-call payer shows *which* admin call the installation paid for.
 ---
 
 ## Bugs that cost real time, and the lesson from each

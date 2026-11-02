@@ -51,7 +51,7 @@ import { AiServiceError, type OwnLlmKeyState } from '@traders/shared/ai';
 import { keySpendOf } from '../../services/keySpend.js';
 import { modelChoiceRefusal, modelChoiceSchema, readModelChoices, relayModels } from '../../services/modelChoices.js';
 import { currentUserId, type AppEnv } from '../app.js';
-import { ApiProblem, badRequest, forbidden, notFound, unprocessable, upstreamFailure } from '../errors.js';
+import { ApiProblem, badRequest, notFound, unprocessable, upstreamFailure } from '../errors.js';
 
 /**
  * The severity ladder, ascending, mirroring the CHECK on both severity columns
@@ -131,14 +131,6 @@ const OWN_KEY_REFUSALS: Record<string, { status: 422 | 502 | 503; message: strin
   own_keys_unavailable: { status: 503, message: "this installation does not use users' own keys" },
 };
 
-function ownKeyUser(context: Context<AppEnv>): string {
-  const userId = currentUserId(context);
-  if (context.get('user')?.role === 'admin') {
-    throw forbidden('the admin runs on the installation key');
-  }
-  return userId;
-}
-
 async function relayOwnKey(call: () => Promise<OwnLlmKeyState>): Promise<OwnLlmKeyState> {
   try {
     return await call();
@@ -173,8 +165,7 @@ export function registerSettingsRoutes(app: Hono<AppEnv>): void {
     return context.json({ settings: toWire(row) });
   });
 
-  // Own-key spend and the safety limit (D209, D250): null for the admin, who
-  // runs on the installation's key and sees no card.
+  // Own-key spend and the safety limit (D209, D250), the admin's too (D363).
   app.get('/settings/llm-spend', async (context) => {
     const row = await getMonthlySpend(currentUserId(context));
     const body: MonthlySpendResponse = {
@@ -182,6 +173,7 @@ export function registerSettingsRoutes(app: Hono<AppEnv>): void {
         ownKeySpentMicroUsd: Number(row.own_key_spent_micro_usd),
         safetyLimitMicroUsd: row.safety_limit_micro_usd === null ? null : Number(row.safety_limit_micro_usd),
         resetsOn: row.resets_on,
+        installationFallback: row.installation_fallback,
       },
     };
     return context.json(body);
@@ -189,13 +181,10 @@ export function registerSettingsRoutes(app: Hono<AppEnv>): void {
 
   // The top bar's spend indicator (D247-D250, D281): OpenRouter's reading of the
   // user's own key, cached 15 minutes per user by the AI service (D249), against
-  // whichever limit binds first. Null for the admin, on the installation's key.
+  // whichever limit binds first. Null for the admin with no key of their own:
+  // the installation pays for those calls, so there is no key to read (D363).
   app.get('/settings/llm-usage', async (context) => {
     const userId = currentUserId(context);
-    if (context.get('user')?.role === 'admin') {
-      const body: KeySpendResponse = { spend: null };
-      return context.json(body);
-    }
     let state;
     try {
       state = await context.get('ai').ownLlmKeyUsage(userId, context.get('requestId'));
@@ -203,14 +192,19 @@ export function registerSettingsRoutes(app: Hono<AppEnv>): void {
       if (!(error instanceof AiServiceError)) throw error;
       throw upstreamFailure(error.status, 'Your key could not be read.');
     }
+    if (context.get('user')?.role === 'admin' && (!state.available || state.key === null)) {
+      const body: KeySpendResponse = { spend: null };
+      return context.json(body);
+    }
     const body: KeySpendResponse = { spend: keySpendOf(state, await getMonthlySpend(userId), new Date()) };
     return context.json(body);
   });
 
-  // The user's own monthly brake on what this app spends on their key (D250).
-  // Not the admin's: the admin runs on the installation's key and its daily guard.
+  // The user's own monthly brake on what this app spends on their key (D250),
+  // the admin's personal key's too (D363); the installation's own key is under
+  // its daily guard instead.
   app.put('/settings/llm-safety-limit', async (context) => {
-    const userId = ownKeyUser(context);
+    const userId = currentUserId(context);
     const parsed = safetyLimitSchema.safeParse(await context.req.json().catch(() => null));
     if (!parsed.success) {
       throw badRequest(
@@ -226,15 +220,15 @@ export function registerSettingsRoutes(app: Hono<AppEnv>): void {
 
   // A user's own OpenRouter key (D206). Relayed to the AI service, which alone
   // holds the encryption key; the key arrives once, in the PUT's body, and no
-  // answer carries more than its last four characters. The admin runs on the
-  // installation's key (D245), so the routes refuse them.
+  // answer carries more than its last four characters. The admin may save one
+  // too: it pays for the admin's own calls, apart from the installation (D363).
   app.get('/settings/llm-key', async (context) => {
-    const userId = ownKeyUser(context);
+    const userId = currentUserId(context);
     return context.json(toOwnKeyResponse(await relayOwnKey(() => context.get('ai').ownLlmKey(userId, context.get('requestId')))));
   });
 
   app.put('/settings/llm-key', async (context) => {
-    const userId = ownKeyUser(context);
+    const userId = currentUserId(context);
     const parsed = saveKeySchema.safeParse(await context.req.json().catch(() => null));
     // No issues attached: zod's would quote the value, and the value is a key.
     if (!parsed.success) throw badRequest('invalid_body', 'expected { apiKey: string }');
@@ -245,7 +239,7 @@ export function registerSettingsRoutes(app: Hono<AppEnv>): void {
   });
 
   app.delete('/settings/llm-key', async (context) => {
-    const userId = ownKeyUser(context);
+    const userId = currentUserId(context);
     return context.json(
       toOwnKeyResponse(await relayOwnKey(() => context.get('ai').removeOwnLlmKey(userId, context.get('requestId')))),
     );

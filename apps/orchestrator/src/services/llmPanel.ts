@@ -12,6 +12,10 @@
  * lost a race, or the scan failed after narrating) or an explanation without a
  * call (a recording that failed, which never fails the call).
  *
+ * Every count and cost is also split by payer (D363): the installation's key,
+ * which pays for the admin's calls when the admin has no key of their own, and
+ * users' own keys, the admin's personal key among them.
+ *
  * Not measured, and said so on the page rather than shown as zero: time to
  * first token (no call streams) and a semantic-cache hit rate (there is no
  * cache).
@@ -22,10 +26,12 @@ import type {
   LlmCallOutcome,
   LlmCallVerdict,
   LlmPanelResponse,
+  LlmPayer,
+  LlmPayerSplit,
   NarrationReconciliationRow,
 } from '@traders/shared';
 
-import type { LlmCallGroupRow, LlmCallRow, LlmLatencyRow } from '../db/queries.js';
+import type { LlmCallGroupRow, LlmCallRow, LlmLatencyRow, LlmPaidBy } from '../db/queries.js';
 
 /** The AI service keeps calls this long (`LLM_CALL_RETENTION_DAYS`); a longer window would read as a quiet month. */
 export const LLM_PANEL_MAX_DAYS = 30;
@@ -81,6 +87,22 @@ function zeroes<K extends string>(keys: readonly K[]): Record<K, number> {
   return Object.fromEntries(keys.map((key) => [key, 0])) as Record<K, number>;
 }
 
+const PAYERS: Record<LlmPaidBy, LlmPayer> = { installation: 'installation', own_key: 'ownKey' };
+
+/** Calls and cost per payer, both payers present even when one paid for nothing. */
+function splitByPayer(groups: LlmCallGroupRow[]): LlmPayerSplit {
+  const split: LlmPayerSplit = {
+    installation: { calls: 0, costMicroUsd: 0 },
+    ownKey: { calls: 0, costMicroUsd: 0 },
+  };
+  for (const row of groups) {
+    const payer = split[PAYERS[row.paid_by]];
+    payer.calls += row.calls;
+    payer.costMicroUsd += Number(row.cost_micro_usd);
+  }
+  return split;
+}
+
 function verdictOf(verdict: string | null): LlmCallVerdict {
   return verdict === null ? 'not_judged' : (verdict as LlmCallVerdict);
 }
@@ -119,6 +141,7 @@ function summarisePurpose(
     promptTokens,
     completionTokens,
     costMicroUsd,
+    byPayer: splitByPayer(groups),
     models: [...models]
       .map(([model, count]) => ({ model, calls: count, free: isFreeRoute(model) }))
       .sort((a, b) => b.calls - a.calls),
@@ -176,6 +199,7 @@ export function llmPanel(input: LlmPanelInput): LlmPanelResponse {
   return {
     window: { days: input.days, since: input.since.toISOString() },
     firstCallAt: input.firstCallAt ? input.firstCallAt.toISOString() : null,
+    byPayer: splitByPayer(input.groups),
     purposes: purposes.map((purpose) =>
       summarisePurpose(
         purpose,
@@ -203,6 +227,7 @@ export function llmPanel(input: LlmPanelInput): LlmPanelResponse {
       promptTokens: row.prompt_tokens,
       completionTokens: row.completion_tokens,
       costMicroUsd: Number(row.cost_micro_usd),
+      paidBy: PAYERS[row.paid_by],
       startedAt: new Date(row.started_at).toISOString(),
     })),
   };

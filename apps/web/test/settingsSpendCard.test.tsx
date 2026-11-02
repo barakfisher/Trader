@@ -2,8 +2,8 @@
 /**
  * The Settings cards for a user's own OpenRouter key and their own-key month
  * (D206, D245, D250): the key every model call of theirs runs on, what this app
- * spent on it, and the optional monthly safety limit. The admin, on the
- * installation's key, sees neither.
+ * spent on it, and the optional monthly safety limit. The admin sees both, with
+ * the installation's key behind a missing personal one (D363).
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -66,7 +66,7 @@ function serve(spend: MonthlySpendResponse, ownKey: OwnLlmKeyResponse = NO_KEY) 
   );
 }
 
-const MONTH = { ownKeySpentMicroUsd: 280_462, safetyLimitMicroUsd: null, resetsOn: '2026-11-01' };
+const MONTH = { ownKeySpentMicroUsd: 280_462, safetyLimitMicroUsd: null, resetsOn: '2026-11-01', installationFallback: false };
 
 function renderSettings() {
   const router = createAppRouter(createMemoryHistory({ initialEntries: ['/settings'] }));
@@ -164,15 +164,39 @@ describe('the own-key month and the safety limit (D250)', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('is absent for the admin, who runs on the installation key', async () => {
+  it('is absent when the month cannot be read', async () => {
     serve({ spend: null });
     renderSettings();
 
     expect(await screen.findByText('Language')).toBeTruthy();
     await waitFor(() => expect(get).toHaveBeenCalledWith('/settings/llm-spend'));
     expect(screen.queryByText('Model spending')).toBeNull();
-    // The admin is refused the key routes; the page does not ask.
     expect(get).not.toHaveBeenCalledWith('/settings/llm-key');
+  });
+});
+
+describe("the admin's personal key (D363)", () => {
+  const ADMIN_MONTH = { ...MONTH, installationFallback: true };
+
+  it('says the installation pays while no personal key is saved, and warns of nothing', async () => {
+    serve({ spend: ADMIN_MONTH });
+    renderSettings();
+
+    expect(await screen.findByText(/As the admin you have two keys/)).toBeTruthy();
+    expect(screen.getByText("No personal key is saved: your calls run on the installation's key.")).toBeTruthy();
+    expect(screen.queryByText(/No key is saved, so scans and questions can't run/)).toBeNull();
+    expect(screen.getByLabelText('API key')).toBeTruthy();
+    expect(screen.getByLabelText('Limit per month (USD)')).toBeTruthy();
+  });
+
+  it('says a refused personal key stops the work, as for anyone', async () => {
+    serve(
+      { spend: ADMIN_MONTH },
+      { available: true, key: { ...SAVED_KEY, status: 'failed', failure: 'rejected', failedAt: SAVED_KEY.savedAt } },
+    );
+    renderSettings();
+
+    expect(await screen.findByText(/OpenRouter stopped accepting your key ending c0de/)).toBeTruthy();
   });
 });
 

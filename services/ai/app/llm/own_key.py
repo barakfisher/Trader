@@ -1,9 +1,11 @@
 """A user's own OpenRouter key: checked on save, stored encrypted, the only key their calls use.
 
 **A user who is not the admin runs on their own key, and only on it** (D206's
-key, D245's rule; `payer.py` decides): nothing of the installation's applies to
-those calls - not the installation's daily guard (`LLM_DAILY_BUDGET_USD`, D210),
-which bounds the installation's bill - and nothing falls back to the
+key, D245's rule; `payer.py` decides). **The admin runs on their own key when
+one is saved**, and on the installation's when none can be used (D363). On an
+own key nothing of the installation's applies to those calls - not the
+installation's daily guard (`LLM_DAILY_BUDGET_USD`, D210), which bounds the
+installation's bill - and, for anyone but the admin, nothing falls back to the
 installation's key when there is no key. The smaller daily limits underneath,
 each agent's allowance and the assistant's, still apply: they stop a runaway
 loop, whoever pays; so does the user's own monthly safety limit (D250).
@@ -11,12 +13,12 @@ loop, whoever pays; so does the user's own monthly safety limit (D250).
 `OwnKeyProvider` sits inside the recorder (`factory.py`):
 
     ChoosingProvider(RecordingProvider(OwnKeyProvider(
-        BudgetedProvider(installation adapter),                  # the admin, and no user
+        BudgetedProvider(installation adapter),       # no user, or the admin with no key
         own key -> MonthlyCapProvider(safety limit,
                        OpenAICompatibleProvider(with that key)))))
 
-For each metered call with a user it asks the `PayerGate`: the admin goes to
-the installation's adapter; anyone else with a valid key goes to an adapter
+For each metered call with a user it asks the `PayerGate`: the admin with no
+usable key goes to the installation's adapter; anyone with a valid key goes to an adapter
 built with it (cheap: the adapter builds a client per call anyway), and the
 completion - or the error - is marked `paid_by="own_key"` (D209); anyone else
 without one is refused before a call is made (`OwnKeyRequiredError`).
@@ -40,7 +42,7 @@ from typing import TYPE_CHECKING, Literal, Protocol
 
 import httpx
 from sqlalchemy import text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, Row
 
 from app.core.logging import get_logger
 from app.llm.base import (
@@ -121,9 +123,11 @@ class DatabaseOwnKeyStore:
         return self._vault is not None
 
     def payer(self, user_id: str) -> Payer:
-        """The admin is the installation's; anyone else pays with a saved key that is
-        marked valid and decrypts, or is refused - a user unknown here too."""
-        from app.llm.payer import INSTALLATION, Payer
+        """Anyone pays with a saved key that is marked valid and decrypts, or is
+        refused - a user unknown here too. The admin is the one exception: with no
+        key that can be used the installation pays, but a key OpenRouter refused is
+        refused like anyone's (D363)."""
+        from app.llm.payer import INSTALLATION
 
         with self._engine.connect() as connection:
             row = connection.execute(
@@ -137,8 +141,16 @@ class DatabaseOwnKeyStore:
                 ),
                 {"user": user_id},
             ).one_or_none()
-        if row is not None and row.role == "admin":
-            return INSTALLATION
+        payer = self._key_payer(row, user_id)
+        if row is None or row.role != "admin":
+            return payer
+        if payer.key is not None:
+            return replace(payer, installation_fallback=True)
+        return payer if payer.refusal == "own_key_failed" else INSTALLATION
+
+    def _key_payer(self, row: Row | None, user_id: str) -> Payer:
+        from app.llm.payer import Payer
+
         if row is None or row.ciphertext is None:
             return Payer(refusal="own_key_required")
         if row.status == "failed":
@@ -276,7 +288,7 @@ AdapterFactory = Callable[[str], LLMProvider]
 
 
 class OwnKeyProvider:
-    """Sends the admin's calls to the installation and everyone else's to their own key."""
+    """Sends each user's calls to their own key, and the admin's without one to the installation."""
 
     def __init__(self, inner: LLMProvider, gate: PayerGate, adapter: AdapterFactory) -> None:
         self._inner = inner

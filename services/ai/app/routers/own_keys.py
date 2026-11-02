@@ -1,10 +1,11 @@
 """`/llm/own-keys/{user_id}`: a user's own OpenRouter key - read, saved, removed (D206).
 
 The orchestrator owns the session and calls this for the user it authenticated,
-and refuses the admin, who runs on the installation's key. This service owns
-the table because it alone holds the encryption key (D208): the orchestrator
-never sees a saved key, and nothing here ever answers with one - only its last
-four characters, whether it works, and since when it does not.
+the admin included: the admin's personal key pays for the admin's own calls
+(D363). This service owns the table because it alone holds the encryption key
+(D208): the orchestrator never sees a saved key, and nothing here ever answers
+with one - only its last four characters, whether it works, and since when it
+does not.
 
 A key is checked against OpenRouter before it is stored: a key OpenRouter
 refuses is never saved, and one that cannot be checked is not saved either.
