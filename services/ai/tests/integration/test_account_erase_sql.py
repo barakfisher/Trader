@@ -59,7 +59,7 @@ def _erase(connection: Connection, user: str) -> bool:
 def _with_reset_and_audit(connection: Connection, account: dict[str, str]) -> None:
     """A reset's backup of the account, and an admin action that named it."""
     connection.execute(
-        text("SELECT reset_account(CAST(:u AS uuid), ARRAY['followed_topics'])"),
+        text("SELECT reset_account(CAST(:u AS uuid), ARRAY['main_portfolio'])"),
         {"u": account["user"]},
     )
     connection.execute(

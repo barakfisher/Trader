@@ -68,9 +68,9 @@ export interface NarrationTransitionRow {
  * Record narration's state if it differs from the last one recorded, and return
  * the new row - or null when nothing changed.
  *
- * The comparison and the insert run under a lock on the user's row: a portfolio
- * scan and a topic scan finishing together would otherwise both read the old
- * state and both record the change, and each row would get its own notice.
+ * The comparison and the insert run under a lock on the user's row: two scans
+ * finishing together would otherwise both read the old state and both record
+ * the change, and each row would get its own notice.
  */
 export function recordNarrationState(
   userId: string,

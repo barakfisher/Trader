@@ -2,11 +2,9 @@
  * Gaps between what a user asks for and what the universe holds (M8), recorded
  * as `ops_events` for the admin page.
  *
- * Recorded only where a *user* named something - a holding, an import row, a
- * ticker added to a topic, a topic typed into the resolver. The scheduled
- * metadata run and topic discovery look things up too, but a phrase discovery
- * tried and dropped is the system's search, not a user's gap, and recording
- * them would bury the real ones.
+ * Recorded only where a *user* named something - a holding or an import row.
+ * The scheduled metadata run looks things up too, but that is the system's
+ * search, not a user's gap, and recording it would bury the real ones.
  *
  * A real gap - a US equity or ETF the universe lacks - also asks the AI
  * service to profile the listing in the background (decision 89), so it is
@@ -15,19 +13,19 @@
  * import naming a small company should not wait on it at all.
  *
  * Nothing here can fail the flow that called it: a gap that could not be
- * written is logged and the user's import, holding or topic carries on
+ * written is logged and the user's import or holding carries on
  * exactly as it would have. The panel is an observation of the product, and
  * an observer that could break what it observes is the wrong way round.
  */
 
-import type { InstrumentResolution, TopicResolveResponse } from '@traders/shared/ai';
+import type { InstrumentResolution } from '@traders/shared/ai';
 
 import { recordOpsEvent } from '../db/queries.js';
 import { logger } from '../logger.js';
 import { localDate } from './snapshot.js';
 
 /** Where the user named the symbol. */
-export type GapSource = 'holding' | 'import' | 'topic';
+export type GapSource = 'holding' | 'import';
 
 /**
  * What kind of gap it is:
@@ -109,38 +107,6 @@ export async function recordMissingTicker(
     userId: user.userId,
     detail,
     dedupeKey: `missing_ticker:${user.userId}:${detail.symbol.toUpperCase()}:${localDate(user.timezone, now)}`,
-  });
-}
-
-/** Lower-cased, whitespace collapsed: "Quantum  Computing" and "quantum computing" are one question. */
-export function normaliseTopic(topic: string): string {
-  return topic.trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
-/**
- * A topic whose every candidate fell below the resolver's gate. Only `none`:
- * `weak` is an answer the user was given, and `unavailable` means the universe
- * was not searched at all - an installation fault, not a gap in its contents.
- */
-export async function recordLowConfidence(
-  user: UserContext,
-  resolution: TopicResolveResponse,
-  now: Date = new Date(),
-): Promise<void> {
-  if (resolution.verdict !== 'none') return;
-  const topic = normaliseTopic(resolution.topic);
-  await record({
-    kind: 'universe_gap_low_confidence',
-    userId: user.userId,
-    detail: {
-      topic,
-      bestSimilarity: resolution.best_similarity ?? null,
-      refuseBelow: resolution.refuse_below,
-      confidentAbove: resolution.confident_above,
-      embeddingModel: resolution.embedding_model,
-      vectorIsSemantic: resolution.vector_is_semantic,
-    },
-    dedupeKey: `low_confidence:${user.userId}:${topic}:${localDate(user.timezone, now)}`,
   });
 }
 

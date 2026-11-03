@@ -15,7 +15,6 @@ from sqlalchemy.engine import Engine
 from app.corpus.hashed_embedder import HashedEmbedder
 from app.universe.membership import DatabaseMembership
 from app.universe.profiles import (
-    coverage,
     embed_profile,
     insert_on_demand,
     profile_exists,
@@ -67,7 +66,6 @@ def loaded(migrated: Engine, database_url: str) -> Engine:
 async def test_an_on_demand_profile_is_described_but_answers_no_topic(loaded: Engine) -> None:
     embedder = HashedEmbedder()
     with loaded.begin() as connection:
-        before = coverage(connection, model=embedder.model)
         instrument_id = insert_on_demand(
             connection, TINY, source="test", license="test", as_of=datetime.now(UTC)
         )
@@ -85,9 +83,7 @@ async def test_an_on_demand_profile_is_described_but_answers_no_topic(loaded: En
             model=embedder.model,
             limit=50,
         )
-        after = coverage(connection, model=embedder.model)
     assert "TINYU" not in {match.symbol for match in matches}
-    assert after == before
 
     with patch("app.universe.membership.get_engine", return_value=loaded):
         # Still a gap: only a rescreen can close it.

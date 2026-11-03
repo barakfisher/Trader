@@ -1,13 +1,12 @@
 /**
- * Articles as the web app receives them, for any subject that has news: a
- * topic (its confirmed instruments) or a holding (its one instrument).
+ * Articles as the web app receives them: a holding's news (its one instrument).
  */
 
 import type { NewsArticle, NewsCollectionState } from '@traders/shared';
 
-import type { TopicArticleRow } from '../db/queries.js';
+import type { ArticleRow } from '../db/queries.js';
 
-export function articleOut(row: TopicArticleRow): NewsArticle {
+export function articleOut(row: ArticleRow): NewsArticle {
   return {
     id: row.id,
     url: row.url,

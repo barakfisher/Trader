@@ -13,7 +13,7 @@ any day is the same world, shifted.
 **Figures the cases quote are the rules' own.** The drawdown alert is
 `drawdown_findings` run over the fixture prices, not a number typed here; a
 scan's tool results are what the tool returns for the fixture. What *is* typed
-here - a thesis, a scan's error, a topic's weekly move - is stored where the
+here - a thesis, a scan's error - is stored where the
 tools read it, so the assistant meets it as evidence, as it would a real one.
 
 **One account per case**, so no case reads another's conversation or spend.
@@ -73,14 +73,6 @@ EVAL_DESCRIPTIONS: dict[str, str] = {
 #: Left the universe at the seeded rescreen (`universe-dropped`).
 DROPPED_AT_RESCREEN = ("AEM", "SYK")
 RESCREEN_DAYS_AGO = 20
-
-TOPIC = "Uranium & Nuclear Energy"
-TOPIC_MEMBERS = {
-    "CCJ": "Mines and sells uranium for nuclear power plants.",
-    "URA": "Holds uranium miners and nuclear fuel companies.",
-    "SMR": "Builds small modular nuclear reactors.",
-    "LEU": "Supplies enriched uranium fuel for reactors.",
-}
 
 #: The real portfolio: symbol -> (quantity, cost per unit, opened days ago).
 DEMO_HOLDINGS: dict[str, tuple[str, str, int]] = {
@@ -378,7 +370,6 @@ async def seed_account(engine: Engine, market: EvalMarket, fixture: str, now: da
         if fixture != "empty":
             _agents(connection, account, now)
             _observations(connection, account, smr_points, now)
-            _topic(connection, account, now)
     return account
 
 
@@ -555,7 +546,6 @@ def _scan(
             "gainers": [{"symbol": "SMR"}, {"symbol": "URA"}],
             "losers": [{"symbol": "NVDA"}],
         },
-        "followed_topics": [TOPIC],
     }
     scan = connection.execute(
         text(
@@ -694,9 +684,8 @@ def _agents(connection: Connection, account: Account, now: datetime) -> None:
         "symbol": "SMR",
         "quantity": "50",
         "thesis": (
-            "SMR rose 10.65% today to $9.87 after news of a first commercial reactor order, and "
-            "it belongs to the followed topic Uranium & Nuclear Energy. Buying 50 shares uses "
-            "$493.50 of the $6000.00 cash."
+            "SMR rose 10.65% today to $9.87 after news of a first commercial reactor order. "
+            "Buying 50 shares uses $493.50 of the $6000.00 cash."
         ),
         "price_minor": 987,
         "price_as_of": as_of,
@@ -896,45 +885,5 @@ def _observations(
             ),
             "evidence": json.dumps(finding.evidence),
             "at": now - timedelta(days=1),
-        },
-    )
-
-
-def _topic(connection: Connection, account: Account, now: datetime) -> None:
-    topic = connection.execute(
-        text(
-            "INSERT INTO topics (user_id, label, status, created_by, confirmed_at, created_at) "
-            "VALUES (CAST(:u AS uuid), :label, 'active', 'user', :at, :at) RETURNING id::text"
-        ),
-        {"u": account.user_id, "label": TOPIC, "at": now - timedelta(days=21)},
-    ).scalar_one()
-    for symbol, rationale in TOPIC_MEMBERS.items():
-        connection.execute(
-            text(
-                "INSERT INTO topic_instruments (topic_id, user_id, instrument_id, source, "
-                "confidence, rationale) VALUES (CAST(:t AS uuid), CAST(:u AS uuid), "
-                "CAST(:i AS uuid), 'resolver', 'confident', :r)"
-            ),
-            {
-                "t": topic,
-                "u": account.user_id,
-                "i": _instrument(connection, symbol),
-                "r": rationale,
-            },
-        )
-    connection.execute(
-        text(
-            "INSERT INTO observations (user_id, agent_id, kind, severity, subject_kind, "
-            "subject_ref, headline, evidence, dedupe_key, narration_source, created_at) "
-            "VALUES (CAST(:u AS uuid), CAST(:a AS uuid), 'topic_move', 'notable', 'topic', "
-            ":ref, :headline, CAST(:evidence AS jsonb), 'eval:topic_move', 'template', :at)"
-        ),
-        {
-            "u": account.user_id,
-            "a": account.primary_id,
-            "ref": f"topic:{topic}",
-            "headline": f"{TOPIC} rose 4.80% over five days",
-            "evidence": json.dumps({"topic": TOPIC, "change_pct": "4.80", "window_days": 5}),
-            "at": now - timedelta(days=2),
         },
     )

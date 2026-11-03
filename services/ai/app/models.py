@@ -479,10 +479,6 @@ class NewsInstrument(BaseModel):
 class NewsCollectRequest(BaseModel):
     instruments: list[NewsInstrument] = Field(min_length=1, max_length=500)
     lookback_hours: int = Field(default=48, ge=1, le=24 * 60)
-    #: How long unlinked market-feed articles are kept (decision 60). The
-    #: orchestrator sends discovery's window plus a proposal's lifetime; absent,
-    #: nothing is pruned.
-    market_retention_days: int | None = Field(default=None, ge=1, le=365)
 
 
 class SuspectedNetwork(BaseModel):
@@ -512,56 +508,11 @@ class NewsCollectResponse(BaseModel):
     linked_symbols: dict[str, int] = Field(default_factory=dict)
     #: Stored articles the market feed kept (linked or not).
     market_articles: int = 0
-    #: Unlinked market-feed articles deleted as older than the retention.
+    #: Unlinked market-feed articles deleted as older than `market_feed.SUSPECT_WINDOW`.
     pruned: int = 0
     #: Outlets not yet excluded that look like a ticker network. Empty is the
     #: expected answer; a name here is a candidate for `TICKER_NETWORKS`.
     suspected_networks: list[SuspectedNetwork] = Field(default_factory=list)
-
-
-class TopicScanInstrument(BaseModel):
-    instrument_id: str
-    symbol: str
-
-
-class TopicScanTopic(BaseModel):
-    """One active topic and the instruments the user confirmed for it."""
-
-    topic_id: str
-    label: str
-    instruments: list[TopicScanInstrument] = Field(min_length=1, max_length=100)
-
-
-class TopicScanRequest(BaseModel):
-    #: The account this is for, recorded on each model call it makes
-    #: (`llm_calls.user_id`, decision 87). Optional: a caller that sends none
-    #: gets its calls recorded without an owner.
-    user_id: UUID | None = None
-    topics: list[TopicScanTopic] = Field(min_length=1, max_length=50)
-    known_dedupe_keys: list[str] = Field(
-        default_factory=list,
-        max_length=5000,
-        description="As on PortfolioScanRequest: matching findings are counted, not narrated.",
-    )
-
-
-class TopicScanStatsOut(BaseModel):
-    topics: int = 0
-    topics_measured: int = 0
-    instruments: int = 0
-    findings: int = 0
-    already_known: int = 0
-    narrated_by_llm: int = 0
-    narration_fallbacks: dict[str, int] = Field(default_factory=dict)
-    skipped: dict[str, str] = Field(
-        default_factory=dict,
-        description="Topic label -> why it could not be measured. A quiet topic is not listed.",
-    )
-
-
-class TopicScanResponse(BaseModel):
-    observations: list[ObservationOut]
-    stats: TopicScanStatsOut
 
 
 class NarrationConfigResponse(BaseModel):
@@ -666,173 +617,6 @@ class HealthResponse(BaseModel):
     service: str = "ai-service"
     version: str
     checks: dict[str, str] = Field(default_factory=dict)
-
-
-class TopicResolveRequest(BaseModel):
-    """A theme in the user's own words: "uranium", "robot surgery", "GLP-1"."""
-
-    #: At least one non-space character; surrounding whitespace is ignored.
-    topic: str = Field(min_length=1, max_length=200, pattern=r"\S")
-
-
-class TopicHolder(BaseModel):
-    """A source ETF that holds a candidate, and what fraction of the fund it is."""
-
-    etf: str
-    #: A fraction of the fund, as a decimal string (guideline 4): "0.108" is 10.8%.
-    weight: str
-
-
-class TopicCandidateOut(BaseModel):
-    """One instrument offered for a topic, with the reason it was offered.
-
-    `rationale` is a sentence from the instrument's own description, verbatim -
-    never written by a model. `held_by` is the second, independent reason: the
-    topic's source ETFs that hold it. Either can be checked by the reader.
-
-    `confidence` is a band, not a number, because a cosine is not a
-    probability; `similarity` is exposed for debugging and for the record, not
-    for display as a percentage.
-    """
-
-    instrument_id: str
-    symbol: str
-    name: str | None
-    asset_class: str
-    sector: str | None
-    industry: str | None
-    similarity: float
-    #: Market cap (equity) or net assets (ETF) in minor units; null when unknown.
-    size_minor: int | None
-    #: ISO currency of `size_minor`; null exactly when `size_minor` is null.
-    size_currency: str | None
-    confidence: Literal["confident", "weak"]
-    rationale: str
-    held_by: list[TopicHolder] = Field(default_factory=list)
-
-
-class TopicInterpretationOut(BaseModel):
-    """One meaning of the topic. `label` is the commonest Yahoo industry in it."""
-
-    label: str | None
-    candidates: list[TopicCandidateOut]
-
-
-class UniverseCoverageOut(BaseModel):
-    """What the resolver could see: the installation's side of the answer.
-
-    `state` is `ready`, `partially_embedded` (resolution ran over `embedded` of
-    `profiles`), `not_embedded` or `not_loaded`. The last two mean the topic
-    was never looked at, which is why they carry a verdict of their own.
-    """
-
-    state: Literal["ready", "partially_embedded", "not_embedded", "not_loaded"]
-    profiles: int
-    embedded: int
-
-
-class TopicResolveResponse(BaseModel):
-    """Candidate instruments for a topic, or a named reason there are none.
-
-    `verdict` is the field to branch on, and it has four values because there
-    are four different situations:
-
-    - `confident` / `weak` - candidates are offered; `weak` means the best
-      match was near the floor and the reader should be told so.
-    - `none` - the universe was searched and nothing in it is about this
-      topic. `interpretations` is empty on purpose: the least-bad rows for a
-      topic nothing is about are the failure the floor exists to prevent.
-    - `unavailable` - the universe was **not** searched, because this
-      installation has no searchable universe (`universe.state` says which
-      step is missing). A 200 rather than an error for the reason `/ask`'s
-      refusal is one, and a separate value from `none` so that "no universe"
-      can never be shown to the user as "your topic matches nothing".
-
-    Every threshold the verdict was judged by travels with it, as in `/ask`.
-    """
-
-    topic: str
-    verdict: Literal["confident", "weak", "none", "unavailable"]
-    #: The best cosine found; null when the universe was not searched.
-    best_similarity: float | None
-    refuse_below: float
-    confident_above: float
-    interpretations: list[TopicInterpretationOut] = Field(default_factory=list)
-    #: More than one interpretation: the candidates split into unrelated
-    #: businesses and the user should choose between them.
-    ambiguous: bool
-    universe: UniverseCoverageOut
-    embedding_model: str
-    vector_is_semantic: bool
-
-
-class TopicDiscoverRequest(BaseModel):
-    """Find recurring phrases in the window's headlines (FR-11).
-
-    `instruments` are the ones the user holds or follows - the same list news
-    was collected for. Their names are cut out of every headline, because
-    "Apple" recurring across Apple's own news is not a theme.
-    """
-
-    instruments: list[NewsInstrument] = Field(default_factory=list, max_length=500)
-    days: int = Field(default=7, ge=1, le=30)
-    #: The most phrases returned, strongest first.
-    limit: int = Field(default=20, ge=1, le=100)
-
-
-class DiscoveredHeadline(BaseModel):
-    """A stored headline, verbatim: the evidence a proposal quotes."""
-
-    article_id: str
-    title: str
-    source: str
-    published_at: datetime | None
-
-
-class DiscoveredPhrase(BaseModel):
-    """One recurring phrase and the headlines it recurred in.
-
-    `phrase` is the spelling the headlines used most; `words` is the folded
-    form that identifies it. Neither has been resolved to instruments: that,
-    and whether it is proposed at all, is the orchestrator's decision.
-    """
-
-    phrase: str
-    words: list[str]
-    #: Distinct stories: articles that are republications of one another count once.
-    story_count: int
-    article_count: int
-    source_count: int
-    #: The instrument most of the phrase's articles are linked to, and how many
-    #: of `article_count` are. The orchestrator judges from these whether the
-    #: phrase is one company's news rather than a theme; this service does not.
-    lead_instrument: str | None = None
-    lead_instrument_articles: int = 0
-    #: The country whose outlets carried most of the phrase's articles (FIPS code,
-    #: "AS" = Australia), its name, and how many of `article_count` it carried.
-    #: The orchestrator judges from these whether the phrase is one country's
-    #: local news (decision 61); this service does not.
-    lead_country: str | None = None
-    lead_country_name: str | None = None
-    lead_country_articles: int = 0
-    #: Up to five of the headlines, in the order they were read (newest first).
-    headlines: list[DiscoveredHeadline]
-
-
-class TopicDiscoverResponse(BaseModel):
-    """Recurring phrases, and enough counts to tell a quiet window from an empty one.
-
-    `headlines == 0` means there was nothing to read - usually no news was
-    collected (see `GET /runs?kind=news_collect`) - which is not the same
-    statement as "headlines were read and nothing recurred".
-    """
-
-    since: datetime
-    days: int
-    headlines: int
-    min_stories: int
-    min_sources: int
-    phrases: list[DiscoveredPhrase] = Field(default_factory=list)
 
 
 class LlmCredits(BaseModel):

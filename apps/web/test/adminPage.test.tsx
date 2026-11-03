@@ -374,7 +374,7 @@ describe('the admin page', () => {
     expect(await screen.findByText('TINY')).toBeTruthy();
     expect(screen.getByText(/below the size floor or listed since the snapshot/)).toBeTruthy();
     expect(screen.getByText(/3×/)).toBeTruthy();
-    expect(screen.getByText(/^profiled on demand; no topic is answered from it/)).toBeTruthy();
+    expect(screen.getByText(/^profiled on demand; agents' searches by theme skip it/)).toBeTruthy();
   });
 
   it('counts on-demand profiles apart from the members', async () => {
@@ -522,16 +522,16 @@ describe('the admin page', () => {
   it("resets only the ticked groups, and only once the word is typed - each user's own, on Settings (D162)", async () => {
     post.mockResolvedValue({
       resetId: 'b-42',
-      groups: ['main_portfolio', 'agents_trading'],
-      erased: { holdings: 2, observations: 104, topics: 0 },
+      groups: ['main_portfolio'],
+      erased: { holdings: 2, observations: 104 },
     });
     renderWithServerState(<AccountResetCard />);
     const submit = (await screen.findByRole('button', { name: 'Erase the ticked groups' })) as HTMLButtonElement;
     // Every group starts ticked: the default is a full reset.
-    for (const label of ['Main portfolio', "Agents' trading", 'Followed topics']) {
+    for (const label of ['Main portfolio', "Agents' trading"]) {
       expect((screen.getByRole('checkbox', { name: new RegExp(label) }) as HTMLInputElement).checked).toBe(true);
     }
-    fireEvent.click(screen.getByRole('checkbox', { name: /Followed topics/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Agents' trading/ }));
     const word = screen.getByLabelText('Type RESET to confirm');
     fireEvent.change(word, { target: { value: 'reset' } });
     expect(submit.disabled).toBe(true);
@@ -541,7 +541,7 @@ describe('the admin page', () => {
       fireEvent.click(submit);
     });
     expect(post).toHaveBeenCalledWith('/account/reset', {
-      groups: ['main_portfolio', 'agents_trading'],
+      groups: ['main_portfolio'],
       confirm: 'RESET',
     });
     expect(await screen.findByText('Done: 106 rows erased. Backup b-42.')).toBeTruthy();
@@ -549,7 +549,7 @@ describe('the admin page', () => {
 
   it('cannot reset with nothing ticked', async () => {
     renderWithServerState(<AccountResetCard />);
-    for (const label of ['Main portfolio', "Agents' trading", 'Followed topics']) {
+    for (const label of ['Main portfolio', "Agents' trading"]) {
       fireEvent.click(await screen.findByRole('checkbox', { name: new RegExp(label) }));
     }
     fireEvent.change(screen.getByLabelText('Type RESET to confirm'), { target: { value: 'RESET' } });

@@ -66,6 +66,12 @@ lifecycle, and the local trigger is an in-process timer calling the same entrypo
 ---
 
 ## M5 — Market discovery & topics *(2–3 days)*
+
+*Removed 2026-11-03 (D371-D372):* the Topics page, topic confirmation, topic scans, auto-discovery
+and the digest's topic section, with the `topics` tables (migration 0082). No topic was ever
+confirmed on either installation. The resolver below stays, as the agents' `search_universe`.
+The milestone is kept as written: it records what was built and why.
+
 - Topic CRUD, resolution to candidate instruments with confidence + rationale, user confirmation.
 - Auto-discovery of themes (proposal-only), rejection memory.
 - Per-topic sentiment trend, topic cards, digest topic section.
@@ -114,7 +120,8 @@ original brief named something this repository does not have, the reconciliation
   `dedupe_key`):
   - `UNIVERSE_GAP_MISSING_TICKER` — a symbol a user searched for or imported that is not in the
     universe.
-  - `UNIVERSE_GAP_LOW_CONFIDENCE` — a topic resolution whose candidates all fell below the gate.
+  - `UNIVERSE_GAP_LOW_CONFIDENCE` — a topic resolution whose candidates all fell below the gate
+    (*removed with `/topics/resolve`, D371-D372*).
     (The resolver has a relative gate, not one fixed similarity threshold; the event records the
     gate and the best score so the threshold question can be asked of real data.)
   - Narration rejections — **already recorded** as `observations.fallback_reason`; the panel is a

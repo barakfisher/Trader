@@ -17,7 +17,7 @@
  *
  * Figures and Latin-script fragments in the Hebrew are wrapped in isolates, as
  * the AI service's Hebrew templates are (`hebrew_templates.py`): a left-to-right
- * isolate for a figure, a first-strong isolate for text the user wrote (a topic
+ * isolate for a figure, a first-strong isolate for text the user wrote (an agent
  * label can be in either script). Telegram renders plain text, so markup cannot
  * do this job there; the isolates are invisible.
  */
@@ -32,7 +32,6 @@ import {
   type RecheckCheck,
   type RecheckUnanswered,
   type ScanToolName,
-  type TopicSentimentGap,
   type TranslatedLanguage,
   type PayerRefusal,
   type UiLanguage,
@@ -502,18 +501,12 @@ export interface Messages {
   digest: {
     title: (
       findings: number,
-      topics: number,
       narrationChanged: boolean,
       modelFallbacks: number,
       scansGaveUp: number,
     ) => string;
     reasons: Record<DigestReason, string>;
     reasonLine: (count: number, reason: string) => string;
-    topicsHeading: string;
-    noUnusualMove: (label: string) => string;
-    notMeasured: (label: string, reason: string) => string;
-    notScanned: (label: string) => string;
-    news: (days: number, gap: TopicSentimentGap | null, articles: number, tone: string, model: string) => string;
   };
 }
 
@@ -1032,10 +1025,9 @@ const en: Messages = {
   },
 
   digest: {
-    title: (findings, topics, narrationChanged, modelFallbacks, scansGaveUp) => {
+    title: (findings, narrationChanged, modelFallbacks, scansGaveUp) => {
       const parts: string[] = [];
       if (findings > 0) parts.push(`${findings} finding${findings === 1 ? '' : 's'}`);
-      if (topics > 0) parts.push(`${topics} topic${topics === 1 ? '' : 's'}`);
       if (narrationChanged) parts.push('explanations changed');
       if (modelFallbacks > 0) parts.push('a model fell back');
       if (scansGaveUp > 0) parts.push(scansGaveUp === 1 ? 'a scan did not run' : `${scansGaveUp} scans did not run`);
@@ -1048,24 +1040,6 @@ const en: Messages = {
       above_floor: 'not delivered when first found',
     },
     reasonLine: (count, reason) => `${count} ${reason}`,
-    topicsHeading: 'Topics',
-    noUnusualMove: (label) => `${label}: no unusual move in the last day`,
-    notMeasured: (label, reason) => `${label}: not measured (${reason})`,
-    notScanned: (label) => `${label}: not scanned yet`,
-    news: (days, gap, articles, tone, model) => {
-      const prefix = `News, last ${days} days:`;
-      const counted = `${articles} article${articles === 1 ? '' : 's'}`;
-      switch (gap) {
-        case 'no_articles':
-          return `${prefix} none collected`;
-        case 'not_scored':
-          return `${prefix} ${counted}, none scored for tone`;
-        case 'too_few_polarised':
-          return `${prefix} ${counted}, too few with a clear tone to score`;
-        default:
-          return `${prefix} ${counted}, tone ${tone} (${model})`;
-      }
-    },
   },
 };
 
@@ -1596,10 +1570,9 @@ const he: Messages = {
   },
 
   digest: {
-    title: (findings, topics, narrationChanged, modelFallbacks, scansGaveUp) => {
+    title: (findings, narrationChanged, modelFallbacks, scansGaveUp) => {
       const parts: string[] = [];
       if (findings > 0) parts.push(hebrewCount(findings, 'ממצא אחד', 'ממצאים'));
-      if (topics > 0) parts.push(hebrewCount(topics, 'נושא אחד', 'נושאים'));
       if (narrationChanged) parts.push('ההסברים השתנו');
       if (modelFallbacks > 0) parts.push('מודל הוחלף בחלופי');
       if (scansGaveUp > 0) parts.push(scansGaveUp === 1 ? 'סריקה לא רצה' : `${ltr(scansGaveUp)} סריקות לא רצו`);
@@ -1612,24 +1585,6 @@ const he: Messages = {
       above_floor: 'לא נשלחו כשנמצאו לראשונה',
     },
     reasonLine: (count, reason) => `${ltr(count)} ${reason}`,
-    topicsHeading: 'נושאים',
-    noUnusualMove: (label) => `${isolated(label)}: אין תנועה חריגה ביממה האחרונה`,
-    notMeasured: (label, reason) => `${isolated(label)}: לא נמדד (${isolated(reason)})`,
-    notScanned: (label) => `${isolated(label)}: עדיין לא נסרק`,
-    news: (days, gap, articles, tone, model) => {
-      const prefix = `חדשות, ${ltr(days)} הימים האחרונים:`;
-      const counted = hebrewCount(articles, 'כתבה אחת', 'כתבות');
-      switch (gap) {
-        case 'no_articles':
-          return `${prefix} לא נאספו כתבות`;
-        case 'not_scored':
-          return `${prefix} ${counted}, אף אחת לא דורגה לפי טון`;
-        case 'too_few_polarised':
-          return `${prefix} ${counted}, מעט מדי עם טון ברור לדירוג`;
-        default:
-          return `${prefix} ${counted}, טון ${ltr(tone)} (${ltr(model)})`;
-      }
-    },
   },
 };
 

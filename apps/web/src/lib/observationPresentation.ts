@@ -62,15 +62,8 @@ export function kindLabel(kind: string): string {
 /**
  * The thing the observation is about, from its kind-prefixed handle:
  * `instrument:NVDA` -> `NVDA`, `portfolio:allocation:AAPL` -> `AAPL`.
- *
- * A topic's handle carries its id, which survives a rename and means nothing to
- * a reader, so a topic is named by the label its evidence recorded.
  */
-export function subjectLabel(subjectRef: string, evidence?: unknown): string {
-  if (subjectRef.startsWith('topic:') && evidence && typeof evidence === 'object') {
-    const label = (evidence as { topic_label?: unknown }).topic_label;
-    if (typeof label === 'string' && label.length > 0) return label;
-  }
+export function subjectLabel(subjectRef: string): string {
   const segments = subjectRef.split(':').filter((segment) => segment.length > 0);
   return segments.at(-1) ?? subjectRef;
 }

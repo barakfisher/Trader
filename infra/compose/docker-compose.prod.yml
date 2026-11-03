@@ -17,7 +17,7 @@
 #   - No Mailpit and no fixture providers: mail goes to the real provider, and
 #     an unavailable price stays unpriced rather than becoming a fixture's.
 #   - No Yahoo descriptions are mounted (D350): `universe` loads membership and
-#     holdings only, and topic resolution answers `unavailable`.
+#     holdings only, and the agents' universe search answers `unavailable`.
 #   - Every container's log is capped, so logs cannot fill the disk.
 #
 # Secrets: `.env` and `.env.owner` in the checkout's root, written once by

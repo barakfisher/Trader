@@ -192,7 +192,7 @@ class TestEnrichment:
 
     async def test_an_article_matching_nothing_is_still_stored_and_scored(self, news_instruments):
         # Storing it is what makes the next pass cheap: it is deduplicated by
-        # hash rather than re-matched, and topic discovery will want it later.
+        # hash rather than re-matched.
         pipeline = build(
             [
                 StubProvider(

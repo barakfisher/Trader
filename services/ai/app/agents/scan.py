@@ -156,7 +156,7 @@ money moves; every trade you propose is approved or rejected by the user.
 {mandate_block}{persona_block}
 How to work:
 1. Start from the briefing: your cash, your holdings and what the rules found in
-   them, today's movers you may trade, and the user's followed topics.
+   them, and today's movers you may trade.
 2. Use the tools to look into what matters to your mandate. Check the news and
    the price history before acting on a move. You have at most {step_limit} tool
    calls; most scans need far fewer.

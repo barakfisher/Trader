@@ -24,7 +24,6 @@ _CONTAINER_FIXTURES_DIR = "/app/data/fixtures"
 
 #: Where the container copies the concept corpus to (same Dockerfile).
 _CONTAINER_CORPUS_DIR = "/app/data/corpus"
-_CONTAINER_OUTLETS_DIR = "/app/data/outlets"
 _CONTAINER_CALENDAR_DIR = "/app/data/calendar"
 
 
@@ -59,21 +58,8 @@ def _default_corpus_dir() -> str:
     return str(checkout) if checkout.is_dir() else _CONTAINER_CORPUS_DIR
 
 
-def _default_outlets_dir() -> str:
-    """Locate `data/outlets`, in both places this service runs, as the corpus is.
-
-    Guessing wrong is loud: discovery refuses to start without its table rather
-    than calling every outlet countryless and every local story a theme.
-    """
-    try:
-        checkout = Path(__file__).resolve().parents[3] / "data" / "outlets"
-    except IndexError:  # pragma: no cover - only when the path is unusually short
-        return _CONTAINER_OUTLETS_DIR
-    return str(checkout) if checkout.is_dir() else _CONTAINER_OUTLETS_DIR
-
-
 def _default_calendar_dir() -> str:
-    """Locate `data/calendar`, in both places this service runs, as the outlets are.
+    """Locate `data/calendar`, in both places this service runs, as the corpus is.
 
     Guessing wrong is loud: the calendar endpoint answers 503 rather than
     calling every weekday a trading day.
@@ -210,9 +196,6 @@ class Settings(BaseSettings):
     # answered as such - and the loader reads the image's snapshot alone.
     universe_snapshot_dir: str | None = None
 
-    # Absolute path to the outlet-country table (`data/outlets`, decision 61).
-    # Resolved for the current runtime; OUTLETS_DIR in the environment always wins.
-    outlets_dir: str = Field(default_factory=_default_outlets_dir)
     calendar_dir: str = Field(default_factory=_default_calendar_dir)
 
     # Which embedder turns corpus text into vectors. One gateway module

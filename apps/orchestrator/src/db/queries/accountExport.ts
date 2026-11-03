@@ -50,8 +50,6 @@ SELECT jsonb_build_object(
   'proposals', ${rows('proposals', 't.created_at, t.id')},
   'proposalTransitions', ${rows('proposal_transitions', 't.created_at, t.id')},
   'observations', ${rows('observations', 't.created_at, t.id')},
-  'topics', ${rows('topics', 't.created_at, t.id')},
-  'topicInstruments', ${rows('topic_instruments', 't.topic_id, t.instrument_id', SYMBOL)},
   'conversations', ${rows(
     'assistant_conversations',
     't.created_at, t.id',

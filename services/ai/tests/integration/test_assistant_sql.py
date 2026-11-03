@@ -32,7 +32,6 @@ from app.assistant.tools import (
     get_portfolio,
     get_proposals,
     get_research,
-    get_topics,
     get_universe_info,
     primary_agent_id,
     replay_scan,
@@ -139,7 +138,7 @@ def _symbols(engine: Engine, count: int) -> list[str]:
 @pytest.fixture()
 def account(loaded: Engine) -> Iterator[dict[str, Any]]:
     """A user whose real portfolio holds two instruments (one priced) with a snapshot,
-    an agent with a pending trade proposal, an expired one, a finding and a topic."""
+    an agent with a pending trade proposal, an expired one and a finding."""
     held, unpriced = _symbols(loaded, 2)
     with loaded.begin() as connection:
         user = connection.execute(
@@ -210,21 +209,6 @@ def account(loaded: Engine) -> Iterator[dict[str, Any]]:
                 ),
                 {"u": user, "a": agent, "state": state, "expires": expires, "k": key},
             )
-        topic = connection.execute(
-            text(
-                "INSERT INTO topics (user_id, label, status, created_by, confirmed_at) "
-                "VALUES (CAST(:u AS uuid), 'Uranium', 'active', 'user', now()) RETURNING id::text"
-            ),
-            {"u": user},
-        ).scalar_one()
-        connection.execute(
-            text(
-                "INSERT INTO topic_instruments (topic_id, user_id, instrument_id, source, "
-                "confidence, rationale) VALUES (CAST(:t AS uuid), CAST(:u AS uuid), "
-                "CAST(:i AS uuid), 'resolver', 'confident', 'The company mines uranium.')"
-            ),
-            {"t": topic, "u": user, "i": _instrument(loaded, held)},
-        )
     market = ScriptedMarket()
     market.prices[held] = 22928
     yield {
@@ -478,16 +462,14 @@ async def test_get_proposals_reports_a_lapsed_pending_proposal_as_expired(
     assert pending["proposals"][0]["link"].startswith("/proposals/")
 
 
-async def test_get_observations_and_get_topics_read_the_users_rows(
+async def test_get_observations_reads_the_users_rows(
     loaded: Engine, account: dict[str, Any]
 ) -> None:
     context = _context(loaded, account)
 
     observations = await get_observations(context, {"symbol": account["held"]})
-    topics = await get_topics(context, {"topic": "uran"})
 
     assert len(observations["observations"]) == 2
-    assert topics["topics"][0]["instruments"][0]["reason"] == "The company mines uranium."
 
 
 def _research(engine: Engine, account: dict[str, Any], rated_days_ago: int) -> None:
@@ -586,7 +568,6 @@ async def test_another_users_rows_are_never_read(loaded: Engine, account: dict[s
 
     assert (await get_proposals(context, {"state": "any"}))["proposals"] == []
     assert (await get_observations(context, {}))["observations"] == []
-    assert (await get_topics(context, {}))["topics"] == []
     assert (await get_portfolio(context, {}))["holdings"] == []
     assert (await get_research(context, {}))["holdings"] == []
 
@@ -642,7 +623,6 @@ def _record_scan(engine: Engine, account: dict[str, Any], *, symbol: str, minute
                             "losers": [],
                             "most_active": [],
                         },
-                        "followed_topics": [{"topic": "Uranium", "symbols": [symbol]}],
                     }
                 ),
                 "t": json.dumps(transcript),
@@ -666,7 +646,6 @@ async def test_replay_scan_walks_a_scan_step_by_step(
     assert result["scan_id"] == latest
     assert result["agent"] == "Momentum" and result["outcome"] == "trade"
     assert result["briefing"]["movers"]["gainers"] == [held]
-    assert result["briefing"]["followed_topics"] == [{"topic": "Uranium", "symbols": [held]}]
     [step] = result["steps"]
     assert (step["step"], step["tool"], step["arguments"]) == (1, "get_quote", {"symbols": [held]})
     # A long result is cut, and says so.

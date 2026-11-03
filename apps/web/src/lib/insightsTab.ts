@@ -24,7 +24,7 @@ export function insightsTabFrom(search: unknown): InsightsTab {
   return INSIGHTS_TABS.find((tab) => tab === params.tab) ?? DEFAULT_INSIGHTS_TAB;
 }
 
-const ALERT_SOURCES: readonly AlertSource[] = ['portfolio', 'topics', 'agents'];
+const ALERT_SOURCES: readonly AlertSource[] = ['portfolio', 'agents'];
 
 /** The Alerts tab's source pill; undefined is "All". An unknown value is "All" too. */
 export function alertSourceFrom(search: unknown): AlertSource | undefined {

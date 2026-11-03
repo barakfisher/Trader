@@ -82,7 +82,6 @@ const ORIGIN = 'http://localhost:5173';
 const ADDRESS = '203.0.113.7';
 const AGENT = '33333333-3333-4333-8333-333333333333';
 const PROPOSAL = '44444444-4444-4444-8444-444444444444';
-const TOPIC = '55555555-5555-4555-8555-555555555555';
 
 function buildApp(limits: RateLimits) {
   resetConfigForTests();
@@ -117,9 +116,6 @@ const PER_USER_ROUTES: { method: string; path: string; scope: RateLimitScope; bo
   { method: 'POST', path: `/proposals/${PROPOSAL}/recheck`, scope: 'proposalRecheck' },
   { method: 'POST', path: '/holdings', scope: 'symbolResolve', body: { symbol: 'AAPL' } },
   { method: 'POST', path: '/imports/preview', scope: 'symbolResolve', body: {} },
-  { method: 'POST', path: '/topics/resolve', scope: 'topicResolve', body: { topic: 'chips' } },
-  { method: 'POST', path: '/topics', scope: 'topicResolve', body: {} },
-  { method: 'PUT', path: `/topics/${TOPIC}`, scope: 'topicResolve', body: {} },
   { method: 'GET', path: '/concepts/search?q=drawdown', scope: 'conceptSearch' },
   { method: 'POST', path: '/portfolio/cash/movements', scope: 'cashMovement', body: { type: 'income', amount: '1' } },
   // Each spends the installation's shared Yahoo budget: per hour, and per minute against a burst.

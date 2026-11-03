@@ -83,10 +83,7 @@ import { automaticSignupHeld } from '../legal.js';
 const ADMIN_RUNS_LIMIT = 100;
 const ADMIN_AUDIT_LIMIT = 100;
 const GAPS_LIMIT = 200;
-const GAP_KINDS: readonly OpsEventKind[] = [
-  'universe_gap_missing_ticker',
-  'universe_gap_low_confidence',
-];
+const GAP_KINDS: readonly OpsEventKind[] = ['universe_gap_missing_ticker'];
 
 const settingsSchema = z
   .object({

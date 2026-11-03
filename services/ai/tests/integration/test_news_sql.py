@@ -1,9 +1,7 @@
-"""The headlines discovery reads, through the real SQL.
+"""The market feed's upkeep and the lexicon re-score, through the real SQL.
 
-What is pinned: only distinct headlines inside the window that are linked or
-came from the market feed are read, and each carries the symbols of every
-instrument it is linked to - the input to a phrase's lead instrument, which
-decides whether it is one company's news. And the market feed's pruning deletes
+What is pinned: the suspected-network check reads every market-feed headline in
+its window, linked or not, and nothing else. The market feed's pruning deletes
 only its own old, unlinked articles (decision 60). And a lexicon re-score reads
 only originals the current lexicon has not scored, so it adds beside older
 opinions and a second pass finds nothing.
@@ -16,11 +14,11 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from app.news.market_feed import SUSPECT_WINDOW
 from app.news.queries import (
     count_unscored_articles,
     load_market_headlines,
     load_unscored_articles,
-    load_window_headlines,
     prune_market_articles,
     store_sentiment,
 )
@@ -65,48 +63,19 @@ def _link(connection: object, article_id: str, instrument_id: str) -> None:
     )
 
 
-def test_window_headlines_carry_every_linked_symbol(migrated: Engine) -> None:
-    with migrated.connect() as connection, connection.begin() as transaction:
-        nvda = _instrument(connection, "NVDA")
-        msft = _instrument(connection, "MSFT")
-        both = _article(connection, "both", "Nvidia and Microsoft build", NOW)
-        one = _article(connection, "one", "Nvidia ships", NOW - timedelta(hours=1))
-        unlinked = _article(connection, "none", "Rates hold", NOW)
-        old = _article(connection, "old", "Nvidia last month", NOW - timedelta(days=30))
-        _link(connection, both, nvda)
-        _link(connection, both, msft)
-        _link(connection, one, nvda)
-        _link(connection, old, nvda)
-
-        headlines = load_window_headlines(connection, since=NOW - timedelta(days=7))
-        transaction.rollback()
-
-    by_id = {h.article_id: h for h in headlines}
-    assert set(by_id) == {both, one}, "an unlinked or out-of-window headline was read"
-    assert unlinked not in by_id
-    assert by_id[both].instruments == ("MSFT", "NVDA")
-    assert by_id[one].instruments == ("NVDA",)
-
-
 def test_market_headlines_are_read_linked_or_not_and_other_unlinked_ones_are_not(
     migrated: Engine,
 ) -> None:
     with migrated.connect() as connection, connection.begin() as transaction:
         nvda = _instrument(connection, "NVDA")
-        market = _article(connection, "m", "Bond yields spike", NOW, feed="market")
+        _article(connection, "m", "Bond yields spike", NOW, feed="market")
         market_linked = _article(connection, "ml", "Nvidia lifts chip stocks", NOW, feed="market")
-        noise = _article(connection, "n", "Fiber-rich breakfasts", NOW)  # the old search API
+        _article(connection, "n", "Fiber-rich breakfasts", NOW)  # the old search API
         _link(connection, market_linked, nvda)
 
-        headlines = load_window_headlines(connection, since=NOW - timedelta(days=7))
-        recent = load_market_headlines(connection, since=NOW - timedelta(days=1))
+        recent = load_market_headlines(connection, since=NOW - SUSPECT_WINDOW)
         transaction.rollback()
 
-    by_id = {h.article_id: h for h in headlines}
-    assert set(by_id) == {market, market_linked}
-    assert noise not in by_id
-    assert by_id[market].instruments == ()
-    assert by_id[market_linked].instruments == ("NVDA",)
     assert sorted(recent) == [
         ("example.test", "Bond yields spike"),
         ("example.test", "Nvidia lifts chip stocks"),
@@ -114,7 +83,7 @@ def test_market_headlines_are_read_linked_or_not_and_other_unlinked_ones_are_not
 
 
 def test_pruning_deletes_only_old_unlinked_market_articles(migrated: Engine) -> None:
-    before = NOW - timedelta(days=21)
+    before = NOW - SUSPECT_WINDOW
     with migrated.connect() as connection, connection.begin() as transaction:
         nvda = _instrument(connection, "NVDA")
         gone = _article(

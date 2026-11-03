@@ -152,7 +152,7 @@ async def resolve_instrument(
 ) -> InstrumentResolution:
     resolution = await market.resolve(query)
     # Whether the universe holds it: a priceable symbol outside the universe is
-    # never offered for a topic, and the admin panel reports it as a gap.
+    # never found by an agent's theme search, and the admin panel reports it as a gap.
     return resolution.model_copy(
         update={"universe": universe_status(resolution.resolved, membership)}
     )

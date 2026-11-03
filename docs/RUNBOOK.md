@@ -121,7 +121,7 @@ curl -s -X POST http://127.0.0.1:8089/internal/runs \
 ```
 
 Kinds: `backfill`, `instrument_metadata`, `snapshot`, `news_collect`, `portfolio_scan`,
-`topic_scan`, `proposal_sweep`, `topic_discovery`, `daily_digest`, `universe_rescreen`. The answer carries the run's
+`proposal_sweep`, `daily_digest`, `universe_rescreen`. The answer carries the run's
 status and its result. Replaying is safe for every kind: each writes idempotently (observations
 and notifications carry a `dedupe_key`; the backfill rewrites only its own rows). The one kind to
 think twice about is **`daily_digest`**: a second digest the same day splits the day's deferred
@@ -132,8 +132,8 @@ takes no `userId`. It answers 202 once the AI service has it, and the AI service
 in the background - half an hour or more, as Yahoo rate-limits it; follow it in `runs` or on the
 Admin page. And through this endpoint it runs only when **due** - the snapshot last loaded is 91
 days old - so a manual trigger usually answers `not due`. To rescreen now, use the Admin page's
-**Rescreen universe** button (audited), which is never held back. It rewrites what every topic
-resolves against: think twice, as with the digest. A failed rescreen is retried the same day by
+**Rescreen universe** button (audited), which is never held back. It rewrites what the agents'
+theme search (`search_universe`) resolves against: think twice, as with the digest. A failed rescreen is retried the same day by
 any trigger and resumes from its fetch cache. One whose process died (no heartbeat for 5 minutes)
 is closed as `failed` by the next claim of any day - the hourly CronJob's or the button's - with
 `stats.supersededBy` naming the run that took over, which resumes from the same cache; no row
@@ -353,8 +353,8 @@ In this order; each step is idempotent or refuses to repeat.
 
 ### What production deliberately does without (D350)
 
-- **Yahoo's company descriptions** are not loaded: topic resolution answers `unavailable` with
-  `universe.state: not_loaded`. Loading them is a copy of `descriptions.local.jsonl` to
+- **Yahoo's company descriptions** are not loaded: the agents' theme search
+  (`search_universe`) finds nothing. Loading them is a copy of `descriptions.local.jsonl` to
   `~/traders/data/universe/` and a mount - decided together with the legal text.
 - **Prices come from `yfinance`** and headlines from GDELT and Yahoo, with no fixture fallback:
   an unavailable price is unpriced. Acceptable for the private phase only; decided again before

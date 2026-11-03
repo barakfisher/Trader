@@ -48,8 +48,8 @@ const HOUR = 60 * MINUTE;
 /**
  * Every limit. Measured before choosing (compose, 2026-09-30 to 2026-10-22, two
  * users): the busiest hour held 3 assistant questions, 2 manual scans, 2
- * instruction checks and 1 re-check; the busiest minute 7 holdings and 6 topics
- * created (an import, a topic burst). Each limit leaves a person working by
+ * instruction checks and 1 re-check; the busiest minute 7 holdings created (an
+ * import). Each limit leaves a person working by
  * hand well inside it and stops a script within the hour.
  */
 export const RATE_LIMITS = {
@@ -108,8 +108,6 @@ export const RATE_LIMITS = {
    * its sums without bound (security review of D340).
    */
   cashMovement: { points: 60, durationSeconds: HOUR },
-  /** A topic resolved, created or renamed: an embedding and a market-data resolve. */
-  topicResolve: { points: 60, durationSeconds: HOUR },
   /** A concept searched: an embedding. */
   conceptSearch: { points: 120, durationSeconds: HOUR },
 } as const satisfies Record<string, RateLimit>;

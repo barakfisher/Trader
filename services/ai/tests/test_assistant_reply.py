@@ -126,7 +126,7 @@ def test_sources_come_from_the_tools_that_ran() -> None:
             "name": "explain_concept",
             "result": {"excerpts": [{"concept": "drawdown", "title": "Drawdown"}]},
         },
-        {"name": "get_topics", "result": {"error": "bad"}},
+        {"name": "get_research", "result": {"error": "bad"}},
     ]
 
     found = sources(calls)
@@ -206,7 +206,7 @@ def test_a_result_that_carries_an_error_field_is_still_a_source() -> None:
             },
         },
         {"name": "get_universe_info", "result": {"symbol": {"symbol": "RIVN", "known": True}}},
-        {"name": "get_topics", "result": {"error": "no such topic"}},
+        {"name": "get_research", "result": {"error": "no such holding"}},
     ]
 
     assert sources(calls) == [

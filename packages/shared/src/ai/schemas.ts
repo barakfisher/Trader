@@ -170,24 +170,6 @@ export const portfolioScanResponseSchema = z.object({
   stats: scanStatsSchema,
 });
 
-// Same default/default_factory split as `scanStatsSchema`: counters always
-// present, the two maps optional.
-export const topicScanStatsSchema = z.object({
-  topics: z.number().int(),
-  topics_measured: z.number().int(),
-  instruments: z.number().int(),
-  findings: z.number().int(),
-  already_known: z.number().int(),
-  narrated_by_llm: z.number().int(),
-  narration_fallbacks: z.record(z.string(), z.number().int()).optional(),
-  skipped: z.record(z.string(), z.string()).optional(),
-});
-
-export const topicScanResponseSchema = z.object({
-  observations: z.array(observationSchema),
-  stats: topicScanStatsSchema,
-});
-
 // Counters always present; lists and the map optional (default_factory).
 export const newsCollectResponseSchema = z.object({
   fetched: z.number().int(),
@@ -213,36 +195,6 @@ export const newsCollectResponseSchema = z.object({
       }),
     )
     .optional(),
-});
-
-const discoveredHeadlineSchema = z.object({
-  article_id: z.string(),
-  title: z.string(),
-  source: z.string(),
-  published_at: z.string().nullable(),
-});
-
-const discoveredPhraseSchema = z.object({
-  phrase: z.string(),
-  words: z.array(z.string()),
-  story_count: z.number().int(),
-  article_count: z.number().int(),
-  source_count: z.number().int(),
-  lead_instrument: z.string().nullable().optional(),
-  lead_instrument_articles: z.number().int(),
-  lead_country: z.string().nullable().optional(),
-  lead_country_name: z.string().nullable().optional(),
-  lead_country_articles: z.number().int(),
-  headlines: z.array(discoveredHeadlineSchema),
-});
-
-export const topicDiscoverResponseSchema = z.object({
-  since: z.string(),
-  days: z.number().int(),
-  headlines: z.number().int(),
-  min_stories: z.number().int(),
-  min_sources: z.number().int(),
-  phrases: z.array(discoveredPhraseSchema).optional(),
 });
 
 export const dailyClosePointSchema = z.object({
@@ -565,14 +517,8 @@ export type _AssertBackfill = Expect<
 export type _AssertPortfolioScan = Expect<
   Equal<z.infer<typeof portfolioScanResponseSchema>, Schemas['PortfolioScanResponse']>
 >;
-export type _AssertTopicScan = Expect<
-  Equal<z.infer<typeof topicScanResponseSchema>, Schemas['TopicScanResponse']>
->;
 export type _AssertNewsCollect = Expect<
   Equal<z.infer<typeof newsCollectResponseSchema>, Schemas['NewsCollectResponse']>
->;
-export type _AssertTopicDiscover = Expect<
-  Equal<z.infer<typeof topicDiscoverResponseSchema>, Schemas['TopicDiscoverResponse']>
 >;
 export const narrationConfigSchema = z.object({
   provider: z.string(),
@@ -680,76 +626,6 @@ export type _AssertConceptDocument = Expect<
 
 export type _AssertHealthResponse = Expect<
   Equal<z.infer<typeof healthResponseSchema>, Schemas['HealthResponse']>
->;
-
-export const topicHolderSchema = z.object({
-  etf: z.string(),
-  // A fraction of the fund: "0.108" is 10.8%. A decimal string, like every
-  // quantity that crosses the wire (guideline 4).
-  weight: decimalString,
-});
-
-export const topicCandidateSchema = z.object({
-  // `instruments.id`, which is what a confirmed topic stores - so confirming
-  // never has to look a symbol up a second time.
-  instrument_id: z.string(),
-  symbol: z.string(),
-  name: z.string().nullable(),
-  asset_class: z.string(),
-  sector: z.string().nullable(),
-  industry: z.string().nullable(),
-  similarity: z.number(),
-  // Market cap or net assets, in minor units of `size_currency`. Null when
-  // unknown - never zero, which would sort as the smallest company there is.
-  size_minor: minorUnits.nullable(),
-  size_currency: z.string().nullable(),
-  // A band, never a percentage: a cosine is not a probability.
-  confidence: z.enum(['confident', 'weak']),
-  // Quoted verbatim from the instrument's own description, never written.
-  rationale: z.string(),
-  held_by: z.array(topicHolderSchema).optional(),
-});
-
-export const topicInterpretationSchema = z.object({
-  label: z.string().nullable(),
-  candidates: z.array(topicCandidateSchema),
-});
-
-export const universeCoverageSchema = z.object({
-  state: z.enum(['ready', 'partially_embedded', 'not_embedded', 'not_loaded']),
-  profiles: z.number().int(),
-  embedded: z.number().int(),
-});
-
-export const topicResolveResponseSchema = z.object({
-  topic: z.string(),
-  // Four values for four situations. `none` means the universe was searched
-  // and nothing in it is about the topic; `unavailable` means it was not
-  // searched at all, because this installation has no universe to search. The
-  // two must never be shown to a reader as the same thing.
-  verdict: z.enum(['confident', 'weak', 'none', 'unavailable']),
-  best_similarity: z.number().nullable(),
-  refuse_below: z.number(),
-  confident_above: z.number(),
-  interpretations: z.array(topicInterpretationSchema).optional(),
-  ambiguous: z.boolean(),
-  universe: universeCoverageSchema,
-  embedding_model: z.string(),
-  vector_is_semantic: z.boolean(),
-});
-
-export type _AssertTopicHolder = Expect<Equal<z.infer<typeof topicHolderSchema>, Schemas['TopicHolder']>>;
-export type _AssertTopicCandidate = Expect<
-  Equal<z.infer<typeof topicCandidateSchema>, Schemas['TopicCandidateOut']>
->;
-export type _AssertTopicInterpretation = Expect<
-  Equal<z.infer<typeof topicInterpretationSchema>, Schemas['TopicInterpretationOut']>
->;
-export type _AssertUniverseCoverage = Expect<
-  Equal<z.infer<typeof universeCoverageSchema>, Schemas['UniverseCoverageOut']>
->;
-export type _AssertTopicResolveResponse = Expect<
-  Equal<z.infer<typeof topicResolveResponseSchema>, Schemas['TopicResolveResponse']>
 >;
 
 export const profileRequestResponseSchema = z.object({

@@ -43,7 +43,6 @@ import { logger } from '../logger.js';
 import { messagesFor, observationTextIn, type Messages } from '../notify/messages.js';
 import { groupAlerts, withMarketLine, type AlertGroup } from './holdingAlerts.js';
 import { announcementFor } from './narrationNotice.js';
-import { gatherTopicDigest, renderTopicSection } from './topicDigest.js';
 import type { Notifier, OutboundNotification } from '../notify/notifier.js';
 import {
   notificationDedupeKey,
@@ -302,8 +301,6 @@ export function settingsForNotification(
 export interface DigestResult {
   /** Findings rolled into this digest. Zero is a quiet day, not a failure. */
   entries: number;
-  /** Topics in the digest's topic section; zero when no topic had anything to report. */
-  topics: number;
   delivered: boolean;
   error?: string;
 }
@@ -323,16 +320,7 @@ export interface DigestResult {
  * recoverable, because the next digest would skip exactly the entries nobody
  * ever saw.
  */
-/**
- * `now` decides which day "today" is for the topic section. Injectable so a test
- * pins it: the first version read the clock here, and its test passed until the
- * calendar moved past the date its rows were written for.
- */
-export async function sendDigest(
-  user: UserRow,
-  notifier: Notifier,
-  now: Date = new Date(),
-): Promise<DigestResult> {
+export async function sendDigest(user: UserRow, notifier: Notifier): Promise<DigestResult> {
   const pending = await listPendingDigest(user.id);
   // Read first, for the language every line below is written in. The mute it
   // also carries is applied further down.
@@ -355,14 +343,8 @@ export async function sendDigest(
     ),
     settings.language,
   );
-  // The topic section is gathered even when nothing was deferred: a topic that
-  // moved today is worth a digest on its own (FR-13), and a quiet day with no
-  // topic news still sends nothing - see topicDigest.ts.
-  const topicEntries = await gatherTopicDigest(user, now);
-  const topicSection = renderTopicSection(topicEntries, settings.language);
-  const topics = topicSection === null ? 0 : topicEntries.length;
-  if (pending.length === 0 && topicSection === null) {
-    return { entries: 0, topics: 0, delivered: false };
+  if (pending.length === 0) {
+    return { entries: 0, delivered: false };
   }
 
   // Read but not enforced here: quiet hours gate *interruptions*, and the
@@ -377,18 +359,16 @@ export async function sendDigest(
     : await notifier
         .send({
           userId: user.id,
-          title: messages.digest.title(findings.length, topics, narrationLine !== null, modelFallbacks, scansGaveUp),
+          title: messages.digest.title(findings.length, narrationLine !== null, modelFallbacks, scansGaveUp),
           // The digest names how many findings and of what kind. It does not
           // restate their figures: those were evidence-validated when the
           // observation was written, and re-rendering them here would be a
           // second place for a number to drift from the evidence behind it.
-          // The topic section quotes stored headlines for the same reason.
           body: [
             findings.length > 0 ? summariseDigest(findings, messages) : null,
             narrationLine,
             fallbackLine,
             gaveUpLine,
-            topicSection,
           ]
             .filter((part): part is string => part !== null)
             .join('\n\n'),
@@ -406,12 +386,11 @@ export async function sendDigest(
   }
 
   logger().info(
-    { userId: user.id, entries: pending.length, topics, delivered: delivery.delivered },
+    { userId: user.id, entries: pending.length, delivered: delivery.delivered },
     'notification.digest',
   );
   return {
     entries: pending.length,
-    topics,
     delivered: delivery.delivered,
     ...(delivery.error === undefined ? {} : { error: delivery.error }),
   };

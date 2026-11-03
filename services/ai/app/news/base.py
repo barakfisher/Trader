@@ -12,9 +12,9 @@ Two differences from the market-data contract, both forced by what news is:
     floor to a freshness window (`quote_granularity_seconds`); an article has a
     publication time that belongs to the publisher, and rounding it would misdate
     the event. Dedupe is done by content hash instead - see `app/news/dedupe.py`.
-  * `fetch_for_query` exists beside `fetch_for_symbols` because Milestone 5's
-    topics are free text (FR-10) and a symbol list cannot express "small modular
-    reactors". Both return the same type, so the pipeline treats them alike.
+  * `fetch_for_query` exists beside `fetch_for_symbols` for free text: a symbol
+    list cannot express "small modular reactors". Both return the same type, so
+    the pipeline treats them alike.
 
 A provider returns `RawArticle`s and nothing more: no entity links, no sentiment,
 no relevance judgement. Even when the upstream API was queried per symbol and

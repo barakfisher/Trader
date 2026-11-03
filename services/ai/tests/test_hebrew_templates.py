@@ -26,13 +26,12 @@ from app.analysis import (
 )
 from app.analysis.findings import Finding, FindingKind
 from app.analysis.price_series import PricePoint
-from app.analysis.topic_move import TopicMember, topic_move_findings
 from app.narration import TRANSLATED_LANGUAGES, localize, narrate
 from app.narration.evidence_validator import unsourced_figures
 from app.narration.hebrew_templates import explanation_for, headline_for
 
 NOW = datetime(2026, 9, 16, 14, 0, tzinfo=UTC)
-ISOLATED = re.compile("[\u2066\u2068][^\u2066\u2068\u2069]*\u2069")
+ISOLATED = re.compile("\u2066[^\u2066\u2069]*\u2069")
 
 
 def series(closes: list[int], currency: str = "USD") -> list[PricePoint]:
@@ -47,7 +46,6 @@ def findings_of_every_kind() -> list[Finding]:
     thresholds = AnalysisThresholds()
     moving = series([10000 + (index % 3) * 20 for index in range(40)] + [9100])
     falling = series([15000] + [14000 - index * 100 for index in range(20)])
-    quiet = [10000, 10050] * 15 + [10000]
     findings = [
         *price_move_findings("TEST", moving, thresholds),
         *sigma_move_findings("TEST", moving, thresholds),
@@ -61,16 +59,6 @@ def findings_of_every_kind() -> list[Finding]:
             thresholds,
             base_currency="USD",
         ),
-        *topic_move_findings(
-            "5f0c1d2e-0000-4000-8000-000000000001",
-            "uranium",
-            [
-                TopicMember(symbol="CCJ", points=series([*quiet, 9400])),
-                TopicMember(symbol="NXE", points=series([*quiet, 9500])),
-                TopicMember(symbol="UEC", points=series([*quiet, 9600])),
-            ],
-            thresholds,
-        ).findings,
     ]
     return findings
 
@@ -104,13 +92,6 @@ def test_every_rule_has_its_own_hebrew_headline(finding: Finding):
     # The fallback for an unknown kind is "<symbol>: <kind>", which would pass
     # the checks above while saying nothing.
     assert finding.kind.replace("_", " ") not in headline_for(finding)
-
-
-def test_a_topic_is_named_by_its_label_not_its_id():
-    (finding,) = [finding for finding in FINDINGS if finding.kind == "topic_move"]
-    # A label is the user's own text, in either script: first-strong, not forced LTR.
-    assert "\u2068uranium\u2069" in headline_for(finding)
-    assert finding.subject_ref.split(":")[-1] not in headline_for(finding)
 
 
 def test_every_translated_language_is_localised_and_serialisable():

@@ -8,7 +8,6 @@
  * appended to its end and every rebase met there.
  */
 
-export type { TopicEvidence } from '@traders/shared';
 export { transaction } from './pool.js';
 
 export * from './queries/users.js';
@@ -44,9 +43,7 @@ export * from './queries/tradeProposals.js';
 export * from './queries/userSettings.js';
 export * from './queries/notifications.js';
 export * from './queries/telegram.js';
-export * from './queries/topics.js';
 export * from './queries/articles.js';
-export * from './queries/topicProposals.js';
 export * from './queries/adminUsers.js';
 export * from './queries/research.js';
 export * from './queries/sessions.js';

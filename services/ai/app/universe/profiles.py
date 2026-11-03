@@ -18,8 +18,8 @@ a different table for the reason migration 0014 gives:
   vectors from two models are the same width and mean nothing to each other.
 
 **Only `membership = 'screened'` answers a topic.** Every read below that a
-topic reaches - the search, the held-by-an-ETF path, the holdings matcher and
-the coverage count - filters on it, so a profile fetched for one user's small
+topic reaches - the search, the held-by-an-ETF path and the holdings matcher -
+filters on it, so a profile fetched for one user's small
 holding (`on_demand`, migration 0030) never changes what a topic resolves to.
 
 Existing `instruments` rows are never overwritten: a holding's instrument may
@@ -35,7 +35,6 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
-from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import text
@@ -298,7 +297,7 @@ def load_universe(
 def mark_dropped(connection: Connection, members: set[str]) -> int:
     """Mark every screened profile the snapshot does not hold as `dropped`. How many.
 
-    Kept, not deleted: holdings and topics reference instruments, and a listing
+    Kept, not deleted: holdings and observations reference instruments, and a listing
     that fell below the floor this quarter may be back the next - `load_universe`
     promotes it again then. Only screened profiles: an on-demand one was never
     the snapshot's to drop.
@@ -808,71 +807,3 @@ def profiles_by_id(
         {"embedding": to_pgvector(embedding), "model": model, "ids": ids},
     ).all()
     return [_profile_match(row) for row in rows]
-
-
-class UniverseState(StrEnum):
-    """Whether topics can be resolved on this installation, and if not, why not.
-
-    Kept apart from a resolution's own verdict on purpose. "Nothing in the
-    universe is about this topic" is a finding about the topic; "there is no
-    universe to look in" is a finding about the installation, and reporting the
-    second as the first would tell the user their topic is unknown when the
-    truth is that nobody ran the loader.
-    """
-
-    #: Every described profile carries a vector from the configured model.
-    READY = "ready"
-    #: Some profiles are embedded by the configured model and some are not.
-    #: Resolution runs, over the embedded part only, and says so.
-    PARTIALLY_EMBEDDED = "partially_embedded"
-    #: Profiles exist, but none has a vector from the configured model: the
-    #: loader ran with `--no-embed`, or `EMBEDDINGS_PROVIDER` changed since.
-    NOT_EMBEDDED = "not_embedded"
-    #: No profile at all. `ingest_universe.py` has not run here, or ran without
-    #: a descriptions file (they are not committed; see migration 0015).
-    NOT_LOADED = "not_loaded"
-
-
-@dataclass(frozen=True, slots=True)
-class UniverseCoverage:
-    #: Described instruments in `instrument_profiles`: the most a topic can see.
-    profiles: int
-    #: Of those, how many carry a vector from the model being asked about.
-    embedded: int
-
-    @property
-    def state(self) -> UniverseState:
-        if self.profiles == 0:
-            return UniverseState.NOT_LOADED
-        if self.embedded == 0:
-            return UniverseState.NOT_EMBEDDED
-        if self.embedded < self.profiles:
-            return UniverseState.PARTIALLY_EMBEDDED
-        return UniverseState.READY
-
-    @property
-    def searchable(self) -> bool:
-        return self.embedded > 0
-
-
-def coverage(connection: Connection, *, model: str) -> UniverseCoverage:
-    """How much of the universe a search with `model` would actually see.
-
-    The count that matters is per model, because `search_profiles` filters on
-    it: a universe embedded by one model is invisible to another, and without
-    this a changed `EMBEDDINGS_PROVIDER` would read as "no topic matches
-    anything" rather than as "nothing has been embedded for this model".
-    """
-    row = connection.execute(
-        text(
-            """
-            SELECT count(*) AS profiles,
-                   count(*) FILTER (WHERE embedding IS NOT NULL
-                                      AND embedding_model = :model) AS embedded
-              FROM instrument_profiles
-             WHERE membership = 'screened'
-            """
-        ),
-        {"model": model},
-    ).one()
-    return UniverseCoverage(profiles=int(row.profiles), embedded=int(row.embedded))

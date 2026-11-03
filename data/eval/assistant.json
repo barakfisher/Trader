@@ -53,10 +53,6 @@
       "status": "exists",
       "what": "the user's observations and why each was raised"
     },
-    "get_topics": {
-      "status": "exists",
-      "what": "followed topics, their instruments, rationale and moves"
-    },
     "replay_scan": {
       "status": "exists",
       "what": "a recorded scan, step by step: briefing, tool calls, results, decision (added 2026-10-11)"
@@ -71,32 +67,11 @@
     }
   },
   "fixtures": {
-    "demo": "Holdings NVDA, AMD, SMR, URA and CCJ; the real portfolio records no cash (it is passive - only an agent holds paper cash); a small move today (well under 5%). One followed topic, 'Uranium & Nuclear Energy'. Two agents: Momentum, whose last scan proposed buying SMR (pending) with the uranium topic in its evidence; Value, whose earlier proposal to sell URA was rejected and whose last scan today failed with invalid_answer. A drawdown observation yesterday. Stored news for TSLA, SMR and the market. A loaded universe snapshot with one completed rescreen.",
+    "demo": "Holdings NVDA, AMD, SMR, URA and CCJ; the real portfolio records no cash (it is passive - only an agent holds paper cash); a small move today (well under 5%). Two agents: Momentum, whose last scan proposed buying SMR (pending); Value, whose earlier proposal to sell URA was rejected and whose last scan today failed with invalid_answer. A drawdown observation yesterday. Stored news for TSLA, SMR and the market. A loaded universe snapshot with one completed rescreen.",
     "empty": "No holdings and no agents.",
     "unpriced": "The demo account, plus one holding the market data provider returns no price for."
   },
   "cases": [
-    {
-      "id": "user-topics-explained",
-      "group": "topics",
-      "source": "user",
-      "fixture": "demo",
-      "turns": [
-        {
-          "user": "Explain topics to me",
-          "expect": {
-            "outcome": "answer",
-            "tools_any": [
-              "get_product_guide"
-            ],
-            "links": [
-              "/topics"
-            ],
-            "behaviour": "A topic is a free-text theme the user follows; the app resolves it to related stocks and ETFs and watches how they move. Mentions the user's followed topic as an example."
-          }
-        }
-      ]
-    },
     {
       "id": "user-app-tour",
       "group": "product",
@@ -113,7 +88,6 @@
             "links": [
               "/",
               "/insights",
-              "/topics",
               "/agents",
               "/ask",
               "/settings"
@@ -140,25 +114,7 @@
               "/",
               "/insights"
             ],
-            "behaviour": "A day in order: open the dashboard, read new insights, review pending proposals and approve or reject them, follow a topic. Links to each step."
-          }
-        }
-      ]
-    },
-    {
-      "id": "user-agents-use-topics",
-      "group": "topics",
-      "source": "user",
-      "fixture": "demo",
-      "turns": [
-        {
-          "user": "How does agents use topics?",
-          "expect": {
-            "outcome": "answer",
-            "tools_any": [
-              "get_product_guide"
-            ],
-            "behaviour": "Each scan's briefing includes the user's followed topics and their instruments; an agent can also search the universe by theme with its search tool. Does not claim topics force trades."
+            "behaviour": "A day in order: open the dashboard, read new insights, review pending proposals and approve or reject them, look at what the agents decided. Links to each step."
           }
         }
       ]
@@ -219,7 +175,7 @@
             "tools_any": [
               "get_universe_info"
             ],
-            "behaviour": "US primary-exchange stocks with a market cap of at least $1B and ETFs with net assets of at least $100M, screened from Yahoo Finance; ETF holdings included; descriptions embedded for topic matching. The thresholds come from the tool, not memory."
+            "behaviour": "US primary-exchange stocks with a market cap of at least $1B and ETFs with net assets of at least $100M, screened from Yahoo Finance; ETF holdings included; descriptions embedded for the agents' theme search. The thresholds come from the tool, not memory."
           }
         }
       ]
@@ -621,7 +577,7 @@
             "tools_any": [
               "get_product_guide"
             ],
-            "behaviour": "Lists what it covers - the account, agents, tickers, topics, the universe, concepts, the app - with an example question for each, and what it will not do."
+            "behaviour": "Lists what it covers - the account, agents, tickers, the universe, concepts, the app - with an example question for each, and what it will not do."
           }
         }
       ]
@@ -760,118 +716,6 @@
       ]
     },
     {
-      "id": "topic-membership-rule",
-      "group": "topics",
-      "source": "claude",
-      "fixture": "demo",
-      "turns": [
-        {
-          "user": "How do you decide which stocks belong to a topic?",
-          "expect": {
-            "outcome": "answer",
-            "tools_any": [
-              "get_product_guide"
-            ],
-            "behaviour": "In plain words: company descriptions are matched to the topic's meaning, and the holdings of ETFs about the topic are added."
-          }
-        }
-      ]
-    },
-    {
-      "id": "topic-members",
-      "group": "topics",
-      "source": "claude",
-      "fixture": "demo",
-      "turns": [
-        {
-          "user": "Which stocks are in my \"Uranium & Nuclear Energy\" topic?",
-          "expect": {
-            "outcome": "answer",
-            "tools_any": [
-              "get_topics"
-            ],
-            "links": [
-              "/topics"
-            ],
-            "behaviour": "Lists the topic's instruments from the tool, with why each matched."
-          }
-        }
-      ]
-    },
-    {
-      "id": "topic-why-member",
-      "group": "topics",
-      "source": "claude",
-      "fixture": "demo",
-      "turns": [
-        {
-          "user": "Why is CCJ in my uranium topic?",
-          "expect": {
-            "outcome": "answer",
-            "tools_any": [
-              "get_topics"
-            ],
-            "behaviour": "The stored rationale for CCJ: the quoted description sentence or the ETF that holds it."
-          }
-        }
-      ]
-    },
-    {
-      "id": "topic-try-new",
-      "group": "topics",
-      "source": "claude",
-      "fixture": "demo",
-      "turns": [
-        {
-          "user": "Would \"quantum computing\" make a good topic?",
-          "expect": {
-            "outcome": "answer",
-            "tools_any": [
-              "search_universe"
-            ],
-            "behaviour": "Shows what the topic would contain, or that it finds nothing; does not follow it for the user."
-          }
-        }
-      ]
-    },
-    {
-      "id": "topic-moves",
-      "group": "topics",
-      "source": "claude",
-      "fixture": "demo",
-      "turns": [
-        {
-          "user": "How did my topics move this week?",
-          "expect": {
-            "outcome": "answer",
-            "tools_any": [
-              "get_topics"
-            ],
-            "behaviour": "The followed topic's move this week, from the tool."
-          }
-        }
-      ]
-    },
-    {
-      "id": "topic-agent-traded-on-topic",
-      "group": "topics",
-      "source": "claude",
-      "fixture": "demo",
-      "turns": [
-        {
-          "user": "Did any of my agents trade something because of a topic I follow?",
-          "expect": {
-            "outcome": "answer",
-            "tools_any": [
-              "get_proposals",
-              "replay_scan"
-            ],
-            "behaviour": "Momentum's SMR proposal names the uranium topic in its evidence; says so and links it. Does not claim a link the records do not show."
-          }
-        }
-      ]
-    },
-    {
       "id": "universe-what",
       "group": "universe",
       "source": "claude",
@@ -884,7 +728,7 @@
             "tools_any": [
               "get_universe_info"
             ],
-            "behaviour": "The US stocks and ETFs the app knows about, used for topics, agents and lookups."
+            "behaviour": "The US stocks and ETFs the app knows about, used by the agents and for lookups."
           }
         }
       ]

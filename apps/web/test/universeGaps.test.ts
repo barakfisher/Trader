@@ -37,20 +37,9 @@ describe('a universe gap, in words', () => {
   });
 
   it('marks a US listing the universe lacks as the gap a rescreen could close', () => {
-    const tiny = gap('universe_gap_missing_ticker', { symbol: 'TINY', source: 'topic', gap: 'not_in_universe' });
-    expect(gapExplanation(tiny)).toMatch(/^added to a topic; a US listing the universe lacks/);
+    const tiny = gap('universe_gap_missing_ticker', { symbol: 'TINY', source: 'holding', gap: 'not_in_universe' });
+    expect(gapExplanation(tiny)).toMatch(/^added as a holding; a US listing the universe lacks/);
     expect(isRealGap(tiny)).toBe(true);
-  });
-
-  it('gives a topic its best score beside the gate', () => {
-    const topic = gap('universe_gap_low_confidence', {
-      topic: 'quantum computing',
-      bestSimilarity: 0.1834,
-      refuseBelow: 0.23,
-    });
-    expect(gapSubject(topic)).toBe('“quantum computing”');
-    expect(gapExplanation(topic)).toBe('topic matched nothing: best score 0.18, gate 0.23');
-    expect(isRealGap(topic)).toBe(true);
   });
 
   it('says a symbol nothing could price was unpriced', () => {
@@ -62,7 +51,7 @@ describe('a universe gap, in words', () => {
   it('says what became of a missing listing, and a closed gap is no longer real', () => {
     const detail = { symbol: 'BYND', source: 'holding', gap: 'not_in_universe', rule: null };
     const described = gap('universe_gap_missing_ticker', detail, 'on_demand');
-    expect(gapProfile(described)).toMatch(/^profiled on demand; no topic is answered from it/);
+    expect(gapProfile(described)).toMatch(/^profiled on demand; agents' searches by theme skip it/);
     expect(isRealGap(described)).toBe(true);
 
     const admitted = gap('universe_gap_missing_ticker', detail, 'screened');

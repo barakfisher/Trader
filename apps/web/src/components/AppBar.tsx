@@ -11,7 +11,6 @@ import {
   Microscope,
   Settings,
   ShieldCheck,
-  Tags,
   X,
 } from 'lucide-react';
 
@@ -30,7 +29,7 @@ import { BrandMark } from './BrandMark.tsx';
  * The bar every signed-in page shares, rendered once by the root route.
  *
  * It used to be the dashboard's own header, so every other page carried a
- * "Back to portfolio" button and reaching Topics from Settings took two
+ * "Back to portfolio" button and reaching Agents from Settings took two
  * clicks. Page-specific controls - the portfolio's Refresh and its price age -
  * stay on their page; this bar holds only places. Targets and Import act on
  * the holdings, so they are on the holdings card (UX5).
@@ -61,7 +60,6 @@ export const AppBar = observer(function AppBar() {
     // Proposals is a tab of Insights (decision 134), so its count is here.
     { to: '/insights', label: t('nav.insights'), icon: Lightbulb, count: openCount, dot: hasUnread },
     { to: '/agents', label: t('nav.agents'), icon: Bot },
-    { to: '/topics', label: t('nav.topics'), icon: Tags },
     { to: '/research', label: t('nav.research'), icon: Microscope },
     { to: '/ask', label: t('nav.ask'), icon: MessageCircleQuestion },
     // Targets is on the holdings card (UX5): it is about those rows.
@@ -139,7 +137,7 @@ export const AppBar = observer(function AppBar() {
 });
 
 type Place = {
-  to: '/insights' | '/agents' | '/topics' | '/research' | '/ask' | '/settings' | '/admin';
+  to: '/insights' | '/agents' | '/research' | '/ask' | '/settings' | '/admin';
   label: string;
   icon: typeof Bot;
   count?: number;

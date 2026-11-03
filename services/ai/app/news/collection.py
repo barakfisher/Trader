@@ -6,9 +6,9 @@ run calls. It exists because until it did, nothing called either - the corpus
 was built, tested and permanently empty.
 
 **Who is matched.** The matcher is built from the instruments the caller names,
-which the orchestrator restricts to what the user holds and what their active
-topics contain. Never the 5,294-instrument universe: company names such as
-"Target", "Block" and "Visa" are ordinary words, and a matcher that knew all of
+which the orchestrator restricts to what the user holds. Never the
+5,294-instrument universe: company names such as "Target", "Block" and "Visa"
+are ordinary words, and a matcher that knew all of
 them would link half of every article to something. The narrower list is not a
 performance choice; it is the difference between a link that means "this is
 about something you follow" and one that means "this contains a noun".
@@ -19,11 +19,12 @@ fetched before the window opened cannot be re-fetched inside it unless its
 publisher re-dated it, and then `ON CONFLICT (url_hash)` still stops the copy.
 
 **The market feed's upkeep** (decision 60), done here because this is the run
-that grows it. Unlinked market articles older than `market_retention` are
-deleted: the caller sets it to discovery's window plus a proposal's lifetime, so
-everything behind an open proposal can still be read. And the last
-`SUSPECT_WINDOW` of market headlines is checked for outlets that look like a
-ticker network not yet listed, reported in the stats for a person to judge.
+that grows it. The last `SUSPECT_WINDOW` of market headlines is checked for
+outlets that look like a ticker network not yet listed, reported in the stats
+for a person to judge - and that check is the only reader of an unlinked market
+article, so one older than `SUSPECT_WINDOW` is deleted. The retention is derived
+from the window rather than tuned beside it: lengthen the window and the
+articles it reads are kept for it.
 """
 
 from __future__ import annotations
@@ -53,7 +54,6 @@ async def collect_news(
     lookback: timedelta,
     limit_per_provider: int | None = None,
     now: datetime | None = None,
-    market_retention: timedelta | None = None,
 ) -> dict[str, object]:
     """Fetch, match, score and store one window. Returns the run's stats."""
     moment = (now or datetime.now(UTC)).astimezone(UTC)
@@ -82,12 +82,7 @@ async def collect_news(
             linked[link.symbol] = linked.get(link.symbol, 0) + 1
     stats["linked_symbols"] = linked
     stats["market_articles"] = sum(1 for item in result.articles if item.record.article.market)
-    # None when the caller did not say how long discovery needs them: keep all.
-    stats["pruned"] = (
-        prune_market_articles(connection, before=moment - market_retention)
-        if market_retention is not None
-        else 0
-    )
+    stats["pruned"] = prune_market_articles(connection, before=moment - SUSPECT_WINDOW)
     stats["suspected_networks"] = [
         {"source": s.source, "headlines": s.headlines, "templated": s.templated}
         for s in suspected_networks(

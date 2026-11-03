@@ -34,7 +34,7 @@ vi.mock('../src/db/queries.js', () => ({
   insertAdminAudit: vi.fn(async () => undefined),
   resetAccount: vi.fn(async () => ({
     reset_id: 'r-1',
-    counts: { holdings: 2, fills: 0, topics: 8 },
+    counts: { holdings: 2, fills: 0, agents: 1 },
   })),
 }));
 
@@ -81,15 +81,15 @@ describe('the account reset', () => {
 
   it('erases the groups asked for, in their canonical order, once each, for this account', async () => {
     const response = await reset({
-      groups: ['followed_topics', 'main_portfolio', 'followed_topics'],
+      groups: ['agents_trading', 'main_portfolio', 'agents_trading'],
       confirm: ACCOUNT_RESET_CONFIRMATION,
     });
     expect(response.status).toBe(200);
-    expect(queries.resetAccount).toHaveBeenCalledWith(ADMIN.id, ['main_portfolio', 'followed_topics']);
+    expect(queries.resetAccount).toHaveBeenCalledWith(ADMIN.id, ['main_portfolio', 'agents_trading']);
     expect(await response.json()).toEqual({
       resetId: 'r-1',
-      groups: ['main_portfolio', 'followed_topics'],
-      erased: { holdings: 2, fills: 0, topics: 8 },
+      groups: ['main_portfolio', 'agents_trading'],
+      erased: { holdings: 2, fills: 0, agents: 1 },
     });
   });
 

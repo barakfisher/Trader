@@ -30,7 +30,7 @@ from typing import Literal
 
 Severity = Literal["info", "notable", "high"]
 
-FindingKind = Literal["price_move", "sigma_move", "drawdown", "allocation_drift", "topic_move"]
+FindingKind = Literal["price_move", "sigma_move", "drawdown", "allocation_drift"]
 
 #: Ascending, so callers can compare or sort severities without a lookup table.
 SEVERITY_ORDER: tuple[Severity, ...] = ("info", "notable", "high")

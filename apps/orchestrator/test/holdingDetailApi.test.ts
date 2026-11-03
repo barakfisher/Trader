@@ -50,7 +50,6 @@ const queries = vi.hoisted(() => ({
   listHoldingArticles: vi.fn(async (): Promise<unknown[]> => []),
   listObservations: vi.fn(async (): Promise<unknown[]> => []),
   countObservations: vi.fn(async () => 0),
-  getLatestFinishedRun: vi.fn(async (): Promise<unknown> => null),
   getLatestInstallationRun: vi.fn(async (): Promise<unknown> => null),
 }));
 

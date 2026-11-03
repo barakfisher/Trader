@@ -34,7 +34,6 @@ import { InsightsPage } from './pages/InsightsPage.tsx';
 import { ProposalPage } from './pages/ProposalPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import { TargetsPage } from './pages/TargetsPage.tsx';
-import { TopicsPage } from './pages/TopicsPage.tsx';
 import { ResearchPage } from './pages/ResearchPage.tsx';
 import { feedFiltersFrom } from './lib/feedFilters.ts';
 import { isLegacyFeedAddress } from './lib/insightsTab.ts';
@@ -106,7 +105,6 @@ const routeTree = rootRoute.addChildren([
     path: '/agents/$agentId',
     component: AgentPage,
   }),
-  createRoute({ getParentRoute: () => rootRoute, path: '/topics', component: TopicsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: '/research', component: ResearchPage }),
   createRoute({ getParentRoute: () => rootRoute, path: '/settings', component: SettingsPage }),
   createRoute({ getParentRoute: () => rootRoute, path: '/admin', component: AdminPage }),

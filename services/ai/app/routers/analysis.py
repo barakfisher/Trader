@@ -18,10 +18,7 @@ from app.analysis.pipeline import (
     ScanBenchmark,
     ScanObservation,
     ScanSubject,
-    TopicInstrument,
-    TopicSubject,
     run_portfolio_scan,
-    run_topic_scan,
 )
 from app.analysis.thresholds import AnalysisThresholds
 from app.core.logging import get_logger
@@ -33,9 +30,6 @@ from app.models import (
     PortfolioScanRequest,
     PortfolioScanResponse,
     ScanStatsOut,
-    TopicScanRequest,
-    TopicScanResponse,
-    TopicScanStatsOut,
 )
 from app.providers.price_provenance import excluded_price_sources
 
@@ -94,48 +88,6 @@ async def portfolio_scan(
     return PortfolioScanResponse(
         observations=[_observation_out(item) for item in observations],
         stats=ScanStatsOut(**vars(stats)),
-    )
-
-
-@router.post("/topic-scan", response_model=TopicScanResponse)
-async def topic_scan(
-    payload: TopicScanRequest,
-    request: Request,
-    settings: SettingsDep,
-) -> TopicScanResponse:
-    """Measure each confirmed topic as an equal-weighted basket (FLOWS F5).
-
-    Price movement only, for now: news per topic needs a news run that does not
-    exist yet, and this endpoint says nothing about news rather than implying it
-    looked.
-    """
-    topics = [
-        TopicSubject(
-            topic_id=topic.topic_id,
-            label=topic.label,
-            instruments=[
-                TopicInstrument(instrument_id=item.instrument_id, symbol=item.symbol.upper())
-                for item in topic.instruments
-            ],
-        )
-        for topic in payload.topics
-    ]
-    llm = getattr(request.app.state, "llm", None)
-
-    with get_engine().begin() as connection:
-        observations, stats = await run_topic_scan(
-            connection,
-            topics,
-            thresholds=AnalysisThresholds.from_settings(settings),
-            llm=llm,
-            known_dedupe_keys=payload.known_dedupe_keys,
-            excluded_sources=excluded_price_sources(settings.market_data_chain),
-            user_id=str(payload.user_id) if payload.user_id else None,
-        )
-
-    return TopicScanResponse(
-        observations=[_observation_out(item) for item in observations],
-        stats=TopicScanStatsOut(**vars(stats)),
     )
 
 

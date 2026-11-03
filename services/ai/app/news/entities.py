@@ -31,10 +31,6 @@ from the strongest method that matched, with a bonus for a mention in the title
 (a headline mention is what an article is about; a mention in the last paragraph
 is context) and a small bonus for repetition. It ranks evidence; it is not a
 probability and nothing should treat it as one.
-
-Topic links (FR-11) are out of scope here: topics do not exist as user data until
-Milestone 5, and `article_entities` models them as a free-text `topic_ref` so
-this module can start emitting them without a schema change.
 """
 
 from __future__ import annotations
@@ -163,7 +159,7 @@ class EntityLink:
     mentions: int
     in_title: bool
     instrument_id: str | None = None
-    entity_kind: Literal["instrument", "topic"] = "instrument"
+    entity_kind: Literal["instrument"] = "instrument"
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,14 +173,14 @@ class _Alias:
 class EntityMatcher:
     """Matches article text against a fixed instrument universe.
 
-    Built once per run from the instruments the user holds (plus, later, the ones
-    their topics resolve to) and reused for every article, because compiling a
+    Built once per run from the instruments the user holds and reused for every
+    article, because compiling a
     few dozen patterns per article would dominate the cost of the pass.
 
     The universe is a closed set by design. Recognising companies we do not hold
-    is a named-entity-recognition problem and belongs to topic discovery (FR-11),
-    not here: this pass answers "does this article concern my portfolio?", and
-    for that question every answer lives in the instruments table.
+    is a named-entity-recognition problem, not this pass's: this pass answers
+    "does this article concern my portfolio?", and for that question every answer
+    lives in the instruments table.
     """
 
     def __init__(self, instruments: list[InstrumentRef]) -> None:

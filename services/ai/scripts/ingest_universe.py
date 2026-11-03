@@ -12,10 +12,9 @@ its embedding, so a second run embeds nothing and costs nothing.
 The compose `universe` service runs this on every stack start, the way the
 `corpus` service runs the concept ingester. **No descriptions file is not a
 failure**: it exits 0 having loaded nothing new, because that is the normal
-state of a fresh clone (descriptions are not committed), and `POST
-/topics/resolve` then answers `unavailable` with `universe.state` saying why.
-It never deletes a profile, so a run without the file leaves an existing
-universe exactly as it was.
+state of a fresh clone (descriptions are not committed), and an agent's theme
+search then finds nothing until a universe is loaded. It never deletes a
+profile, so a run without the file leaves an existing universe exactly as it was.
 
 **Which snapshot** (decision 90): the newest by `as_of` of the image's and those
 a rescreen wrote to `UNIVERSE_SNAPSHOT_DIR`, and never one older than the last
@@ -26,7 +25,7 @@ hold are marked `dropped`.
 `--fixture` loads the eleven hand-written descriptions in
 `data/fixtures/universe/` instead, recorded with a fixture source and licence.
 That is for CI, which has no Yahoo text; never load it into a database used for
-real topics.
+real theme searches.
 
 Embedding uses the configured embedder (`EMBEDDINGS_PROVIDER`), exactly as the
 concept corpus does. On the fixture embedder the vectors measure shared words,
@@ -96,10 +95,10 @@ def main() -> int:
                 provenance = (DESCRIPTION_SOURCE, DESCRIPTION_LICENSE)
             if not descriptions.exists():
                 # Said on stderr and in words, because the consequence shows up
-                # far away: every topic answers `unavailable` until this exists.
+                # far away: every theme search finds nothing until this exists.
                 print(
-                    f"no descriptions at {descriptions}: nothing new can be profiled, and topics "
-                    "will resolve only against profiles already in the database. Descriptions "
+                    f"no descriptions at {descriptions}: nothing new can be profiled, and theme "
+                    "searches will see only profiles already in the database. Descriptions "
                     "are not committed; copy descriptions.local.jsonl into the universe "
                     "directory, run build_instrument_universe.py (half an hour or more), or "
                     "rescreen from the admin page.",

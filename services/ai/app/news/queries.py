@@ -28,7 +28,6 @@ from app.core.logging import get_logger
 from app.news.article import IngestedArticle
 from app.news.ingestion import KnownHashes
 from app.news.sentiment import SentimentScore
-from app.topics.discovery import Headline
 
 log = get_logger("news.queries")
 
@@ -65,8 +64,8 @@ SQL_INSERT_ARTICLE = text(
 
 SQL_ARTICLE_ID_BY_URL_HASH = text("SELECT id FROM articles WHERE url_hash = :url_hash")
 
-#: The conflict target repeats the partial index's predicate, which is how
-#: Postgres is told which of the two unique indexes on this table is meant.
+#: The conflict target repeats the partial unique index's predicate, which is how
+#: Postgres infers that index (`article_entities_instrument_uniq`).
 SQL_UPSERT_INSTRUMENT_ENTITY = text(
     """
     INSERT INTO article_entities (
@@ -210,52 +209,9 @@ def _article_id(connection: object, url_hash: str) -> str | None:
     return str(row.id) if row is not None else None
 
 
-#: The window's headlines for theme discovery (`app/topics/discovery.py`).
-#: Articles linked to an instrument, and articles the market feed kept (decision
-#: 60). Not other unlinked articles: those were fetched because a name appeared
-#: somewhere in a body, not because they are about anything, and read as themes
-#: they are noise (68 of the first 77 real GDELT articles, 2026-09-27). Exact
-#: copies are skipped (`duplicate_of_id`); near copies are grouped into stories
-#: by the caller. Undated articles are placed by when they were fetched.
-SQL_WINDOW_HEADLINES = text(
-    """
-    SELECT a.id::text AS id, a.title, a.source, a.published_at,
-           ARRAY(
-               SELECT DISTINCT i.symbol
-                 FROM article_entities e
-                 JOIN instruments i ON i.id = e.instrument_id
-                WHERE e.article_id = a.id
-                ORDER BY i.symbol
-           ) AS instruments
-      FROM articles a
-     WHERE a.duplicate_of_id IS NULL
-       AND coalesce(a.published_at, a.fetched_at) >= :since
-       AND (a.feed = 'market'
-            OR EXISTS (SELECT 1 FROM article_entities e WHERE e.article_id = a.id))
-     ORDER BY coalesce(a.published_at, a.fetched_at) DESC, a.id
-    """
-)
-
-
-def load_window_headlines(connection: object, *, since: datetime) -> list[Headline]:
-    """Every distinct headline, linked or from the market feed, published (or, if
-    undated, fetched) since `since`, with the symbols of the instruments it is linked to."""
-    rows = connection.execute(SQL_WINDOW_HEADLINES, {"since": since})  # type: ignore[attr-defined]
-    return [
-        Headline(
-            article_id=row.id,
-            title=row.title,
-            source=row.source,
-            published_at=row.published_at,
-            instruments=tuple(row.instruments or ()),
-        )
-        for row in rows
-    ]
-
-
 #: Market-feed articles nothing followed is linked to, older than `:before`.
-#: Linked ones stay: topic news and sentiment read them, whichever feed brought
-#: them. Sentiment rows and entity links go with the article (ON DELETE CASCADE);
+#: Linked ones stay: a holding's news and sentiment read them, whichever feed
+#: brought them. Sentiment rows and entity links go with the article (ON DELETE CASCADE);
 #: a copy pointing at a pruned original keeps its row (SET NULL).
 SQL_PRUNE_MARKET_ARTICLES = text(
     """

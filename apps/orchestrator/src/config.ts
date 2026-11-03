@@ -25,14 +25,8 @@ const optionalSetting = (minLength = 1) =>
     z.string().min(minLength).optional(),
   );
 
-/** Rejection memory's default cooldown; see `TOPIC_REJECTION_COOLDOWN_DAYS`. */
-export const DEFAULT_REJECTION_COOLDOWN_DAYS = 90;
-
 /** nginx alone: what stood in front of the orchestrator before `TRUSTED_PROXY_HOPS` existed. */
 export const DEFAULT_TRUSTED_PROXY_HOPS = 1;
-
-/** How long an unanswered auto-proposal stays open; see `TOPIC_PROPOSAL_TTL_DAYS`. */
-export const DEFAULT_PROPOSAL_TTL_DAYS = 14;
 
 const schema = z.object({
   APP_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -189,36 +183,6 @@ const schema = z.object({
   TELEGRAM_UPDATES: z.preprocess(
     (value) => (value === '' ? undefined : value),
     z.enum(['polling', 'webhook', 'off']).default('polling'),
-  ),
-
-  /**
-   * How long a rejected auto-proposal is remembered (FR-11), in days.
-   *
-   * Rejection memory is a cooldown rather than forever, by the user's decision
-   * on 2026-09-27: what a person follows changes, and a theme turned down in
-   * spring may be the one they want in autumn. Inside the window, a proposal
-   * that matches a rejected one is never shown (`topicMatching.ts` defines
-   * "matches"). After it, the rejected row still exists - the history is kept -
-   * but no longer suppresses anything.
-   */
-  TOPIC_REJECTION_COOLDOWN_DAYS: z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    z.coerce.number().int().min(1).max(3650).default(DEFAULT_REJECTION_COOLDOWN_DAYS),
-  ),
-
-  /**
-   * How long an auto-proposal waits for an answer before it expires, in days.
-   *
-   * At most `MAX_OPEN_PROPOSALS` proposals are open at once, so without an
-   * expiry a few ignored ones stop discovery for good. Two weeks is two
-   * discovery windows: long enough to be seen by someone who opens the app
-   * weekly, short enough that a slot is not held by a story the news has left.
-   * A product bound; nothing measured it. An expired proposal is kept, not
-   * deleted (migration 0021).
-   */
-  TOPIC_PROPOSAL_TTL_DAYS: z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    z.coerce.number().int().min(1).max(365).default(DEFAULT_PROPOSAL_TTL_DAYS),
   ),
 });
 

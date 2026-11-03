@@ -9,7 +9,7 @@
  *
  * The routes are read from the app itself, so a route added later is covered
  * without editing this file. A route with a parameter is asked with each of
- * the other user's ids in turn - agent, holding, topic, conversation,
+ * the other user's ids in turn - agent, holding, conversation,
  * observation, proposal - and every combination of them where it takes two,
  * and must answer without any of the other user's marks.
  *
@@ -128,12 +128,6 @@ const WRITE_BODIES: Record<string, unknown> = {
   'POST /research/runs': null,
   'POST /telegram/bind-token': null,
   'PUT /targets': {},
-  'POST /topics': {},
-  'POST /topics/resolve': {},
-  // AAPL, which the fake resolves: an unresolvable symbol is refused (422) before the topic is looked up.
-  'PUT /topics/:id': { label: 'Renamed', symbols: ['AAPL'] },
-  'DELETE /topics/:id': null,
-  'POST /topics/:id/reject': null,
 };
 
 /** Writes with no id in the path that name one of Omer's in the body - so they, too, must answer "not found". */
@@ -244,13 +238,6 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
         [user.id, primary, instrument, `${user.mark} note`],
       )
     ).rows[0]!.id;
-    const topic = (
-      await pool.query<{ id: string }>(
-        `INSERT INTO topics (user_id, label, status, created_by, confirmed_at)
-         VALUES ($1, $2, 'active', 'user', now()) RETURNING id`,
-        [user.id, `${user.mark} topic`],
-      )
-    ).rows[0]!.id;
     const conversation = (
       await pool.query<{ id: string }>(
         `INSERT INTO assistant_conversations (user_id, title) VALUES ($1, $2) RETURNING id`,
@@ -346,7 +333,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
     user.proposal = proposal;
     user.agent = agent;
     user.conversation = conversation;
-    user.ids.push(primary, agent, holding, topic, conversation, observation, proposal, fallback, research, suggestion, session.id);
+    user.ids.push(primary, agent, holding, conversation, observation, proposal, fallback, research, suggestion, session.id);
   }
 
   beforeAll(async () => {
@@ -386,7 +373,7 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
   const askedFor: string[] = [];
 
   /**
-   * The fake AI service, plus the two calls the writes reach that it lacks.
+   * The fake AI service, plus the one call the writes reach that it lacks.
    * The assistant answers as the real service does (`assistant/conversations.py`
    * `find`, proved by `test_another_users_conversation_is_not_found`): a
    * conversation that is not the asking user's is 404. So the app passing on
@@ -396,20 +383,6 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
   function isolationAi(): ReturnType<typeof createFakeAi> {
     return {
       ...createFakeAi(),
-      async resolveTopic(topic: string) {
-        return {
-          topic,
-          verdict: 'none',
-          ambiguous: false,
-          best_similarity: null,
-          confident_above: 0.5,
-          refuse_below: 0.3,
-          embedding_model: 'fixture',
-          vector_is_semantic: false,
-          interpretations: [],
-          universe: { state: 'loaded', profiles: 0, embedded: 0 },
-        };
-      },
       async assistantMessage(request: { user_id: string; conversation_id?: string | null }) {
         askedFor.push(request.user_id);
         const { rows } = await getPool().query(
@@ -472,13 +445,13 @@ describe.skipIf(DATABASE_URL === '')("M9's exit: two users, each seeing only the
 
   it('reads a user-facing route list worth testing', () => {
     const paths = userFacingGets();
-    for (const expected of ['/portfolio', '/agents', '/agents/:id', '/topics', '/assistant/conversations', '/settings']) {
+    for (const expected of ['/portfolio', '/agents', '/agents/:id', '/assistant/conversations', '/settings']) {
       expect(paths.some((path) => path.startsWith(expected.split(':')[0]!)), expected).toBe(true);
     }
   });
 
-  it("shows Dana her own agents, topics and conversations - so 'nothing of Omer's' is not an empty page", async () => {
-    for (const path of ['/agents', '/topics', '/assistant/conversations']) {
+  it("shows Dana her own agents and conversations - so 'nothing of Omer's' is not an empty page", async () => {
+    for (const path of ['/agents', '/assistant/conversations']) {
       const { status, text } = await read(path);
       expect(status, path).toBe(200);
       expect(text, path).toContain(dana.mark);

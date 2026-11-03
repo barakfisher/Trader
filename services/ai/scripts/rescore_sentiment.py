@@ -3,10 +3,8 @@
     python scripts/rescore_sentiment.py [--dry-run] [--batch N]
 
 Run it once after `LEXICON_MODEL_NAME` changes. New articles are scored by
-ingestion as they arrive; this covers the ones already stored, so the topic
-sentiment page - which reports the scorer that read the most articles in its
-window (`apps/orchestrator/src/services/topicSentiment.ts`) - moves to the new
-lexicon at once instead of weeks later.
+ingestion as they arrive; this covers the ones already stored, so a reader of
+stored sentiment moves to the new lexicon at once instead of weeks later.
 
 It adds rows and changes none: each article gains a row under the new name and
 keeps the old one (`article_sentiment` is unique on (article, model)). It is safe

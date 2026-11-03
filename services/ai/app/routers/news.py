@@ -1,7 +1,7 @@
 """The news collection endpoint the scheduled `news_collect` run calls.
 
 Stateless like the analysis router: the orchestrator decides which instruments
-the user follows and when to run; this service fetches, matches, scores and
+the user holds and when to run; this service fetches, matches, scores and
 stores. The write happens here rather than in the orchestrator because the news
 tables are shared market data with no `user_id` - the same reason `quotes` is
 written by the backfill endpoint and not by the caller.
@@ -53,10 +53,5 @@ async def collect(payload: NewsCollectRequest, settings: SettingsDep) -> NewsCol
             LexiconSentimentScorer(),
             instruments,
             lookback=timedelta(hours=payload.lookback_hours),
-            market_retention=(
-                timedelta(days=payload.market_retention_days)
-                if payload.market_retention_days is not None
-                else None
-            ),
         )
     return NewsCollectResponse(**stats)

@@ -36,8 +36,6 @@ export const INSTALLATION_KINDS: ReadonlySet<string> = new Set([
 export const USER_KINDS: ReadonlySet<string> = new Set([
   'snapshot',
   'portfolio_scan',
-  'topic_scan',
-  'topic_discovery',
   'daily_digest',
 ]);
 

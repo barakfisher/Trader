@@ -138,7 +138,7 @@ export function registerDigestRoute(app: Hono<AppEnv>): void {
 
 export { MAX_NOTIFICATIONS };
 
-const ALERT_SOURCES: readonly AlertSource[] = ['portfolio', 'topics', 'agents'];
+const ALERT_SOURCES: readonly AlertSource[] = ['portfolio', 'agents'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function alertOf(row: AlertRow): Alert {
@@ -168,8 +168,8 @@ function alertOf(row: AlertRow): Alert {
 export function registerAlertsRoute(app: Hono<AppEnv>): void {
   /**
    * What the user was told (decision 134): every finding pushed to Telegram, or
-   * deferred by quiet hours, across the main portfolio, topics and every agent.
-   * `?source=portfolio|topics|agents` keeps one; `?before=<id>` pages.
+   * deferred by quiet hours, across the main portfolio and every agent.
+   * `?source=portfolio|agents` keeps one; `?before=<id>` pages.
    */
   app.get('/notifications/alerts', async (context) => {
     const userId = currentUserId(context);
@@ -178,7 +178,7 @@ export function registerAlertsRoute(app: Hono<AppEnv>): void {
       Number.isInteger(requested) && requested > 0 ? Math.min(requested, MAX_NOTIFICATIONS) : 20;
     const sourceParam = context.req.query('source');
     if (sourceParam !== undefined && !ALERT_SOURCES.includes(sourceParam as AlertSource)) {
-      throw badRequest('invalid_source', 'source must be one of portfolio, topics, agents');
+      throw badRequest('invalid_source', 'source must be one of portfolio, agents');
     }
     const source = (sourceParam as AlertSource | undefined) ?? null;
     const before = context.req.query('before');

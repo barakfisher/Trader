@@ -381,3 +381,7 @@ while this file is out of date.
 | 368 | A row action that does not apply is disabled with its reason, never hidden |
 | 369 | "Research this stock" rates that one stock now, held or not, after a confirmation |
 | 370 | A stock researched on its own is listed on the research page in a section of its own |
+| 371 | Topics and their auto-discovery are removed; the agents' theme search stays |
+| 372 | Migration 0082 drops the topic tables and deletes the topic runs, but the run kinds stay in `runs_kind_check` |
+| 373 | The market news feed keeps unlinked articles for one day, not three weeks |
+| 374 | The embedder stays `text-embedding-3-small` |
