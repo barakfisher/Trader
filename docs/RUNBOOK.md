@@ -185,6 +185,7 @@ ORDER BY p.created_at DESC LIMIT 20;
 | Why did a run fail? | `docker logs traders-orchestrator-1` | `kubectl ... logs job/<job>` (the orchestrator's answer), `kubectl ... logs deploy/orchestrator` |
 | Are prices real and fresh? | the dashboard's price age, per holding | the same, at http://traders.localhost |
 | Is the corpus in step with the files? | `cd services/ai && .venv/bin/python scripts/ingest_corpus.py --dry-run` | `kubectl ... logs job/corpus` after a deploy |
+| What did a scan, a question or a narration see and do? | Langfuse (`cloud.langfuse.com`), environment `development`: one trace per scan / question / narration, a generation per model call, a tool per tool call (D375) | production's: environment `production` |
 | Does the exchange calendar cover the next 90 days? | `cd services/ai && .venv/bin/python scripts/generate_exchange_calendar.py --check`; the test `test_calendar_covers_the_next_90_days` fails first | the same file is in the image |
 
 **Extending the exchange calendar** (once a year, when that test fails): `cd services/ai &&
@@ -359,3 +360,35 @@ In this order; each step is idempotent or refuses to repeat.
 - **Prices come from `yfinance`** and headlines from GDELT and Yahoo, with no fixture fallback:
   an unavailable price is unpriced. Acceptable for the private phase only; decided again before
   sign-up opens to strangers.
+
+## 9. Langfuse traces (D375)
+
+Every model call is also sent to Langfuse as a trace, from the AI service
+(`services/ai/app/llm/tracing.py`). It is off unless both keys are set; `llm_calls` and the admin
+page keep working either way.
+
+**Turning it on** (once per installation; the keys never go in the repository or a chat):
+
+1. Sign up at <https://cloud.langfuse.com> (EU region), create an organization and a project.
+2. In the project: Settings -> API Keys -> Create new API keys. Copy the public key (`pk-lf-...`)
+   and the secret key (`sk-lf-...`); the secret is shown once.
+3. Put them in `.env` (on the server: `ssh traders-prod`, then edit `~/traders/.env`):
+   `LANGFUSE_PUBLIC_KEY=`, `LANGFUSE_SECRET_KEY=`; leave `LANGFUSE_BASE_URL` and
+   `LANGFUSE_CAPTURE_TEXT` at their `.env.example` values unless deciding otherwise.
+4. Restart the AI service (compose: `docker compose ... up -d ai-service`; production: the next
+   `prod-deploy.sh`). Its log says `tracing.started`; a half-set pair says
+   `tracing.half_configured` and sends nothing.
+
+**Before anyone else's portfolio reaches the installation**, set `LANGFUSE_CAPTURE_TEXT=false`
+(names, models, tokens, cost, timing and outcomes still go), or point `LANGFUSE_BASE_URL` at a
+self-hosted Langfuse. With text on, prompts and tool results - holdings, cash, questions - are
+stored by Langfuse.
+
+**Finding things:** filter traces by name (`agent-scan`, `recheck-trade`, `answer-question`,
+`narrate-finding`, `check-mandate`, `research-holdings`), by tag (the call's purpose), by user id
+(the `users.id` uuid) or by environment. A generation's metadata carries `llm_call_id`, the row in
+`llm_calls`; the `verdict` score is what the caller made of the reply (`accepted`,
+`unsourced_figures`, `malformed`, ...). The free plan keeps 30 days.
+
+**When Langfuse is down or the keys are wrong** nothing else is affected: the AI service logs
+`tracing.failed` and every call returns as it would have.

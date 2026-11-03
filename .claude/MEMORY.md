@@ -26,7 +26,7 @@ would have fired here too).
   the user's word, compose first with `db-backup.sh --target compose`, then `prod-deploy.sh`. The
   first `news_collect` after it prunes the market articles no topic links any more: ~89k on
   compose, ~9.3k on production. Expected, not a bug.
-- **Decisions reach 374** (next: **375**). **Migrations:** `0082` head; next free `0083`.
+- **Decisions reach 375** (next: **376**). **Migrations:** `0082` head; next free `0083`.
 - **Next:** no development task is queued. On the user's word: deploy #367; the future items
   ("Connect OpenRouter" by PKCE, dropping GitHub OAuth, the legal text); the M12 roadmap (capital
   gains tax and loss offsetting, `docs/MILESTONES.md`, not started).
@@ -6208,6 +6208,29 @@ failure they prevent.
     one. *Rejected:* switching now - a fair test needs the gate refitted for large and new
     held-out topics, a project whose one consumer after D371 is the agents' search. Recorded in
     `docs/TOPIC_RESOLUTION.md`'s scoreboard.
+375. **Model calls are also traced to Langfuse Cloud, with their text, while the installation is
+    its owner's alone** (the user, 2026-11-03: "Cloud + text", then "In the wrapper"). This
+    amends `docs/MILESTONES.md` section 2, which allowed only a self-hosted exporter because a
+    hosted tracer ships holdings to a third party. Measured that day: production has 3 accounts
+    and is for the user's own use (2026-11-02), 90 model calls / ~160k tokens a week - far under
+    the free Hobby plan's 50k units a month. One trace per unit of work (`agent-scan` /
+    `recheck-trade`, `answer-question` with the conversation as its session, `narrate-finding`,
+    `check-mandate`, `research-holdings` with a `rate-holding` per stock), a `generation` per
+    model call and a `tool` per tool call; the caller's verdict is a `verdict` score.
+    **The generation is opened by `RecordingProvider`, not by Langfuse's drop-in OpenAI client**:
+    the drop-in sees only requests that reached OpenRouter, so a call refused for budget or for
+    want of a model - exactly the one being investigated when "it doesn't work" - would be
+    missing; and its cost comes from Langfuse's price table, which does not know OpenRouter's ids,
+    so it would be blank or disagree with the admin page. The wrapper sends this service's own
+    estimate. `app/llm/tracing.py` is the only importer of `langfuse`; every SDK call is guarded,
+    so a broken Langfuse costs a log line, never a call (the same rule as `call_log.py`). Off
+    without both keys. **`LANGFUSE_CAPTURE_TEXT=false` must be set, or Langfuse self-hosted,
+    before the app serves anyone else** - it is part of the legal wording's checklist.
+    *Rejected:* self-hosting on the production VM (Langfuse asks 4 cores / 16 GiB; the VM has 2 /
+    12 with no swap, and ClickHouse under memory pressure would let the OOM killer take
+    TikLens's Postgres); a second Always Free VM for it (free, but a second server and console
+    steps for a single-user installation); Cloud without text (cannot show what a scan saw,
+    which is the question tracing exists to answer); the drop-in client (above).
 ---
 
 ## Bugs that cost real time, and the lesson from each

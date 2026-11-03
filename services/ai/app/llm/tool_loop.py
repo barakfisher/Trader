@@ -28,6 +28,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from app.llm import tracing
 from app.llm.base import (
     AssistantMessage,
     Caller,
@@ -130,7 +131,12 @@ async def run_tool_loop(
                 content = STEP_LIMIT_RESULT
             else:
                 state.steps += 1
-                content = await run_tool(call.name, call.arguments)
+                # Named after the tool, a sibling of the generation that asked for it.
+                with tracing.observe(
+                    call.name, as_type="tool", input=tracing.parsed(call.arguments)
+                ) as traced:
+                    content = await run_tool(call.name, call.arguments)
+                    traced.update(output=tracing.parsed(content))
                 state.tool_results.append(json.loads(content))
             state.messages.append(ToolResultMessage(call.id, content))
             state.transcript.append(

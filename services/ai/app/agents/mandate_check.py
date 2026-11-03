@@ -29,6 +29,7 @@ from typing import Literal
 from app.agents.mandate import Mandate, percent, risk_band
 from app.agents.scan_log import ScanAgent
 from app.core.logging import get_logger
+from app.llm import tracing
 from app.llm.base import (
     Caller,
     LLMBudgetExceededError,
@@ -206,6 +207,30 @@ def _user_prompt(instructions: str, stated: dict[Setting, str]) -> str:
 
 async def check_instructions(llm: LLMProvider, agent: ScanAgent) -> CheckResult:
     """Judge `agent`'s instructions against its mandate. The caller has checked the budget."""
+    # One trace per check (D375).
+    with tracing.observe(
+        "check-mandate",
+        as_type="chain",
+        input=agent.persona,
+        user_id=agent.user_id,
+        tags=("mandate_check",),
+        metadata={"agent_id": agent.agent_id},
+    ) as traced:
+        result = await _check(llm, agent)
+        traced.update(
+            output={
+                "status": result.status,
+                "reason": result.reason,
+                "conflicts": [
+                    {"setting": conflict.setting, "quote": conflict.quote}
+                    for conflict in result.conflicts
+                ],
+            },
+        )
+    return result
+
+
+async def _check(llm: LLMProvider, agent: ScanAgent) -> CheckResult:
     instructions = (agent.persona or "").strip()
     if not instructions:
         return CheckResult("skipped", reason="no_instructions")

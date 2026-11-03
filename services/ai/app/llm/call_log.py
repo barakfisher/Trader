@@ -27,6 +27,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.core.logging import get_logger
+from app.llm import tracing
 from app.llm.base import (
     AssistantMessage,
     Caller,
@@ -191,6 +192,26 @@ def _completion_text(completion: LLMCompletion) -> str:
     return f"{completion.text}{calls}"
 
 
+@dataclass(frozen=True)
+class _Traced:
+    """What a call sent, as its trace shows it: the messages, not the stored digest."""
+
+    system: str | None
+    messages: Sequence[Message]
+    parameters: dict[str, object]
+    tools: tuple[str, ...] = ()
+
+
+def _parameters(
+    max_output_tokens: int | None, temperature: float | None, reasoning_effort: str | None
+) -> dict[str, object]:
+    return {
+        "max_tokens": max_output_tokens,
+        "temperature": temperature,
+        "reasoning_effort": reasoning_effort,
+    }
+
+
 class RecordingProvider:
     """Records every call to `inner`, whatever becomes of it."""
 
@@ -226,6 +247,11 @@ class RecordingProvider:
             caller=caller,
             model=model,
             prompt=_prompt(system, user),
+            traced=_Traced(
+                system=system,
+                messages=[UserMessage(user)],
+                parameters=_parameters(max_output_tokens, temperature, reasoning_effort),
+            ),
         )
 
     async def converse(
@@ -254,6 +280,12 @@ class RecordingProvider:
             caller=caller,
             model=model,
             prompt=_conversation_prompt(system, messages),
+            traced=_Traced(
+                system=system,
+                messages=messages,
+                parameters=_parameters(max_output_tokens, temperature, reasoning_effort),
+                tools=tuple(tool.name for tool in tools),
+            ),
         )
 
     async def _recorded(
@@ -263,35 +295,76 @@ class RecordingProvider:
         caller: Caller | None,
         model: str | None,
         prompt: str,
+        traced: _Traced,
     ) -> LLMCompletion:
-        started = time.monotonic()
-        try:
-            completion = await call()
-        except BaseException as error:
-            self._record(
+        # Traced as the same call it is recorded as (D375): a refused call too.
+        with tracing.generation(
+            caller=caller,
+            model=model or self._model,
+            system=traced.system,
+            messages=traced.messages,
+            model_parameters=traced.parameters,
+            tools=traced.tools,
+        ) as observation:
+            started = time.monotonic()
+            try:
+                completion = await call()
+            except BaseException as error:
+                outcome = _outcome(error)
+                cost = error.metered_micro_usd if isinstance(error, LLMError) else 0
+                paid_by: PaidBy = error.paid_by if isinstance(error, LLMError) else "installation"
+                message = f"{type(error).__name__}: {error}"[:500]
+                call_id = self._record(
+                    caller,
+                    model=model,
+                    outcome=outcome,
+                    error=message,
+                    started=started,
+                    prompt=prompt,
+                    cost=cost,
+                    paid_by=paid_by,
+                )
+                tracing.finish_generation(
+                    observation,
+                    model=model or self._model,
+                    text=None,
+                    tool_calls=(),
+                    prompt_tokens=0,
+                    completion_tokens=0,
+                    cost_micro_usd=cost,
+                    outcome=outcome,
+                    error=message,
+                    call_id=call_id,
+                    paid_by=paid_by,
+                )
+                raise
+            call_id = self._record(
                 caller,
                 model=model,
-                outcome=_outcome(error),
-                error=f"{type(error).__name__}: {error}"[:500],
+                outcome="ok",
                 started=started,
                 prompt=prompt,
-                cost=error.metered_micro_usd if isinstance(error, LLMError) else 0,
-                paid_by=error.paid_by if isinstance(error, LLMError) else "installation",
+                completion=completion,
             )
-            raise
-        call_id = self._record(
-            caller,
-            model=model,
-            outcome="ok",
-            started=started,
-            prompt=prompt,
-            completion=completion,
-        )
-        return replace(completion, call_id=call_id)
+            tracing.finish_generation(
+                observation,
+                model=completion.model,
+                text=completion.text,
+                tool_calls=completion.tool_calls,
+                prompt_tokens=completion.usage.prompt_tokens,
+                completion_tokens=completion.usage.completion_tokens,
+                cost_micro_usd=completion.estimated_cost_micro_usd,
+                outcome="ok",
+                error=None,
+                call_id=call_id,
+                paid_by=completion.paid_by,
+            )
+            return replace(completion, call_id=call_id)
 
     async def record_verdict(self, call_id: int | None, verdict: Verdict) -> None:
         if call_id is None:
             return
+        tracing.score_verdict(call_id, verdict)
         try:
             self._log.set_verdict(call_id, verdict)
         except Exception as error:  # noqa: BLE001 - never fail the caller

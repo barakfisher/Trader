@@ -144,7 +144,10 @@ original brief named something this repository does not have, the reconciliation
   `malformed`, `unsourced_figures`. (The brief's `rate_limited` is `provider_error` today; split it
   out only if the panel needs it.)
 - Native panel first. Langfuse/Phoenix are optional **self-hosted** exporters behind an interface;
-  a hosted tracer would ship user holdings to a third party.
+  a hosted tracer would ship user holdings to a third party. *(Amended by D375, 2026-11-03: while
+  the installation is its owner's alone, traces go to Langfuse Cloud with their text; before
+  anyone else's portfolio would reach it, `LANGFUSE_CAPTURE_TEXT=false` or a self-hosted
+  Langfuse.)*
 - Not in scope until they exist: **TTFT** (calls do not stream — `app/llm/base.py`) and **semantic
   cache hit rate** (there is no semantic cache). Both are listed so they are not measured as zero.
 

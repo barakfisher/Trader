@@ -22,6 +22,7 @@ from typing import Literal
 from app.analysis.findings import Finding
 from app.core.logging import get_logger
 from app.core.money import minor_to_decimal_string
+from app.llm import tracing
 from app.llm.base import (
     LEAST_REASONING,
     Caller,
@@ -212,6 +213,32 @@ async def narrate(
     user_id: str | None = None,
 ) -> Narration:
     """Narrate `finding`, falling back to the template on any doubt."""
+    # One trace per narration (D375); the template's own words are its output too.
+    with tracing.observe(
+        "narrate-finding",
+        as_type="chain",
+        input={"kind": finding.kind, "subject": finding.subject_ref, "as_of": finding.as_of},
+        user_id=user_id,
+        tags=("narration",),
+        metadata={"severity": finding.severity},
+    ) as traced:
+        narration = await _narrate(finding, articles, llm, temperature=temperature, user_id=user_id)
+        traced.update(
+            output={"headline": narration.headline, "explanation": narration.explanation},
+            metadata={"source": narration.source, "fallback_reason": narration.fallback_reason},
+            level="DEFAULT" if narration.source == "llm" else "WARNING",
+        )
+    return narration
+
+
+async def _narrate(
+    finding: Finding,
+    articles: list[CandidateArticle],
+    llm: LLMProvider | None,
+    *,
+    temperature: float,
+    user_id: str | None,
+) -> Narration:
     evidence = build_evidence(finding, articles)
 
     if llm is None:

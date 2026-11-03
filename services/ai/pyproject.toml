@@ -26,6 +26,9 @@ dependencies = [
     # Encrypts the OpenRouter keys users save (app/llm/key_vault.py, D208):
     # Fernet tokens, and MultiFernet for rotation. The floor is the version tested.
     "cryptography>=50",
+    # Sends every model call to Langfuse as a trace (app/llm/tracing.py, D375),
+    # with OpenTelemetry under it. The floor is the version tested.
+    "langfuse>=5.1",
 ]
 
 [project.optional-dependencies]

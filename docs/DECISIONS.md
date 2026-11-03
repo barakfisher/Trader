@@ -385,3 +385,4 @@ while this file is out of date.
 | 372 | Migration 0082 drops the topic tables and deletes the topic runs, but the run kinds stay in `runs_kind_check` |
 | 373 | The market news feed keeps unlinked articles for one day, not three weeks |
 | 374 | The embedder stays `text-embedding-3-small` |
+| 375 | Model calls are also traced to Langfuse Cloud, with their text, while the installation is its owner's alone |
