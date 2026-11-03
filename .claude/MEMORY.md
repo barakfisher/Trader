@@ -4,7 +4,38 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-02 - **Handoff by count: eleven merges since #351** (#352-#362; the trigger
+Updated: 2026-11-03 - **Handoff at a milestone boundary: the six tasks agreed 2026-11-02 are
+done** (#364-#367 merged since handoff #363; this PR is the fifth merge, so the count trigger
+would have fired here too).
+- **Merges since #363:**
+  - #364: the admin chooses models like every user - each agent's on its page, Ask in Settings,
+    explanations on the "Main portfolio" agent page (D360-D362, migration `0081`);
+  - #365: the admin has two keys - the installation key for shared work, a personal key in
+    Settings like any user's (D363-D365);
+  - #366: All / Real only / Simulated show the same cards, toolbar and row menu; an action that
+    does not apply is disabled, not hidden (D366-D370);
+  - #367: the Topics page and auto-discovery are removed, `topics` / `topic_instruments` dropped
+    (D371-D374, migration `0082`); `resolve_topic` stays for the agents' theme search.
+- **Task 6 was already built.** "The Re-evaluate button" (improvements item 4) shipped on
+  2026-10-20 as *Re-check* (D212-D219, #280 onward): an agent buy or sell that expired unanswered
+  can be re-checked once, within 7 days, on the proposal page and in Telegram. The user closed
+  task 6 on 2026-11-03 with no PR. Measured that day: production has no proposal of any kind yet;
+  compose has had one re-check ever (outcome `trade`).
+- **Deployed:** production (`https://app.tiklens.com`) and compose run `e6a08e0` (#366) at
+  `0081_drop_admin_model_choices` (read 2026-11-03). **#367 (`0082`) is deployed nowhere** - on
+  the user's word, compose first with `db-backup.sh --target compose`, then `prod-deploy.sh`. The
+  first `news_collect` after it prunes the market articles no topic links any more: ~89k on
+  compose, ~9.3k on production. Expected, not a bug.
+- **Decisions reach 374** (next: **375**). **Migrations:** `0082` head; next free `0083`.
+- **Next:** no development task is queued. On the user's word: deploy #367; the future items
+  ("Connect OpenRouter" by PKCE, dropping GitHub OAuth, the legal text); the M12 roadmap (capital
+  gains tax and loss offsetting, `docs/MILESTONES.md`, not started).
+- **Lesson - a queued item can already exist under another name.** Task 6 was copied from the
+  2026-10-20 queue as "Re-evaluate" although it had shipped that same day as "Re-check"; nobody
+  noticed until the session sent to build it measured first. Before a task goes on a list, grep
+  the decision log and `git log --grep` for the feature under its other names.
+
+Previous update, 2026-11-02 - **Handoff by count: eleven merges since #351** (#352-#362; the trigger
 was five, so this is six late - nothing counted them across the production-deploy sessions).
 - **Merges since #351:**
   - #352: the web healthcheck asks 127.0.0.1, not localhost (nginx listens on IPv4 only);
