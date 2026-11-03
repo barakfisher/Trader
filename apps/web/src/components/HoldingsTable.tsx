@@ -344,6 +344,7 @@ function HoldingRow({
           <span className="flex items-center justify-end">
             <HoldingRowMenu
               symbol={holding.instrument.symbol}
+              instrumentId={holding.instrument.id}
               onEdit={startEditing}
               onRemove={() => setConfirmingDelete(true)}
             />
@@ -512,7 +513,10 @@ function HoldingCard({
         </div>
       ) : (
         <div className="flex justify-end">
-          <HoldingRowMenu symbol={symbol} onEdit={startEditing} onRemove={() => setConfirmingDelete(true)} />
+          <HoldingRowMenu
+            symbol={symbol}
+            instrumentId={holding.instrument.id}
+            onEdit={startEditing} onRemove={() => setConfirmingDelete(true)} />
         </div>
       )}
     </div>

@@ -81,6 +81,8 @@ export interface ResearchHoldingRow {
   instrument_id: string;
   symbol: string;
   name: string | null;
+  /** In the main portfolio; false for a stock researched on its own (D370). */
+  held: boolean;
   rating: 'bullish' | 'bearish' | 'neutral' | null;
   rationale: string | null;
   findings: unknown;
@@ -92,22 +94,37 @@ export interface ResearchHoldingRow {
 
 /**
  * Each main-portfolio holding with the agent's latest rating of it and its
- * newest attempt of any outcome, by symbol. With no agent, every holding with
- * no rating.
+ * newest attempt of any outcome, then each stock the agent has researched that
+ * the main portfolio does not hold (D370) - `held` tells them apart - by
+ * symbol. With no agent, every holding with no rating.
  */
 export function listResearchHoldings(userId: string, agentId: string | null): Promise<ResearchHoldingRow[]> {
   return query<ResearchHoldingRow>(
-    `SELECT i.id AS instrument_id, i.symbol, i.name,
+    `WITH stocks AS (
+       SELECT h.instrument_id, true AS held
+         FROM holdings h
+         JOIN agents p ON p.id = h.agent_id AND p.user_id = h.user_id AND p.is_primary
+        WHERE h.user_id = $1
+       UNION
+       SELECT DISTINCT r.instrument_id, false AS held
+         FROM research_ratings r
+        WHERE r.user_id = $1 AND r.agent_id = $2
+          AND NOT EXISTS (
+            SELECT 1 FROM holdings h
+              JOIN agents p ON p.id = h.agent_id AND p.user_id = h.user_id AND p.is_primary
+             WHERE h.user_id = $1 AND h.instrument_id = r.instrument_id
+          )
+     )
+     SELECT i.id AS instrument_id, i.symbol, i.name, s.held,
             rated.rating, rated.rationale, rated.findings, rated.created_at AS rated_at,
             rated.agent_name, latest.status AS last_status, latest.created_at AS last_at
-       FROM holdings h
-       JOIN agents p ON p.id = h.agent_id AND p.user_id = h.user_id AND p.is_primary
-       JOIN instruments i ON i.id = h.instrument_id
+       FROM stocks s
+       JOIN instruments i ON i.id = s.instrument_id
        LEFT JOIN LATERAL (
          SELECT r.rating, r.rationale, r.findings, r.created_at, a.name AS agent_name
            FROM research_ratings r
            JOIN agents a ON a.id = r.agent_id
-          WHERE r.user_id = h.user_id AND r.agent_id = $2 AND r.instrument_id = h.instrument_id
+          WHERE r.user_id = $1 AND r.agent_id = $2 AND r.instrument_id = s.instrument_id
             AND r.status = 'rated'
           ORDER BY r.created_at DESC
           LIMIT 1
@@ -115,11 +132,10 @@ export function listResearchHoldings(userId: string, agentId: string | null): Pr
        LEFT JOIN LATERAL (
          SELECT r.status, r.created_at
            FROM research_ratings r
-          WHERE r.user_id = h.user_id AND r.agent_id = $2 AND r.instrument_id = h.instrument_id
+          WHERE r.user_id = $1 AND r.agent_id = $2 AND r.instrument_id = s.instrument_id
           ORDER BY r.created_at DESC
           LIMIT 1
        ) latest ON true
-      WHERE h.user_id = $1
       ORDER BY i.symbol`,
     [userId, agentId],
   );

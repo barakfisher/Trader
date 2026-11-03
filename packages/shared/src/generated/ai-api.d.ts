@@ -1979,9 +1979,11 @@ export interface components {
         };
         /**
          * ResearchRunRequest
-         * @description Run the assigned agent's research on the main portfolio (D254).
+         * @description Run the assigned agent's research on the main portfolio (D254), or on one stock (D369).
          */
         ResearchRunRequest: {
+            /** Instrument Id */
+            instrument_id?: string | null;
             /**
              * Trigger
              * @default manual

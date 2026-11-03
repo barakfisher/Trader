@@ -7,6 +7,10 @@ agent paused or archived (`agent_not_active`), its daily allowance spent
 D245, D250), no holdings to rate (`no_holdings`), a run already going
 (`research_running`), or no model at all (503 `no_model`).
 
+With `instrument_id` the run rates that one stock, held or not (D369): the
+holding row's "Research this stock". An instrument nobody knows is a 404
+(`unknown_instrument`) rather than a run with nothing to rate.
+
 The run itself takes a model call per holding, so it is not awaited: the
 route claims the run's row, starts it in the background and answers 202 with
 its id. The research page reads the run's progress from Postgres; a restart
@@ -44,6 +48,7 @@ from app.research.run import RESEARCH_MAX_HOLDINGS, run_research
 from app.research.store import (
     ResearchAlreadyRunningError,
     claim_run,
+    instrument_to_rate,
     main_holdings,
     research_agent_id,
 )
@@ -85,7 +90,13 @@ async def start_research(
         raise _refuse("budget_spent", "the agent's model budget for today is spent")
     llm = _model(request, settings)
     _payable(request, user_id)
-    holdings = main_holdings(engine, user_id)
+    if payload.instrument_id is not None:
+        one = instrument_to_rate(engine, str(payload.instrument_id))
+        if one is None:
+            raise _refuse("unknown_instrument", "no such instrument", status.HTTP_404_NOT_FOUND)
+        holdings = [one]
+    else:
+        holdings = main_holdings(engine, user_id)
     if not holdings:
         raise _refuse("no_holdings", "the main portfolio has no holdings to research")
     try:

@@ -40,6 +40,7 @@ from app.research.store import (
     ABANDONED_AFTER,
     ResearchAlreadyRunningError,
     claim_run,
+    instrument_to_rate,
     main_holdings,
 )
 from tests.integration.conftest import run_script
@@ -293,6 +294,17 @@ def test_one_run_at_a_time_and_an_abandoned_one_is_closed(loaded: Engine, agent:
         ).one()
     assert (status, error) == ("failed", "abandoned")
     assert second != first
+
+
+def test_one_stock_is_found_whether_or_not_the_user_holds_it(
+    loaded: Engine, agent: ScanAgent
+) -> None:
+    unheld = _instrument(loaded, "UEC")
+    assert "UEC" not in {holding.symbol for holding in main_holdings(loaded, agent.user_id)}
+    found = instrument_to_rate(loaded, unheld)
+    assert found is not None
+    assert (found.instrument_id, found.symbol) == (unheld, "UEC")
+    assert instrument_to_rate(loaded, "10000000-0000-0000-0000-0000000000ff") is None
 
 
 def test_the_assigned_agent_must_be_the_users_own(loaded: Engine, agent: ScanAgent) -> None:

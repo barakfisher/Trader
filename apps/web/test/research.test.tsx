@@ -8,7 +8,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 
 import type { AgentView, ResearchResponse } from '@traders/shared';
 
@@ -50,6 +50,7 @@ const RESEARCH: ResearchResponse = {
       instrumentId: 'i1',
       symbol: 'CCJ',
       name: 'Cameco',
+      held: true,
       latest: {
         rating: 'bullish',
         rationale: 'CCJ trades at 54.32.',
@@ -64,6 +65,7 @@ const RESEARCH: ResearchResponse = {
       instrumentId: 'i2',
       symbol: 'NXE',
       name: null,
+      held: true,
       latest: {
         rating: 'bearish',
         rationale: 'NXE fell.',
@@ -116,6 +118,29 @@ describe('the research page', () => {
     await waitFor(() => expect(put).toHaveBeenCalledWith('/research/agent', { agentId: null }));
     fireEvent.click(screen.getByRole('button', { name: t('research.run') }));
     await waitFor(() => expect(post).toHaveBeenCalledWith('/research/runs', {}));
+  });
+
+  it('lists a stock researched on its own apart from the holdings, and counts only the holdings (D370)', async () => {
+    get.mockImplementation(async (path: string) => {
+      if (path === '/research') {
+        return {
+          ...RESEARCH,
+          holdings: [
+            ...RESEARCH.holdings,
+            { ...RESEARCH.holdings[0]!, instrumentId: 'i3', symbol: 'GM', name: 'General Motors', held: false },
+          ],
+        };
+      }
+      if (path === '/agents') return { agents: [ANALYST], agentLimit: null };
+      return new Promise(() => {});
+    });
+    renderPage(<ResearchPage />);
+    const others = await screen.findByText(t('research.othersTitle', { count: 1 }));
+    expect(screen.getByText(t('research.holdingsTitle', { count: 2 }))).toBeTruthy();
+    expect(await screen.findByText(t('research.cost', { count: 2 }))).toBeTruthy();
+    const section = others.closest('section')!;
+    expect(within(section).getByText('GM')).toBeTruthy();
+    expect(within(section).queryByText('CCJ')).toBeNull();
   });
 
   it("says a refusal in the reader's words", async () => {

@@ -64,6 +64,8 @@ export interface ResearchHolding {
   instrumentId: string;
   symbol: string;
   name: string | null;
+  /** In the main portfolio; false for a stock researched on its own from its row (D370). */
+  held: boolean;
   /** The assigned agent's latest rating of it; null before its first. */
   latest: ResearchRating | null;
   /** The newest attempt, when it came after `latest` and was not rated. */
@@ -90,6 +92,11 @@ export interface ResearchResponse {
 }
 
 /** `PUT /api/research/agent`: assign one of the user's agents, or none. */
+/** `POST /research/runs`: absent, every holding; with an instrument, that one stock (D369). */
+export interface ResearchRunInput {
+  instrumentId?: string;
+}
+
 export interface ResearchAgentInput {
   agentId: string | null;
 }

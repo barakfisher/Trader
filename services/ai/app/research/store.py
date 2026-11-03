@@ -32,6 +32,8 @@ class ResearchAlreadyRunningError(RuntimeError):
 
 @dataclass(frozen=True)
 class MainHolding:
+    """A stock a run rates: a main-portfolio holding, or the one stock asked for (D369)."""
+
     instrument_id: str
     symbol: str
     name: str | None
@@ -65,6 +67,19 @@ def main_holdings(engine: Engine, user_id: str) -> list[MainHolding]:
             {"user": user_id},
         ).all()
     return [MainHolding(row.instrument_id, row.symbol, row.name) for row in rows]
+
+
+def instrument_to_rate(engine: Engine, instrument_id: str) -> MainHolding | None:
+    """One known instrument, whoever holds it (D369): the shared list, not the user's rows."""
+    with engine.connect() as connection:
+        row = connection.execute(
+            text(
+                "SELECT id::text AS instrument_id, symbol, name FROM instruments "
+                "WHERE id = CAST(:instrument AS uuid)"
+            ),
+            {"instrument": instrument_id},
+        ).one_or_none()
+    return None if row is None else MainHolding(row.instrument_id, row.symbol, row.name)
 
 
 def claim_run(

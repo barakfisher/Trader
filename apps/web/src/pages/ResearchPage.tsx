@@ -1,36 +1,21 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation } from '@tanstack/react-router';
 import { Microscope, Play } from 'lucide-react';
 
-import {
-  RESEARCH_REFUSALS,
-  RESEARCH_STOPS,
-  type ResearchHolding,
-  type ResearchRunSummary,
-  type ResearchStop,
-} from '@traders/shared';
+import { RESEARCH_STOPS, type ResearchHolding, type ResearchRunSummary, type ResearchStop } from '@traders/shared';
 
-import { ApiRequestError, errorMessage } from '../api/client.ts';
+import { errorMessage } from '../api/client.ts';
 import { Disclaimer } from '../components/Disclaimer.tsx';
 import { OwnKeyNotice } from '../components/OwnKeyNotice.tsx';
 import { SentimentBadge, byOn, ratedOn } from '../components/SentimentBadge.tsx';
 import { Button, Card, EmptyState, ErrorNote, Spinner } from '../components/ui.tsx';
-import { t, useTranslation } from '../i18n/index.ts';
+import { useTranslation } from '../i18n/index.ts';
+import { researchRefusalText } from '../lib/researchRefusals.ts';
 import { formatExactTime } from '../lib/relativeTime.ts';
 import { SERVER_ENGLISH } from '../lib/textDirection.ts';
 import { useAgentsQuery } from '../queries/agents.ts';
 import { useModelAccess } from '../queries/modelAccess.ts';
 import { useAssignResearchAgent, useResearchQuery, useStartResearch } from '../queries/research.ts';
-
-/** Refusals the page says in the reader's words: research's own, the payer's, and no model. */
-const SAID_REFUSALS = [
-  ...RESEARCH_REFUSALS,
-  'own_key_required',
-  'own_key_failed',
-  'safety_limit_reached',
-  'no_model',
-] as const;
-type SaidRefusal = (typeof SAID_REFUSALS)[number];
 
 /**
  * Research on the main portfolio (D254, D289-D293): the agent the user assigned
@@ -39,15 +24,28 @@ type SaidRefusal = (typeof SAID_REFUSALS)[number];
  * stock, never the user's position, and never an instruction - so the
  * disclaimer heads the page (guardrail 5), and the rationale is shown as the
  * model wrote it, in English (D291), with every figure checked.
+ *
+ * A stock researched on its own from a holding row (D369) is listed under the
+ * holdings, in a section of its own (D370): it is rated, but not held.
  */
 export function ResearchPage() {
   const { t } = useTranslation();
   const research = useResearchQuery();
   const hash = useLocation({ select: (location) => location.hash });
 
+  // Once per address: the read repeats while a run goes, and the page must not
+  // jump back to the stock on every repeat. A stock researched on its own has
+  // no entry until its rating lands, so the scroll waits for the entry.
+  const scrolledTo = useRef<string | null>(null);
   useEffect(() => {
-    if (hash && research.data) document.getElementById(`research-${hash}`)?.scrollIntoView({ block: 'start' });
+    if (!hash || scrolledTo.current === hash) return;
+    const entry = research.data && document.getElementById(`research-${hash}`);
+    if (!entry) return;
+    entry.scrollIntoView({ block: 'start' });
+    scrolledTo.current = hash;
   }, [hash, research.data]);
+  const held = research.data?.holdings.filter((holding) => holding.held) ?? [];
+  const others = research.data?.holdings.filter((holding) => !holding.held) ?? [];
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
@@ -67,9 +65,15 @@ export function ResearchPage() {
           <AssignmentCard
             agentId={research.data.agent?.id ?? null}
             run={research.data.run}
-            holdingCount={research.data.holdings.length}
+            holdingCount={held.length}
           />
-          <HoldingsResearch holdings={research.data.holdings} assigned={research.data.agent !== null} />
+          <HoldingsResearch holdings={held} assigned={research.data.agent !== null} />
+          {research.data.agent !== null && others.length > 0 && (
+            <Card title={t('research.othersTitle', { count: others.length })}>
+              <p className="mb-3 text-xs text-text-muted">{t('research.othersExplained')}</p>
+              <ResearchList holdings={others} />
+            </Card>
+          )}
         </>
       )}
     </div>
@@ -93,7 +97,7 @@ function AssignmentCard({
   const choosable = (agents.data ?? []).filter((agent) => !agent.isPrimary && agent.state !== 'archived');
   const assigned = choosable.find((agent) => agent.id === agentId) ?? null;
   const running = run?.status === 'running';
-  const refusal = refusalText(start.error);
+  const refusal = researchRefusalText(start.error);
 
   return (
     <Card title={t('research.agentTitle')}>
@@ -142,14 +146,6 @@ function AssignmentCard({
   );
 }
 
-/** A refused start in the reader's words: a known refusal from the catalogue, else the server's. */
-function refusalText(error: Error | null): string | null {
-  if (error === null) return null;
-  return error instanceof ApiRequestError && (SAID_REFUSALS as readonly string[]).includes(error.code)
-    ? t(`research.refusals.${error.code as SaidRefusal}`)
-    : errorMessage(error, t('research.startFailed'));
-}
-
 function RunStatus({ run }: { run: ResearchRunSummary }) {
   const { t } = useTranslation();
   const when = formatExactTime(run.finishedAt ?? run.startedAt);
@@ -159,7 +155,7 @@ function RunStatus({ run }: { run: ResearchRunSummary }) {
     <div role="status" className="space-y-1 text-xs text-text-muted">
       {run.status === 'running' ? (
         <p className="flex items-center gap-2">
-          <Spinner label={t('research.running', { holdings: run.holdings })} />
+          <Spinner label={t('research.running', { count: run.holdings })} />
         </p>
       ) : (
         <p>
@@ -181,14 +177,21 @@ function HoldingsResearch({ holdings, assigned }: { holdings: ResearchHolding[];
   if (!assigned) return <EmptyState title={t('research.unassignedTitle')} body={t('research.unassignedBody')} />;
   return (
     <Card title={t('research.holdingsTitle', { count: holdings.length })}>
-      <ul className="divide-y divide-border-subtle/60">
-        {holdings.map((holding) => (
-          <li key={holding.instrumentId} id={`research-${holding.symbol}`} className="scroll-mt-20 py-3 first:pt-0 last:pb-0">
-            <HoldingResearch holding={holding} />
-          </li>
-        ))}
-      </ul>
+      <ResearchList holdings={holdings} />
     </Card>
+  );
+}
+
+/** Each stock's latest rating, with the anchor a holding row's "Research this stock" opens at. */
+function ResearchList({ holdings }: { holdings: ResearchHolding[] }) {
+  return (
+    <ul className="divide-y divide-border-subtle/60">
+      {holdings.map((holding) => (
+        <li key={holding.instrumentId} id={`research-${holding.symbol}`} className="scroll-mt-20 py-3 first:pt-0 last:pb-0">
+          <HoldingResearch holding={holding} />
+        </li>
+      ))}
+    </ul>
   );
 }
 

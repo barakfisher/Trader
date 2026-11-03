@@ -29,6 +29,8 @@ USER = "00000000-0000-0000-0000-000000000001"
 AGENT = "90000000-0000-0000-0000-0000000000a1"
 RUN = "b0000000-0000-0000-0000-000000000001"
 HOLDING = MainHolding("10000000-0000-0000-0000-000000000001", "CCJ", "Cameco")
+#: A stock the main portfolio does not hold: one-stock research rates it all the same (D369).
+OTHER = MainHolding("10000000-0000-0000-0000-000000000002", "GM", "General Motors")
 
 
 def _agent(**overrides: Any) -> ScanAgent:
@@ -53,6 +55,7 @@ def research(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, Any]]:
         "holdings": [HOLDING],
         "running": False,
         "ran": [],
+        "instruments": {OTHER.instrument_id: OTHER},
     }
 
     async def fake_run(**kwargs: Any) -> None:
@@ -71,6 +74,9 @@ def research(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict[str, Any]]:
         lambda *_a: AgentBudget(allowance_micro_usd=500_000, spent_micro_usd=state["spent"]),
     )
     monkeypatch.setattr(f"{module}.main_holdings", lambda *_a: state["holdings"])
+    monkeypatch.setattr(
+        f"{module}.instrument_to_rate", lambda _engine, key: state["instruments"].get(key)
+    )
     monkeypatch.setattr(f"{module}.claim_run", fake_claim)
     monkeypatch.setattr(f"{module}.run_research", fake_run)
     monkeypatch.setattr("app.routers.agents.payer_refusal", lambda *_a: None)
@@ -120,6 +126,24 @@ def test_an_accepted_run_starts_in_the_background(
 def test_the_holdings_count_is_the_runs_limit(client: TestClient, research: dict[str, Any]) -> None:
     research["holdings"] = [HOLDING] * (RESEARCH_MAX_HOLDINGS + 1)
     assert _post(client).json()["holdings"] == RESEARCH_MAX_HOLDINGS
+
+
+def test_one_stock_is_rated_alone_whether_held_or_not(
+    client: TestClient, research: dict[str, Any]
+) -> None:
+    research["holdings"] = []
+    response = _post(client, instrument_id=OTHER.instrument_id)
+    assert response.status_code == 202
+    assert response.json()["holdings"] == 1
+    assert research["ran"][0]["holdings"] == [OTHER]
+
+
+def test_an_unknown_stock_is_a_404_before_any_model_call(
+    client: TestClient, research: dict[str, Any]
+) -> None:
+    response = _post(client, instrument_id="10000000-0000-0000-0000-0000000000ff")
+    assert _code(response) == (404, "unknown_instrument")
+    assert research["ran"] == []
 
 
 @pytest.mark.parametrize(

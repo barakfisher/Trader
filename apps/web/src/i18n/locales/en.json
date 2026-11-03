@@ -346,9 +346,26 @@
       "sell": "Sell",
       "edit": "Edit",
       "remove": "Remove",
-      "needsCash": "Set the cash on the Account card to record trades."
+      "needsCash": "Set the cash on the Account card to record trades.",
+      "noFreeCash": "The main portfolio has no free cash: record a deposit on the Account card to buy.",
+      "notHeld": "Sell records a sale of your own shares; your real portfolio does not hold this stock.",
+      "ask": "Ask about this stock",
+      "askDraft": "What is new with {{symbol}}, and how does it affect my portfolio?",
+      "research": "Research this stock",
+      "researchBlocked": {
+        "noAgent": "Choose a research agent on the Research page first.",
+        "agentNotActive": "Resume the research agent to run research.",
+        "running": "Research is already running."
+      },
+      "agentOnly": "Edit and Remove correct your real holding. An agent's holdings change only through its own trades."
     },
-    "removeNote": "Remove corrects a holding entered by mistake; the cash does not change. To record a sale, use Sell."
+    "removeNote": "Remove corrects a holding entered by mistake; the cash does not change. To record a sale, use Sell.",
+    "researchStock": {
+      "title": "Research {{symbol}}",
+      "explained": "{{agent}} rates the outlook of {{symbol}} now, from its news, market data and sector. The rating appears on the Research page.",
+      "cost": "It takes one model call, or two when a check refuses the first answer, counted against the agent's daily allowance.",
+      "confirm": "Research now"
+    }
   },
   "import": {
     "title": "Import holdings",
@@ -2091,8 +2108,6 @@
   },
   "combined": {
     "holders": "Holders",
-    "editReal": "Edit your real {{symbol}} holding",
-    "removeReal": "Remove your real {{symbol}} holding",
     "editingReal": "Your real {{symbol}} holding",
     "chartsAreReal": "The charts below are your real portfolio's.",
     "scopes": {
@@ -2255,7 +2270,8 @@
     "cost_other": "About one model call per holding: {{count}} calls a run.",
     "run": "Run research now",
     "startFailed": "The research could not start.",
-    "running": "Researching {{holdings}} holdings…",
+    "running_one": "Researching 1 stock…",
+    "running_other": "Researching {{count}} stocks…",
     "lastRun": "Last run {{when}}: {{rated}} of {{holdings}} rated.",
     "lastFailed": "The last run, {{when}}, failed after rating {{rated}} of {{holdings}}.",
     "refusals": {
@@ -2297,7 +2313,10 @@
       "refused": "The latest attempt, {{date}}, was refused by the checks; the rating above is the one before it.",
       "failed": "The latest attempt, {{date}}, failed; the rating above is the one before it."
     },
-    "column": "Sentiment"
+    "column": "Sentiment",
+    "othersTitle_one": "Another researched stock (1)",
+    "othersTitle_other": "Other researched stocks ({{count}})",
+    "othersExplained": "Stocks you researched from a holding row that your real portfolio does not hold. The daily research rates only your holdings."
   },
   "reset": {
     "requestTitle": "Reset your password",

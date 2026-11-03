@@ -376,3 +376,8 @@ while this file is out of date.
 | 363 | The admin has two keys: a personal key pays for the admin's calls when one is saved, the installation's when none can be used |
 | 364 | The admin's personal key is under the same optional monthly safety limit as a user's |
 | 365 | The Admin page splits calls and cost by payer everywhere |
+| 366 | Every portfolio view has the same cards, the same toolbar and the same row "⋮" |
+| 367 | The Account card follows the view, like the three cards beside it |
+| 368 | A row action that does not apply is disabled with its reason, never hidden |
+| 369 | "Research this stock" rates that one stock now, held or not, after a confirmation |
+| 370 | A stock researched on its own is listed on the research page in a section of its own |

@@ -944,10 +944,12 @@ class AgentScanRequest(BaseModel):
 
 
 class ResearchRunRequest(BaseModel):
-    """Run the assigned agent's research on the main portfolio (D254)."""
+    """Run the assigned agent's research on the main portfolio (D254), or on one stock (D369)."""
 
     user_id: UUID
     trigger: Literal["manual", "schedule"] = "manual"
+    #: One stock to rate instead of the main portfolio's holdings; held or not (D369).
+    instrument_id: UUID | None = None
 
 
 class ResearchRunStarted(BaseModel):

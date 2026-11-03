@@ -20,7 +20,7 @@ was five, so this is six late - nothing counted them across the production-deplo
 - **Deployed:** production (`https://app.tiklens.com`) runs `dbf9cf6` (#361) since 2026-11-01;
   compose runs `a8b3c30` (#356). **#362 is deployed nowhere yet** - on the user's word.
   Migration head `0080_cash_movement_kinds` everywhere; no PR since added one.
-- **Decisions reach 365** (next: **366**). **Migrations:** `0081` head (#364); next free `0082`.
+- **Decisions reach 370** (next: **371**). **Migrations:** `0081` head (#364); next free `0082`.
 - **Production is the real installation; compose is a lab (user, 2026-11-02).** The user's real
   portfolio lives on production. Compose's `.env` has `ENABLE_SCHEDULED_SCANS=false`,
   `SCHEDULER_ENABLED=false` and `TELEGRAM_UPDATES=off`: the local stack runs nothing on its own
@@ -42,11 +42,10 @@ was five, so this is six late - nothing counted them across the production-deplo
      the corpus and topic queries - none of it in `llm_calls`) and a personal key in Settings like
      any user's, so the admin's own usage is tracked apart. Today the admin's calls are all
      installation-paid (`own_key.py`, `payer.py`, D245).
-  4. **Every view looks the same:** All / Real only / Simulated show the same cards (the Account
-     card too), the same toolbar and the same row "⋮" menu (D334's `HoldingRowMenu`, today only in
-     the real-only view), plus "ask about this stock" and "research this stock". An action that
-     does not apply is disabled, not hidden: Buy whenever the main portfolio has free cash, Sell
-     only when the real portfolio holds the instrument.
+  4. ~~**Every view looks the same:**~~ - D366-D370 (this task's PR). Was: All / Real only /
+     Simulated show the same cards (the Account card too), the same toolbar and the same row "⋮"
+     menu, plus "ask about this stock" and "research this stock"; an action that does not apply
+     is disabled, not hidden.
   5. **Remove the Topics page and auto-discovery** (deviates from PRD FR-10/FR-11 - a decision):
      proposals, `topic_scan`, `topic_discovery`, the digest and Telegram topic parts,
      `/topics/resolve`, i18n, the product guide, the account export. **Keep** `resolve_topic` (the
@@ -6082,6 +6081,56 @@ failure they prevent.
     admin's calls without a personal key; the users list reads the admin's month as "on your key
     and the installation's". *Rejected:* a totals line only - D363's fallback is silent by design,
     and only the per-call payer shows *which* admin call the installation paid for.
+366. **Every portfolio view has the same cards, the same toolbar and the same row "⋮"** (the user,
+    2026-11-02, task 4). *All*, *Real only* and *Simulated* (and one agent) show the four cards
+    with the Account card in the total cost's place (D367), *Add holding* / *Targets* / "⋯" above
+    the table, and `HoldingRowMenu` on every row, the phone's cards included - the combined
+    table's pencil and bin are gone (they were D334's "not changed"). The real view keeps its own
+    table without the *Holders* column (D229). The menu gains *Ask about this stock* - `/ask`
+    with the question filled in through `AskStore.setDraft` in a new conversation, never sent
+    (decision 70) - and *Research this stock* (D369). With six actions and their reasons the
+    list can be taller than the room under a low row on a phone, and a scroll closes it, so it
+    opens upward when it would not fit (seen in the browser at 375 px).
+367. **The Account card follows the view, like the three cards beside it** (the user, 2026-11-03,
+    task 4's third question). Its value is the view's holdings plus the cash in the view: the
+    real cash at the broker when the real portfolio is in it, and each agent's paper cash
+    (`SimulatedAgentStanding.cashMinor`); "put in" is the real `investedMinor` plus each agent's
+    `depositsMinor`. *Manage cash* is offered only where the real portfolio is in the view - it
+    edits the real cash. No server change: the consolidated read already carried both figures.
+    *Rejected:* always the real account - under *Simulated* one card would speak of the real
+    portfolio and three of the agents, the mismatch D231 removed. *Accepted cost:* under *All*
+    the figure adds real and paper money, as D231's cards already do, and the breakdown says
+    whose is whose.
+368. **A row action that does not apply is disabled with its reason, never hidden** (the user,
+    2026-11-02/03, task 4 and its second question). *Buy* records a buy at the broker on the main
+    portfolio and needs free cash (`cashMinor > 0`; unset cash says where to set it). *Sell*
+    needs the real portfolio to hold the stock - an agent's paper shares are not the user's to
+    sell. *Edit* and *Remove* correct the real holding; on a row with no real part they are
+    disabled with "an agent's holdings change only through its own trades". *Research* is
+    disabled without an active research agent or while a run goes. Whether the real portfolio
+    holds a stock is read **by instrument from `/portfolio`, not from the row's positions**:
+    under *Simulated* a row shows only the agents' part, and reading the row disabled Sell on a
+    stock the user does hold (caught in the browser on AAPL). *Rejected:* Edit on an agent's row
+    opening the agent's page - one word meaning two things, and no single agent on a shared row.
+369. **"Research this stock" rates that one stock now, held or not, after a confirmation** (the
+    user, 2026-11-03, task 4's first question). `POST /research/runs` takes an optional
+    `instrumentId`; the AI service rates `instrument_to_rate` (any known instrument) instead of
+    `main_holdings`, through the same run - the same refusals, payer, allowance, one-run-at-a-time
+    lock and evidence checks - and an unknown instrument is a 404 `unknown_instrument` before any
+    model call. The row opens a drawer naming the agent and the cost (one call, two when a check
+    refuses the first answer); *Research now* starts it and opens `/research#SYMBOL`. No
+    migration: `research_ratings` is keyed by instrument, not by holding. *Rejected:* jumping to
+    the existing rating (no action on the rows where it matters most, nothing for a stock only an
+    agent holds); an agent scan (a scan decides a portfolio, it does not research one stock).
+370. **A stock researched on its own is listed on the research page in a section of its own**
+    (the user, 2026-11-03). `listResearchHoldings` reads the real holdings plus every instrument
+    the assigned agent has rated that the real portfolio does not hold, with `held` telling them
+    apart; the page shows "Other researched stocks" under the holdings, and the dashboard's
+    *Sentiment* column shows their rating too. The run button's count and cost stay the holdings':
+    the daily research still rates only the real portfolio. The page scrolls to the address's
+    stock once, when its entry exists - the read repeats every 5 s during a run and used to jump
+    back on each repeat. *Rejected:* research on real holdings only (the action would again be
+    disabled on exactly the rows an agent alone holds).
 ---
 
 ## Bugs that cost real time, and the lesson from each

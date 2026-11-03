@@ -2765,6 +2765,26 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         const mine = (rows: Awaited<ReturnType<typeof queries.listResearchHoldings>>) => rows.find((row) => row.instrument_id === instrument);
         const row = mine(await queries.listResearchHoldings(USER, analyst!));
         expect(row).toMatchObject({ rating: 'bullish', rationale: 'bullish reasons', agent_name: 'Research analyst', last_status: 'refused' });
+        expect(row?.held).toBe(true);
+        // A stock researched on its own is listed, not held (D370); another user's holding is not this user's.
+        const unheld = (
+          await pool.query<{ id: string }>(
+            `INSERT INTO instruments (symbol, asset_class, name) VALUES ($1, 'equity', 'Unheld Corp') RETURNING id`,
+            [`U${mark}`.slice(0, 12).toUpperCase()],
+          )
+        ).rows[0]!.id;
+        await pool.query(
+          `INSERT INTO research_ratings (run_id, user_id, agent_id, instrument_id, symbol, status, rating, rationale)
+           VALUES ($1, $2, $3, $4, 'U', 'rated', 'neutral', 'neutral reasons')`,
+          [run, USER, analyst, unheld],
+        );
+        const listed = await queries.listResearchHoldings(USER, analyst!);
+        expect(listed.filter((entry) => entry.instrument_id === unheld)).toEqual([
+          expect.objectContaining({ held: false, rating: 'neutral' }),
+        ]);
+        expect(listed.filter((entry) => entry.instrument_id === instrument)).toHaveLength(1);
+        // Without the agent, a stock nobody holds is not listed.
+        expect((await queries.listResearchHoldings(USER, archived!)).some((entry) => entry.instrument_id === unheld)).toBe(false);
         // Another agent's ratings are not this one's.
         const none = mine(await queries.listResearchHoldings(USER, archived!));
         expect(none).toMatchObject({ rating: null, last_status: null });

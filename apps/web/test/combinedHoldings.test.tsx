@@ -20,6 +20,7 @@ vi.mock('../src/api/client.ts', async () => {
 
 const { CombinedHoldingsTable } = await import('../src/components/CombinedHoldingsTable.tsx');
 const { SummaryCards } = await import('../src/components/SummaryCards.tsx');
+const { AccountCard } = await import('../src/components/AccountCard.tsx');
 const { combinedHoldings, scopeSummary, summarySources } = await import('../src/lib/combinedHoldings.ts');
 const { holdingsScopeFrom, holdingsSearchValue } = await import('../src/lib/holdingsScope.ts');
 const { renderPage } = await import('./serverStateHarness.tsx');
@@ -217,6 +218,54 @@ describe('the holdings table', () => {
   });
 });
 
+describe('the row menu in every view (D366, D368)', () => {
+  /** The real portfolio holds NVDA; Momentum alone holds TSLA. */
+  function serve() {
+    get.mockImplementation(async (path: string) => {
+      if (path === '/portfolio') {
+        return { holdings: [{ id: 'h-1', instrument: { id: 'i-NVDA', symbol: 'NVDA' }, costBasisMinor: 15000 }] };
+      }
+      if (path === '/agents') return { agents: [{ id: PRIMARY, isPrimary: true, name: 'Main portfolio', state: 'active' }] };
+      if (path === '/portfolio/cash') {
+        return { state: 'open', currency: 'USD', cashMinor: 50_000, depositsMinor: 50_000, openingHoldingsCostMinor: 0, investedMinor: 50_000, feesPaidMinor: 0 };
+      }
+      if (path === '/research') return { agent: null, run: null, holdings: [] };
+      return new Promise(() => {});
+    });
+  }
+  const tsla = () => {
+    const nvda = response().rows[0]!;
+    return {
+      ...nvda,
+      instrument: { ...nvda.instrument, id: 'i-TSLA', symbol: 'TSLA', name: 'Tesla' },
+      real: null,
+      positions: [{ ...nvda.positions[1]!, holdingId: 'h-3' }],
+    };
+  };
+  const item = (name: string) => screen.getByRole('button', { name }) as HTMLButtonElement;
+
+  it('acts on the real holding under Simulated, though the row shows only the agents', async () => {
+    serve();
+    renderPage(<CombinedHoldingsTable data={response()} scope={{ kind: 'simulated' }} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for NVDA' }));
+    await vi.waitFor(() => expect(item('Sell').disabled).toBe(false));
+    expect(item('Edit').disabled).toBe(false);
+    expect(item('Remove').disabled).toBe(false);
+  });
+
+  it('disables selling and correcting a stock only an agent holds, under All', async () => {
+    serve();
+    const data = response();
+    data.rows.push(tsla());
+    renderPage(<CombinedHoldingsTable data={data} scope={ALL} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Actions for TSLA' }));
+    await vi.waitFor(() => expect(item('Buy').disabled).toBe(false));
+    expect(item('Sell').disabled).toBe(true);
+    expect(item('Edit').disabled).toBe(true);
+    expect(item('Remove').disabled).toBe(true);
+  });
+});
+
 describe('an agent\'s pending trade (D232)', () => {
   it('is approved from its row through the proposal\'s own card, not in one click', async () => {
     renderPage(<CombinedHoldingsTable data={response({ pendingTrades: [pendingTrade('p-1', 'NVDA')] })} scope={ALL} />);
@@ -253,6 +302,26 @@ describe('the four cards', () => {
     expect(within(drawer).getAllByText('$49,000.00').length).toBeGreaterThan(0);
     expect(within(drawer).getByText('Uninvested paper cash: $14,000.00')).toBeTruthy();
     expect(within(drawer).getByText(/Momentum proposes to buy 2 NVDA/)).toBeTruthy();
+  });
+
+  it("put the view's account in the total cost's place: under Simulated, the agents' paper cash and deposits (D367)", async () => {
+    const data = response();
+    const sources = summarySources(data, { kind: 'simulated' });
+    const summary = scopeSummary(data, sources);
+    renderPage(
+      <SummaryCards
+        summary={summary}
+        sources={sources}
+        account={<AccountCard summary={summary} agents={sources} real={false} />}
+      />,
+    );
+    const card = (await screen.findByText('Account')).closest('div')!.parentElement!;
+    // Holdings $1,000.00 plus paper cash $14,000.00; deposits $15,000.00, so no gain.
+    expect(within(card).getByText('$15,000.00', { selector: 'span > bdi' })).toBeTruthy();
+    expect(within(card).getByText('$14,000.00')).toBeTruthy();
+    expect(screen.queryByText('Total cost')).toBeNull();
+    // Managing the cash is the real account's: not offered without it.
+    expect(within(card).queryByRole('button')).toBeNull();
   });
 
   it('are plain figures for one source with nothing waiting', async () => {

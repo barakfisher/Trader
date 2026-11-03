@@ -10,7 +10,7 @@
 
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import type { ResearchAgentInput, ResearchResponse } from '@traders/shared';
+import type { ResearchAgentInput, ResearchResponse, ResearchRunInput } from '@traders/shared';
 
 import { api } from '../api/client.ts';
 import { queryKeys } from './queryKeys.ts';
@@ -37,10 +37,15 @@ export function useAssignResearchAgent() {
   });
 }
 
+/** Start research now: on every holding, or with an instrument id on that one stock (D369). */
 export function useStartResearch() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: () => api.post<{ run_id: string; holdings: number }>('/research/runs', {}),
+    mutationFn: (instrumentId?: string) =>
+      api.post<{ run_id: string; holdings: number }>(
+        '/research/runs',
+        instrumentId === undefined ? {} : ({ instrumentId } satisfies ResearchRunInput),
+      ),
     onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.research }),
   });
 }
