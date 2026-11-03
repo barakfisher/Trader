@@ -5,7 +5,8 @@ questions the user might ask next (`instructions.py`). This module turns that
 into a reply the user may see, or says why it may not:
 
 - **Shape**: JSON with a known `outcome`, and a `reason` exactly when it
-  declines. Fenced JSON is accepted; anything else is `malformed`.
+  declines. Fenced JSON is accepted; anything else is `malformed`. One repair:
+  suggestions that are not JSON are dropped and the reply kept (D376).
 - **Figures** (guideline 7): every number in the text and the suggestions must
   appear in a tool result of this conversation or in the user's own words. The
   user's words count because correcting "my portfolio is up 50%" has to repeat
@@ -41,6 +42,11 @@ MAX_SUGGESTIONS = 3
 MAX_SUGGESTION_CHARS = 120
 
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL)
+#: The `suggestions` member with the comma that joins it to its neighbour, whatever
+#: the array holds. Measured 2026-11-03: Flash-Lite wrote Hebrew suggestions without
+#: quotes, and a correct answer was refused twice for three optional buttons (D376).
+_SUGGESTIONS_THEN_COMMA = re.compile(r'"suggestions"\s*:\s*\[[^\]]*\]\s*,', re.DOTALL)
+_COMMA_THEN_SUGGESTIONS = re.compile(r',\s*"suggestions"\s*:\s*\[[^\]]*\]', re.DOTALL)
 #: A markdown numbered-list marker ("2. " at a line's start): a position, not a
 #: figure. Measured 2026-10-12: a real step-by-step reply was refused for its "2.".
 _LIST_MARKER = re.compile(r"^(\s*)\d{1,2}[.)](?=\s)", re.MULTILINE)
@@ -72,10 +78,7 @@ def parse(raw: str) -> Reply | None:
     fenced = _FENCE.match(body)
     if fenced:
         body = fenced.group(1)
-    try:
-        data = json.loads(body)
-    except json.JSONDecodeError:
-        return None
+    data = _loaded(body)
     if not isinstance(data, dict):
         return None
     outcome = data.get("outcome")
@@ -92,6 +95,26 @@ def parse(raw: str) -> Reply | None:
         if isinstance(s, str) and s.strip()
     )[:MAX_SUGGESTIONS]
     return Reply(outcome=outcome, text=text_.strip(), reason=reason, suggestions=suggestions)
+
+
+def _loaded(body: str) -> Any:
+    """`body` as JSON; failing that, without its `suggestions`; failing that, None.
+
+    Only the suggestions are given up: they are optional buttons, and the answer is
+    still checked like any other. A reply broken anywhere else stays `malformed`.
+    """
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError:
+        pass
+    for member in (_COMMA_THEN_SUGGESTIONS, _SUGGESTIONS_THEN_COMMA):
+        without, removed = member.subn("", body, count=1)
+        if removed:
+            try:
+                return {**json.loads(without), "suggestions": []}
+            except (json.JSONDecodeError, TypeError):
+                continue
+    return None
 
 
 #: A markdown link's target and a bare URL: where a link goes, checked by

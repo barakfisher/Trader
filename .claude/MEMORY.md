@@ -26,7 +26,7 @@ would have fired here too).
   the user's word, compose first with `db-backup.sh --target compose`, then `prod-deploy.sh`. The
   first `news_collect` after it prunes the market articles no topic links any more: ~89k on
   compose, ~9.3k on production. Expected, not a bug.
-- **Decisions reach 375** (next: **376**). **Migrations:** `0082` head; next free `0083`.
+- **Decisions reach 376** (next: **377**). **Migrations:** `0082` head; next free `0083`.
 - **Next:** no development task is queued. On the user's word: deploy #367; the future items
   ("Connect OpenRouter" by PKCE, dropping GitHub OAuth, the legal text); the M12 roadmap (capital
   gains tax and loss offsetting, `docs/MILESTONES.md`, not started).
@@ -6231,6 +6231,22 @@ failure they prevent.
     TikLens's Postgres); a second Always Free VM for it (free, but a second server and console
     steps for a single-user installation); Cloud without text (cannot show what a scan saw,
     which is the question tracing exists to answer); the drop-in client (above).
+376. **An assistant reply whose suggestions are not JSON keeps its answer; the suggestions are
+    dropped** (the user, 2026-11-03: "fix it here"). Found in the first production Langfuse trace
+    (D375): asked in English which tools an agent's last scan used, Flash-Lite wrote a correct
+    answer twice but its `suggestions` array without quotes (`[ מה התזה של הסוכן שלי?, ...]`), so
+    `json.loads` failed, both turns were `malformed`, and the user was shown "I couldn't give an
+    answer I could check". `reply.parse` now retries once without the `suggestions` member; the
+    answer then passes the same figure, degenerate and link checks as any other. Measured over
+    every `malformed` assistant reply that day: 2 of 9 (production `llm_calls` 94-95) were this
+    and are recovered; the other 7 (1 production, 6 compose) are plain prose with no JSON at all
+    and stay `malformed` - accepting prose is a separate decision (it would also lose the
+    answer/decline/clarify distinction). The same trace answered an English question in Hebrew,
+    against D220; measured that day, compose's 8 answered English questions were all answered in
+    English, so rule 9 was left as it is. The GitHub OAuth PR, open at the same time, also took 376 - whichever merges second renumbers.
+    *Rejected:* asking the model for JSON through `response_format` (not every OpenRouter route
+    honours it, and a refusal there fails the call rather than one optional field); repairing
+    the array's quoting (guessing where an unquoted string ends, for three buttons).
 ---
 
 ## Bugs that cost real time, and the lesson from each
