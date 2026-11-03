@@ -354,7 +354,7 @@ describe('commands send a view', () => {
     sent = [];
     settings = { ...settings, muted_until: new Date(Date.now() + 3_600_000) };
     await handleTelegramUpdate(deps(), command('/status'));
-    expect(lastText()).toMatch(/Muted until \d{2}:\d{2}/);
+    expect(lastText()).toMatch(/Muted until (.*, )?\d{2}:\d{2}\./);
     expect(tapsOf(lastButtons())).toContainEqual({ view: 'mute', hours: 0 });
   });
 
