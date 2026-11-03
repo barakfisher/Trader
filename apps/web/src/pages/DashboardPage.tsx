@@ -151,8 +151,9 @@ export const DashboardPage = observer(function DashboardPage() {
           <>
             {/* The four cards, then the holdings - the page's main content -
                 with the scope toggle directly above them, then the two charts
-                (D233). On a phone everything stacks. Findings and the digest
-                are on Insights. */}
+                (D233). Every view has the same cards, the Account card among
+                them, the same toolbar and the same row menu (D366). On a phone
+                everything stacks. Findings and the digest are on Insights. */}
             {combinedView ? (
               consolidated.data && (
                 <SummaryCards
@@ -161,6 +162,13 @@ export const DashboardPage = observer(function DashboardPage() {
                   pendingTrades={consolidated.data.pendingTrades.filter((trade) =>
                     inScope(scope, { agentId: trade.agentId, isPrimary: false }),
                   )}
+                  account={
+                    <AccountCard
+                      summary={scopeSummary(consolidated.data, sources)}
+                      agents={sources.filter((source) => !source.isPrimary)}
+                      real={sources.some((source) => source.isPrimary)}
+                    />
+                  }
                 />
               )
             ) : (
@@ -175,7 +183,7 @@ export const DashboardPage = observer(function DashboardPage() {
                 <CombinedHoldingsTable
                   data={consolidated.data}
                   scope={scope}
-                  actions={scope.kind === 'all' ? <HoldingsActions /> : undefined}
+                  actions={<HoldingsActions />}
                   sort={sort}
                   onSort={setSort}
                 />

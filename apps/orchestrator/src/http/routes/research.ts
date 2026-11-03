@@ -4,7 +4,8 @@
  * - `GET /research`: the assigned agent, its latest run and each holding's
  *   latest rating - the research page and the Dashboard's *Sentiment* column.
  * - `PUT /research/agent`: assign one of the user's agents, or none.
- * - `POST /research/runs`: start a run now. It answers 202 as soon as the AI
+ * - `POST /research/runs`: start a run now - on the main portfolio, or with
+ *   `{ instrumentId }` on that one stock, held or not (D369). It answers 202 as soon as the AI
  *   service has claimed the run; the page reads its progress from `GET`. Rate
  *   limited per user like every route that spends the model (D257).
  */
@@ -19,6 +20,7 @@ import { badRequest, notFound } from '../errors.js';
 import { limitPerUser } from '../rateLimits.js';
 
 const agentBody = z.object({ agentId: z.string().uuid().nullable() }).strict();
+const runBody = z.object({ instrumentId: z.string().uuid().optional() }).strict();
 
 export function registerResearchRoutes(app: Hono<AppEnv>): void {
   app.get('/research', async (context) => {
@@ -37,7 +39,18 @@ export function registerResearchRoutes(app: Hono<AppEnv>): void {
 
   app.post('/research/runs', limitPerUser('researchRun'), async (context) => {
     const userId = currentUserId(context);
-    const started = await startResearch(userId, context.get('ai'), 'manual', context.get('requestId'));
+    // An empty body is the whole portfolio, as before one stock could be asked for.
+    const parsed = runBody.safeParse(await context.req.json().catch(() => ({})));
+    if (!parsed.success) {
+      throw badRequest('invalid_body', 'instrumentId is an instrument id, or absent for every holding', parsed.error.issues);
+    }
+    const started = await startResearch(
+      userId,
+      context.get('ai'),
+      'manual',
+      context.get('requestId'),
+      parsed.data.instrumentId,
+    );
     return context.json(started, 202);
   });
 }

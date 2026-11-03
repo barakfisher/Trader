@@ -56,8 +56,10 @@ export interface SummarySource {
   /** The stored name; the primary is named from the catalogue by the caller. */
   name: string;
   summary: PortfolioSummary;
-  /** An agent's uninvested paper cash; the real portfolio has none on record. */
+  /** An agent's uninvested paper cash; the real portfolio's is read on its own (`usePrimaryCash`). */
   cashMinor: number | null;
+  /** An agent's paper money put in: its deposits (D367). Null for the real portfolio, as the cash. */
+  depositsMinor: number | null;
 }
 
 function sumOrNull(values: number[]): number | null {
@@ -112,6 +114,7 @@ export function summarySources(data: ConsolidatedHoldingsResponse, scope: Holdin
     name: '',
     summary: data.real,
     cashMinor: null,
+    depositsMinor: null,
   };
   const agents = data.agents
     .filter((standing) => inScope(scope, { agentId: standing.agentId, isPrimary: false }))
@@ -122,6 +125,7 @@ export function summarySources(data: ConsolidatedHoldingsResponse, scope: Holdin
         name: standing.name,
         summary: standing.summary,
         cashMinor: standing.cashMinor,
+        depositsMinor: standing.depositsMinor,
       }),
     );
   if (scope.kind === 'real') return [real];

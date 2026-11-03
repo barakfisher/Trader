@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
-import { Check, Clock, Pencil, Trash2 } from 'lucide-react';
+import { Check, Clock } from 'lucide-react';
 
 import type {
   ConsolidatedHoldingsResponse,
@@ -32,6 +32,7 @@ import { sentimentRank, sortHoldings, type SortFields, type SortKey } from '../l
 import { ApproveProposalButton } from './ProposalApproval.tsx';
 import { SortControl, SortableTh, useSortColumns, type SortProps } from './SortableHeader.tsx';
 import { SentimentCell, useSentiments } from './SentimentBadge.tsx';
+import { HoldingRowMenu } from './HoldingRowMenu.tsx';
 import { Card, Delta } from './ui.tsx';
 
 /**
@@ -80,17 +81,19 @@ export function CombinedHoldingsTable({
       />
     );
   };
-  const realHoldings = new Map((usePortfolioQuery().data?.holdings ?? []).map((holding) => [holding.id, holding]));
+  // By instrument, not by the row's positions: under *Simulated* a row shows
+  // only the agents' part, yet the real portfolio may hold the stock too, and
+  // the row's Sell, Edit and Remove act on that (D368).
+  const realHoldings = new Map(
+    (usePortfolioQuery().data?.holdings ?? []).map((holding) => [holding.instrument.id, holding]),
+  );
   const updateHolding = useUpdateHolding();
   const removeHolding = useRemoveHolding();
   const narrow = useNarrowViewport();
   const failure =
     (updateHolding.error && errorMessage(updateHolding.error, t('holdings.updateFailed'))) ||
     (removeHolding.error && errorMessage(removeHolding.error, t('holdings.removeFailed')));
-  const realOf = (row: CombinedHolding) => {
-    const position = row.positions.find((entry) => entry.isPrimary);
-    return position ? (realHoldings.get(position.holdingId) ?? null) : null;
-  };
+  const realOf = (row: CombinedHolding) => realHoldings.get(row.instrument.id) ?? null;
   const shared = { currency: data.currency, updateHolding, removeHolding };
 
   return (
@@ -152,7 +155,7 @@ export function combinedSortFields(row: CombinedHolding, research?: ResearchHold
 
 interface RowProps {
   row: CombinedHolding;
-  /** The real portfolio's holding in this row, when it has one: the part that can be edited. */
+  /** The real portfolio's holding of this row's stock, in whatever view: the part that can be edited. */
   real: HoldingView | null;
   currency: string;
   updateHolding: UpdateHolding;
@@ -220,36 +223,19 @@ function CombinedRow({ row, real, currency, updateHolding, removeHolding }: RowP
             {row.pending.map((trade) => (
               <ApproveProposalButton key={trade.proposalId} trade={trade} />
             ))}
-            {real &&
-              (confirmingDelete ? (
-                <span className="flex items-center gap-2 text-xs">
-                  <button type="button" onClick={() => removeHolding.mutate(real.id)} className="text-loss underline">
-                    {t('common.remove')}
-                  </button>
-                  <button type="button" onClick={() => setConfirmingDelete(false)} className="text-text-muted">
-                    {t('common.cancel')}
-                  </button>
-                </span>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setEditing(true)}
-                    aria-label={t('combined.editReal', { symbol })}
-                    className="text-text-muted hover:text-text-primary"
-                  >
-                    <Pencil className="size-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingDelete(true)}
-                    aria-label={t('combined.removeReal', { symbol })}
-                    className="text-text-muted hover:text-loss"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
-                </>
-              ))}
+            {confirmingDelete && real ? (
+              <span className="flex items-center gap-2 text-xs">
+                <span className="max-w-56 text-start text-[11px] text-text-muted">{t('holdings.removeNote')}</span>
+                <button type="button" onClick={() => removeHolding.mutate(real.id)} className="text-loss underline">
+                  {t('common.remove')}
+                </button>
+                <button type="button" onClick={() => setConfirmingDelete(false)} className="text-text-muted">
+                  {t('common.cancel')}
+                </button>
+              </span>
+            ) : (
+              <RowMenu row={row} real={real} onEdit={() => setEditing(true)} onRemove={() => setConfirmingDelete(true)} />
+            )}
           </span>
         </td>
       </tr>
@@ -310,30 +296,40 @@ function CombinedCard({ row, real, currency, updateHolding, removeHolding }: Row
           </button>
         </div>
       ) : (
-        (real || row.pending.length > 0) && (
-          <div className="flex flex-wrap gap-2">
-            {row.pending.map((trade) => (
-              <ApproveProposalButton key={trade.proposalId} trade={trade} />
-            ))}
-            {real && (
-              <>
-                <button type="button" onClick={() => setEditing(true)} aria-label={t('combined.editReal', { symbol })} className={button}>
-                  <Pencil className="size-4" aria-hidden /> {t('common.edit')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmingDelete(true)}
-                  aria-label={t('combined.removeReal', { symbol })}
-                  className={button}
-                >
-                  <Trash2 className="size-4" aria-hidden /> {t('common.remove')}
-                </button>
-              </>
-            )}
-          </div>
-        )
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {row.pending.map((trade) => (
+            <ApproveProposalButton key={trade.proposalId} trade={trade} />
+          ))}
+          <RowMenu row={row} real={real} onEdit={() => setEditing(true)} onRemove={() => setConfirmingDelete(true)} />
+        </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The row's "⋮" - the same one the real view's rows have (D366). Edit and
+ * Remove act on the real portfolio's part of the row, so a row the real
+ * portfolio does not hold has them disabled (D368).
+ */
+function RowMenu({
+  row,
+  real,
+  onEdit,
+  onRemove,
+}: {
+  row: CombinedHolding;
+  real: HoldingView | null;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <HoldingRowMenu
+      symbol={row.instrument.symbol}
+      instrumentId={row.instrument.id}
+      onEdit={real ? onEdit : undefined}
+      onRemove={real ? onRemove : undefined}
+    />
   );
 }
 

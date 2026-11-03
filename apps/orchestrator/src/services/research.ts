@@ -24,7 +24,7 @@ import {
   type ResearchHoldingRow,
   type ResearchRunRow,
 } from '../db/queries.js';
-import { ApiProblem, aiRefusal, conflict, upstreamFailure } from '../http/errors.js';
+import { ApiProblem, aiRefusal, conflict, notFound, upstreamFailure } from '../http/errors.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -47,6 +47,7 @@ export function toResearchHolding(row: ResearchHoldingRow, now: Date): ResearchH
     instrumentId: row.instrument_id,
     symbol: row.symbol,
     name: row.name,
+    held: row.held,
     latest: rated
       ? {
           rating: row.rating!,
@@ -86,21 +87,27 @@ export async function readResearch(userId: string, now = new Date()): Promise<Re
 }
 
 /**
- * Start the assigned agent's research now. Throws `ApiProblem` for every
- * refusal: the AI service's 409s keep their codes, a missing model is 503.
+ * Start the assigned agent's research now: on the main portfolio, or on one
+ * stock (D369). Throws `ApiProblem` for every refusal: the AI service's 409s
+ * keep their codes, an unknown stock is 404, a missing model is 503.
  */
 export async function startResearch(
   userId: string,
   ai: AiClient,
   trigger: 'manual' | 'schedule',
   requestId?: string,
+  instrumentId?: string,
 ): Promise<ResearchRunStarted> {
   try {
-    return await ai.startResearch({ user_id: userId, trigger }, requestId);
+    return await ai.startResearch(
+      { user_id: userId, trigger, ...(instrumentId === undefined ? {} : { instrument_id: instrumentId }) },
+      requestId,
+    );
   } catch (error) {
     if (error instanceof AiServiceError) {
       const reason = aiRefusal(error.body);
       if (error.status === 409 && reason) throw conflict(reason.code, reason.message);
+      if (error.status === 404 && reason?.code === 'unknown_instrument') throw notFound('instrument not found');
       if (error.status === 503 && reason?.code === 'no_model') {
         throw new ApiProblem(503, 'no_model', 'No model is configured. Choose one on the Admin page.');
       }

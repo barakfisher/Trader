@@ -12,30 +12,50 @@ import { ApiRequestError } from '../api/client.ts';
 import { formatMoney } from '../i18n/format.ts';
 import { t as translate, useTranslation } from '../i18n/index.ts';
 import { BUDGET_INPUT } from '../lib/agentPresentation.ts';
+import type { SummarySource } from '../lib/combinedHoldings.ts';
 import { useCashMovement, useCashWrite, usePrimaryCash, type CashAction } from '../queries/portfolioCash.ts';
 import { Drawer } from './Drawer.tsx';
 import { Button, Delta, ErrorNote } from './ui.tsx';
 
 /**
- * The main portfolio's account (D328-D330), in place of the total-cost card:
- * the account's value - holdings at market plus the cash at the broker - with
- * the cash and the money put in under it.
+ * The account (D328-D330), in place of the total-cost card in every view
+ * (D367): the value - holdings at market plus the cash - with the cash and the
+ * money put in under it, for whatever the view shows, like the cards beside it.
+ * The real portfolio brings its cash at the broker and what the user put in;
+ * each agent in the view brings its paper cash and its paper deposits.
  *
- * Until the user enters their cash, the card says so and offers to set it:
- * a $0 nobody entered would read as an empty account (guideline 7). The
- * figures are the portfolio summary's own, so when a holding is unpriced the
- * value carries the same warning the other cards do.
+ * While the real portfolio is in the view and its cash is not entered, the
+ * card says so and offers to set it: a $0 nobody entered would read as an
+ * empty account (guideline 7). The holdings' figure is the summary's own, so
+ * when a holding is unpriced the value carries the same warning the other
+ * cards do. Managing the cash is the real account's, so it is offered only
+ * where the real portfolio is in the view.
  */
-export function AccountCard({ summary }: { summary: PortfolioSummary }) {
+export function AccountCard({
+  summary,
+  agents = [],
+  real = true,
+}: {
+  /** The view's holdings, added together as the other cards add them. */
+  summary: PortfolioSummary;
+  /** The agents in the view; each brings its paper cash and deposits. */
+  agents?: SummarySource[];
+  /** Whether the real portfolio is in the view. */
+  real?: boolean;
+}) {
   const { t } = useTranslation();
   const cash = usePrimaryCash();
   const [open, setOpen] = useState(false);
   const currency = summary.baseCurrency;
   const money = (minor: number) => <bdi>{formatMoney(minor, currency)}</bdi>;
-  const data = cash.data;
+  const data = real ? cash.data : undefined;
+  const paperCash = agents.reduce((total, agent) => total + (agent.cashMinor ?? 0), 0);
+  const paperIn = agents.reduce((total, agent) => total + (agent.depositsMinor ?? 0), 0);
 
   let body: React.ReactNode;
-  if (cash.isPending) {
+  if (!real) {
+    body = <AccountFigures summary={summary} cashMinor={paperCash} investedMinor={paperIn} />;
+  } else if (cash.isPending) {
     body = <span className="mt-1 block text-sm text-text-muted">{t('account.loading')}</span>;
   } else if (cash.isError || !data) {
     body = <span className="mt-1 block text-xs text-loss">{t('account.loadFailed')}</span>;
@@ -43,42 +63,18 @@ export function AccountCard({ summary }: { summary: PortfolioSummary }) {
     body = (
       <>
         <span className="mt-1 block text-base font-semibold tabular-nums sm:text-lg">
-          {money(summary.totalValueMinor)}
+          {money(summary.totalValueMinor + paperCash)}
         </span>
         <span className="mt-1 block text-xs text-text-muted">{t('account.cashUnset')}</span>
       </>
     );
   } else {
-    const value = summary.totalValueMinor + data.cashMinor;
-    const gain = value - data.investedMinor;
     body = (
-      <>
-        <span className="mt-1 block text-base font-semibold tabular-nums sm:text-lg">{money(value)}</span>
-        <dl className="mt-1 space-y-0.5 text-xs text-text-muted">
-          <div className="flex justify-between gap-2">
-            <dt>{t('account.cash')}</dt>
-            <dd className="tabular-nums text-text-primary">{money(data.cashMinor)}</dd>
-          </div>
-          <div className="flex justify-between gap-2">
-            <dt>{t('account.invested')}</dt>
-            <dd className="tabular-nums text-text-primary">{money(data.investedMinor)}</dd>
-          </div>
-          {!summary.degraded && (
-            <div className="flex justify-between gap-2">
-              <dt>{t('account.gain')}</dt>
-              <dd className="tabular-nums">
-                <Delta value={gain}>{money(gain)}</Delta>
-              </dd>
-            </div>
-          )}
-        </dl>
-        {summary.degraded && (
-          <span className="mt-1 flex items-center gap-1 text-xs text-warn">
-            <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
-            {t('account.incomplete')}
-          </span>
-        )}
-      </>
+      <AccountFigures
+        summary={summary}
+        cashMinor={data.cashMinor + paperCash}
+        investedMinor={data.investedMinor + paperIn}
+      />
     );
   }
 
@@ -86,7 +82,7 @@ export function AccountCard({ summary }: { summary: PortfolioSummary }) {
     <div className="min-w-0 rounded-xl border border-border-subtle bg-surface-raised px-3 py-3 sm:px-4">
       <div className="flex items-start justify-between gap-2">
         <span className="block text-xs uppercase tracking-wide text-text-muted">{t('account.title')}</span>
-        {data && (
+        {real && data && (
           <button
             type="button"
             onClick={() => setOpen(true)}
@@ -105,6 +101,51 @@ export function AccountCard({ summary }: { summary: PortfolioSummary }) {
         </Drawer>
       )}
     </div>
+  );
+}
+
+/** The account's value, then its cash, the money put in and the gain - or why the gain is left out. */
+function AccountFigures({
+  summary,
+  cashMinor,
+  investedMinor,
+}: {
+  summary: PortfolioSummary;
+  cashMinor: number;
+  investedMinor: number;
+}) {
+  const { t } = useTranslation();
+  const money = (minor: number) => <bdi>{formatMoney(minor, summary.baseCurrency)}</bdi>;
+  const value = summary.totalValueMinor + cashMinor;
+  const gain = value - investedMinor;
+  return (
+    <>
+      <span className="mt-1 block text-base font-semibold tabular-nums sm:text-lg">{money(value)}</span>
+      <dl className="mt-1 space-y-0.5 text-xs text-text-muted">
+        <div className="flex justify-between gap-2">
+          <dt>{t('account.cash')}</dt>
+          <dd className="tabular-nums text-text-primary">{money(cashMinor)}</dd>
+        </div>
+        <div className="flex justify-between gap-2">
+          <dt>{t('account.invested')}</dt>
+          <dd className="tabular-nums text-text-primary">{money(investedMinor)}</dd>
+        </div>
+        {!summary.degraded && (
+          <div className="flex justify-between gap-2">
+            <dt>{t('account.gain')}</dt>
+            <dd className="tabular-nums">
+              <Delta value={gain}>{money(gain)}</Delta>
+            </dd>
+          </div>
+        )}
+      </dl>
+      {summary.degraded && (
+        <span className="mt-1 flex items-center gap-1 text-xs text-warn">
+          <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
+          {t('account.incomplete')}
+        </span>
+      )}
+    </>
   );
 }
 

@@ -17,8 +17,8 @@ import { Delta } from './ui.tsx';
 /**
  * The dashboard's four cards - total value, total cost, unrealised P&L, today
  * - for whatever the holdings scope shows (D231): the real portfolio, an agent,
- * or several of them added together. On the real portfolio alone, the account
- * card - holdings plus cash - takes the total cost's place (D328).
+ * or several of them added together. The account card - holdings plus cash -
+ * takes the total cost's place in every view (D328, D367).
  *
  * A figure that adds sources never stands alone: when there is more than one
  * source, or an agent's trade is waiting, each card is a button that opens
@@ -35,7 +35,7 @@ export const SummaryCards = observer(function SummaryCards({
   /** What the figures add up; more than one makes the cards open their breakdown. */
   sources?: SummarySource[];
   pendingTrades?: ConsolidatedPendingTrade[];
-  /** The main portfolio's account card, in the total cost's place (D328). */
+  /** The view's account card, in the total cost's place (D328, D367). */
   account?: React.ReactNode;
 }) {
   const { t } = useTranslation();

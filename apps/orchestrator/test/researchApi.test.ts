@@ -28,6 +28,7 @@ function holding(overrides: Record<string, unknown> = {}) {
     instrument_id: '10000000-0000-0000-0000-000000000001',
     symbol: 'CCJ',
     name: 'Cameco',
+    held: true,
     rating: 'bullish',
     rationale: 'CCJ trades at 54.32.',
     findings: ['Steady news.'],
@@ -86,6 +87,7 @@ describe('a holding as the page reads it (D293)', () => {
       instrumentId: '10000000-0000-0000-0000-000000000001',
       symbol: 'CCJ',
       name: 'Cameco',
+      held: true,
       latest: {
         rating: 'bullish',
         rationale: 'CCJ trades at 54.32.',
@@ -163,6 +165,28 @@ describe('the research routes', () => {
     const response = await send('POST', '/research/runs');
     expect(response.status).toBe(202);
     expect(start).toHaveBeenCalledWith({ user_id: USER.id, trigger: 'manual' }, expect.anything());
+  });
+
+  it('starts a run on one stock, held or not (D369)', async () => {
+    const start = vi.fn(ai.startResearch);
+    ai.startResearch = start;
+    const instrumentId = '10000000-0000-0000-0000-000000000002';
+    expect((await send('POST', '/research/runs', { instrumentId })).status).toBe(202);
+    expect(start).toHaveBeenCalledWith(
+      { user_id: USER.id, trigger: 'manual', instrument_id: instrumentId },
+      expect.anything(),
+    );
+    expect((await send('POST', '/research/runs', { instrumentId: 'nope' })).status).toBe(400);
+  });
+
+  it('answers 404 for a stock the AI service does not know', async () => {
+    ai.startResearch = vi.fn(async () => {
+      throw new AiServiceError('unknown_instrument', 404, {
+        detail: { code: 'unknown_instrument', message: 'no such instrument' },
+      });
+    });
+    const response = await send('POST', '/research/runs', { instrumentId: '10000000-0000-0000-0000-0000000000ff' });
+    expect(response.status).toBe(404);
   });
 
   it('is rate limited per user (D257)', async () => {

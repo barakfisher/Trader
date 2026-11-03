@@ -78,6 +78,7 @@ beforeEach(() => {
   get.mockImplementation(async (path: string) => {
     if (path === '/agents') return { agents: [] };
     if (path === '/portfolio/cash') return { state: 'unset' };
+    if (path === '/research') return { agent: null, run: null, holdings: [] };
     return PORTFOLIO;
   });
 });
@@ -177,7 +178,10 @@ it('shows a yen cost as yen, with no decimal places to invent', async () => {
     costBasisMinor: 1500,
     costCurrency: 'JPY',
   };
-  get.mockResolvedValue({ ...PORTFOLIO, holdings: [toyota] });
+  const answer = get.getMockImplementation()!;
+  get.mockImplementation(async (path: string) =>
+    path === '/portfolio' ? { ...PORTFOLIO, holdings: [toyota] } : answer(path),
+  );
   renderPage(<HoldingsTable />);
 
   await choose('7203.T', 'Edit');
