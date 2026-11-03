@@ -14,7 +14,7 @@
 Facts this section must state:
 
 - Your account: email address, password (stored only as a hash), time zone, interface language, and the time you last signed in.
-- If you sign in with Google or GitHub: the provider's account id and the email address it reported.
+- If you sign in with Google: the provider's account id and the email address it reported.
 - Your holdings: quantities, cost per unit and any notes you add. An imported broker file is read and not stored.
 - Your simulated agents: their instructions, settings and virtual ledgers.
 - What the app produced for you: observations, trade proposals, notifications and daily digests.
@@ -35,7 +35,7 @@ Facts this section must state:
 - **Yahoo Finance:** the symbols of the instruments you hold, to fetch prices. Nothing that identifies you.
 - **Telegram,** if you connect it: alerts, digests and answers sent to your chat.
 - **The email provider (Resend):** your address and the account emails sent to you.
-- **Google or GitHub,** if you sign in with them.
+- **Google,** if you sign in with it.
 
 ## How long we keep it
 
@@ -70,7 +70,7 @@ Facts this section must state:
 Facts this section must state:
 
 - One cookie keeps you signed in. It is not readable by the page's scripts.
-- A short-lived cookie protects a sign-in through Google or GitHub.
+- A short-lived cookie protects a sign-in through Google.
 - No advertising or analytics cookies.
 
 ## Who can see your data

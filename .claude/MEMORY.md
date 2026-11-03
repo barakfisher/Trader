@@ -26,7 +26,8 @@ would have fired here too).
   the user's word, compose first with `db-backup.sh --target compose`, then `prod-deploy.sh`. The
   first `news_collect` after it prunes the market articles no topic links any more: ~89k on
   compose, ~9.3k on production. Expected, not a bug.
-- **Decisions reach 375** (next: **376**). **Migrations:** `0082` head; next free `0083`.
+- **Decisions reach 376** (next: **377**; D376 drops GitHub sign-in). **Migrations:** `0083` head
+  (`0083_drop_github_identities`); next free `0084`.
 - **Next:** no development task is queued. On the user's word: deploy #367; the future items
   ("Connect OpenRouter" by PKCE, dropping GitHub OAuth, the legal text); the M12 roadmap (capital
   gains tax and loss offsetting, `docs/MILESTONES.md`, not started).
@@ -6231,6 +6232,19 @@ failure they prevent.
     TikLens's Postgres); a second Always Free VM for it (free, but a second server and console
     steps for a single-user installation); Cloud without text (cannot show what a scan saw,
     which is the question tracing exists to answer); the drop-in client (above).
+376. **GitHub is no longer a sign-in provider; Google stays, and migration 0083 narrows
+    `user_identities.provider` to it** (the user, 2026-11-03: "Drop GitHub OAuth", then "yes,
+    migration 0083"). This amends D262 and M10's "OAuth (Google, GitHub)". GitHub's OAuth app was
+    never registered on production and was listed as owed since 2026-11-01; measured that day,
+    neither installation holds a GitHub identity (production: 2 Google rows, 3 accounts, no
+    `GITHUB_*` set; compose: none). Gone: `GitHubProvider`, `GITHUB_CLIENT_ID/SECRET`, `'github'`
+    in `OAUTH_PROVIDERS`, and every "Google or GitHub" a user reads (the deletion card, the
+    approval email, the privacy drafts). `arctic` and the provider interface stay - Google uses
+    them, and adding a provider back is one class plus a migration. 0083 *refuses* if a GitHub row
+    exists instead of deleting it: for a password-less account that row is its only way in.
+    *Rejected:* finishing the GitHub app (a second console and secret for three accounts that all
+    have Google); dropping the code but leaving the CHECK (the database would accept a provider
+    the code no longer knows, and a stray write would leave a row nothing reads).
 ---
 
 ## Bugs that cost real time, and the lesson from each

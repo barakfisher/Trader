@@ -5,8 +5,8 @@
  * scheduled for it - and the installation's `account_erase` run erases it
  * `ACCOUNT_DELETION_GRACE_DAYS` later. Signing in before then cancels it
  * (`routes/auth.ts`, `routes/oauth.ts`). It is confirmed by the typed word and
- * the password, or - for an account that only signs in through Google or
- * GitHub, which has none - by a sign-in moments ago: a session left open on a
+ * the password, or - for an account that only signs in through Google,
+ * which has none - by a sign-in moments ago: a session left open on a
  * shared computer is not the account's owner.
  */
 

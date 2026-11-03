@@ -727,7 +727,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
           await getPool().query('INSERT INTO telegram_bindings (user_id, chat_id) VALUES ($1, $2)', [userId, 990000000 + Math.floor(Math.random() * 1_000_000)]);
           // And a provider linked from a stolen session goes too (D315).
-          await queries.linkIdentity({ userId, provider: 'github', subject: `sub-${randomUUID()}`, email: null });
+          await queries.linkIdentity({ userId, provider: 'google', subject: `sub-${randomUUID()}`, email: null });
           expect((await queries.useResetToken(await resetLink(userId, email('reset-admin')), 'new')).outcome).toBe('reset');
           const { rows } = await getPool().query(
             `SELECT (SELECT count(*)::int FROM telegram_bindings WHERE user_id = $1) AS bindings,
@@ -753,7 +753,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         });
       });
 
-      describe('provider identities (0075, D262, D263, D314)', () => {
+      describe('provider identities (0075, 0083, D262, D263, D314, D376)', () => {
         const sub = () => `sub-${randomUUID()}`;
 
         it('opens a verified account with no password, linked to the identity, by the rules', async () => {
@@ -770,7 +770,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           expect(await queries.getIdentityUser('google', subject)).toEqual({ user_id: userId, status: 'active' });
           expect(
             await queries.createOAuthAccount(
-              { email: email('oauth-new'), provider: 'github', subject: sub(), timezone: 'UTC', language: 'en' },
+              { email: email('oauth-new'), provider: 'google', subject: sub(), timezone: 'UTC', language: 'en' },
               RULES,
             ),
           ).toEqual({ outcome: 'exists' });
@@ -804,22 +804,29 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           const first = (await ask(email('oauth-a'))) as { userId: string };
           const second = (await ask(email('oauth-b'))) as { userId: string };
           const subject = sub();
-          expect(await queries.linkIdentity({ userId: first.userId, provider: 'github', subject, email: null })).toBe('linked');
-          expect(await queries.linkIdentity({ userId: second.userId, provider: 'github', subject, email: null })).toBe('taken');
-          expect(await queries.linkIdentity({ userId: first.userId, provider: 'github', subject: sub(), email: null })).toBe('already_linked');
+          expect(await queries.linkIdentity({ userId: first.userId, provider: 'google', subject, email: null })).toBe('linked');
+          expect(await queries.linkIdentity({ userId: second.userId, provider: 'google', subject, email: null })).toBe('taken');
+          expect(await queries.linkIdentity({ userId: first.userId, provider: 'google', subject: sub(), email: null })).toBe('already_linked');
         });
 
-        it("refuses to unlink an account's only way in, and unlinks when a password or another provider remains", async () => {
+        it("refuses to unlink an account's only way in, and unlinks when a password remains", async () => {
           const created = await queries.createOAuthAccount(
             { email: email('oauth-only'), provider: 'google', subject: sub(), timezone: 'UTC', language: 'en' },
             RULES,
           );
           const userId = (created as { userId: string }).userId;
           expect(await queries.unlinkIdentity(userId, 'google')).toBe('last_method');
-          expect(await queries.unlinkIdentity(userId, 'github')).toBe('not_linked');
-          await queries.linkIdentity({ userId, provider: 'github', subject: sub(), email: null });
+          await getPool().query("UPDATE users SET password_hash = 'hash' WHERE id = $1", [userId]);
           expect(await queries.unlinkIdentity(userId, 'google')).toBe('unlinked');
-          expect((await queries.listIdentities(userId)).map((row) => row.provider)).toEqual(['github']);
+          expect(await queries.unlinkIdentity(userId, 'google')).toBe('not_linked');
+          expect(await queries.listIdentities(userId)).toEqual([]);
+        });
+
+        it('refuses a provider this installation no longer offers (0083, D376)', async () => {
+          const { userId } = (await ask(email('oauth-github'))) as { userId: string };
+          await expect(
+            getPool().query("INSERT INTO user_identities (user_id, provider, subject) VALUES ($1, 'github', $2)", [userId, sub()]),
+          ).rejects.toMatchObject({ code: '23514' });
         });
       });
 

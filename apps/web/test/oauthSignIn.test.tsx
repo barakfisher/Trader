@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** Sign-in through Google and GitHub in the web (D262, D263): the buttons, the outcome, and Settings. */
+/** Sign-in through Google in the web (D262, D263, D376): the buttons, the outcome, and Settings. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, configure, fireEvent, screen } from '@testing-library/react';
@@ -40,14 +40,13 @@ afterEach(async () => {
 
 describe('the sign-in page', () => {
   it('offers each configured provider, leaving for its start with this page as the origin', async () => {
-    serve({ '/auth/oauth/providers': { providers: ['google', 'github'] } });
+    serve({ '/auth/oauth/providers': { providers: ['google'] } });
     renderWithServerState(<LoginPage />);
     const google = (await screen.findByRole('link', { name: 'Continue with Google' })) as HTMLAnchorElement;
     const url = new URL(google.href);
     expect(url.pathname).toBe('/api/auth/oauth/google/start');
     expect(url.searchParams.get('origin')).toBe(window.location.origin);
     expect(url.searchParams.get('intent')).toBe('signin');
-    expect(screen.getByRole('link', { name: 'Continue with GitHub' })).toBeTruthy();
   });
 
   it('offers nothing where no provider is configured', async () => {
@@ -89,18 +88,24 @@ describe('the sign-in page', () => {
 });
 
 describe('Settings: sign in with (D263)', () => {
-  it('lists linked providers with Unlink, and offered ones with Link', async () => {
+  it('lists a linked provider with Unlink', async () => {
     serve({
       '/auth/identities': {
         identities: [{ provider: 'google', email: 'noa@example.com', linkedAt: '2026-10-26T10:00:00Z' }],
-        available: ['google', 'github'],
+        available: ['google'],
       },
     });
     renderWithServerState(<LinkedProviders />);
     expect(await screen.findByText('noa@example.com')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Unlink' })).toBeTruthy();
-    const link = screen.getByRole('link', { name: 'Link' }) as HTMLAnchorElement;
-    expect(new URL(link.href).pathname).toBe('/api/auth/oauth/github/start');
+    expect(screen.queryByRole('link', { name: 'Link' })).toBeNull();
+  });
+
+  it('lists an offered provider not yet linked with Link', async () => {
+    serve({ '/auth/identities': { identities: [], available: ['google'] } });
+    renderWithServerState(<LinkedProviders />);
+    const link = (await screen.findByRole('link', { name: 'Link' })) as HTMLAnchorElement;
+    expect(new URL(link.href).pathname).toBe('/api/auth/oauth/google/start');
     expect(new URL(link.href).searchParams.get('intent')).toBe('link');
   });
 

@@ -14,8 +14,8 @@ import { useStore } from '../stores/context.tsx';
 
 /**
  * A version of the privacy policy and terms this account has not accepted
- * (D265) - a new one, or the first, for an account made through Google or
- * GitHub. The server refuses everything else until it is accepted, so the
+ * (D265) - a new one, or the first, for an account made through Google.
+ * The server refuses everything else until it is accepted, so the
  * app shows nothing else; but whoever declines can still take their data and
  * delete the account, or sign out.
  */

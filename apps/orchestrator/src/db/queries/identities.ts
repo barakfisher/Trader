@@ -1,5 +1,5 @@
 /**
- * Sign-in through Google or GitHub (D262, D263): `user_identities` (0075), one
+ * Sign-in through Google (D262, D263, D376): `user_identities` (0075), one
  * row per provider account linked to a Traders account, found by the
  * provider's stable subject id - never by email, which a person can change at
  * the provider.
@@ -168,8 +168,8 @@ export function listIdentities(userId: string): Promise<IdentityRow[]> {
  * in - no password and no other provider - so nobody locks themselves out.
  */
 export async function unlinkIdentity(userId: string, provider: OAuthProviderName): Promise<'unlinked' | 'last_method' | 'not_linked'> {
-  // The account's row is locked first, so two unlinks at once - Google and
-  // GitHub - cannot each see the other still there and leave no way in.
+  // The account's row is locked first, so two unlinks at once - one per
+  // provider - cannot each see the other still there and leave no way in.
   return transaction(async (client) => {
     const account = (
       await client.query<{ has_password: boolean }>(
