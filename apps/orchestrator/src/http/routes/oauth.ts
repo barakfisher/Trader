@@ -1,7 +1,7 @@
 /**
- * Sign-in through Google and GitHub, and linking them in Settings (D262,
- * D263, D314). The browser leaves for the provider from `/start` and comes
- * back to `/callback`; both are top-level navigations, so they answer with
+ * Sign-in through Google, and linking it in Settings (D262, D263, D314;
+ * GitHub was dropped, D376). The browser leaves for the provider from
+ * `/start` and comes back to `/callback`; both are top-level navigations, so they answer with
  * redirects, and the page the browser lands on reads `?oauth=<outcome>`.
  *
  * Who a provider identity is, in order:
@@ -69,7 +69,7 @@ export function oauthRedirectUri(origin: string, provider: OAuthProviderName): s
   return new URL(`/api/auth/oauth/${provider}/callback`, origin).toString();
 }
 
-const PROVIDER_LABEL: Record<OAuthProviderName, string> = { google: 'Google', github: 'GitHub' };
+const PROVIDER_LABEL: Record<OAuthProviderName, string> = { google: 'Google' };
 
 const startQuery = z.object({
   origin: z.string().max(500),

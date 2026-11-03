@@ -1,4 +1,4 @@
-/** Sign-in through Google and GitHub (D262, D263): what this installation offers, and what is linked. */
+/** Sign-in through Google (D262, D263, D376): what this installation offers, and what is linked. */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 

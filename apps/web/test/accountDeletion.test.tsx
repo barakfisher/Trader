@@ -214,7 +214,7 @@ describe('the sign-in that cancelled a deletion (D264)', () => {
     expect(screen.queryByText(/Signing in cancelled/)).toBeNull();
   });
 
-  it("says so after Google or GitHub came back with 'restored', and leaves other outcomes in the address", async () => {
+  it("says so after Google came back with 'restored', and leaves other outcomes in the address", async () => {
     window.history.replaceState(null, '', '/?oauth=restored');
     renderWithServerState(<DeletionCancelledBanner />, signedIn());
     expect(await screen.findByText(/Signing in cancelled your account's deletion/)).toBeTruthy();

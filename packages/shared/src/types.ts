@@ -1226,12 +1226,12 @@ export interface VerifyEmailResponse {
     | 'signup_full';
 }
 
-/** The providers someone can sign in with (D262); the migration's CHECK lists the same. */
-export const OAUTH_PROVIDERS = ['google', 'github'] as const;
+/** The providers someone can sign in with (D262, D376); migration 0083's CHECK lists the same. */
+export const OAUTH_PROVIDERS = ['google'] as const;
 export type OAuthProviderName = (typeof OAUTH_PROVIDERS)[number];
 
 /**
- * Where a sign-in through Google or GitHub ended (D262, D263, D314): the
+ * Where a sign-in through Google ended (D262, D263, D314): the
  * callback sends the browser back with `?oauth=<outcome>`, and the page says
  * what it means.
  */
@@ -1628,8 +1628,8 @@ export const ACCOUNT_DELETION_GRACE_DAYS = 7;
 
 /**
  * `GET /account/deletion`: how this account confirms a deletion (D264). With a
- * password, the password; an account that only signs in through Google or
- * GitHub signs in again, and `recentSignIn` says whether this session is
+ * password, the password; an account that only signs in through Google
+ * signs in again, and `recentSignIn` says whether this session is
  * recent enough to count.
  */
 export interface AccountDeletionCheck {

@@ -191,7 +191,7 @@ export class AuthStore {
     this.closed = null;
   }
 
-  /** A sign-in through Google or GitHub came back having cancelled a deletion (`?oauth=restored`). */
+  /** A sign-in through Google came back having cancelled a deletion (`?oauth=restored`). */
   noteDeletionCancelled(): void {
     this.deletionCancelled = true;
   }

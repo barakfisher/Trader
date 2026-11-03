@@ -1,5 +1,5 @@
 /**
- * Sign-in through Google and GitHub (D262, D263, D314): the start, the
+ * Sign-in through Google (D262, D263, D314, D376): the start, the
  * callback's four answers, and linking in Settings. The provider is a fake -
  * no network - and the database is mocked; the state cookie's signing is real.
  */
@@ -124,6 +124,11 @@ describe('starting a sign-in (D262)', () => {
   });
 
   it('answers 404 for a provider with no app here', async () => {
+    const app = createApp(loadConfig(ENV), createFakeAi(), undefined, null, memoryRateLimits(), mail, new Map());
+    expect((await app.request(`/auth/oauth/google/start?origin=${encodeURIComponent(ORIGIN)}`)).status).toBe(404);
+  });
+
+  it('answers 404 for GitHub, which is no longer a provider (D376)', async () => {
     expect((await buildApp().request(`/auth/oauth/github/start?origin=${encodeURIComponent(ORIGIN)}`)).status).toBe(404);
   });
 

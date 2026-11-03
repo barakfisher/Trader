@@ -386,4 +386,5 @@ while this file is out of date.
 | 373 | The market news feed keeps unlinked articles for one day, not three weeks |
 | 374 | The embedder stays `text-embedding-3-small` |
 | 375 | Model calls are also traced to Langfuse Cloud, with their text, while the installation is its owner's alone |
-| 376 | An assistant reply whose suggestions are not JSON keeps its answer; the suggestions are dropped |
+| 376 | GitHub is no longer a sign-in provider; Google stays, and migration 0083 narrows `user_identities.provider` to it |
+| 377 | An assistant reply whose suggestions are not JSON keeps its answer; the suggestions are dropped |

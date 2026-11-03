@@ -266,7 +266,7 @@ user (today `POST /internal/runs` does exactly that, which a signed-in test cann
 
 ## M10 — Public access *(roadmap, added 2026-10-18; decision 155)*
 
-Self-signup for people the admin does not know, with OAuth (Google, GitHub), automated free-tier
+Self-signup for people the admin does not know, with OAuth (Google; GitHub dropped by D376), automated free-tier
 limits and self-service password reset - **without changing the isolated data layer** M9 relies
 on. Planned only after M9's exit. It brings what M9 deliberately leaves out:
 internet exposure, abuse handling and holding strangers' financial data.

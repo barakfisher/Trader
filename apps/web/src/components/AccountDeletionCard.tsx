@@ -13,7 +13,7 @@ import { Button, Card, ErrorNote, Spinner } from './ui.tsx';
  * Settings: delete the account (D264). What closes now and what is deleted
  * later are written above the button; the typed word is the same in every
  * language, as the reset's is, and the password - or, for an account that
- * only signs in through Google or GitHub, a sign-in moments ago - confirms it
+ * only signs in through Google, a sign-in moments ago - confirms it
  * is the owner. The server checks all of it again.
  */
 export const AccountDeletionCard = observer(function AccountDeletionCard() {

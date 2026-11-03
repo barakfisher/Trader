@@ -1,15 +1,14 @@
 /**
- * Google and GitHub as sign-in providers (D262), behind one interface
- * (guideline 6): the routes never name `arctic`, and tests use a fake that
+ * Google as the sign-in provider (D262; GitHub was dropped, D376), behind
+ * one interface (guideline 6): the routes never name `arctic`, and tests use a fake that
  * makes no network call.
  *
  * A provider says three things about a person: a stable subject id, the email
  * it has for them, and whether it vouches for that email (D263): Google's
- * `email_verified`, or GitHub's verified primary address. Only a vouched-for
- * address links to an existing account or opens a new one.
+ * `email_verified`. Only a vouched-for address links to an existing account or opens a new one.
  */
 
-import { GitHub, Google, decodeIdToken } from 'arctic';
+import { Google, decodeIdToken } from 'arctic';
 
 import type { OAuthProviderName } from '@traders/shared';
 
@@ -23,8 +22,7 @@ export interface OAuthIdentity {
    * Whether the provider is the authority for that mailbox now, not just a
    * check it once made (D315): only then does it link to an existing account
    * automatically. Google: a `@gmail.com` address, or a Workspace domain
-   * (`hd`). GitHub gives no such signal; its verified primary address keeps
-   * D263's rule.
+   * (`hd`).
    */
   authoritative: boolean;
 }
@@ -86,48 +84,11 @@ class GoogleProvider implements OAuthProvider {
   }
 }
 
-class GitHubProvider implements OAuthProvider {
-  readonly name = 'github' as const;
-
-  constructor(
-    private readonly clientId: string,
-    private readonly clientSecret: string,
-  ) {}
-
-  authorizationUrl({ state, redirectUri }: { state: string; redirectUri: string }): URL {
-    // GitHub's OAuth apps do not take PKCE; `state` alone binds the callback.
-    return new GitHub(this.clientId, this.clientSecret, redirectUri).createAuthorizationURL(state, ['read:user', 'user:email']);
-  }
-
-  async identify({ code, redirectUri }: { code: string; redirectUri: string }): Promise<OAuthIdentity> {
-    const tokens = await new GitHub(this.clientId, this.clientSecret, redirectUri).validateAuthorizationCode(code);
-    const headers = {
-      authorization: `Bearer ${tokens.accessToken()}`,
-      accept: 'application/vnd.github+json',
-      'user-agent': 'traders',
-    };
-    const get = async <T>(path: string): Promise<T> => {
-      const response = await fetch(`https://api.github.com${path}`, { headers, signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS) });
-      if (!response.ok) throw new Error(`GitHub ${path} answered ${response.status}`);
-      return (await response.json()) as T;
-    };
-    const user = await get<{ id?: unknown }>('/user');
-    if (typeof user.id !== 'number') throw new Error('GitHub returned no user id');
-    const emails = await get<Array<{ email: string; primary: boolean; verified: boolean }>>('/user/emails');
-    const primary = emails.find((entry) => entry.primary);
-    const emailVerified = primary?.verified === true;
-    return { subject: String(user.id), email: primary?.email ?? null, emailVerified, authoritative: emailVerified };
-  }
-}
-
 /** The providers this installation has an app for: both settings set, or the provider is not offered. */
 export function buildOAuthProviders(config: Config): Map<OAuthProviderName, OAuthProvider> {
   const providers = new Map<OAuthProviderName, OAuthProvider>();
   if (config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET) {
     providers.set('google', new GoogleProvider(config.GOOGLE_CLIENT_ID, config.GOOGLE_CLIENT_SECRET));
-  }
-  if (config.GITHUB_CLIENT_ID && config.GITHUB_CLIENT_SECRET) {
-    providers.set('github', new GitHubProvider(config.GITHUB_CLIENT_ID, config.GITHUB_CLIENT_SECRET));
   }
   return providers;
 }

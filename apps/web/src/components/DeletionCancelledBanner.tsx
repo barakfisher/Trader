@@ -7,7 +7,7 @@ import { Button } from './ui.tsx';
 
 /**
  * Once, after a sign-in that cancelled the account's pending deletion (D264):
- * by password (the sign-in's answer says so) or through Google or GitHub (the
+ * by password (the sign-in's answer says so) or through Google (the
  * callback lands on `?oauth=restored`).
  */
 export const DeletionCancelledBanner = observer(function DeletionCancelledBanner() {

@@ -229,7 +229,7 @@ export async function deleteStaleUnverifiedSignups(days: number): Promise<number
  * take the last place of the day or of the queue, and a mode the admin just
  * changed is obeyed. *automatic* below its daily limit makes the account
  * active; otherwise it waits for the admin, if the queue has room. Used by a
- * verification link and by a sign-up through Google or GitHub (D263), whose
+ * verification link and by a sign-up through Google (D263), whose
  * address the provider vouched for. The caller's transaction holds the user.
  */
 export async function admitVerified(
@@ -347,7 +347,7 @@ export async function useResetToken(tokenHash: Buffer, passwordHash: string | nu
     // that other bound must not keep the assistant and Approve (D313). The
     // owner binds again from Settings.
     await client.query('DELETE FROM telegram_bindings WHERE user_id = $1', [token.user_id]);
-    // So does a Google or GitHub account linked from a stolen session (D315).
+    // So does a Google account linked from a stolen session (D315).
     await client.query('DELETE FROM user_identities WHERE user_id = $1', [token.user_id]);
     return { outcome: 'reset', userId: token.user_id, email: changed.email };
   });

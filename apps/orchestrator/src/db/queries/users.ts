@@ -184,7 +184,7 @@ export async function emailInUse(email: string, exceptUserId: string): Promise<b
  * is no admin to give them to.
  */
 export async function setAdminCredentials(email: string, passwordHash: string): Promise<UserRow | null> {
-  // Recovering the admin on the host also drops any Google or GitHub link,
+  // Recovering the admin on the host also drops any Google link,
   // which whoever held a session may have added (D315); the admin links again
   // from Settings.
   await query("DELETE FROM user_identities WHERE user_id IN (SELECT id FROM users WHERE role = 'admin')");
