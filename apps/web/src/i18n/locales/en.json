@@ -1143,6 +1143,7 @@
     "ownKey": {
       "title": "Your OpenRouter key",
       "intro": "Your agent scans, questions and model-written explanations run on an OpenRouter API key of your own, paid from your OpenRouter account. This installation's key is not used for them. The key is checked with OpenRouter, stored encrypted, and never shown again: only its last four characters.",
+      "introAdmin": "As the admin you have two keys. The installation's key pays for shared work - embeddings for the universe, the concept corpus and topics - and for your own agent scans, questions and model-written explanations while no key of yours is saved here. Save a personal OpenRouter key and it pays for those instead, tracked apart from the installation and under your monthly safety limit below. The key is checked with OpenRouter, stored encrypted, and never shown again: only its last four characters.",
       "limitHint": "To cap what your key spends, set a credit limit on the key in your OpenRouter account, or a monthly safety limit below. When OpenRouter refuses the key, scans and questions stop until you save it again.",
       "label": "API key",
       "saved": "Key ending {{lastFour}}, saved {{date}}.",
@@ -1151,11 +1152,13 @@
       "replace": "Replace key",
       "remove": "Remove key",
       "removed": "Key removed. Scans and questions stop until you save a key.",
+      "removedAdmin": "Key removed. Your calls run on the installation's key again.",
       "failed": {
         "rejected": "OpenRouter stopped accepting your key ending {{lastFour}} on {{date}}. Scans and questions are stopped until you save a working key.",
         "no_credit": "On {{date}} OpenRouter said your key ending {{lastFour}} has no credit left: your account ran out, or the key reached the credit limit set on it. Scans and questions are stopped until you add credit or raise the limit and save the key again."
       },
       "unavailable": "This installation isn't set up to use your own key.",
+      "unavailableAdmin": "This installation isn't set up to use a personal key, so your calls run on the installation's key.",
       "errors": {
         "key_rejected": "OpenRouter didn't accept that key. Check it and try again.",
         "key_malformed": "That doesn't look like an API key.",
@@ -1164,7 +1167,8 @@
         "failed": "The key couldn't be saved.",
         "removeFailed": "The key couldn't be removed."
       },
-      "none": "No key is saved, so scans and questions can't run. Explanations are written by templates meanwhile."
+      "none": "No key is saved, so scans and questions can't run. Explanations are written by templates meanwhile.",
+      "noneAdmin": "No personal key is saved: your calls run on the installation's key."
     },
     "safetyLimit": {
       "title": "Monthly safety limit",
@@ -1268,7 +1272,7 @@
       "balance": "{{remaining}} left ({{used}} used of {{purchased}})",
       "unavailable": "The account balance could not be read.",
       "none": "No credit left: paid models will fail until credit is added at openrouter.ai.",
-      "note": "This credit pays for your own model calls. Models are chosen like every user's: Ask in Settings, explanations on the Main portfolio page, each agent on its page."
+      "note": "This credit pays for shared work, and for your own model calls while you have no personal key in Settings. Models are chosen like every user's: Ask in Settings, explanations on the Main portfolio page, each agent on its page."
     },
     "title": "Admin",
     "onlyTitle": "Administrators only",
@@ -1320,6 +1324,19 @@
     "llmLoading": "Loading model calls…",
     "llmFailed": "Could not load the model calls.",
     "recordedSince": "Calls are recorded since {{when}} and kept for a limited time.",
+    "paidBy": {
+      "total": "Paid by the installation's key: {{installation}} over {{installationCalls}} calls. Paid by own keys, yours included: {{ownKey}} over {{ownKeyCalls}} calls.",
+      "part": {
+        "installation_one": "installation {{cost}} ({{count}} call)",
+        "installation_other": "installation {{cost}} ({{count}} calls)",
+        "ownKey_one": "own keys {{cost}} ({{count}} call)",
+        "ownKey_other": "own keys {{cost}} ({{count}} calls)"
+      },
+      "call": {
+        "installation": " · installation's key",
+        "ownKey": " · own key"
+      }
+    },
     "noCalls": "No model call has been recorded yet. Every call is recorded from the moment it is made.",
     "llmColumns": {
       "purpose": "Purpose",
@@ -1430,7 +1447,7 @@
       "oneTimeShown": "Shown once - pass it on. They must change it when they sign in, and every session they had has ended.",
       "disable": "Disable",
       "enable": "Enable",
-      "spentInstallation": "{{spent}} this month on the installation's key",
+      "spentAdmin": "{{spent}} this month, on your key and the installation's",
       "spentOwnKey": "{{spent}} this month on their own key"
     },
     "tabs": {

@@ -27,6 +27,7 @@ function group(overrides: Partial<LlmCallGroupRow>): LlmCallGroupRow {
     model: FREE,
     outcome: 'ok',
     verdict: 'accepted',
+    paid_by: 'installation',
     calls: 1,
     prompt_tokens: '0',
     completion_tokens: '0',
@@ -99,6 +100,55 @@ describe('per purpose', () => {
     expect(isFreeRoute(FREE)).toBe(true);
     expect(isFreeRoute('free-model')).toBe(false);
     expect(isFreeRoute(null)).toBe(false);
+  });
+});
+
+describe('who paid (D363)', () => {
+  it('splits the window and each purpose by payer, both payers always present', () => {
+    const response = panel([
+      group({ paid_by: 'installation', calls: 3, cost_micro_usd: '300' }),
+      group({ paid_by: 'own_key', calls: 2, cost_micro_usd: '2000' }),
+      group({ purpose: 'ask', paid_by: 'own_key', calls: 1, cost_micro_usd: '500' }),
+    ]);
+    expect(response.byPayer).toEqual({
+      installation: { calls: 3, costMicroUsd: 300 },
+      ownKey: { calls: 3, costMicroUsd: 2500 },
+    });
+    const [narration, ask] = response.purposes;
+    expect(narration!.byPayer).toEqual({
+      installation: { calls: 3, costMicroUsd: 300 },
+      ownKey: { calls: 2, costMicroUsd: 2000 },
+    });
+    expect(ask!.byPayer).toEqual({ installation: { calls: 0, costMicroUsd: 0 }, ownKey: { calls: 1, costMicroUsd: 500 } });
+  });
+
+  it('names the payer of each recent call', () => {
+    const response = llmPanel({
+      days: LLM_PANEL_DEFAULT_DAYS,
+      since: SINCE,
+      firstCallAt: FIRST_CALL,
+      groups: [],
+      latencies: [],
+      fallbacks: [],
+      reconciledFallbacks: [],
+      recent: [
+        {
+          id: '1',
+          purpose: 'ask',
+          model: FREE,
+          outcome: 'ok',
+          verdict: 'accepted',
+          error: null,
+          latency_ms: 10,
+          prompt_tokens: 1,
+          completion_tokens: 1,
+          cost_micro_usd: '0',
+          paid_by: 'own_key',
+          started_at: FIRST_CALL,
+        },
+      ],
+    });
+    expect(response.recent[0]!.paidBy).toBe('ownKey');
   });
 });
 

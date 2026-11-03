@@ -346,16 +346,22 @@ describe('user settings', () => {
     );
   });
 
-  it("reads the user's own-key month and safety limit, and nothing for the admin", async () => {
+  it("reads the user's own-key month and safety limit, the admin's with the installation behind it", async () => {
     vi.mocked(queries.getMonthlySpend).mockResolvedValueOnce({
       own_key_spent_micro_usd: '1200000',
       safety_limit_micro_usd: '20000000',
       resets_on: '2026-11-01',
+      installation_fallback: false,
     });
     const limited = await app.request('/settings/llm-spend', { headers: { cookie } });
     expect(limited.status).toBe(200);
     expect(await limited.json()).toEqual({
-      spend: { ownKeySpentMicroUsd: 1_200_000, safetyLimitMicroUsd: 20_000_000, resetsOn: '2026-11-01' },
+      spend: {
+        ownKeySpentMicroUsd: 1_200_000,
+        safetyLimitMicroUsd: 20_000_000,
+        resetsOn: '2026-11-01',
+        installationFallback: false,
+      },
     });
     expect(queries.getMonthlySpend).toHaveBeenCalledWith(USER.id);
 
@@ -363,15 +369,17 @@ describe('user settings', () => {
       own_key_spent_micro_usd: '0',
       safety_limit_micro_usd: null,
       resets_on: '2026-11-01',
+      installation_fallback: true,
     });
     expect((await (await app.request('/settings/llm-spend', { headers: { cookie } })).json()).spend).toEqual({
       ownKeySpentMicroUsd: 0,
       safetyLimitMicroUsd: null,
       resetsOn: '2026-11-01',
+      installationFallback: true,
     });
 
-    const admin = await app.request('/settings/llm-spend', { headers: { cookie } });
-    expect(await admin.json()).toEqual({ spend: null });
+    const unknown = await app.request('/settings/llm-spend', { headers: { cookie } });
+    expect(await unknown.json()).toEqual({ spend: null });
     expect((await app.request('/settings/llm-spend')).status).toBe(401);
   });
 });
@@ -416,10 +424,11 @@ describe("a user's monthly safety limit (D250)", () => {
     expect(queries.setSafetyLimit).not.toHaveBeenCalled();
   });
 
-  it("is not the admin's, who runs on the installation's key", async () => {
+  it("is the admin's too, for their personal key (D363)", async () => {
     vi.mocked(queries.getUser).mockResolvedValueOnce({ ...USER, role: 'admin' } as never);
-    expect((await put({ limitMicroUsd: 5 })).status).toBe(403);
-    expect(queries.setSafetyLimit).not.toHaveBeenCalled();
+    vi.mocked(queries.setSafetyLimit).mockResolvedValueOnce(5);
+    expect((await put({ limitMicroUsd: 5 })).status).toBe(200);
+    expect(queries.setSafetyLimit).toHaveBeenCalledWith(USER.id, 5);
   });
 });
 
@@ -502,7 +511,7 @@ describe("a user's own OpenRouter key (D206)", () => {
     expect(await response.text()).not.toContain(KEY);
   });
 
-  it('reads and removes the key, and refuses the admin', async () => {
+  it('reads and removes the key, the admin\'s too (D363)', async () => {
     const ownLlmKey = vi.fn(async () => SAVED);
     const removeOwnLlmKey = vi.fn(async () => ({ available: true, key: null }));
     const app = appWith({ ownLlmKey, removeOwnLlmKey });
@@ -513,7 +522,9 @@ describe("a user's own OpenRouter key (D206)", () => {
     expect(await removed.json()).toEqual({ available: true, key: null });
 
     vi.mocked(queries.getUser).mockResolvedValueOnce({ ...USER, role: 'admin' } as never);
-    expect((await app.request('/settings/llm-key', { headers: { cookie } })).status).toBe(403);
+    const admin = await app.request('/settings/llm-key', { headers: { cookie } });
+    expect(admin.status).toBe(200);
+    expect(ownLlmKey).toHaveBeenLastCalledWith(USER.id, expect.any(String));
     expect((await app.request('/settings/llm-key')).status).toBe(401);
   });
 });
@@ -550,6 +561,7 @@ describe('the spend indicator (D247-D249)', () => {
       own_key_spent_micro_usd: '1000000',
       safety_limit_micro_usd: '20000000',
       resets_on: '2026-11-01',
+      installation_fallback: false,
     });
     const response = await appWith(ownLlmKeyUsage).request('/settings/llm-usage', { headers: { cookie } });
     expect(response.status).toBe(200);
@@ -560,12 +572,24 @@ describe('the spend indicator (D247-D249)', () => {
     expect(ownLlmKeyUsage).toHaveBeenCalledWith(USER.id, expect.any(String));
   });
 
-  it('is null for the admin, and asks OpenRouter nothing', async () => {
-    const ownLlmKeyUsage = vi.fn(async () => USAGE);
+  it('is null for the admin with no key, whose calls the installation pays (D363)', async () => {
+    const ownLlmKeyUsage = vi.fn(async () => ({ available: true, key: null, usage: null }));
     vi.mocked(queries.getUser).mockResolvedValueOnce({ ...USER, role: 'admin' } as never);
     const response = await appWith(ownLlmKeyUsage).request('/settings/llm-usage', { headers: { cookie } });
     expect(await response.json()).toEqual({ spend: null });
-    expect(ownLlmKeyUsage).not.toHaveBeenCalled();
+  });
+
+  it("reads the admin's personal key like a user's (D363)", async () => {
+    const ownLlmKeyUsage = vi.fn(async () => USAGE);
+    vi.mocked(queries.getUser).mockResolvedValueOnce({ ...USER, role: 'admin' } as never);
+    vi.mocked(queries.getMonthlySpend).mockResolvedValueOnce({
+      own_key_spent_micro_usd: '0',
+      safety_limit_micro_usd: null,
+      resets_on: '2026-11-01',
+      installation_fallback: true,
+    });
+    const response = await appWith(ownLlmKeyUsage).request('/settings/llm-usage', { headers: { cookie } });
+    expect((await response.json()).spend.key).toBe('valid');
   });
 
   it('needs a session', async () => {

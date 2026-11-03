@@ -311,13 +311,18 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           own_key_spent_micro_usd: '11',
           safety_limit_micro_usd: '20000000',
           resets_on: rows[0]!.resets,
+          installation_fallback: false,
         });
         expect(await queries.setSafetyLimit(user, null)).toBeNull();
         await expect(queries.setSafetyLimit(user, 0)).rejects.toThrow();
         const { rows: admins } = await getPool().query<{ id: string }>(
           "SELECT id FROM users WHERE role = 'admin' LIMIT 1",
         );
-        if (admins[0]) expect(await queries.getMonthlySpend(admins[0].id)).toBeNull();
+        // D363: the admin has a month too, with the installation behind a missing key.
+        if (admins[0]) {
+          expect(await queries.getMonthlySpend(admins[0].id)).toMatchObject({ installation_fallback: true });
+        }
+        expect(await queries.getMonthlySpend('00000000-0000-0000-0000-0000000000ff')).toBeNull();
       } finally {
         await getPool().query('DELETE FROM llm_calls WHERE user_id = $1', [user]);
         await getPool().query('DELETE FROM user_settings WHERE user_id = $1', [user]);
@@ -1188,6 +1193,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       expect(groups.find((row) => row.purpose === 'ask')).toMatchObject({
         calls: 1,
         cost_micro_usd: '3000000000',
+        paid_by: 'installation',
       });
       const accepted = groups.find((row) => row.verdict === 'accepted');
       expect(accepted).toMatchObject({ calls: 2, prompt_tokens: '20', completion_tokens: '40' });
@@ -1204,6 +1210,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       expect(recent.length).toBeGreaterThanOrEqual(3);
       expect(Object.keys(recent[0]!)).not.toContain('prompt');
       expect(Object.keys(recent[0]!)).not.toContain('completion');
+      expect(recent[0]!.paid_by).toBe('installation');
       expect(await queries.firstLlmCallAt()).toBeInstanceOf(Date);
 
       const fallbacks = await queries.countNarrationFallbacks(TOMORROW);

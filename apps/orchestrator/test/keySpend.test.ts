@@ -40,6 +40,7 @@ const month = (limit: number | null, spent: number) => ({
   own_key_spent_micro_usd: String(spent),
   safety_limit_micro_usd: limit === null ? null : String(limit),
   resets_on: '2026-11-01',
+  installation_fallback: false,
 });
 
 describe('the week', () => {

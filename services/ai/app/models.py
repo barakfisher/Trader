@@ -844,7 +844,7 @@ class LlmCredits(BaseModel):
 
 
 class LlmCreditsResponse(BaseModel):
-    """The installation's provider balance, which pays the admin's calls (D360)."""
+    """The installation's provider balance: shared work, the admin's calls without a key (D363)."""
 
     provider: str
     credits: LlmCredits | None = Field(

@@ -10,7 +10,12 @@ import type { MonthlySpend, OwnLlmKeyResponse } from '@traders/shared';
 import { blockOf } from '../src/queries/modelAccess.ts';
 
 const LIMIT = 20_000_000;
-const MONTH: MonthlySpend = { ownKeySpentMicroUsd: 0, safetyLimitMicroUsd: null, resetsOn: '2026-11-01' };
+const MONTH: MonthlySpend = {
+  ownKeySpentMicroUsd: 0,
+  safetyLimitMicroUsd: null,
+  resetsOn: '2026-11-01',
+  installationFallback: false,
+};
 const KEY = { lastFour: 'c0de', savedAt: '2026-10-20T12:00:00Z', failedAt: null, failure: null };
 const WORKING: OwnLlmKeyResponse = { available: true, key: { ...KEY, status: 'valid' } };
 
@@ -30,5 +35,22 @@ describe('what stops a user', () => {
 
   it('is the safety limit once spend meets it', () => {
     expect(blockOf({ ...MONTH, safetyLimitMicroUsd: LIMIT, ownKeySpentMicroUsd: LIMIT }, WORKING)).toBe('safety_limit');
+  });
+});
+
+describe('what stops the admin (D363)', () => {
+  const ADMIN: MonthlySpend = { ...MONTH, installationFallback: true };
+
+  it('is nothing without a usable key of their own: the installation pays', () => {
+    expect(blockOf(ADMIN, { available: true, key: null })).toBeNull();
+    expect(blockOf(ADMIN, { available: false, key: null })).toBeNull();
+    expect(blockOf(ADMIN, WORKING)).toBeNull();
+  });
+
+  it('is a refused personal key or a spent safety limit, as for anyone', () => {
+    expect(
+      blockOf(ADMIN, { available: true, key: { ...KEY, status: 'failed', failure: 'rejected', failedAt: KEY.savedAt } }),
+    ).toBe('key_failed');
+    expect(blockOf({ ...ADMIN, safetyLimitMicroUsd: LIMIT, ownKeySpentMicroUsd: LIMIT }, WORKING)).toBe('safety_limit');
   });
 });

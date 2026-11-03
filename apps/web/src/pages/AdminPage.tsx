@@ -17,6 +17,8 @@ import type {
   AdminAuditEntry,
   AdminLlmCreditsResponse,
   AdminRun,
+  LlmPayer,
+  LlmPayerSplit,
   LlmPurposeSummary,
   LlmCallSummary,
   LlmPanelResponse,
@@ -529,7 +531,7 @@ function UserRow({ user }: { user: AdminUserView }) {
         </div>
         <span className="text-xs text-text-muted">
           <bdi>
-            {t(isAdmin ? 'admin.users.spentInstallation' : 'admin.users.spentOwnKey', {
+            {t(isAdmin ? 'admin.users.spentAdmin' : 'admin.users.spentOwnKey', {
               spent: formatMicroUsd(user.spentThisMonthMicroUsd),
             })}
           </bdi>
@@ -830,7 +832,8 @@ function AgentLimitCard() {
 }
 
 /**
- * The installation's provider balance (D44). It pays the admin's calls; the
+ * The installation's provider balance (D44). It pays for shared work and for the
+ * admin's calls while the admin has no personal key in Settings (D363); the
  * admin's models are chosen like every user's, on the agent pages and in
  * Settings (D360), so the pickers and their estimates that sat here are gone.
  */
@@ -924,6 +927,7 @@ function LlmPanel({ data }: { data: LlmPanelResponse }) {
           ? t('admin.recordedSince', { when: formatExactTime(data.firstCallAt) })
           : t('admin.noCalls')}
       </p>
+      <PayerTotals split={data.byPayer} />
       <div className="overflow-x-auto">
         <table className="w-full text-start text-sm">
           <thead className="text-xs text-text-muted">
@@ -988,8 +992,49 @@ function PurposeRow({ summary }: { summary: LlmPurposeSummary }) {
           completion: count.format(summary.completionTokens),
         })}
       </td>
-      <td className="py-2 whitespace-nowrap">{summary.calls === 0 ? '-' : purposeCost(summary)}</td>
+      <td className="py-2 whitespace-nowrap">
+        {summary.calls === 0 ? (
+          '-'
+        ) : (
+          <>
+            <div>{purposeCost(summary)}</div>
+            {PAYERS.map((payer) => (
+              <div key={payer} className="text-xs text-text-muted">
+                <bdi>
+                  {t(`admin.paidBy.part.${payer}`, {
+                    cost: formatMicroUsd(summary.byPayer[payer].costMicroUsd),
+                    count: summary.byPayer[payer].calls,
+                  })}
+                </bdi>
+              </div>
+            ))}
+          </>
+        )}
+      </td>
     </tr>
+  );
+}
+
+const PAYERS: readonly LlmPayer[] = ['installation', 'ownKey'];
+
+/**
+ * The window's calls by who paid (D363): the installation's key - shared work and
+ * the admin's calls while the admin has no key of their own - and users' own
+ * keys, the admin's personal key among them.
+ */
+function PayerTotals({ split }: { split: LlmPayerSplit }) {
+  const { t } = useTranslation();
+  return (
+    <p>
+      <bdi>
+        {t('admin.paidBy.total', {
+          installation: formatMicroUsd(split.installation.costMicroUsd),
+          installationCalls: count.format(split.installation.calls),
+          ownKey: formatMicroUsd(split.ownKey.costMicroUsd),
+          ownKeyCalls: count.format(split.ownKey.calls),
+        })}
+      </bdi>
+    </p>
   );
 }
 
@@ -1079,6 +1124,7 @@ function RecentCalls({ calls }: { calls: LlmCallSummary[] }) {
                   cost: callCost(call),
                 })
               )}
+              {t(`admin.paidBy.call.${call.paidBy}`)}
             </div>
             {call.error && <div className="break-all text-xs text-loss">{call.error}</div>}
           </li>

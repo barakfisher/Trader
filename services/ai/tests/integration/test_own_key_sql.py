@@ -93,25 +93,50 @@ def test_a_key_no_configured_key_decrypts_is_not_used(migrated: Engine) -> None:
     assert DatabaseOwnKeyStore(migrated, None).payer(user) == refused
 
 
-def test_the_admin_is_the_installations_and_a_user_without_a_key_is_refused(
-    migrated: Engine,
-) -> None:
-    store = DatabaseOwnKeyStore(migrated, _vault())
-    with migrated.connect() as connection:
+def _admin(engine: Engine) -> str:
+    with engine.connect() as connection:
         admin = connection.execute(
             text("SELECT id::text FROM users WHERE role = 'admin' LIMIT 1")
         ).scalar_one_or_none()
-    if admin is None:
-        with migrated.begin() as connection:
-            admin = connection.execute(
-                text(
-                    "INSERT INTO users (role, status) VALUES ('admin', 'active') RETURNING id::text"
-                )
-            ).scalar_one()
+    if admin is not None:
+        return admin
+    with engine.begin() as connection:
+        return connection.execute(
+            text("INSERT INTO users (role, status) VALUES ('admin', 'active') RETURNING id::text")
+        ).scalar_one()
+
+
+def test_the_admin_without_a_key_is_the_installations_and_a_user_is_refused(
+    migrated: Engine,
+) -> None:
+    store = DatabaseOwnKeyStore(migrated, _vault())
+    admin = _admin(migrated)
+    store.remove(admin)
     assert store.payer(admin) == INSTALLATION
     assert store.payer(_user(migrated)) == Payer(refusal="own_key_required")
     nobody = "00000000-0000-0000-0000-0000000000ff"
     assert store.payer(nobody) == Payer(refusal="own_key_required")
+
+
+def test_the_admins_saved_key_pays_and_a_refused_one_refuses_the_admin(migrated: Engine) -> None:
+    """D363: the admin's personal key pays when it can; refused, it is not covered."""
+    vault = _vault()
+    store = DatabaseOwnKeyStore(migrated, vault)
+    admin = _admin(migrated)
+    store.save(admin, KEY)
+    try:
+        payer = store.payer(admin)
+        assert payer.key is not None and payer.key.api_key == KEY
+        assert payer.installation_fallback and not payer.installation
+        # A key this installation can no longer read: the installation pays, loudly.
+        assert DatabaseOwnKeyStore(migrated, _vault()).payer(admin) == INSTALLATION
+        assert DatabaseOwnKeyStore(migrated, None).payer(admin) == INSTALLATION
+
+        store.mark_failed(admin, payer.key.token, "no_credit")
+        assert store.payer(admin) == Payer(refusal="own_key_failed")
+    finally:
+        store.remove(admin)
+    assert store.payer(admin) == INSTALLATION
 
 
 def test_reencrypting_moves_every_key_to_the_first_vault_key(migrated: Engine) -> None:

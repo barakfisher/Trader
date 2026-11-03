@@ -1,7 +1,10 @@
 import { query, queryOne } from '../pool.js';
 
+/** Whose key paid for a call (D209): the installation's, or the user's own (the admin's too, D363). */
+export type LlmPaidBy = 'installation' | 'own_key';
+
 /**
- * Model calls since `since`, counted per purpose, model, outcome and verdict.
+ * Model calls since `since`, counted per purpose, model, outcome, verdict and payer.
  * Sums arrive as text: `bigint` is how Postgres sums, and a string is how `pg`
  * returns one rather than rounding it.
  */
@@ -10,6 +13,7 @@ export interface LlmCallGroupRow {
   model: string | null;
   outcome: string;
   verdict: string | null;
+  paid_by: LlmPaidBy;
   calls: number;
   prompt_tokens: string;
   completion_tokens: string;
@@ -18,13 +22,13 @@ export interface LlmCallGroupRow {
 
 export function groupLlmCalls(since: Date): Promise<LlmCallGroupRow[]> {
   return query<LlmCallGroupRow>(
-    `SELECT purpose, model, outcome, verdict, count(*)::int AS calls,
+    `SELECT purpose, model, outcome, verdict, paid_by, count(*)::int AS calls,
             sum(prompt_tokens)::text AS prompt_tokens,
             sum(completion_tokens)::text AS completion_tokens,
             sum(cost_micro_usd)::text AS cost_micro_usd
        FROM llm_calls
       WHERE started_at >= $1
-      GROUP BY purpose, model, outcome, verdict`,
+      GROUP BY purpose, model, outcome, verdict, paid_by`,
     [since],
   );
 }
@@ -71,6 +75,7 @@ export interface LlmCallRow {
   prompt_tokens: number;
   completion_tokens: number;
   cost_micro_usd: string;
+  paid_by: LlmPaidBy;
   started_at: Date;
 }
 
@@ -81,7 +86,7 @@ export interface LlmCallRow {
 export function listLlmCalls(limit: number): Promise<LlmCallRow[]> {
   return query<LlmCallRow>(
     `SELECT id::text, purpose, model, outcome, verdict, left(error, 300) AS error, latency_ms,
-            prompt_tokens, completion_tokens, cost_micro_usd::text, started_at
+            prompt_tokens, completion_tokens, cost_micro_usd::text, paid_by, started_at
        FROM llm_calls
       ORDER BY started_at DESC, id DESC
       LIMIT $1`,
@@ -115,26 +120,29 @@ export interface MonthlySpendRow {
   safety_limit_micro_usd: string | null;
   /** `YYYY-MM-DD`: the first day of the user's next calendar month, in their zone. */
   resets_on: string;
+  /** The admin's: with no usable key of their own, the installation pays (D363). */
+  installation_fallback: boolean;
 }
 
 /**
- * The user's own-key spend this month against their safety limit, or null for
- * the admin, who runs on the installation's key (D245). The same month the AI
+ * The user's own-key spend this month against their safety limit, the admin's
+ * included (D363); null only for a user unknown here. The same month the AI
  * service enforces (`app/llm/monthly_cap.py`): the calendar month in
  * `users.timezone`, summed over every recorded call made on the user's own key.
  */
 export function getMonthlySpend(userId: string): Promise<MonthlySpendRow | null> {
   return queryOne<MonthlySpendRow>(
     `WITH month AS (
-       SELECT u.id, u.timezone, s.llm_safety_limit_micro_usd AS safety_limit,
+       SELECT u.id, u.timezone, u.role, s.llm_safety_limit_micro_usd AS safety_limit,
               date_trunc('month', now() AT TIME ZONE u.timezone) AS local_start
          FROM users u
          LEFT JOIN user_settings s ON s.user_id = u.id
-        WHERE u.id = $1 AND u.role <> 'admin'
+        WHERE u.id = $1
      )
      SELECT coalesce(sp.own_key, 0)::text AS own_key_spent_micro_usd,
             m.safety_limit::text AS safety_limit_micro_usd,
-            to_char(m.local_start + interval '1 month', 'YYYY-MM-DD') AS resets_on
+            to_char(m.local_start + interval '1 month', 'YYYY-MM-DD') AS resets_on,
+            m.role = 'admin' AS installation_fallback
        FROM month m
        CROSS JOIN LATERAL (
          SELECT sum(c.cost_micro_usd) AS own_key

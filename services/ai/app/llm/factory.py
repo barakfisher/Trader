@@ -70,10 +70,10 @@ def build_llm(
     OpenRouter's list writes its prices into it (`openrouter_models.py`).
     Without one, the configured table is used.
 
-    Given a `payer` gate, every metered call for a user who is not the admin
-    runs on that user's own OpenRouter key, under their monthly safety limit,
-    or is refused (D245, D250); the admin's calls and the installation's own
-    stay on the installation's key and its daily guard. Inside the recorder,
+    Given a `payer` gate, every metered call for a user runs on that user's own
+    OpenRouter key, under their monthly safety limit, or is refused (D245,
+    D250); the admin's calls with no usable key of their own (D363) and the
+    installation's own stay on the installation's key and its daily guard. Inside the recorder,
     so a refused call is recorded too.
     """
     if prices is None:

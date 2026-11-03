@@ -98,11 +98,13 @@ class _Store:
         *,
         admin: bool = False,
         failed: bool = False,
+        admin_key: bool = False,
     ) -> None:
         self._key = key
         self._error = error
         self._admin = admin
         self._failed = failed
+        self._admin_key = admin_key
         self.failed: list[tuple[str, str, str]] = []
         self.asked: list[str] = []
 
@@ -116,7 +118,7 @@ class _Store:
             return Payer(refusal="own_key_failed")
         if self._key is None:
             return Payer(refusal="own_key_required")
-        return Payer(key=UsableKey(self._key, "token"))
+        return Payer(key=UsableKey(self._key, "token"), installation_fallback=self._admin_key)
 
     def mark_failed(self, user_id: str, token: str, failure: str) -> None:
         self.failed.append((user_id, token, failure))
@@ -331,11 +333,16 @@ async def test_the_admin_stays_under_the_installations_daily_guard() -> None:
     assert (entry.outcome, entry.paid_by) == ("budget_exhausted", "installation")
 
 
-async def test_a_refused_own_key_is_recorded_as_a_provider_error_on_that_key() -> None:
-    store = _Store()
-    provider, log, _ = _assembled(store, httpx.Response(401, json={"error": {"code": 401}}))
+# D363: the admin's personal key fails and brakes like anyone's - never onto the installation.
+@pytest.mark.parametrize("admin_key", [False, True])
+async def test_a_refused_own_key_is_recorded_as_a_provider_error_on_that_key(
+    admin_key: bool,
+) -> None:
+    store = _Store(admin_key=admin_key)
+    provider, log, sent = _assembled(store, httpx.Response(401, json={"error": {"code": 401}}))
     with pytest.raises(OwnKeyFailedError):
         await provider.complete(system=None, user="q", caller=Caller("ask", USER))
+    assert sent == [f"Bearer {OWN_KEY}"]
     [entry] = log.entries
     assert (entry.outcome, entry.paid_by) == ("provider_error", "own_key")
     assert store.failed == [(USER, "token", "rejected")]
@@ -350,9 +357,10 @@ async def test_without_a_key_nothing_is_sent_and_the_refusal_is_recorded() -> No
     assert (entry.outcome, entry.paid_by) == ("no_provider", "own_key")
 
 
-async def test_a_spent_safety_limit_refuses_before_the_key_is_used() -> None:
+@pytest.mark.parametrize("admin_key", [False, True])
+async def test_a_spent_safety_limit_refuses_before_the_key_is_used(admin_key: bool) -> None:
     spent = CapMonth(cap_micro_usd=1000, spent_micro_usd=1000, resets_at=NOW)
-    provider, log, sent = _assembled(_Store(), httpx.Response(200), limit=spent)
+    provider, log, sent = _assembled(_Store(admin_key=admin_key), httpx.Response(200), limit=spent)
     with pytest.raises(MonthlyCapReachedError):
         await provider.complete(system=None, user="q", caller=Caller("ask", USER))
     assert sent == []
@@ -372,12 +380,28 @@ async def test_a_spent_safety_limit_refuses_before_the_key_is_used() -> None:
         (_Store(failed=True), None, "own_key_failed"),
         (_Store(), CapMonth(1000, 999, NOW), None),
         (_Store(), CapMonth(1000, 1000, NOW), "safety_limit_reached"),
+        # D363: the admin's personal key is under the same safety limit as anyone's.
+        (_Store(admin_key=True), None, None),
+        (_Store(admin_key=True), CapMonth(1000, 1000, NOW), "safety_limit_reached"),
     ],
 )
 def test_the_gate_says_why_work_may_not_start(
     store: _Store, month: CapMonth | None, expected: str | None
 ) -> None:
     assert _gate(store, month).refusal(USER, metered=True) == expected
+
+
+def test_the_admins_key_this_installation_cannot_use_leaves_the_installation_paying() -> None:
+    """D363: a saved key unusable here (no vault, not OpenRouter) is not a refusal for the admin."""
+    assert _gate(_Store(admin_key=True), usable=False).payer(USER) == INSTALLATION
+    assert _gate(_Store(), usable=False).payer(USER) == Payer(refusal="own_key_required")
+
+
+async def test_the_admins_saved_key_pays_for_the_admins_calls() -> None:
+    provider, inner, own, keys = _routed(_Store(admin_key=True))
+    completion = await provider.complete(system=None, user="q", caller=Caller("ask", USER))
+    assert (inner.calls, own.calls, keys) == (0, 1, [OWN_KEY])
+    assert completion.paid_by == "own_key"
 
 
 def test_the_gate_never_refuses_an_unmetered_provider() -> None:

@@ -1,10 +1,11 @@
 /**
  * Whether the signed-in user's model work can run right now (D245, D250, D280).
  *
- * The admin runs on the installation's key; everyone else on their own
- * OpenRouter key only, under their optional monthly safety limit. This reads the
- * two Settings reads the key card already makes - the month (null for the admin)
- * and the key - and says what stops the user, so Ask, the Agents page and a
+ * Everyone runs on their own OpenRouter key, under their optional monthly
+ * safety limit; the admin without a usable one runs on the installation's
+ * (D363), so for the admin only a refused key or a spent limit stops anything.
+ * This reads the two Settings reads the key card already makes - the month and
+ * the key - and says what stops the user, so Ask, the Agents page and a
  * re-check can say it up front and keep their buttons from promising a call that
  * would be refused. The server refuses regardless; this is never the gate.
  *
@@ -33,6 +34,7 @@ export function useModelAccess(): ModelAccess {
 }
 
 export function blockOf(spend: MonthlySpend, ownKey: OwnLlmKeyResponse): ModelBlock | null {
+  if (spend.installationFallback && (!ownKey.available || ownKey.key === null)) return null;
   if (!ownKey.available) return 'unavailable';
   if (ownKey.key === null) return 'no_key';
   if (ownKey.key.status === 'failed') return 'key_failed';

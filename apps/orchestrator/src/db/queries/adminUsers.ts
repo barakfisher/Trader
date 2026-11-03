@@ -22,8 +22,9 @@ export interface AdminUserRow {
 /**
  * Active and disabled accounts, the admin first, then by approval. Waiting and
  * rejected requests are the sign-up list's. This month's spend is every recorded
- * call since the start of the month in the user's zone, whoever's key paid: the
- * admin's are the installation's, everyone else's their own (D245).
+ * call since the start of the month in the user's zone, whoever's key paid:
+ * everyone's own, and the admin's either their own or, without one, the
+ * installation's (D245, D363).
  */
 export function listUsersForAdmin(): Promise<AdminUserRow[]> {
   return query<AdminUserRow>(

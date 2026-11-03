@@ -54,6 +54,10 @@ const zeroVerdicts = {
 const LLM_PANEL = {
   window: { days: 7, since: '2026-09-24T00:00:00Z' },
   firstCallAt: '2026-09-30T22:18:16Z',
+  byPayer: {
+    installation: { calls: 2, costMicroUsd: 1_250_000 },
+    ownKey: { calls: 3, costMicroUsd: 500_000 },
+  },
   purposes: [
     {
       purpose: 'narration',
@@ -64,6 +68,7 @@ const LLM_PANEL = {
       promptTokens: 400,
       completionTokens: 90,
       costMicroUsd: 0,
+      byPayer: { installation: { calls: 1, costMicroUsd: 0 }, ownKey: { calls: 1, costMicroUsd: 0 } },
       models: [{ model: FREE, calls: 2, free: true }],
     },
     {
@@ -75,6 +80,7 @@ const LLM_PANEL = {
       promptTokens: 0,
       completionTokens: 0,
       costMicroUsd: 0,
+      byPayer: { installation: { calls: 0, costMicroUsd: 0 }, ownKey: { calls: 0, costMicroUsd: 0 } },
       models: [],
     },
   ],
@@ -101,6 +107,7 @@ const LLM_PANEL = {
       promptTokens: 0,
       completionTokens: 0,
       costMicroUsd: 0,
+      paidBy: 'ownKey' as const,
       startedAt: '2026-10-01T06:00:00Z',
     },
   ],
@@ -391,6 +398,18 @@ describe('the admin page', () => {
     expect(get).toHaveBeenCalledWith('/admin/llm?days=7');
   });
 
+  it('splits calls and cost by who paid: the window, each purpose and each call (D363)', async () => {
+    renderAt('/admin?tab=operations', ADMIN);
+    expect(
+      await screen.findByText(
+        /Paid by the installation's key: [\u2066-\u2069]*\$1\.25[\u2066-\u2069]* over 2 calls\. Paid by own keys, yours included: [\u2066-\u2069]*\$0\.50/,
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText(/^installation .*\(1 call\)$/)).toBeTruthy();
+    expect(screen.getByText(/^own keys .*\(1 call\)$/)).toBeTruthy();
+    expect(screen.getByText(/· own key$/)).toBeTruthy();
+  });
+
   it('shows the balance and no model pickers: the admin chooses like every user (D360)', async () => {
     renderAt('/admin?tab=models', ADMIN);
     expect(await screen.findByText('$9.8971 left ($0.1029 used of $10.00)')).toBeTruthy();
@@ -543,7 +562,7 @@ describe('the admin page', () => {
     renderAt('/admin', ADMIN);
     expect(await screen.findByText('dana@example.com')).toBeTruthy();
     expect(screen.getByText(/\$1\.25 this month on their own key/)).toBeTruthy();
-    expect(screen.getByText(/this month on the installation's key/)).toBeTruthy();
+    expect(screen.getByText(/this month, on your key and the installation's/)).toBeTruthy();
     expect(screen.getByText(/own key working/)).toBeTruthy();
     // One row of actions: Dana's. The admin's row has none.
     expect(screen.getAllByRole('button', { name: 'Disable' })).toHaveLength(1);

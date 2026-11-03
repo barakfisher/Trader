@@ -431,9 +431,9 @@ const SignInCard = observer(function SignInCard() {
 /**
  * The user's own OpenRouter key (D206), which every model call of theirs runs on
  * and nothing replaces (D245), then what this app spent on it this month and
- * their optional monthly safety limit (D250). The admin runs on the
- * installation's key and sees neither card; a failed read shows nothing rather
- * than a guess.
+ * their optional monthly safety limit (D250). The admin sees both too: their
+ * personal key is optional, the installation's paying without it (D363). A
+ * failed read shows nothing rather than a guess.
  */
 function SpendCard() {
   const { t } = useTranslation();
@@ -446,7 +446,11 @@ function SpendCard() {
     <>
       {ownKey && (
         <Card title={t('settings.ownKey.title')}>
-          <OwnLlmKeyForm available={ownKey.available} saved={ownKey.key} />
+          <OwnLlmKeyForm
+            available={ownKey.available}
+            saved={ownKey.key}
+            installationFallback={spend.installationFallback}
+          />
         </Card>
       )}
       <Card title={t('settings.spend.title')}>
