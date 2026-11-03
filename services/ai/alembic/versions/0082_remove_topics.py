@@ -1,4 +1,4 @@
-"""Topics are removed: the page, the proposals, the scans and their tables (D371-D375).
+"""Topics are removed: the page, the proposals, the scans and their tables (D371-D374).
 
 FR-10/FR-11 built a theme the user follows (`topics`, `topic_instruments`, 0017)
 and proposals discovered from the news (0019, 0021, 0024). Measured 2026-11-02:
