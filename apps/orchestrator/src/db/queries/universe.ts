@@ -19,7 +19,7 @@ export function getLatestUniverseLoad(): Promise<UniverseLoadRow | null> {
 }
 
 export interface UniverseCountsRow {
-  /** Screened profiles: the ones a snapshot put here, and the only ones a topic sees. */
+  /** Screened profiles: the ones a snapshot put here, and the only ones the agents' universe search sees. */
   profiles: number;
   equities: number;
   etfs: number;

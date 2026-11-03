@@ -1490,7 +1490,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
 
       const pushed = await observe(AGENT, 'instrument', 'drawdown');
       await notify(AGENT, pushed, 'telegram', 'push', 'above_floor');
-      const quiet = await observe(AGENT, 'topic', 'topic_move');
+      const quiet = await observe(AGENT, 'portfolio', 'allocation_drift');
       await notify(AGENT, quiet, 'digest', 'digest', 'quiet_hours');
       const belowFloor = await observe(AGENT, 'instrument', 'price_move');
       await notify(AGENT, belowFloor, 'digest', 'digest', 'below_floor');
@@ -1498,13 +1498,12 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
       const trade = await observe(agent, 'instrument', 'agent_trade');
       await notify(agent, trade, 'telegram', 'push', 'above_floor');
 
-      const ids = async (source: 'portfolio' | 'topics' | 'agents' | null) =>
+      const ids = async (source: 'portfolio' | 'agents' | null) =>
         (await queries.listAlerts(USER, 50, source, null)).map((row) => row.id);
 
       expect(await ids(null)).toEqual([trade, quiet, pushed]);
       expect(await queries.countAlerts(USER, null)).toBe(3);
-      expect(await ids('portfolio')).toEqual([pushed]);
-      expect(await ids('topics')).toEqual([quiet]);
+      expect(await ids('portfolio')).toEqual([quiet, pushed]);
       expect(await ids('agents')).toEqual([trade]);
 
       const [first] = await queries.listAlerts(USER, 1, null, null);
@@ -2519,27 +2518,21 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
         [OWNER],
       );
       const agent = rows[0]!.id;
-      await getPool().query(
-        `INSERT INTO topics (user_id, label, status, created_by, confirmed_at)
-         VALUES ($1, 'robots', 'active', 'user', now())`,
-        [OWNER],
-      );
 
-      const reset = await queries.resetAccount(OWNER, ['agents_trading', 'followed_topics']);
+      const reset = await queries.resetAccount(OWNER, ['agents_trading']);
 
-      expect(reset.counts).toMatchObject({ topics: 1, cash_movements: 1, fills: 0 });
-      const after = await getPool().query<{ budget: string; cash: string; topics: string }>(
-        `SELECT a.budget_minor::text AS budget, c.balance_minor::text AS cash,
-                (SELECT count(*)::text FROM topics WHERE user_id = $1) AS topics
-           FROM agents a JOIN agent_cash c ON c.agent_id = a.id WHERE a.id = $2`,
-        [OWNER, agent],
+      expect(reset.counts).toMatchObject({ cash_movements: 1, fills: 0 });
+      const after = await getPool().query<{ budget: string; cash: string }>(
+        `SELECT a.budget_minor::text AS budget, c.balance_minor::text AS cash
+           FROM agents a JOIN agent_cash c ON c.agent_id = a.id WHERE a.id = $1`,
+        [agent],
       );
-      expect(after.rows[0]).toEqual({ budget: '0', cash: '0', topics: '0' });
+      expect(after.rows[0]).toEqual({ budget: '0', cash: '0' });
       const backup = await getPool().query<{ groups: string[] }>(
         'SELECT groups FROM account_resets WHERE id = $1',
         [reset.reset_id],
       );
-      expect(backup.rows[0]!.groups).toEqual(['agents_trading', 'followed_topics']);
+      expect(backup.rows[0]!.groups).toEqual(['agents_trading']);
     });
   });
 
@@ -3204,7 +3197,7 @@ describe.skipIf(DATABASE_URL === '')('queries.ts against Postgres', async () => 
           expect(Object.keys(document).sort()).toEqual(
             [
               'account', 'agentScans', 'agentSuggestions', 'agents', 'conversations', 'exportedAt', 'format', 'holdings', 'ledgers',
-              'legalAcceptances', 'observations', 'proposalTransitions', 'proposals', 'settings', 'targetWeights', 'topicInstruments', 'topics',
+              'legalAcceptances', 'observations', 'proposalTransitions', 'proposals', 'settings', 'targetWeights',
             ].sort(),
           );
           for (const secret of [SECRET_HASH, 'never-exported-ciphertext', 'abcd', 'token_hash', 'session_version', USER]) {

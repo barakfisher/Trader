@@ -1,14 +1,12 @@
-"""Which of GDELT's articles are market news, for the feed nothing followed selects.
+"""Which of GDELT's articles are market news, for the feed nothing held selects.
 
-**Why this feed exists.** Until it, news was collected only for the instruments
-the user holds or follows (decision 51), and discovery could only find themes
-*next to* those: on 2026-09-29 NVDA, AAPL, BTC-USD and MSFT were 95% of the
-headlines, and after one company's news was dropped (decision 59) nothing left
-was a theme. The market feed keeps the articles about markets in general, so a
-theme like "data center" reads as spread across companies. It feeds discovery
-only: an article kept here and linked to nothing followed never reaches topic
-news, sentiment or a holding's evidence, because each of those joins through
-`article_entities` (decision 60).
+**What the feed is.** The articles about markets in general, beside the ones
+collected for the instruments the user holds (decision 51). An article it keeps
+that names a holding is linked like any other and reaches that holding's news,
+sentiment and evidence through `article_entities`; one linked to nothing reaches
+none of them (decision 60). Its only reader is `suspected_networks`, which is
+why an unlinked market article is kept for `SUSPECT_WINDOW` and then deleted
+(`collection.py`).
 
 **The filter, measured before it was written** (2026-09-29, raw GKG files, three
 24-hour samples and then every slot of 2026-09-22..29). An article is market
@@ -17,9 +15,7 @@ news when GDELT tagged it with a market theme (`MARKET_TAGS`, from column 8)
 Either alone was too wide: the tags let through law-firm press releases and
 general economics, the words let through "MasterChef star shares". Together
 they keep about 4,000 articles a day of GDELT's ~112,000, the same within 1% on
-two held-out days, and discovery over a week of them resolves "data center",
-"bond yields", "mortgage rates" and "crude oil" to confident instrument sets.
-The lists are frozen as measured: a change to either is a change to the feed,
+two held-out days. The lists are frozen as measured: a change to either is a change to the feed,
 and is measured the same way before it is made.
 
 **What is not news, whatever its tags** (`EXCLUDED_OUTLETS`). Two kinds of
@@ -27,17 +23,14 @@ outlet, named rather than detected:
 
 * *Generated ticker networks* publish a templated headline per ticker per event
   ("Bloom Energy's (BE) Outperform Rating Reiterated at ..."): over the measured
-  week 88-95% of their headlines carried a ticker in parentheses, and they put
-  "short interest" and "etf nysearca" at the top of every day's phrases. The
-  next outlet down, seekingalpha at 0.63-0.77, is real reporting, so the gap is
+  week 88-95% of their headlines carried a ticker in parentheses. The next
+  outlet down, seekingalpha at 0.63-0.77, is real reporting, so the gap is
   too thin to draw automatically.
-* *Press-release wires* carry what a company wrote about itself. Once the
-  networks were out, their law-firm "class action" and "lead plaintiff"
-  releases filled the top of the list.
+* *Press-release wires* carry what a company wrote about itself: law-firm
+  "class action" and "lead plaintiff" releases, not reporting.
 
 A network that appears under a new domain is found by `suspected_networks`,
-which each collection run reports; adding it here is a reviewed change, like a
-word in `GENERIC_WORDS`.
+which each collection run reports; adding it here is a reviewed change.
 """
 
 from __future__ import annotations

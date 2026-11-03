@@ -41,7 +41,7 @@ const DECIMAL = /^\d+(\.\d+)?$/;
  */
 export const HOLDING_HISTORY_DAYS = 365;
 
-/** A holding's news window: a week, as on a topic card. */
+/** A holding's news window: a week. */
 export const HOLDING_NEWS_DAYS = 7;
 
 /** One page of a holding's news. AAPL links ~440 articles a week; the page says how many. */
@@ -132,7 +132,7 @@ export function registerHoldingsRoutes(app: Hono<AppEnv>): void {
 
   /**
    * The holding's week of news, newest first, one page of it with the total.
-   * As on a topic card, the latest collection travels with it, so an empty list
+   * The latest collection travels with it, so an empty list
    * can tell a quiet week from news that could not be collected.
    */
   app.get('/holdings/:id/news', async (context) => {

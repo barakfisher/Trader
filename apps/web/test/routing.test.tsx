@@ -51,12 +51,12 @@ describe('page addresses', () => {
 
   it('goes to a view through a real link', async () => {
     const { router } = renderAt('/');
-    const topics = await screen.findByRole('link', { name: /Topics/ });
-    expect(topics.getAttribute('href')).toBe('/topics');
+    const research = await screen.findByRole('link', { name: /Research/ });
+    expect(research.getAttribute('href')).toBe('/research');
 
-    fireEvent.click(topics);
-    expect(await screen.findByRole('heading', { name: 'Topics' })).toBeTruthy();
-    expect(router.state.location.pathname).toBe('/topics');
+    fireEvent.click(research);
+    expect(await screen.findByRole('heading', { name: 'Research' })).toBeTruthy();
+    expect(router.state.location.pathname).toBe('/research');
   });
 
   it('treats an unknown address as the portfolio', async () => {

@@ -12,8 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../src/db/queries.js', () => ({ recordOpsEvent: vi.fn(async () => undefined) }));
 
 const queries = await import('../src/db/queries.js');
-const { missingTickerDetail, normaliseTopic, recordLowConfidence, recordMissingTicker, requestProfile } =
-  await import(
+const { missingTickerDetail, recordMissingTicker, requestProfile } = await import(
   '../src/services/universeGaps.js'
 );
 
@@ -36,21 +35,6 @@ function resolution(overrides: Record<string, unknown> = {}) {
     candidates: [],
     universe: { member: false, outside_screen: null },
     ...overrides,
-  } as never;
-}
-
-function topicResolution(verdict: string) {
-  return {
-    topic: '  Quantum   Computing ',
-    verdict,
-    best_similarity: 0.18,
-    refuse_below: 0.23,
-    confident_above: 0.4,
-    interpretations: [],
-    ambiguous: false,
-    universe: { state: 'ready', profiles: 5223, embedded: 5223 },
-    embedding_model: 'text-embedding-3-small',
-    vector_is_semantic: true,
   } as never;
 }
 
@@ -78,7 +62,7 @@ describe('a missing ticker', () => {
 
   it('is unpriced when nothing could price it', () => {
     const nothing = resolution({ resolved: null, universe: null });
-    expect(missingTickerDetail('NOSUCH', nothing, 'topic')).toMatchObject({
+    expect(missingTickerDetail('NOSUCH', nothing, 'holding')).toMatchObject({
       symbol: 'NOSUCH',
       gap: 'unpriced',
     });
@@ -128,37 +112,5 @@ describe('a missing ticker', () => {
 
     const failing = { requestProfile: vi.fn(async () => Promise.reject(new Error('AI service down'))) };
     await expect(requestProfile(failing, 'TINY')).resolves.toBeUndefined();
-  });
-});
-
-describe('a low-confidence topic', () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it('records the gate and the best score it was judged by', async () => {
-    await recordLowConfidence(USER, topicResolution('none'), NOW);
-    expect(queries.recordOpsEvent).toHaveBeenCalledWith({
-      kind: 'universe_gap_low_confidence',
-      userId: 'u-1',
-      detail: {
-        topic: 'quantum computing',
-        bestSimilarity: 0.18,
-        refuseBelow: 0.23,
-        confidentAbove: 0.4,
-        embeddingModel: 'text-embedding-3-small',
-        vectorIsSemantic: true,
-      },
-      dedupeKey: 'low_confidence:u-1:quantum computing:2026-10-01',
-    });
-  });
-
-  it('is only a "none": weak is an answer, unavailable is not a gap in the universe', async () => {
-    for (const verdict of ['confident', 'weak', 'unavailable']) {
-      await recordLowConfidence(USER, topicResolution(verdict), NOW);
-    }
-    expect(queries.recordOpsEvent).not.toHaveBeenCalled();
-  });
-
-  it('treats spacing and case as the same question', () => {
-    expect(normaliseTopic('  Quantum   Computing ')).toBe('quantum computing');
   });
 });

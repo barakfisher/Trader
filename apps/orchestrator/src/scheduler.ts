@@ -27,10 +27,7 @@ import { EVERY_ACTIVE_USER, USER_KINDS } from './runKinds.js';
 export const INTERVALS_MS: Record<string, number> = {
   snapshot: 60 * 60 * 1000,
   portfolio_scan: 15 * 60 * 1000,
-  topic_scan: 15 * 60 * 1000,
   news_collect: 15 * 60 * 1000,
-  // Hourly against a daily bucket, like backfill: a restart cannot skip a day.
-  topic_discovery: 60 * 60 * 1000,
   // Hourly against a daily bucket: the extras cost one HTTP request each and
   // mean a restart cannot skip the day's history.
   backfill: 60 * 60 * 1000,
@@ -71,24 +68,18 @@ const FIRST_RUN_DELAY_MS: Record<string, number> = {
   portfolio_scan: 40_000,
   // Before the scans, which will read what it stores.
   news_collect: 35_000,
-  // After the portfolio scan, so the two do not load the same histories at once.
-  topic_scan: 48_000,
   proposal_sweep: 55_000,
   // Out of everyone's way: it reads nothing the others write.
   auth_sweep: 58_000,
   // Out of everyone's way too; nothing waits on it.
   account_erase: 59_000,
-  // After news collection, which it reads. On a fresh start the first
-  // collection has usually finished by then; if not, the hourly retry of the
-  // daily bucket is the catch-up.
-  topic_discovery: 62_000,
   // Last: the digest reports on what the scan and the sweep just did, so
   // running it first would describe the previous cycle.
   daily_digest: 70_000,
   // After backfill and before the scan: naming an instrument changes nothing
   // the analysis reads, so it only has to stay out of the way of what does.
   instrument_metadata: 30_000,
-  // After the scans and discovery, before the digest; most asks are "not due".
+  // After the scans, before the digest; most asks are "not due".
   universe_rescreen: 65_000,
   // After backfill and the snapshot, before the portfolio scan: a scan reads prices.
   agent_scans: 25_000,

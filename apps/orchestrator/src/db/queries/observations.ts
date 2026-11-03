@@ -122,23 +122,7 @@ export interface ObservationRow {
   created_at: Date;
 }
 
-/**
- * Dedupe keys the feed already holds, for the scan to skip before narrating.
- *
- * Bounded by age rather than count: a key buckets by the day of the observed
- * data, so anything older than a couple of days can no longer collide with a
- * finding the next scan produces. Sending the whole history would grow the
- * request without changing a single decision.
- */
-/**
- * The instruments whose price history this user's analysis reads: what they
- * hold, and what their active topics are made of.
- *
- * Topic instruments are usually *not* held - that is the point of following a
- * theme - so a backfill of holdings alone left every topic with no series, and
- * the topic scan with nothing to measure. `proposed` and `rejected` topics are
- * excluded: nobody chose their instruments.
- */
+/** An instrument the installation's shared ingestion fetches: closes and news. */
 export interface AnalysedInstrumentRow {
   id: string;
   symbol: string;
@@ -147,27 +131,9 @@ export interface AnalysedInstrumentRow {
   asset_class: AssetClass;
 }
 
-export function listAnalysedInstruments(userId: string): Promise<AnalysedInstrumentRow[]> {
-  return query<AnalysedInstrumentRow>(
-    `-- agent-blind: shared ingestion fetches every agent's instruments once (§4.1).
-     SELECT i.id, i.symbol, i.name, i.asset_class
-       FROM instruments i
-      WHERE i.id IN (
-              SELECT h.instrument_id FROM holdings h WHERE h.user_id = $1
-              UNION
-              SELECT ti.instrument_id
-                FROM topic_instruments ti
-                JOIN topics t ON t.id = ti.topic_id
-               WHERE ti.user_id = $1 AND t.status = 'active'
-            )
-      ORDER BY i.symbol`,
-    [userId],
-  );
-}
-
 /**
  * What the installation's shared ingestion fetches (D161, D238): every active
- * user's analysed instruments, once. Backfill and news collection run once a
+ * user's held instruments, once. Backfill and news collection run once a
  * bucket for the installation, not once per user - two users holding AAPL
  * fetch its closes once.
  */
@@ -180,17 +146,19 @@ export function listActiveUsersAnalysedInstruments(): Promise<AnalysedInstrument
               SELECT h.instrument_id
                 FROM holdings h JOIN users u ON u.id = h.user_id
                WHERE u.status = 'active'
-              UNION
-              SELECT ti.instrument_id
-                FROM topic_instruments ti
-                JOIN topics t ON t.id = ti.topic_id
-                JOIN users u ON u.id = ti.user_id
-               WHERE u.status = 'active' AND t.status = 'active'
             )
       ORDER BY i.symbol`,
   );
 }
 
+/**
+ * Dedupe keys the feed already holds, for the scan to skip before narrating.
+ *
+ * Bounded by age rather than count: a key buckets by the day of the observed
+ * data, so anything older than a couple of days can no longer collide with a
+ * finding the next scan produces. Sending the whole history would grow the
+ * request without changing a single decision.
+ */
 export async function listRecentDedupeKeys(
   userId: string,
   agentId: string,

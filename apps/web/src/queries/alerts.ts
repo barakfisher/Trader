@@ -1,6 +1,6 @@
 /**
  * The Alerts tab (decision 134): what the user was told, a page at a time,
- * optionally from one source - the main portfolio, topics, or the agents.
+ * optionally from one source - the main portfolio or the agents.
  */
 
 import { infiniteQueryOptions, useInfiniteQuery } from '@tanstack/react-query';

@@ -1,8 +1,8 @@
-"""`POST /news/collect`: the retention the orchestrator sends reaches the collection run.
+"""`POST /news/collect`: the request reaches the collection run, and its stats come back.
 
 The run itself is `test_news_collection.py`'s; what is pinned here is the wire -
-that `market_retention_days` becomes the run's `market_retention`, that leaving
-it out prunes nothing, and that the market feed's stats come back.
+that `lookback_hours` becomes the run's `lookback`, and that the market feed's
+stats come back.
 """
 
 from __future__ import annotations
@@ -62,15 +62,10 @@ def _post(body: dict) -> dict:
     return response.json()
 
 
-def test_the_retention_in_days_reaches_the_run(seen: dict) -> None:
-    result = _post({**BODY, "market_retention_days": 21})
-    assert seen["market_retention"] == timedelta(days=21)
+def test_the_lookback_reaches_the_run_and_the_market_stats_come_back(seen: dict) -> None:
+    result = _post({**BODY, "lookback_hours": 12})
+    assert seen["lookback"] == timedelta(hours=12)
     assert (result["market_articles"], result["pruned"]) == (3, 2)
     assert result["suspected_networks"] == [
         {"source": "new.example", "headlines": 25, "templated": 24}
     ]
-
-
-def test_no_retention_means_nothing_is_pruned(seen: dict) -> None:
-    _post(BODY)
-    assert seen["market_retention"] is None

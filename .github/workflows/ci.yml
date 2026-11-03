@@ -161,11 +161,9 @@ jobs:
       - name: Check the universe loader tolerates having no descriptions
         run: bash scripts/wait-for-exit.sh infra/compose/docker-compose.yml universe
       # Then eleven hand-written descriptions (data/fixtures/universe), recorded
-      # with a fixture source and licence. They exist so the smoke test can
-      # resolve a topic through the real SQL - the coverage count, the profile
-      # search, the holdings join - which no other gate reaches, because the
-      # Python suite has no Postgres. They say nothing about topic quality: the
-      # resolver abstains on the fixture embedder.
+      # with a fixture source and licence: proves the loader's fixture path
+      # writes profiles into the stack's database. The resolver's SQL over them
+      # is tested by the postgres job (tests/integration/test_retrieval_sql.py).
       - name: Load the fixture universe
         run: >
           docker compose -f infra/compose/docker-compose.yml run --rm

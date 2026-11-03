@@ -62,7 +62,6 @@ import { registerResearchRoutes } from './routes/research.js';
 import { registerInstructionsCheckRoutes } from './routes/instructionsCheck.js';
 import { registerTaxonomyRoutes } from './routes/taxonomy.js';
 import { registerTradesRoutes } from './routes/trades.js';
-import { registerTopicsRoutes } from './routes/topics.js';
 
 export interface AppEnv {
   Variables: {
@@ -106,12 +105,10 @@ const PROTECTED_PREFIXES = [
   // reader has no observation to have arrived from.
   '/concepts',
   '/targets',
-  // Like '/concepts': the universe has no `user_id`, and is still the product.
-  '/topics',
   '/proposals',
   // The narration badge: which model wrote the latest explanations, per user.
   '/narration',
-  // Like '/topics': no `user_id` (the agent template taxonomy), still the product.
+  // Like '/concepts': no `user_id` (the agent template taxonomy), still the product.
   '/universe',
   // Like '/universe': the instrument list and the symbol lookup (D324), no `user_id`.
   '/instruments',
@@ -362,7 +359,6 @@ export function createApp(
   registerImportRoutes(app);
   registerConceptsRoutes(app);
   registerAssistantRoutes(app);
-  registerTopicsRoutes(app);
   registerTaxonomyRoutes(app);
   registerInstructionsCheckRoutes(app);
   registerResearchRoutes(app);

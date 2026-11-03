@@ -55,11 +55,8 @@ portfolio_snapshots(id, user_id, as_of, total_minor, cost_minor, currency, break
                     holdings_count, priced_count, degraded)   -- see note below
 quotes(instrument_id, as_of, price_minor, currency, source, delay_seconds)  -- time-series, retained N days
 
-topics(id, user_id, label, status[active|proposed|rejected], created_by[user|auto])
-topic_instruments(topic_id, user_id, instrument_id, source[resolver|user], confidence, rationale, held_by)  -- confirmed rows only (migration 0017)
-
 articles(id, url_hash unique, url, source, published_at, title, raw_text, content_hash)
-article_entities(article_id, instrument_id|topic_id, kind, salience)
+article_entities(article_id, instrument_id, kind, salience)   -- instruments only since 0082 (D372)
 article_sentiment(article_id, score, magnitude, model, created_at)
 
 observations(id, user_id, kind, severity, subject_ref, headline, explanation,
@@ -133,9 +130,9 @@ via `NewsProvider`.
 ## 5. Analysis pipeline (one scheduled run)
 
 1. `runs` row created with a `run_key` = `{kind}:{user}:{bucket}` — duplicate trigger = no-op.
-2. Refresh quotes + FX for held and topic-linked instruments (batched, cached).
+2. Refresh quotes + FX for held instruments (batched, cached).
 3. **Rule layer (deterministic, no LLM):** price move vs thresholds, σ-move, volume anomaly, drawdown, allocation drift. Emits candidate findings with exact numbers.
-4. **News layer:** fetch → dedupe by `url_hash`/`content_hash` → extract entities (ticker/company/topic resolution) → sentiment → link to instruments/topics.
+4. **News layer:** fetch → dedupe by `url_hash`/`content_hash` → extract entities (ticker/company) → sentiment → link to instruments.
 5. **Correlation:** join price findings with same-window news to answer "why".
 6. **Narration (LLM):** turns a finding + its evidence into headline + explanation. Numbers are interpolated from the evidence struct; a validator rejects any figure in the output that is not present in the evidence.
 7. **Concept linking:** attach `concept_refs` resolved against the RAG corpus.
@@ -186,7 +183,7 @@ could not be priced.
 
 ## 7. Orchestrator
 
-- **Run kinds:** `portfolio_scan`, `topic_scan`, `daily_digest`, `proposal_sweep` and the rest, all entering through `POST /internal/runs` with a run key.
+- **Run kinds:** `portfolio_scan`, `daily_digest`, `proposal_sweep` and the rest, all entering through `POST /internal/runs` with a run key.
 - **HITL:** a proposal is a row with a deadline. The UI and Telegram both call `applyDecision`; the sweep expires what nobody answered. A restart loses nothing, because nothing waits in memory.
 - **Notification fan-out:** channel adapters (`ui`, `telegram`) behind one interface; `notifications.dedupe_key` makes resend safe.
 - **Telegram:** webhook with secret-token validation; `callback_data` carries `{proposal_id, action, nonce}` HMAC-signed, single-use (nonce burned in Redis), TTL-checked against `proposals.expires_at`.

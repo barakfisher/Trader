@@ -3,10 +3,9 @@ import type { ObservationRow } from './observations.js';
 
 /**
  * Where an alert came from (decision 134, the user's pills, 2026-10-11): the
- * main portfolio's holdings and allocation, a followed topic, or an agent's
- * trade proposal.
+ * main portfolio's holdings and allocation, or an agent's trade proposal.
  */
-export type AlertSource = 'portfolio' | 'topics' | 'agents';
+export type AlertSource = 'portfolio' | 'agents';
 
 export interface AlertRow extends ObservationRow {
   agent_id: string;
@@ -41,8 +40,7 @@ const ALERT_JOIN = `
 /** `$${first}` is the source, or null for every source. */
 function sourceWhere(first: number): string {
   return `AND ($${first}::text IS NULL
-            OR ($${first} = 'portfolio' AND a.is_primary AND o.subject_kind <> 'topic')
-            OR ($${first} = 'topics' AND a.is_primary AND o.subject_kind = 'topic')
+            OR ($${first} = 'portfolio' AND a.is_primary)
             OR ($${first} = 'agents' AND NOT a.is_primary))`;
 }
 

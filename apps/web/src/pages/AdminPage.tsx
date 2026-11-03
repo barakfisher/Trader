@@ -294,9 +294,10 @@ function UniverseCard() {
 }
 
 /**
- * Rescreen now. Asked twice, because it rewrites what every topic resolves
- * against: listings cross the size floor both ways, and a member the new
- * screen lacks is marked dropped. The answer says where to follow the run.
+ * Rescreen now. Asked twice, because it rewrites what every theme search
+ * resolves against: listings cross the size floor both ways, and a member
+ * the new screen lacks is marked dropped. The answer says where to follow the
+ * run.
  */
 function RescreenControl() {
   const rescreen = useRescreen();

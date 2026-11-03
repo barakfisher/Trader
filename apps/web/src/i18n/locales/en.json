@@ -10,14 +10,12 @@
     "no": "no",
     "save": "Save",
     "cancel": "Cancel",
-    "edit": "Edit",
     "remove": "Remove",
     "none": "none",
     "close": "Close",
     "done": "Done",
     "loadPortfolioFailed": "Could not load your portfolio.",
-    "loading": "Loading…",
-    "notAvailable": "n/a"
+    "loading": "Loading…"
   },
   "disclaimer": "Educational and informational only. Nothing here is investment advice, no orders are ever placed, and prices may be delayed. Verify every figure before acting on it.",
   "login": {
@@ -309,7 +307,6 @@
     "delay": " · {{minutes}}m delay",
     "pnl": "{{money}} ({{percent}})",
     "editSymbol": "Edit {{symbol}}",
-    "removeSymbol": "Remove {{symbol}}",
     "removeConfirm": "Remove {{symbol}}?",
     "staleTitle": "Last known price, observed {{when}}. No provider could refresh it.",
     "stale": "stale",
@@ -493,7 +490,6 @@
     "sigma_move": "Unusual move",
     "drawdown": "Drawdown",
     "allocation_drift": "Allocation drift",
-    "topic_move": "Topic move",
     "agent_trade": "Agent trade"
   },
   "news": {
@@ -502,7 +498,12 @@
     "companyName": "matched by name",
     "companyNameQuoted": "matched by name “{{text}}”",
     "publishDateUnknown": " (found; publish date unknown)",
-    "about": " · about {{symbols}}"
+    "empty": {
+      "notCollected": "News has not been collected yet, so there is nothing to show here.",
+      "quiet": "No news about {{subject}} in the last {{days}} days.",
+      "unreachable": "No news to show, but that may not mean a quiet week: the last news collection could not reach its sources{{who}}, so stories may be missing.",
+      "failedProviders": " ({{providers}})"
+    }
   },
   "feed": {
     "title": "Observations",
@@ -832,18 +833,15 @@
     },
     "sources": {
       "holding": "added as a holding",
-      "import": "in an import",
-      "topic": "added to a topic"
+      "import": "in an import"
     },
     "named": "named",
-    "quoted": "“{{text}}”",
-    "lowConfidence": "topic matched nothing: best score {{best}}, gate {{gate}}",
     "outsideScreen": "outside the screen",
     "because": "{{where}}; {{why}}",
     "notInUniverse": "a US listing the universe lacks - below the size floor or listed since the snapshot",
     "unpriced": "no market data provider could price it",
     "profiles": {
-      "on_demand": "profiled on demand; no topic is answered from it until a rescreen admits it",
+      "on_demand": "profiled on demand; agents' searches by theme skip it until a rescreen admits it",
       "screened": "now in the universe",
       "dropped": "dropped by a later snapshot"
     }
@@ -886,48 +884,12 @@
     "deleteFailed": "Could not delete that conversation.",
     "retention": "Conversations are kept for 90 days after their last message, then deleted."
   },
-  "topics": {
-    "heldBy": "held by {{funds}}",
-    "fundShare": "{{etf}} {{share}}",
-    "verdicts": {
-      "weak": "These are weak matches: the closest descriptions are only loosely about this topic. Keep only what you recognise, and add what is missing.",
-      "none": "Nothing in the instrument universe describes itself as being about this topic. You can still add tickers yourself."
-    },
-    "universe": {
-      "not_loaded": "No suggestions: this installation has no instrument universe loaded, so the topic was not looked up. You can still add tickers yourself.",
-      "not_embedded": "No suggestions: the instrument universe is loaded but not indexed for the configured embedding model, so the topic was not looked up. You can still add tickers yourself.",
-      "available": "No suggestions are available right now. You can still add tickers yourself."
-    },
-    "partialCoverage": "Only {{embedded}} of {{profiles}} instruments could be searched, so some matches may be missing.",
-    "news": {
-      "thisTopicsInstruments": "this topic’s instruments",
-      "notCollected": "News has not been collected yet, so there is nothing to show here.",
-      "quiet": "No news about {{subject}} in the last {{days}} days.",
-      "unreachable": "No news to show, but that may not mean a quiet week: the last news collection could not reach its sources{{who}}, so stories may be missing.",
-      "failedProviders": " ({{providers}})"
-    },
-    "tone": {
-      "gaps": {
-        "no_articles": "No tone yet: there were no articles to read.",
-        "not_scored": "No tone yet: the articles have not been scored.",
-        "too_few_polarised": "Too little to judge: too few articles expressed any tone."
-      },
-      "counts": "{{positive}} positive, {{negative}} negative, {{neutral}} neutral",
-      "summary": "Headline tone over {{days}} days, from {{articles}} ({{tones}}). A word count, not a forecast.",
-      "articles_one": "{{count}} article",
-      "articles_other": "{{count}} articles"
-    }
-  },
   "errors": {
     "askFailed": "Could not get an answer.",
     "loginFailed": "Login failed. Please try again.",
     "settingsSaveFailed": "Could not save your settings.",
     "decisionFailed": "Could not record your decision.",
-    "targetsSaveFailed": "Could not save your targets.",
-    "topicDeclineFailed": "Could not decline that proposal.",
-    "topicRemoveFailed": "Could not remove that topic.",
-    "topicLookupFailed": "Could not look that topic up.",
-    "topicSaveFailed": "Could not save the topic."
+    "targetsSaveFailed": "Could not save your targets."
   },
   "validation": {
     "ttlWhole": "How long a proposal stays open must be a whole number of hours.",
@@ -935,18 +897,12 @@
     "quietHoursSame": "Quiet hours must start and end at different times.",
     "targetFormat": "{{symbols}}: a target must be a percentage, with at most two decimal places.",
     "targetOver100": "{{symbols}}: no single target can be more than 100% of the portfolio.",
-    "targetsTotal": "Your targets add up to {{total}}%. They can add up to less than 100%, but not more.",
-    "topicName": "Name the topic.",
-    "topicNameLength": "A topic name can be at most {{max}} characters.",
-    "topicInstruments": "Choose at least one instrument.",
-    "topicInstrumentsMax": "A topic can hold at most {{max}} instruments.",
-    "topicsLimit": "You follow {{max}} topics already, which is the most you can. Remove one to add another."
+    "targetsTotal": "Your targets add up to {{total}}%. They can add up to less than 100%, but not more."
   },
   "nav": {
     "refresh": "Refresh",
     "targets": "Targets",
     "agents": "Agents",
-    "topics": "Topics",
     "ask": "Ask",
     "proposals": "Proposals",
     "settings": "Settings",
@@ -1160,7 +1116,7 @@
     "ownKey": {
       "title": "Your OpenRouter key",
       "intro": "Your agent scans, questions and model-written explanations run on an OpenRouter API key of your own, paid from your OpenRouter account. This installation's key is not used for them. The key is checked with OpenRouter, stored encrypted, and never shown again: only its last four characters.",
-      "introAdmin": "As the admin you have two keys. The installation's key pays for shared work - embeddings for the universe, the concept corpus and topics - and for your own agent scans, questions and model-written explanations while no key of yours is saved here. Save a personal OpenRouter key and it pays for those instead, tracked apart from the installation and under your monthly safety limit below. The key is checked with OpenRouter, stored encrypted, and never shown again: only its last four characters.",
+      "introAdmin": "As the admin you have two keys. The installation's key pays for shared work - embeddings for the universe and the concept corpus - and for your own agent scans, questions and model-written explanations while no key of yours is saved here. Save a personal OpenRouter key and it pays for those instead, tracked apart from the installation and under your monthly safety limit below. The key is checked with OpenRouter, stored encrypted, and never shown again: only its last four characters.",
       "limitHint": "To cap what your key spends, set a credit limit on the key in your OpenRouter account, or a monthly safety limit below. When OpenRouter refuses the key, scans and questions stop until you save it again.",
       "label": "API key",
       "saved": "Key ending {{lastFour}}, saved {{date}}.",
@@ -1218,69 +1174,6 @@
     "othersEnded_one": "Signed out {{count}} other device.",
     "othersEnded_other": "Signed out {{count}} other devices."
   },
-  "topicsPage": {
-    "title": "Topics",
-    "count": "{{active}} of {{max}}",
-    "intro": "A topic is a theme you want to follow, in your own words: “uranium”, “robot surgery”. Type one and the app suggests instruments whose business descriptions are about it, each with the sentence that matched. Suggestions are never ticked for you, and you can add any ticker they missed. Following a topic buys nothing; it decides what the app watches.",
-    "loadFailed": "Could not load your topics.",
-    "loading": "Loading your topics…",
-    "new": "New topic",
-    "emptyTitle": "No topics yet",
-    "emptyBody": "Follow a theme and the app will watch the instruments you confirm for it.",
-    "yours": "Your topics",
-    "atLimit": "You follow {{max}} topics, which is the most you can. Remove one to add another.",
-    "instruments_one": "{{count}} instrument",
-    "instruments_other": "{{count}} instruments",
-    "foundInNews": " · found in the news",
-    "suggested": "Suggested from the news",
-    "suggestedIntro": "These themes kept coming up in headlines about what you hold and follow. They are suggestions only: nothing is followed until you choose its instruments.",
-    "cooldown": " If you are not interested, a theme like it is not suggested again for {{days}} days.",
-    "proposalTtl": " A suggestion left unanswered is withdrawn after {{days}} days, to make room for new ones.",
-    "hideWeak": "Hide weak matches",
-    "showWeak_one": "Show {{count}} weak match",
-    "showWeak_other": "Show {{count}} weak matches",
-    "weakExplained": "Themes the news kept mentioning, where the instruments found fit only loosely.",
-    "weakMatch": "weak match",
-    "strongMatch": "strong match",
-    "chooseInstruments": "Choose instruments",
-    "notInterested": "Not interested",
-    "evidence": "In {{articles}} headlines from {{sources}} outlets over the last {{days}} days",
-    "looseMatches": " · loose matches: {{symbols}}",
-    "resolverSuggested": " · the resolver suggested {{symbols}}",
-    "headlineSource": " · {{source}}",
-    "atLimitSuggestion": "You follow the most topics you can; remove one to take this suggestion up.",
-    "topicLoading": "Loading that topic…",
-    "topicLoadFailed": "Could not load that topic.",
-    "stopFollowing": "Stop following this topic?",
-    "keep": "Keep",
-    "confirmedAt": "Confirmed {{when}}. The reasons below are the ones shown when you confirmed.",
-    "tone": "Tone this week",
-    "toneFailed": "Could not load this topic’s tone.",
-    "toneLoading": "Reading the tone…",
-    "news": "News this week",
-    "newsFailed": "Could not load this topic’s news.",
-    "addedByYou": "added by you",
-    "newTopic": "New topic",
-    "suggestedTopic": "Suggested topic",
-    "editTopic": "Edit topic",
-    "topic": "Topic",
-    "topicPlaceholder": "e.g. uranium, robot surgery, GLP-1",
-    "find": "Find instruments",
-    "resolving": "Looking through the instrument universe…",
-    "stale": "The suggestions below are for “{{label}}”. Find instruments again to see them for the new name. When you confirm, reasons are kept only for suggestions the new name also brings up.",
-    "ambiguous": "This topic matches more than one kind of business. Choose from whichever you meant.",
-    "suggestions": "Suggestions",
-    "tickAll": "Tick all",
-    "addMissed": "Add tickers the suggestions missed",
-    "addTickers": "Add tickers",
-    "addPlaceholder": "e.g. ISRG or BWXT, LEU",
-    "add": "Add",
-    "notRecognised": "· not recognised",
-    "checkedOnConfirm": "Tickers are checked when you confirm. One that no market data provider recognises is marked here, and nothing is saved until it is fixed or removed.",
-    "chosen": "{{chosen}} of at most {{max}} instruments chosen",
-    "confirm": "Confirm topic",
-    "etf": "ETF"
-  },
   "admin": {
     "credits": {
       "title": "OpenRouter balance",
@@ -1314,12 +1207,12 @@
     "universeLoading": "Loading the universe…",
     "universeFailed": "Could not load the universe status.",
     "profiled": "{{profiles}} profiled ({{equities}} equities, {{etfs}} ETFs), {{embedded}} embedded, {{holdings}} ETF holdings.",
-    "dropped": "{{value}} dropped by a later snapshot: kept, because holdings and topics refer to them, but no longer members.",
-    "onDemand": "Also {{value}} profiled on demand for listings users named. They are described but not members: no topic is answered from them, and they are not compared with the snapshot.",
+    "dropped": "{{value}} dropped by a later snapshot: kept, because holdings refer to them, but no longer members.",
+    "onDemand": "Also {{value}} profiled on demand for listings users named. They are described but not members: agents' searches by theme skip them, and they are not compared with the snapshot.",
     "lastLoad": "Snapshot of {{snapshot}}, last loaded {{age}}.",
     "noLoad": "No load has been recorded, so there is nothing to compare the database against. The universe loader records one every time it runs.",
     "rescreen": "Rescreen universe",
-    "rescreenWarning": "This rebuilds the universe from Yahoo's screener - half an hour or more, as Yahoo limits how fast it answers - and loads it. If Yahoo refuses some listings the run fails and keeps what it fetched; rescreening again the same day resumes. Listings cross the size floor both ways; a member the new screen lacks is marked dropped and no topic is answered from it. Once a rescreen has succeeded, another the same day does nothing.",
+    "rescreenWarning": "This rebuilds the universe from Yahoo's screener - half an hour or more, as Yahoo limits how fast it answers - and loads it. If Yahoo refuses some listings the run fails and keeps what it fetched; rescreening again the same day resumes. Listings cross the size floor both ways; a member the new screen lacks is marked dropped and agents' searches by theme skip it. Once a rescreen has succeeded, another the same day does nothing.",
     "rescreenNow": "Rescreen now",
     "rescreenStarting": "Starting the rescreen…",
     "rescreenFailed": "Could not start the rescreen.",
@@ -1332,7 +1225,7 @@
     "gaps": "Universe gaps",
     "gapsLoading": "Loading gaps…",
     "gapsFailed": "Could not load the universe gaps.",
-    "gapsEmpty": "No gap recorded: every symbol and topic users asked about was in the universe.",
+    "gapsEmpty": "No gap recorded: every symbol users asked about was in the universe.",
     "occurrences": "{{count}}× · ",
     "llm": "Model calls",
     "window": "Window",
@@ -2092,7 +1985,6 @@
     "sources": {
       "all": "All",
       "portfolio": "Portfolio",
-      "topics": "Topics",
       "agents": "Agents"
     },
     "loading": "Loading alerts…",
@@ -2159,10 +2051,6 @@
       "agents_trading": {
         "label": "Agents' trading",
         "erases": "Every simulated agent's trades, holdings, daily values, scans and proposals. Each agent's cash and budget go to $0; it keeps its name, persona and schedule, and waits for Add cash."
-      },
-      "followed_topics": {
-        "label": "Followed topics",
-        "erases": "Topics, their instruments, and what was found about them."
       }
     },
     "kept": "Always kept: your settings and Telegram, the agents' configuration, market data and the universe, and the logs of runs, model calls and admin actions.",
@@ -2377,14 +2265,14 @@
   },
   "accountDeletion": {
     "dataTitle": "Your data",
-    "exportIntro": "Download everything this account holds as one JSON file: your settings, holdings, agents and their ledgers, scans, proposals, observations, topics and conversations. Your model key, sessions and password are never in it.",
+    "exportIntro": "Download everything this account holds as one JSON file: your settings, holdings, agents and their ledgers, scans, proposals, observations and conversations. Your model key, sessions and password are never in it.",
     "exportButton": "Download my data",
     "exporting": "Preparing the file…",
     "exportFailed": "The file did not download. Try again.",
     "title": "Delete account",
     "intro_one": "The account closes at once - signed out everywhere, nothing runs for it - and is permanently deleted {{count}} day later. Until then, signing in cancels the deletion.",
     "intro_other": "The account closes at once - signed out everywhere, nothing runs for it - and is permanently deleted {{count}} days later. Until then, signing in cancels the deletion.",
-    "erases": "Deleted for good: your settings, holdings, agents and their ledgers, scans, proposals, observations, topics, conversations, model key and Telegram link. Market data shared with other users stays. The installation's backups keep a deleted account for up to 56 days.",
+    "erases": "Deleted for good: your settings, holdings, agents and their ledgers, scans, proposals, observations, conversations, model key and Telegram link. Market data shared with other users stays. The installation's backups keep a deleted account for up to 56 days.",
     "exportFirst": "Want a copy? Download your data first.",
     "adminNotAllowed": "The installation's admin account cannot be deleted from Settings.",
     "confirmLabel": "Type {{word}} to confirm",

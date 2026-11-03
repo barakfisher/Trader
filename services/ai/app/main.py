@@ -45,7 +45,6 @@ from app.routers import (
     news,
     own_keys,
     research,
-    topics,
     universe,
 )
 from app.universe.profile_source import build_profile_source
@@ -143,7 +142,6 @@ app.include_router(market.router)
 app.include_router(analysis.router)
 app.include_router(narration.router)
 app.include_router(concepts.router)
-app.include_router(topics.router)
 app.include_router(news.router)
 app.include_router(universe.router)
 app.include_router(llm.router)

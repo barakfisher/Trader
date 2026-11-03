@@ -12,7 +12,7 @@ claim. It never places an order.
 |---|---|
 | [docs/PRD.md](docs/PRD.md) | Problem, product stances, functional requirements, success criteria |
 | [docs/DESIGN.md](docs/DESIGN.md) | Architecture, decisions and rejected alternatives, data model, security |
-| [docs/FLOWS.md](docs/FLOWS.md) | Diagrams for import, scheduled runs, HITL, Telegram, topics, RAG |
+| [docs/FLOWS.md](docs/FLOWS.md) | Diagrams for import, scheduled runs, HITL, Telegram, RAG |
 | [docs/MILESTONES.md](docs/MILESTONES.md) | Milestone plan with exit criteria |
 | [docs/RUNBOOK.md](docs/RUNBOOK.md) | Operating it: rotate keys, replay a run, recover a stuck proposal |
 | [docs/DECISIONS.md](docs/DECISIONS.md) | Index of every argued decision, with a pointer to its reasoning |
@@ -94,7 +94,7 @@ flowchart LR
     subgraph app [Traders]
         web["web<br/>nginx: the built app,<br/>/api/* forwarded"] --> orchestrator
         orchestrator["orchestrator<br/>Node/TS, Hono<br/>sessions, holdings, import, valuation,<br/>runs, proposals, notifications"] -->|REST, typed client| ai
-        ai["ai-service<br/>Python, FastAPI<br/>market data, analysis, narration,<br/>retrieval, news, topics"]
+        ai["ai-service<br/>Python, FastAPI<br/>market data, analysis, narration,<br/>retrieval, news"]
         scheduler["scheduled runs<br/>in-process timer, or<br/>Kubernetes CronJobs"] -->|POST /internal/runs| orchestrator
         orchestrator --> pg[("Postgres + pgvector<br/>schema owned by Alembic")]
         ai --> pg
@@ -123,13 +123,13 @@ flowchart LR
 apps/web            React + MobX + Tailwind dashboard (Vite)
 apps/orchestrator   REST API, valuation, import, runs, proposals, Telegram
 packages/shared     Shared types, money helpers, generated AI-service client
-services/ai         FastAPI service: market data, analysis, narration, RAG, news, topics;
+services/ai         FastAPI service: market data, analysis, narration, RAG, news, agents;
                     owns the database schema (Alembic)
 infra/docker        Dockerfiles and the production nginx config
 infra/compose       local docker-compose environment
 infra/k8s           Kubernetes: base manifests, the kind overlay, ingress and metrics add-ons
 data/corpus         concept explanations, ingested into the database (CC0)
-data/universe       the instrument universe for topic resolution
+data/universe       the instrument universe the agents search
 data/fixtures       offline prices, instruments and a demo portfolio
 scripts             dev-docker.sh, dev-local.sh, k8s-up.sh, k8s-down.sh, smoke-test.sh
 ```
@@ -150,8 +150,8 @@ python scripts/export_openapi.py   # after changing any pydantic wire model
 ```
 
 `bash scripts/smoke-test.sh` runs the full vertical slice against a live stack: login, import,
-valuation, snapshot run, idempotency and auth checks, questions answered from the corpus, and a
-topic resolved. CI runs it against compose on every push, and deploys the kind cluster too.
+valuation, snapshot run, idempotency and auth checks, and questions answered from the corpus.
+CI runs it against compose on every push, and deploys the kind cluster too.
 
 ## Operating it
 
@@ -169,7 +169,7 @@ Nothing, by default: every provider has a keyless path, and CI and a fresh clone
 | News | fixture | GDELT's raw files are free: about 96 downloads and **~300 MB a day** |
 | Explanations | templates - fixed phrasing over checked figures | a model through OpenRouter: about $0.0015 per explanation, **~$0.45 a month** at ~10 findings a day; `LLM_DAILY_BUDGET_USD` caps the day |
 | Embeddings | a hashed fixture (keyword search only) | `openai/text-embedding-3-small`: re-embedding the corpus ~$0.0001; the universe's first load (~5,200 descriptions) ~$0.02, then only what changed |
-| Instrument descriptions | none (topic resolution answers "unavailable") | free from Yahoo, but about an hour to build the first time |
+| Instrument descriptions | none (the agents' universe search answers "unavailable") | free from Yahoo, but about an hour to build the first time |
 
 Machine resources, measured on an Apple M1 with 8 GB given to Docker: the compose stack uses about
 1 GB of memory; the kind cluster's node about 1.9 GB, of which the app and its add-ons reserve

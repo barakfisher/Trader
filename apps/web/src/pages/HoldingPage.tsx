@@ -18,7 +18,7 @@ import { baseCurrencyOf, shortRate } from '../lib/portfolioView.ts';
 import { formatAge, formatExactTime } from '../lib/relativeTime.ts';
 import { unitsToPercent, weightToUnits } from '../lib/targetWeights.ts';
 import { MIRROR_IN_RTL } from '../lib/textDirection.ts';
-import { newsEmptyMessage } from '../lib/topicPresentation.ts';
+import { newsEmptyMessage } from '../lib/newsPresentation.ts';
 import { useHoldingNewsQuery, useSymbolObservationsQuery } from '../queries/holding.ts';
 import { usePortfolioQuery } from '../queries/portfolio.ts';
 import { useTargetsQuery } from '../queries/targets.ts';
@@ -269,7 +269,7 @@ function NewsCard({ holdingId, symbol }: { holdingId: string; symbol: string }) 
           {news.collection && t('holding.lastCollection', { age: formatAge(news.collection.lastRunAt) })}
         </p>
       )}
-      {news && news.articles.length > 0 && <NewsList articles={news.articles} showSymbols={false} />}
+      {news && news.articles.length > 0 && <NewsList articles={news.articles} />}
     </Card>
   );
 }

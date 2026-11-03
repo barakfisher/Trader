@@ -67,7 +67,7 @@ else
   [ -d "$UNIVERSE_DIR" ] || fail "UNIVERSE_DIR does not exist: $UNIVERSE_DIR"
   UNIVERSE_DIR="$(cd "$UNIVERSE_DIR" && pwd)"
   if [ ! -f "$UNIVERSE_DIR/descriptions.local.jsonl" ]; then
-    warn "no descriptions.local.jsonl in $UNIVERSE_DIR - topic resolution will answer 'unavailable'"
+    warn "no descriptions.local.jsonl in $UNIVERSE_DIR - the agents' universe search will answer 'unavailable'"
   fi
   say "Creating kind cluster '$CLUSTER' (universe from $UNIVERSE_DIR)"
   cluster_config="$(mktemp)"

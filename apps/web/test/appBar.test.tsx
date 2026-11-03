@@ -49,7 +49,7 @@ it.each([
   '/insights?tab=digest',
   '/agents',
   '/agents/a-1',
-  '/topics',
+  '/research',
   '/ask',
   '/proposals',
   '/proposals/p-1',
@@ -67,7 +67,7 @@ it('marks the current place, and keeps it marked below it', async () => {
   renderAt('/agents/a-1');
   const nav = await screen.findByRole('navigation', { name: 'Main' });
   expect(within(nav).getByRole('link', { name: 'Agents' }).getAttribute('aria-current')).toBe('page');
-  expect(within(nav).getByRole('link', { name: 'Topics' }).getAttribute('aria-current')).toBeNull();
+  expect(within(nav).getByRole('link', { name: 'Research' }).getAttribute('aria-current')).toBeNull();
   expect(within(nav).getByRole('link', { name: 'Portfolio' }).getAttribute('aria-current')).toBeNull();
 });
 
@@ -95,7 +95,7 @@ it('closes the menu when one of its links is followed', async () => {
   fireEvent.click(button);
   const panel = document.getElementById(button.getAttribute('aria-controls')!)!;
 
-  fireEvent.click(within(panel).getByRole('link', { name: 'Topics' }));
-  await vi.waitFor(() => expect(router.state.location.pathname).toBe('/topics'));
+  fireEvent.click(within(panel).getByRole('link', { name: 'Research' }));
+  await vi.waitFor(() => expect(router.state.location.pathname).toBe('/research'));
   expect(button.getAttribute('aria-expanded')).toBe('false');
 });

@@ -86,9 +86,6 @@ vi.mock('../src/db/queries.js', () => ({
   listTargetWeights: vi.fn(async () => []),
   findInstrumentsBySymbols: vi.fn(async () => []),
   listInstrumentsWithoutName: vi.fn(async () => []),
-  listAnalysedInstruments: vi.fn(async () => [
-    { id: 'instrument-1', symbol: 'AAPL', name: 'Apple Inc.', asset_class: 'equity' },
-  ]),
   listActiveUsersAnalysedInstruments: vi.fn(async () => [
     { id: 'instrument-1', symbol: 'AAPL', name: 'Apple Inc.', asset_class: 'equity' },
   ]),
@@ -105,7 +102,6 @@ const { createApp } = await import('../src/http/app.js');
 
 const fakeAi = await import('./fakeAi.js');
 const { createFakeAi } = fakeAi;
-const { DISCOVERY_WINDOW_DAYS } = await import('../src/services/topicDiscovery.js');
 const queries = await import('../src/db/queries.js');
 const pool = await import('../src/db/pool.js');
 const { LEGAL_NOT_ACCEPTED } = await import('../src/services/accountHold.js');
@@ -553,7 +549,7 @@ describe('API', () => {
         headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
         body: JSON.stringify({ kind, userId: USER.id }),
       });
-    for (const kind of ['daily_digest', 'portfolio_scan', 'topic_scan', 'topic_discovery']) {
+    for (const kind of ['daily_digest', 'portfolio_scan']) {
       vi.mocked(queries.finishRun).mockClear();
       expect(await (await post(kind)).json(), kind).toMatchObject({ status: 'skipped', result: { reason: LEGAL_NOT_ACCEPTED } });
     }
@@ -595,7 +591,6 @@ describe('API', () => {
       expect.objectContaining({ userId: null, agentId: null, runKey: expect.stringMatching(/^news_collect:installation:/) }),
     );
     expect(queries.listActiveUsersAnalysedInstruments).toHaveBeenCalled();
-    expect(queries.listAnalysedInstruments).not.toHaveBeenCalled();
   });
 
   it('refuses a named user who is not active', async () => {
@@ -659,7 +654,7 @@ describe('API', () => {
     expect(second.status).toBe('skipped');
   });
 
-  it('keeps market-feed articles for the discovery window plus a proposal lifetime', async () => {
+  it('asks for news about the held instruments and leaves market-feed retention to the AI service', async () => {
     const response = await app.request('/internal/runs', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-internal-key': 'internal-test-key' },
@@ -667,8 +662,9 @@ describe('API', () => {
     });
     expect(response.status).toBe(200);
     expect(fakeAi.lastCollectRequest).toMatchObject({
-      market_retention_days: DISCOVERY_WINDOW_DAYS + loadConfig(ENV).TOPIC_PROPOSAL_TTL_DAYS,
+      instruments: [{ instrument_id: 'instrument-1', symbol: 'AAPL' }],
     });
+    expect(fakeAi.lastCollectRequest).not.toHaveProperty('market_retention_days');
   });
 
   it('names instruments that are missing one and reports the ones still unnamed', async () => {

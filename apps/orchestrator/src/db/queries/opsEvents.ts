@@ -1,6 +1,6 @@
 import { query } from '../pool.js';
 
-export type OpsEventKind = 'universe_gap_missing_ticker' | 'universe_gap_low_confidence';
+export type OpsEventKind = 'universe_gap_missing_ticker';
 
 export interface OpsEventInput {
   kind: OpsEventKind;

@@ -168,7 +168,6 @@ _PAGES = {
     "get_portfolio": "Portfolio",
     "get_agents": "Agents",
     "get_observations": "Insights",
-    "get_topics": "Topics",
     "get_research": "Research",
 }
 _DATA = {

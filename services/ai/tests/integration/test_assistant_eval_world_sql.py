@@ -29,8 +29,6 @@ from scripts.assistant_eval.world import (
     DEMO_HOLDINGS,
     DROPPED_AT_RESCREEN,
     REPO_ROOT,
-    TOPIC,
-    TOPIC_MEMBERS,
     Account,
     build_database,
     seed_account,
@@ -144,7 +142,6 @@ async def test_the_proposals_the_cases_ask_about(world: Any) -> None:
     assert [(p["kind"], p["trade"]["symbol"], p["agent"]) for p in rejected["proposals"]] == [
         ("sell", "URA", "Value")
     ]
-    assert TOPIC in pending["proposals"][0]["thesis"]
 
 
 async def test_each_agents_last_scan_replays(world: Any) -> None:
@@ -158,7 +155,6 @@ async def test_each_agents_last_scan_replays(world: Any) -> None:
     assert [s["tool"] for s in momentum["steps"]] == ["search_universe", "get_quote", "get_news"]
     assert value["outcome"] == "invalid_answer" and value["scan_error"]
     assert latest["agent"] == "Value"  # "my agent's last scan" is Value's
-    assert momentum["briefing"]["followed_topics"] == [TOPIC]
 
 
 async def test_the_drawdown_alert_was_raised_yesterday_and_is_high(world: Any) -> None:
@@ -171,16 +167,6 @@ async def test_the_drawdown_alert_was_raised_yesterday_and_is_high(world: Any) -
     assert alert["severity"] == "high"
     created = datetime.fromisoformat(alert["created_at"])
     assert NOW - timedelta(days=2) < created < NOW
-
-
-async def test_the_topic_its_members_and_its_move(world: Any) -> None:
-    account = await seed_account(world[0], world[1], "demo", NOW)
-
-    (topic,) = (await _call(world, account, "get_topics"))["topics"]
-
-    assert topic["topic"] == TOPIC
-    assert {i["symbol"] for i in topic["instruments"]} == set(TOPIC_MEMBERS)
-    assert topic["latest_move"] is not None
 
 
 async def test_the_universe_its_rescreen_and_a_lookup(world: Any) -> None:

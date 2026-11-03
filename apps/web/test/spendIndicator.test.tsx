@@ -69,14 +69,14 @@ afterEach(cleanup);
 describe('the spend indicator', () => {
   it('asks a user with no key to add one', async () => {
     serve({ ...WORKING, key: 'none', reading: null, binding: null, dailyPaceMicroUsd: null, daysLeft: null });
-    renderAt('/topics');
+    renderAt('/research');
     const chip = await screen.findByRole('link', { name: /Add key/ });
     expect(chip.getAttribute('href')).toBe('/settings');
   });
 
   it('shows the ratio, and a tap opens the pace and the days left', async () => {
     serve(WORKING);
-    renderAt('/topics');
+    renderAt('/research');
     const chip = await screen.findByRole('button', { name: new RegExp(`Spend on your OpenRouter key: ${ratio('12.00', '50.00')}`) });
     expect(chip.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(chip);
@@ -92,14 +92,14 @@ describe('the spend indicator', () => {
       binding: null,
       daysLeft: null,
     });
-    renderAt('/topics');
+    renderAt('/research');
     fireEvent.click(await screen.findByRole('button', { name: new RegExp(ratio('12.00', 'Unlimited')) }));
     expect(await screen.findByText(/No limit on this key, so nothing is projected/)).toBeTruthy();
   });
 
   it('is absent for the admin, who is never asked about', async () => {
     serve(WORKING);
-    renderAt('/topics', 'admin');
+    renderAt('/research', 'admin');
     await screen.findByRole('link', { name: /Portfolio/ });
     expect(get).not.toHaveBeenCalledWith('/settings/llm-usage');
     expect(screen.queryByRole('button', { name: /Spend on your OpenRouter key/ })).toBeNull();
@@ -111,14 +111,14 @@ describe('the daily reminder (D246)', () => {
 
   it('shows when the warning starts, and stays dismissed for the day', async () => {
     serve(WARNING);
-    const first = renderAt('/topics');
+    const first = renderAt('/research');
     expect(await screen.findByText(/about 3 days of spend left at this week's pace/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss for today' }));
     await waitFor(() => expect(screen.queryByText(/days of spend left/)).toBeNull());
     first.unmount();
 
     serve(WARNING);
-    renderAt('/topics');
+    renderAt('/research');
     await screen.findByRole('button', { name: /Spend on your OpenRouter key/ });
     expect(screen.queryByText(/days of spend left/)).toBeNull();
   });
@@ -129,14 +129,14 @@ describe('the daily reminder (D246)', () => {
       binding: 'safety',
       safetyLimit: { limitMicroUsd: 20 * DOLLAR, spentMicroUsd: 14 * DOLLAR, resetsOn: '2026-11-01' },
     });
-    renderAt('/topics');
+    renderAt('/research');
     expect(await screen.findByText(/Your safety limit will be reached in about 3 days/)).toBeTruthy();
     expect(screen.getByRole('button', { name: new RegExp(ratio('14.00', '20.00')) })).toBeTruthy();
   });
 
   it('is not shown without a warning', async () => {
     serve(WORKING);
-    renderAt('/topics');
+    renderAt('/research');
     await screen.findByRole('button', { name: /Spend on your OpenRouter key/ });
     expect(screen.queryByText(/days of spend left/)).toBeNull();
   });

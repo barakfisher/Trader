@@ -36,8 +36,6 @@ import { eraseDueAccounts } from '../../services/accountErase.js';
 import { backfillInstrumentNames } from '../../services/instrumentMetadata.js';
 import { AUTH_TOKEN_RETENTION_DAYS, UNVERIFIED_SIGNUP_DAYS } from '../linkTokens.js';
 import { runPortfolioScan } from '../../services/portfolioScan.js';
-import { marketRetentionDays, runTopicDiscovery } from '../../services/topicDiscovery.js';
-import { HISTORY_BACKFILL_DAYS, runTopicScan } from '../../services/topicScan.js';
 import { sendDigest } from '../../services/notifications.js';
 import { RESCREEN_KIND, startRescreen } from '../../services/universeRescreen.js';
 import { EVERY_ACTIVE_USER, INSTALLATION_KINDS } from '../../runKinds.js';
@@ -66,18 +64,10 @@ import { ApiProblem, badRequest, conflict, notFound } from '../errors.js';
 const RUN_BUCKET_MINUTES: Record<string, number> = {
   snapshot: 24 * 60,
   portfolio_scan: 30,
-  // Same cadence as the portfolio scan: both read the same daily closes, and a
-  // topic that moved should not be announced half an hour after the holding.
-  topic_scan: 30,
   // News moves faster than daily closes, but the only provider today is a
   // fixture, and a real one (GDELT) is polite at this rate. Matches the scans so
   // a story collected in one bucket can be read by the scans of the next.
   news_collect: 30,
-  // Discovery reads a week of headlines for themes that last, so a second pass
-  // the same day would read nearly the same week and, with the open-proposal
-  // bound, usually have nowhere to write. Once a day also keeps it to at most
-  // a handful of resolver embeddings a day.
-  topic_discovery: 24 * 60,
   // Daily closes appear once a day, so asking more often fetches the same
   // series and writes nothing. The provider quota is the reason to care.
   backfill: 24 * 60,
@@ -133,13 +123,14 @@ export function runBucket(kind: string, localDate: string, now: Date = new Date(
  */
 const NEWS_LOOKBACK_HOURS = 48;
 
+/** Days of daily closes the backfill fetches for an instrument the analysis reads. */
+const HISTORY_BACKFILL_DAYS = 180;
+
 const runSchema = z.object({
   kind: z.enum([
     'snapshot',
     'portfolio_scan',
-    'topic_scan',
     'news_collect',
-    'topic_discovery',
     'backfill',
     'proposal_sweep',
     'auth_sweep',
@@ -211,7 +202,7 @@ async function runForInstallation(context: Context, request: RunRequest): Promis
 
   return claimAnd({ userId: null, agentId: null, kind, runKey, trigger: request.trigger ?? 'unknown' }, async (runId) => {
     if (kind === 'backfill') {
-      // Beside what is held and followed: every instrument an agent has ever
+      // Beside what is held: every instrument an agent has ever
       // traded, so a past day stays valued after a sale, and the benchmarks,
       // always: SPY's closes are there before the first agent is (PR 7, D24),
       // and every index a move is set beside has its closes too (decision 149).
@@ -224,7 +215,7 @@ async function runForInstallation(context: Context, request: RunRequest): Promis
       const instruments = [
         ...new Map([...analysed, ...traded, ...benchmark].map((row) => [row.id, row])).values(),
       ];
-      if (instruments.length === 0) return done(runId, 'skipped', { reason: 'no holdings and no topics' });
+      if (instruments.length === 0) return done(runId, 'skipped', { reason: 'no holdings' });
       const result = await context.get('ai').backfillHistory(
         {
           instruments: instruments.map((row) => ({ instrument_id: row.id, symbol: row.symbol })),
@@ -279,11 +270,11 @@ async function runForInstallation(context: Context, request: RunRequest): Promis
       return done(runId, result.failed > 0 ? 'degraded' : 'ok', result);
     }
 
-    // news_collect. Held and topic instruments only - never the universe. The
+    // news_collect. Held instruments only - never the universe. The
     // reason is in app/news/collection.py: a matcher that knows "Target" and
     // "Block" links half of every article to something.
     const instruments = await listActiveUsersAnalysedInstruments();
-    if (instruments.length === 0) return done(runId, 'skipped', { reason: 'no holdings and no topics' });
+    if (instruments.length === 0) return done(runId, 'skipped', { reason: 'no holdings' });
     const result = await context.get('ai').collectNews(
       {
         instruments: instruments.map((row) => ({
@@ -293,7 +284,6 @@ async function runForInstallation(context: Context, request: RunRequest): Promis
           asset_class: row.asset_class,
         })),
         lookback_hours: NEWS_LOOKBACK_HOURS,
-        market_retention_days: marketRetentionDays(config.TOPIC_PROPOSAL_TTL_DAYS),
       },
       context.get('requestId'),
     );
@@ -310,11 +300,10 @@ async function runForUser(
   user: UserRow,
   runKeyOverride: string | undefined,
 ): Promise<RunOutcome> {
-  const config = context.get('config');
   const kind = request.kind;
   // Resolved once, here at the edge, and passed down. Every user kind is the
-  // primary's - the agent-blind ones (topics, digest) by convention, since they
-  // are no agent's work (§3.3c).
+  // primary's - the agent-blind one (the digest) by convention, since it is no
+  // agent's work (§3.3c).
   const agentId = await primaryAgentId(user.id);
   const runKey = runKeyOverride ?? `${kind}:${user.id}:${runBucket(kind, localDate(user.timezone))}`;
   const done = async (runId: string, status: FinishedStatus, result: unknown): Promise<RunOutcome> => {
@@ -337,37 +326,8 @@ async function runForUser(
       // claiming: 'skipped' says the run happened and found nothing to say,
       // which is exactly what GET /runs is read to distinguish.
       const status =
-        digest.entries === 0 && digest.topics === 0 ? 'skipped' : digest.delivered ? 'ok' : 'degraded';
+        digest.entries === 0 ? 'skipped' : digest.delivered ? 'ok' : 'degraded';
       return done(runId, status, digest);
-    }
-
-    if (kind === 'topic_discovery') {
-      const result = await runTopicDiscovery(
-        user,
-        context.get('ai'),
-        {
-          cooldownDays: config.TOPIC_REJECTION_COOLDOWN_DAYS,
-          proposalTtlDays: config.TOPIC_PROPOSAL_TTL_DAYS,
-        },
-        context.get('requestId'),
-      );
-      // No headlines is 'skipped', not 'ok': the run asked nothing, and the
-      // reason says where to look. A run that examined phrases and proposed
-      // none is 'ok' - every phrase carries its reason in `notProposed`.
-      return done(runId, result.degraded ? 'degraded' : result.headlines === 0 ? 'skipped' : 'ok', result);
-    }
-
-    if (kind === 'topic_scan') {
-      const scan = await runTopicScan(
-        user,
-        agentId,
-        context.get('ai'),
-        context.get('notifier'),
-        runId,
-        context.get('requestId'),
-      );
-      if (scan === null) return done(runId, 'skipped', { reason: 'no active topics' });
-      return done(runId, scan.degraded ? 'degraded' : 'ok', scan);
     }
 
     if (kind === 'portfolio_scan') {

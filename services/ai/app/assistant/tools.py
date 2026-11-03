@@ -53,8 +53,6 @@ DEFAULT_OBSERVATION_DAYS = 7
 MAX_OBSERVATION_DAYS = 90
 #: Snapshots compared against for "how has it done": a day, a week, a month back.
 RETURN_WINDOWS = {"1d": 1, "7d": 7, "30d": 30}
-#: Topic instruments listed per topic.
-MAX_TOPIC_INSTRUMENTS = 30
 PROPOSAL_STATES = ("pending", "approved", "rejected", "snoozed", "expired")
 #: The currency totals are summed in when no snapshot names one (guideline 10).
 BASE_CURRENCY = "USD"
@@ -806,91 +804,6 @@ async def get_observations(context: ToolContext, arguments: Mapping[str, Any]) -
     }
 
 
-# -- get_topics ----------------------------------------------------------------
-
-
-async def get_topics(context: ToolContext, arguments: Mapping[str, Any]) -> dict[str, Any]:
-    wanted = arguments.get("topic")
-    wanted = wanted.strip().lower() if isinstance(wanted, str) and wanted.strip() else None
-    with context.engine.connect() as connection:
-        topics = connection.execute(
-            text(
-                """
-                SELECT t.id::text AS id, t.label, t.confirmed_at
-                  FROM topics t
-                 WHERE t.user_id = CAST(:user AS uuid) AND t.status = 'active'
-                 ORDER BY t.confirmed_at DESC NULLS LAST, t.label
-                """
-            ),
-            {"user": context.user_id},
-        ).all()
-        if wanted is not None:
-            topics = [t for t in topics if wanted in t.label.lower()] or []
-        answer = []
-        for topic in topics:
-            instruments = connection.execute(
-                text(
-                    """
-                    SELECT i.symbol, i.name, ti.source, ti.confidence, ti.rationale, ti.held_by
-                      FROM topic_instruments ti JOIN instruments i ON i.id = ti.instrument_id
-                     WHERE ti.topic_id = CAST(:topic AS uuid) AND ti.user_id = CAST(:user AS uuid)
-                     ORDER BY i.symbol
-                     LIMIT :limit
-                    """
-                ),
-                {"topic": topic.id, "user": context.user_id, "limit": MAX_TOPIC_INSTRUMENTS},
-            ).all()
-            move = connection.execute(
-                text(
-                    """
-                    SELECT headline, severity, evidence, created_at
-                      FROM observations
-                     WHERE user_id = CAST(:user AS uuid) AND kind = 'topic_move'
-                       AND subject_ref = 'topic:' || :topic
-                     ORDER BY created_at DESC
-                     LIMIT 1
-                    """
-                ),
-                {"topic": topic.id, "user": context.user_id},
-            ).one_or_none()
-            answer.append(
-                {
-                    "topic": topic.label,
-                    "confirmed_at": topic.confirmed_at.isoformat() if topic.confirmed_at else None,
-                    "instruments": [
-                        {
-                            "symbol": row.symbol,
-                            "name": row.name,
-                            "matched_by": row.source,
-                            "confidence": row.confidence,
-                            "reason": row.rationale,
-                            "held_by": row.held_by,
-                        }
-                        for row in instruments
-                    ],
-                    "latest_move": (
-                        {
-                            "headline": move.headline,
-                            "severity": move.severity,
-                            "evidence": move.evidence,
-                            "at": move.created_at.isoformat(),
-                        }
-                        if move
-                        else None
-                    ),
-                }
-            )
-    return {
-        "topics": answer,
-        "link": "/topics",
-        **(
-            {}
-            if answer
-            else {"note": "no followed topic matches" if wanted else "no topics are followed"}
-        ),
-    }
-
-
 # -- get_product_guide ---------------------------------------------------------
 
 
@@ -994,7 +907,6 @@ async def replay_scan(context: ToolContext, arguments: Mapping[str, Any]) -> dic
                 for kind, listed in (briefing.get("movers") or {}).items()
                 if isinstance(listed, list)
             },
-            "followed_topics": briefing.get("followed_topics", []),
         },
         "steps": steps,
         "decision": answer,
@@ -1327,7 +1239,7 @@ OWN_TOOLS: tuple[Tool, ...] = (
     Tool(
         ToolSpec(
             "get_observations",
-            "What the rules found for this user (price moves, drawdowns, drift, topic moves), "
+            "What the rules found for this user (price moves, drawdowns, drift), "
             "newest first, with the evidence and thresholds behind each severity.",
             _object(
                 {
@@ -1340,15 +1252,6 @@ OWN_TOOLS: tuple[Tool, ...] = (
             ),
         ),
         get_observations,
-    ),
-    Tool(
-        ToolSpec(
-            "get_topics",
-            "The topics the user follows: each one's instruments with why each matched, and "
-            "its latest move.",
-            _object({"topic": _TEXT}, []),
-        ),
-        get_topics,
     ),
     Tool(
         ToolSpec(
@@ -1384,7 +1287,7 @@ OWN_TOOLS: tuple[Tool, ...] = (
     Tool(
         ToolSpec(
             "get_product_guide",
-            "How this app works: its pages, a typical workflow, topics, agents and their "
+            "How this app works: its pages, a typical workflow, agents and their "
             "tools, the evidence check, proposals, Telegram, settings, the universe, and what "
             "this assistant can and cannot do.",
             _object({"section": {"type": "string", "enum": list(SECTIONS)}}, []),

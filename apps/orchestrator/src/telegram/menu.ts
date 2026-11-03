@@ -336,7 +336,7 @@ async function agentsScreen(reader: Reader): Promise<Screen> {
   const text = messages.menu.agents;
   const rows = agents.map((agent) => {
     const mark = agent.running_scan !== null ? '🔄' : agent.state === 'paused' ? '⏸' : '▶️';
-    // The name is the user's own text, in either script: isolated, as a topic label is.
+    // The name is the user's own text, in either script: isolated.
     const label = `${mark} ${isolated(agent.name)} · ${text.scansADay(scansPerDay(scheduleOf(agent)))}`;
     return [tapButton(label, { view: 'agent', agentId: agent.id })];
   });

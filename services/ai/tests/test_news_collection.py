@@ -37,6 +37,9 @@ NUSCALE = InstrumentRef(
 
 
 class _Result:
+    #: What a DELETE reports; every run prunes the market feed, and nothing here is old.
+    rowcount = 0
+
     def __init__(self, rows):
         self._rows = rows
 
@@ -197,18 +200,13 @@ async def test_each_article_is_stored_with_the_feed_that_let_it_in():
     assert stats["market_articles"] == 1
 
 
-async def test_unlinked_market_articles_are_pruned_at_the_retention_the_caller_gives():
-    db = MarketNews(pruned=7)
-    stats = await _collect_market(db, [], market_retention=timedelta(days=21))
-    assert db.asked[SQL_PRUNE_MARKET_ARTICLES] == {"before": _NOW - timedelta(days=21)}
-    assert stats["pruned"] == 7
-
-
-async def test_nothing_is_pruned_when_the_caller_names_no_retention():
+async def test_unlinked_market_articles_are_kept_only_as_long_as_their_one_reader_looks():
+    # The suspected-network check is the only reader of an unlinked market
+    # article, so the retention is its window: derived, not a second setting.
     db = MarketNews(pruned=7)
     stats = await _collect_market(db, [])
-    assert SQL_PRUNE_MARKET_ARTICLES not in db.asked
-    assert stats["pruned"] == 0
+    assert db.asked[SQL_PRUNE_MARKET_ARTICLES] == {"before": _NOW - SUSPECT_WINDOW}
+    assert stats["pruned"] == 7
 
 
 async def test_a_suspected_network_in_the_last_day_is_reported():

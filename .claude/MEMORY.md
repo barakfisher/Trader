@@ -20,7 +20,7 @@ was five, so this is six late - nothing counted them across the production-deplo
 - **Deployed:** production (`https://app.tiklens.com`) runs `dbf9cf6` (#361) since 2026-11-01;
   compose runs `a8b3c30` (#356). **#362 is deployed nowhere yet** - on the user's word.
   Migration head `0080_cash_movement_kinds` everywhere; no PR since added one.
-- **Decisions reach 370** (next: **371**). **Migrations:** `0081` head (#364); next free `0082`.
+- **Decisions reach 374** (next: **375**). **Migrations:** `0082` head (task 5's PR); next free `0083`.
 - **Production is the real installation; compose is a lab (user, 2026-11-02).** The user's real
   portfolio lives on production. Compose's `.env` has `ENABLE_SCHEDULED_SCANS=false`,
   `SCHEDULER_ENABLED=false` and `TELEGRAM_UPDATES=off`: the local stack runs nothing on its own
@@ -46,7 +46,7 @@ was five, so this is six late - nothing counted them across the production-deplo
      Simulated show the same cards (the Account card too), the same toolbar and the same row "⋮"
      menu, plus "ask about this stock" and "research this stock"; an action that does not apply
      is disabled, not hidden.
-  5. **Remove the Topics page and auto-discovery** (deviates from PRD FR-10/FR-11 - a decision):
+  5. ~~**Remove the Topics page and auto-discovery**~~ - D371-D374 (this task's PR). Was (deviates from PRD FR-10/FR-11 - a decision):
      proposals, `topic_scan`, `topic_discovery`, the digest and Telegram topic parts,
      `/topics/resolve`, i18n, the product guide, the account export. **Keep** `resolve_topic` (the
      agents' theme-search tool) and the universe embeddings. The migration **drops** `topics` and
@@ -6131,6 +6131,52 @@ failure they prevent.
     stock once, when its entry exists - the read repeats every 5 s during a run and used to jump
     back on each repeat. *Rejected:* research on real holdings only (the action would again be
     disabled on exactly the rows an agent alone holds).
+371. **Topics and their auto-discovery are removed; the agents' theme search stays** (the user,
+    2026-11-02, task 5 - a deviation from PRD FR-10, FR-11, FR-12, the topic part of FR-13 and
+    FR-17's `topic_subscribe`). Measured first: no topic was ever confirmed on either
+    installation; production held none, compose 31 auto-proposals nobody answered, while
+    `topic_scan` ran every 15 minutes and `topic_discovery` daily. Gone: the Topics page, its
+    store and strings, `/topics` in the orchestrator, `/topics/resolve` and `/topics/discover` in
+    the AI service, both run kinds (scheduler and CronJobs), `topic_move` findings, the digest's
+    and Telegram's topic section, the agents' briefing `followed_topics`, the assistant's
+    `get_topics` and the product guide's text, topics in the account export, the reset group
+    `followed_topics`, the alerts filter "Topics", the `topicResolve` rate limit, the
+    low-confidence universe gap and `TOPIC_REJECTION_COOLDOWN_DAYS` / `TOPIC_PROPOSAL_TTL_DAYS`.
+    news_collect now collects for held instruments only. **Kept:** `resolve_topic` (the agents'
+    `search_universe`), the universe and its embeddings, `data/eval/topics.json` and
+    `run_topic_eval.py` - they measure the resolver the agents still call. *Rejected:* hiding
+    the page and leaving the runs (a scan every 15 minutes and a daily discovery for a feature
+    nobody can reach, and every later change paying to keep them compiling).
+372. **Migration 0082 drops the topic tables and deletes the topic runs, but the run kinds stay
+    in `runs_kind_check`** (the user, 2026-11-03: "Drop them", then "delete rows, keep CHECK").
+    `topics` and `topic_instruments` are dropped; 2,263 runs on compose and ~270 on production
+    are deleted (`observations.run_id` and `narration_transitions.run_id` are `SET NULL`); the
+    observations' `topic` subject, the ops event `universe_gap_low_confidence` (2 rows on
+    compose) and `article_entities.topic_ref` (never written) are removed with their rows.
+    `reset_account` is 0078's without the topics group, built by loading 0078's module as 0078
+    loaded 0072's - the first draft copied 0072's text and silently undid 0078's primary-ledger
+    reset, caught only by `test_ledger_sql.py`. `account_resets.groups` keeps the old CHECK: two
+    compose backups name `followed_topics`, and a backup is history. *Rejected:* narrowing the
+    run-kind CHECK - `test_no_migration_drops_a_run_kind` exists because a migration that
+    dropped a kind once stopped the whole chain, and a kind nothing writes costs nothing.
+373. **The market news feed keeps unlinked articles for one day, not three weeks** (the user,
+    2026-11-03). The feed (decision 60) was built for discovery, which was its only reader of
+    unlinked articles; it still links market articles that name a held instrument (about 13% of
+    the linked articles on compose). The AI service now prunes unlinked market articles older
+    than `market_feed.SUSPECT_WINDOW` (one day: what the ticker-network check reads), and the
+    orchestrator no longer sends `market_retention_days`. The first run after the deploy deletes
+    the backlog (~89,000 rows, 43 MB on compose; ~9,300 on production). `data/outlets/`
+    (decision 61's outlet countries) went with discovery, its only user. *Rejected:* removing the
+    feed (fewer holding articles); keeping 21 days (dead weight with no reader).
+374. **The embedder stays `text-embedding-3-small`** (the user, 2026-11-02: "Yes, stay"). Measured
+    on a copy of compose, same resolver and thresholds (`run_topic_eval.py --unseal`): small 10/31
+    (primary 9/20, sealed 1/11), `text-embedding-3-large` at `dimensions=1536` 8/31 (8/20, 0/11).
+    Large separates real topics from nonsense better (held-out gap +0.068 -> +0.116) and ranks
+    missed symbols far higher (DLR 77 -> 10, LAC 45 -> 12, MDB 54 -> 21), but the gate and band
+    were fitted to small's scale, so the pass count compares a refitted model with an unfitted
+    one. *Rejected:* switching now - a fair test needs the gate refitted for large and new
+    held-out topics, a project whose one consumer after D371 is the agents' search. Recorded in
+    `docs/TOPIC_RESOLUTION.md`'s scoreboard.
 ---
 
 ## Bugs that cost real time, and the lesson from each

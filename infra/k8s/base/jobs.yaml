@@ -23,7 +23,7 @@
 #
 # The corpus and universe loaders failing must not stop the app, exactly as in
 # compose: nothing waits on them. An empty corpus costs the concept links; an
-# empty universe makes topic resolution answer `unavailable`.
+# empty universe makes the agents' universe search answer `unavailable`.
 apiVersion: batch/v1
 kind: Job
 metadata:

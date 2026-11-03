@@ -22,8 +22,7 @@ flowchart TD
   H -->|no| C
   H -->|yes| I[Persist holdings + first snapshot]
   I --> J[Optional: set target weights]
-  J --> K[Optional: add interest topics]
-  K --> L[Dashboard live]
+  J --> L[Dashboard live]
 ```
 Rules: import is all-or-nothing per *file* only on parse failure; per-row resolution failures
 are reported and skipped, never silently dropped. Re-uploading the same file offers
@@ -122,27 +121,12 @@ signed buttons; deciding there goes through the alert's handler and keeps a way 
 
 ---
 
-## F5 — Topic tracking & auto-discovery
+## F5 — Topic tracking & auto-discovery (removed)
 
-```mermaid
-flowchart TD
-  A[User types topic: 'nuclear energy'] --> B[ai-service resolves to candidates]
-  B --> C[Candidate tickers/ETFs + confidence + rationale]
-  C --> D{User confirms set}
-  D -->|edits| C
-  D -->|confirms| E[topic active]
-  E --> F[topicScan: news per topic, sentiment, movers]
-  F --> G[Topic card + digest section]
-  H[Auto-discovery: recurring entities across runs] --> I[topic status=proposed]
-  I --> J{User accepts?}
-  J -->|yes| B
-  J -->|no| K[status=rejected, suppressed from future proposals]
-```
-Auto-discovery never subscribes on its own (PRD FR-11). A rejected theme is remembered so the
-same proposal doesn't return within `TOPIC_REJECTION_COOLDOWN_DAYS` (default 90). "The same" means
-every word of the rejected label appears in the new one, or at least half of the new proposal's
-instruments were offered with the rejected one. Discovery reads recurring phrases in headlines
-collected for what the user already follows (`topic_discovery` run, daily).
+Removed by D371 (2026-11-03): the Topics page, topic confirmation, `topicScan` and auto-discovery
+(`topic_discovery`). No topic was ever confirmed on either installation. The resolver that turned a
+theme into instruments stays as the agents' `search_universe` tool
+([TOPIC_RESOLUTION.md](TOPIC_RESOLUTION.md)).
 
 ---
 
@@ -167,6 +151,6 @@ flowchart TD
 ## F7 — Daily digest
 
 Fires once after market close (user timezone): portfolio delta and equity curve, top N
-observations by severity, per-topic sentiment shift, pending proposals awaiting the user.
+observations by severity, pending proposals awaiting the user.
 Delivered to UI inbox + Telegram as one message. Suppressed entirely if nothing crossed a
 threshold and there are no pending proposals — silence is a valid digest.

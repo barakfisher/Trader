@@ -4,7 +4,7 @@
 
 The orchestrator calls this when a user names a US equity or ETF that is not
 a member - a real gap. The answer comes at once (202); the fetch and the
-embedding run after it, so no import, holding or topic ever waits on Yahoo.
+embedding run after it, so no import or holding ever waits on Yahoo.
 
 `BackgroundTasks` runs in this process after the response is sent. A copy of
 the service that dies mid-fetch loses that fetch, and the next time a user

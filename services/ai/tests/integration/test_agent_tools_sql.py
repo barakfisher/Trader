@@ -545,7 +545,7 @@ def _mover(symbol: str, kind: str, change: float, price: int = 10_000) -> Mover:
     )
 
 
-async def test_the_briefing_carries_holdings_with_findings_movers_and_topics(
+async def test_the_briefing_carries_holdings_with_findings_and_movers(
     loaded: Engine,
 ) -> None:
     with loaded.begin() as connection:
@@ -570,21 +570,6 @@ async def test_the_briefing_carries_holdings_with_findings_movers_and_topics(
             ),
             {"u": user, "a": agent, "i": _instrument(loaded, "UEC")},
         )
-        topic = connection.execute(
-            text(
-                "INSERT INTO topics (user_id, label, status, created_by, confirmed_at) "
-                "VALUES (CAST(:u AS uuid), 'uranium', 'active', 'user', now()) RETURNING id"
-            ),
-            {"u": user},
-        ).scalar_one()
-        for symbol in ("CCJ", "LEU"):
-            connection.execute(
-                text(
-                    "INSERT INTO topic_instruments (topic_id, user_id, instrument_id, source) "
-                    "VALUES (:t, CAST(:u AS uuid), CAST(:i AS uuid), 'user')"
-                ),
-                {"t": topic, "u": user, "i": _instrument(loaded, symbol)},
-            )
     market = ScriptedMarket()
     # The holding fell by a third over the last week: the briefing must say so.
     market.closes = {"UEC": _daily("UEC", [3_000] * 60 + [2_700, 2_400, 2_200, 2_000])}
@@ -615,7 +600,6 @@ async def test_the_briefing_carries_holdings_with_findings_movers_and_topics(
     }
     assert [m["symbol"] for m in briefing["movers"]["losers"]] == ["LEU"]
     assert [m["symbol"] for m in briefing["movers"]["most_active"]] == ["XOM"]
-    assert briefing["followed_topics"] == [{"topic": "uranium", "symbols": ["CCJ", "LEU"]}]
     json.dumps(briefing)  # stored with the transcript as JSON
 
 

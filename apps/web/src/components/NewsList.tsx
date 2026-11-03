@@ -5,10 +5,10 @@ import { formatAge } from '../lib/relativeTime.ts';
 import { SERVER_ENGLISH } from '../lib/textDirection.ts';
 
 /**
- * Articles about some instruments, newest first: a topic's week, or a holding's.
- * Each says which instrument brought it here, because a link is evidence.
+ * Articles about one holding, newest first. Each says how it was linked to the
+ * holding, because a link is evidence and a name match is weaker than a ticker.
  */
-export function NewsList({ articles, showSymbols = true }: { articles: NewsArticle[]; showSymbols?: boolean }) {
+export function NewsList({ articles }: { articles: NewsArticle[] }) {
   const { t } = useTranslation();
   return (
     <ul className="space-y-2">
@@ -26,12 +26,7 @@ export function NewsList({ articles, showSymbols = true }: { articles: NewsArtic
           <p className="text-xs text-text-muted">
             {article.source} · {formatAge(article.publishedAt ?? article.fetchedAt)}
             {article.publishedAt === null && t('news.publishDateUnknown')}
-            {showSymbols &&
-              article.instruments.length > 0 &&
-              t('news.about', {
-                symbols: article.instruments.map((i) => i.symbol).join(t('common.listSeparator')),
-              })}
-            {!showSymbols && article.instruments[0] && ` · ${matchText(article.instruments[0])}`}
+            {article.instruments[0] && ` · ${matchText(article.instruments[0])}`}
           </p>
         </li>
       ))}

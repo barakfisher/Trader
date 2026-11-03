@@ -17,13 +17,12 @@ import { Card, EmptyState, ErrorNote, Spinner } from './ui.tsx';
 const SOURCES: { value: AlertSource | undefined; key: 'all' | AlertSource }[] = [
   { value: undefined, key: 'all' },
   { value: 'portfolio', key: 'portfolio' },
-  { value: 'topics', key: 'topics' },
   { value: 'agents', key: 'agents' },
 ];
 
 /**
  * What the user was told (decision 134): every finding pushed to Telegram, or
- * held back by quiet hours, from the main portfolio, topics and every agent.
+ * held back by quiet hours, from the main portfolio and every agent.
  *
  * The source pills are the user's (2026-10-11): one list answers "what was I
  * told?", and a pill narrows it without a second place to look. A push the

@@ -59,7 +59,7 @@ class TestProviderContract:
     async def test_free_text_query_searches_title_and_body(
         self, news_provider: FixtureNewsProvider
     ):
-        # The shape Milestone 5's free-text topics need (FR-10).
+        # Free text: a symbol list cannot express a theme.
         matches = await news_provider.fetch_for_query("uranium", BEFORE_CORPUS)
         assert len(matches) >= 1
         assert all("uranium" in f"{item.title} {item.body}".lower() for item in matches)

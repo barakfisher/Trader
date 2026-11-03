@@ -141,7 +141,7 @@ function SubjectLink({ proposal }: { proposal: Proposal }) {
   const portfolio = usePortfolioQuery();
   const { t } = useTranslation();
   if (proposal.subjectRef === null) return null;
-  const symbol = subjectLabel(proposal.subjectRef, proposal.evidence);
+  const symbol = subjectLabel(proposal.subjectRef);
   const holding = portfolio.data?.holdings.find((row) => row.instrument.symbol === symbol);
   if (!holding) return null;
   return (

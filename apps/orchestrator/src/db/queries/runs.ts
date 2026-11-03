@@ -227,28 +227,6 @@ export function listAllRuns(kind?: string, limit = 100): Promise<AdminRunRow[]> 
 }
 
 /**
- * The last finished run of `kind`, with what it recorded.
- *
- * The digest reads a topic scan's `stats.skipped` from here: that map is the only
- * record of which topics a scan could not measure, and "not measured" must not
- * be reported as "nothing moved".
- */
-export function getLatestFinishedRun(
-  userId: string,
-  kind: string,
-): Promise<{ started_at: Date; status: string; stats: unknown } | null> {
-  return queryOne(
-    `-- agent-blind: asked only of agent-blind kinds (news_collect, topic_scan), §3.3c.
-     SELECT started_at, status, stats
-       FROM runs
-      WHERE user_id = $1 AND kind = $2 AND finished_at IS NOT NULL
-      ORDER BY started_at DESC
-      LIMIT 1`,
-    [userId, kind],
-  );
-}
-
-/**
  * The installation's latest finished run of a kind (D238) - news collection,
  * which runs once for every user and so belongs to none of them.
  */

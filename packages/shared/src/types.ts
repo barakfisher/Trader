@@ -966,7 +966,11 @@ export interface HoldingNewsResponse {
   articles: NewsArticle[];
   /** How many articles the window holds in all, so a page never reads as the whole week. */
   total: number;
-  /** As on a topic card: which empty an empty list is. */
+  /**
+   * The latest finished news collection, so an empty `articles` can say which
+   * empty it is: a quiet week (`ok`) or news the app could not get (`degraded`,
+   * `failed`). Null when news has never been collected.
+   */
   collection: NewsCollectionState | null;
 }
 
@@ -1306,13 +1310,12 @@ export interface AdminAuditResponse {
   entries: AdminAuditEntry[];
 }
 
-export type UniverseGapKind = 'universe_gap_missing_ticker' | 'universe_gap_low_confidence';
+export type UniverseGapKind = 'universe_gap_missing_ticker';
 
 /**
- * One gap, counted. `detail` depends on `kind`: a missing ticker says the
- * symbol, where it was named and why the universe lacks it (`gap`:
- * `outside_screen` with the `rule`, `not_in_universe`, or `unpriced`); a
- * low-confidence topic says the topic, the best score and the gate.
+ * One gap, counted. A missing ticker's `detail` says the symbol, where it was
+ * named and why the universe lacks it (`gap`: `outside_screen` with the `rule`,
+ * `not_in_universe`, or `unpriced`).
  */
 export interface UniverseGap {
   id: string;
@@ -1325,7 +1328,7 @@ export interface UniverseGap {
   /**
    * The listing's profile now, for a missing ticker: `on_demand` once it has
    * been described for the user who named it, `screened` once a rescreen has
-   * admitted it (the gap is closed). Null when it has none - or for a topic.
+   * admitted it (the gap is closed). Null when it has none.
    */
   profile: 'screened' | 'on_demand' | 'dropped' | null;
 }
@@ -1597,7 +1600,7 @@ export interface ModelChoiceInput {
  * What a reset may erase, one checkbox each (migration 0045, task 18). The
  * migration's `RESET_GROUPS` is tested against this list.
  */
-export const ACCOUNT_RESET_GROUPS = ['main_portfolio', 'agents_trading', 'followed_topics'] as const;
+export const ACCOUNT_RESET_GROUPS = ['main_portfolio', 'agents_trading'] as const;
 export type AccountResetGroup = (typeof ACCOUNT_RESET_GROUPS)[number];
 
 /** Typed to confirm a reset; the same word in every language, so it never depends on a translation. */
@@ -1670,7 +1673,7 @@ export type ObservationKind = 'price_move' | 'sigma_move' | 'drawdown' | 'alloca
 /** Derived from the size of the statistic, never chosen by a narrator. */
 export type ObservationSeverity = 'info' | 'notable' | 'high';
 
-export type ObservationSubjectKind = 'instrument' | 'portfolio' | 'topic';
+export type ObservationSubjectKind = 'instrument' | 'portfolio';
 
 /**
  * One explained finding.
@@ -1774,8 +1777,8 @@ export interface InsightsDaysResponse {
   days: { day: string; count: number; unread: number }[];
 }
 
-/** Where an alert came from: the main portfolio, a followed topic, or an agent's trade (D134). */
-export type AlertSource = 'portfolio' | 'topics' | 'agents';
+/** Where an alert came from: the main portfolio or an agent's trade (D134). */
+export type AlertSource = 'portfolio' | 'agents';
 
 /**
  * A finding the user was told about (decision 134): pushed to Telegram, or held
@@ -2395,96 +2398,12 @@ export interface TelegramConnectLink {
   expiresAt: string;
 }
 
-// --- Topics (M5; /topics) -----------------------------------------------------
-
-export type TopicStatus = 'active' | 'proposed';
+// --- News (articles linked to instruments) ----------------------------------
 
 /**
- * How strong the resolver's match was when auto-discovery proposed a topic.
- * `weak` proposals are shown only when the user asks for them, and never take
- * a confident proposal's place (migration 0024).
- */
-export type ProposalBand = 'confident' | 'weak';
-
-/** One of the user's topics, without its instruments. */
-export interface TopicSummary {
-  id: string;
-  /** The user's own words, trimmed. */
-  label: string;
-  status: TopicStatus;
-  createdBy: 'user' | 'auto';
-  /** Set on every auto-proposal, kept after it is accepted; null for a topic the user created. */
-  proposalBand: ProposalBand | null;
-  createdAt: string;
-  updatedAt: string;
-  /** When the user last confirmed the instrument set; null for an unconfirmed proposal. */
-  confirmedAt: string | null;
-  instrumentCount: number;
-  /**
-   * Why auto-discovery proposed it (FR-11); null for a topic the user created.
-   * Kept after the proposal is accepted, so the card can still say where it came from.
-   */
-  evidence: TopicEvidence | null;
-}
-
-/**
- * The reason behind an auto-proposal. Every value is copied from stored data -
- * the phrase and headlines verbatim, the symbols from the resolver's candidates
- * (the confident ones for a confident proposal, every one offered for a weak
- * one) - so a proposal never says anything the news did not.
- */
-export interface TopicEvidence {
-  /** The phrase as the headlines spelled it most often. */
-  phrase: string;
-  /** Distinct articles, and distinct outlets, it appeared in within the window. */
-  articleCount: number;
-  sourceCount: number;
-  windowDays: number;
-  /** Up to five of those headlines, verbatim. */
-  headlines: { articleId: string; title: string; source: string; publishedAt: string | null }[];
-  /** What the resolver suggested when it was proposed, per `proposalBand`. Not a confirmed set. */
-  symbols: string[];
-}
-
-/**
- * One confirmed instrument, and why it is in the topic.
- *
- * `source: 'resolver'` means the user ticked a suggestion. It carries the band,
- * a sentence quoted verbatim from the instrument's own description, and the
- * source ETFs that held it, all as they were when the user confirmed. `'user'`
- * means the user added a ticker the resolver missed. It carries no reasons,
- * because it was not suggested for any.
- */
-export interface TopicInstrument {
-  instrumentId: string;
-  symbol: string;
-  name: string | null;
-  assetClass: AssetClass;
-  source: 'resolver' | 'user';
-  confidence: 'confident' | 'weak' | null;
-  rationale: string | null;
-  /** Weights are fractions of the fund as decimal strings: '0.2195' is 21.95%. */
-  heldBy: { etf: string; weight: string }[];
-  addedAt: string;
-}
-
-export interface TopicDetail extends TopicSummary {
-  instruments: TopicInstrument[];
-}
-
-/**
- * One article about a topic, with the reason it is about the topic.
- *
- * An article reaches a topic only through an instrument the user confirmed for
- * it: `instruments` says which, and each carries the rule that linked it and the
- * exact text that matched, because a link is evidence and evidence without its
- * provenance cannot be checked.
- */
-export type TopicArticle = NewsArticle;
-
-/**
- * An article linked to an instrument, with the rule that linked it. Shared by a
- * topic's news and a holding's: both are "articles about these instruments".
+ * An article linked to an instrument. `instruments` carries the rule that linked
+ * it and the exact text that matched, because a link is evidence and evidence
+ * without its provenance cannot be checked.
  */
 export interface NewsArticle {
   id: string;
@@ -2499,106 +2418,12 @@ export interface NewsArticle {
   sentiment: { score: string; magnitude: string; model: string } | null;
 }
 
-export interface TopicNewsResponse {
-  topicId: string;
-  /** The window the articles were published in, in days. */
-  days: number;
-  articles: TopicArticle[];
-  /**
-   * The latest finished news collection, so an empty `articles` can say which
-   * empty it is: a quiet week (`ok`) or news the app could not get (`degraded`,
-   * `failed`). Null when news has never been collected.
-   */
-  collection: NewsCollectionState | null;
-}
-
 export interface NewsCollectionState {
   lastRunAt: string;
   status: 'ok' | 'degraded' | 'failed' | 'skipped';
   /** Providers that refused or errored in that run, by name ("gdelt"). */
   failedProviders: string[];
 }
-
-/** Why a topic's sentiment score is null. Never a zero standing in for "unknown". */
-export type TopicSentimentGap = 'no_articles' | 'not_scored' | 'too_few_polarised';
-
-/** One article's contribution to a topic's sentiment. Ratios are decimal strings. */
-export interface TopicSentimentArticle {
-  id: string;
-  url: string;
-  source: string;
-  title: string;
-  publishedAt: string | null;
-  score: string;
-  magnitude: string;
-  /** This article's share of the total weight, 0..1: how much of the score it is. */
-  weight: string;
-}
-
-export interface TopicSentimentDay {
-  /** `YYYY-MM-DD` in the user's timezone. */
-  day: string;
-  articles: number;
-  /** Null on a day with no polarised article: an unmeasured day, not a neutral one. */
-  score: string | null;
-}
-
-/**
- * A topic's tone over a rolling window (FR-12), with the articles behind it.
- *
- * `score` is the magnitude-weighted mean of the articles' scores, in -1..1, from
- * one model only: scores from different models are not comparable, so they are
- * never averaged together. Articles scored only by another model are counted in
- * `otherModels`, not mixed in.
- */
-export interface TopicSentimentResponse {
-  topicId: string;
-  days: number;
-  model: string | null;
-  otherModels: string[];
-  score: string | null;
-  gap: TopicSentimentGap | null;
-  /** `unscored` is articles `model` has not read; the three tones cover the rest. */
-  counts: { articles: number; unscored: number; positive: number; negative: number; neutral: number };
-  daily: TopicSentimentDay[];
-  /** Articles with any weight, heaviest first, capped; `counts` covers them all. */
-  behind: TopicSentimentArticle[];
-}
-
-/** The bounds a topic write is held to, published so the UI can show them. */
-export interface TopicLimits {
-  maxActiveTopics: number;
-  maxInstrumentsPerTopic: number;
-  maxLabelLength: number;
-  /** Confident auto-proposals that may be open at once. */
-  maxOpenProposals: number;
-  /** Weak auto-proposals that may be open at once: a cap of their own. */
-  maxOpenWeakProposals: number;
-  /** Days a declined proposal's theme is not proposed again. */
-  rejectionCooldownDays: number;
-  /** Days a proposal waits for an answer before it expires and frees its slot. */
-  proposalTtlDays: number;
-}
-
-export interface TopicsResponse {
-  topics: TopicSummary[];
-  limits: TopicLimits;
-}
-
-/**
- * Confirm a topic: its label and the exact instrument set the user chose.
- *
- * `symbols` mixes ticked suggestions and added tickers, and the server tells
- * them apart itself. It resolves the label again and records a symbol as
- * `resolver` only if the resolver offers it. Provenance is never taken from
- * the request, because a rationale is a quotation and the browser must not be
- * able to write one.
- */
-export interface TopicConfirmRequest {
-  label: string;
-  symbols: string[];
-}
-
 
 /* -- the assistant (`/ask` with tools, migration 0052) ----------------------- */
 

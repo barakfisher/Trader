@@ -69,11 +69,6 @@ export const queryKeys = {
   /** Under the agent, so a scan's invalidation of `['agents']` brings a new review's cards. */
   agentSuggestions: (agentId: string) => ['agents', agentId, 'suggestions'] as const,
   agentScan: (agentId: string, scanId: string) => ['agents', agentId, 'scans', scanId] as const,
-  /** The list, and - under it, so invalidating the list prefix reaches them - each topic. */
-  topics: ['topics'] as const,
-  topic: (topicId: string) => ['topics', topicId] as const,
-  topicNews: (topicId: string) => ['topics', topicId, 'news'] as const,
-  topicSentiment: (topicId: string) => ['topics', topicId, 'sentiment'] as const,
   concept: (slug: string) => ['concepts', slug] as const,
   holdingHistory: (holdingId: string) => ['holdings', holdingId, 'history'] as const,
   holdingNews: (holdingId: string) => ['holdings', holdingId, 'news'] as const,

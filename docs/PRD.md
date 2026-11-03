@@ -14,8 +14,7 @@ give opaque signals with no explanation and no audit trail.
 
 ## 2. Product
 
-A single-tenant-first B2C system that continuously watches the user's holdings and their
-declared interest topics, and surfaces **explained observations** — never bare signals.
+A single-tenant-first B2C system that continuously watches the user's holdings and surfaces **explained observations** — never bare signals.
 Anything that would change the portfolio is a *proposal* that requires an explicit human
 approval, recorded with the evidence that produced it.
 
@@ -35,7 +34,7 @@ These shape the whole architecture, so they are stated as requirements, not opin
 
 - **Primary:** the owner-operator (single user, self-hosted). Data model is multi-tenant from
   day 1 (`user_id` on every row) but v1 ships one account.
-- **Secondary (future):** invited users, each with own portfolio, topics and Telegram chat.
+- **Secondary (future):** invited users, each with own portfolio and Telegram chat.
 
 ## 5. Functional requirements
 
@@ -48,15 +47,13 @@ These shape the whole architecture, so they are stated as requirements, not opin
 
 ### 5.2 Scheduled analysis
 - FR-6 A scheduled run (default: intraday every 30 min during market hours + one daily close run) evaluates, per holding: price move vs configurable thresholds (1d/5d/σ-based), volume anomaly, drawdown from local high, and allocation drift vs target weights.
-- FR-7 News ingestion per held symbol and per topic; dedupe by URL + content hash.
+- FR-7 News ingestion per held symbol; dedupe by URL + content hash.
 - FR-8 Each finding becomes an `Observation` with severity, evidence, and a plain-language explanation.
 - FR-9 Runs are idempotent: the same input state must not produce duplicate observations or duplicate notifications.
 
 ### 5.3 Market discovery
-- FR-10 User-defined topics as free text; the system resolves each to a candidate instrument set (tickers/ETFs) with a confidence score, shown for user confirmation.
-- FR-11 Auto-discovery proposes new topics from recurring entities/themes in ingested news; proposals are accepted/rejected by the user and never auto-subscribed.
-- FR-12 Per-topic sentiment over a rolling window, with the articles behind the score.
-- FR-13 Daily digest: portfolio summary + top observations + topic movements, to UI and Telegram.
+- ~~FR-10 User-defined topics~~, ~~FR-11 Auto-discovery of topics~~ and ~~FR-12 Per-topic sentiment~~: **removed** (D371, 2026-11-03). No topic was ever confirmed on either installation. What remains of FR-10 is the resolver itself, which the agents call to search the universe by theme.
+- FR-13 Daily digest: portfolio summary + top observations, to UI and Telegram.
 
 ### 5.4 RAG / educational engine
 - FR-14 A curated corpus of financial concepts and terminology is indexed (definitions, how a metric is computed, how to read it, common misreadings).
@@ -64,7 +61,7 @@ These shape the whole architecture, so they are stated as requirements, not opin
 - FR-16 Every observation links the concepts it invoked (RSI, drawdown, earnings surprise…) so any term is one click from an explanation.
 
 ### 5.5 Human-in-the-loop
-- FR-17 Proposal kinds: `watch`, `rebalance`, `trim`, `add`, `topic_subscribe`. Each has approve / reject / snooze.
+- FR-17 Proposal kinds: `watch`, `rebalance`, `trim`, `add` (`topic_subscribe` went with topics, D371). Each has approve / reject / snooze.
 - FR-18 Approval is possible from the UI or a Telegram inline button; both hit the same state machine and are idempotent (double-tap is a no-op).
 - FR-19 Full audit trail: who/what/when/from which surface/on which evidence, immutable.
 
@@ -100,4 +97,4 @@ decides on them; billing stays out.
 | `yfinance` is unofficial and rate-limited | provider interface + cache + fixture/paid fallbacks (see DESIGN §4) |
 | LLM hallucinates numbers | numbers only ever inserted from structured data, never generated; validator rejects unsourced figures |
 | Alert fatigue | thresholds, dedupe, quiet hours, digest-over-alert default |
-| Scope creep via "discovery" | topic count cap, auto-discovery is proposal-only |
+| Scope creep via "discovery" | topic discovery removed (D371): no topic was ever confirmed |

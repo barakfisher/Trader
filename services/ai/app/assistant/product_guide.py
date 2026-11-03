@@ -25,7 +25,6 @@ PAGES = (
     "/targets",
     "/agents",
     "/agents/<id>",
-    "/topics",
     "/research",
     "/settings",
     "/admin",
@@ -51,7 +50,6 @@ SECTIONS = MappingProxyType(
             "Agents (/agents): the real portfolio and the simulated agents; each agent's page "
             "(/agents/<id>) shows its holdings, its decisions and its scans, and is where its "
             "scan schedule and model budget are set. "
-            "Topics (/topics): themes the user follows and the instruments chosen for each. "
             "Research (/research): an agent the user assigns rates each real holding's "
             "outlook Bullish, Bearish or Neutral from its news and market data, with the "
             "reasons; the Portfolio's Sentiment column shows the latest. Any stock, held or "
@@ -68,35 +66,23 @@ SECTIONS = MappingProxyType(
         "workflow": (
             "A typical day: open the Portfolio page for today's value and change; open "
             "Insights to read new findings (a dot marks unread ones); decide the proposals "
-            "waiting there - approve, reject or snooze - before they expire; look at what the "
-            "agents decided on their pages; and follow a new theme on Topics when one comes "
-            "up. Telegram can bring alerts and proposals to the phone, with the same buttons."
-        ),
-        "topics": (
-            "A topic is a theme the user follows in their own words, such as 'uranium'. The "
-            "app matches it against the business descriptions of the instruments in its "
-            "universe (by meaning, using embeddings, with the company's own name removed so "
-            "names do not cause false matches), and adds the top holdings of ETFs that are "
-            "themselves about the theme. The user confirms which instruments to follow; each "
-            "keeps the reason it matched - a quoted sentence of its description, or the ETF "
-            "that holds it. The app then watches how the topic's instruments move together, "
-            "and may suggest new topics from themes that recur in the news. "
-            "Agents use topics too: every scan's briefing lists the user's followed topics "
-            "and their instruments (up to five topics, eight symbols each), and an agent can "
-            "search the universe by theme with its search_universe tool."
+            "waiting there - approve, reject or snooze - before they expire; and look at what "
+            "the agents decided on their pages. Telegram can bring alerts and proposals to the "
+            "phone, with the same buttons."
         ),
         "agents": (
             "An agent is a simulated investor with a paper budget and a persona the user "
             "writes. On its schedule (for example once a day before the market opens) it "
             "scans: it reads a briefing - its cash, its holdings and what the rules found in "
-            "them, the day's movers it may trade, the user's followed topics - then calls "
+            "them, the day's movers it may trade - then calls "
             "read-only tools, and decides to buy, sell or do nothing. Doing nothing is the "
             "most common answer. Every agent has the same tools: search_universe (find "
-            "instruments by what they do), get_quote (delayed quotes), get_price_history "
-            "(daily closes and returns), get_findings (what the rules find in a symbol), "
-            "get_news (stored news with sources), its own cash and holdings, and "
-            "explain_concept (the reference notes). A scan has at most 12 tool calls and "
-            "a daily model budget. Every scan is recorded step by step. "
+            "instruments by what they do, such as a theme like 'uranium', matched by meaning "
+            "against the business descriptions in the universe), get_quote (delayed quotes), "
+            "get_price_history (daily closes and returns), get_findings (what the rules "
+            "find in a symbol), get_news (stored news with sources), its own cash and "
+            "holdings, and explain_concept (the reference notes). A scan has at most 12 tool "
+            "calls and a daily model budget. Every scan is recorded step by step. "
             "The user creates an agent on the Agents page (/agents) with New agent: a name, "
             "a paper budget in dollars (simulated money, not taken from the portfolio), its "
             "settings - risk, sectors, limits - or a template that fills them, and optional "
@@ -138,7 +124,7 @@ SECTIONS = MappingProxyType(
         ),
         "assistant": (
             "This assistant answers questions about the user's portfolio, agents, proposals, "
-            "findings and topics; about tickers, prices and market news; about investing "
+            "and findings; about tickers, prices and market news; about investing "
             "concepts; and about how this app works. It reads, it never changes anything: it "
             "cannot trade, approve, or change a setting. It does not say whether to buy or "
             "sell. It declines questions outside markets, investing, the account and the app. "

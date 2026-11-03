@@ -1,7 +1,9 @@
 # Topic resolution — design, measurements and backlog
 
-How a free-text topic ("Uranium & Nuclear Energy", "chips") becomes candidate instruments (PRD
-FR-10), what has been measured, and what to try next. Written at the end of M5 slices 1–2
+How a free-text topic ("Uranium & Nuclear Energy", "chips") becomes candidate instruments, what
+has been measured, and what to try next. **Since D371 (2026-11-03) the user-facing Topics page,
+its `/topics/resolve` endpoint and auto-discovery are gone; the resolver's one consumer is the
+agents' `search_universe` tool** (`app/agents/tools.py`), and this document is that tool's. Written at the end of M5 slices 1–2
 (2026-09-24) so that resolution work can be resumed without re-deriving any of it. The code is
 `services/ai/app/topics/resolution.py`; every constant there carries the measurement it came from.
 
@@ -32,12 +34,10 @@ before measuring and disjoint from the eval by test — never on eval cases.
 
 ### Serving it
 
-`POST /topics/resolve` on the AI service (`app/routers/topics.py`), proxied by the orchestrator at
-the same path. `verdict` has **four** values. `confident`, `weak` and `none` are the resolver's.
-`unavailable` means the universe was not searched at all, and `universe.state` says why:
-`not_loaded` (no descriptions have ever been loaded) or `not_embedded` (none for the configured
-embedding model). `partially_embedded` still resolves, and says so. Keep `none` and `unavailable`
-apart: one is a fact about the topic, the other a fact about the installation.
+`resolve_topic` is called in-process by the agents' `search_universe` tool; there is no HTTP
+endpoint since D371 (`POST /topics/resolve` and the page that used it were removed). An empty or
+unembedded universe yields no candidates, which reads like a theme nothing is about, so check the
+loader (below) before judging a result.
 
 **Loading.** The compose `universe` container runs `scripts/ingest_universe.py` on every stack
 start. It needs `data/universe/descriptions.local.jsonl`, which is gitignored and excluded from the
@@ -54,6 +54,19 @@ Same universe and embeddings for every row; only the resolver differs.
 | Description similarity, ranked by similarity (first run) | 6/20 | — | — |
 | Slice 1: + name stripping, gate, size order, meanings | 5/20 | 1/11 | 14/35 |
 | Slice 2: + ETF holdings | **9/20** | **1/11** | **14/35** |
+| Slice 2, re-run 2026-11-02 (`--unseal`, compose copy) | 9/20 | 1/11 | — |
+| Same resolver and thresholds, `text-embedding-3-large` at `dimensions=1536` | 8/20 | 0/11 | — |
+
+**The embedder, measured and not adopted (D374, 2026-11-02, ~$0.10).** Large separates real
+topics from nonsense better - the held-out gap between the lowest real topic and the highest
+nonsense rose from +0.068 to +0.116 - and ranks most missed symbols far higher (DLR 77 -> 10, LAC
+45 -> 12, MDB 54 -> 21). It still passes fewer cases, because `BAND`, `CANDIDATE_FLOOR`,
+`NOTHING_BELOW` and the ETF floors were fitted to small's similarity scale: the row compares a
+fitted model with an unfitted one. A fair test refits the gate for large on
+`threshold_fitting_topics` and needs new held-out topics (batch 2 is spent). *Decided: stay on
+`text-embedding-3-small`* until the agents' search gives a reason to run that project. **Lesson:**
+compare embedders with thresholds refitted for each, or by their rankings - never by the pass
+count alone.
 
 **The held-out row is the one that counts.** The primary suite shaped three design rounds; batch 2
 was written by the user after the first run and kept unrun until slice 2 was final. Slice 2 gained

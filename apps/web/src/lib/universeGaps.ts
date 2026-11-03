@@ -5,7 +5,6 @@
 
 import type { UniverseGap } from '@traders/shared';
 
-import { formatFixed } from '../i18n/format.ts';
 import { i18n, t } from '../i18n/index.ts';
 
 function rule(name: string): string {
@@ -18,19 +17,12 @@ function source(name: string): string {
 
 /** The headline: what was asked for. */
 export function gapSubject(gap: UniverseGap): string {
-  const detail = gap.detail;
-  if (gap.kind === 'universe_gap_low_confidence') return t('gaps.quoted', { text: String(detail.topic ?? '') });
-  return String(detail.symbol ?? '');
+  return String(gap.detail.symbol ?? '');
 }
 
 /** Why it is a gap, in words - and whether it is one a rescreen could close. */
 export function gapExplanation(gap: UniverseGap): string {
   const detail = gap.detail;
-  if (gap.kind === 'universe_gap_low_confidence') {
-    const score = (value: unknown) =>
-      typeof value === 'number' ? formatFixed(value, 2) : t('common.notAvailable');
-    return t('gaps.lowConfidence', { best: score(detail.bestSimilarity), gate: score(detail.refuseBelow) });
-  }
   const where = source(String(detail.source));
   switch (detail.gap) {
     case 'outside_screen':
@@ -50,7 +42,7 @@ export function gapExplanation(gap: UniverseGap): string {
  */
 export function isRealGap(gap: UniverseGap): boolean {
   if (gap.profile === 'screened') return false;
-  return gap.kind === 'universe_gap_low_confidence' || gap.detail.gap === 'not_in_universe';
+  return gap.detail.gap === 'not_in_universe';
 }
 
 /**

@@ -42,11 +42,8 @@ import {
   portfolioScanResponseSchema,
   profileRequestResponseSchema,
   rescreenResponseSchema,
-  topicScanResponseSchema,
   newsCollectResponseSchema,
   quoteResponseSchema,
-  topicDiscoverResponseSchema,
-  topicResolveResponseSchema,
 } from './schemas.js';
 
 export type Quote = components['schemas']['Quote'];
@@ -60,8 +57,6 @@ export type HealthResponse = components['schemas']['HealthResponse'];
 export type NarrationConfig = components['schemas']['NarrationConfigResponse'];
 export type PortfolioScanRequest = components['schemas']['PortfolioScanRequest'];
 export type PortfolioScanResponse = components['schemas']['PortfolioScanResponse'];
-export type TopicScanRequest = components['schemas']['TopicScanRequest'];
-export type TopicScanResponse = components['schemas']['TopicScanResponse'];
 export type NewsCollectRequest = components['schemas']['NewsCollectRequest'];
 export type NewsCollectResponse = components['schemas']['NewsCollectResponse'];
 export type ObservationOut = components['schemas']['ObservationOut'];
@@ -93,13 +88,6 @@ export type ConceptSearchResponse = components['schemas']['ConceptSearchResponse
 export type ConceptSearchMatch = components['schemas']['ConceptSearchMatch'];
 export type ProfileRequestResponse = components['schemas']['ProfileRequestResponse'];
 export type RescreenResponse = components['schemas']['RescreenResponse'];
-export type TopicResolveResponse = components['schemas']['TopicResolveResponse'];
-export type TopicCandidate = components['schemas']['TopicCandidateOut'];
-export type TopicInterpretation = components['schemas']['TopicInterpretationOut'];
-export type UniverseCoverage = components['schemas']['UniverseCoverageOut'];
-export type TopicDiscoverRequest = components['schemas']['TopicDiscoverRequest'];
-export type TopicDiscoverResponse = components['schemas']['TopicDiscoverResponse'];
-export type DiscoveredPhrase = components['schemas']['DiscoveredPhrase'];
 
 /**
  * A scan loads history for every holding and may call a model once per finding,
@@ -289,20 +277,6 @@ export class AiClient {
       portfolioScanResponseSchema,
       { method: 'POST', body: JSON.stringify(payload), requestId, timeoutMs: SCAN_TIMEOUT_MS },
     );
-  }
-
-  /**
-   * Measure each confirmed topic as an equal-weighted basket. Same timeout as a
-   * portfolio scan, for the same reason: history per instrument, a model call
-   * per new finding.
-   */
-  topicScan(payload: TopicScanRequest, requestId?: string): Promise<TopicScanResponse> {
-    return this.request<TopicScanResponse>('/analysis/topic-scan', topicScanResponseSchema, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      requestId,
-      timeoutMs: SCAN_TIMEOUT_MS,
-    });
   }
 
   /**
@@ -593,39 +567,6 @@ export class AiClient {
       conceptSearchResponseSchema,
       { method: 'GET', requestId },
     );
-  }
-
-  /**
-   * Candidate instruments for a free-text topic, each with a quoted reason.
-   *
-   * Branch on `verdict`, not on the status: an installation with no loaded
-   * universe answers 200 with `verdict: 'unavailable'` and a `universe.state`
-   * naming the missing step, which is a different statement from `none` (the
-   * universe was searched and holds nothing about the topic).
-   *
-   * The longer timeout, because a cold call embeds the topic at a provider
-   * before it searches.
-   */
-  /**
-   * Phrases recurring across the window's collected headlines (FR-11). Reads
-   * only; nothing is resolved or stored. Auto-discovery filters these against
-   * the user's topics and rejection memory before resolving any of them.
-   */
-  discoverTopics(payload: TopicDiscoverRequest, requestId?: string): Promise<TopicDiscoverResponse> {
-    return this.request<TopicDiscoverResponse>('/topics/discover', topicDiscoverResponseSchema, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      requestId,
-    });
-  }
-
-  resolveTopic(topic: string, requestId?: string): Promise<TopicResolveResponse> {
-    return this.request<TopicResolveResponse>('/topics/resolve', topicResolveResponseSchema, {
-      method: 'POST',
-      body: JSON.stringify({ topic }),
-      requestId,
-      timeoutMs: SCAN_TIMEOUT_MS,
-    });
   }
 
     fxRate(base: string, quote: string, requestId?: string): Promise<FxRate> {

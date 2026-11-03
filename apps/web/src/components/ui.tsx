@@ -41,7 +41,7 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
 
 /**
  * The classes a button of this variant wears. Exported for links that go
- * somewhere - "Topics", "Back to portfolio" - which look like buttons but are
+ * somewhere - "Back to portfolio", a holding's page - which look like buttons but are
  * anchors with real addresses, so they open in a new tab and read as links.
  */
 export function buttonClass(variant: ButtonVariant = 'primary', className = ''): string {

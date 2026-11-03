@@ -1,6 +1,6 @@
 """Reset account, by group, against a real Postgres (migrations 0045 and 0072, task 18).
 
-Each group alone and all three together, on an account holding a row of every
+Each group alone and both together, on an account holding a row of every
 kind a group erases - and another user's identical account, which no reset may
 touch (guideline 5). Then what the reset leaves: an agent at $0 whose first
 *Add cash* opens its ledger again; a backup holding every erased row; and the
@@ -19,7 +19,7 @@ from sqlalchemy.exc import DBAPIError
 
 INSTRUMENT = "10000000-0000-0000-0000-0000000000e1"
 BUDGET = 100_000
-RESET_GROUPS = ("main_portfolio", "agents_trading", "followed_topics")
+RESET_GROUPS = ("main_portfolio", "agents_trading")
 
 #: The tables each group erases rows from, for an account seeded by `_account`.
 ERASES = {
@@ -49,10 +49,9 @@ ERASES = {
         "notifications",
         "agent_cash",
     },
-    "followed_topics": {"topics", "topic_instruments", "observations", "notifications"},
 }
 
-#: Rows each table holds for an account, by who owns them: (primary, agent, topic).
+#: Rows each table holds for an account, by who owns them: (primary, agent).
 TABLE_FILTERS = {
     "holdings": "user_id = :u",
     "target_weights": "user_id = :u",
@@ -68,8 +67,6 @@ TABLE_FILTERS = {
     "fills": "user_id = :u",
     "cash_movements": "user_id = :u",
     "agent_scans": "user_id = :u",
-    "topics": "user_id = :u",
-    "topic_instruments": "user_id = :u",
     # A run still going is kept, with its ratings (0072); see its own test.
     "research_runs": "user_id = :u AND status <> 'running'",
     "research_ratings": "run_id IN (SELECT id FROM research_runs "
@@ -162,17 +159,6 @@ def _account(connection: Connection) -> dict[str, str]:
         "status, dedupe_key) SELECT :u, :a, 'telegram', 'proposal', id, 'push', 'above_floor', "
         "'pending', 'n-agent:' || :k FROM proposals WHERE agent_id = :a",
         "UPDATE agents SET budget_minor = :b + 5000 WHERE id = :a",
-        # A followed topic, and what it found.
-        "INSERT INTO topics (id, user_id, label, status, created_by, confirmed_at) "
-        "VALUES (gen_random_uuid(), :u, 'robots', 'active', 'user', now())",
-        "INSERT INTO topic_instruments (topic_id, user_id, instrument_id, source) "
-        "SELECT id, :u, :i, 'user' FROM topics WHERE user_id = :u",
-        "INSERT INTO observations (id, user_id, agent_id, kind, severity, subject_kind, "
-        "subject_ref, headline, dedupe_key) VALUES (gen_random_uuid(), :u, :p, 'topic_move', "
-        "'notable', 'topic', 'topic:robots', 'robots', 'topic:' || :k)",
-        "INSERT INTO notifications (user_id, agent_id, channel, ref_kind, ref_id, route, reason, "
-        "status, dedupe_key) SELECT :u, :p, 'digest', 'observation', id, 'digest', 'below_floor', "
-        "'pending', 'n-topic:' || :k FROM observations WHERE dedupe_key = 'topic:' || :k",
     ]
     for statement in statements:
         connection.execute(text(statement), {**params, "b": BUDGET, "k": user})
@@ -256,7 +242,7 @@ def test_a_reset_erases_its_groups_and_nothing_else(
 def test_each_group_leaves_the_others_rows_in_shared_tables(connection: Connection) -> None:
     account = _account(connection)
     _reset(connection, account["user"], ["agents_trading"])
-    # The real portfolio's holding and its finding stay, as does the topic's.
+    # The real portfolio's holding and its finding stay.
     assert (
         _one(
             connection,
@@ -269,7 +255,7 @@ def test_each_group_leaves_the_others_rows_in_shared_tables(connection: Connecti
         text("SELECT subject_kind FROM observations WHERE user_id = CAST(:u AS uuid) ORDER BY 1"),
         {"u": account["user"]},
     ).scalars()
-    assert list(kinds) == ["portfolio", "topic"]
+    assert list(kinds) == ["portfolio"]
 
 
 def test_an_agent_reset_to_zero_keeps_its_configuration_and_opens_again_on_add_cash(
@@ -373,9 +359,11 @@ def test_the_flag_is_down_once_the_reset_is_done(connection: Connection) -> None
 
 
 @pytest.mark.parametrize(
-    "groups", [[], ["everything"], ["main_portfolio", "everything"], [None]], ids=str
+    "groups",
+    [[], ["everything"], ["main_portfolio", "everything"], ["followed_topics"], [None]],
+    ids=str,
 )
-def test_groups_outside_the_three_are_refused(
+def test_groups_outside_the_two_are_refused(
     connection: Connection, groups: list[str | None]
 ) -> None:
     account = _account(connection)

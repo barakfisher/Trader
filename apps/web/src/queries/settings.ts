@@ -108,8 +108,8 @@ export function useSetSafetyLimit() {
 
 /**
  * Reset the signed-in account, by group (task 18; each user's own, D162). Afterwards almost every cached read
- * describes rows that are gone - the portfolio, findings, proposals, agents,
- * topics - so the whole cache is refetched rather than a list of keys that the
+ * describes rows that are gone - the portfolio, findings, proposals,
+ * agents - so the whole cache is refetched rather than a list of keys that the
  * next feature would have to remember to extend.
  */
 export function useResetAccount() {

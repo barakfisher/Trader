@@ -124,8 +124,8 @@ export function translatedRecord<K extends string>(
 }
 
 /**
- * The language as a MobX dependency. A store's computed message ("Name the
- * topic.") is cached until something it read changes; reading the language
+ * The language as a MobX dependency. A store's computed message ("Your
+ * targets add up to 105%.") is cached until something it read changes; reading the language
  * through this atom makes a change of language one of those things, so the
  * cached English is recomputed rather than left on a Hebrew page.
  */

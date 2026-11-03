@@ -134,7 +134,7 @@ services:
   # per installation and never committed or baked in. So the checkout's
   # data/universe is mounted read-only over the image's copy, which is how a
   # local descriptions.local.jsonl reaches the loader. Without that file this
-  # exits 0 having profiled nothing, and POST /topics/resolve answers
+  # exits 0 having profiled nothing, and the agents' universe search answers
   # `unavailable` with `universe.state: not_loaded` - a named state, not a
   # failure. The first run with the file embeds ~5,200 descriptions (about two
   # minutes and two US cents on the OpenRouter embedder); later runs embed none.
