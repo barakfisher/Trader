@@ -35,9 +35,14 @@ prod_configured() {
 prod_ssh() { ssh -o BatchMode=yes -o ConnectTimeout=15 "$PROD_SSH_HOST" "$@"; }
 
 # The production Postgres container, by its compose labels, on the server.
+# ssh forwards its stdin whether or not the remote command reads it, so the
+# lookup takes /dev/null: inside `db_exec prod ... < archive` it would
+# otherwise swallow the archive meant for the next connection
+# (scripts/check-db-targets.sh).
 prod_postgres_container() {
   prod_ssh "docker ps --quiet --filter label=com.docker.compose.project=$PROD_COMPOSE_PROJECT \
-    --filter label=com.docker.compose.service=postgres --filter status=running | head -n 1" 2> /dev/null
+    --filter label=com.docker.compose.service=postgres --filter status=running | head -n 1" \
+    < /dev/null 2> /dev/null
 }
 
 db_targets() {

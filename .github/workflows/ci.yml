@@ -140,6 +140,10 @@ jobs:
       # only Caddy public, production settings, no fixture providers.
       - name: Production compose file
         run: bash scripts/check-prod-compose.sh
+      # Production backups pipe the archive back through `db_exec prod`; a
+      # stand-in ssh checks the payload reaches the container whole.
+      - name: Production database access keeps stdin
+        run: bash scripts/check-db-targets.sh
       - name: Start the stack
         run: docker compose -f infra/compose/docker-compose.yml up -d --build postgres redis migrate corpus universe ai-service orchestrator
       # The hermetic Python suite cannot reach this: it has no Postgres, and its
