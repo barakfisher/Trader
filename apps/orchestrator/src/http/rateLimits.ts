@@ -67,7 +67,7 @@ export const RATE_LIMITS = {
   resetRequestPerAddress: { points: 5, durationSeconds: HOUR },
   /** Reset links asked for one email: each is a mail to it (D260). */
   resetRequestPerEmail: { points: 3, durationSeconds: HOUR },
-  /** Sign-ins through Google or GitHub started from one address: each is a round trip to the provider (D262). */
+  /** Sign-ins through Google started from one address: each is a round trip to the provider (D262). */
   oauthStartPerAddress: { points: 30, durationSeconds: HOUR },
   /** New passwords sent with a reset link from one address: each may cost an argon2 hash (D312). */
   resetAttemptPerAddress: { points: 20, durationSeconds: HOUR },

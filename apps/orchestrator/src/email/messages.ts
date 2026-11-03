@@ -34,7 +34,7 @@ interface EmailCatalogue {
   resetPassword(link: string, minutes: number): Draft;
   /** After the password changed, by reset or from Settings (D312). */
   passwordChanged(signInLink: string): Draft;
-  /** A Google or GitHub account was linked, by hand or automatically (D263). */
+  /** A Google account was linked, by hand or automatically (D263). */
   identityLinked(provider: string, signInLink: string): Draft;
   /** The account was closed at the user's request and will be erased on `date` (D264). */
   accountClosed(date: string, signInLink: string): Draft;
@@ -126,7 +126,7 @@ const CATALOGUE: Record<UiLanguage, EmailCatalogue> = {
     signupApproved: (signInLink) => ({
       subject: 'Your TikLens account is ready',
       blocks: [
-        'Your request to join TikLens was approved. Sign in with the email and password you signed up with, or the Google or GitHub account you used:',
+        'Your request to join TikLens was approved. Sign in with the email and password you signed up with, or the Google account you used:',
         { link: signInLink },
       ],
     }),
@@ -210,7 +210,7 @@ const CATALOGUE: Record<UiLanguage, EmailCatalogue> = {
     signupApproved: (signInLink) => ({
       subject: 'חשבון ה-TikLens שלכם מוכן',
       blocks: [
-        'הבקשה שלכם להצטרף ל-TikLens אושרה. התחברו עם האימייל והסיסמה שאיתם נרשמתם, או עם חשבון ה-Google או ה-GitHub שבו השתמשתם:',
+        'הבקשה שלכם להצטרף ל-TikLens אושרה. התחברו עם האימייל והסיסמה שאיתם נרשמתם, או עם חשבון ה-Google שבו השתמשתם:',
         { link: signInLink },
       ],
     }),

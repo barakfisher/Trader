@@ -8,7 +8,7 @@ import { useIdentitiesQuery, useOAuthProvidersQuery, useUnlinkIdentity } from '.
 import { Button, ErrorNote, Spinner, buttonClass } from './ui.tsx';
 
 /** Product names, not translated (guideline 1 translates our words, not theirs). */
-export const PROVIDER_LABEL: Record<OAuthProviderName, string> = { google: 'Google', github: 'GitHub' };
+export const PROVIDER_LABEL: Record<OAuthProviderName, string> = { google: 'Google' };
 
 function browserTimeZone(): string {
   try {
@@ -59,7 +59,7 @@ export function OAuthOutcomeNotice({ outcome }: { outcome: OAuthOutcome | null }
   );
 }
 
-/** "Continue with Google / GitHub" on the sign-in page; nothing where no provider is configured. */
+/** "Continue with Google" on the sign-in page; nothing where no provider is configured. */
 export function OAuthButtons() {
   const { t } = useTranslation();
   const providers = useOAuthProvidersQuery();

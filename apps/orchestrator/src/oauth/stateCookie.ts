@@ -1,5 +1,5 @@
 /**
- * What a sign-in through Google or GitHub carries from its start to its
+ * What a sign-in through Google carries from its start to its
  * callback (D262): the `state` the provider must hand back, PKCE's code
  * verifier, where the browser came from, and why it is signing in. Signed with
  * the session secret and kept in a short-lived HttpOnly cookie, so a callback
