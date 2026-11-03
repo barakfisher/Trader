@@ -33,6 +33,7 @@ from app.agents.scan_budget import agent_budget
 from app.agents.scan_log import ScanAgent
 from app.agents.tools import ToolContext
 from app.core.logging import get_logger
+from app.llm import tracing
 from app.llm.base import (
     Caller,
     LLMBudgetExceededError,
@@ -238,9 +239,29 @@ async def run_research(
                 evidence = {"symbol": holding.symbol}
                 parsed, problems, model = None, [f"{EVIDENCE_FAILED}: {error}"], None
             else:
-                parsed, problems, model = await _rate(
-                    engine=engine, llm=llm, agent=agent, evidence=evidence, tally=tally, now=now()
-                )
+                # Each holding's attempts nest under one observation (D375).
+                with tracing.observe(
+                    "rate-holding",
+                    as_type="chain",
+                    input={"symbol": holding.symbol, "name": holding.name},
+                    metadata={"instrument_id": holding.instrument_id},
+                ) as traced:
+                    parsed, problems, model = await _rate(
+                        engine=engine,
+                        llm=llm,
+                        agent=agent,
+                        evidence=evidence,
+                        tally=tally,
+                        now=now(),
+                    )
+                    traced.update(
+                        output={
+                            "rating": parsed.rating if parsed else None,
+                            "rationale": parsed.rationale if parsed else None,
+                            "problems": problems or None,
+                        },
+                        level="DEFAULT" if parsed else "WARNING",
+                    )
             failed = parsed is None and any(
                 p.startswith((CALL_FAILED, EVIDENCE_FAILED)) for p in problems
             )
@@ -262,15 +283,29 @@ async def run_research(
             if parsed:
                 tally.rated += 1
 
-    try:
-        await asyncio.wait_for(rate_all(), timeout=RESEARCH_TIME_LIMIT)
-    except _StopRun as stopped:
-        stop = stopped.reason
-    except TimeoutError:
-        stop = STOP_TIME
-    except Exception as error:  # noqa: BLE001 - the run records it; nothing else would
-        log.exception("research.run_failed", run_id=run_id, trigger=trigger)
-        status, stop = "failed", f"failed: {type(error).__name__}"
+    # One trace per research run (D375), a `rate-holding` inside for each holding.
+    with tracing.observe(
+        "research-holdings",
+        as_type="agent",
+        input={"agent": agent.name, "trigger": trigger, "holdings": [h.symbol for h in chosen]},
+        user_id=agent.user_id,
+        tags=("research",),
+        metadata={"agent_id": agent.agent_id, "run_id": run_id},
+    ) as traced:
+        try:
+            await asyncio.wait_for(rate_all(), timeout=RESEARCH_TIME_LIMIT)
+        except _StopRun as stopped:
+            stop = stopped.reason
+        except TimeoutError:
+            stop = STOP_TIME
+        except Exception as error:  # noqa: BLE001 - the run records it; nothing else would
+            log.exception("research.run_failed", run_id=run_id, trigger=trigger)
+            status, stop = "failed", f"failed: {type(error).__name__}"
+        traced.update(
+            output={"status": status, "rated": tally.rated, "stop": stop},
+            metadata={"cost_micro_usd": tally.cost_micro_usd},
+            level="ERROR" if status == "failed" else None,
+        )
     finish_run(
         engine,
         run_id,

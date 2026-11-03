@@ -22,6 +22,7 @@ from app.core.ratelimit import RateLimiter
 from app.corpus.embedder_factory import build_embedder
 from app.corpus.vector_store import PgVectorStore
 from app.db import get_engine
+from app.llm import tracing
 from app.llm.call_log import DatabaseCallLog
 from app.llm.factory import build_llm, models_are_choosable
 from app.llm.key_vault import build_vault
@@ -82,6 +83,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     prices = PriceBook(settings.llm_model_prices)
     app.state.listed_models = OpenRouterModels(settings.openrouter_base_url, prices)
     app.state.user_models = DatabaseUserModels(get_engine())
+    # Every model call is also a Langfuse trace when both keys are set (D375).
+    tracing.install(
+        public_key=settings.langfuse_public_key,
+        secret_key=settings.langfuse_secret_key,
+        base_url=settings.langfuse_base_url,
+        environment=settings.app_env,
+        capture_text=settings.langfuse_capture_text,
+    )
     app.state.llm = build_llm(
         settings,
         redis,
@@ -105,6 +114,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await redis.aclose()
+        # Sends what is still buffered: a deploy's restart would otherwise lose it.
+        tracing.shutdown()
         log.info("shutdown")
 
 

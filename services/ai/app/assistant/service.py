@@ -33,6 +33,7 @@ from app.assistant.instructions import instructions
 from app.assistant.reply import Checked, check, sources
 from app.assistant.tools import TOOLS, TOOLS_BY_NAME
 from app.core.logging import get_logger
+from app.llm import tracing
 from app.llm.base import (
     AssistantMessage,
     Caller,
@@ -166,22 +167,45 @@ async def ask(
     user_words = [m.content for m in history if m.role == "user"] + [question]
 
     turn = Turn(conversation_id=conversation_id, message_id=None, outcome="failed", text="")
-    if llm is None:
-        # No model at all: the question is kept, and the reply says what is missing.
-        turn.outcome = "no_model"
-    else:
-        await _answer(
-            turn,
-            state,
-            engine=engine,
-            llm=llm,
-            context=context,
-            now=now,
-            timezone=timezone,
-            earlier_results=earlier_results,
-            user_words=user_words,
+    # One trace per question (D375), one session per conversation.
+    with tracing.observe(
+        "answer-question",
+        as_type="agent",
+        input=question,
+        user_id=user_id,
+        session_id=conversation_id,
+        tags=("assistant",),
+    ) as traced:
+        if llm is None:
+            # No model at all: the question is kept, and the reply says what is missing.
+            turn.outcome = "no_model"
+        else:
+            await _answer(
+                turn,
+                state,
+                engine=engine,
+                llm=llm,
+                context=context,
+                now=now,
+                timezone=timezone,
+                earlier_results=earlier_results,
+                user_words=user_words,
+            )
+        stored = _store(
+            engine, turn, state, user_id=user_id, conversation_id=conversation_id, now=now
         )
-    return _store(engine, turn, state, user_id=user_id, conversation_id=conversation_id, now=now)
+        traced.update(
+            output=stored.text,
+            metadata={
+                "outcome": stored.outcome,
+                "message_id": stored.message_id,
+                "steps": stored.steps,
+                "cost_micro_usd": stored.cost_micro_usd,
+                "problems": stored.problems or None,
+            },
+            level="DEFAULT" if stored.outcome in ("answer", "decline", "clarify") else "WARNING",
+        )
+    return stored
 
 
 async def _answer(

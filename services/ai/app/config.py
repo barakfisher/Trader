@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.llm.key_vault import build_vault
@@ -267,6 +267,27 @@ class Settings(BaseSettings):
     # deletes it (decision 87). Never less than a month: the monthly cap sums
     # this log since the user's month began (D204).
     llm_call_retention_days: int = Field(default=MIN_RETENTION_DAYS, ge=MIN_RETENTION_DAYS)
+
+    # Langfuse, where every model call is also sent as a trace (`app/llm/tracing.py`,
+    # D375). Off unless both keys are set, so tests, CI and a stack without an
+    # account send nothing. The base URL is the EU cloud by default.
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    langfuse_base_url: str = "https://cloud.langfuse.com"
+    # Whether prompts, replies and tool results go too, or only names, models,
+    # tokens, cost and timing. On while the installation is its owner's alone;
+    # it must be off (or Langfuse self-hosted) before anyone else's portfolio
+    # would reach it (D375).
+    langfuse_capture_text: bool = True
+
+    @field_validator("langfuse_capture_text", mode="before")
+    @classmethod
+    def _capture_text_default_when_empty(cls, value: object) -> object:
+        # `LANGFUSE_CAPTURE_TEXT=` - a line copied and left blank - means the
+        # default, not a boot failure: tracing never stops the service (D375).
+        if isinstance(value, str) and not value.strip():
+            return cls.model_fields["langfuse_capture_text"].default
+        return value
 
     # Per-call limits. A narration is a headline plus a short explanation, so the
     # output cap is small on purpose: it bounds both the latency of a scheduled

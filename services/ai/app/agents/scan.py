@@ -56,6 +56,7 @@ from app.agents.tools import TOOLS, ToolContext, money, run_tool
 from app.agents.trade_review import TradeReview, holdings_cost, load_book
 from app.core.fees import FEE_PER_SHARE_MINOR, MIN_FEE_MINOR
 from app.core.logging import get_logger
+from app.llm import tracing
 from app.llm.base import (
     Caller,
     LLMProvider,
@@ -291,27 +292,45 @@ async def run_briefed(
         refreshes_proposal_id=focus.proposal_id if focus else None,
     )
     result = ScanResult(scan_id=scan_id, outcome="failed")
-    try:
-        await asyncio.wait_for(
-            _converse(
-                result,
-                engine=engine,
-                llm=llm,
-                context=context,
-                agent=agent,
-                briefing=briefing,
-                pending=pending,
-                focus=focus,
-            ),
-            timeout=SCAN_TIME_LIMIT,
-        )
-    except TimeoutError:
-        result.outcome, result.error = "failed", f"the scan ran past {SCAN_TIME_LIMIT:.0f}s"
-    except Exception as error:  # noqa: BLE001 - recorded on the scan, then re-raised
-        result.outcome, result.error = "failed", f"{type(error).__name__}: {error}"
+    # One trace per scan (D375): its model calls and tools nest under it.
+    with tracing.observe(
+        "recheck-trade" if focus else "agent-scan",
+        as_type="agent",
+        input={
+            "agent": agent.name,
+            "trigger": trigger,
+            "focus": {"side": focus.side, "symbol": focus.symbol} if focus else None,
+        },
+        user_id=agent.user_id,
+        tags=("agent_scan",),
+        metadata={"agent_id": agent.agent_id, "scan_id": scan_id, "trigger": trigger},
+    ) as traced:
+        try:
+            await asyncio.wait_for(
+                _converse(
+                    result,
+                    engine=engine,
+                    llm=llm,
+                    context=context,
+                    agent=agent,
+                    briefing=briefing,
+                    pending=pending,
+                    focus=focus,
+                ),
+                timeout=SCAN_TIME_LIMIT,
+            )
+        except TimeoutError:
+            result.outcome, result.error = "failed", f"the scan ran past {SCAN_TIME_LIMIT:.0f}s"
+        except Exception as error:  # noqa: BLE001 - recorded on the scan, then re-raised
+            result.outcome, result.error = "failed", f"{type(error).__name__}: {error}"
+            _finish(engine, result)
+            raise
         _finish(engine, result)
-        raise
-    _finish(engine, result)
+        traced.update(
+            output={"outcome": result.outcome, "answer": result.answer, "error": result.error},
+            metadata={"steps": result.steps, "cost_micro_usd": result.cost_micro_usd},
+            level="ERROR" if result.outcome == "failed" else None,
+        )
     log.info(
         "agents.scan_finished",
         scan_id=scan_id,
