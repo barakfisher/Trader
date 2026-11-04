@@ -644,14 +644,14 @@ class LlmListedModel(BaseModel):
     prompt_usd_per_mtok: str = Field(description="USD per million input tokens, a decimal.")
     completion_usd_per_mtok: str = Field(description="USD per million output tokens, a decimal.")
     tested_for: list[Literal["explain", "agent", "assistant"]] = Field(
-        description="The uses it was measured on (D285, D379): 'agent' the scans, "
+        description="The uses it was measured on (D285, D380): 'agent' the scans, "
         "'explain' the explanations, 'assistant' Ask."
     )
     scan_estimate_micro_usd: int = Field(description="One agent scan at the agent basis (D46).")
 
 
 class LlmDefaultModels(BaseModel):
-    """Each use's default: the first model tested for it (D285, D379)."""
+    """Each use's default: the first model tested for it (D285, D380)."""
 
     explain: str
     agent: str
@@ -669,7 +669,7 @@ class LlmListedModelsResponse(BaseModel):
         "catalogue stands in, and a saved model is used as it is (D284)."
     )
     default_models: LlmDefaultModels = Field(
-        description="What each use runs on when nothing is chosen (D379)."
+        description="What each use runs on when nothing is chosen (D380)."
     )
     models: list[LlmListedModel]
 

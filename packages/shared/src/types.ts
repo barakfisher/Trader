@@ -1567,7 +1567,7 @@ export interface ListedModelView {
   /** USD per million tokens, decimal strings. */
   promptUsdPerMtok: string;
   completionUsdPerMtok: string;
-  /** The uses it was measured on (D285, D379). */
+  /** The uses it was measured on (D285, D380). */
   testedFor: LlmModelUse[];
   /** One agent scan at the installation's measured basis (D46), integer micro-USD. */
   scanEstimateMicroUsd: number;
@@ -1586,7 +1586,7 @@ export interface ModelChoicesResponse {
   choosable: boolean;
   /** False while OpenRouter's list has never been read; a saved model is then used as it is. */
   live: boolean;
-  /** What each use runs on when nothing is chosen: its first tested model (D379). */
+  /** What each use runs on when nothing is chosen: its first tested model (D380). */
   defaultModels: Record<LlmModelUse, string>;
   models: ListedModelView[];
   choices: Record<UserLlmScope, ModelResolutionView>;

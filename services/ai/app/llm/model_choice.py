@@ -3,7 +3,7 @@
 Every user - the admin included since D360 - runs on what they chose for the
 agent, for Ask or for explanations, resolved against OpenRouter's list
 (`user_models.py`, D283-D284); nothing chosen runs on the default of its use
-(D379). The
+(D380). The
 Admin page's installation-wide choice (`llm_model_choices`, D43) is gone with
 its table (migration 0081).
 

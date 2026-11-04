@@ -4,7 +4,7 @@ Every user chooses from OpenRouter's list (`openrouter_models.py`, D283):
 `agents.model` for an agent's scans and its instructions check,
 `user_settings.llm_assistant_model` for Ask, and `user_settings.llm_explain_model`
 for narration (migration 0069). Nothing chosen runs on the default of its use,
-the first model tested for it (`catalogue.DEFAULT_MODELS`, D285, D379). **The
+the first model tested for it (`catalogue.DEFAULT_MODELS`, D285, D380). **The
 admin chooses the same way** (D360): the Admin page's model pickers and
 `llm_model_choices` are gone, and the admin's calls differ from a user's only in
 who pays for them (D245).
@@ -49,7 +49,7 @@ class ModelResolution:
 
 def default_model(listed: ModelList, scope: Scope) -> str:
     """The first listed model tested for `scope`, or the dearest listed model no
-    dearer than its default (D284, D379)."""
+    dearer than its default (D284, D380)."""
     default = DEFAULT_MODELS[scope]
     if not listed.live:
         return default

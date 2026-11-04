@@ -18,7 +18,7 @@ interface Saving {
   error: Error | null;
 }
 
-/** The models tested for this use first, then by name (D285, D379). */
+/** The models tested for this use first, then by name (D285, D380). */
 function ordered(models: ListedModelView[], use: LlmModelUse): ListedModelView[] {
   const tested = (model: ListedModelView) => Number(model.testedFor.includes(use));
   return [...models].sort((a, b) => tested(b) - tested(a) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
@@ -39,7 +39,7 @@ export function matching(models: ListedModelView[], search: string): ListedModel
  * A saved model the list no longer has is said first, with the model used
  * meanwhile (D284), and stays selectable as it is so the select tells the truth.
  * "Not chosen" runs on the use's default, its first tested model, for every
- * user (D360, D379): Ask's is not the scans'.
+ * user (D360, D380): Ask's is not the scans'.
  */
 export function ModelPicker({
   id,

@@ -69,7 +69,7 @@ export async function readModelChoices(ai: AiClient, userId: string, requestId?:
 
 /**
  * Why `model` may not be saved, or null when it may. Null (not chosen) always
- * may: it runs on the use's default (D379). A model must be on the list as it is now;
+ * may: it runs on the use's default (D380). A model must be on the list as it is now;
  * one that has left it can stay saved (D284), but cannot be chosen anew.
  */
 export function modelChoiceRefusal(listed: LlmListedModelsResponse, model: string | null): ApiProblem | null {

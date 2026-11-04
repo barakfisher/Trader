@@ -1297,7 +1297,7 @@
         "type": "object"
       },
       "LlmDefaultModels": {
-        "description": "Each use's default: the first model tested for it (D285, D379).",
+        "description": "Each use's default: the first model tested for it (D285, D380).",
         "properties": {
           "agent": {
             "title": "Agent",
@@ -1349,7 +1349,7 @@
             "type": "integer"
           },
           "tested_for": {
-            "description": "The uses it was measured on (D285, D379): 'agent' the scans, 'explain' the explanations, 'assistant' Ask.",
+            "description": "The uses it was measured on (D285, D380): 'agent' the scans, 'explain' the explanations, 'assistant' Ask.",
             "items": {
               "enum": [
                 "explain",
@@ -1383,7 +1383,7 @@
           },
           "default_models": {
             "$ref": "#/components/schemas/LlmDefaultModels",
-            "description": "What each use runs on when nothing is chosen (D379)."
+            "description": "What each use runs on when nothing is chosen (D380)."
           },
           "live": {
             "description": "False while OpenRouter's list has never been read: the short catalogue stands in, and a saved model is used as it is (D284).",

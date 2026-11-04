@@ -6,7 +6,7 @@ into a reply the user may see, or says why it may not:
 
 - **Shape**: JSON with a known `outcome`, and a `reason` exactly when it
   declines. Fenced JSON is accepted; anything else is `malformed`. One repair:
-  suggestions that are not JSON are dropped and the reply kept (D377).
+  suggestions that are not JSON are dropped and the reply kept (D378).
 - **Figures** (guideline 7): every number in the text and the suggestions must
   appear in a tool result of this conversation or in the user's own words. The
   user's words count because correcting "my portfolio is up 50%" has to repeat
@@ -44,7 +44,7 @@ MAX_SUGGESTION_CHARS = 120
 _FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.DOTALL)
 #: The `suggestions` member with the comma that joins it to its neighbour, whatever
 #: the array holds. Measured 2026-11-03: Flash-Lite wrote Hebrew suggestions without
-#: quotes, and a correct answer was refused twice for three optional buttons (D377).
+#: quotes, and a correct answer was refused twice for three optional buttons (D378).
 _SUGGESTIONS_THEN_COMMA = re.compile(r'"suggestions"\s*:\s*\[[^\]]*\]\s*,', re.DOTALL)
 _COMMA_THEN_SUGGESTIONS = re.compile(r',\s*"suggestions"\s*:\s*\[[^\]]*\]', re.DOTALL)
 #: A markdown numbered-list marker ("2. " at a line's start): a position, not a

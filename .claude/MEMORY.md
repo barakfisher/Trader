@@ -26,8 +26,8 @@ would have fired here too).
   the user's word, compose first with `db-backup.sh --target compose`, then `prod-deploy.sh`. The
   first `news_collect` after it prunes the market articles no topic links any more: ~89k on
   compose, ~9.3k on production. Expected, not a bug.
-- **Decisions reach 379** (next: **380**; D376 drops GitHub sign-in, D377-D378 stop two false assistant refusals, D379 gives Ask its own default model). **Migrations:** `0083` head
-  (`0083_drop_github_identities`); next free `0084`.
+- **Decisions reach 380** (next: **381**; D376 drops GitHub sign-in, D377 indexes `articles.duplicate_of_id`, D378-D379 stop two false assistant refusals, D380 gives Ask its own default model). **Migrations:** `0084` head
+  (`0084_index_article_duplicates`); next free `0085`.
 - **Next:** no development task is queued. On the user's word: deploy #367; the future items
   ("Connect OpenRouter" by PKCE, dropping GitHub OAuth, the legal text); the M12 roadmap (capital
   gains tax and loss offsetting, `docs/MILESTONES.md`, not started).
@@ -6245,7 +6245,25 @@ failure they prevent.
     *Rejected:* finishing the GitHub app (a second console and secret for three accounts that all
     have Google); dropping the code but leaving the CHECK (the database would accept a provider
     the code no longer knows, and a stray write would leave a row nothing reads).
-377. **An assistant reply whose suggestions are not JSON keeps its answer; the suggestions are
+377. **`articles.duplicate_of_id` is indexed (migration 0084), and the market feed's prune runs
+    only in the scheduled collection, never in an on-demand refresh** (the user, 2026-11-04:
+    "Index + move prune"). Measured 2026-11-03 from compose's Postgres log (`log_lock_waits` is
+    on): an assistant replay's `get_news` ran the first prune after D373, with 89,479 of 114,925
+    articles to delete, for 1,357 s. A second refresh waited 660 s on its row lock and then ran
+    its own; 2,000 deletes on a copy took 4.9 s without the index and 40 ms with it. The cause
+    was 0004's `REFERENCES articles(id) ON DELETE SET NULL` with no index, so every deleted
+    article was a sequential scan of `articles`. The scan was synchronous inside an async tool,
+    so it blocked the service's event loop, and the assistant's 120 s limit could not cancel it.
+    Production had already pruned (one 6.3 s prune, no lock waits) but grows the same way.
+    `market_feed_upkeep` (prune plus suspected networks) is now called by `POST /news/collect`
+    after `collect_news`. *Rejected:* only a `lock_timeout` / `statement_timeout` (bounds the
+    stall, still pays it inside a user's turn); index only (a future backlog, such as another
+    retention change, would still land on someone's question); moving the network fetch out of
+    `refresh`'s transaction (worth doing, but it held no lock here, so it is not this fix).
+    Lesson: an `ON DELETE` foreign key needs an index on the referencing column whenever the
+    referenced table sees bulk deletes. 16 more lack one on compose, all on small tables
+    (`users`, `target_weights`, ...).
+378. **An assistant reply whose suggestions are not JSON keeps its answer; the suggestions are
     dropped** (the user, 2026-11-03: "fix it here"). Found in the first production Langfuse trace
     (D375): asked in English which tools an agent's last scan used, Flash-Lite wrote a correct
     answer twice but its `suggestions` array without quotes (`[ מה התזה של הסוכן שלי?, ...]`), so
@@ -6261,7 +6279,7 @@ failure they prevent.
     *Rejected:* asking the model for JSON through `response_format` (not every OpenRouter route
     honours it, and a refusal there fails the call rather than one optional field); repairing
     the array's quoting (guessing where an unquoted string ends, for three buttons).
-378. **A time of day the evidence states is not a figure, even written apart from its date**
+379. **A time of day the evidence states is not a figure, even written apart from its date**
     (the user, 2026-11-03: "fix the error"). A true reply about Block (XYZ) was refused as
     unsourced (compose `llm_calls` 589-590, 2026-10-24) because Flash-Lite wrote "2026-10-24
     בשעה 13:15:00+00:00": D323 removes a stated date whole, but only when its time is joined to it,
@@ -6271,9 +6289,9 @@ failure they prevent.
     invented "14:15" is still refused, and "13:1" (a ratio) is not a time.
     *Rejected:* skipping every `HH:MM` (an invented time would pass); converting to the user's
     zone and back (no reply measured did it, and a guessed zone would pass a wrong hour).
-379. **Each use has its own default model; Ask's is Gemini 3.7 Flash** (the user, 2026-11-03:
+380. **Each use has its own default model; Ask's is Gemini 3.7 Flash** (the user, 2026-11-03:
     "Yes, make it default"). Measured that day by replaying the 43 stored Ask questions (36
-    compose, 7 production) through the real loop on compose, one at a time, with D377-D378 in:
+    compose, 7 production) through the real loop on compose, one at a time, with D378-D379 in:
     Gemini 3.7 Flash answered 42 (1 refused as unsourced), every one in the question's language,
     at ~$0.0084 a question and 8.1 s median; Flash-Lite 40 (2 wrong declines - "why can't I create
     an agent", "when does the exchange open" - and 1 timeout in the news refresh), $0.0035, 3.8 s,

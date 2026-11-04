@@ -1200,7 +1200,7 @@ export interface components {
         };
         /**
          * LlmDefaultModels
-         * @description Each use's default: the first model tested for it (D285, D379).
+         * @description Each use's default: the first model tested for it (D285, D380).
          */
         LlmDefaultModels: {
             /** Agent */
@@ -1242,7 +1242,7 @@ export interface components {
             scan_estimate_micro_usd: number;
             /**
              * Tested For
-             * @description The uses it was measured on (D285, D379): 'agent' the scans, 'explain' the explanations, 'assistant' Ask.
+             * @description The uses it was measured on (D285, D380): 'agent' the scans, 'explain' the explanations, 'assistant' Ask.
              */
             tested_for: ("explain" | "agent" | "assistant")[];
         };
@@ -1256,7 +1256,7 @@ export interface components {
              * @description False unless LLM_PROVIDER is openrouter: nothing can be chosen.
              */
             choosable: boolean;
-            /** @description What each use runs on when nothing is chosen (D379). */
+            /** @description What each use runs on when nothing is chosen (D380). */
             default_models: components["schemas"]["LlmDefaultModels"];
             /**
              * Live

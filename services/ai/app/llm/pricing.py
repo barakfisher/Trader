@@ -67,7 +67,7 @@ DEFAULT_MODEL_PRICES: dict[str, ModelPrice] = {
     "anthropic/claude-opus-5.5": ModelPrice(Decimal("4"), Decimal("20")),
     "anthropic/claude-sonnet-5.5": ModelPrice(Decimal("2"), Decimal("10")),
     "google/gemini-3.5-flash-lite": ModelPrice(Decimal("0.3"), Decimal("2.5")),
-    # OpenRouter's list on 2026-11-03 (D379).
+    # OpenRouter's list on 2026-11-03 (D380).
     "google/gemini-3.7-flash": ModelPrice(Decimal("0.75"), Decimal("3.75")),
     "anthropic/claude-opus-4.1": ModelPrice(Decimal("15"), Decimal("75")),
     "anthropic/claude-sonnet-4.5": ModelPrice(Decimal("3"), Decimal("15")),

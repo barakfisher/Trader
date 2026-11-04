@@ -198,7 +198,7 @@ describe('the fallback banner', () => {
 });
 
 describe("an agent's model", () => {
-  it('says "not chosen" is the scans\' default, to the admin as to a user (D360, D379)', async () => {
+  it('says "not chosen" is the scans\' default, to the admin as to a user (D360, D380)', async () => {
     data = choices({ agents: [{ agentId: AGENT, name: 'Tech Agent', saved: null, effective: TESTED, fallback: false }] });
     for (const role of ['user', 'admin'] as const) {
       render(<AgentModelCard agentId={AGENT} />, role);

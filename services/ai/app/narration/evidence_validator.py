@@ -370,7 +370,7 @@ def _as_checked(text: str, dates: set[str], times: set[tuple[int, int, int]]) ->
 
     Measured 2026-11-03: a true Block quote was refused because the model wrote
     "2026-10-24 בשעה 13:15:00+00:00", the date apart from its time, and the 13 of
-    the time was read as a figure (llm_calls 589, D378). A time the evidence does
+    the time was read as a figure (llm_calls 589, D379). A time the evidence does
     not state stays in and is checked, like a date.
 
     Measured 2026-10-26 over 445 Flash-Lite narrations: 34 of the 41 refused were

@@ -43,7 +43,7 @@ CATALOGUE: tuple[CatalogueModel, ...] = (
 #: for that use (D285). The scans' evidence validator and tool calls were tuned on
 #: Flash-Lite (D75, D227); Ask was measured on 43 stored questions, where Gemini
 #: 3.7 Flash answered 42, every one in the question's language, and Flash-Lite 40
-#: (D379). A constant, because the claim changes only after a measurement, and a
+#: (D380). A constant, because the claim changes only after a measurement, and a
 #: measurement ends in a code change and a decision anyway.
 #:
 #: The first of a use is its default: the model of a user who has chosen none for
