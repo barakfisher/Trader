@@ -2,9 +2,10 @@
 
 What is pinned: the suspected-network check reads every market-feed headline in
 its window, linked or not, and nothing else. The market feed's pruning deletes
-only its own old, unlinked articles (decision 60). And a lexicon re-score reads
-only originals the current lexicon has not scored, so it adds beside older
-opinions and a second pass finds nothing.
+only its own old, unlinked articles (decision 60), and every key that points at
+an article is indexed, so a deleted row is not a scan of the table (D377). And a
+lexicon re-score reads only originals the current lexicon has not scored, so it
+adds beside older opinions and a second pass finds nothing.
 """
 
 from __future__ import annotations
@@ -112,6 +113,28 @@ def test_pruning_deletes_only_old_unlinked_market_articles(migrated: Engine) -> 
     assert pruned == 1
     assert gone not in left
     assert {linked, fresh, followed} <= left
+
+
+#: Foreign keys into `articles` whose referencing column leads no index.
+SQL_UNINDEXED_KEYS_INTO_ARTICLES = text(
+    """
+    SELECT c.conrelid::regclass::text || '.' || a.attname
+      FROM pg_constraint c
+      JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
+     WHERE c.contype = 'f'
+       AND c.confrelid = 'articles'::regclass
+       AND NOT EXISTS (SELECT 1 FROM pg_index i
+                        WHERE i.indrelid = c.conrelid AND i.indkey[0] = c.conkey[1])
+    """
+)
+
+
+def test_every_foreign_key_into_articles_is_indexed(migrated: Engine) -> None:
+    # An unindexed `ON DELETE` key costs one sequential scan of the referencing
+    # table per deleted article: 89k pruned rows took 22 minutes on compose.
+    with migrated.connect() as connection:
+        unindexed = connection.execute(SQL_UNINDEXED_KEYS_INTO_ARTICLES).scalars().all()
+    assert unindexed == []
 
 
 def test_a_rescore_adds_the_current_lexicon_beside_the_old_and_then_finds_nothing(

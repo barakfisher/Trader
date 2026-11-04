@@ -2,7 +2,7 @@
 
 The run itself is `test_news_collection.py`'s; what is pinned here is the wire -
 that `lookback_hours` becomes the run's `lookback`, and that the market feed's
-stats come back.
+upkeep runs here, on the schedule, and its stats come back (D377).
 """
 
 from __future__ import annotations
@@ -41,6 +41,11 @@ def seen(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict]:
         return {
             "since": datetime(2026, 9, 29, tzinfo=UTC).isoformat(),
             "market_articles": 3,
+        }
+
+    def fake_upkeep(connection, *, now):  # noqa: ANN001
+        calls["upkeep_at"] = now
+        return {
             "pruned": 2,
             "suspected_networks": [{"source": "new.example", "headlines": 25, "templated": 24}],
         }
@@ -48,6 +53,7 @@ def seen(monkeypatch: pytest.MonkeyPatch) -> Iterator[dict]:
     monkeypatch.setattr(news, "get_engine", _FakeEngine)
     monkeypatch.setattr(news, "build_news_providers", lambda settings, cursor_for: [])
     monkeypatch.setattr(news, "collect_news", fake_collect)
+    monkeypatch.setattr(news, "market_feed_upkeep", fake_upkeep)
     settings = Settings(_env_file=None, internal_api_key=INTERNAL_KEY)  # type: ignore[arg-type]
     app.dependency_overrides[get_settings] = lambda: settings
     yield calls
@@ -65,6 +71,7 @@ def _post(body: dict) -> dict:
 def test_the_lookback_reaches_the_run_and_the_market_stats_come_back(seen: dict) -> None:
     result = _post({**BODY, "lookback_hours": 12})
     assert seen["lookback"] == timedelta(hours=12)
+    assert seen["upkeep_at"].tzinfo is not None
     assert (result["market_articles"], result["pruned"]) == (3, 2)
     assert result["suspected_networks"] == [
         {"source": "new.example", "headlines": 25, "templated": 24}

@@ -18,13 +18,15 @@ is loaded over the same window by fetch time, which is enough: an article
 fetched before the window opened cannot be re-fetched inside it unless its
 publisher re-dated it, and then `ON CONFLICT (url_hash)` still stops the copy.
 
-**The market feed's upkeep** (decision 60), done here because this is the run
-that grows it. The last `SUSPECT_WINDOW` of market headlines is checked for
-outlets that look like a ticker network not yet listed, reported in the stats
-for a person to judge - and that check is the only reader of an unlinked market
-article, so one older than `SUSPECT_WINDOW` is deleted. The retention is derived
-from the window rather than tuned beside it: lengthen the window and the
-articles it reads are kept for it.
+**The market feed's upkeep** (decision 60), `market_feed_upkeep`, run by the
+scheduled collection because that is the run that grows the feed - and only by
+it: the on-demand refresh collects inside an agent's or the assistant's turn,
+where a prune once ran 22 minutes (D377). The last `SUSPECT_WINDOW` of market
+headlines is checked for outlets that look like a ticker network not yet
+listed, reported in the stats for a person to judge - and that check is the
+only reader of an unlinked market article, so one older than `SUSPECT_WINDOW`
+is deleted. The retention is derived from the window rather than tuned beside
+it: lengthen the window and the articles it reads are kept for it.
 """
 
 from __future__ import annotations
@@ -82,11 +84,16 @@ async def collect_news(
             linked[link.symbol] = linked.get(link.symbol, 0) + 1
     stats["linked_symbols"] = linked
     stats["market_articles"] = sum(1 for item in result.articles if item.record.article.market)
-    stats["pruned"] = prune_market_articles(connection, before=moment - SUSPECT_WINDOW)
-    stats["suspected_networks"] = [
-        {"source": s.source, "headlines": s.headlines, "templated": s.templated}
-        for s in suspected_networks(
-            load_market_headlines(connection, since=moment - SUSPECT_WINDOW)
-        )
-    ]
     return stats
+
+
+def market_feed_upkeep(connection: object, *, now: datetime) -> dict[str, object]:
+    """Prune the feed's old unlinked articles and report suspected networks."""
+    since = now.astimezone(UTC) - SUSPECT_WINDOW
+    return {
+        "pruned": prune_market_articles(connection, before=since),
+        "suspected_networks": [
+            {"source": s.source, "headlines": s.headlines, "templated": s.templated}
+            for s in suspected_networks(load_market_headlines(connection, since=since))
+        ],
+    }

@@ -387,3 +387,4 @@ while this file is out of date.
 | 374 | The embedder stays `text-embedding-3-small` |
 | 375 | Model calls are also traced to Langfuse Cloud, with their text, while the installation is its owner's alone |
 | 376 | GitHub is no longer a sign-in provider; Google stays, and migration 0083 narrows `user_identities.provider` to it |
+| 377 | `articles.duplicate_of_id` is indexed (migration 0084), and the market feed's prune runs only in the scheduled collection, never in an on-demand refresh |
