@@ -44,16 +44,26 @@ export function ratedOn(at: string): string {
  * One holding's latest rating, as the Dashboard's *Sentiment* cell shows it: the
  * word, the agent and the date, and a stale mark past the set age (guardrail
  * 3). It links to the research page, where the rationale and the disclaimer are.
+ *
+ * `inline` is a phone card's form: the same word, agent, date and stale mark on
+ * one line beside the symbol, and nothing at all for a holding with no rating -
+ * a dash in a card has no column to explain it.
  */
-export function SentimentCell({ holding }: { holding: ResearchHolding | undefined }) {
+export function SentimentCell({
+  holding,
+  inline = false,
+}: {
+  holding: ResearchHolding | undefined;
+  inline?: boolean;
+}) {
   const { t } = useTranslation();
   const latest = holding?.latest;
-  if (!latest) return <span className="text-text-muted">—</span>;
+  if (!latest) return inline ? null : <span className="text-text-muted">—</span>;
   return (
     <Link
       to="/research"
       hash={holding.symbol}
-      className="inline-flex flex-col items-start gap-0.5 hover:opacity-80"
+      className={`inline-flex hover:opacity-80 ${inline ? 'flex-wrap items-center gap-1' : 'flex-col items-start gap-0.5'}`}
       aria-label={t('research.cellLabel', {
         rating: t(`research.ratings.${latest.rating}`),
         agent: latest.agentName,

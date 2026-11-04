@@ -99,6 +99,69 @@ it('shows a card per holding on a phone, and no table', async () => {
   expect(screen.getAllByRole('link', { name: 'AAPL' })).toHaveLength(1);
 });
 
+/** A research agent's latest rating of AAPL, as `GET /research` answers it. */
+function ratedAapl(stale: boolean) {
+  const answer = get.getMockImplementation()!;
+  get.mockImplementation(async (path: string) =>
+    path === '/research'
+      ? {
+          agent: { id: 'a-1', name: 'Warren', state: 'active' },
+          run: null,
+          holdings: [
+            {
+              instrumentId: 'i-aapl',
+              symbol: 'AAPL',
+              latest: { rating: 'bullish', agentName: 'Warren', ratedAt: '2026-11-03T12:00:00Z', stale },
+            },
+          ],
+        }
+      : answer(path),
+  );
+}
+
+it("keeps a rating's word, agent and date on the card, linked to the research (guardrail 3)", async () => {
+  narrowScreen(true);
+  ratedAapl(false);
+  renderPage(<HoldingsTable />);
+
+  const rating = await screen.findByRole('link', { name: /Bullish, by Warren/ });
+  expect(rating.textContent).toContain('Bullish');
+  expect(rating.textContent).toContain('Warren');
+  expect(rating.textContent).toMatch(/Nov/);
+  expect(rating.getAttribute('href')).toContain('/research');
+});
+
+it('marks a stale rating on the card', async () => {
+  narrowScreen(true);
+  ratedAapl(true);
+  renderPage(<HoldingsTable />);
+
+  const rating = await screen.findByRole('link', { name: /Bullish, by Warren/ });
+  expect(rating.textContent).toContain('stale');
+});
+
+it('draws no dash on a card for a holding with no rating', async () => {
+  narrowScreen(true);
+  const answer = get.getMockImplementation()!;
+  get.mockImplementation(async (path: string) =>
+    path === '/research' ? { agent: { id: 'a-1', name: 'Warren', state: 'active' }, run: null, holdings: [] } : answer(path),
+  );
+  renderPage(<HoldingsTable />);
+
+  await screen.findByText('$8,235.00');
+  await waitFor(() => expect(get).toHaveBeenCalledWith('/research'));
+  expect(screen.queryByText('—')).toBeNull();
+});
+
+it("keeps the menu off the card while the holding is being edited", async () => {
+  narrowScreen(true);
+  renderPage(<HoldingsTable />);
+
+  await choose('AAPL', 'Edit');
+  expect(screen.getByLabelText('Quantity for AAPL')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Actions for AAPL' })).toBeNull();
+});
+
 it('keeps the table on a wider screen', async () => {
   narrowScreen(false);
   renderPage(<HoldingsTable />);

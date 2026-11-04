@@ -57,6 +57,17 @@ body {
   }
 }
 
+/* iOS Safari zooms the page into any field under 16 px when it takes focus, and
+   does not zoom back. Unlayered, so it wins over `.input` and a field's own
+   `text-sm` alike, and a new field cannot forget it. 639 px is NARROW_QUERY. */
+@media (max-width: 639px) {
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='file']),
+  select,
+  textarea {
+    font-size: 1rem;
+  }
+}
+
 /* Charts: a ring for keyboard focus, none for a click. recharts makes each pie
    slice focusable by mouse only (tabindex -1), and the browser drew its outline
    around the slice after every click; a slice cannot be reached by keyboard, so
