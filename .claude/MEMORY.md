@@ -4,7 +4,46 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-03 - **Handoff at a milestone boundary: the six tasks agreed 2026-11-02 are
+Updated: 2026-11-05 - **Handoff by count: six merges since #368** (#369-#374; the trigger was
+five, so this is one late).
+- **Merges since #368:**
+  - #369: every model call is also a Langfuse trace, with its text, while the installation is its
+    owner's alone (D375; RUNBOOK section 9);
+  - #370: production backups no longer lose the archive to the container lookup;
+  - #372: GitHub is no longer a sign-in provider (D376, migration `0083`);
+  - #373: `articles.duplicate_of_id` is indexed and the market feed's prune runs only on schedule
+    (D377, migration `0084`);
+  - #371: two false Ask refusals fixed, and Ask's default is Gemini 3.7 Flash (D378-D380);
+  - #374: a phone's holding card is three lines and states today's percent instead of the total
+    P&L; every field is 16 px on a phone (D381).
+- **Deployed:** production (`https://app.tiklens.com`) and compose both run `e71b463` (#374) at
+  `0084_index_article_duplicates`, read 2026-11-05. Nothing merged is undeployed.
+- **Decisions reach 381** (next: **382**). **Migrations:** `0084` head; next free `0085`.
+- **The phone view is three PRs, agreed with the user 2026-11-04, and #374 is the first.** Measured
+  on production at 375 px in Hebrew: no sideways scroll on any screen, so the problem is density,
+  not breakage. The portfolio went from 8.1 screens to 4.7 on real data.
+  - **PR 2, next: a bottom navigation bar.** Not designed: put the design questions to the user one
+    at a time. Today every place is behind a hamburger with 32 px rows, and the portfolio is
+    reachable only through the logo. `AppBar.tsx`'s comment explains the present choice.
+  - **PR 3: polish.** Tap targets (85 of the portfolio's 108 controls were under 40 px before #374)
+    and text (76% was 12 px or less), collapsing Research (10.7 screens) and Settings (6.1), and
+    the small bugs: Ask's intro still says answers are in English and its examples are English
+    (`AskPage.tsx`, against D220); `$` beside `USD` for one currency; the model select clipped on
+    the agent page; a gray bar at the end of the Insights tabs, which may be emulation only.
+- **Owed by the user, on the phone:** tap a field in Settings and confirm the page does not zoom;
+  type `12.5` on Targets and confirm it shows whole. Neither has been seen on a real iPhone.
+- **Owed by a session:** re-measure Ask from a week of production Langfuse traces (~2026-11-11),
+  and ask the user the open question: 7 of 9 `malformed` replies were plain prose with no JSON -
+  accept them or not?
+- **Otherwise on the user's word:** "Connect OpenRouter" by PKCE, the legal text, and the M12
+  roadmap (`docs/MILESTONES.md`, not started).
+- **Lesson - a rule that lives only here is invisible from the code it binds.** The first draft of
+  the compact card dropped the rating's agent and date. Nothing failed: no test covered it, and the
+  rule that a rating carries them is guardrail 3 of D254, in this file. It surfaced only because a
+  grep for the rating's decision ran before the card shipped. Before removing anything a user sees,
+  grep this file for it, and add a test when the rule turns out to have none (#374 did).
+
+Previous update, 2026-11-03 - **Handoff at a milestone boundary: the six tasks agreed 2026-11-02 are
 done** (#364-#367 merged since handoff #363; this PR is the fifth merge, so the count trigger
 would have fired here too).
 - **Merges since #363:**
@@ -26,8 +65,7 @@ would have fired here too).
   the user's word, compose first with `db-backup.sh --target compose`, then `prod-deploy.sh`. The
   first `news_collect` after it prunes the market articles no topic links any more: ~89k on
   compose, ~9.3k on production. Expected, not a bug.
-- **Decisions reach 381** (next: **382**; D376 drops GitHub sign-in, D377 indexes `articles.duplicate_of_id`, D378-D379 stop two false assistant refusals, D380 gives Ask its own default model, D381 compacts the phone's holding card). **Migrations:** `0084` head
-  (`0084_index_article_duplicates`); next free `0085`.
+- **Decisions reach 374** (next: **375**). **Migrations:** `0082` head; next free `0083`.
 - **Next:** no development task is queued. On the user's word: deploy #367; the future items
   ("Connect OpenRouter" by PKCE, dropping GitHub OAuth, the legal text); the M12 roadmap (capital
   gains tax and loss offsetting, `docs/MILESTONES.md`, not started).
@@ -7133,6 +7171,11 @@ component starts a query app-wide, grep the tests for catch-all pending mocks; a
 awaits invalidation inherits every active query's fate.** Same shape in UX5: adding a holding waits
 for the equity curve's snapshots.
 
+**`truncate` follows the block's direction, not the text's** (D381). On a right-to-left page a Latin
+name lost its beginning, `...t SPDR S&P 500 ETF Trust`, and jsdom cannot see it. **Lesson: a value
+in another script needs its own direction on the element that truncates (`InstrumentName`), and
+only a look at the page in Hebrew finds this class of bug.**
+
 **`git grep PATTERN REV -- path` from a subdirectory reports 0** (UX1 merge check). The pathspec is
 relative to the working directory, so `-- apps/web/src` from `apps/web` matched nothing and a
 merged change looked absent. **Verify by content from the root, or with `-- ':/apps/web/src'`.**
@@ -7141,6 +7184,8 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 
 | Item | Where | Impact |
 |---|---|---|
+| **A phone can sort by P&L but not see it** | `SortControl`, `CombinedCard`, `HoldingCard` (D381) | The card states today's percent, so sorting by P&L or P&L % orders the cards by a figure they do not show. Harmless, but it reads as a random order. The total is one tap away on the holding's page. |
+| **A phone's places are behind a hamburger, and much of the UI is under 40 px and 12 px** | `AppBar.tsx`, app-wide | Every move between pages is two taps with a thumb at the far corner. PR 2 and PR 3 of the phone view (top of this file). |
 | **A reset keeps the agent review's suggestions** | `reset_account` (0072), `agent_suggestions` (0079) | A reset of `agents_trading` erases the scans and fills a suggestion's evidence came from, but an open card stays until dismissed or superseded by the next window. Its Apply still checks the setting's current value, so it can change nothing unexpected; the figures are only out of date. Fix: add the table to the reset's `agents_trading` group (a `CREATE OR REPLACE` of the function, as 0072 did) |
 | **Consent records go with an erased account** | `0077` cascade, D317's erase | Once an account is erased there is no record of what it agreed to. Whether consent must outlive the account (and for how long) is a legal retention question for the user or a lawyer, raised by the PR 15 security review; keeping it would need the erase to keep an anonymised row |
 | ~~Telegram ignores the legal acceptance~~ | — | **Resolved** (2026-10-26, the PR after #332): messages and taps are answered with one sentence, `/stop` excepted, and pushes go nowhere until the account accepts (D321) |
@@ -7602,6 +7647,18 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 
 ---
 
+**Seeing a component on a phone without signing in** (D381): a throwaway `apps/web/__preview.html`
+and `.tsx` that stub `window.fetch`, call `applyLanguage('he')` after `new RootStore()` (the store
+resets it, so call it again a moment later), and render the real component with the real CSS; a
+Vite server on port 5175 serves them. It reaches the awkward rows real data lacks: stale, unpriced,
+agent-only, pending. Delete them before committing. The browser pane keeps the user's production
+sign-in, so screens are read there at 375 px; production's CSP blocks an injected `<style>`, so CSS
+is simulated with inline styles. Opening Insights there marks findings as seen.
+`db-backup.sh` refuses to run without `--target compose|prod|all`: check its output before
+`dev-docker.sh`, because the two chained with `;` rebuild compose without the backup.
+
+---
+
 **Running a branch's orchestrator against a copy of the live DB** (UX4 rehearsal): copy with
 `docker exec traders-postgres-1 sh -c 'createdb -U traders traders_ux4 && pg_dump -U traders traders
 | psql -q -U traders -d traders_ux4'`, migrate it with this branch's alembic and
@@ -7615,6 +7672,15 @@ after `APP_DB_PASSWORD=traders_app scripts/migrate.py` against `traders_ci` - as
 grant tests fail for the wrong reason.
 
 ## Where to go next
+
+### Next session: the phone view's PR 2 (written 2026-11-05)
+
+**State:** everything merged is deployed to production and compose at `0084`. No grant is open:
+every merge and every deploy needs the user's word, compose first.
+
+**Next:** ask the user whether to start PR 2, the bottom navigation bar. If yes, design questions
+one at a time, then build, look at it at 375 px in Hebrew, and open the PR. The top of this file has
+the measurements and PR 3's list.
 
 ### Next session: the first production deploy (written 2026-10-30)
 
