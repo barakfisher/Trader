@@ -31,6 +31,7 @@ import {
 import { sentimentRank, sortHoldings, type SortFields, type SortKey } from '../lib/holdingsSort.ts';
 import { ApproveProposalButton } from './ProposalApproval.tsx';
 import { SortControl, SortableTh, useSortColumns, type SortProps } from './SortableHeader.tsx';
+import { DayChange } from './DayChange.tsx';
 import { InstrumentName } from './InstrumentName.tsx';
 import { SentimentCell, useSentiments } from './SentimentBadge.tsx';
 import { HoldingRowMenu } from './HoldingRowMenu.tsx';
@@ -277,7 +278,7 @@ function CombinedCard({ row, real, currency, updateHolding, removeHolding }: Row
             {row.valueMinor === null ? t('holdings.unpriced') : formatMoney(row.valueMinor, currency)}
           </p>
           <p className="text-xs">
-            <PnlText row={row} currency={currency} />
+            <DayChange pct={row.quote?.dayChangePct} />
           </p>
         </div>
       </div>
@@ -418,17 +419,6 @@ function CostCell({ row, currency, onSet }: { row: CombinedHolding; currency: st
       {row.uncosted && <CostWarning symbol={row.instrument.symbol} onSet={onSet} />}
       {row.costMinor === null && !row.uncosted && '—'}
     </span>
-  );
-}
-
-function PnlText({ row, currency }: { row: CombinedHolding; currency: string }) {
-  const { t } = useTranslation();
-  return (
-    <Delta value={row.pnlMinor}>
-      {row.pnlMinor === null
-        ? '—'
-        : t('holdings.pnl', { money: formatMoney(row.pnlMinor, currency), percent: formatPercent(row.pnlPct) })}
-    </Delta>
   );
 }
 

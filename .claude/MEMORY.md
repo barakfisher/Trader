@@ -6307,8 +6307,10 @@ failure they prevent.
 381. **A phone's holding card is three lines, and every field is 16 px on a phone** (the user,
     2026-11-04, after a measurement of production at 375 px). The portfolio was 8.1 screens: 22
     cards of 208 px were 70% of the page, with the value chart and the allocation under them.
-    A plain row is now 87 px: symbol, rating and value; name and P&L; figures and "⋮". D72's cards
-    stay. *Rejected:* **dropping the rating's agent and date from the card** - the shortest card,
+    A plain row is now 87 px: symbol, rating and value; name and today's change; figures and "⋮".
+    D72's cards stay. The card states today's percent instead of the total P&L (the user, on seeing
+    it: "better to see it than the total"); the total stays in the wide table and on the holding's
+    page. *Rejected:* **dropping the rating's agent and date from the card** - the shortest card,
     but guardrail 3 of D254 says each rating carries them, so they sit beside the word on one line;
     a long row wraps rather than losing them. **A swipe or tap-to-expand card** - hides the figures
     a list is read for, and adds a gesture nothing else here has. The "Real" pill is gone from a

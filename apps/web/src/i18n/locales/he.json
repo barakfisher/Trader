@@ -318,6 +318,7 @@
     "unpriced": "ללא מחיר",
     "noPrice": "אין מחיר",
     "today": " · <delta>{{change}}</delta> היום",
+    "todayChange": "<delta>{{change}}</delta> היום",
     "ofPortfolio": " · {{share}} מהתיק",
     "priceAge": " · מחיר {{age}}",
     "actions": {

@@ -15,6 +15,7 @@ import { usePortfolioQuery, useRemoveHolding, useUpdateHolding } from '../querie
 import { HoldingRowMenu } from './HoldingRowMenu.tsx';
 import { sentimentRank, sortHoldings, type SortFields } from '../lib/holdingsSort.ts';
 import { SortControl, SortableTh, useSortColumns, type SortProps } from './SortableHeader.tsx';
+import { DayChange } from './DayChange.tsx';
 import { InstrumentName } from './InstrumentName.tsx';
 import { SentimentCell, useSentiments } from './SentimentBadge.tsx';
 import { Card, Delta } from './ui.tsx';
@@ -389,8 +390,8 @@ const CARD_BUTTON = 'flex h-10 items-center gap-1.5 rounded-lg border border-bor
 
 /**
  * One holding on a phone: three lines, because a portfolio is read as a list -
- * what it is and is worth, its name and how it has done, then the figures behind
- * them and its "⋮". Stacking the rating and the menu on lines of their own made
+ * what it is and is worth, its name and how it moved today, then the figures
+ * behind them and its "⋮". Stacking the rating and the menu on lines of their own made
  * each card 208 px, and 22 of them buried everything under the list. A price's
  * age is not repeated per card: the page says it, and a stale one is marked here.
  */
@@ -433,14 +434,7 @@ function HoldingCard({
         <div className="shrink-0 text-end">
           <p className="text-sm font-semibold">{formatMoney(holding.valueMinor, baseCurrency)}</p>
           <p className="text-xs">
-            <Delta value={holding.pnlMinor}>
-              {holding.pnlMinor === null
-                ? '—'
-                : t('holdings.pnl', {
-                    money: formatMoney(holding.pnlMinor, baseCurrency),
-                    percent: formatPercent(holding.pnlPct),
-                  })}
-            </Delta>
+            <DayChange pct={holding.quote?.dayChangePct} />
           </p>
         </div>
       </div>
@@ -451,13 +445,6 @@ function HoldingCard({
           {holding.quote
             ? formatMoney(holding.quote.priceMinor, holding.quote.currency)
             : t('holdings.noPrice')}
-          {holding.quote && (
-            <Trans
-              i18nKey="holdings.today"
-              values={{ change: formatPercent(holding.quote.dayChangePct) }}
-              components={{ delta: <Delta value={holding.quote.dayChangePct}>{null}</Delta> }}
-            />
-          )}
           {holding.weightPct !== null &&
             t('holdings.ofPortfolio', { share: formatShare(holding.weightPct) })}
         </p>

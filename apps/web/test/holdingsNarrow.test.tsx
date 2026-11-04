@@ -22,6 +22,7 @@ vi.mock('../src/api/client.ts', async () => {
 });
 
 const { HoldingsTable } = await import('../src/components/HoldingsTable.tsx');
+const { formatPercent } = await import('../src/i18n/format.ts');
 const { renderPage } = await import('./serverStateHarness.tsx');
 
 const AAPL: HoldingView = {
@@ -63,6 +64,10 @@ async function choose(symbol: string, action: 'Edit' | 'Remove') {
   fireEvent.click(await screen.findByRole('button', { name: `Actions for ${symbol}` }));
   fireEvent.click(screen.getByRole('button', { name: action }));
 }
+
+/** The change's figure and the word "today" are separate elements of one paragraph. */
+const paragraphReading = (text: string) => (_: string, element: Element | null) =>
+  element?.tagName === 'P' && element.textContent === text;
 
 function narrowScreen(narrow: boolean) {
   window.matchMedia = ((query: string) => ({
@@ -160,6 +165,28 @@ it("keeps the menu off the card while the holding is being edited", async () => 
   await choose('AAPL', 'Edit');
   expect(screen.getByLabelText('Quantity for AAPL')).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Actions for AAPL' })).toBeNull();
+});
+
+it("shows today's change on the card, not the total P&L", async () => {
+  narrowScreen(true);
+  renderPage(<HoldingsTable />);
+
+  await screen.findByText('$8,235.00');
+  expect(screen.getByText(paragraphReading(`${formatPercent(AAPL.quote!.dayChangePct)} today`))).toBeTruthy();
+  expect(screen.queryByText(/\$3,600\.00/)).toBeNull();
+});
+
+it('says a dash for an unpriced holding, never a zero change', async () => {
+  narrowScreen(true);
+  const answer = get.getMockImplementation()!;
+  get.mockImplementation(async (path: string) =>
+    path === '/portfolio'
+      ? { ...PORTFOLIO, holdings: [{ ...AAPL, quote: null, valueMinor: null, pnlMinor: null, pnlPct: null }] }
+      : answer(path),
+  );
+  renderPage(<HoldingsTable />);
+
+  expect(await screen.findByText(paragraphReading('— today'))).toBeTruthy();
 });
 
 it('keeps the table on a wider screen', async () => {
