@@ -31,6 +31,8 @@ import {
 import { sentimentRank, sortHoldings, type SortFields, type SortKey } from '../lib/holdingsSort.ts';
 import { ApproveProposalButton } from './ProposalApproval.tsx';
 import { SortControl, SortableTh, useSortColumns, type SortProps } from './SortableHeader.tsx';
+import { DayChange } from './DayChange.tsx';
+import { InstrumentName } from './InstrumentName.tsx';
 import { SentimentCell, useSentiments } from './SentimentBadge.tsx';
 import { HoldingRowMenu } from './HoldingRowMenu.tsx';
 import { Card, Delta } from './ui.tsx';
@@ -250,7 +252,11 @@ function CombinedRow({ row, real, currency, updateHolding, removeHolding }: RowP
   );
 }
 
-/** One instrument on a phone: what it is worth and how it has done, who holds it, then what can be done. */
+/**
+ * One instrument on a phone, in the real view's three lines (HoldingCard).
+ * Holders are a line only when they say something: a row only the real portfolio
+ * holds is the usual case, and its "Real" pill led where the symbol already does.
+ */
 function CombinedCard({ row, real, currency, updateHolding, removeHolding }: RowProps) {
   const { t } = useTranslation();
   const sentiments = useSentiments();
@@ -260,27 +266,33 @@ function CombinedCard({ row, real, currency, updateHolding, removeHolding }: Row
   const button = 'flex h-10 items-center gap-1.5 rounded-lg border border-border-subtle px-3 text-xs text-text-muted';
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <SymbolCell row={row} real={real} />
+        <div className="min-w-0 flex-1">
+          <SymbolCell row={row} real={real}>
+            {sentiments.shown && <SentimentCell inline holding={sentiments.byInstrument.get(row.instrument.id)} />}
+          </SymbolCell>
         </div>
         <div className="shrink-0 text-end">
           <p className="text-sm font-semibold">
             {row.valueMinor === null ? t('holdings.unpriced') : formatMoney(row.valueMinor, currency)}
           </p>
           <p className="text-xs">
-            <PnlText row={row} currency={currency} />
+            <DayChange pct={row.quote?.dayChangePct} />
           </p>
         </div>
       </div>
-      <Holders positions={row.positions} />
-      {sentiments.shown && <SentimentCell holding={sentiments.byInstrument.get(row.instrument.id)} />}
-      <p className="text-xs text-text-muted">
-        {trimQuantity(row.quantity)} ×{' '}
-        {row.quote ? formatMoney(row.quote.priceMinor, row.quote.currency) : t('holdings.noPrice')}
-        {row.weightPct !== null && t('holdings.ofPortfolio', { share: formatShare(row.weightPct) })}
-      </p>
+      {row.positions.some((position) => !position.isPrimary) && <Holders positions={row.positions} />}
+      <div className="flex items-center justify-between gap-2">
+        <p className="min-w-0 text-xs text-text-muted">
+          {trimQuantity(row.quantity)} ×{' '}
+          {row.quote ? formatMoney(row.quote.priceMinor, row.quote.currency) : t('holdings.noPrice')}
+          {row.weightPct !== null && t('holdings.ofPortfolio', { share: formatShare(row.weightPct) })}
+        </p>
+        {!editing && !confirmingDelete && (
+          <RowMenu row={row} real={real} onEdit={() => setEditing(true)} onRemove={() => setConfirmingDelete(true)} />
+        )}
+      </div>
       {row.positions.length > 1 && <BreakdownList row={row} currency={currency} />}
       {row.uncosted && <CostWarning symbol={symbol} onSet={real?.costBasisMinor === null ? () => setEditing(true) : undefined} />}
       {editing && real ? (
@@ -296,12 +308,13 @@ function CombinedCard({ row, real, currency, updateHolding, removeHolding }: Row
           </button>
         </div>
       ) : (
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {row.pending.map((trade) => (
-            <ApproveProposalButton key={trade.proposalId} trade={trade} />
-          ))}
-          <RowMenu row={row} real={real} onEdit={() => setEditing(true)} onRemove={() => setConfirmingDelete(true)} />
-        </div>
+        row.pending.length > 0 && (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {row.pending.map((trade) => (
+              <ApproveProposalButton key={trade.proposalId} trade={trade} />
+            ))}
+          </div>
+        )
       )}
     </div>
   );
@@ -334,7 +347,7 @@ function RowMenu({
 }
 
 /** The symbol, linked to the real holding's page when there is one, with its warnings and pending count. */
-function SymbolCell({ row, real }: { row: CombinedHolding; real: HoldingView | null }) {
+function SymbolCell({ row, real, children }: { row: CombinedHolding; real: HoldingView | null; children?: ReactNode }) {
   const { t } = useTranslation();
   const symbol = <bdi>{row.instrument.symbol}</bdi>;
   return (
@@ -360,10 +373,9 @@ function SymbolCell({ row, real }: { row: CombinedHolding; real: HoldingView | n
             {t('consolidated.pending.badge', { count: row.pending.length })}
           </span>
         )}
+        {children}
       </div>
-      <p className="truncate text-xs text-text-muted">
-        <bdi>{row.instrument.name ?? assetClassName(row.instrument.assetClass)}</bdi>
-      </p>
+      <InstrumentName>{row.instrument.name ?? assetClassName(row.instrument.assetClass)}</InstrumentName>
     </>
   );
 }
@@ -407,17 +419,6 @@ function CostCell({ row, currency, onSet }: { row: CombinedHolding; currency: st
       {row.uncosted && <CostWarning symbol={row.instrument.symbol} onSet={onSet} />}
       {row.costMinor === null && !row.uncosted && '—'}
     </span>
-  );
-}
-
-function PnlText({ row, currency }: { row: CombinedHolding; currency: string }) {
-  const { t } = useTranslation();
-  return (
-    <Delta value={row.pnlMinor}>
-      {row.pnlMinor === null
-        ? '—'
-        : t('holdings.pnl', { money: formatMoney(row.pnlMinor, currency), percent: formatPercent(row.pnlPct) })}
-    </Delta>
   );
 }
 

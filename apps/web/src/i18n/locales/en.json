@@ -313,6 +313,7 @@
     "unpriced": "unpriced",
     "noPrice": "no price",
     "today": " · <delta>{{change}}</delta> today",
+    "todayChange": "<delta>{{change}}</delta> today",
     "ofPortfolio": " · {{share}} of portfolio",
     "priceAge": " · price {{age}}",
     "actions": {

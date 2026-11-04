@@ -15,6 +15,8 @@ import { usePortfolioQuery, useRemoveHolding, useUpdateHolding } from '../querie
 import { HoldingRowMenu } from './HoldingRowMenu.tsx';
 import { sentimentRank, sortHoldings, type SortFields } from '../lib/holdingsSort.ts';
 import { SortControl, SortableTh, useSortColumns, type SortProps } from './SortableHeader.tsx';
+import { DayChange } from './DayChange.tsx';
+import { InstrumentName } from './InstrumentName.tsx';
 import { SentimentCell, useSentiments } from './SentimentBadge.tsx';
 import { Card, Delta } from './ui.tsx';
 
@@ -356,7 +358,7 @@ function HoldingRow({
 }
 
 /** The symbol with its warnings: a stale price and an unpriced holding are said beside it. */
-function SymbolLabel({ holding }: { holding: HoldingView }) {
+function SymbolLabel({ holding, children }: { holding: HoldingView; children?: ReactNode }) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -378,6 +380,7 @@ function SymbolLabel({ holding }: { holding: HoldingView }) {
       {holding.valueMinor === null && (
         <span className="rounded bg-loss/15 px-1.5 py-0.5 text-[10px] text-loss">{t('holdings.unpriced')}</span>
       )}
+      {children}
     </div>
   );
 }
@@ -386,8 +389,11 @@ function SymbolLabel({ holding }: { holding: HoldingView }) {
 const CARD_BUTTON = 'flex h-10 items-center gap-1.5 rounded-lg border border-border-subtle px-3 text-xs';
 
 /**
- * One holding on a phone: what it is worth and how it has done first, then the
- * figures behind them, then the two things that can be done to it.
+ * One holding on a phone: three lines, because a portfolio is read as a list -
+ * what it is and is worth, its name and how it moved today, then the figures
+ * behind them and its "⋮". Stacking the rating and the menu on lines of their own made
+ * each card 208 px, and 22 of them buried everything under the list. A price's
+ * age is not repeated per card: the page says it, and a stale one is marked here.
  */
 function HoldingCard({
   holding,
@@ -417,46 +423,40 @@ function HoldingCard({
   const sentiments = useSentiments();
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <SymbolLabel holding={holding} />
-          <p className="truncate text-xs text-text-muted">
-            <bdi>{holding.instrument.name ?? assetClassName(holding.instrument.assetClass)}</bdi>
-          </p>
+        <div className="min-w-0 flex-1">
+          <SymbolLabel holding={holding}>
+            {sentiments.shown && <SentimentCell inline holding={sentiments.byInstrument.get(holding.instrument.id)} />}
+          </SymbolLabel>
+          <InstrumentName>{holding.instrument.name ?? assetClassName(holding.instrument.assetClass)}</InstrumentName>
         </div>
         <div className="shrink-0 text-end">
           <p className="text-sm font-semibold">{formatMoney(holding.valueMinor, baseCurrency)}</p>
           <p className="text-xs">
-            <Delta value={holding.pnlMinor}>
-              {holding.pnlMinor === null
-                ? '—'
-                : t('holdings.pnl', {
-                    money: formatMoney(holding.pnlMinor, baseCurrency),
-                    percent: formatPercent(holding.pnlPct),
-                  })}
-            </Delta>
+            <DayChange pct={holding.quote?.dayChangePct} />
           </p>
         </div>
       </div>
 
-      {sentiments.shown && <SentimentCell holding={sentiments.byInstrument.get(holding.instrument.id)} />}
-      <p className="text-xs text-text-muted">
-        {trimQuantity(holding.quantity)} ×{' '}
-        {holding.quote
-          ? formatMoney(holding.quote.priceMinor, holding.quote.currency)
-          : t('holdings.noPrice')}
-        {holding.quote && (
-          <Trans
-            i18nKey="holdings.today"
-            values={{ change: formatPercent(holding.quote.dayChangePct) }}
-            components={{ delta: <Delta value={holding.quote.dayChangePct}>{null}</Delta> }}
+      <div className="flex items-center justify-between gap-2">
+        <p className="min-w-0 text-xs text-text-muted">
+          {trimQuantity(holding.quantity)} ×{' '}
+          {holding.quote
+            ? formatMoney(holding.quote.priceMinor, holding.quote.currency)
+            : t('holdings.noPrice')}
+          {holding.weightPct !== null &&
+            t('holdings.ofPortfolio', { share: formatShare(holding.weightPct) })}
+        </p>
+        {!editing && !confirmingDelete && (
+          <HoldingRowMenu
+            symbol={symbol}
+            instrumentId={holding.instrument.id}
+            onEdit={startEditing}
+            onRemove={() => setConfirmingDelete(true)}
           />
         )}
-        {holding.weightPct !== null &&
-          t('holdings.ofPortfolio', { share: formatShare(holding.weightPct) })}
-        {holding.quote && t('holdings.priceAge', { age: formatAge(holding.quote.asOf) })}
-      </p>
+      </div>
 
       {!editing && holding.costBasisMinor === null && (
         <CostWarning symbol={holding.instrument.symbol} onSet={startEditing} />
@@ -511,14 +511,7 @@ function HoldingCard({
             {t('common.cancel')}
           </button>
         </div>
-      ) : (
-        <div className="flex justify-end">
-          <HoldingRowMenu
-            symbol={symbol}
-            instrumentId={holding.instrument.id}
-            onEdit={startEditing} onRemove={() => setConfirmingDelete(true)} />
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -26,7 +26,7 @@ would have fired here too).
   the user's word, compose first with `db-backup.sh --target compose`, then `prod-deploy.sh`. The
   first `news_collect` after it prunes the market articles no topic links any more: ~89k on
   compose, ~9.3k on production. Expected, not a bug.
-- **Decisions reach 380** (next: **381**; D376 drops GitHub sign-in, D377 indexes `articles.duplicate_of_id`, D378-D379 stop two false assistant refusals, D380 gives Ask its own default model). **Migrations:** `0084` head
+- **Decisions reach 381** (next: **382**; D376 drops GitHub sign-in, D377 indexes `articles.duplicate_of_id`, D378-D379 stop two false assistant refusals, D380 gives Ask its own default model, D381 compacts the phone's holding card). **Migrations:** `0084` head
   (`0084_index_article_duplicates`); next free `0085`.
 - **Next:** no development task is queued. On the user's word: deploy #367; the future items
   ("Connect OpenRouter" by PKCE, dropping GitHub OAuth, the legal text); the M12 roadmap (capital
@@ -6304,6 +6304,24 @@ failure they prevent.
     tuned on Flash-Lite. `GET /llm/listed` says `default_models` and each model's `tested_for`
     in place of one `fallback_model` and `tested`, so Settings' "Not chosen" names Ask's default
     and the "tested" mark is per use. A user who saved a model keeps it.
+381. **A phone's holding card is three lines, and every field is 16 px on a phone** (the user,
+    2026-11-04, after a measurement of production at 375 px). The portfolio was 8.1 screens: 22
+    cards of 208 px were 70% of the page, with the value chart and the allocation under them.
+    A plain row is now 87 px: symbol, rating and value; name and today's change; figures and "⋮".
+    D72's cards stay. The card states today's percent instead of the total P&L (the user, on seeing
+    it: "better to see it than the total"); the total stays in the wide table and on the holding's
+    page. *Rejected:* **dropping the rating's agent and date from the card** - the shortest card,
+    but guardrail 3 of D254 says each rating carries them, so they sit beside the word on one line;
+    a long row wraps rather than losing them. **A swipe or tap-to-expand card** - hides the figures
+    a list is read for, and adds a gesture nothing else here has. The "Real" pill is gone from a
+    row only the real portfolio holds (it led where the symbol leads; an agent's part still names
+    its holders), and the price's age is off the card (the page says it; a stale one is marked).
+    **Fields:** iOS Safari zooms into a field under 16 px on focus and stays zoomed. The rule is
+    unlayered CSS on the elements rather than a class, because `text-sm` on a field would beat
+    `.input` and a new field could forget a class. It showed that Targets' field had 19 px of room
+    for text, too little for "12.5" even before, so that field has a minimum width on a phone.
+    **`InstrumentName`:** `truncate` in a right-to-left block cut a Latin name's beginning; the
+    name takes its own direction inside a flex parent, which keeps it at the page's start.
     *Rejected:* 3.7 Flash as the one default for everything (2.4x the scans' cost, unmeasured
     against the scans' validator); keeping one default and letting each user pick 3.7 Flash in
     Settings (every new account would start on the model that declines and mixes languages more);

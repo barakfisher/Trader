@@ -141,7 +141,8 @@ export function HoldingRowMenu({
         aria-label={t('holdings.menu.label', { symbol })}
         title={t('holdings.menu.label', { symbol })}
         onClick={() => setOpen(!open)}
-        className="rounded-lg p-1.5 text-text-muted transition hover:bg-surface-hover hover:text-text-primary"
+        // A thumb's 40 px on a phone card, with margins that keep its line a line of text.
+        className="rounded-lg p-1.5 text-text-muted transition hover:bg-surface-hover hover:text-text-primary max-sm:-my-3 max-sm:-me-2 max-sm:grid max-sm:size-10 max-sm:place-items-center"
       >
         <EllipsisVertical className="size-4" aria-hidden />
       </button>

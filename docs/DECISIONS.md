@@ -391,3 +391,4 @@ while this file is out of date.
 | 378 | An assistant reply whose suggestions are not JSON keeps its answer; the suggestions are dropped |
 | 379 | A time of day the evidence states is not a figure, even written apart from its date |
 | 380 | Each use has its own default model; Ask's is Gemini 3.7 Flash |
+| 381 | A phone's holding card is three lines, and every field is 16 px on a phone |

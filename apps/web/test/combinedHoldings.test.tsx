@@ -218,6 +218,42 @@ describe('the holdings table', () => {
   });
 });
 
+describe('the card on a phone', () => {
+  beforeEach(() => {
+    window.matchMedia = ((query: string) => ({
+      matches: true,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+  });
+  afterEach(() => {
+    // jsdom has none; leaving one behind would make every later test a phone.
+    delete (window as { matchMedia?: unknown }).matchMedia;
+  });
+
+  it('names the holders when an agent holds a part', async () => {
+    renderPage(<CombinedHoldingsTable data={response()} scope={ALL} />);
+    const holders = await screen.findByRole('list', { name: 'Holders' });
+    expect(within(holders).getByText('Momentum')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Actions for NVDA' })).toBeTruthy();
+  });
+
+  it('has no holders line for a row only the real portfolio holds', async () => {
+    const data = response();
+    data.rows[0]!.positions = [data.rows[0]!.positions[0]!];
+    renderPage(<CombinedHoldingsTable data={data} scope={ALL} />);
+    await screen.findByText('NVDA');
+    expect(screen.queryByRole('list', { name: 'Holders' })).toBeNull();
+  });
+
+  it('keeps an approve button on a row with a pending trade', async () => {
+    const data = response({ pendingTrades: [pendingTrade('p-1', 'NVDA')] });
+    renderPage(<CombinedHoldingsTable data={data} scope={ALL} />);
+    expect(await screen.findByRole('button', { name: /Review and approve/ })).toBeTruthy();
+  });
+});
+
 describe('the row menu in every view (D366, D368)', () => {
   /** The real portfolio holds NVDA; Momentum alone holds TSLA. */
   function serve() {

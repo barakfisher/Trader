@@ -212,7 +212,8 @@ const Row = observer(function Row({ row }: { row: TargetRow }) {
       <td className="py-2 pe-3 text-end">
         <div className="flex items-center justify-end gap-1">
           <input
-            className={`input max-w-24 text-end tabular-nums ${row.invalid ? 'border-loss' : ''}`}
+            // On a phone the table squeezed this to 19 px of text: too narrow for "12.5".
+            className={`input max-w-24 text-end tabular-nums max-sm:min-w-14 max-sm:px-1.5 ${row.invalid ? 'border-loss' : ''}`}
             type="text"
             inputMode="decimal"
             aria-label={t('targets.weightFor', { symbol: row.symbol })}
