@@ -37,10 +37,10 @@ five, so this is one late).
   accept them or not?
 - **Otherwise on the user's word:** "Connect OpenRouter" by PKCE, the legal text, and the M12
   roadmap (`docs/MILESTONES.md`, not started).
-- **Lesson - a rule that lives only here is invisible from the code it binds.** The first draft of
-  the compact card dropped the rating's agent and date. Nothing failed: no test covered it, and the
-  rule that a rating carries them is guardrail 3 of D254, in this file. It surfaced only because a
-  grep for the rating's decision ran before the card shipped. Before removing anything a user sees,
+- **Lesson - a rule that lives only here is invisible from the code it binds.** The first design of
+  the compact card dropped the rating's agent and date. The rule that a rating carries them is
+  guardrail 3 of D254, in this file, and no phone-card test asserted it. It surfaced only because
+  a grep for the rating's decision ran before the card was written. Before removing anything a user sees,
   grep this file for it, and add a test when the rule turns out to have none (#374 did).
 
 Previous update, 2026-11-03 - **Handoff at a milestone boundary: the six tasks agreed 2026-11-02 are
