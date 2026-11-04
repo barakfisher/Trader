@@ -277,6 +277,44 @@ def test_a_date_the_evidence_does_not_state_is_checked():
     assert unsourced_figures("Observed on 2026-10-24.", SIGMA_MOVE) != []
 
 
+QUOTE = {
+    "symbol": "XYZ",
+    "price": "76.46",
+    "previous_close": "79.02",
+    "as_of": "2026-10-24T13:15:00+00:00",
+}
+
+
+@pytest.mark.parametrize(
+    "written",
+    [
+        # llm_calls 589 (2026-10-24): a true Block quote, refused for the 13 of its time.
+        "נכון לתאריך 2026-10-24 בשעה 13:15:00+00:00, המחיר הוא 76.46 USD.",
+        "As of 13:15 UTC the price was 76.46 USD.",
+        "At 13:15:00 it traded at 76.46.",
+    ],
+)
+def test_a_time_of_day_the_evidence_states_is_not_a_figure(written):
+    assert unsourced_figures(written, QUOTE) == []
+
+
+@pytest.mark.parametrize(
+    ("written", "offender"),
+    [
+        ("As of 14:15 UTC the price was 76.46 USD.", "14"),
+        ("At 13:45 it traded at 76.46.", "45"),
+        ("At 13:15:30 it traded at 76.46.", "30"),
+    ],
+)
+def test_a_time_of_day_the_evidence_does_not_state_is_checked(written, offender):
+    assert offender in unsourced_figures(written, QUOTE)
+
+
+def test_a_ratio_with_a_colon_is_still_checked():
+    # Only a time the evidence states is passed whole; "13:1" is not a time of day.
+    assert "13" in unsourced_figures("A ratio of 13:1 against.", QUOTE)
+
+
 def test_a_dash_a_model_writes_for_a_hyphen_is_a_hyphen():
     # Measured 2026-10-11 on the assistant: every hyphen came back as U+2011.
     assert unsourced_figures("Up 5.29% over the 60‑day window.", SIGMA_MOVE) == []

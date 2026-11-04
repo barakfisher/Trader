@@ -26,7 +26,7 @@ would have fired here too).
   the user's word, compose first with `db-backup.sh --target compose`, then `prod-deploy.sh`. The
   first `news_collect` after it prunes the market articles no topic links any more: ~89k on
   compose, ~9.3k on production. Expected, not a bug.
-- **Decisions reach 377** (next: **378**; D377 indexes `articles.duplicate_of_id`. Open PR #371 also claims 377-378 and renumbers if this merges first). **Migrations:** `0084` head
+- **Decisions reach 380** (next: **381**; D376 drops GitHub sign-in, D377 indexes `articles.duplicate_of_id`, D378-D379 stop two false assistant refusals, D380 gives Ask its own default model). **Migrations:** `0084` head
   (`0084_index_article_duplicates`); next free `0085`.
 - **Next:** no development task is queued. On the user's word: deploy #367; the future items
   ("Connect OpenRouter" by PKCE, dropping GitHub OAuth, the legal text); the M12 roadmap (capital
@@ -6263,6 +6263,52 @@ failure they prevent.
     Lesson: an `ON DELETE` foreign key needs an index on the referencing column whenever the
     referenced table sees bulk deletes. 16 more lack one on compose, all on small tables
     (`users`, `target_weights`, ...).
+378. **An assistant reply whose suggestions are not JSON keeps its answer; the suggestions are
+    dropped** (the user, 2026-11-03: "fix it here"). Found in the first production Langfuse trace
+    (D375): asked in English which tools an agent's last scan used, Flash-Lite wrote a correct
+    answer twice but its `suggestions` array without quotes (`[ מה התזה של הסוכן שלי?, ...]`), so
+    `json.loads` failed, both turns were `malformed`, and the user was shown "I couldn't give an
+    answer I could check". `reply.parse` now retries once without the `suggestions` member; the
+    answer then passes the same figure, degenerate and link checks as any other. Measured over
+    every `malformed` assistant reply that day: 2 of 9 (production `llm_calls` 94-95) were this
+    and are recovered; the other 7 (1 production, 6 compose) are plain prose with no JSON at all
+    and stay `malformed` - accepting prose is a separate decision (it would also lose the
+    answer/decline/clarify distinction). The same trace answered an English question in Hebrew,
+    against D220; measured that day, compose's 8 answered English questions were all answered in
+    English, so rule 9 was left as it is.
+    *Rejected:* asking the model for JSON through `response_format` (not every OpenRouter route
+    honours it, and a refusal there fails the call rather than one optional field); repairing
+    the array's quoting (guessing where an unquoted string ends, for three buttons).
+379. **A time of day the evidence states is not a figure, even written apart from its date**
+    (the user, 2026-11-03: "fix the error"). A true reply about Block (XYZ) was refused as
+    unsourced (compose `llm_calls` 589-590, 2026-10-24) because Flash-Lite wrote "2026-10-24
+    בשעה 13:15:00+00:00": D323 removes a stated date whole, but only when its time is joined to it,
+    so the "13" of the loose time was checked as a figure. The check now removes a time of day
+    ("13:15", "13:15:00+00:00", "13:15 UTC") when an evidence timestamp states that hour and minute
+    (and second, if written). A time the evidence does not state stays in and is checked, so an
+    invented "14:15" is still refused, and "13:1" (a ratio) is not a time.
+    *Rejected:* skipping every `HH:MM` (an invented time would pass); converting to the user's
+    zone and back (no reply measured did it, and a guessed zone would pass a wrong hour).
+380. **Each use has its own default model; Ask's is Gemini 3.7 Flash** (the user, 2026-11-03:
+    "Yes, make it default"). Measured that day by replaying the 43 stored Ask questions (36
+    compose, 7 production) through the real loop on compose, one at a time, with D378-D379 in:
+    Gemini 3.7 Flash answered 42 (1 refused as unsourced), every one in the question's language,
+    at ~$0.0084 a question and 8.1 s median; Flash-Lite 40 (2 wrong declines - "why can't I create
+    an agent", "when does the exchange open" - and 1 timeout in the news refresh), $0.0035, 3.8 s,
+    2 answers in the wrong language; Claude Haiku 5.5 41 but 4 Hebrew questions answered in
+    English, p90 18 s; Claude Sonnet 5.5 $0.156 a question and 2 of 11 failed. At ~43 questions in
+    three weeks the difference is cents. `catalogue.TESTED_MODELS` is now per use (explain, agent,
+    assistant); the first of a use is its default and the next is where a chosen model that left
+    OpenRouter's list falls back to before the cheaper-than-the-default search (D284). Scans and
+    explanations keep Flash-Lite: 3.7 Flash was not measured there, and the figure check was
+    tuned on Flash-Lite. `GET /llm/listed` says `default_models` and each model's `tested_for`
+    in place of one `fallback_model` and `tested`, so Settings' "Not chosen" names Ask's default
+    and the "tested" mark is per use. A user who saved a model keeps it.
+    *Rejected:* 3.7 Flash as the one default for everything (2.4x the scans' cost, unmeasured
+    against the scans' validator); keeping one default and letting each user pick 3.7 Flash in
+    Settings (every new account would start on the model that declines and mixes languages more);
+    Sonnet 5.5 (35x the cost and still failed 2 of 11); an eval of one run is thin, so it is
+    re-measured once Langfuse has a week of production Ask traces on the new default.
 ---
 
 ## Bugs that cost real time, and the lesson from each

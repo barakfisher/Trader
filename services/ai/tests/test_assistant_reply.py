@@ -43,6 +43,50 @@ def test_prose_or_an_unknown_outcome_is_not_a_reply() -> None:
     assert parse(_raw(outcome="answer", text="  ")) is None
 
 
+#: The shape production refused twice on 2026-11-03 (`llm_calls` 94-95, found in its
+#: Langfuse trace): a right answer, its suggestions written without quotes.
+UNQUOTED_SUGGESTIONS = r"""```json
+{
+ "outcome": "answer",
+ "text": "בסריקה האחרונה של הסוכן, הכלים נקראו בסדר הזה:\n1. `search_universe`\n2. `get_quote`",
+ "suggestions": [
+   מה התזה של הסוכן שלי?,
+   איך עובדים הסוכנים באפליקציה?
+ ]
+}
+```"""
+
+
+def test_a_reply_whose_suggestions_are_not_json_keeps_its_answer() -> None:
+    reply = parse(UNQUOTED_SUGGESTIONS)
+
+    assert reply is not None
+    assert reply.outcome == "answer"
+    assert reply.text.startswith("בסריקה האחרונה של הסוכן")
+    assert reply.suggestions == ()
+
+
+def test_broken_suggestions_written_first_are_dropped_too() -> None:
+    raw = '{"suggestions": [What is a drawdown?], "outcome": "clarify", "text": "Which agent?"}'
+
+    reply = parse(raw)
+
+    assert reply is not None and (reply.outcome, reply.suggestions) == ("clarify", ())
+
+
+def test_a_reply_broken_outside_its_suggestions_is_still_malformed() -> None:
+    assert parse('{"outcome": "answer", "text": NVDA is up, "suggestions": []}') is None
+    assert parse('{"outcome": "answer", "text": "NVDA is up" "suggestions": ["x"]}') is None
+
+
+def test_a_salvaged_reply_is_checked_for_figures_like_any_other() -> None:
+    raw = '{"outcome": "answer", "text": "NVDA fell 9.9% today.", "suggestions": [Why?]}'
+
+    checked = check(raw, tool_results=[PORTFOLIO], user_messages=["How is NVDA?"])
+
+    assert not checked.valid and checked.unsourced == ("9.9",)
+
+
 def test_a_decline_names_a_known_reason_and_nothing_else_carries_one() -> None:
     assert parse(_raw(outcome="decline", text="No.")) is None
     assert parse(_raw(outcome="decline", reason="because", text="No.")) is None

@@ -3,14 +3,16 @@
 Every user chooses from OpenRouter's list (`openrouter_models.py`, D283):
 `agents.model` for an agent's scans and its instructions check,
 `user_settings.llm_assistant_model` for Ask, and `user_settings.llm_explain_model`
-for narration (migration 0069). Nothing chosen runs on the tested model
-(`catalogue.FALLBACK_MODEL`, D285). **The admin chooses the same way** (D360):
-the Admin page's model pickers and `llm_model_choices` are gone, and the admin's
-calls differ from a user's only in who pays for them (D245).
+for narration (migration 0069). Nothing chosen runs on the default of its use,
+the first model tested for it (`catalogue.DEFAULT_MODELS`, D285, D380). **The
+admin chooses the same way** (D360): the Admin page's model pickers and
+`llm_model_choices` are gone, and the admin's calls differ from a user's only in
+who pays for them (D245).
 
-**A saved model OpenRouter no longer lists falls back** (D284): to the tested
-model, or, when that is not listed either, to the listed model with the highest
-output price at or below the tested model's, so a fallback never costs more. The
+**A saved model OpenRouter no longer lists falls back** (D284): to the first
+listed model tested for its use, or, when none is listed, to the listed model
+with the highest output price at or below the default's, so a fallback never
+costs more. The
 saved value is kept, and the model returns by itself once listed again. While
 the list has never been read (`ModelList.live` is False) nothing is known to be
 gone, and a saved model is used as it is.
@@ -29,7 +31,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.core.logging import get_logger
-from app.llm.catalogue import FALLBACK_MODEL, Scope
+from app.llm.catalogue import DEFAULT_MODELS, TESTED_MODELS, Scope
 from app.llm.openrouter_models import ModelList, OpenRouterModels
 from app.llm.pricing import DEFAULT_MODEL_PRICES, ModelPrice, price_for
 
@@ -45,15 +47,20 @@ class ModelResolution:
     fallback: bool
 
 
-def default_model(listed: ModelList) -> str:
-    """The tested model, or the dearest listed model no dearer than it (D284)."""
-    if not listed.live or listed.get(FALLBACK_MODEL) is not None:
-        return FALLBACK_MODEL
-    # The tested model is not listed, so its own price is the table's.
-    ceiling = DEFAULT_MODEL_PRICES[FALLBACK_MODEL].completion_usd_per_mtok
+def default_model(listed: ModelList, scope: Scope) -> str:
+    """The first listed model tested for `scope`, or the dearest listed model no
+    dearer than its default (D284, D380)."""
+    default = DEFAULT_MODELS[scope]
+    if not listed.live:
+        return default
+    for tested in TESTED_MODELS[scope]:
+        if listed.get(tested) is not None:
+            return tested
+    # The default is not listed, so its own price is the table's.
+    ceiling = DEFAULT_MODEL_PRICES[default].completion_usd_per_mtok
     cheaper = [m for m in listed.models if m.price.completion_usd_per_mtok <= ceiling]
     if not cheaper:
-        return FALLBACK_MODEL
+        return default
     best = max(
         cheaper,
         key=lambda m: (m.price.completion_usd_per_mtok, m.price.prompt_usd_per_mtok, m.id),
@@ -62,23 +69,29 @@ def default_model(listed: ModelList) -> str:
 
 
 def resolve(
-    saved: str | None, listed: ModelList, prices: dict[str, ModelPrice] | None = None
+    saved: str | None,
+    listed: ModelList,
+    prices: dict[str, ModelPrice] | None = None,
+    *,
+    scope: Scope,
 ) -> ModelResolution:
     """The model a call runs on, given what the user saved and what is listed.
 
     While the list has never been read, a saved model is used as it is only if
     `prices` knows its price: one priced at the unknown-model rate would be counted
     low against the safety limit when it costs more than that rate. Otherwise it
-    runs on the tested model, without a fallback recorded - nothing is known to be
-    gone.
+    runs on the default of its use, without a fallback recorded - nothing is known
+    to be gone.
     """
     if saved is not None and listed.get(saved) is not None:
         return ModelResolution(saved=saved, effective=saved, fallback=False)
     if saved is not None and not listed.live:
         if prices is None or price_for(saved, prices) is not None:
             return ModelResolution(saved=saved, effective=saved, fallback=False)
-        return ModelResolution(saved=saved, effective=FALLBACK_MODEL, fallback=False)
-    return ModelResolution(saved=saved, effective=default_model(listed), fallback=saved is not None)
+        return ModelResolution(saved=saved, effective=DEFAULT_MODELS[scope], fallback=False)
+    return ModelResolution(
+        saved=saved, effective=default_model(listed, scope), fallback=saved is not None
+    )
 
 
 @dataclass(frozen=True)
@@ -226,5 +239,5 @@ async def fallback_from(
         return None
     if choice is None:
         return None
-    resolution = resolve(choice.saved, await listed.current(), listed.prices)
+    resolution = resolve(choice.saved, await listed.current(), listed.prices, scope=scope)
     return resolution.saved if resolution.fallback else None

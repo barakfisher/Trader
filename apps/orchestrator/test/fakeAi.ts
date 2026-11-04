@@ -52,14 +52,18 @@ export function createFakeAi(options: FakeAiOptions = {}): AiClient {
       return {
         choosable: true,
         live: true,
-        fallback_model: 'google/gemini-3.5-flash-lite',
+        default_models: {
+          explain: 'google/gemini-3.5-flash-lite',
+          agent: 'google/gemini-3.5-flash-lite',
+          assistant: 'google/gemini-3.5-flash-lite',
+        },
         models: [
           {
             id: 'google/gemini-3.5-flash-lite',
             name: 'Google: Gemini 3.5 Flash-Lite',
             prompt_usd_per_mtok: '0.3',
             completion_usd_per_mtok: '2.5',
-            tested: true,
+            tested_for: ['explain', 'agent', 'assistant'] as ('explain' | 'agent' | 'assistant')[],
             scan_estimate_micro_usd: 900,
           },
         ],

@@ -86,6 +86,14 @@ _DATE = re.compile(
     r"\b(\d{4}-\d{2}-\d{2})(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2}| ?UTC)?)?"
 )
 
+#: A time of day on its own, after its date was written apart from it: "13:15",
+#: "13:15:00+00:00", "13:15 UTC". Read whole only when the evidence states that time.
+_CLOCK = re.compile(
+    r"(?<![\d:.])(\d{1,2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2}| ?UTC)?(?![\d:])"
+)
+#: The time inside an evidence timestamp, as (hour, minute, second).
+_STAMPED_CLOCK = re.compile(r"\d{4}-\d{2}-\d{2}[T ](\d{2}):(\d{2})(?::(\d{2}))?")
+
 #: A month's name, in English (whole, three letters, "Sept") and Hebrew ("מרס" and
 #: "מרץ" are both March), as its number.
 _MONTH_NUMBERS = {
@@ -332,6 +340,22 @@ def stated_dates(evidence: object) -> set[str]:
     return {match.group(1) for s in _strings(evidence) for match in _DATE.finditer(s)}
 
 
+def stated_times(evidence: object) -> set[tuple[int, int, int]]:
+    """The times of day the evidence's timestamps state, as (hour, minute, second)."""
+    return {
+        (int(m.group(1)), int(m.group(2)), int(m.group(3) or 0))
+        for s in _strings(evidence)
+        for m in _STAMPED_CLOCK.finditer(s)
+    }
+
+
+def _stated_time(times: set[tuple[int, int, int]], m: re.Match[str]) -> bool:
+    hour, minute, second = int(m.group(1)), int(m.group(2)), m.group(3)
+    return any(
+        (hour, minute) == (h, mi) and (second is None or int(second) == sec) for h, mi, sec in times
+    )
+
+
 def _stated(dates: set[str], month: str, day: str, year: str | None) -> bool:
     wanted = f"-{_MONTH_NUMBERS[month.lower()]:02d}-{int(day):02d}"
     return any(
@@ -339,9 +363,15 @@ def _stated(dates: set[str], month: str, day: str, year: str | None) -> bool:
     )
 
 
-def _as_checked(text: str, dates: set[str]) -> str:
+def _as_checked(text: str, dates: set[str], times: set[tuple[int, int, int]]) -> str:
     """The text as the check reads it: dashes as "-", and a date the evidence states
-    removed whole, written as digits or in words. The text shown is the writer's own.
+    removed whole, written as digits or in words, and so is a time of day it states.
+    The text shown is the writer's own.
+
+    Measured 2026-11-03: a true Block quote was refused because the model wrote
+    "2026-10-24 בשעה 13:15:00+00:00", the date apart from its time, and the 13 of
+    the time was read as a figure (llm_calls 589, D379). A time the evidence does
+    not state stays in and is checked, like a date.
 
     Measured 2026-10-26 over 445 Flash-Lite narrations: 34 of the 41 refused were
     true and quoted a timestamp ("2026-10-23T20:00:00+00:00"), refused for its 20
@@ -356,17 +386,18 @@ def _as_checked(text: str, dates: set[str]) -> str:
         lambda m: " " if _stated(dates, m.group(2), m.group(1), m.group(3)) else m.group(0),
         checked,
     )
-    return _MONTH_DAY.sub(
+    checked = _MONTH_DAY.sub(
         lambda m: " " if _stated(dates, m.group(1), m.group(2), m.group(3)) else m.group(0),
         checked,
     )
+    return _CLOCK.sub(lambda m: " " if _stated_time(times, m) else m.group(0), checked)
 
 
 def _figures(text: str, evidence: Mapping[str, object]) -> list[tuple[str, bool]]:
     """Each figure in `text`, as written, with whether the evidence supports it.
     A window's length a key names is not a figure, so it is left out, and so is a
     date the evidence states."""
-    text = _as_checked(text, stated_dates(evidence))
+    text = _as_checked(text, stated_dates(evidence), stated_times(evidence))
     sourced = sourced_values(evidence)
     as_percent = sourced_values(evidence, percent=True)
     windows = named_windows(evidence)

@@ -1199,6 +1199,18 @@ export interface components {
             provider: string;
         };
         /**
+         * LlmDefaultModels
+         * @description Each use's default: the first model tested for it (D285, D380).
+         */
+        LlmDefaultModels: {
+            /** Agent */
+            agent: string;
+            /** Assistant */
+            assistant: string;
+            /** Explain */
+            explain: string;
+        };
+        /**
          * LlmListedModel
          * @description A model a user on their own key may choose, from OpenRouter's list (D244, D283).
          */
@@ -1229,10 +1241,10 @@ export interface components {
              */
             scan_estimate_micro_usd: number;
             /**
-             * Tested
-             * @description The scans were tuned on it (D285).
+             * Tested For
+             * @description The uses it was measured on (D285, D380): 'agent' the scans, 'explain' the explanations, 'assistant' Ask.
              */
-            tested: boolean;
+            tested_for: ("explain" | "agent" | "assistant")[];
         };
         /**
          * LlmListedModelsResponse
@@ -1244,11 +1256,8 @@ export interface components {
              * @description False unless LLM_PROVIDER is openrouter: nothing can be chosen.
              */
             choosable: boolean;
-            /**
-             * Fallback Model
-             * @description The tested model a choice falls back to (D284).
-             */
-            fallback_model: string;
+            /** @description What each use runs on when nothing is chosen (D380). */
+            default_models: components["schemas"]["LlmDefaultModels"];
             /**
              * Live
              * @description False while OpenRouter's list has never been read: the short catalogue stands in, and a saved model is used as it is (D284).

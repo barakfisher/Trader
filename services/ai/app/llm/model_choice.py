@@ -2,14 +2,15 @@
 
 Every user - the admin included since D360 - runs on what they chose for the
 agent, for Ask or for explanations, resolved against OpenRouter's list
-(`user_models.py`, D283-D284); nothing chosen runs on the tested model. The
+(`user_models.py`, D283-D284); nothing chosen runs on the default of its use
+(D380). The
 Admin page's installation-wide choice (`llm_model_choices`, D43) is gone with
 its table (migration 0081).
 
 A call for no user, or with models not choosable (another provider than
 OpenRouter), is passed no model and runs on the configured one (`LLM_MODEL`).
 
-A failed read never fails the call. It is logged, and the tested model answers
+A failed read never fails the call. It is logged, and the use's default answers
 - the same rule the recorder follows (`call_log.py`): the machinery around a
 call must not be what stops it.
 
@@ -24,7 +25,7 @@ from collections.abc import Sequence
 
 from app.core.logging import get_logger
 from app.llm.base import Caller, LLMCompletion, LLMProvider, Message, Purpose, ToolSpec, Verdict
-from app.llm.catalogue import FALLBACK_MODEL, Scope
+from app.llm.catalogue import DEFAULT_MODELS, Scope
 from app.llm.openrouter_models import OpenRouterModels
 from app.llm.user_models import UserModelStore, resolve
 
@@ -64,11 +65,13 @@ class ChoosingProvider:
             choice = self._users.choice(caller.user_id, scope, caller.agent_id)
         except Exception as error:  # noqa: BLE001 - never fail the caller
             log.warning("llm.user_model_unreadable", scope=scope, error=str(error))
-            return FALLBACK_MODEL
+            return DEFAULT_MODELS[scope]
         if choice is None:
-            # No such user: nothing chosen, so the tested model.
-            return FALLBACK_MODEL
-        resolution = resolve(choice.saved, await self._listed.current(), self._listed.prices)
+            # No such user: nothing chosen, so the use's default.
+            return DEFAULT_MODELS[scope]
+        resolution = resolve(
+            choice.saved, await self._listed.current(), self._listed.prices, scope=scope
+        )
         if resolution.fallback:
             try:
                 self._users.record_fallback(caller.user_id, scope, caller.agent_id, resolution)

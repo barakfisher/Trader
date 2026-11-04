@@ -394,14 +394,14 @@ export const installationKeyTestResponseSchema = z.object({
 export const llmListedModelsResponseSchema = z.object({
   choosable: z.boolean(),
   live: z.boolean(),
-  fallback_model: z.string(),
+  default_models: z.object({ explain: z.string(), agent: z.string(), assistant: z.string() }),
   models: z.array(
     z.object({
       id: z.string(),
       name: z.string(),
       prompt_usd_per_mtok: z.string(),
       completion_usd_per_mtok: z.string(),
-      tested: z.boolean(),
+      tested_for: z.array(z.enum(['explain', 'agent', 'assistant'])),
       scan_estimate_micro_usd: z.number().int(),
     }),
   ),

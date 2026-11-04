@@ -26,10 +26,12 @@ const { MAX_SHOWN_MODELS, matching } = await import('../src/components/ModelPick
 const { renderPage } = await import('./serverStateHarness.tsx');
 
 const TESTED = 'google/gemini-3.5-flash-lite';
+const ASK_DEFAULT = 'google/gemini-3.7-flash';
+const SCANS: ListedModelView['testedFor'] = ['explain', 'agent', 'assistant'];
 const AGENT = '11111111-1111-4111-8111-111111111111';
 
-function model(id: string, name: string, tested = false): ListedModelView {
-  return { id, name, promptUsdPerMtok: '0.3', completionUsdPerMtok: '2.5', tested, scanEstimateMicroUsd: 900 };
+function model(id: string, name: string, testedFor: ListedModelView['testedFor'] = []): ListedModelView {
+  return { id, name, promptUsdPerMtok: '0.3', completionUsdPerMtok: '2.5', testedFor, scanEstimateMicroUsd: 900 };
 }
 
 let data: ModelChoicesResponse;
@@ -38,8 +40,13 @@ function choices(overrides: Partial<ModelChoicesResponse> = {}): ModelChoicesRes
   return {
     choosable: true,
     live: true,
-    fallbackModel: TESTED,
-    models: [model('acme/zeta', 'Acme: Zeta'), model(TESTED, 'Google: Gemini 3.5 Flash-Lite', true), model('acme/alpha', 'Acme: Alpha')],
+    defaultModels: { explain: TESTED, agent: TESTED, assistant: ASK_DEFAULT },
+    models: [
+      model('acme/zeta', 'Acme: Zeta'),
+      model(TESTED, 'Google: Gemini 3.5 Flash-Lite', SCANS),
+      model('acme/alpha', 'Acme: Alpha'),
+      model(ASK_DEFAULT, 'Google: Gemini 3.7 Flash', ['assistant']),
+    ],
     choices: {
       assistant: { saved: 'acme/retired', effective: TESTED, fallback: true },
       explain: { saved: null, effective: TESTED, fallback: false },
@@ -69,14 +76,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('the model picker', () => {
-  it('offers the tested model first, then by name, and says a saved model has fallen back', async () => {
+  it("offers the models tested for Ask first, then by name, and says a saved model has fallen back", async () => {
     render(<AskModelCard />);
     const ask = (await screen.findByLabelText('Ask')) as HTMLSelectElement;
     const labels = [...ask.options].map((option) => option.textContent);
     expect(labels).toEqual([
-      expect.stringMatching(/^Not chosen: the tested model/),
+      expect.stringMatching(/^Not chosen: the default, .*Gemini 3\.7 Flash/),
       expect.stringMatching(/acme\/retired.*no longer offered/),
       'Google: Gemini 3.5 Flash-Lite (tested)',
+      'Google: Gemini 3.7 Flash (tested)',
       'Acme: Alpha',
       'Acme: Zeta',
     ]);
@@ -190,12 +198,14 @@ describe('the fallback banner', () => {
 });
 
 describe("an agent's model", () => {
-  it('says "not chosen" is the tested model, to the admin as to a user (D360)', async () => {
+  it('says "not chosen" is the scans\' default, to the admin as to a user (D360, D380)', async () => {
     data = choices({ agents: [{ agentId: AGENT, name: 'Tech Agent', saved: null, effective: TESTED, fallback: false }] });
     for (const role of ['user', 'admin'] as const) {
       render(<AgentModelCard agentId={AGENT} />, role);
       const select = (await screen.findByLabelText('The model this agent scans with')) as HTMLSelectElement;
-      expect(select.options[0]!.textContent).toMatch(/^Not chosen: the tested model/);
+      expect(select.options[0]!.textContent).toMatch(/^Not chosen: the default, .*Gemini 3\.5 Flash-Lite/);
+      // Tested for Ask only, so not marked tested for scans.
+      expect([...select.options].map((option) => option.textContent)).toContain('Google: Gemini 3.7 Flash');
       cleanup();
     }
   });

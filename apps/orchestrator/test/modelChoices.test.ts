@@ -20,6 +20,7 @@ const USER = {
 const AGENT_ID = '11111111-1111-4111-8111-111111111111';
 const LISTED_MODEL = 'acme/model-1';
 const FALLBACK_MODEL = 'google/gemini-3.5-flash-lite';
+const ASK_MODEL = 'google/gemini-3.7-flash';
 
 vi.mock('../src/db/pool.js', () => ({
   queryOne: vi.fn(async () => ({ ok: 1 })),
@@ -64,14 +65,14 @@ function list(): LlmListedModelsResponse {
   return {
     choosable: true,
     live: true,
-    fallback_model: FALLBACK_MODEL,
+    default_models: { explain: FALLBACK_MODEL, agent: FALLBACK_MODEL, assistant: ASK_MODEL },
     models: [
       {
         id: FALLBACK_MODEL,
         name: 'Google: Gemini 3.5 Flash-Lite',
         prompt_usd_per_mtok: '0.3',
         completion_usd_per_mtok: '2.5',
-        tested: true,
+        tested_for: ['explain', 'agent', 'assistant'],
         scan_estimate_micro_usd: 900,
       },
       {
@@ -79,7 +80,7 @@ function list(): LlmListedModelsResponse {
         name: 'Acme: Model 1',
         prompt_usd_per_mtok: '1',
         completion_usd_per_mtok: '4',
-        tested: false,
+        tested_for: [],
         scan_estimate_micro_usd: 3000,
       },
     ],
@@ -130,14 +131,14 @@ describe('a user choosing their models', () => {
   const put = (path: string, body: unknown) =>
     app.request(path, { method: 'PUT', headers: { ...HEADERS, cookie }, body: JSON.stringify(body) });
 
-  it('reads the list, the tested mark and each resolution, fallbacks included', async () => {
+  it('reads the list, each use\'s default, the tested marks and each resolution, fallbacks included', async () => {
     const response = await app.request('/settings/llm-models', { headers: { ...HEADERS, cookie } });
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body.fallbackModel).toBe(FALLBACK_MODEL);
-    expect(body.models.map((model: { id: string; tested: boolean }) => [model.id, model.tested])).toEqual([
-      [FALLBACK_MODEL, true],
-      [LISTED_MODEL, false],
+    expect(body.defaultModels).toEqual({ explain: FALLBACK_MODEL, agent: FALLBACK_MODEL, assistant: ASK_MODEL });
+    expect(body.models.map((model: { id: string; testedFor: string[] }) => [model.id, model.testedFor])).toEqual([
+      [FALLBACK_MODEL, ['explain', 'agent', 'assistant']],
+      [LISTED_MODEL, []],
     ]);
     expect(body.choices.assistant).toEqual({ saved: 'acme/retired', effective: FALLBACK_MODEL, fallback: true });
     expect(body.agents).toEqual([

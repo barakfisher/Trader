@@ -643,8 +643,19 @@ class LlmListedModel(BaseModel):
     name: str = Field(description="OpenRouter's name for it. Data, not copy.")
     prompt_usd_per_mtok: str = Field(description="USD per million input tokens, a decimal.")
     completion_usd_per_mtok: str = Field(description="USD per million output tokens, a decimal.")
-    tested: bool = Field(description="The scans were tuned on it (D285).")
+    tested_for: list[Literal["explain", "agent", "assistant"]] = Field(
+        description="The uses it was measured on (D285, D380): 'agent' the scans, "
+        "'explain' the explanations, 'assistant' Ask."
+    )
     scan_estimate_micro_usd: int = Field(description="One agent scan at the agent basis (D46).")
+
+
+class LlmDefaultModels(BaseModel):
+    """Each use's default: the first model tested for it (D285, D380)."""
+
+    explain: str
+    agent: str
+    assistant: str
 
 
 class LlmListedModelsResponse(BaseModel):
@@ -657,7 +668,9 @@ class LlmListedModelsResponse(BaseModel):
         description="False while OpenRouter's list has never been read: the short "
         "catalogue stands in, and a saved model is used as it is (D284)."
     )
-    fallback_model: str = Field(description="The tested model a choice falls back to (D284).")
+    default_models: LlmDefaultModels = Field(
+        description="What each use runs on when nothing is chosen (D380)."
+    )
     models: list[LlmListedModel]
 
 
