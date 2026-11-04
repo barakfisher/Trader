@@ -47,14 +47,14 @@ export function toModelChoices(listed: LlmListedModelsResponse, user: UserLlmMod
   return {
     choosable: listed.choosable,
     live: listed.live,
-    fallbackModel: listed.fallback_model,
+    defaultModels: listed.default_models,
     // Every user chooses from the same list, the admin included (D360).
     models: listed.models.map((model) => ({
       id: model.id,
       name: model.name,
       promptUsdPerMtok: model.prompt_usd_per_mtok,
       completionUsdPerMtok: model.completion_usd_per_mtok,
-      tested: model.tested,
+      testedFor: model.tested_for,
       scanEstimateMicroUsd: model.scan_estimate_micro_usd,
     })),
     choices: { assistant: scope('assistant'), explain: scope('explain') },
@@ -69,7 +69,7 @@ export async function readModelChoices(ai: AiClient, userId: string, requestId?:
 
 /**
  * Why `model` may not be saved, or null when it may. Null (not chosen) always
- * may: it runs on the tested model. A model must be on the list as it is now;
+ * may: it runs on the use's default (D379). A model must be on the list as it is now;
  * one that has left it can stay saved (D284), but cannot be chosen anew.
  */
 export function modelChoiceRefusal(listed: LlmListedModelsResponse, model: string | null): ApiProblem | null {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BadgeCheck, TriangleAlert } from 'lucide-react';
 
-import type { ListedModelView, ModelChoicesResponse, ModelResolutionView } from '@traders/shared';
+import type { ListedModelView, LlmModelUse, ModelChoicesResponse, ModelResolutionView } from '@traders/shared';
 
 import { errorMessage } from '../api/client.ts';
 import { leftToRight } from '../i18n/format.ts';
@@ -18,11 +18,10 @@ interface Saving {
   error: Error | null;
 }
 
-/** The tested models first, then by name: the scans were tuned on the first (D285). */
-function ordered(models: ListedModelView[]): ListedModelView[] {
-  return [...models].sort(
-    (a, b) => Number(b.tested) - Number(a.tested) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id),
-  );
+/** The models tested for this use first, then by name (D285, D379). */
+function ordered(models: ListedModelView[], use: LlmModelUse): ListedModelView[] {
+  const tested = (model: ListedModelView) => Number(model.testedFor.includes(use));
+  return [...models].sort((a, b) => tested(b) - tested(a) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }
 
 export function matching(models: ListedModelView[], search: string): ListedModelView[] {
@@ -39,10 +38,12 @@ export function matching(models: ListedModelView[], search: string): ListedModel
  *
  * A saved model the list no longer has is said first, with the model used
  * meanwhile (D284), and stays selectable as it is so the select tells the truth.
- * "Not chosen" runs on the tested model, for every user (D360).
+ * "Not chosen" runs on the use's default, its first tested model, for every
+ * user (D360, D379): Ask's is not the scans'.
  */
 export function ModelPicker({
   id,
+  use,
   label,
   data,
   resolution,
@@ -50,6 +51,8 @@ export function ModelPicker({
   perScan,
 }: {
   id: string;
+  /** What the model is chosen for: it decides the default and the "tested" mark. */
+  use: LlmModelUse;
   label: string;
   data: ModelChoicesResponse;
   resolution: ModelResolutionView;
@@ -63,14 +66,15 @@ export function ModelPicker({
   const [search, setSearch] = useState('');
   useEffect(() => setSelected(stored), [stored]);
 
-  const models = useMemo(() => ordered(data.models), [data.models]);
+  const models = useMemo(() => ordered(data.models, use), [data.models, use]);
   const byId = useMemo(() => new Map(models.map((model) => [model.id, model])), [models]);
   const found = matching(models, search);
   const shown = found.slice(0, MAX_SHOWN_MODELS);
   // The selection is always an option, even when the search hides it.
   const selectedModel = byId.get(selected);
   if (selectedModel && !shown.includes(selectedModel)) shown.unshift(selectedModel);
-  const unchosenModel = byId.get(data.fallbackModel);
+  const defaultModel = data.defaultModels[use];
+  const unchosenModel = byId.get(defaultModel);
   const nameOf = (modelId: string | null) => leftToRight((modelId && byId.get(modelId)?.name) || modelId || '');
   const detail = selected === '' ? unchosenModel : selectedModel;
 
@@ -102,7 +106,7 @@ export function ModelPicker({
           onChange={(event) => setSelected(event.target.value)}
           className="input min-w-0 sm:max-w-md"
         >
-          <option value="">{t('models.notChosen')}</option>
+          <option value="">{t('models.notChosen', { model: nameOf(defaultModel) })}</option>
           {resolution.fallback && resolution.saved && (
             <option value={resolution.saved} disabled>
               {t('models.noLongerOffered', { model: leftToRight(resolution.saved) })}
@@ -110,7 +114,7 @@ export function ModelPicker({
           )}
           {shown.map((model) => (
             <option key={model.id} value={model.id}>
-              {model.tested ? t('models.optionTested', { name: model.name }) : model.name}
+              {model.testedFor.includes(use) ? t('models.optionTested', { name: model.name }) : model.name}
             </option>
           ))}
         </select>
@@ -135,13 +139,13 @@ export function ModelPicker({
             })}
           </p>
           {perScan && <p>{t('models.perScan', { cost: formatMicroUsd(detail.scanEstimateMicroUsd) })}</p>}
-          {detail.tested ? (
+          {detail.testedFor.includes(use) ? (
             <p className="flex items-center gap-1 text-gain">
               <BadgeCheck className="size-4" aria-hidden />
               {t('models.tested')}
             </p>
           ) : (
-            <p className="text-warn">{t('models.untested', { model: nameOf(data.fallbackModel) })}</p>
+            <p className="text-warn">{t('models.untested', { model: nameOf(defaultModel) })}</p>
           )}
         </div>
       )}

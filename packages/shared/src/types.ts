@@ -1557,6 +1557,9 @@ export interface InstallationKeyTestView {
 export const USER_LLM_SCOPES = ['assistant', 'explain'] as const;
 export type UserLlmScope = (typeof USER_LLM_SCOPES)[number];
 
+/** What a model is chosen for: Ask, explanations, or an agent's scans. */
+export type LlmModelUse = UserLlmScope | 'agent';
+
 /** A model from OpenRouter's list, filtered (D283). Its id and name are data, not copy. */
 export interface ListedModelView {
   id: string;
@@ -1564,8 +1567,8 @@ export interface ListedModelView {
   /** USD per million tokens, decimal strings. */
   promptUsdPerMtok: string;
   completionUsdPerMtok: string;
-  /** The scans were tuned on it (D285). */
-  tested: boolean;
+  /** The uses it was measured on (D285, D379). */
+  testedFor: LlmModelUse[];
   /** One agent scan at the installation's measured basis (D46), integer micro-USD. */
   scanEstimateMicroUsd: number;
 }
@@ -1583,8 +1586,8 @@ export interface ModelChoicesResponse {
   choosable: boolean;
   /** False while OpenRouter's list has never been read; a saved model is then used as it is. */
   live: boolean;
-  /** The tested model a choice falls back to. */
-  fallbackModel: string;
+  /** What each use runs on when nothing is chosen: its first tested model (D379). */
+  defaultModels: Record<LlmModelUse, string>;
   models: ListedModelView[];
   choices: Record<UserLlmScope, ModelResolutionView>;
   /** Every agent that scans, oldest first. */

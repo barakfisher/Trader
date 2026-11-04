@@ -1296,6 +1296,30 @@
         "title": "LlmCreditsResponse",
         "type": "object"
       },
+      "LlmDefaultModels": {
+        "description": "Each use's default: the first model tested for it (D285, D379).",
+        "properties": {
+          "agent": {
+            "title": "Agent",
+            "type": "string"
+          },
+          "assistant": {
+            "title": "Assistant",
+            "type": "string"
+          },
+          "explain": {
+            "title": "Explain",
+            "type": "string"
+          }
+        },
+        "required": [
+          "explain",
+          "agent",
+          "assistant"
+        ],
+        "title": "LlmDefaultModels",
+        "type": "object"
+      },
       "LlmListedModel": {
         "description": "A model a user on their own key may choose, from OpenRouter's list (D244, D283).",
         "properties": {
@@ -1324,10 +1348,18 @@
             "title": "Scan Estimate Micro Usd",
             "type": "integer"
           },
-          "tested": {
-            "description": "The scans were tuned on it (D285).",
-            "title": "Tested",
-            "type": "boolean"
+          "tested_for": {
+            "description": "The uses it was measured on (D285, D379): 'agent' the scans, 'explain' the explanations, 'assistant' Ask.",
+            "items": {
+              "enum": [
+                "explain",
+                "agent",
+                "assistant"
+              ],
+              "type": "string"
+            },
+            "title": "Tested For",
+            "type": "array"
           }
         },
         "required": [
@@ -1335,7 +1367,7 @@
           "name",
           "prompt_usd_per_mtok",
           "completion_usd_per_mtok",
-          "tested",
+          "tested_for",
           "scan_estimate_micro_usd"
         ],
         "title": "LlmListedModel",
@@ -1349,10 +1381,9 @@
             "title": "Choosable",
             "type": "boolean"
           },
-          "fallback_model": {
-            "description": "The tested model a choice falls back to (D284).",
-            "title": "Fallback Model",
-            "type": "string"
+          "default_models": {
+            "$ref": "#/components/schemas/LlmDefaultModels",
+            "description": "What each use runs on when nothing is chosen (D379)."
           },
           "live": {
             "description": "False while OpenRouter's list has never been read: the short catalogue stands in, and a saved model is used as it is (D284).",
@@ -1370,7 +1401,7 @@
         "required": [
           "choosable",
           "live",
-          "fallback_model",
+          "default_models",
           "models"
         ],
         "title": "LlmListedModelsResponse",

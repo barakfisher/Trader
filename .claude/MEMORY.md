@@ -26,7 +26,7 @@ would have fired here too).
   the user's word, compose first with `db-backup.sh --target compose`, then `prod-deploy.sh`. The
   first `news_collect` after it prunes the market articles no topic links any more: ~89k on
   compose, ~9.3k on production. Expected, not a bug.
-- **Decisions reach 378** (next: **379**; D376 drops GitHub sign-in, D377-D378 stop two false assistant refusals). **Migrations:** `0083` head
+- **Decisions reach 379** (next: **380**; D376 drops GitHub sign-in, D377-D378 stop two false assistant refusals, D379 gives Ask its own default model). **Migrations:** `0083` head
   (`0083_drop_github_identities`); next free `0084`.
 - **Next:** no development task is queued. On the user's word: deploy #367; the future items
   ("Connect OpenRouter" by PKCE, dropping GitHub OAuth, the legal text); the M12 roadmap (capital
@@ -6271,6 +6271,26 @@ failure they prevent.
     invented "14:15" is still refused, and "13:1" (a ratio) is not a time.
     *Rejected:* skipping every `HH:MM` (an invented time would pass); converting to the user's
     zone and back (no reply measured did it, and a guessed zone would pass a wrong hour).
+379. **Each use has its own default model; Ask's is Gemini 3.7 Flash** (the user, 2026-11-03:
+    "Yes, make it default"). Measured that day by replaying the 43 stored Ask questions (36
+    compose, 7 production) through the real loop on compose, one at a time, with D377-D378 in:
+    Gemini 3.7 Flash answered 42 (1 refused as unsourced), every one in the question's language,
+    at ~$0.0084 a question and 8.1 s median; Flash-Lite 40 (2 wrong declines - "why can't I create
+    an agent", "when does the exchange open" - and 1 timeout in the news refresh), $0.0035, 3.8 s,
+    2 answers in the wrong language; Claude Haiku 5.5 41 but 4 Hebrew questions answered in
+    English, p90 18 s; Claude Sonnet 5.5 $0.156 a question and 2 of 11 failed. At ~43 questions in
+    three weeks the difference is cents. `catalogue.TESTED_MODELS` is now per use (explain, agent,
+    assistant); the first of a use is its default and the next is where a chosen model that left
+    OpenRouter's list falls back to before the cheaper-than-the-default search (D284). Scans and
+    explanations keep Flash-Lite: 3.7 Flash was not measured there, and the figure check was
+    tuned on Flash-Lite. `GET /llm/listed` says `default_models` and each model's `tested_for`
+    in place of one `fallback_model` and `tested`, so Settings' "Not chosen" names Ask's default
+    and the "tested" mark is per use. A user who saved a model keeps it.
+    *Rejected:* 3.7 Flash as the one default for everything (2.4x the scans' cost, unmeasured
+    against the scans' validator); keeping one default and letting each user pick 3.7 Flash in
+    Settings (every new account would start on the model that declines and mixes languages more);
+    Sonnet 5.5 (35x the cost and still failed 2 of 11); an eval of one run is thin, so it is
+    re-measured once Langfuse has a week of production Ask traces on the new default.
 ---
 
 ## Bugs that cost real time, and the lesson from each

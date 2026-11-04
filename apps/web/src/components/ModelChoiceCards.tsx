@@ -44,6 +44,7 @@ function UserScopePicker({ data, scope }: { data: ModelChoicesResponse; scope: '
   return (
     <ModelPicker
       id={`user-model-${scope}`}
+      use={scope}
       label={t(`models.scope.${scope}`)}
       data={data}
       resolution={data.choices[scope]}
@@ -53,7 +54,7 @@ function UserScopePicker({ data, scope }: { data: ModelChoicesResponse; scope: '
   );
 }
 
-/** The model an agent scans with (D244); one with none runs on the tested model, the admin's too (D360). */
+/** The model an agent scans with (D244); one with none runs on the scans' default, the admin's too (D360). */
 export function AgentModelCard({ agentId }: { agentId: string }) {
   const { t } = useTranslation();
   const query = useModelChoicesQuery();
@@ -68,6 +69,7 @@ export function AgentModelCard({ agentId }: { agentId: string }) {
           return (
             <ModelPicker
               id={`agent-model-${agentId}`}
+              use="agent"
               label={t('models.scope.agent')}
               data={data}
               resolution={agent}

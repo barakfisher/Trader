@@ -17,7 +17,7 @@ from sqlalchemy.engine import Engine
 from app.config import get_settings
 from app.db import get_engine
 from app.deps import require_internal_key
-from app.llm.catalogue import FALLBACK_MODEL, TESTED_MODELS
+from app.llm.catalogue import DEFAULT_MODELS, TESTED_MODELS, Scope
 from app.llm.credits import build_credit_source
 from app.llm.factory import configured_model, models_are_choosable
 from app.llm.openrouter_models import ModelList, OpenRouterModels, stand_in
@@ -27,6 +27,7 @@ from app.models import (
     AgentLlmModel,
     LlmCredits,
     LlmCreditsResponse,
+    LlmDefaultModels,
     LlmListedModel,
     LlmListedModelsResponse,
     LlmModelResolution,
@@ -80,14 +81,14 @@ async def llm_listed(
     return LlmListedModelsResponse(
         choosable=models_are_choosable(get_settings()),
         live=listed.live,
-        fallback_model=FALLBACK_MODEL,
+        default_models=LlmDefaultModels(**DEFAULT_MODELS),
         models=[
             LlmListedModel(
                 id=model.id,
                 name=model.name,
                 prompt_usd_per_mtok=decimal_text(model.price.prompt_usd_per_mtok),
                 completion_usd_per_mtok=decimal_text(model.price.completion_usd_per_mtok),
-                tested=model.id in TESTED_MODELS,
+                tested_for=[scope for scope, ids in TESTED_MODELS.items() if model.id in ids],
                 scan_estimate_micro_usd=scan_estimate_micro_usd(agents, model.price),
             )
             for model in listed.models
@@ -108,27 +109,29 @@ async def user_llm_models(
     book: OpenRouterModels | None = getattr(request.app.state, "listed_models", None)
     prices = book.prices if book is not None else settings.llm_model_price_map
 
-    def resolved(model: str | None) -> LlmModelResolution:
+    def resolved(model: str | None, scope: Scope) -> LlmModelResolution:
         if not choosable:
             # Nothing can be chosen here: every call runs on the configured model.
             return LlmModelResolution(
                 saved=model, effective=configured_model(settings), fallback=False
             )
-        resolution: ModelResolution = resolve(model, listed, prices)
+        resolution: ModelResolution = resolve(model, listed, prices, scope=scope)
         return LlmModelResolution(**vars(resolution))
 
     return UserLlmModelsResponse(
         choosable=choosable,
         live=listed.live,
         choices=[
-            UserLlmScopeModel(scope="explain", **resolved(saved.explain).model_dump()),
-            UserLlmScopeModel(scope="assistant", **resolved(saved.assistant).model_dump()),
+            UserLlmScopeModel(scope="explain", **resolved(saved.explain, "explain").model_dump()),
+            UserLlmScopeModel(
+                scope="assistant", **resolved(saved.assistant, "assistant").model_dump()
+            ),
         ],
         agents=[
             AgentLlmModel(
                 agent_id=UUID(agent.agent_id),
                 name=agent.name,
-                **resolved(agent.saved).model_dump(),
+                **resolved(agent.saved, "agent").model_dump(),
             )
             for agent in saved.agents
         ],

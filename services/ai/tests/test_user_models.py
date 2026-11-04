@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from app.llm.base import Caller
-from app.llm.catalogue import FALLBACK_MODEL, TESTED_MODELS
+from app.llm.catalogue import CATALOGUE, DEFAULT_MODELS, FALLBACK_MODEL, TESTED_MODELS
 from app.llm.model_choice import ChoosingProvider
 from app.llm.openrouter_models import ListedModel, ModelList
 from app.llm.pricing import DEFAULT_MODEL_PRICES, ModelPrice
@@ -33,24 +33,24 @@ def model(model_id: str, completion: Decimal, prompt: Decimal = Decimal("0.1")) 
 TESTED = ListedModel(id=FALLBACK_MODEL, name="Flash-Lite", price=FALLBACK_PRICE)
 
 
-def test_the_fallback_is_the_first_tested_model():
-    assert TESTED_MODELS[0] == FALLBACK_MODEL
+def test_the_fallback_is_the_scans_first_tested_model():
+    assert TESTED_MODELS["agent"][0] == FALLBACK_MODEL
 
 
 def test_a_listed_choice_is_used():
-    assert resolve(CHOSEN, listed(model(CHOSEN, Decimal(9)), TESTED)) == ModelResolution(
-        saved=CHOSEN, effective=CHOSEN, fallback=False
-    )
+    assert resolve(
+        CHOSEN, listed(model(CHOSEN, Decimal(9)), TESTED), scope="agent"
+    ) == ModelResolution(saved=CHOSEN, effective=CHOSEN, fallback=False)
 
 
 def test_nothing_chosen_runs_on_the_tested_model_and_is_no_fallback():
-    assert resolve(None, listed(TESTED)) == ModelResolution(
+    assert resolve(None, listed(TESTED), scope="agent") == ModelResolution(
         saved=None, effective=FALLBACK_MODEL, fallback=False
     )
 
 
 def test_a_choice_no_longer_listed_falls_back_to_the_tested_model():
-    assert resolve(CHOSEN, listed(TESTED)) == ModelResolution(
+    assert resolve(CHOSEN, listed(TESTED), scope="agent") == ModelResolution(
         saved=CHOSEN, effective=FALLBACK_MODEL, fallback=True
     )
 
@@ -60,14 +60,14 @@ def test_without_the_tested_model_the_fallback_is_the_dearest_model_no_dearer_th
     at_ceiling = model("acme/equal", ceiling)
     below = model("acme/cheaper", ceiling - Decimal("0.5"))
     above = model("acme/dearer", ceiling + Decimal("0.01"))
-    assert default_model(listed(below, above, at_ceiling)) == "acme/equal"
-    assert default_model(listed(below, above)) == "acme/cheaper"
+    assert default_model(listed(below, above, at_ceiling), "agent") == "acme/equal"
+    assert default_model(listed(below, above), "agent") == "acme/cheaper"
     # Nothing at or below it: the tested model is sent anyway.
-    assert default_model(listed(above)) == FALLBACK_MODEL
+    assert default_model(listed(above), "agent") == FALLBACK_MODEL
 
 
 def test_while_the_list_was_never_read_a_saved_model_is_used_as_it_is():
-    assert resolve(CHOSEN, listed(TESTED, live=False)).effective == CHOSEN
+    assert resolve(CHOSEN, listed(TESTED, live=False), scope="agent").effective == CHOSEN
 
 
 def test_while_the_list_was_never_read_an_unpriced_saved_model_runs_on_the_tested_one():
@@ -75,8 +75,8 @@ def test_while_the_list_was_never_read_an_unpriced_saved_model_runs_on_the_teste
     # against the safety limit; nothing is known to be gone, so no fallback.
     priced = "anthropic/claude-opus-5.5"
     stand_in = listed(TESTED, live=False)
-    assert resolve(priced, stand_in, DEFAULT_MODEL_PRICES).effective == priced
-    assert resolve(CHOSEN, stand_in, DEFAULT_MODEL_PRICES) == ModelResolution(
+    assert resolve(priced, stand_in, DEFAULT_MODEL_PRICES, scope="agent").effective == priced
+    assert resolve(CHOSEN, stand_in, DEFAULT_MODEL_PRICES, scope="agent") == ModelResolution(
         saved=CHOSEN, effective=FALLBACK_MODEL, fallback=False
     )
 
@@ -140,3 +140,54 @@ async def test_an_answer_names_the_model_it_fell_back_from():
     assert users.asked == [("u1", "assistant", None)]
     on_list = Listed(listed(model(CHOSEN, Decimal(1)), TESTED))
     assert await fallback_from(users, on_list, "u1", "assistant") is None
+
+
+ASK_DEFAULT = DEFAULT_MODELS["assistant"]
+ASK = ListedModel(id=ASK_DEFAULT, name="Ask's default", price=DEFAULT_MODEL_PRICES[ASK_DEFAULT])
+
+
+def test_each_use_defaults_to_its_first_tested_model():
+    assert {scope: models[0] for scope, models in TESTED_MODELS.items()} == DEFAULT_MODELS
+    assert FALLBACK_MODEL == DEFAULT_MODELS["agent"] == DEFAULT_MODELS["explain"]
+
+
+def test_every_tested_model_is_catalogued_and_priced():
+    # Each must stand in before OpenRouter's list is read, at a known price.
+    catalogued = {m.id for m in CATALOGUE if m.supports_tools}
+    tested = {model for models in TESTED_MODELS.values() for model in models}
+    assert tested <= catalogued
+    assert all(model in DEFAULT_MODEL_PRICES for model in tested)
+
+
+def test_nothing_chosen_runs_on_the_default_of_its_use():
+    both = listed(TESTED, ASK)
+    assert resolve(None, both, scope="assistant").effective == ASK_DEFAULT
+    assert resolve(None, both, scope="explain").effective == FALLBACK_MODEL
+    assert resolve(None, both, scope="agent").effective == FALLBACK_MODEL
+
+
+def test_without_asks_default_ask_runs_on_its_next_tested_model():
+    second = TESTED_MODELS["assistant"][1]
+    assert resolve(CHOSEN, listed(TESTED), scope="assistant") == ModelResolution(
+        saved=CHOSEN, effective=second, fallback=True
+    )
+
+
+def test_while_the_list_was_never_read_nothing_chosen_runs_on_the_default_of_its_use():
+    stand_in = listed(TESTED, ASK, live=False)
+    assert resolve(None, stand_in, DEFAULT_MODEL_PRICES, scope="assistant").effective == ASK_DEFAULT
+    assert resolve(CHOSEN, stand_in, DEFAULT_MODEL_PRICES, scope="assistant") == ModelResolution(
+        saved=CHOSEN, effective=ASK_DEFAULT, fallback=False
+    )
+
+
+async def test_ask_with_nothing_chosen_unreadable_or_no_user_runs_on_asks_default():
+    ask = Caller("assistant", user_id="u1")
+    for users in (
+        Users(UserModelChoice(saved=None)),
+        Users(None),
+        Users(None, error=RuntimeError("database down")),
+    ):
+        provider, inner = chain(users, listed(TESTED, ASK))
+        await provider.complete(system=None, user="u", caller=ask)
+        assert inner.models == [ASK_DEFAULT]

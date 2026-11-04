@@ -389,3 +389,4 @@ while this file is out of date.
 | 376 | GitHub is no longer a sign-in provider; Google stays, and migration 0083 narrows `user_identities.provider` to it |
 | 377 | An assistant reply whose suggestions are not JSON keeps its answer; the suggestions are dropped |
 | 378 | A time of day the evidence states is not a figure, even written apart from its date |
+| 379 | Each use has its own default model; Ask's is Gemini 3.7 Flash |
