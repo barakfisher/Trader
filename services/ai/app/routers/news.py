@@ -9,7 +9,7 @@ written by the backfill endpoint and not by the caller.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends
 
@@ -17,7 +17,7 @@ from app.db import get_engine
 from app.deps import SettingsDep, require_internal_key
 from app.models import NewsCollectRequest, NewsCollectResponse
 from app.news import LexiconSentimentScorer, build_news_providers
-from app.news.collection import collect_news
+from app.news.collection import collect_news, market_feed_upkeep
 from app.news.entities import InstrumentRef
 from app.news.queries import SqlFeedCursor
 
@@ -54,4 +54,6 @@ async def collect(payload: NewsCollectRequest, settings: SettingsDep) -> NewsCol
             instruments,
             lookback=timedelta(hours=payload.lookback_hours),
         )
+        # Here and not in `collect_news`: the on-demand refresh must not pay for it (D377).
+        stats.update(market_feed_upkeep(connection, now=datetime.now(UTC)))
     return NewsCollectResponse(**stats)

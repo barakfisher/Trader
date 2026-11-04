@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 from app.news import FixtureNewsProvider, LexiconSentimentScorer
 from app.news.article import RawArticle
-from app.news.collection import collect_news
+from app.news.collection import collect_news, market_feed_upkeep
 from app.news.entities import InstrumentRef
 from app.news.market_feed import SUSPECT_MIN_HEADLINES, SUSPECT_WINDOW
 from app.news.queries import (
@@ -37,9 +37,6 @@ NUSCALE = InstrumentRef(
 
 
 class _Result:
-    #: What a DELETE reports; every run prunes the market feed, and nothing here is old.
-    rowcount = 0
-
     def __init__(self, rows):
         self._rows = rows
 
@@ -200,21 +197,30 @@ async def test_each_article_is_stored_with_the_feed_that_let_it_in():
     assert stats["market_articles"] == 1
 
 
-async def test_unlinked_market_articles_are_kept_only_as_long_as_their_one_reader_looks():
+async def test_a_collection_leaves_the_market_feed_s_upkeep_to_its_caller():
+    # The on-demand refresh collects inside an agent's or the assistant's turn;
+    # a prune there once ran 22 minutes on the event loop (D377).
+    db = MarketNews(pruned=7)
+    stats = await _collect_market(db, [_raw("Bond yields spike", market=True)])
+    assert db.asked == {}
+    assert "pruned" not in stats
+
+
+def test_unlinked_market_articles_are_kept_only_as_long_as_their_one_reader_looks():
     # The suspected-network check is the only reader of an unlinked market
     # article, so the retention is its window: derived, not a second setting.
     db = MarketNews(pruned=7)
-    stats = await _collect_market(db, [])
+    upkeep = market_feed_upkeep(db, now=_NOW)
     assert db.asked[SQL_PRUNE_MARKET_ARTICLES] == {"before": _NOW - SUSPECT_WINDOW}
-    assert stats["pruned"] == 7
+    assert upkeep["pruned"] == 7
 
 
-async def test_a_suspected_network_in_the_last_day_is_reported():
+def test_a_suspected_network_in_the_last_day_is_reported():
     recent = [("new.example", f"Acme (ACME{i}) shares up") for i in range(SUSPECT_MIN_HEADLINES)]
     db = MarketNews(recent=recent)
-    stats = await _collect_market(db, [])
+    upkeep = market_feed_upkeep(db, now=_NOW)
     assert db.asked[SQL_MARKET_HEADLINES] == {"since": _NOW - SUSPECT_WINDOW}
-    assert stats["suspected_networks"] == [
+    assert upkeep["suspected_networks"] == [
         {"source": "new.example", "headlines": SUSPECT_MIN_HEADLINES,
          "templated": SUSPECT_MIN_HEADLINES},
     ]  # fmt: skip

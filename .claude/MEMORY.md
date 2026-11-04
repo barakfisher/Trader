@@ -26,8 +26,8 @@ would have fired here too).
   the user's word, compose first with `db-backup.sh --target compose`, then `prod-deploy.sh`. The
   first `news_collect` after it prunes the market articles no topic links any more: ~89k on
   compose, ~9.3k on production. Expected, not a bug.
-- **Decisions reach 376** (next: **377**; D376 drops GitHub sign-in). **Migrations:** `0083` head
-  (`0083_drop_github_identities`); next free `0084`.
+- **Decisions reach 377** (next: **378**; D377 indexes `articles.duplicate_of_id`. Open PR #371 also claims 377-378 and renumbers if this merges first). **Migrations:** `0084` head
+  (`0084_index_article_duplicates`); next free `0085`.
 - **Next:** no development task is queued. On the user's word: deploy #367; the future items
   ("Connect OpenRouter" by PKCE, dropping GitHub OAuth, the legal text); the M12 roadmap (capital
   gains tax and loss offsetting, `docs/MILESTONES.md`, not started).
@@ -6245,6 +6245,24 @@ failure they prevent.
     *Rejected:* finishing the GitHub app (a second console and secret for three accounts that all
     have Google); dropping the code but leaving the CHECK (the database would accept a provider
     the code no longer knows, and a stray write would leave a row nothing reads).
+377. **`articles.duplicate_of_id` is indexed (migration 0084), and the market feed's prune runs
+    only in the scheduled collection, never in an on-demand refresh** (the user, 2026-11-04:
+    "Index + move prune"). Measured 2026-11-03 from compose's Postgres log (`log_lock_waits` is
+    on): an assistant replay's `get_news` ran the first prune after D373, with 89,479 of 114,925
+    articles to delete, for 1,357 s. A second refresh waited 660 s on its row lock and then ran
+    its own; 2,000 deletes on a copy took 4.9 s without the index and 40 ms with it. The cause
+    was 0004's `REFERENCES articles(id) ON DELETE SET NULL` with no index, so every deleted
+    article was a sequential scan of `articles`. The scan was synchronous inside an async tool,
+    so it blocked the service's event loop, and the assistant's 120 s limit could not cancel it.
+    Production had already pruned (one 6.3 s prune, no lock waits) but grows the same way.
+    `market_feed_upkeep` (prune plus suspected networks) is now called by `POST /news/collect`
+    after `collect_news`. *Rejected:* only a `lock_timeout` / `statement_timeout` (bounds the
+    stall, still pays it inside a user's turn); index only (a future backlog, such as another
+    retention change, would still land on someone's question); moving the network fetch out of
+    `refresh`'s transaction (worth doing, but it held no lock here, so it is not this fix).
+    Lesson: an `ON DELETE` foreign key needs an index on the referencing column whenever the
+    referenced table sees bulk deletes. 16 more lack one on compose, all on small tables
+    (`users`, `target_weights`, ...).
 ---
 
 ## Bugs that cost real time, and the lesson from each

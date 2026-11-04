@@ -12,7 +12,8 @@ afternoon gets the afternoon's headlines.
 instrument): deduped by content, linked to the instrument only when the headline
 names it (`entities.py`), scored, stored. So what an agent reads is an ordinary
 stored article - every agent reads the same rows, and the holding's page shows
-them too when the user holds it.
+them too when the user holds it. The market feed's upkeep is not part of it:
+that runs on the schedule, never inside an agent's or the assistant's turn (D377).
 
 **The hourly mark is claimed before the fetch**, in Redis with an expiry
 (`SET NX EX`): the first caller in the hour fetches and the rest read. A fetch
