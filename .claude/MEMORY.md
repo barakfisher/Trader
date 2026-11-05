@@ -4,7 +4,55 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-05 - **Handoff by count: six merges since #368** (#369-#374; the trigger was
+Updated: 2026-11-05, evening - **Handoff by count: five merges since #375** (#376-#380).
+- **Merges since #375:**
+  - #376: a phone moves between places on a bottom bar, and its header holds the name and the
+    account (D382);
+  - #377: phone polish bugs - language claims, one currency sign, the model select, the gray tab bar
+    (D383);
+  - #378: a phone's holding card opens on a tap; controls are 44 px and text is larger (D384);
+  - #379: a catalogue not-advice line on every proposal and answer; agents and Ask speak like an
+    advisor (D385-D388);
+  - #380: Research, Settings and an agent's Settings tab open closed on a phone (D389).
+- **Deployed:** production (`https://app.tiklens.com`) and the main checkout behind compose both
+  read `7726ada` (#380) at `0084_index_article_duplicates`, 2026-11-05; both backed up first. Nothing
+  merged is undeployed. **#379 reached production only with #380's deploy:** `prod-deploy.sh` ships
+  everything on `main`, so a deploy of one PR carries any merged PR ahead of it. No model had run
+  #379's prompts when it shipped, so the agents' new voice has not been read yet.
+- **The phone view is finished, bar a real iPhone.** On production, real data, 375 px in Hebrew,
+  everything closed: Research 2.37 screens (was 13.2), Settings 1.44 (was 7.0), a simulated agent's
+  Settings tab 1.34 (was 4.8). A card was not opened on production; opening is covered by tests and
+  synthetic data. Compose's screens were not seen after this deploy, because the browser pane is
+  signed out there; its health, its head and the source it serves were.
+- **Decisions reach 389** (next: **390**). **Migrations:** `0084` head; next free `0085`.
+- **Owed by the user, on a real iPhone** (put off 2026-11-05): tap a field in Settings and confirm the
+  page does not zoom; type `12.5` on Targets and confirm it shows whole; the bottom bar clears the
+  home indicator, nothing sits under the notch in landscape, and what the bar does with the keyboard
+  open; a Research line opens and closes; change a field, close its card, and "unsaved" stays in sight.
+- **Owed by a session:** re-measure Ask from a week of production Langfuse traces (~2026-11-11), now
+  including the advice group #379 changed, and ask the user the open question: 7 of 9 `malformed`
+  replies were plain prose with no JSON - accept them or not?
+- **Next, on the user's word:** no milestone is scheduled. Candidates: D387's PRs on the real
+  portfolio (case 1, then 4, then 5, one PR each), M12 and M13 (`docs/MILESTONES.md`), "Connect
+  OpenRouter" by PKCE, and the legal text.
+- **Lesson - a decision number is taken when it reaches `main`, not when it is written.** #379 took
+  D385-D388 while #380 was open with its own D385, and the conflict surfaced only at the merge, with
+  the number already in five source comments and a commit message. Before opening a PR, `git fetch`
+  and read the head of this file on `origin/main`; renumber then, while it is cheap.
+- **Lesson - an independent read of a finished slice finds what the author's checks are built around.**
+  On #380 the tests, the sweep and the size measurements were green, and `bf-qa` still found a Save
+  hidden in a closed card, a failure hidden behind a boolean that stayed true, and a focus ring cut
+  by a refactor of code nobody meant to change. Run it before the PR, not after.
+- **An unexplained result, once:** in the preview, an agent's settings card looked open after a close
+  on one run. Two more browser runs and the test closed normally. If a real phone shows it, start at
+  `CollapsingCard`.
+- **Local environment:**
+  - Compose's web container is a Vite dev server on port 5174, so its page has no bundle to search:
+    fetch `/src/...` to see what it serves.
+  - `git config user.name` is unset here. A commit still works from the system name, but
+    `sync_with_base_branch` refuses, so merge `main` by hand or set the name.
+
+Previous update, 2026-11-05 - **Handoff by count: six merges since #368** (#369-#374; the trigger was
 five, so this is one late).
 - **Merges since #368:**
   - #369: every model call is also a Langfuse trace, with its text, while the installation is its
@@ -7390,6 +7438,8 @@ merged change looked absent. **Verify by content from the root, or with `-- ':/a
 | Item | Where | Impact |
 |---|---|---|
 | **Tab can reach the page behind an open Drawer** | `Drawer.tsx` (D382) | It says `aria-modal` but has no focus trap, so a keyboard user can Tab onto a covered link, now including the bottom bar, and leave a half-filled form. Older than the bar; only a hardware keyboard reaches it. |
+| **A half-made edit says nothing while its card is closed** | Model, schedule, key and safety-limit cards (D389) | They keep their own Save inside the card. The edit stays mounted, but a phone user who closes the card sees no sign of it, and leaving the page loses it. Settings' shared draft and an agent's form do say so. |
+| **The research agent's card stays open after a stopped run** | `AssignmentCard`, `attention` (D389) | It reopens until the next run. For someone over the holdings limit every full run stops that way, so the card is open on every visit and the page starts about 300 px lower. |
 | **A phone sorts by P&L with the figure one tap away** | `SortControl`, `CombinedCard`, `HoldingCard` (D381, D384) | The closed card states today's percent, so sorting by P&L orders cards by a figure shown only when one is opened. Harmless, but it can read as a random order. |
 | **A reset keeps the agent review's suggestions** | `reset_account` (0072), `agent_suggestions` (0079) | A reset of `agents_trading` erases the scans and fills a suggestion's evidence came from, but an open card stays until dismissed or superseded by the next window. Its Apply still checks the setting's current value, so it can change nothing unexpected; the figures are only out of date. Fix: add the table to the reset's `agents_trading` group (a `CREATE OR REPLACE` of the function, as 0072 did) |
 | **Consent records go with an erased account** | `0077` cascade, D317's erase | Once an account is erased there is no record of what it agreed to. Whether consent must outlive the account (and for how long) is a legal retention question for the user or a lawyer, raised by the PR 15 security review; keeping it would need the erase to keep an anonymised row |
