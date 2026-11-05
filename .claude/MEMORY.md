@@ -4,7 +4,44 @@ Written for a session that has never seen the conversation that built this. The 
 the reasoning behind it is not, and that is what this file is for. Maintained per
 [CLAUDE.md](../CLAUDE.md) "Session management & memory".
 
-Updated: 2026-11-05, evening - **Handoff by count: five merges since #375** (#376-#380).
+Updated: 2026-11-05, late - **Handoff at the user's word after D387 case 1** (#382-#383 since
+handoff #381; not yet the count of five).
+- **Merges since #381:**
+  - #382: a phone card's menu and arrow take its corners; the app installs from a manifest (D390,
+    D391);
+  - #383: D387 case 1 - research gives a view (Buy more / Hold / Trim / Sell; Buy / Wait / Avoid
+    for a stock not held) and an actionable word is an acknowledge-only `research` proposal on the
+    real portfolio (D392, migration `0085`).
+- **Deployed: production is behind.** It reads `7726ada` (#380) at `0084`, as of handoff #381.
+  #382 and #383 are merged and **undeployed**; #383 carries migration `0085`, so the next
+  `prod-deploy.sh` migrates (back up first, as always). Deploying is the user's step.
+- **After that deploy, read the first research run** (the next post-close scheduled run, or press
+  *Run research now*): its Langfuse trace (`research-holdings`), how many holdings were `refused`
+  (a held/unheld vocabulary mix-up or a Hebrew figure the validator misreads are the likely causes),
+  and whether a Trim/Sell/Buy more reached the inbox and Telegram within one proposal sweep (15 min).
+  No real model has run the new prompt.
+- **Decisions reach 392** (next: **393**). **Migrations:** `0085` head; next free `0086`.
+- **Next, on the user's word: D387 case 4** - Ask drafts an acknowledge-only proposal in the
+  conversation, with two buttons (add to the inbox / close), only when explicitly asked; it reuses
+  the `research`-style acknowledge-only path or a kind of its own, which 0085's trigger allowlist
+  must then admit in a new migration. Read `isAdvisory()` (`services/advisoryMode.ts`) before the
+  write, as D388 requires. Then case 5 (alert narration's view). M13's gap from D392: research's
+  vocabulary is chosen in the AI service's prompt, which does not read the mode.
+- **Lesson - a decision number can be taken twice in one afternoon.** #383 was written as D389, lost
+  it to #380, was renumbered D390, and lost that to #382 minutes before its merge. Fetch `main` and
+  read `docs/DECISIONS.md`'s last row **immediately before merging**, not only before opening the PR;
+  keep a decision's number out of identifiers (only comments and docs carried it here, so a sed was
+  enough). Amending a pushed commit is refused in this environment: renumber in a new commit and
+  merge `main` in.
+- **Local environment (cloud container):** Postgres for the integration suites is not provided.
+  `apt-get install postgresql-16-pgvector`, then `initdb` under `/var/lib/postgresql/<dir>` (not the
+  scratchpad: its permissions changed mid-session and killed the server) with
+  `-c shared_preload_libraries=pg_stat_statements` on port 55432; `scripts/migrate.py` with
+  `APP_DB_PASSWORD=traders_app` gives the app role its login for the orchestrator's Postgres tests.
+  `services/ai/.venv` is built with `uv venv -p python3.12` (system python is 3.13, the project wants
+  3.12). No Docker, so `smoke-test.sh` cannot run here.
+
+Previous update, 2026-11-05, evening - **Handoff by count: five merges since #375** (#376-#380).
 - **Merges since #375:**
   - #376: a phone moves between places on a bottom bar, and its header holds the name and the
     account (D382);
