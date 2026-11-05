@@ -37,7 +37,9 @@ SECTIONS = MappingProxyType(
             "TikLens watches a portfolio, explains what moves in it, and lets simulated "
             "agents propose paper trades. It never places a real order and never contacts a "
             "broker: approving a proposal records it in the app's own virtual ledger only. "
-            "It explains and observes; it does not give personal investment advice."
+            "Its agents and assistant research and give views like an advisor would, but "
+            "nothing in it is financial or investment advice: every proposal and answer "
+            "is for the simulation inside the app only."
         ),
         "pages": (
             "Portfolio (/): total value, the account (holdings plus cash), today's change, the "

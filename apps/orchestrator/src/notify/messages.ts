@@ -453,6 +453,8 @@ export interface Messages {
     textOnly: string;
     /** The heading over the news an answer drew on. */
     sources: string;
+    /** The last line of every answer (D385): a view like an advisor's is still not advice. */
+    notAdvice: string;
     newConversation: string;
   };
 
@@ -892,6 +894,7 @@ const en: Messages = {
     unavailable: "The assistant couldn't be reached, so this question wasn't answered. Try again in a minute.",
     textOnly: 'I can read text only. Write your question as a message.',
     sources: 'Sources:',
+    notAdvice: 'Not financial or investment advice, and no substitute for a professional: answers are for the simulation inside the app only.',
     newConversation: 'New conversation. Your next question starts it.',
   },
   recheck: {
@@ -1436,6 +1439,7 @@ const he: Messages = {
     unavailable: 'לא הצלחתי להגיע לעוזר, ולכן השאלה לא נענתה. נסו שוב בעוד דקה.',
     textOnly: 'אני קורא טקסט בלבד. כתבו את השאלה כהודעה.',
     sources: 'מקורות:',
+    notAdvice: 'אין בתשובה זו ייעוץ פיננסי או ייעוץ השקעות, והיא אינה תחליף לייעוץ מקצועי: התשובות נועדו לסימולציה בתוך האפליקציה בלבד.',
     newConversation: 'שיחה חדשה. השאלה הבאה שלכם תפתח אותה.',
   },
   recheck: {

@@ -109,7 +109,7 @@ describe('a question in the chat', () => {
     expect(assistantMessage).toHaveBeenCalledWith({ user_id: USER, conversation_id: null, message: 'How am I doing?' });
     expect(sent[0]).toEqual({ method: 'sendChatAction', body: { chat_id: String(CHAT), action: 'typing' } });
     const [answer] = messagesSent();
-    expect(answer!.text).toBe('Your portfolio is up 5.00%. See Insights.');
+    expect(answer!.text).toBe(`Your portfolio is up 5.00%. See Insights.\n\n${MESSAGES.en.ask.notAdvice}`);
     expect(answer!.reply_markup).toEqual({
       keyboard: [[{ text: 'Which holding moved most?' }]],
       one_time_keyboard: true,
@@ -267,13 +267,22 @@ describe('the reply as plain text (D223)', () => {
       '',
       MESSAGES.en.ask.sources,
       ...news.slice(0, MAX_NEWS_SOURCES).flatMap((s) => [`• ${s.label}`, s.url]),
+      '',
+      MESSAGES.en.ask.notAdvice,
     ]);
   });
 
   it('marks an answer that ran on a fallback model, under it (D284)', () => {
     const text = plainAnswer(reply({ text: 'Chips slid.', fallback_from: 'acme/retired-1' }), MESSAGES.en, null);
 
-    expect(text).toBe(`Chips slid.\n\n${MESSAGES.en.modelFallback.answerMark('acme/retired-1')}`);
+    expect(text).toBe(
+      `Chips slid.\n\n${MESSAGES.en.modelFallback.answerMark('acme/retired-1')}\n\n${MESSAGES.en.ask.notAdvice}`,
+    );
+  });
+
+  it("ends every answer with the catalogue's not-advice line, in the language given (D385)", () => {
+    expect(plainAnswer(reply({ text: 'השבבים ירדו.' }), MESSAGES.he, null)).toBe(`השבבים ירדו.\n\n${MESSAGES.he.ask.notAdvice}`);
+    expect(plainAnswer(reply({ outcome: 'clarify', text: 'Which one?' }), MESSAGES.en, null)).toBe('Which one?');
   });
 
   it("says the catalogue's sentence for an outcome with no reply, in the language given (D224)", () => {

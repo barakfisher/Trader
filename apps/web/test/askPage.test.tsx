@@ -124,6 +124,8 @@ describe('a reply', () => {
     expect(news.getAttribute('target')).toBe('_blank');
     expect(news.getAttribute('rel')).toContain('noopener');
     expect(screen.getByText('Sources (2)')).toBeTruthy();
+    // D385: an answer ends with the catalogue's not-advice line.
+    expect(screen.getByText(en.ask.notAdvice)).toBeTruthy();
     expect(post).toHaveBeenCalledWith('/assistant/messages', { message: 'How am I doing?' });
   });
 
@@ -194,6 +196,8 @@ describe('what is not an answer', () => {
 
     expect(await screen.findByText('Outside what I cover')).toBeTruthy();
     expect(screen.getByText('I can only help with investing.')).toBeTruthy();
+    // A decline gives no view, so it carries no not-advice line (D385).
+    expect(screen.queryByText(en.ask.notAdvice)).toBeNull();
   });
 
   it.each([

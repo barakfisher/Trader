@@ -66,6 +66,10 @@ export function plainAnswer(reply: AssistantReply, messages: Messages, linkBase:
   const news = reply.sources
     .filter((source) => source.kind === 'news' && typeof source.url === 'string' && source.url !== '')
     .slice(0, MAX_NEWS_SOURCES);
-  if (news.length === 0) return text;
-  return `${text}\n\n${messages.ask.sources}\n${news.map((source) => `• ${source.label}\n${source.url}`).join('\n')}`;
+  const withSources =
+    news.length === 0
+      ? text
+      : `${text}\n\n${messages.ask.sources}\n${news.map((source) => `• ${source.label}\n${source.url}`).join('\n')}`;
+  // D385: an answer may read like an advisor's, so it ends with the catalogue's not-advice line.
+  return reply.outcome === 'answer' ? `${withSources}\n\n${messages.ask.notAdvice}` : withSources;
 }

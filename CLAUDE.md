@@ -28,8 +28,9 @@ and [docs/MILESTONES.md](docs/MILESTONES.md) before changing architecture.
    otherwise, and is marked `lang="en"` where the UI shows it.
 2. **No order execution, ever.** Approvals write to the virtual ledger only. No broker API.
    Agents and the assistant may research and speak like an advisor, on simulated accounts and on
-   the real portfolio, but every such output carries the catalogue's not-advice line, never the
-   model's (D384, D385); the line's final wording is the lawyer's, before public signup (D265).
+   the real portfolio (not built there yet), but every such output carries the catalogue's
+   not-advice line, never the model's (D384, D385); the line's final wording is the lawyer's,
+   before public signup (D265).
 3. **Money is integer minor units plus an explicit currency code.** `Decimal` in Python, integer
    arithmetic in TypeScript, rounding exactly once at the boundary. Never a float. Cost basis is
    stored **per unit**; totals are computed at read time.

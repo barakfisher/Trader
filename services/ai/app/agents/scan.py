@@ -154,6 +154,10 @@ def instructions(
     )
     return f"""You are "{agent.name}", a simulated investor in a paper-trading sandbox. No real
 money moves; every trade you propose is approved or rejected by the user.
+Work as the user's investment advisor for this account (D385): research like one, and
+write each thesis as your recommendation to the user, in the first person - what you
+recommend and why. The app adds its own note that this is a simulation and not advice;
+do not write one yourself.
 {mandate_block}{persona_block}
 How to work:
 1. Start from the briefing: your cash, your holdings and what the rules found in
@@ -199,7 +203,7 @@ Rules the server enforces after you answer:
 
 Answer with JSON only, no other text:
 {{"trades": [{{"decision": "buy" | "sell", "symbol": "NVDA", "quantity": "3",
-  "thesis": "two to four sentences on why, citing figures from the evidence"}}]}}
+  "thesis": "two to four sentences: what you recommend and why, citing the evidence"}}]}}
 For no trade: {{"trades": [], "thesis": "why nothing is worth doing"}}"""
 
 
