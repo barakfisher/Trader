@@ -34,11 +34,19 @@ export function ExpandingCard({
 }) {
   const root = useRef<HTMLDivElement>(null);
 
-  // Closing the card above moves this one up, possibly under the header.
+  // Closing the card above moves this one up, possibly under the header. A new
+  // touch cancels it: the page must not move under a thumb that has gone on to
+  // something else, and a scroll would close a "⋮" menu it just opened.
   useEffect(() => {
     if (!open) return;
-    const timer = window.setTimeout(() => root.current?.scrollIntoView?.({ block: 'nearest' }), OPEN_MS);
-    return () => window.clearTimeout(timer);
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const timer = window.setTimeout(() => root.current?.scrollIntoView?.({ block: 'nearest' }), still ? 0 : OPEN_MS);
+    const cancel = () => window.clearTimeout(timer);
+    window.addEventListener('pointerdown', cancel, { once: true });
+    return () => {
+      cancel();
+      window.removeEventListener('pointerdown', cancel);
+    };
   }, [open]);
 
   return (
@@ -59,7 +67,8 @@ export function ExpandingCard({
           open ? 'visible grid-rows-[1fr]' : 'invisible grid-rows-[0fr]'
         } [&_a]:relative [&_a]:z-[2] [&_button]:relative [&_button]:z-[2]`}
       >
-        <div className="min-h-0 overflow-hidden">
+        {/* The padding is room for the page button's focus ring, which the clip would cut. */}
+        <div className="-mx-1 -mb-1 min-h-0 overflow-hidden px-1 pb-1">
           <div className="mt-2 space-y-2 border-t border-border-subtle/60 pt-2">{details}</div>
         </div>
       </div>

@@ -34,7 +34,7 @@ export const SpendIndicator = observer(function SpendIndicator() {
     return (
       <Link
         to="/settings"
-        className="flex items-center gap-1 rounded-full border border-warn/40 px-2 py-0.5 text-xs text-warn hover:bg-warn/10"
+        className="tap-compact flex items-center gap-1 rounded-full border border-warn/40 px-2 py-0.5 text-xs text-warn hover:bg-warn/10"
       >
         <KeyRound className="size-3" aria-hidden />
         {t(spend.key === 'none' ? 'spendIndicator.addKey' : 'spendIndicator.keyRefused')}
@@ -114,7 +114,7 @@ function SpendChip({ spend }: { spend: KeySpend }) {
           className="absolute end-0 top-full z-40 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-border-subtle bg-surface-raised p-3 text-start shadow-lg"
         >
           <KeySpendDetails spend={spend} />
-          <Link to="/settings" className="mt-2 inline-block text-xs font-medium text-accent hover:underline">
+          <Link to="/settings" className="mt-2 inline-block text-xs font-medium text-accent hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
             {t('spendIndicator.openSettings')}
           </Link>
         </div>

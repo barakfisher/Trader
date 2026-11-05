@@ -136,14 +136,14 @@ function PerformanceChart({ data }: { data: AgentPerformanceResponse }) {
             <XAxis
               dataKey="day"
               tickFormatter={formatDay}
-              tick={{ fill: '#94a0c0', fontSize: 11 }}
+              tick={{ fill: '#94a0c0', fontSize: 'var(--text-2xs)' }}
               axisLine={false}
               tickLine={false}
               minTickGap={24}
             />
             <YAxis
               tickFormatter={(value: number) => formatCompactMoney(value, data.currency)}
-              tick={{ fill: '#94a0c0', fontSize: 11 }}
+              tick={{ fill: '#94a0c0', fontSize: 'var(--text-2xs)' }}
               axisLine={false}
               tickLine={false}
               width={56}

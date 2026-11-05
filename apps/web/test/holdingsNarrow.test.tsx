@@ -237,6 +237,47 @@ describe('opening a card (D384)', () => {
     expect(screen.getByRole('link', { name: 'Holding page for AAPL' })).toBeTruthy();
   });
 
+  it('cannot close a card that is asking to confirm a removal', async () => {
+    narrowScreen(true);
+    renderPage(<HoldingsTable />);
+    await screen.findByText('$8,235.00');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for AAPL' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+    expect(screen.queryByRole('button', { name: 'Details for AAPL' })).toBeNull();
+  });
+
+  it('asks the server for nothing to open a card', async () => {
+    narrowScreen(true);
+    renderPage(<HoldingsTable />);
+    await screen.findByText('$8,235.00');
+    const asked = get.mock.calls.length;
+
+    fireEvent.click(toggle('AAPL'));
+
+    await screen.findByRole('link', { name: 'Holding page for AAPL' });
+    expect(get.mock.calls.length).toBe(asked);
+  });
+
+  it('says a dash for a figure it does not have, never a zero', async () => {
+    narrowScreen(true);
+    const answer = get.getMockImplementation()!;
+    get.mockImplementation(async (path: string) =>
+      path === '/portfolio'
+        ? { ...PORTFOLIO, holdings: [{ ...AAPL, quote: null, valueMinor: null, costMinor: null, pnlMinor: null, pnlPct: null }] }
+        : answer(path),
+    );
+    renderPage(<HoldingsTable />);
+    await screen.findByText('AAPL');
+
+    fireEvent.click(toggle('AAPL'));
+
+    const figures = screen.getAllByRole('definition').map((figure) => figure.textContent);
+    expect(figures[0]).toBe('—');
+    expect(figures[1]).toMatch(/^—/);
+  });
+
   it('is a table on a wide screen, with nothing to open', async () => {
     narrowScreen(false);
     renderPage(<HoldingsTable />);

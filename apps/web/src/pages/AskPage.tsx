@@ -268,7 +268,7 @@ function Sources({ sources }: { sources: AssistantSourceView[] }) {
 function SourceLabel({ source }: { source: AssistantSourceView }) {
   if (source.url) {
     return (
-      <a href={source.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:underline">
+      <a href={source.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 hover:underline max-sm:min-h-11">
         {source.label}
         <ExternalLink className="size-3" aria-hidden />
       </a>
@@ -276,7 +276,7 @@ function SourceLabel({ source }: { source: AssistantSourceView }) {
   }
   if (source.link) {
     return (
-      <Link to={source.link as never} className="hover:underline">
+      <Link to={source.link as never} className="hover:underline max-sm:inline-flex max-sm:min-h-11 max-sm:items-center">
         {source.label}
       </Link>
     );

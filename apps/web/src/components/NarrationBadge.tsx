@@ -37,7 +37,7 @@ export function NarrationBadge() {
     <div className="group relative">
       <button
         type="button"
-        className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${tone}`}
+        className={`tap-compact flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${tone}`}
         aria-label={t('narration.badgeLabel', { label: copy.label })}
       >
         <Sparkles className="size-3" aria-hidden />

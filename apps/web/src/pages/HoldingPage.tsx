@@ -180,7 +180,7 @@ function PositionCard({ holding, baseCurrency }: { holding: HoldingView; baseCur
           {target ? (
             t('holding.targetValue', { value: unitsToPercent(weightToUnits(target.weight)) })
           ) : (
-            <Link to="/targets" className="text-sm text-text-muted underline hover:text-text-primary">
+            <Link to="/targets" className="tap-compact text-sm text-text-muted underline hover:text-text-primary">
               {t('holding.noTarget')}
             </Link>
           )}

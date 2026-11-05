@@ -112,7 +112,7 @@ export const ProposalsInbox = observer(function ProposalsInbox() {
               ? t('proposals.agentFilter', { name: ownDirection(agentName(filterAgent)) })
               : t('proposals.agentFilterUnknown')}
           </span>
-          <Link to="/insights" search={{ tab: 'proposals' }} className="font-medium text-accent hover:underline">
+          <Link to="/insights" search={{ tab: 'proposals' }} className="tap-compact font-medium text-accent hover:underline">
             {t('proposals.showAll')}
           </Link>
         </p>
@@ -211,7 +211,7 @@ function HistorySection({
                     to="/proposals/$proposalId"
                     params={{ proposalId: proposal.id }}
                     {...text.attributes}
-                    className="min-w-0 text-sm text-text-primary hover:text-accent hover:underline"
+                    className="min-w-0 text-sm text-text-primary hover:text-accent hover:underline max-sm:flex max-sm:min-h-11 max-sm:items-center"
                   >
                     {text.headline}
                   </Link>

@@ -59,7 +59,7 @@ export function LegalPage({ document }: { document: LegalDocument }) {
   return (
     <main className="mx-auto w-full max-w-2xl space-y-4 p-4 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <a href="/" className="flex items-center gap-2 text-sm text-accent hover:underline">
+        <a href="/" className="flex items-center gap-2 text-sm text-accent hover:underline max-sm:min-h-11">
           <LineChart className="size-5" aria-hidden />
           {t('legal.backToApp')}
         </a>
@@ -84,7 +84,7 @@ export function LegalPage({ document }: { document: LegalDocument }) {
             key={option}
             href={`${legalPath(option)}?lang=${language}`}
             aria-current={option === document ? 'page' : undefined}
-            className={`-mb-px border-b-2 pb-2 ${option === document ? 'border-accent font-medium' : 'border-transparent text-text-muted hover:text-text-primary'}`}
+            className={`-mb-px border-b-2 pb-2 max-sm:inline-flex max-sm:min-h-11 max-sm:items-center ${option === document ? 'border-accent font-medium' : 'border-transparent text-text-muted hover:text-text-primary'}`}
           >
             {t(`legal.${option}`)}
           </a>

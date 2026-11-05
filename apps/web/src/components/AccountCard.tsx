@@ -231,7 +231,7 @@ function MovementForm({ onDone }: { onDone: () => void }) {
             {PRIMARY_MOVEMENT_TYPES.map((option) => (
               <label
                 key={option}
-                className={`cursor-pointer rounded-lg border px-2 py-1.5 text-center text-xs transition ${
+                className={`cursor-pointer justify-center rounded-lg border px-2 py-1.5 text-center text-xs transition ${
                   option === type
                     ? 'border-accent bg-accent/10 font-medium text-text-primary'
                     : 'border-border-subtle text-text-muted hover:bg-surface-hover'

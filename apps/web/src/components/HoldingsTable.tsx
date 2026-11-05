@@ -441,8 +441,8 @@ function HoldingDetails({ holding, baseCurrency }: { holding: HoldingView; baseC
   );
 }
 
-/** A 40 px tap target: the table's 16 px icons are a desktop pointer's size, not a thumb's. */
-const CARD_BUTTON = 'flex h-10 items-center gap-1.5 rounded-lg border border-border-subtle px-3 text-xs';
+/** A 44 px tap target: the table's 16 px icons are a desktop pointer's size, not a thumb's. */
+const CARD_BUTTON = 'flex h-11 items-center gap-1.5 rounded-lg border border-border-subtle px-3 text-xs';
 
 /**
  * One holding on a phone: three lines, because a portfolio is read as a list -
@@ -606,7 +606,7 @@ export function CostWarning({ symbol, onSet }: { symbol: string; onSet?: () => v
       onClick={onSet}
       title={t('holdings.noCostTitle')}
       aria-label={t('holdings.setCostFor', { symbol })}
-      className="inline-flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-2xs text-warn hover:bg-warn/25"
+      className="tap-compact tap-tight inline-flex items-center gap-1 rounded bg-warn/15 px-1.5 py-0.5 text-2xs text-warn hover:bg-warn/25"
     >
       {body}
     </button>

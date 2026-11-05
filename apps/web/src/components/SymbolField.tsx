@@ -151,7 +151,7 @@ export function SymbolField({
               <li
                 key="__search_market__"
                 {...getItemProps({ item, index })}
-                className={`flex cursor-pointer items-center gap-2 border-t border-border-subtle px-3 py-2 text-sm text-accent ${
+                className={`flex cursor-pointer items-center gap-2 border-t border-border-subtle px-3 py-2 text-sm text-accent max-sm:min-h-11 ${
                   highlightedIndex === index ? 'bg-surface-hover' : ''
                 }`}
               >
@@ -162,7 +162,7 @@ export function SymbolField({
               <li
                 key={item.symbol}
                 {...getItemProps({ item, index })}
-                className={`flex cursor-pointer items-baseline gap-2 px-3 py-2 text-sm ${
+                className={`flex cursor-pointer items-baseline gap-2 px-3 py-2 text-sm max-sm:min-h-11 max-sm:items-center ${
                   highlightedIndex === index ? 'bg-surface-hover' : ''
                 }`}
               >

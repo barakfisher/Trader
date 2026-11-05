@@ -356,6 +356,8 @@ function CombinedDetails({ row, real, currency }: { row: CombinedHolding; real: 
   const { t } = useTranslation();
   // A cost per unit is one holder's: with several, the split below says each part.
   const only = row.positions.length === 1 ? row.positions[0] : undefined;
+  // The row's own real position answers while the portfolio is loading, or if it failed.
+  const holdingId = real?.id ?? row.positions.find((position) => position.isPrimary)?.holdingId;
   return (
     <>
       <dl className="space-y-1">
@@ -377,10 +379,10 @@ function CombinedDetails({ row, real, currency }: { row: CombinedHolding; real: 
         <CardDetail label={t('holdings.details.priceUpdated')}>{formatAge(row.quote?.asOf)}</CardDetail>
       </dl>
       {row.positions.length > 1 && <BreakdownList row={row} currency={currency} />}
-      {real && (
+      {holdingId && (
         <Link
           to="/holdings/$holdingId"
-          params={{ holdingId: real.id }}
+          params={{ holdingId }}
           aria-label={t('holdings.details.openPageFor', { symbol: row.instrument.symbol })}
           className={buttonClass('secondary', 'w-full text-center')}
         >

@@ -6420,8 +6420,18 @@ failure they prevent.
     is Android's and longer everywhere. **14 px for secondary text** - expected to break the three-line
     card. *Deliberately under 44:* the rating and the holder chips on a card have 34 px (`.tap-tight`):
     a full 44 px target reached the name line and sent its taps to Research, found only by tapping it
-    in the browser. Inline links in a sentence and checkboxes keep their size; a checkbox's label is
-    its target.
+    in the browser. The same goes for what shares a closed card's line: the set-cost pill and Approve.
+    Approve can take the bottom 9 px of the "⋮" above it; a tap there opens the review drawer, never
+    an approval. Inline links in a sentence and checkboxes keep their size; a checkbox's label is its
+    target. **Links and list rows are not caught by the size rule** (it names `button`, `select`,
+    `input`), so each carries its own 44 px; a list's rows are a real 44, because hidden targets on
+    neighbouring rows would overlap. Chips that wrap (concepts on an observation) sit 14 px apart so
+    two rows of 44 px targets do not cross. **The label rule is in the base layer, unlike the rest:**
+    a label that says `items-start` above a long sentence is right, and unlayered it was overruled.
+    Chart axes read `var(--text-2xs)`, the one size CSS cannot reach through a class. An independent
+    QA pass found all of this after the first commit; the sweep (`elementFromPoint` up and down from
+    each control's centre) is what proves it, at 375 px over Portfolio, Insights, Settings, Research,
+    a holding, Agents and an agent, on synthetic data.
 **Three PRs for the polish:** bugs first, then tap targets and text, then collapsing Research and
 Settings, because a collapsed row's height depends on the sizing rule (the user, 2026-11-05).
 ---
