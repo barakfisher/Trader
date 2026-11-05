@@ -111,7 +111,7 @@ describe('the own-key month and the safety limit (D250)', () => {
     put.mockResolvedValue({ limitMicroUsd: 12_340_000 });
     renderSettings();
 
-    const field = (await screen.findByLabelText('Limit per month (USD)')) as HTMLInputElement;
+    const field = (await screen.findByLabelText('Limit per month ($)')) as HTMLInputElement;
     expect(field.value).toBe('5.00');
     fireEvent.change(field, { target: { value: '12.34' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save limit' }));
@@ -127,7 +127,7 @@ describe('the own-key month and the safety limit (D250)', () => {
     serve({ spend: MONTH }, { available: true, key: SAVED_KEY });
     renderSettings();
 
-    const field = await screen.findByLabelText('Limit per month (USD)');
+    const field = await screen.findByLabelText('Limit per month ($)');
     for (const wrong of ['0', '0.00', '1.234', 'ten', '1000.01']) {
       fireEvent.change(field, { target: { value: wrong } });
       expect((screen.getByRole('button', { name: 'Save limit' }) as HTMLButtonElement).disabled, wrong).toBe(true);
@@ -186,7 +186,7 @@ describe("the admin's personal key (D363)", () => {
     expect(screen.getByText("No personal key is saved: your calls run on the installation's key.")).toBeTruthy();
     expect(screen.queryByText(/No key is saved, so scans and questions can't run/)).toBeNull();
     expect(screen.getByLabelText('API key')).toBeTruthy();
-    expect(screen.getByLabelText('Limit per month (USD)')).toBeTruthy();
+    expect(screen.getByLabelText('Limit per month ($)')).toBeTruthy();
   });
 
   it('says a refused personal key stops the work, as for anyone', async () => {

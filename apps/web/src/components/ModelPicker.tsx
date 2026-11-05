@@ -106,7 +106,8 @@ export function ModelPicker({
           onChange={(event) => setSelected(event.target.value)}
           className="input min-w-0 sm:max-w-md"
         >
-          <option value="">{t('models.notChosen', { model: nameOf(defaultModel) })}</option>
+          {/* No model's name here: at 16 px it does not fit a phone's field, and the line above names it. */}
+          <option value="">{t('models.notChosen')}</option>
           {resolution.fallback && resolution.saved && (
             <option value={resolution.saved} disabled>
               {t('models.noLongerOffered', { model: leftToRight(resolution.saved) })}

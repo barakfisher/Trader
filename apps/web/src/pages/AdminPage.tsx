@@ -117,7 +117,7 @@ export const AdminPage = observer(function AdminPage() {
 
       {isAdmin ? (
         <>
-          <div role="tablist" className="flex gap-2 overflow-x-auto border-b border-border-subtle">
+          <div role="tablist" className="flex gap-2 overflow-x-auto overflow-y-hidden border-b border-border-subtle">
             {ADMIN_TABS.map((name) => (
               <button
                 key={name}

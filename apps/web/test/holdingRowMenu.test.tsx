@@ -85,7 +85,7 @@ describe('a holding’s actions', () => {
     // "My price" is chosen: the record is of a trade already made.
     expect((within(form).getByLabelText('My price') as HTMLInputElement).checked).toBe(true);
     fireEvent.change(within(form).getAllByRole('textbox')[1]!, { target: { value: '2' } });
-    fireEvent.change(within(form).getByLabelText('Price per share (USD)'), { target: { value: '200' } });
+    fireEvent.change(within(form).getByLabelText('Price per share ($)'), { target: { value: '200' } });
     fireEvent.click(within(form).getByRole('button', { name: 'Preview' }));
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith(`/agents/${PRIMARY}/trades/preview`, {

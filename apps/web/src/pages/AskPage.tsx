@@ -20,18 +20,6 @@ import { useStore } from '../stores/context.tsx';
 import { leftToRight } from '../i18n/format.ts';
 
 /**
- * Questions to start from, one of each kind the assistant answers - three of
- * them the user's own (data/eval/assistant.json, U2 and U6). Filled in, never
- * sent (decision 70). Not translated: they become the question itself, and the
- * assistant answers in English for now (guideline 1), so they are marked English.
- */
-const EXAMPLES = [
-  'How is my portfolio doing today?',
-  'Give me a tour in the app',
-  'What tools did my agent use in its last scan?',
-];
-
-/**
  * The assistant (`/ask` with tools): a conversation, the conversations before
  * it, and a reply that says what it is.
  *
@@ -84,7 +72,16 @@ export const AskPage = observer(function AskPage() {
             {!ask.opening && ask.turns.length === 0 && (
               <div className="space-y-2">
                 <p className="text-sm text-text-muted">{t('ask.intro')}</p>
-                <Suggestions suggestions={EXAMPLES} onPick={fill} />
+                {/*
+                  Questions to start from, one of each kind the assistant answers - three of
+                  them the user's own (data/eval/assistant.json, U2 and U6). Filled in, never
+                  sent (decision 70). In the page's language: it answers in the language it is
+                  asked in (D220).
+                */}
+                <Suggestions
+                  suggestions={[t('ask.examples.portfolio'), t('ask.examples.tour'), t('ask.examples.tools')]}
+                  onPick={fill}
+                />
               </div>
             )}
             {ask.turns.map((turn, index) => (
